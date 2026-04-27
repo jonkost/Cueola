@@ -749,6 +749,38 @@ let unsubscribe = null;
 // Apply saved theme immediately
 applyTheme(currentTheme);
 
+// Auto-join session if ?code= is in the URL (admin coming from dashboard)
+(async function autoJoinFromURL(){
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if(!code) return;
+  const adminCode = localStorage.getItem('cueola_instructor');
+  const role = adminCode ? 'instructor' : 'student';
+  session = {code, role, userName: adminCode || '', isDemo: false, isExpert: false};
+  // Load session from Firestore once ready, then enter rundown
+  const enter = async () => {
+    if(window._firebaseReady){
+      try{
+        const snap = await window._getDoc(window._doc(window._db,'sessions',code));
+        if(snap.exists()){
+          const d = snap.data();
+          show.name = d.showName || 'Untitled Show';
+          show.start = d.startTime || '';
+          cues = d.cues || [];
+          nextId = cues.length + 1;
+        }
+      }catch(e){ console.warn('Auto-join load error:', e); }
+    }
+    updateTopBar();
+    subscribeToSession();
+    showRundown();
+    // Clean up URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
+  };
+  if(window._firebaseReady){ enter(); }
+  else { window.addEventListener('firebaseReady', enter, {once:true}); }
+})();
+
 // Demo cues
 const DEMO_CUES = [
   {id:1, type:'video',    name:'Countdown Slate',          notes:'Pre-show 5 min hold — hype music',              min:5,  sec:0,  done:true},
