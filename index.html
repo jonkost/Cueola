@@ -351,29 +351,23 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="e-title">Cueola</div>
     <div class="e-sub">The rundown tool that teaches you <em>as you build.</em><br>Plan the shape of the journey — not just the words.</div>
     <div class="e-cards">
-      <div class="e-card inst" onclick="showModal('modal-inst')">
-        <div class="ec-icon">🎓</div>
-        <div class="ec-title">Instructor</div>
-        <div class="ec-desc">Create a new session and share a code with your class.</div>
-        <span class="ec-pill">Creates session code</span>
-      </div>
-      <div class="e-card stud" onclick="showModal('modal-stud')">
+      <div class="e-card stud e-card-full" onclick="showModal('modal-stud')">
         <div class="ec-icon">🎬</div>
         <div class="ec-title">Student</div>
         <div class="ec-desc">Join an existing session with the code your instructor gave you.</div>
         <span class="ec-pill">Enter session code</span>
+      </div>
+      <div class="e-card exp e-card-full" onclick="loadExpert()">
+        <div class="ec-icon">⚡</div>
+        <div class="ec-title">Blank Slate</div>
+        <div class="ec-desc">Jump straight in with an empty rundown. No guidance, no prompts — just build.</div>
+        <span class="ec-pill">Experienced producers</span>
       </div>
       <div class="e-card demo e-card-full" onclick="loadDemo()">
         <div class="ec-icon">▶️</div>
         <div class="ec-title">Demo — See how it works</div>
         <div class="ec-desc">Load a pre-built example rundown for a live newscast. No code needed — explore and run it as a test.</div>
         <span class="ec-pill">No login required</span>
-      </div>
-      <div class="e-card exp e-card-full" onclick="loadExpert()">
-        <div class="ec-icon">⚡</div>
-        <div class="ec-title">Expert — Blank slate</div>
-        <div class="ec-desc">Jump straight in with an empty rundown. No guidance, no prompts — just build.</div>
-        <span class="ec-pill">Experienced producers</span>
       </div>
     </div>
     <div class="e-footer">🐨 CUEOLA · BROADCAST EDUCATION · <a href="dashboard.html" style="color:inherit;opacity:0.5;text-decoration:none;font-size:0.85em;">Admin</a></div>
