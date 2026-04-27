@@ -90,7 +90,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 /* ── TOPBAR ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:54px;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px}
 .brand{font-family:var(--syne);font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
-.brand span{color:var(--accent)}
+.brand span{font-style:normal}
+.brand em{color:var(--accent);font-style:normal}
 .session-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--s3);border:1px solid var(--bord2);border-radius:20px;font-family:var(--mono);font-size:11px;color:var(--text2)}
 .session-badge strong{color:var(--accent);letter-spacing:.08em}
 .role-badge{padding:4px 10px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;letter-spacing:.07em}
@@ -259,6 +260,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
 /* ── SETTINGS SHEET ── */
 .settings-sheet{max-height:80vh;overflow-y:auto;padding-bottom:16px}
+.settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.settings-section{display:flex;flex-direction:column;gap:12px}
+.theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.theme-swatch{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.ts-preview{width:100%;aspect-ratio:3/2;border-radius:8px;border:2px solid;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.theme-swatch:hover .ts-preview{filter:brightness(1.2)}
+.ts-dot{width:10px;height:10px;border-radius:50%}
+.ts-name{font-size:10px;font-family:var(--mono);color:var(--text3)}
+.theme-swatch.active .ts-preview{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── THEMES ── */
+[data-theme="midnight"]{--bg:#000;--s1:#080808;--s2:#101010;--s3:#181818;--s4:#222;--border:#1c1c1c;--bord2:#272727}
+[data-theme="warm"]{--bg:#0e0904;--s1:#140e07;--s2:#1b150c;--s3:#231c12;--s4:#2c2318;--border:#2a2015;--bord2:#342a1e;--text:#f5ede0;--accent:#f59e0b;--acg:#f97316}
+[data-theme="forest"]{--bg:#060f09;--s1:#0a150d;--s2:#0f1e12;--s3:#152618;--s4:#1c301f;--border:#1a2d1e;--bord2:#213726;--text:#e0f5e8;--accent:#22d3a0;--acg:#16a98a}
 
 /* ── LIVE SHOW SCREEN ── */
 #liveshow{background:var(--bg)}
@@ -431,17 +446,45 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <!-- ══ MODAL: SETTINGS ══ -->
 <div class="modal-wrap" id="modal-settings">
   <div class="modal settings-sheet">
-    <div class="modal-title">Rundown Settings</div>
-    <div class="field">
-      <label class="field-lbl">Show Name</label>
-      <input class="field-in" id="set-showname" type="text" maxlength="60">
+    <div class="modal-title">Settings</div>
+
+    <div class="settings-section">
+      <div class="settings-sec-label">Show</div>
+      <div class="field">
+        <label class="field-lbl">Show Name</label>
+        <input class="field-in" id="set-showname" type="text" maxlength="60">
+        <div class="field-hint" id="showname-locked-hint" style="display:none;font-size:11px;color:var(--text3);margin-top:2px">🔒 Name is locked — only the admin can change it.</div>
+      </div>
+      <div class="field">
+        <label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label>
+        <input class="field-in" id="set-starttime" type="time">
+        <div class="field-hint" style="font-size:11px;color:var(--text3);margin-top:2px">Leave blank if your show time isn't set yet.</div>
+      </div>
     </div>
-    <div class="field">
-      <label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label>
-      <input class="field-in" id="set-starttime" type="time">
-      <div class="field-hint" style="font-size:11px;color:var(--text3);margin-top:2px">Leave blank if your show time isn't set yet.</div>
+
+    <div class="settings-section">
+      <div class="settings-sec-label">Appearance</div>
+      <div class="theme-grid">
+        <div class="theme-swatch" data-theme="default" onclick="selectTheme('default')">
+          <div class="ts-preview" style="background:#080b12;border-color:#1e253a"><div class="ts-dot" style="background:#5b8df8"></div></div>
+          <div class="ts-name">Default</div>
+        </div>
+        <div class="theme-swatch" data-theme="midnight" onclick="selectTheme('midnight')">
+          <div class="ts-preview" style="background:#000;border-color:#272727"><div class="ts-dot" style="background:#5b8df8"></div></div>
+          <div class="ts-name">Midnight</div>
+        </div>
+        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')">
+          <div class="ts-preview" style="background:#0e0904;border-color:#342a1e"><div class="ts-dot" style="background:#f59e0b"></div></div>
+          <div class="ts-name">Warm</div>
+        </div>
+        <div class="theme-swatch" data-theme="forest" onclick="selectTheme('forest')">
+          <div class="ts-preview" style="background:#060f09;border-color:#213726"><div class="ts-dot" style="background:#22d3a0"></div></div>
+          <div class="ts-name">Forest</div>
+        </div>
+      </div>
     </div>
-    <button class="btn-primary" onclick="saveSettings()" style="margin-top:6px">Save Settings</button>
+
+    <button class="btn-primary" onclick="saveSettings()" style="margin-top:6px">Save</button>
     <button class="btn-secondary" onclick="hideModal('modal-settings')" style="margin-top:6px">Cancel</button>
   </div>
 </div>
@@ -451,7 +494,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — This is a pre-built example. Changes won't be saved.</div>
 
   <div class="topbar">
-    <div class="brand">🐨 Cue<span>ola</span></div>
+    <div class="brand"><span>🐨 Cue<em>ola</em></span></div>
     <div class="mode-tabs">
       <div class="mtab on" onclick="showRundown()">Build</div>
       <div class="mtab" onclick="goLive()">Live Show</div>
@@ -702,6 +745,9 @@ let guideStep = 1; let gType = null;
 let elapsed = 0; let timerInt = null;
 let nextId  = 1;
 let unsubscribe = null;
+
+// Apply saved theme immediately
+applyTheme(currentTheme);
 
 // Demo cues
 const DEMO_CUES = [
@@ -1182,9 +1228,23 @@ function deleteCue(){
 }
 
 // ══════ SETTINGS ══════════════════════════════
+let currentTheme = localStorage.getItem('cueola_theme') || 'default';
+
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t === 'default' ? '' : t);
+}
+
+function selectTheme(t){
+  currentTheme = t;
+  document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === t));
+}
+
 function saveSettings(){
-  show.name=document.getElementById('set-showname').value.trim()||show.name;
-  show.start=document.getElementById('set-starttime').value||'';
+  const nameInput = document.getElementById('set-showname');
+  if(!nameInput.disabled) show.name = nameInput.value.trim() || show.name;
+  show.start = document.getElementById('set-starttime').value || '';
+  applyTheme(currentTheme);
+  localStorage.setItem('cueola_theme', currentTheme);
   hideModal('modal-settings');
   renderRundown(); syncToFirestore();
 }
@@ -1193,8 +1253,16 @@ function saveSettings(){
 const origShowModal=showModal;
 window.showModal=function(id){
   if(id==='modal-settings'){
-    document.getElementById('set-showname').value=show.name||'';
-    document.getElementById('set-starttime').value=show.start||'';
+    const locked = session.role === 'student' && !!show.name;
+    const nameInput = document.getElementById('set-showname');
+    nameInput.value = show.name || '';
+    nameInput.disabled = locked;
+    nameInput.style.opacity = locked ? '0.5' : '1';
+    document.getElementById('showname-locked-hint').style.display = locked ? 'block' : 'none';
+    document.getElementById('set-starttime').value = show.start || '';
+    const saved = localStorage.getItem('cueola_theme') || 'default';
+    currentTheme = saved;
+    document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === saved));
   }
   document.getElementById(id).classList.add('on');
 };
