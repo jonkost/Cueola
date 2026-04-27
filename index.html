@@ -99,6 +99,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .role-stud{background:rgba(34,211,160,.15);color:var(--green)}
 .role-view{background:rgba(245,183,49,.15);color:var(--yellow)}
 .tb-right{display:flex;gap:6px;align-items:center}
+
+/* ── PRESENCE ── */
+.presence-wrap{position:relative;display:flex;align-items:center}
+.presence-avatars{display:flex;align-items:center}
+.p-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:var(--mono);border:2px solid var(--s1);margin-left:-6px;cursor:default}
+.p-avatar:first-child{margin-left:0}
+.p-avatar.inst{background:rgba(91,141,248,.3);color:var(--accent)}
+.p-avatar.stud{background:rgba(34,211,160,.25);color:var(--green)}
+.p-avatar.extra{background:var(--s3);color:var(--text3);font-size:9px}
+.p-tooltip{display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--s1);border:1px solid var(--bord2);border-radius:10px;padding:10px 12px;min-width:140px;z-index:400;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.presence-wrap:hover .p-tooltip{display:flex}
+.p-tip-row{display:flex;align-items:center;gap:7px;font-size:12px;white-space:nowrap}
+.p-tip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.p-tip-label{font-size:9px;font-family:var(--mono);color:var(--text3);margin-left:auto}
 .tbtn{padding:7px 13px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
 .tbtn-ghost{background:transparent;color:var(--text2);border:1.5px solid var(--bord2)}
 .tbtn-ghost:hover{color:var(--text);border-color:var(--text2)}
@@ -505,6 +519,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         Code: <strong id="topCode">—</strong>
         <span class="role-badge role-inst" id="roleTag">INST</span>
       </div>
+      <div class="presence-wrap" id="presenceWrap" style="display:none">
+        <div class="presence-avatars" id="presenceAvatars"></div>
+        <div class="p-tooltip" id="presenceTooltip"></div>
+      </div>
       <button class="tbtn tbtn-ghost" onclick="showModal('modal-settings')">⚙ Settings</button>
       <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
     </div>
@@ -773,8 +791,8 @@ applyTheme(currentTheme);
     }
     updateTopBar();
     subscribeToSession();
+    joinPresence();
     showRundown();
-    // Clean up URL without reloading
     window.history.replaceState({}, '', window.location.pathname);
   };
   if(window._firebaseReady){ enter(); }
@@ -856,6 +874,7 @@ function enterAsInstructor(){
   hideModal('modal-code');
   updateTopBar();
   subscribeToSession();
+  joinPresence();
   showRundown();
 }
 
@@ -881,6 +900,7 @@ async function joinSession(){
   hideModal('modal-stud');
   updateTopBar();
   subscribeToSession();
+  joinPresence();
   showRundown();
 }
 
@@ -897,6 +917,7 @@ function subscribeToSession(){
       if(typeof d.activeIdx==='number')lsIdx=d.activeIdx;
       document.getElementById('syncDot').classList.remove('off');
       renderRundown();
+      renderPresence(d.presence||{});
       if(document.getElementById('liveshow').classList.contains('on'))renderLive();
     });
   }catch(e){document.getElementById('syncDot').classList.add('off')}
@@ -1259,6 +1280,62 @@ function deleteCue(){
   renderRundown(); syncToFirestore();
 }
 
+// ══════ PRESENCE ══════════════════════════════
+const presenceId = Math.random().toString(36).slice(2,10);
+let presenceInterval = null;
+
+async function joinPresence(){
+  if(!session.code||session.isDemo||session.isExpert||!window._firebaseReady)return;
+  const displayName = session.role==='instructor' ? 'Instructor' : (session.userName||'?');
+  try{
+    await window._updateDoc(window._doc(window._db,'sessions',session.code),{
+      [`presence.${presenceId}`]:{name:displayName,role:session.role,lastSeen:Date.now()}
+    });
+    clearInterval(presenceInterval);
+    presenceInterval=setInterval(async()=>{
+      try{
+        await window._updateDoc(window._doc(window._db,'sessions',session.code),{
+          [`presence.${presenceId}.lastSeen`]:Date.now()
+        });
+      }catch(e){}
+    },30000);
+  }catch(e){console.warn('Presence join error:',e)}
+}
+
+async function leavePresence(){
+  if(!session.code||!window._firebaseReady)return;
+  clearInterval(presenceInterval);
+  try{
+    await window._updateDoc(window._doc(window._db,'sessions',session.code),{
+      [`presence.${presenceId}`]:window._deleteField()
+    });
+  }catch(e){}
+}
+
+function renderPresence(presenceMap){
+  const now=Date.now();
+  const active=Object.values(presenceMap||{})
+    .filter(p=>(now-(p.lastSeen||0))<90000)
+    .sort((a,b)=>a.role==='instructor'?-1:b.role==='instructor'?1:0);
+  const wrap=document.getElementById('presenceWrap');
+  if(!active.length||!session.code||session.isDemo||session.isExpert){wrap.style.display='none';return;}
+  wrap.style.display='flex';
+  const shown=active.slice(0,4);
+  const extra=active.length-4;
+  document.getElementById('presenceAvatars').innerHTML=
+    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" title="${p.name}">${(p.name||'?')[0].toUpperCase()}</div>`).join('')+
+    (extra>0?`<div class="p-avatar extra">+${extra}</div>`:'');
+  document.getElementById('presenceTooltip').innerHTML=
+    `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN THIS SESSION</div>`+
+    active.map(p=>{
+      const col=p.role==='instructor'?'var(--accent)':'var(--green)';
+      const lbl=p.role==='instructor'?'INST':'STU';
+      return `<div class="p-tip-row"><div class="p-tip-dot" style="background:${col}"></div>${p.name}<span class="p-tip-label">${lbl}</span></div>`;
+    }).join('');
+}
+
+window.addEventListener('beforeunload',leavePresence);
+
 // ══════ SETTINGS ══════════════════════════════
 let currentTheme = localStorage.getItem('cueola_theme') || 'default';
 
@@ -1303,7 +1380,7 @@ window.showModal=function(id){
 <!-- Firebase module -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, serverTimestamp }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, serverTimestamp, deleteField }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -1325,6 +1402,7 @@ window.showModal=function(id){
   window._onSnapshot = onSnapshot;
   window._updateDoc = updateDoc;
   window._serverTimestamp = serverTimestamp;
+  window._deleteField = deleteField;
   window._firebaseReady = true;
   window.dispatchEvent(new Event('firebaseReady'));
 </script>
