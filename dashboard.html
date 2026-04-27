@@ -293,13 +293,13 @@ body{overflow-x:hidden}
 <!-- ── MODAL: INSTRUCTOR LOGIN ── -->
 <div class="modal-wrap on" id="modal-login">
   <div class="modal">
-    <div class="modal-title">👋 Welcome back</div>
-    <div class="modal-sub">Enter your instructor name to access your sessions. Your sessions are saved by name — use the same name each time.</div>
+    <div class="modal-title">🔒 Admin Access</div>
+    <div class="modal-sub">Enter your admin code to access your sessions. Use the same code each time.</div>
     <div class="field">
-      <label class="field-lbl">Your Name</label>
-      <input class="field-in" id="login-name" type="text" placeholder='e.g. "Prof. Kost"' maxlength="40" onkeydown="if(event.key==='Enter')loginInstructor()">
+      <label class="field-lbl">Admin Code</label>
+      <input class="field-in" id="login-name" type="password" placeholder="Enter your code" maxlength="40" onkeydown="if(event.key==='Enter')loginInstructor()">
     </div>
-    <div class="modal-err" id="login-err">Please enter your name.</div>
+    <div class="modal-err" id="login-err">Please enter your admin code.</div>
     <button class="btn-full btn-primary" onclick="loginInstructor()">Enter Dashboard →</button>
   </div>
 </div>
@@ -409,10 +409,9 @@ function switchInstructor(){
 
 // ── DASHBOARD ──────────────────────────────────────────
 function updateDashboard(){
-  document.getElementById('heroName').textContent = `Hey, ${instructor.name} 👋`;
+  document.getElementById('heroName').textContent = `Instructor Dashboard`;
   document.getElementById('heroSub').textContent = 'Manage your sessions below. Create a new one or return to an existing rundown.';
-  document.getElementById('topInstName').style.display = 'flex';
-  document.getElementById('topInstNameVal').textContent = instructor.name;
+  document.getElementById('topInstName').style.display = 'none';
 }
 
 function updateStats(){
