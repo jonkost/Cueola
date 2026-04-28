@@ -647,9 +647,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="tc" data-t="wiggle"   style="--tc-c:#64748b;--tc-bg:rgba(100,116,139,.07)" onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">⏸</span><span class="tc-nm" style="color:#64748b">WIGGLE ROOM</span></div><div class="tc-d">Flex buffer — always build this in</div><div class="tc-e">Pros always leave wiggle room</div></div>
           <div class="tc" data-t="take"     style="--tc-c:#f05252;--tc-bg:rgba(240,82,82,.07)"   onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">🎬</span><span class="tc-nm" style="color:#f05252">TAKE</span></div><div class="tc-d">Director take — switch to a source</div><div class="tc-e">e.g. Take CAM 1 — anchor wide</div></div>
           <div class="tc" data-t="ready"    style="--tc-c:#f5b731;--tc-bg:rgba(245,183,49,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">⚡</span><span class="tc-nm" style="color:#f5b731">READY</span></div><div class="tc-d">Standby — cue coming next</div><div class="tc-e">e.g. Ready CAM 2</div></div>
-          <div class="tc" data-t="vtroll"   style="--tc-c:#f97316;--tc-bg:rgba(249,115,22,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">📼</span><span class="tc-nm" style="color:#f97316">VT ROLL</span></div><div class="tc-d">Roll pre-recorded video tape</div><div class="tc-e">e.g. VT roll — news package</div></div>
+          <div class="tc" data-t="vtroll"   style="--tc-c:#f97316;--tc-bg:rgba(249,115,22,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">📼</span><span class="tc-nm" style="color:#f97316">PKG ROLL</span></div><div class="tc-d">Roll pre-recorded video tape</div><div class="tc-e">e.g. VT roll — news package</div></div>
           <div class="tc" data-t="lower3"   style="--tc-c:#22d3d3;--tc-bg:rgba(34,211,211,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">📋</span><span class="tc-nm" style="color:#22d3d3">LOWER 3RD</span></div><div class="tc-d">Lower third graphic overlay</div><div class="tc-e">e.g. Name/title lower third</div></div>
-          <div class="tc" data-t="toss"     style="--tc-c:#ec4899;--tc-bg:rgba(236,72,153,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">🏃</span><span class="tc-nm" style="color:#ec4899">TOSS</span></div><div class="tc-d">Hand off to another presenter</div><div class="tc-e">e.g. Toss to field reporter</div></div>
         </div>
         <div class="field-err" id="ge-type">⚠ Pick a cue type to continue.</div>
       </div>
@@ -720,9 +719,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="pc" style="--pcc:#64748b;--pcbg:rgba(100,116,139,.07);grid-column:span 2" onclick="quickAdd('wiggle')"><div class="pc-row"><span class="pc-ico">⏸</span><span class="pc-nm" style="color:#64748b">WIGGLE ROOM</span></div><div class="pc-d">Flex buffer — always build this in</div></div>
       <div class="pc" style="--pcc:#f05252;--pcbg:rgba(240,82,82,.07)" onclick="quickAdd('take')"><div class="pc-row"><span class="pc-ico">🎬</span><span class="pc-nm" style="color:#f05252">TAKE</span></div><div class="pc-d">Director take — switch source</div></div>
       <div class="pc" style="--pcc:#f5b731;--pcbg:rgba(245,183,49,.07)" onclick="quickAdd('ready')"><div class="pc-row"><span class="pc-ico">⚡</span><span class="pc-nm" style="color:#f5b731">READY</span></div><div class="pc-d">Standby — cue coming next</div></div>
-      <div class="pc" style="--pcc:#f97316;--pcbg:rgba(249,115,22,.07)" onclick="quickAdd('vtroll')"><div class="pc-row"><span class="pc-ico">📼</span><span class="pc-nm" style="color:#f97316">VT ROLL</span></div><div class="pc-d">Roll pre-recorded video</div></div>
+      <div class="pc" style="--pcc:#f97316;--pcbg:rgba(249,115,22,.07)" onclick="quickAdd('vtroll')"><div class="pc-row"><span class="pc-ico">📼</span><span class="pc-nm" style="color:#f97316">PKG ROLL</span></div><div class="pc-d">Roll pre-recorded video</div></div>
       <div class="pc" style="--pcc:#22d3d3;--pcbg:rgba(34,211,211,.07)" onclick="quickAdd('lower3')"><div class="pc-row"><span class="pc-ico">📋</span><span class="pc-nm" style="color:#22d3d3">LOWER 3RD</span></div><div class="pc-d">Lower third graphic overlay</div></div>
-      <div class="pc" style="--pcc:#ec4899;--pcbg:rgba(236,72,153,.07)" onclick="quickAdd('toss')"><div class="pc-row"><span class="pc-ico">🏃</span><span class="pc-nm" style="color:#ec4899">TOSS</span></div><div class="pc-d">Hand off to another presenter</div></div>
     </div>
     <button class="sheet-cancel" onclick="closePicker()">Cancel</button>
   </div>
@@ -781,8 +779,7 @@ const TM = {
   take:     {icon:'🎬',label:'TAKE',         color:'#f05252',bg:'rgba(240,82,82,.18)'},
   ready:    {icon:'⚡',label:'READY',        color:'#f5b731',bg:'rgba(245,183,49,.18)'},
   lower3:   {icon:'📋',label:'LOWER 3RD',   color:'#22d3d3',bg:'rgba(34,211,211,.13)'},
-  vtroll:   {icon:'📼',label:'VT ROLL',      color:'#f97316',bg:'rgba(249,115,22,.18)'},
-  toss:     {icon:'🏃',label:'TOSS',         color:'#ec4899',bg:'rgba(236,72,153,.13)'},
+  vtroll:   {icon:'📼',label:'PKG ROLL',     color:'#f97316',bg:'rgba(249,115,22,.18)'},
 };
 
 // ══════ STATE ══════════════════════════════════
@@ -856,7 +853,7 @@ const DEMO_BEATS = [
   {id:9,name:'Wiggle Room',min:2,sec:0,notes:'',
    items:[{id:'i9',type:'wiggle',name:'Buffer — pros always build this in',notes:''}]},
   {id:10,name:'Outro & Anchor Signoff',min:1,sec:30,notes:'',
-   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'toss',name:'Toss to credits roll',notes:''}]},
+   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'script',name:'Anchor signoff — roll credits',notes:''}]},
 ];
 
 function durMins(c){ return (c.min||0) + (c.sec||0)/60; }
@@ -1364,7 +1361,7 @@ function openAddItem(beatId) {
   document.getElementById('addItemNameField').style.display = 'none';
   document.getElementById('addItemConfirm').style.display = 'none';
 
-  const types = ['take','ready','video','audio','graphic','lower3','vtroll','playback','script','lighting','toss','anchor','wiggle'];
+  const types = ['take','ready','video','audio','graphic','lower3','vtroll','playback','script','lighting','anchor','wiggle'];
   document.getElementById('addItemGrid').innerHTML = types.map(t => {
     const m = TM[t];
     return `<div class="pc" style="--pcc:${m.color};--pcbg:${m.bg}" onclick="selectAddItemType('${t}')"><div class="pc-row"><span class="pc-ico">${m.icon}</span><span class="pc-nm" style="color:${m.color};font-size:9px">${m.label}</span></div></div>`;
