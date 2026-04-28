@@ -793,8 +793,8 @@ let elapsed = 0; let timerInt = null;
 let nextId  = 1;
 let unsubscribe = null;
 
-// Apply saved theme immediately
-applyTheme(currentTheme);
+// Apply saved theme immediately (inline — applyTheme defined later but theme CSS attr needed now)
+(function(){ const t=localStorage.getItem('cueola_theme')||'default'; document.documentElement.setAttribute('data-theme',t==='default'?'':t); })();
 
 // Auto-join session if ?code= is in the URL (admin coming from dashboard)
 (async function autoJoinFromURL(){
