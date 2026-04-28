@@ -375,6 +375,140 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .beat-add-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:9px;font-family:var(--mono);color:var(--text3);border:1px dashed var(--bord2);background:transparent;cursor:pointer;transition:all .15s}
 .beat-add-btn:hover{border-color:var(--accent);color:var(--accent)}
 
+/* ── RUNDOWN GRID ── */
+.rg-wrap { overflow-x: auto; flex: 1; }
+.rg-table { min-width: 900px; width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rg-table th, .rg-table td { padding: 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+
+/* Column widths */
+.col-drag  { width: 22px; }
+.col-num   { width: 36px; }
+.col-info  { width: 160px; }
+.col-start { width: 58px; }
+.col-dur   { width: 52px; }
+.col-video { width: 140px; }
+.col-audio { width: 120px; }
+.col-play  { width: 110px; }
+.col-gfx   { width: 110px; }
+.col-script{ width: auto; min-width: 140px; }
+
+/* Header */
+.rg-head th {
+  background: var(--s2);
+  font-size: 9px;
+  font-family: var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 6px 8px;
+  white-space: nowrap;
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 2px solid var(--border);
+}
+
+/* Row */
+.rg-row { transition: background .12s; }
+.rg-row:hover { background: var(--s2); }
+.rg-row.is-active { background: rgba(91,141,248,.05); }
+.rg-row.is-done { opacity: .4; }
+.rg-row.dragging { opacity: .4; }
+.rg-row.drag-over { box-shadow: inset 0 2px 0 var(--accent); }
+
+/* Row accent stripe — auto color from video field */
+.rg-row td:first-child { border-left: 3px solid transparent; }
+.rg-row.src-cam  td:first-child { border-left-color: var(--accent); }
+.rg-row.src-pkg  td:first-child { border-left-color: var(--red); }
+.rg-row.src-gfx  td:first-child { border-left-color: var(--yellow); }
+.rg-row.src-vt   td:first-child { border-left-color: var(--orange); }
+
+/* Drag handle */
+.drag-handle {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; min-height: 36px; cursor: grab; color: var(--text3); font-size: 10px;
+  opacity: 0;
+  padding: 8px 2px;
+}
+.rg-row:hover .drag-handle { opacity: 1; }
+
+/* Row num */
+.rg-num {
+  font-family: var(--mono); font-size: 10px; color: var(--text3);
+  text-align: center; padding: 10px 4px; user-select: none;
+}
+.rg-row.is-active .rg-num { color: var(--accent); }
+
+/* Cell */
+.rg-cell {
+  padding: 8px 8px;
+  cursor: pointer;
+  min-height: 36px;
+  position: relative;
+  vertical-align: top;
+}
+.rg-cell:hover { background: rgba(255,255,255,.03); }
+.rg-cell-inner {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.rg-cell.has-content .rg-cell-inner { color: var(--text); }
+.rg-cell.col-info .rg-cell-inner { font-size: 12px; font-weight: 600; color: var(--text); }
+.rg-cell .rg-empty { color: var(--text3); font-size: 10px; opacity: .4; }
+
+/* Script cell gets italic treatment */
+.rg-cell.col-script .rg-cell-inner { font-style: italic; color: var(--text2); }
+.rg-cell.col-script.has-content .rg-cell-inner { font-style: normal; color: var(--text); }
+
+/* Start/Dur cells */
+.rg-cell.col-start .rg-cell-inner,
+.rg-cell.col-dur .rg-cell-inner {
+  font-family: var(--mono); font-size: 11px; color: var(--text2);
+  text-align: right;
+}
+.rg-cell.col-start { cursor: default; }
+
+/* Video cell color hint */
+.rg-cell.col-video.has-content .rg-cell-inner { color: var(--accent); }
+.rg-row.src-pkg .rg-cell.col-video.has-content .rg-cell-inner { color: var(--red); }
+.rg-row.src-gfx .rg-cell.col-gfx.has-content .rg-cell-inner { color: var(--yellow); }
+
+/* Add row button */
+.rg-add-row td {
+  padding: 10px 12px;
+  text-align: center;
+}
+.rg-add-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-family: var(--mono); color: var(--text3);
+  border: 1.5px dashed var(--bord2); border-radius: 7px;
+  padding: 7px 18px; cursor: pointer; background: transparent;
+  transition: all .15s; width: 100%;
+  justify-content: center;
+}
+.rg-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Search highlight */
+.rg-row.search-hit { background: rgba(91,141,248,.1) !important; }
+
+/* Search input focus */
+.rg-search-wrap input:focus { border-color: var(--accent); }
+
+/* Wizard chip */
+.wz-chip {
+  padding: 6px 12px; border-radius: 7px; font-size: 11px;
+  font-family: var(--mono); color: var(--text2);
+  border: 1.5px solid var(--bord2); background: var(--s2);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.wz-chip:hover, .wz-chip.sel { border-color: var(--accent); color: var(--accent); background: rgba(91,141,248,.08); }
+
 @media(max-width:600px){
   .mode-tabs{display:none}
   .col-heads{grid-template-columns:28px 76px 1fr 54px 36px}
@@ -530,6 +664,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="mtab" onclick="goLive()">Live Show</div>
     </div>
     <div class="tb-right">
+      <div class="rg-search-wrap" id="rgSearchWrap" style="display:none">
+        <input class="rg-search-in" id="rgSearchIn" type="text" placeholder="# row" maxlength="4"
+          oninput="searchRow(this.value)" style="width:52px;padding:5px 8px;font-family:var(--mono);font-size:12px;background:var(--s2);border:1.5px solid var(--bord2);border-radius:7px;color:var(--text);outline:none">
+      </div>
       <div class="session-badge" id="topSessionBadge" style="display:none">
         <span class="sync-dot" id="syncDot"></span>
         Code: <strong id="topCode">—</strong>
@@ -558,21 +696,24 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   </div>
   <div class="prog"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
 
-  <div class="rd-scroll">
-    <div class="col-heads">
-      <div class="colh">#</div>
-      <div class="colh">Type</div>
-      <div class="colh">Cue / Notes</div>
-      <div class="colh">Start</div>
-      <div class="colh">Dur</div>
-      <div class="colh"></div>
-    </div>
-    <div id="cueList"></div>
-    <div class="add-row" onclick="openGuide()">
-      <div class="add-plus">+</div>
-      <span>Add a cue</span>
-      <span class="add-tip">💡 Tap for guided help</span>
-    </div>
+  <div class="rg-wrap" id="rgWrap">
+    <table class="rg-table" id="rgTable">
+      <thead>
+        <tr class="rg-head">
+          <th class="col-drag"></th>
+          <th class="col-num">#</th>
+          <th class="col-info">Info</th>
+          <th class="col-start">Start</th>
+          <th class="col-dur">Dur</th>
+          <th class="col-video">Video</th>
+          <th class="col-audio">Audio</th>
+          <th class="col-play">Playback</th>
+          <th class="col-gfx">GFX</th>
+          <th class="col-script">Script</th>
+        </tr>
+      </thead>
+      <tbody id="rgBody"></tbody>
+    </table>
   </div>
 
   <div class="bot-bar">
@@ -764,6 +905,190 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   </div>
 </div>
 
+<!-- ══ INFO WIZARD ══ -->
+<div class="overlay" id="wzInfo" onclick="closeWz('wzInfo',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Info</div>
+    <div class="sheet-sub">Name this moment in your show. Keep it short — this is your slug.</div>
+    <div class="field">
+      <label class="field-lbl">Slug / Segment Name</label>
+      <input class="field-in" id="wz-info-name" type="text" maxlength="60" placeholder='e.g. "Show Open" or "PKG — Student Council"'>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Duration</label>
+      <div class="dur-row">
+        <div class="field">
+          <input class="field-in" id="wz-info-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono);font-size:20px">
+          <div class="field-lbl" style="text-align:center;margin-top:4px">MIN</div>
+        </div>
+        <div class="dur-sep">:</div>
+        <div class="field">
+          <input class="field-in" id="wz-info-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:20px">
+          <div class="field-lbl" style="text-align:center;margin-top:4px">SEC</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="saveWzInfo()">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzInfo')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ VIDEO WIZARD ══ -->
+<div class="overlay" id="wzVideo" onclick="closeWz('wzVideo',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Video</div>
+    <div class="sheet-sub">What does the viewer see? Pick the source, then describe the shot.</div>
+    <div class="field">
+      <label class="field-lbl">Source</label>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px">
+        <button class="wz-chip" onclick="wzVideoSource('CAM 1')" data-src="CAM 1">CAM 1</button>
+        <button class="wz-chip" onclick="wzVideoSource('CAM 2')" data-src="CAM 2">CAM 2</button>
+        <button class="wz-chip" onclick="wzVideoSource('CAM 3')" data-src="CAM 3">CAM 3</button>
+        <button class="wz-chip" onclick="wzVideoSource('CAM 4')" data-src="CAM 4">CAM 4</button>
+        <button class="wz-chip" onclick="wzVideoSource('PKG')" data-src="PKG">PKG</button>
+        <button class="wz-chip" onclick="wzVideoSource('VT')" data-src="VT">VT</button>
+        <button class="wz-chip" onclick="wzVideoSource('GFX')" data-src="GFX">GFX</button>
+        <button class="wz-chip" onclick="wzVideoSource('')" data-src="">Other</button>
+      </div>
+    </div>
+    <div class="field" id="wzVideoActionField" style="display:none">
+      <label class="field-lbl">Action</label>
+      <div style="display:flex;gap:6px">
+        <button class="wz-chip" id="wzActReady" onclick="wzSetAction('Ready')">Ready</button>
+        <button class="wz-chip" id="wzActTake" onclick="wzSetAction('Take')">Take</button>
+      </div>
+    </div>
+    <div class="field" id="wzVideoShotField" style="display:none">
+      <label class="field-lbl">Shot</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="wz-chip" onclick="wzSetShot('Wide')">Wide</button>
+        <button class="wz-chip" onclick="wzSetShot('MCU')">MCU</button>
+        <button class="wz-chip" onclick="wzSetShot('CU')">CU</button>
+        <button class="wz-chip" onclick="wzSetShot('2-shot')">2-shot</button>
+        <button class="wz-chip" onclick="wzSetShot('')">—</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Result <span style="color:var(--text3)">(edit freely)</span></label>
+      <input class="field-in" id="wz-video-val" type="text" maxlength="80" placeholder='e.g. "Take CAM 1 — Wide"'>
+    </div>
+    <button class="btn-primary" onclick="saveWzField('video','wz-video-val')">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzVideo')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ AUDIO WIZARD ══ -->
+<div class="overlay" id="wzAudio" onclick="closeWz('wzAudio',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Audio</div>
+    <div class="sheet-sub">What's the audio source and level call?</div>
+    <div class="field">
+      <label class="field-lbl">Source</label>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Mics hot')">Mics hot</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Music up full')">Music up full</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Music under')">Music under</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Music out')">Music out</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','NAT SOT')">NAT SOT</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','VO')">VO</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','SFX')">SFX</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Fade out')">Fade out</button>
+        <button class="wz-chip" onclick="wzAppend('wz-audio-val','Silence')">Silence</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Notes</label>
+      <input class="field-in" id="wz-audio-val" type="text" maxlength="80" placeholder='e.g. "CH1 + CH2 up — theme music under"'>
+    </div>
+    <button class="btn-primary" onclick="saveWzField('audio','wz-audio-val')">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzAudio')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ PLAYBACK WIZARD ══ -->
+<div class="overlay" id="wzPlayback" onclick="closeWz('wzPlayback',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Playback</div>
+    <div class="sheet-sub">Name the clip and set the total running time (TRT). This is what the playback operator needs.</div>
+    <div class="field">
+      <label class="field-lbl">Clip Slug / File Name</label>
+      <input class="field-in" id="wz-play-clip" type="text" maxlength="60" placeholder='e.g. "SC_042" or "HOFL_122_OpenBillboard"'>
+    </div>
+    <div class="field">
+      <label class="field-lbl">TRT (Total Running Time)</label>
+      <div class="dur-row">
+        <div class="field">
+          <input class="field-in" id="wz-play-min" type="number" min="0" max="60" placeholder="0" style="text-align:center;font-family:var(--mono);font-size:20px">
+          <div class="field-lbl" style="text-align:center;margin-top:4px">MIN</div>
+        </div>
+        <div class="dur-sep">:</div>
+        <div class="field">
+          <input class="field-in" id="wz-play-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:20px">
+          <div class="field-lbl" style="text-align:center;margin-top:4px">SEC</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="saveWzPlayback()">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzPlayback')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ GFX WIZARD ══ -->
+<div class="overlay" id="wzGfx" onclick="closeWz('wzGfx',event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">GFX</div>
+    <div class="sheet-sub">What graphic appears? Pick the type and describe what it says.</div>
+    <div class="field">
+      <label class="field-lbl">Type</label>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <button class="wz-chip" onclick="wzGfxType('L3:')">Lower Third</button>
+        <button class="wz-chip" onclick="wzGfxType('FULL:')">Full Screen</button>
+        <button class="wz-chip" onclick="wzGfxType('Bug:')">Bug</button>
+        <button class="wz-chip" onclick="wzGfxType('Chyron:')">Chyron</button>
+        <button class="wz-chip" onclick="wzGfxType('Transition:')">Transition</button>
+        <button class="wz-chip" onclick="wzGfxType('')">Other</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Content / Description</label>
+      <input class="field-in" id="wz-gfx-val" type="text" maxlength="80" placeholder='e.g. "L3: Anchor Name — Campus News"'>
+    </div>
+    <button class="btn-primary" onclick="saveWzField('gfx','wz-gfx-val')">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzGfx')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ SCRIPT WIZARD ══ -->
+<div class="overlay" id="wzScript" onclick="closeWz('wzScript',event)">
+  <div class="sheet" style="max-height:85vh">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Script</div>
+    <div class="sheet-sub">Write the copy for this moment. This feeds directly into Prompt Up The Jam.</div>
+    <div class="field">
+      <label class="field-lbl">Who speaks?</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="wz-chip" onclick="wzScriptWho('Anchor:')">Anchor</button>
+        <button class="wz-chip" onclick="wzScriptWho('Host:')">Host</button>
+        <button class="wz-chip" onclick="wzScriptWho('VO:')">VO</button>
+        <button class="wz-chip" onclick="wzScriptWho('Guest:')">Guest</button>
+      </div>
+    </div>
+    <div class="field" style="flex:1">
+      <label class="field-lbl">Copy</label>
+      <textarea class="field-in" id="wz-script-val" rows="7" maxlength="2000"
+        placeholder="Write the copy here. What does the talent say, word for word?"
+        style="resize:vertical;min-height:140px;font-size:14px;line-height:1.6"></textarea>
+    </div>
+    <button class="btn-primary" onclick="saveWzScript()">Save →</button>
+    <button class="sheet-cancel" onclick="closeWz('wzScript')">Cancel</button>
+  </div>
+</div>
+
 <script>
 // ══════ TYPE META ══════════════════════════════
 const TM = {
@@ -814,9 +1139,9 @@ let unsubscribe = null;
           show.name = d.showName || 'Untitled Show';
           show.start = d.startTime || '';
           if(d.beats && d.beats.length){
-            beats = d.beats;
+            beats = d.beats.map(b=>({...b, info: b.info||b.name||'', video:b.video||'', audio:b.audio||'', playback:b.playback||'', gfx:b.gfx||'', script:b.script||''}));
           } else if(d.cues && d.cues.length){
-            beats = d.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+            beats = d.cues.map(c=>({id:c.id,info:c.name||'',min:c.min,sec:c.sec,notes:c.notes||'',video:'',audio:'',playback:'',gfx:'',script:'',active:c.active,done:c.done}));
           }
           nextId = beats.length + 1;
         }
@@ -834,36 +1159,30 @@ let unsubscribe = null;
 
 // Demo beats
 const DEMO_BEATS = [
-  {id:1,name:'Countdown Slate',min:5,sec:0,notes:'',done:true,
-   script:'',
-   items:[{id:'i1',type:'video',name:'Pre-show hold — hype music',notes:''}]},
-  {id:2,name:'Show Open',min:0,sec:30,active:true,notes:'',
-   script:'',
-   items:[{id:'i2a',type:'take',name:'Take CAM 1 — wide',notes:''},{id:'i2b',type:'audio',name:'Theme music up full',notes:''},{id:'i2c',type:'graphic',name:'Show open title card',notes:''}]},
-  {id:3,name:'Anchor Mics Hot',min:0,sec:10,notes:'',
-   script:'',
-   items:[{id:'i3',type:'audio',name:'CH1 + CH2 up, fade open music',notes:''}]},
-  {id:4,name:'Show Open Title Card',min:0,sec:8,notes:'',
-   script:'',
-   items:[{id:'i4',type:'graphic',name:'Full screen — Campus News Spring Edition',notes:''}]},
-  {id:5,name:'Anchor Intro — Cold Open',min:1,sec:30,notes:'',
-   script:'Good evening and welcome to Campus News — I\'m your anchor.\n\nTonight we\'re covering three stories shaping life on campus this week. From a major change to student housing policy, to an exclusive sit-down with the head coach ahead of this weekend\'s championship — and a student-run startup that just landed its first real investor.\n\nWe\'ve got a full show ahead. Let\'s get into it.',
-   items:[{id:'i5a',type:'script',name:'Cold open — anchor to cam',notes:''},{id:'i5b',type:'ready',name:'Ready CAM 2',notes:''}]},
-  {id:6,name:'Guest Conversation Block',min:15,sec:0,notes:'Shape: intro → 2 themes → wrap.',
-   script:'Joining me now is a guest who has been at the center of this week\'s biggest story.\n\nWelcome to the show — thanks for being here.\n\n[INTERVIEW BLOCK — FLEXIBLE · shape the conversation around their journey and what surprised them most]',
-   items:[{id:'i6a',type:'flex',name:'Guest intro block — content TBD',notes:''},{id:'i6b',type:'lower3',name:'Guest lower third',notes:''}]},
-  {id:7,name:'Anchor Redirect Prompt',min:0,sec:30,notes:'',
-   script:'"What surprised you most about how this unfolded?"',
-   items:[{id:'i7',type:'anchor',name:'"What surprised you most?"',notes:'Use if conversation stalls'}]},
-  {id:8,name:'PKG — Student Council',min:2,sec:15,notes:'',
-   script:'',
-   items:[{id:'i8a',type:'vtroll',name:'PKG roll — clip SC_042 — 2m15s',notes:''},{id:'i8b',type:'take',name:'Take PKG server',notes:''}]},
-  {id:9,name:'Wiggle Room',min:2,sec:0,notes:'',
-   script:'',
-   items:[{id:'i9',type:'wiggle',name:'Buffer — pros always build this in',notes:''}]},
-  {id:10,name:'Outro & Anchor Signoff',min:1,sec:30,notes:'',
-   script:'That\'s all for tonight\'s Campus News.\n\nThank you for watching — and thank you to our guests and crew for making this show happen.\n\nWe\'ll see you next week. I\'m your anchor — goodnight.',
-   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'script',name:'Anchor signoff',notes:''}]},
+  {id:1, info:'Countdown Slate', min:5, sec:0, done:true,
+   video:'Looping logo hold', audio:'HOF BGM under', playback:'', gfx:'Logo + countdown timer', script:''},
+  {id:2, info:'Show Open', min:0, sec:30, active:true,
+   video:'Take CAM 1 — Wide', audio:'Theme music up full', playback:'', gfx:'Show open title card', script:''},
+  {id:3, info:'Anchor Mics Hot', min:0, sec:10,
+   video:'', audio:'CH1 + CH2 up — fade open music', playback:'', gfx:'', script:''},
+  {id:4, info:'Show Open Title Card', min:0, sec:8,
+   video:'', audio:'', playback:'', gfx:'FULL: Campus News Spring Edition', script:''},
+  {id:5, info:'Anchor Intro — Cold Open', min:1, sec:30,
+   video:'Take CAM 1', audio:'Anchor mics hot', playback:'', gfx:'L3: Anchor Name/Title',
+   script:"Good evening and welcome to Campus News — I'm your anchor.\n\nTonight we're covering three stories shaping life on campus this week. From a major change to student housing policy, to an exclusive sit-down with the head coach — and a student-run startup that just landed its first real investor.\n\nWe've got a full show ahead. Let's get into it."},
+  {id:6, info:'Guest Conversation Block', min:15, sec:0,
+   video:'Take CAM 2', audio:'Guest mic hot', playback:'', gfx:'L3: Guest Name/Title',
+   script:"Joining me now is a guest who has been at the center of this week's biggest story.\n\nWelcome to the show — thanks for being here.\n\n[INTERVIEW BLOCK — shape the conversation around their journey and what surprised them most]"},
+  {id:7, info:'Anchor Redirect Prompt', min:0, sec:30,
+   video:'', audio:'', playback:'', gfx:'',
+   script:'"What surprised you most about how this unfolded?"'},
+  {id:8, info:'PKG — Student Council', min:2, sec:15,
+   video:'PKG server roll', audio:'NAT SOT under', playback:'SC_042 — 02:15', gfx:'L3: PKG slug', script:''},
+  {id:9, info:'Wiggle Room', min:2, sec:0,
+   video:'', audio:'', playback:'', gfx:'', script:''},
+  {id:10, info:'Outro & Anchor Signoff', min:1, sec:30,
+   video:'Take CAM 1 — anchor close', audio:'Theme music fade in', playback:'', gfx:'End card',
+   script:"That's all for tonight's Campus News.\n\nThank you for watching — and thank you to our guests and crew.\n\nWe'll see you next week. I'm your anchor — goodnight."},
 ];
 
 function durMins(c){ return (c.min||0) + (c.sec||0)/60; }
@@ -893,8 +1212,17 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById(id).classList.add('on');
 }
-function showRundown(){showScreen('rundown');renderRundown()}
-function goLive(){lsIdx=beats.findIndex(b=>b.active);if(lsIdx<0)lsIdx=0;renderLive();showScreen('liveshow');if(!timerInt)startTimer()}
+function showRundown(){
+  showScreen('rundown');
+  renderRundown();
+  const sw = document.getElementById('rgSearchWrap');
+  if (sw) sw.style.display = beats.length ? 'block' : 'none';
+}
+function goLive(){
+  const sw = document.getElementById('rgSearchWrap');
+  if (sw) sw.style.display = 'none';
+  lsIdx=beats.findIndex(b=>b.active);if(lsIdx<0)lsIdx=0;renderLive();showScreen('liveshow');if(!timerInt)startTimer();
+}
 
 // ══════ MODALS ══════════════════════════════════
 function showModal(id){document.getElementById(id).classList.add('on')}
@@ -947,9 +1275,9 @@ async function joinSession(){
       show.name=data.showName||'Untitled Show';
       show.start=data.startTime||'';
       if(data.beats&&data.beats.length){
-        beats=data.beats;
+        beats=data.beats.map(b=>({...b, info: b.info||b.name||'', video:b.video||'', audio:b.audio||'', playback:b.playback||'', gfx:b.gfx||'', script:b.script||''}));
       } else if(data.cues&&data.cues.length){
-        beats=data.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+        beats=data.cues.map(c=>({id:c.id,info:c.name||'',min:c.min,sec:c.sec,notes:c.notes||'',video:'',audio:'',playback:'',gfx:'',script:'',active:c.active,done:c.done}));
       }
       nextId=beats.length+1;
     }catch(e){console.warn('Firestore error:',e)}
@@ -971,9 +1299,9 @@ function subscribeToSession(){
       show.name=d.showName||show.name;
       show.start=d.startTime||show.start;
       if(d.beats&&d.beats.length){
-        beats=d.beats;
+        beats=d.beats.map(b=>({...b, info: b.info||b.name||'', video:b.video||'', audio:b.audio||'', playback:b.playback||'', gfx:b.gfx||'', script:b.script||''}));
       } else if(d.cues&&d.cues.length){
-        beats=d.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+        beats=d.cues.map(c=>({id:c.id,info:c.name||'',min:c.min,sec:c.sec,notes:c.notes||'',video:'',audio:'',playback:'',gfx:'',script:'',active:c.active,done:c.done}));
       }
       if(typeof d.activeIdx==='number')lsIdx=d.activeIdx;
       document.getElementById('syncDot').classList.remove('off');
@@ -1008,7 +1336,7 @@ function updateTopBar(){
 function loadDemo(){
   session={code:'DEMO1',role:'viewer',userName:'Demo',isDemo:true};
   show={name:'Campus News — Demo Show',start:'19:00'};
-  beats=DEMO_BEATS.map(b=>({...b,items:[...b.items]}));
+  beats=DEMO_BEATS.map(b=>({...b}));
   nextId=100;
   document.getElementById('demoBanner').style.display='block';
   updateTopBar();
@@ -1016,19 +1344,15 @@ function loadDemo(){
   showRundown();
   startTimer();
   // Write demo beats to Firestore so Prompt-Up-The-Jam can load them
-  if(window._firebaseReady){
+  const writeDemo = () => {
     window._setDoc(window._doc(window._db,'sessions','DEMO1'),{
       code:'DEMO1', showName:show.name, startTime:'19:00',
       beats, activeIdx:0, isDemo:true
     }).catch(()=>{});
-  } else {
-    window.addEventListener('firebaseReady',()=>{
-      window._setDoc(window._doc(window._db,'sessions','DEMO1'),{
-        code:'DEMO1', showName:show.name, startTime:'19:00',
-        beats, activeIdx:0, isDemo:true
-      }).catch(()=>{});
-    },{once:true});
-  }
+    subscribeToSession();
+  };
+  if(window._firebaseReady){ writeDemo(); }
+  else { window.addEventListener('firebaseReady', writeDemo, {once:true}); }
 }
 
 function loadExpert(){
@@ -1050,41 +1374,67 @@ function renderRundown(){
   document.getElementById('rd-end').textContent=(show.start&&td>0)?clock(show.start,td):'—';
   document.getElementById('rd-count').textContent=beats.length;
 
-  const list=document.getElementById('cueList'); list.innerHTML='';
-  let off=0;
-  beats.forEach((b,i)=>{
-    const isEditable = session.role === 'instructor' || session.isExpert || session.isDemo;
-    const row=document.createElement('div');
-    row.className='beat-row'+(b.active?' is-active':b.done?' is-done':'');
+  const tbody = document.getElementById('rgBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  let off = 0;
 
-    // Items chips HTML
-    const chipsHtml=(b.items||[]).map(item=>{
-      const m=TM[item.type]||TM.video;
-      return `<div class="beat-chip" style="background:${m.bg};color:${m.color};border-color:${m.color}22" title="${item.notes||''}" onclick="editItem(${b.id},'${item.id}')">${m.icon} ${item.name}</div>`;
-    }).join('');
+  beats.forEach((b, i) => {
+    const src = rowSrcClass(b.video);
+    const tr = document.createElement('tr');
+    tr.className = 'rg-row' + (b.active ? ' is-active' : b.done ? ' is-done' : '') + (src ? ' ' + src : '');
+    tr.dataset.id = b.id;
+    tr.draggable = true;
 
-    row.innerHTML=`
-      <div class="beat-head" onclick="openEdit(${b.id})">
-        <div class="beat-num">${pad(i+1)}</div>
-        <div class="beat-name">${b.name}</div>
-        <div class="beat-time">${show.start?clock(show.start,off):'—'}</div>
-        <div class="beat-dur">${fmtDur(b)}</div>
-        <div class="ia">${isEditable?'✏️':''}</div>
-      </div>
-      <div class="beat-items">
-        ${chipsHtml}
-        <button class="beat-add-btn" onclick="event.stopPropagation();openAddItem(${b.id})">+ Add Cue</button>
-      </div>
+    const startStr = show.start ? clock(show.start, off) : '—';
+    const durStr = fmtDur(b);
+
+    tr.innerHTML = `
+      <td class="col-drag"><div class="drag-handle">⋮⋮</div></td>
+      <td><div class="rg-num">${pad(i+1)}</div></td>
+      <td class="rg-cell col-info ${b.info?'has-content':''}" onclick="openWz('wzInfo',${b.id})">
+        <div class="rg-cell-inner">${b.info || '<span class="rg-empty">+ Info</span>'}</div>
+      </td>
+      <td class="rg-cell col-start"><div class="rg-cell-inner">${startStr}</div></td>
+      <td class="rg-cell col-dur" onclick="openWz('wzInfo',${b.id})"><div class="rg-cell-inner">${durStr}</div></td>
+      <td class="rg-cell col-video ${b.video?'has-content':''}" onclick="openWz('wzVideo',${b.id})">
+        <div class="rg-cell-inner">${b.video || '<span class="rg-empty">+ Video</span>'}</div>
+      </td>
+      <td class="rg-cell col-audio ${b.audio?'has-content':''}" onclick="openWz('wzAudio',${b.id})">
+        <div class="rg-cell-inner">${b.audio || '<span class="rg-empty">+ Audio</span>'}</div>
+      </td>
+      <td class="rg-cell col-play ${b.playback?'has-content':''}" onclick="openWz('wzPlayback',${b.id})">
+        <div class="rg-cell-inner">${b.playback || '<span class="rg-empty">+ Playback</span>'}</div>
+      </td>
+      <td class="rg-cell col-gfx ${b.gfx?'has-content':''}" onclick="openWz('wzGfx',${b.id})">
+        <div class="rg-cell-inner">${b.gfx || '<span class="rg-empty">+ GFX</span>'}</div>
+      </td>
+      <td class="rg-cell col-script ${b.script?'has-content':''}" onclick="openWz('wzScript',${b.id})">
+        <div class="rg-cell-inner">${b.script ? b.script.split('\n')[0] : '<span class="rg-empty">+ Script</span>'}</div>
+      </td>
     `;
-    list.appendChild(row);
-    off+=durMins(b);
+    tbody.appendChild(tr);
+    off += durMins(b);
   });
+
+  // Add row button
+  const addTr = document.createElement('tr');
+  addTr.className = 'rg-add-row';
+  addTr.innerHTML = `<td colspan="10"><button class="rg-add-btn" onclick="openGuide()">+ Add Cue</button></td>`;
+  tbody.appendChild(addTr);
+
+  // Wire up drag-to-reorder
+  initDrag();
+
+  // Show search
+  const sw = document.getElementById('rgSearchWrap');
+  if (sw) sw.style.display = beats.length ? 'block' : 'none';
 
   // Now/Next
   const ai=beats.findIndex(b=>b.active);
   const ac=ai>=0?beats[ai]:null,nc=ai>=0?beats[ai+1]:null;
-  document.getElementById('nn-now').textContent=`● NOW  ${ac?ac.name:'—'}`;
-  document.getElementById('nn-nxt').textContent=`NEXT → ${nc?nc.name:'—'}`;
+  document.getElementById('nn-now').textContent=`● NOW  ${ac?ac.info:'—'}`;
+  document.getElementById('nn-nxt').textContent=`NEXT → ${nc?nc.info:'—'}`;
   document.getElementById('bb-rm').textContent=fmtSecs(Math.max(0,Math.round((totalDur()-elapsed/60)*60)));
 
   updateGuidePreview();
@@ -1096,11 +1446,9 @@ function updateGuidePreview(){
   if(!beats.length){list.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px 0">No cues yet — this will be your first.</div>';return}
   list.innerHTML='';
   beats.forEach((b,i)=>{
-    const firstItem=(b.items&&b.items.length)?b.items[0]:null;
-    const m=firstItem?(TM[firstItem.type]||TM.video):TM.video;
     const row=document.createElement('div');
     row.className='rdp-row';
-    row.innerHTML=`<span class="rdp-num">${pad(i+1)}</span><span class="rdp-badge" style="background:${m.bg};color:${m.color}">${m.icon} ${m.label}</span><span class="rdp-name">${b.name}</span><span class="rdp-dur">${fmtDur(b)}</span>`;
+    row.innerHTML=`<span class="rdp-num">${pad(i+1)}</span><span class="rdp-name">${b.info||'—'}</span><span class="rdp-dur">${fmtDur(b)}</span>`;
     list.appendChild(row);
   });
 }
@@ -1125,24 +1473,23 @@ function startTimer(){
 function renderLive(){
   const body=document.getElementById('lsBody'); body.innerHTML='';
   const ac=beats[lsIdx]; if(!ac)return;
-  const firstItem=(ac.items&&ac.items.length)?ac.items[0]:null;
-  const m=firstItem?(TM[firstItem.type]||TM.video):TM.video;
   let off=0; for(let i=0;i<lsIdx;i++)off+=durMins(beats[i]);
 
-  // Items chips for NOW card
-  const nowChips=(ac.items||[]).map(item=>{
-    const tm=TM[item.type]||TM.video;
-    return `<span class="type-badge" style="background:${tm.bg};color:${tm.color};margin-right:4px">${tm.icon} ${item.name}</span>`;
-  }).join('');
+  // Column chips for NOW card
+  const nowChips=[];
+  if(ac.video) nowChips.push(`<span class="type-badge" style="background:rgba(91,141,248,.13);color:var(--accent);margin-right:4px">🎥 ${ac.video}</span>`);
+  if(ac.audio) nowChips.push(`<span class="type-badge" style="background:rgba(34,211,160,.13);color:var(--green);margin-right:4px">🎙 ${ac.audio}</span>`);
+  if(ac.playback) nowChips.push(`<span class="type-badge" style="background:rgba(240,82,82,.13);color:var(--red);margin-right:4px">▶️ ${ac.playback}</span>`);
+  if(ac.gfx) nowChips.push(`<span class="type-badge" style="background:rgba(245,183,49,.13);color:var(--yellow);margin-right:4px">📊 ${ac.gfx}</span>`);
 
   // NOW
   const nowEl=document.createElement('div');
   nowEl.className='ls-now';
   nowEl.innerHTML=`
     <div class="ls-now-lbl"><span class="live-dot" style="background:var(--red)"></span>ON AIR · BEAT ${pad(lsIdx+1)}</div>
-    <div class="ls-cue-name">${ac.name}</div>
-    ${ac.notes?`<div class="ls-cue-note">${ac.notes}</div>`:''}
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">${nowChips}</div>
+    <div class="ls-cue-name">${ac.info||'—'}</div>
+    ${ac.script?`<div class="ls-cue-note" style="font-style:italic;color:var(--text2)">${ac.script.split('\n')[0]}</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">${nowChips.join('')}</div>
     <div class="ls-meta">
       ${show.start?`<div class="ls-mi"><div class="ls-ml">Start</div><div class="ls-mv">${clock(show.start,off)}</div></div>`:''}
       <div class="ls-mi"><div class="ls-ml">Duration</div><div class="ls-mv">${fmtDur(ac)}</div></div>
@@ -1153,17 +1500,14 @@ function renderLive(){
   // NEXT
   if(beats[lsIdx+1]){
     const nx=beats[lsIdx+1];
-    const nxFirst=(nx.items&&nx.items.length)?nx.items[0]:null;
-    const nm2=nxFirst?(TM[nxFirst.type]||TM.video):TM.video;
     const nxEl=document.createElement('div');
     nxEl.className='ls-next';
     nxEl.innerHTML=`
       <div class="ls-next-info">
         <div class="ls-next-lbl">NEXT UP · BEAT ${pad(lsIdx+2)}</div>
-        <div class="ls-next-name">${nx.name}</div>
-        ${nx.notes?`<div class="ls-next-note">${nx.notes}</div>`:''}
+        <div class="ls-next-name">${nx.info||'—'}</div>
+        ${nx.video?`<div class="ls-next-note">${nx.video}</div>`:''}
       </div>
-      <span class="type-badge" style="background:${nm2.bg};color:${nm2.color};flex-shrink:0">${nm2.icon} ${nm2.label}</span>
     `;
     body.appendChild(nxEl);
   }
@@ -1175,15 +1519,14 @@ function renderLive(){
   body.appendChild(allTitle);
 
   beats.forEach((b,i)=>{
-    const bFirst=(b.items&&b.items.length)?b.items[0]:null;
-    const cm=bFirst?(TM[bFirst.type]||TM.video):TM.video;
+    const srcCls=rowSrcClass(b.video);
+    const accentColor=srcCls==='src-cam'?'var(--accent)':srcCls==='src-pkg'?'var(--red)':srcCls==='src-gfx'?'var(--yellow)':srcCls==='src-vt'?'var(--orange)':'var(--bord2)';
     const item=document.createElement('div');
     item.className='ls-cue-item'+(i===lsIdx?' ls-active':i<lsIdx?' ls-done':'');
-    item.style.setProperty('--rc',cm.color);
+    item.style.setProperty('--rc',accentColor);
     item.innerHTML=`
       <div class="ls-ci-num">${pad(i+1)}</div>
-      <span class="type-badge" style="background:${cm.bg};color:${cm.color};flex-shrink:0">${cm.icon}</span>
-      <div class="ls-ci-name">${b.name}</div>
+      <div class="ls-ci-name">${b.info||'—'}</div>
       <div class="ls-ci-dur">${fmtDur(b)}</div>
     `;
     item.onclick=()=>{lsIdx=i;renderLive();syncToFirestore()};
@@ -1310,10 +1653,14 @@ function guideNext(){
     // Add beat
     const newBeat={
       id:nextId++,
-      name:document.getElementById('g-cuename').value.trim(),
+      info:document.getElementById('g-cuename').value.trim(),
       notes:document.getElementById('g-cuenotes').value.trim(),
       min:mn, sec:sc,
-      items:[{id:`item_${Date.now()}`,type:gType,name:document.getElementById('g-cuename').value.trim(),notes:document.getElementById('g-cuenotes').value.trim()}]
+      video: gType==='video'||gType==='take'||gType==='ready' ? TM[gType].label : '',
+      audio: gType==='audio' ? TM[gType].label : '',
+      playback: gType==='vtroll' ? document.getElementById('g-cuename').value.trim() : '',
+      gfx: gType==='graphic'||gType==='lower3' ? document.getElementById('g-cuenotes').value.trim() : '',
+      script: gType==='script'||gType==='anchor' ? document.getElementById('g-cuenotes').value.trim() : '',
     };
     beats.push(newBeat);
     closeGuide(); renderRundown(); syncToFirestore();
@@ -1341,8 +1688,12 @@ function quickAdd(type){
   closePicker();
   const m=TM[type];
   const newBeat={
-    id:nextId++, name:`New ${m.label}`, min:1, sec:0, notes:'',
-    items:[{id:`item_${Date.now()}`,type,name:m.label,notes:''}]
+    id:nextId++, info:`New ${m.label}`, min:1, sec:0, notes:'',
+    video: (type==='video'||type==='take'||type==='ready') ? m.label : '',
+    audio: type==='audio' ? m.label : '',
+    playback: type==='vtroll' ? 'New PKG Roll' : '',
+    gfx: (type==='graphic'||type==='lower3') ? m.label : '',
+    script: (type==='script'||type==='anchor') ? '' : '',
   };
   beats.push(newBeat);
   renderRundown(); syncToFirestore();
@@ -1352,7 +1703,7 @@ function quickAdd(type){
 function openEdit(id){
   const b=beats.find(x=>x.id===id); if(!b)return;
   editId=id;
-  document.getElementById('ed-name').value=b.name;
+  document.getElementById('ed-name').value=b.info||'';
   document.getElementById('ed-notes').value=b.notes||'';
   document.getElementById('ed-min').value=b.min||0;
   document.getElementById('ed-sec').value=b.sec||0;
@@ -1361,7 +1712,7 @@ function openEdit(id){
 function closeEdit(e){if(!e||e.target===document.getElementById('editOv'))document.getElementById('editOv').classList.remove('on')}
 function saveEdit(){
   const b=beats.find(x=>x.id===editId); if(!b)return;
-  b.name=document.getElementById('ed-name').value.trim()||b.name;
+  b.info=document.getElementById('ed-name').value.trim()||b.info;
   b.notes=document.getElementById('ed-notes').value.trim();
   b.min=parseInt(document.getElementById('ed-min').value)||0;
   b.sec=parseInt(document.getElementById('ed-sec').value)||0;
@@ -1372,6 +1723,192 @@ function deleteCue(){
   beats=beats.filter(b=>b.id!==editId);
   document.getElementById('editOv').classList.remove('on');
   renderRundown(); syncToFirestore();
+}
+
+// ══════ RUNDOWN GRID HELPERS ══════════════════
+function rowSrcClass(video) {
+  if (!video) return '';
+  const v = video.toUpperCase();
+  if (v.includes('CAM')) return 'src-cam';
+  if (v.includes('PKG')) return 'src-pkg';
+  if (v.includes('VT')) return 'src-vt';
+  if (v.includes('GFX')) return 'src-gfx';
+  return '';
+}
+
+function initDrag() {
+  const tbody = document.getElementById('rgBody');
+  if (!tbody) return;
+  let dragSrc = null;
+
+  tbody.querySelectorAll('tr.rg-row').forEach(tr => {
+    tr.addEventListener('dragstart', e => {
+      dragSrc = tr;
+      tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    tr.addEventListener('dragend', () => {
+      tr.classList.remove('dragging');
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+    });
+    tr.addEventListener('dragover', e => {
+      e.preventDefault();
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      if (tr !== dragSrc) tr.classList.add('drag-over');
+    });
+    tr.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === tr) return;
+      const srcId = parseInt(dragSrc.dataset.id);
+      const tgtId = parseInt(tr.dataset.id);
+      const si = beats.findIndex(b => b.id === srcId);
+      const ti = beats.findIndex(b => b.id === tgtId);
+      if (si < 0 || ti < 0) return;
+      const [moved] = beats.splice(si, 1);
+      beats.splice(ti, 0, moved);
+      renderRundown();
+      syncToFirestore();
+    });
+  });
+}
+
+function searchRow(val) {
+  document.querySelectorAll('.rg-row').forEach(r => r.classList.remove('search-hit'));
+  if (!val) return;
+  const n = parseInt(val);
+  if (isNaN(n) || n < 1) return;
+  const rows = document.querySelectorAll('.rg-row');
+  const target = rows[n - 1];
+  if (target) {
+    target.classList.add('search-hit');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ══════ WIZARD FUNCTIONS ══════════════════════
+let wzBeatId = null;
+
+function openWz(id, beatId) {
+  wzBeatId = beatId;
+  const b = beats.find(x => x.id === beatId);
+  if (!b) return;
+
+  if (id === 'wzInfo') {
+    document.getElementById('wz-info-name').value = b.info || '';
+    document.getElementById('wz-info-min').value = b.min || 0;
+    document.getElementById('wz-info-sec').value = b.sec || 0;
+  } else if (id === 'wzVideo') {
+    document.getElementById('wz-video-val').value = b.video || '';
+    document.getElementById('wzVideoActionField').style.display = 'none';
+    document.getElementById('wzVideoShotField').style.display = 'none';
+    document.querySelectorAll('#wzVideo .wz-chip').forEach(c => c.classList.remove('sel'));
+  } else if (id === 'wzAudio') {
+    document.getElementById('wz-audio-val').value = b.audio || '';
+  } else if (id === 'wzPlayback') {
+    document.getElementById('wz-play-clip').value = b.playback || '';
+    document.getElementById('wz-play-min').value = '';
+    document.getElementById('wz-play-sec').value = '';
+  } else if (id === 'wzGfx') {
+    document.getElementById('wz-gfx-val').value = b.gfx || '';
+  } else if (id === 'wzScript') {
+    document.getElementById('wz-script-val').value = b.script || '';
+  }
+
+  document.getElementById(id).classList.add('on');
+}
+
+function closeWz(id, e) {
+  if (e && e.target !== document.getElementById(id)) return;
+  document.getElementById(id).classList.remove('on');
+}
+
+function saveWzInfo() {
+  const b = beats.find(x => x.id === wzBeatId); if (!b) return;
+  b.info = document.getElementById('wz-info-name').value.trim() || b.info;
+  b.min = parseInt(document.getElementById('wz-info-min').value) || 0;
+  b.sec = parseInt(document.getElementById('wz-info-sec').value) || 0;
+  closeWz('wzInfo');
+  renderRundown(); syncToFirestore();
+}
+
+function saveWzField(field, inputId) {
+  const b = beats.find(x => x.id === wzBeatId); if (!b) return;
+  b[field] = document.getElementById(inputId).value.trim();
+  const overlayId = 'wz' + field.charAt(0).toUpperCase() + field.slice(1);
+  closeWz(overlayId);
+  renderRundown(); syncToFirestore();
+}
+
+function saveWzPlayback() {
+  const b = beats.find(x => x.id === wzBeatId); if (!b) return;
+  const clip = document.getElementById('wz-play-clip').value.trim();
+  const m = parseInt(document.getElementById('wz-play-min').value) || 0;
+  const s = parseInt(document.getElementById('wz-play-sec').value) || 0;
+  b.playback = clip ? (m || s ? `${clip} — ${pad(m)}:${pad(s)}` : clip) : '';
+  closeWz('wzPlayback');
+  renderRundown(); syncToFirestore();
+}
+
+function saveWzScript() {
+  const b = beats.find(x => x.id === wzBeatId); if (!b) return;
+  b.script = document.getElementById('wz-script-val').value.trim();
+  closeWz('wzScript');
+  renderRundown(); syncToFirestore();
+}
+
+// Video wizard helpers
+let wzVideoSrc = '';
+let wzVideoAction = '';
+let wzVideoShot = '';
+
+function wzVideoSource(src) {
+  wzVideoSrc = src;
+  document.querySelectorAll('#wzVideo .wz-chip[data-src]').forEach(c => c.classList.toggle('sel', c.dataset.src === src));
+  const isCAM = src.startsWith('CAM');
+  document.getElementById('wzVideoActionField').style.display = isCAM ? 'block' : 'none';
+  document.getElementById('wzVideoShotField').style.display = isCAM ? 'block' : 'none';
+  wzBuildVideoVal();
+}
+
+function wzSetAction(a) {
+  wzVideoAction = a;
+  document.querySelectorAll('#wzVideoActionField .wz-chip').forEach(c => c.classList.toggle('sel', c.textContent === a));
+  wzBuildVideoVal();
+}
+
+function wzSetShot(s) {
+  wzVideoShot = s;
+  document.querySelectorAll('#wzVideoShotField .wz-chip').forEach(c => c.classList.toggle('sel', c.textContent === s));
+  wzBuildVideoVal();
+}
+
+function wzBuildVideoVal() {
+  let val = '';
+  if (wzVideoAction && wzVideoSrc.startsWith('CAM')) val = `${wzVideoAction} ${wzVideoSrc}`;
+  else val = wzVideoSrc;
+  if (wzVideoShot) val += ` — ${wzVideoShot}`;
+  document.getElementById('wz-video-val').value = val;
+}
+
+function wzAppend(inputId, text) {
+  const el = document.getElementById(inputId);
+  el.value = el.value ? el.value + ' — ' + text : text;
+}
+
+function wzGfxType(prefix) {
+  const el = document.getElementById('wz-gfx-val');
+  if (prefix && !el.value.startsWith(prefix)) {
+    el.value = prefix + ' ' + el.value.replace(/^[A-Z3]+:\s*/,'');
+  }
+  document.querySelectorAll('#wzGfx .wz-chip').forEach(c => c.classList.remove('sel'));
+  event.currentTarget.classList.add('sel');
+}
+
+function wzScriptWho(who) {
+  const el = document.getElementById('wz-script-val');
+  if (!el.value.startsWith(who)) {
+    el.value = who + '\n' + el.value.replace(/^[A-Za-z]+:\s*\n?/,'');
+  }
 }
 
 // ══════ ADD ITEM TO BEAT ══════════════════════
