@@ -835,25 +835,35 @@ applyTheme(currentTheme);
 // Demo beats
 const DEMO_BEATS = [
   {id:1,name:'Countdown Slate',min:5,sec:0,notes:'',done:true,
+   script:'',
    items:[{id:'i1',type:'video',name:'Pre-show hold — hype music',notes:''}]},
   {id:2,name:'Show Open',min:0,sec:30,active:true,notes:'',
+   script:'',
    items:[{id:'i2a',type:'take',name:'Take CAM 1 — wide',notes:''},{id:'i2b',type:'audio',name:'Theme music up full',notes:''},{id:'i2c',type:'graphic',name:'Show open title card',notes:''}]},
   {id:3,name:'Anchor Mics Hot',min:0,sec:10,notes:'',
+   script:'',
    items:[{id:'i3',type:'audio',name:'CH1 + CH2 up, fade open music',notes:''}]},
   {id:4,name:'Show Open Title Card',min:0,sec:8,notes:'',
+   script:'',
    items:[{id:'i4',type:'graphic',name:'Full screen — Campus News Spring Edition',notes:''}]},
   {id:5,name:'Anchor Intro — Cold Open',min:1,sec:30,notes:'',
-   items:[{id:'i5a',type:'script',name:'Anchor reads cold open — prompter on',notes:''},{id:'i5b',type:'ready',name:'Ready CAM 2',notes:''}]},
+   script:'Good evening and welcome to Campus News — I\'m your anchor.\n\nTonight we\'re covering three stories shaping life on campus this week. From a major change to student housing policy, to an exclusive sit-down with the head coach ahead of this weekend\'s championship — and a student-run startup that just landed its first real investor.\n\nWe\'ve got a full show ahead. Let\'s get into it.',
+   items:[{id:'i5a',type:'script',name:'Cold open — anchor to cam',notes:''},{id:'i5b',type:'ready',name:'Ready CAM 2',notes:''}]},
   {id:6,name:'Guest Conversation Block',min:15,sec:0,notes:'Shape: intro → 2 themes → wrap.',
+   script:'Joining me now is a guest who has been at the center of this week\'s biggest story.\n\nWelcome to the show — thanks for being here.\n\n[INTERVIEW BLOCK — FLEXIBLE · shape the conversation around their journey and what surprised them most]',
    items:[{id:'i6a',type:'flex',name:'Guest intro block — content TBD',notes:''},{id:'i6b',type:'lower3',name:'Guest lower third',notes:''}]},
   {id:7,name:'Anchor Redirect Prompt',min:0,sec:30,notes:'',
+   script:'"What surprised you most about how this unfolded?"',
    items:[{id:'i7',type:'anchor',name:'"What surprised you most?"',notes:'Use if conversation stalls'}]},
   {id:8,name:'PKG — Student Council',min:2,sec:15,notes:'',
-   items:[{id:'i8a',type:'vtroll',name:'VT roll — clip SC_042 — 2m15s',notes:''},{id:'i8b',type:'take',name:'Take PKG server',notes:''}]},
+   script:'',
+   items:[{id:'i8a',type:'vtroll',name:'PKG roll — clip SC_042 — 2m15s',notes:''},{id:'i8b',type:'take',name:'Take PKG server',notes:''}]},
   {id:9,name:'Wiggle Room',min:2,sec:0,notes:'',
+   script:'',
    items:[{id:'i9',type:'wiggle',name:'Buffer — pros always build this in',notes:''}]},
   {id:10,name:'Outro & Anchor Signoff',min:1,sec:30,notes:'',
-   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'script',name:'Anchor signoff — roll credits',notes:''}]},
+   script:'That\'s all for tonight\'s Campus News.\n\nThank you for watching — and thank you to our guests and crew for making this show happen.\n\nWe\'ll see you next week. I\'m your anchor — goodnight.',
+   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'script',name:'Anchor signoff',notes:''}]},
 ];
 
 function durMins(c){ return (c.min||0) + (c.sec||0)/60; }
@@ -996,7 +1006,7 @@ function updateTopBar(){
 
 // ══════ DEMO & EXPERT ══════════════════════════
 function loadDemo(){
-  session={code:null,role:'viewer',userName:'Demo',isDemo:true};
+  session={code:'DEMO1',role:'viewer',userName:'Demo',isDemo:true};
   show={name:'Campus News — Demo Show',start:'19:00'};
   beats=DEMO_BEATS.map(b=>({...b,items:[...b.items]}));
   nextId=100;
@@ -1005,6 +1015,20 @@ function loadDemo(){
   elapsed=338;
   showRundown();
   startTimer();
+  // Write demo beats to Firestore so Prompt-Up-The-Jam can load them
+  if(window._firebaseReady){
+    window._setDoc(window._doc(window._db,'sessions','DEMO1'),{
+      code:'DEMO1', showName:show.name, startTime:'19:00',
+      beats, activeIdx:0, isDemo:true
+    }).catch(()=>{});
+  } else {
+    window.addEventListener('firebaseReady',()=>{
+      window._setDoc(window._doc(window._db,'sessions','DEMO1'),{
+        code:'DEMO1', showName:show.name, startTime:'19:00',
+        beats, activeIdx:0, isDemo:true
+      }).catch(()=>{});
+    },{once:true});
+  }
 }
 
 function loadExpert(){
