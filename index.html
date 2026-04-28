@@ -359,6 +359,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
 
+/* ── BEAT ROW ── */
+.beat-row{background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--bord2);border-radius:var(--r);margin-bottom:5px;transition:border-color .15s}
+.beat-row.is-active{border-left-color:var(--accent);background:rgba(91,141,248,.04)}
+.beat-row.is-done{opacity:.35}
+.beat-head{display:grid;grid-template-columns:34px 1fr auto auto 32px;gap:6px;align-items:center;padding:9px 10px;cursor:pointer}
+.beat-head:hover .beat-name{color:var(--accent)}
+.beat-num{font-family:var(--mono);font-size:11px;color:var(--text3);text-align:center}
+.beat-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.beat-time{font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap}
+.beat-dur{font-family:var(--mono);font-size:11px;color:var(--text);white-space:nowrap}
+.beat-items{display:flex;flex-wrap:wrap;gap:5px;padding:0 10px 10px 44px;align-items:center}
+.beat-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:9px;font-family:var(--mono);font-weight:600;letter-spacing:.04em;cursor:pointer;border:1px solid transparent;transition:filter .12s}
+.beat-chip:hover{filter:brightness(1.25)}
+.beat-add-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:9px;font-family:var(--mono);color:var(--text3);border:1px dashed var(--bord2);background:transparent;cursor:pointer;transition:all .15s}
+.beat-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+
 @media(max-width:600px){
   .mode-tabs{display:none}
   .col-heads{grid-template-columns:28px 76px 1fr 54px 36px}
@@ -629,6 +645,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="tc" data-t="flex"     style="--tc-c:#f97316;--tc-bg:rgba(249,115,22,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">🔀</span><span class="tc-nm" style="color:#f97316">FLEXIBLE</span></div><div class="tc-d">Shape the journey — content TBD</div><div class="tc-e">e.g. Guest intro, set context ~3 min</div></div>
           <div class="tc" data-t="anchor"   style="--tc-c:#ec4899;--tc-bg:rgba(236,72,153,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">⚓</span><span class="tc-nm" style="color:#ec4899">ANCHOR PROMPT</span></div><div class="tc-d">A redirect if conversation stalls</div><div class="tc-e">e.g. "What surprised you most about..."</div></div>
           <div class="tc" data-t="wiggle"   style="--tc-c:#64748b;--tc-bg:rgba(100,116,139,.07)" onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">⏸</span><span class="tc-nm" style="color:#64748b">WIGGLE ROOM</span></div><div class="tc-d">Flex buffer — always build this in</div><div class="tc-e">Pros always leave wiggle room</div></div>
+          <div class="tc" data-t="take"     style="--tc-c:#f05252;--tc-bg:rgba(240,82,82,.07)"   onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">🎬</span><span class="tc-nm" style="color:#f05252">TAKE</span></div><div class="tc-d">Director take — switch to a source</div><div class="tc-e">e.g. Take CAM 1 — anchor wide</div></div>
+          <div class="tc" data-t="ready"    style="--tc-c:#f5b731;--tc-bg:rgba(245,183,49,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">⚡</span><span class="tc-nm" style="color:#f5b731">READY</span></div><div class="tc-d">Standby — cue coming next</div><div class="tc-e">e.g. Ready CAM 2</div></div>
+          <div class="tc" data-t="vtroll"   style="--tc-c:#f97316;--tc-bg:rgba(249,115,22,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">📼</span><span class="tc-nm" style="color:#f97316">VT ROLL</span></div><div class="tc-d">Roll pre-recorded video tape</div><div class="tc-e">e.g. VT roll — news package</div></div>
+          <div class="tc" data-t="lower3"   style="--tc-c:#22d3d3;--tc-bg:rgba(34,211,211,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">📋</span><span class="tc-nm" style="color:#22d3d3">LOWER 3RD</span></div><div class="tc-d">Lower third graphic overlay</div><div class="tc-e">e.g. Name/title lower third</div></div>
+          <div class="tc" data-t="toss"     style="--tc-c:#ec4899;--tc-bg:rgba(236,72,153,.07)"  onclick="gSelType(this)"><div class="tc-top"><span class="tc-ico">🏃</span><span class="tc-nm" style="color:#ec4899">TOSS</span></div><div class="tc-d">Hand off to another presenter</div><div class="tc-e">e.g. Toss to field reporter</div></div>
         </div>
         <div class="field-err" id="ge-type">⚠ Pick a cue type to continue.</div>
       </div>
@@ -697,6 +718,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="pc" style="--pcc:#f97316;--pcbg:rgba(249,115,22,.07)" onclick="quickAdd('flex')"><div class="pc-row"><span class="pc-ico">🔀</span><span class="pc-nm" style="color:#f97316">FLEXIBLE</span></div><div class="pc-d">Shape TBD</div></div>
       <div class="pc" style="--pcc:#ec4899;--pcbg:rgba(236,72,153,.07)" onclick="quickAdd('anchor')"><div class="pc-row"><span class="pc-ico">⚓</span><span class="pc-nm" style="color:#ec4899">ANCHOR PROMPT</span></div><div class="pc-d">Redirect prompt</div></div>
       <div class="pc" style="--pcc:#64748b;--pcbg:rgba(100,116,139,.07);grid-column:span 2" onclick="quickAdd('wiggle')"><div class="pc-row"><span class="pc-ico">⏸</span><span class="pc-nm" style="color:#64748b">WIGGLE ROOM</span></div><div class="pc-d">Flex buffer — always build this in</div></div>
+      <div class="pc" style="--pcc:#f05252;--pcbg:rgba(240,82,82,.07)" onclick="quickAdd('take')"><div class="pc-row"><span class="pc-ico">🎬</span><span class="pc-nm" style="color:#f05252">TAKE</span></div><div class="pc-d">Director take — switch source</div></div>
+      <div class="pc" style="--pcc:#f5b731;--pcbg:rgba(245,183,49,.07)" onclick="quickAdd('ready')"><div class="pc-row"><span class="pc-ico">⚡</span><span class="pc-nm" style="color:#f5b731">READY</span></div><div class="pc-d">Standby — cue coming next</div></div>
+      <div class="pc" style="--pcc:#f97316;--pcbg:rgba(249,115,22,.07)" onclick="quickAdd('vtroll')"><div class="pc-row"><span class="pc-ico">📼</span><span class="pc-nm" style="color:#f97316">VT ROLL</span></div><div class="pc-d">Roll pre-recorded video</div></div>
+      <div class="pc" style="--pcc:#22d3d3;--pcbg:rgba(34,211,211,.07)" onclick="quickAdd('lower3')"><div class="pc-row"><span class="pc-ico">📋</span><span class="pc-nm" style="color:#22d3d3">LOWER 3RD</span></div><div class="pc-d">Lower third graphic overlay</div></div>
+      <div class="pc" style="--pcc:#ec4899;--pcbg:rgba(236,72,153,.07)" onclick="quickAdd('toss')"><div class="pc-row"><span class="pc-ico">🏃</span><span class="pc-nm" style="color:#ec4899">TOSS</span></div><div class="pc-d">Hand off to another presenter</div></div>
     </div>
     <button class="sheet-cancel" onclick="closePicker()">Cancel</button>
   </div>
@@ -710,32 +736,33 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="edit-fields">
       <div class="field"><label class="field-lbl">Cue Name</label><input class="field-in" id="ed-name" type="text" maxlength="60"></div>
       <div class="field"><label class="field-lbl">Notes</label><input class="field-in" id="ed-notes" type="text" maxlength="120"></div>
-      <div class="edit-row">
-        <div class="field">
-          <label class="field-lbl">Duration</label>
-          <div class="dur-row">
-            <input class="field-in" id="ed-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono)">
-            <div class="dur-sep">:</div>
-            <input class="field-in" id="ed-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono)">
-          </div>
-        </div>
-        <div class="field"><label class="field-lbl">Type</label>
-          <select class="field-in" id="ed-type">
-            <option value="video">🎥 VIDEO</option>
-            <option value="audio">🎙 AUDIO</option>
-            <option value="graphic">📊 GRAPHIC</option>
-            <option value="playback">▶️ PLAYBACK</option>
-            <option value="lighting">💡 LIGHTING</option>
-            <option value="script">📝 SCRIPT</option>
-            <option value="flex">🔀 FLEXIBLE</option>
-            <option value="anchor">⚓ ANCHOR PROMPT</option>
-            <option value="wiggle">⏸ WIGGLE ROOM</option>
-          </select>
+      <div class="field">
+        <label class="field-lbl">Duration</label>
+        <div class="dur-row">
+          <input class="field-in" id="ed-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono)">
+          <div class="dur-sep">:</div>
+          <input class="field-in" id="ed-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono)">
         </div>
       </div>
     </div>
     <button class="save-btn" onclick="saveEdit()">Save Cue ✓</button>
     <button class="del-btn" onclick="deleteCue()">Remove this cue</button>
+  </div>
+</div>
+
+<!-- ══ ADD ITEM OVERLAY ══ -->
+<div class="overlay" id="addItemOv" onclick="closeAddItem(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Add Cue to Beat</div>
+    <div class="sheet-sub">Pick a type — you can give it a custom label below.</div>
+    <div id="addItemGrid" class="picker-grid" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="field" id="addItemNameField" style="display:none;margin-top:8px">
+      <label class="field-lbl">Label <span style="color:var(--text3)">(optional — defaults to type name)</span></label>
+      <input class="field-in" id="addItemName" type="text" maxlength="40" placeholder="e.g. Take CAM 1">
+    </div>
+    <button class="btn-primary" id="addItemConfirm" onclick="confirmAddItem()" style="margin-top:10px;display:none">Add Cue →</button>
+    <button class="sheet-cancel" onclick="closeAddItem()" style="margin-top:6px">Cancel</button>
   </div>
 </div>
 
@@ -751,11 +778,16 @@ const TM = {
   flex:     {icon:'🔀',label:'FLEXIBLE',     color:'#f97316',bg:'rgba(249,115,22,.13)'},
   anchor:   {icon:'⚓',label:'ANCHOR PROMPT',color:'#ec4899',bg:'rgba(236,72,153,.13)'},
   wiggle:   {icon:'⏸',label:'WIGGLE ROOM',  color:'#64748b',bg:'rgba(100,116,139,.13)'},
+  take:     {icon:'🎬',label:'TAKE',         color:'#f05252',bg:'rgba(240,82,82,.18)'},
+  ready:    {icon:'⚡',label:'READY',        color:'#f5b731',bg:'rgba(245,183,49,.18)'},
+  lower3:   {icon:'📋',label:'LOWER 3RD',   color:'#22d3d3',bg:'rgba(34,211,211,.13)'},
+  vtroll:   {icon:'📼',label:'VT ROLL',      color:'#f97316',bg:'rgba(249,115,22,.18)'},
+  toss:     {icon:'🏃',label:'TOSS',         color:'#ec4899',bg:'rgba(236,72,153,.13)'},
 };
 
 // ══════ STATE ══════════════════════════════════
 let show    = {name:'Untitled Show', start:''};
-let cues    = [];
+let beats   = [];
 let session = {code:null, role:null, userName:null, isDemo:false, isExpert:false};
 let lsIdx   = 0;
 let editId  = null;
@@ -784,8 +816,12 @@ applyTheme(currentTheme);
           const d = snap.data();
           show.name = d.showName || 'Untitled Show';
           show.start = d.startTime || '';
-          cues = d.cues || [];
-          nextId = cues.length + 1;
+          if(d.beats && d.beats.length){
+            beats = d.beats;
+          } else if(d.cues && d.cues.length){
+            beats = d.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+          }
+          nextId = beats.length + 1;
         }
       }catch(e){ console.warn('Auto-join load error:', e); }
     }
@@ -799,18 +835,28 @@ applyTheme(currentTheme);
   else { window.addEventListener('firebaseReady', enter, {once:true}); }
 })();
 
-// Demo cues
-const DEMO_CUES = [
-  {id:1, type:'video',    name:'Countdown Slate',          notes:'Pre-show 5 min hold — hype music',              min:5,  sec:0,  done:true},
-  {id:2, type:'video',    name:'Open Billboard',           notes:'Take CAM 1 — anchor wide shot',                  min:0,  sec:30, active:true},
-  {id:3, type:'audio',    name:'Anchor Mics Hot',          notes:'CH1 + CH2 up, fade open music',                  min:0,  sec:10},
-  {id:4, type:'graphic',  name:'Show Open Title Card',     notes:'Full screen — "Campus News Spring Edition"',     min:0,  sec:8},
-  {id:5, type:'script',   name:'Anchor Intro — Cold Open', notes:'Anchor reads cold open copy — prompter on',      min:1,  sec:30},
-  {id:6, type:'flex',     name:'Guest Conversation Block', notes:'Shape: intro → 2 themes → wrap. Content TBD.',   min:15, sec:0},
-  {id:7, type:'anchor',   name:'"What surprised you most?"',notes:'Use if conversation stalls or loses direction', min:0,  sec:30},
-  {id:8, type:'playback', name:'PKG — Student Council',    notes:'VT roll — clip SC_042 — 2m 15s',                 min:2,  sec:15},
-  {id:9, type:'wiggle',   name:'Wiggle Room',              notes:'Buffer — pros always build this in',             min:2,  sec:0},
-  {id:10,type:'video',    name:'Outro & Anchor Signoff',   notes:'Take CAM 1 — anchor close, roll credits',        min:1,  sec:30},
+// Demo beats
+const DEMO_BEATS = [
+  {id:1,name:'Countdown Slate',min:5,sec:0,notes:'',done:true,
+   items:[{id:'i1',type:'video',name:'Pre-show hold — hype music',notes:''}]},
+  {id:2,name:'Show Open',min:0,sec:30,active:true,notes:'',
+   items:[{id:'i2a',type:'take',name:'Take CAM 1 — wide',notes:''},{id:'i2b',type:'audio',name:'Theme music up full',notes:''},{id:'i2c',type:'graphic',name:'Show open title card',notes:''}]},
+  {id:3,name:'Anchor Mics Hot',min:0,sec:10,notes:'',
+   items:[{id:'i3',type:'audio',name:'CH1 + CH2 up, fade open music',notes:''}]},
+  {id:4,name:'Show Open Title Card',min:0,sec:8,notes:'',
+   items:[{id:'i4',type:'graphic',name:'Full screen — Campus News Spring Edition',notes:''}]},
+  {id:5,name:'Anchor Intro — Cold Open',min:1,sec:30,notes:'',
+   items:[{id:'i5a',type:'script',name:'Anchor reads cold open — prompter on',notes:''},{id:'i5b',type:'ready',name:'Ready CAM 2',notes:''}]},
+  {id:6,name:'Guest Conversation Block',min:15,sec:0,notes:'Shape: intro → 2 themes → wrap.',
+   items:[{id:'i6a',type:'flex',name:'Guest intro block — content TBD',notes:''},{id:'i6b',type:'lower3',name:'Guest lower third',notes:''}]},
+  {id:7,name:'Anchor Redirect Prompt',min:0,sec:30,notes:'',
+   items:[{id:'i7',type:'anchor',name:'"What surprised you most?"',notes:'Use if conversation stalls'}]},
+  {id:8,name:'PKG — Student Council',min:2,sec:15,notes:'',
+   items:[{id:'i8a',type:'vtroll',name:'VT roll — clip SC_042 — 2m15s',notes:''},{id:'i8b',type:'take',name:'Take PKG server',notes:''}]},
+  {id:9,name:'Wiggle Room',min:2,sec:0,notes:'',
+   items:[{id:'i9',type:'wiggle',name:'Buffer — pros always build this in',notes:''}]},
+  {id:10,name:'Outro & Anchor Signoff',min:1,sec:30,notes:'',
+   items:[{id:'i10a',type:'take',name:'Take CAM 1 — anchor close',notes:''},{id:'i10b',type:'toss',name:'Toss to credits roll',notes:''}]},
 ];
 
 function durMins(c){ return (c.min||0) + (c.sec||0)/60; }
@@ -819,7 +865,7 @@ function durMins(c){ return (c.min||0) + (c.sec||0)/60; }
 function pad(n){return String(Math.floor(Math.abs(n))).padStart(2,'0')}
 function fmtDur(c){return `${pad(c.min||0)}:${pad(c.sec||0)}`}
 function fmtSecs(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return`${pad(h)}:${pad(m)}:${pad(sc)}`}
-function totalDur(){return cues.reduce((a,c)=>a+durMins(c),0)}
+function totalDur(){return beats.reduce((a,b)=>a+durMins(b),0)}
 function clock(t24,off=0){
   if(!t24)return'—';
   const[h,m]=t24.split(':').map(Number);
@@ -841,7 +887,7 @@ function showScreen(id){
   document.getElementById(id).classList.add('on');
 }
 function showRundown(){showScreen('rundown');renderRundown()}
-function goLive(){lsIdx=cues.findIndex(c=>c.active);if(lsIdx<0)lsIdx=0;renderLive();showScreen('liveshow');if(!timerInt)startTimer()}
+function goLive(){lsIdx=beats.findIndex(b=>b.active);if(lsIdx<0)lsIdx=0;renderLive();showScreen('liveshow');if(!timerInt)startTimer()}
 
 // ══════ MODALS ══════════════════════════════════
 function showModal(id){document.getElementById(id).classList.add('on')}
@@ -863,7 +909,7 @@ async function createSession(){
     try{
       await window._setDoc(window._doc(window._db,'sessions',code),{
         code, createdBy:name, showName:show.name,
-        startTime:show.start||'', cues:[],
+        startTime:show.start||'', beats:[],
         activeIdx:0, createdAt:window._serverTimestamp()
       });
     }catch(e){console.warn('Firestore write failed:',e)}
@@ -893,8 +939,12 @@ async function joinSession(){
       const data=snap.data();
       show.name=data.showName||'Untitled Show';
       show.start=data.startTime||'';
-      cues=(data.cues||[]);
-      nextId=cues.length+1;
+      if(data.beats&&data.beats.length){
+        beats=data.beats;
+      } else if(data.cues&&data.cues.length){
+        beats=data.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+      }
+      nextId=beats.length+1;
     }catch(e){console.warn('Firestore error:',e)}
   }
   hideModal('modal-stud');
@@ -913,7 +963,11 @@ function subscribeToSession(){
       const d=snap.data();
       show.name=d.showName||show.name;
       show.start=d.startTime||show.start;
-      if(d.cues&&d.cues.length)cues=d.cues;
+      if(d.beats&&d.beats.length){
+        beats=d.beats;
+      } else if(d.cues&&d.cues.length){
+        beats=d.cues.map(c=>({id:c.id,name:c.name,min:c.min,sec:c.sec,notes:c.notes||'',items:[{id:`item_${c.id}`,type:c.type,name:c.name,notes:c.notes||''}],active:c.active,done:c.done}));
+      }
       if(typeof d.activeIdx==='number')lsIdx=d.activeIdx;
       document.getElementById('syncDot').classList.remove('off');
       renderRundown();
@@ -927,7 +981,7 @@ async function syncToFirestore(){
   if(!window._firebaseReady||!session.code||session.isDemo||session.isExpert)return;
   try{
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      cues, showName:show.name, startTime:show.start||'', activeIdx:lsIdx
+      beats, showName:show.name, startTime:show.start||'', activeIdx:lsIdx
     });
   }catch(e){console.warn('Sync failed:',e)}
 }
@@ -947,7 +1001,7 @@ function updateTopBar(){
 function loadDemo(){
   session={code:null,role:'viewer',userName:'Demo',isDemo:true};
   show={name:'Campus News — Demo Show',start:'19:00'};
-  cues=DEMO_CUES.map(c=>({...c}));
+  beats=DEMO_BEATS.map(b=>({...b,items:[...b.items]}));
   nextId=100;
   document.getElementById('demoBanner').style.display='block';
   updateTopBar();
@@ -959,7 +1013,7 @@ function loadDemo(){
 function loadExpert(){
   session={code:null,role:'producer',userName:'',isExpert:true};
   show={name:'',start:''};
-  cues=[];
+  beats=[];
   document.getElementById('demoBanner').style.display='none';
   updateTopBar();
   showRundown();
@@ -973,36 +1027,41 @@ function renderRundown(){
   const td=totalDur();
   document.getElementById('rd-dur').textContent=td>0?fmtSecs(Math.round(td*60)):'—';
   document.getElementById('rd-end').textContent=(show.start&&td>0)?clock(show.start,td):'—';
-  document.getElementById('rd-count').textContent=cues.length;
+  document.getElementById('rd-count').textContent=beats.length;
 
   const list=document.getElementById('cueList'); list.innerHTML='';
   let off=0;
-  cues.forEach((c,i)=>{
-    const m=TM[c.type]||TM.video;
+  beats.forEach((b,i)=>{
+    const isEditable = session.role === 'instructor' || session.isExpert || session.isDemo;
     const row=document.createElement('div');
-    row.className='cue-row'+(c.active?' is-active':c.done?' is-done':'')+(c.type==='flex'||c.type==='wiggle'?' is-flex':'');
-    row.style.setProperty('--rc',m.color);
+    row.className='beat-row'+(b.active?' is-active':b.done?' is-done':'');
+
+    // Items chips HTML
+    const chipsHtml=(b.items||[]).map(item=>{
+      const m=TM[item.type]||TM.video;
+      return `<div class="beat-chip" style="background:${m.bg};color:${m.color};border-color:${m.color}22" title="${item.notes||''}" onclick="editItem(${b.id},'${item.id}')">${m.icon} ${item.name}</div>`;
+    }).join('');
+
     row.innerHTML=`
-      <div class="cue-num">${pad(i+1)}</div>
-      <div><span class="type-badge" style="background:${m.bg};color:${m.color}">${m.icon} ${m.label}</span></div>
-      <div class="cue-info">
-        <div class="cue-name">${c.name}</div>
-        ${c.notes?`<div class="cue-note">${c.notes}</div>`:''}
-        ${c.type==='flex'?`<div class="cue-tag">🔀 Shape the journey — content flexible</div>`:''}
-        ${c.type==='anchor'?`<div class="cue-tag">⚓ Redirect prompt — use if conversation stalls</div>`:''}
-        ${c.type==='wiggle'?`<div class="cue-tag">⏸ Flex buffer — always build this in</div>`:''}
+      <div class="beat-head" onclick="openEdit(${b.id})">
+        <div class="beat-num">${pad(i+1)}</div>
+        <div class="beat-name">${b.name}</div>
+        <div class="beat-time">${show.start?clock(show.start,off):'—'}</div>
+        <div class="beat-dur">${fmtDur(b)}</div>
+        <div class="ia">${isEditable?'✏️':''}</div>
       </div>
-      <div class="cue-start">${show.start?clock(show.start,off):'—'}</div>
-      <div class="cue-dur">${fmtDur(c)}</div>
-      <div class="row-acts"><div class="ia" onclick="openEdit(${c.id})">✏️</div></div>
+      <div class="beat-items">
+        ${chipsHtml}
+        <button class="beat-add-btn" onclick="event.stopPropagation();openAddItem(${b.id})">+ Add Cue</button>
+      </div>
     `;
     list.appendChild(row);
-    off+=durMins(c);
+    off+=durMins(b);
   });
 
   // Now/Next
-  const ai=cues.findIndex(c=>c.active);
-  const ac=ai>=0?cues[ai]:null,nc=ai>=0?cues[ai+1]:null;
+  const ai=beats.findIndex(b=>b.active);
+  const ac=ai>=0?beats[ai]:null,nc=ai>=0?beats[ai+1]:null;
   document.getElementById('nn-now').textContent=`● NOW  ${ac?ac.name:'—'}`;
   document.getElementById('nn-nxt').textContent=`NEXT → ${nc?nc.name:'—'}`;
   document.getElementById('bb-rm').textContent=fmtSecs(Math.max(0,Math.round((totalDur()-elapsed/60)*60)));
@@ -1013,13 +1072,14 @@ function renderRundown(){
 // ══════ GUIDE PREVIEW ══════════════════════════
 function updateGuidePreview(){
   const list=document.getElementById('guideRdList');
-  if(!cues.length){list.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px 0">No cues yet — this will be your first.</div>';return}
+  if(!beats.length){list.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px 0">No cues yet — this will be your first.</div>';return}
   list.innerHTML='';
-  cues.forEach((c,i)=>{
-    const m=TM[c.type]||TM.video;
+  beats.forEach((b,i)=>{
+    const firstItem=(b.items&&b.items.length)?b.items[0]:null;
+    const m=firstItem?(TM[firstItem.type]||TM.video):TM.video;
     const row=document.createElement('div');
     row.className='rdp-row';
-    row.innerHTML=`<span class="rdp-num">${pad(i+1)}</span><span class="rdp-badge" style="background:${m.bg};color:${m.color}">${m.icon} ${m.label}</span><span class="rdp-name">${c.name}</span><span class="rdp-dur">${fmtDur(c)}</span>`;
+    row.innerHTML=`<span class="rdp-num">${pad(i+1)}</span><span class="rdp-badge" style="background:${m.bg};color:${m.color}">${m.icon} ${m.label}</span><span class="rdp-name">${b.name}</span><span class="rdp-dur">${fmtDur(b)}</span>`;
     list.appendChild(row);
   });
 }
@@ -1043,19 +1103,26 @@ function startTimer(){
 // ══════ LIVE SHOW ══════════════════════════════
 function renderLive(){
   const body=document.getElementById('lsBody'); body.innerHTML='';
-  const ac=cues[lsIdx]; if(!ac)return;
-  const m=TM[ac.type]||TM.video;
-  let off=0; for(let i=0;i<lsIdx;i++)off+=durMins(cues[i]);
+  const ac=beats[lsIdx]; if(!ac)return;
+  const firstItem=(ac.items&&ac.items.length)?ac.items[0]:null;
+  const m=firstItem?(TM[firstItem.type]||TM.video):TM.video;
+  let off=0; for(let i=0;i<lsIdx;i++)off+=durMins(beats[i]);
+
+  // Items chips for NOW card
+  const nowChips=(ac.items||[]).map(item=>{
+    const tm=TM[item.type]||TM.video;
+    return `<span class="type-badge" style="background:${tm.bg};color:${tm.color};margin-right:4px">${tm.icon} ${item.name}</span>`;
+  }).join('');
 
   // NOW
   const nowEl=document.createElement('div');
   nowEl.className='ls-now';
   nowEl.innerHTML=`
-    <div class="ls-now-lbl"><span class="live-dot" style="background:var(--red)"></span>ON AIR · CUE ${pad(lsIdx+1)}</div>
+    <div class="ls-now-lbl"><span class="live-dot" style="background:var(--red)"></span>ON AIR · BEAT ${pad(lsIdx+1)}</div>
     <div class="ls-cue-name">${ac.name}</div>
     ${ac.notes?`<div class="ls-cue-note">${ac.notes}</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">${nowChips}</div>
     <div class="ls-meta">
-      <div class="ls-mi"><div class="ls-ml">Type</div><div class="ls-mv" style="color:${m.color}">${m.icon} ${m.label}</div></div>
       ${show.start?`<div class="ls-mi"><div class="ls-ml">Start</div><div class="ls-mv">${clock(show.start,off)}</div></div>`:''}
       <div class="ls-mi"><div class="ls-ml">Duration</div><div class="ls-mv">${fmtDur(ac)}</div></div>
     </div>
@@ -1063,13 +1130,15 @@ function renderLive(){
   body.appendChild(nowEl);
 
   // NEXT
-  if(cues[lsIdx+1]){
-    const nx=cues[lsIdx+1],nm2=TM[nx.type]||TM.video;
+  if(beats[lsIdx+1]){
+    const nx=beats[lsIdx+1];
+    const nxFirst=(nx.items&&nx.items.length)?nx.items[0]:null;
+    const nm2=nxFirst?(TM[nxFirst.type]||TM.video):TM.video;
     const nxEl=document.createElement('div');
     nxEl.className='ls-next';
     nxEl.innerHTML=`
       <div class="ls-next-info">
-        <div class="ls-next-lbl">NEXT UP · CUE ${pad(lsIdx+2)}</div>
+        <div class="ls-next-lbl">NEXT UP · BEAT ${pad(lsIdx+2)}</div>
         <div class="ls-next-name">${nx.name}</div>
         ${nx.notes?`<div class="ls-next-note">${nx.notes}</div>`:''}
       </div>
@@ -1078,44 +1147,45 @@ function renderLive(){
     body.appendChild(nxEl);
   }
 
-  // ALL CUES LIST
+  // ALL BEATS LIST
   const allTitle=document.createElement('div');
   allTitle.className='ls-all-title';
-  allTitle.textContent='All Cues';
+  allTitle.textContent='All Beats';
   body.appendChild(allTitle);
 
-  cues.forEach((c,i)=>{
-    const cm=TM[c.type]||TM.video;
+  beats.forEach((b,i)=>{
+    const bFirst=(b.items&&b.items.length)?b.items[0]:null;
+    const cm=bFirst?(TM[bFirst.type]||TM.video):TM.video;
     const item=document.createElement('div');
     item.className='ls-cue-item'+(i===lsIdx?' ls-active':i<lsIdx?' ls-done':'');
     item.style.setProperty('--rc',cm.color);
     item.innerHTML=`
       <div class="ls-ci-num">${pad(i+1)}</div>
       <span class="type-badge" style="background:${cm.bg};color:${cm.color};flex-shrink:0">${cm.icon}</span>
-      <div class="ls-ci-name">${c.name}</div>
-      <div class="ls-ci-dur">${fmtDur(c)}</div>
+      <div class="ls-ci-name">${b.name}</div>
+      <div class="ls-ci-dur">${fmtDur(b)}</div>
     `;
     item.onclick=()=>{lsIdx=i;renderLive();syncToFirestore()};
     body.appendChild(item);
   });
 
-  // Follow chips — build from cues' assigned users (placeholder)
+  // Follow chips — build from beats' assigned users (placeholder)
   buildFollowChips();
 }
 
 function lsNext(){
-  if(lsIdx<cues.length-1){
-    if(cues[lsIdx])cues[lsIdx].active=false;
+  if(lsIdx<beats.length-1){
+    if(beats[lsIdx])beats[lsIdx].active=false;
     lsIdx++;
-    if(cues[lsIdx])cues[lsIdx].active=true;
+    if(beats[lsIdx])beats[lsIdx].active=true;
     renderLive(); syncToFirestore();
   }
 }
 function lsPrev(){
   if(lsIdx>0){
-    if(cues[lsIdx])cues[lsIdx].active=false;
+    if(beats[lsIdx])beats[lsIdx].active=false;
     lsIdx--;
-    if(cues[lsIdx])cues[lsIdx].active=true;
+    if(beats[lsIdx])beats[lsIdx].active=true;
     renderLive(); syncToFirestore();
   }
 }
@@ -1216,14 +1286,15 @@ function guideNext(){
     const sc=parseInt(document.getElementById('g-dur-sec').value)||0;
     if(mn===0&&sc===0){document.getElementById('ge-dur').classList.add('on');return}
     document.getElementById('ge-dur').classList.remove('on');
-    // Add cue
-    const newCue={
-      id:nextId++, type:gType,
+    // Add beat
+    const newBeat={
+      id:nextId++,
       name:document.getElementById('g-cuename').value.trim(),
       notes:document.getElementById('g-cuenotes').value.trim(),
       min:mn, sec:sc,
+      items:[{id:`item_${Date.now()}`,type:gType,name:document.getElementById('g-cuename').value.trim(),notes:document.getElementById('g-cuenotes').value.trim()}]
     };
-    cues.push(newCue);
+    beats.push(newBeat);
     closeGuide(); renderRundown(); syncToFirestore();
     return;
   }
@@ -1248,36 +1319,102 @@ function closePicker(e){if(!e||e.target===document.getElementById('pickerOv'))do
 function quickAdd(type){
   closePicker();
   const m=TM[type];
-  cues.push({id:nextId++,type,name:`New ${m.label} Cue`,notes:'',min:1,sec:0});
+  const newBeat={
+    id:nextId++, name:`New ${m.label}`, min:1, sec:0, notes:'',
+    items:[{id:`item_${Date.now()}`,type,name:m.label,notes:''}]
+  };
+  beats.push(newBeat);
   renderRundown(); syncToFirestore();
 }
 
 // ══════ EDIT ══════════════════════════════════
 function openEdit(id){
-  const c=cues.find(x=>x.id===id); if(!c)return;
+  const b=beats.find(x=>x.id===id); if(!b)return;
   editId=id;
-  document.getElementById('ed-name').value=c.name;
-  document.getElementById('ed-notes').value=c.notes||'';
-  document.getElementById('ed-min').value=c.min||0;
-  document.getElementById('ed-sec').value=c.sec||0;
-  document.getElementById('ed-type').value=c.type;
+  document.getElementById('ed-name').value=b.name;
+  document.getElementById('ed-notes').value=b.notes||'';
+  document.getElementById('ed-min').value=b.min||0;
+  document.getElementById('ed-sec').value=b.sec||0;
   document.getElementById('editOv').classList.add('on');
 }
 function closeEdit(e){if(!e||e.target===document.getElementById('editOv'))document.getElementById('editOv').classList.remove('on')}
 function saveEdit(){
-  const c=cues.find(x=>x.id===editId); if(!c)return;
-  c.name=document.getElementById('ed-name').value.trim()||c.name;
-  c.notes=document.getElementById('ed-notes').value.trim();
-  c.min=parseInt(document.getElementById('ed-min').value)||0;
-  c.sec=parseInt(document.getElementById('ed-sec').value)||0;
-  c.type=document.getElementById('ed-type').value;
+  const b=beats.find(x=>x.id===editId); if(!b)return;
+  b.name=document.getElementById('ed-name').value.trim()||b.name;
+  b.notes=document.getElementById('ed-notes').value.trim();
+  b.min=parseInt(document.getElementById('ed-min').value)||0;
+  b.sec=parseInt(document.getElementById('ed-sec').value)||0;
   document.getElementById('editOv').classList.remove('on');
   renderRundown(); syncToFirestore();
 }
 function deleteCue(){
-  cues=cues.filter(c=>c.id!==editId);
+  beats=beats.filter(b=>b.id!==editId);
   document.getElementById('editOv').classList.remove('on');
   renderRundown(); syncToFirestore();
+}
+
+// ══════ ADD ITEM TO BEAT ══════════════════════
+let addItemBeatId = null;
+let addItemType = null;
+
+function openAddItem(beatId) {
+  addItemBeatId = beatId;
+  addItemType = null;
+  document.getElementById('addItemName').value = '';
+  document.getElementById('addItemNameField').style.display = 'none';
+  document.getElementById('addItemConfirm').style.display = 'none';
+
+  const types = ['take','ready','video','audio','graphic','lower3','vtroll','playback','script','lighting','toss','anchor','wiggle'];
+  document.getElementById('addItemGrid').innerHTML = types.map(t => {
+    const m = TM[t];
+    return `<div class="pc" style="--pcc:${m.color};--pcbg:${m.bg}" onclick="selectAddItemType('${t}')"><div class="pc-row"><span class="pc-ico">${m.icon}</span><span class="pc-nm" style="color:${m.color};font-size:9px">${m.label}</span></div></div>`;
+  }).join('');
+
+  document.getElementById('addItemOv').classList.add('on');
+}
+
+function selectAddItemType(type) {
+  addItemType = type;
+  document.querySelectorAll('#addItemGrid .pc').forEach(p => p.style.outline = 'none');
+  event.currentTarget.style.outline = `2px solid ${TM[type].color}`;
+  document.getElementById('addItemNameField').style.display = 'block';
+  document.getElementById('addItemName').placeholder = `e.g. ${TM[type].label}`;
+  document.getElementById('addItemConfirm').style.display = 'block';
+}
+
+function confirmAddItem() {
+  if (!addItemType || addItemBeatId == null) return;
+  const beat = beats.find(b => b.id === addItemBeatId);
+  if (!beat) return;
+  const name = document.getElementById('addItemName').value.trim() || TM[addItemType].label;
+  const item = { id: `item_${Date.now()}`, type: addItemType, name, notes: '' };
+  beat.items = beat.items || [];
+  beat.items.push(item);
+  closeAddItem();
+  renderRundown();
+  syncToFirestore();
+}
+
+function closeAddItem(e) {
+  if (e && e.target !== document.getElementById('addItemOv')) return;
+  document.getElementById('addItemOv').classList.remove('on');
+  addItemBeatId = null;
+  addItemType = null;
+}
+
+// ══════ EDIT ITEM IN BEAT ══════════════════════
+function editItem(beatId, itemId) {
+  event.stopPropagation();
+  const beat = beats.find(b => b.id === beatId);
+  if (!beat) return;
+  const item = (beat.items || []).find(it => it.id === itemId);
+  if (!item) return;
+  const newName = prompt('Edit cue label:', item.name);
+  if (newName === null) return;
+  if (newName.trim()) item.name = newName.trim();
+  else beat.items = beat.items.filter(it => it.id !== itemId);
+  renderRundown();
+  syncToFirestore();
 }
 
 // ══════ PRESENCE ══════════════════════════════
