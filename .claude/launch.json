@@ -1,40 +1,29 @@
 {
-  "servers": [
+  "version": "0.0.1",
+  "configurations": [
     {
       "name": "Cueola",
-      "description": "Broadcast rundown tool",
-      "root": "/Users/jonkost/Documents/GitHub/Cueola",
-      "command": "npx serve . -p 3001 --no-clipboard",
-      "port": 3001,
-      "url": "http://localhost:3001",
-      "type": "static"
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "3001", "--directory", "/Users/jonkost/Documents/GitHub/Cueola"],
+      "port": 3001
     },
     {
       "name": "Prompt-Up-The-Jam",
-      "description": "Teleprompter app",
-      "root": "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam",
-      "command": "npx serve . -p 3002 --no-clipboard",
-      "port": 3002,
-      "url": "http://localhost:3002",
-      "type": "static"
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "3002", "--directory", "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam"],
+      "port": 3002
     },
     {
       "name": "SwitchUp-Studio",
-      "description": "Studio switcher app",
-      "root": "/Users/jonkost/Documents/GitHub/SwitchUp-Studio",
-      "command": "npx serve . -p 3003 --no-clipboard",
-      "port": 3003,
-      "url": "http://localhost:3003",
-      "type": "static"
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "3003", "--directory", "/Users/jonkost/Documents/GitHub/SwitchUp-Studio"],
+      "port": 3003
     },
     {
       "name": "jonkost.github.io",
-      "description": "Personal GitHub Pages site",
-      "root": "/Users/jonkost/Documents/GitHub/jonkost.github.io",
-      "command": "npx serve . -p 3004 --no-clipboard",
-      "port": 3004,
-      "url": "http://localhost:3004",
-      "type": "static"
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "3004", "--directory", "/Users/jonkost/Documents/GitHub/jonkost.github.io"],
+      "port": 3004
     }
   ]
 }
