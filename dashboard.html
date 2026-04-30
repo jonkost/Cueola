@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Cueola — Instructor Dashboard</title>
+<title>Cueola — Admin Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -49,8 +49,12 @@ body{overflow-x:hidden}
 .brand-text span{color:var(--accent)}
 .brand-tag{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-left:2px;padding:2px 7px;border:1px solid var(--border);border-radius:20px}
 .tb-right{display:flex;align-items:center;gap:10px}
-.inst-name{font-size:13px;color:var(--text2);font-family:var(--mono)}
-.inst-name strong{color:var(--text)}
+.admin-badge{font-size:11px;font-family:var(--mono);padding:3px 9px;border-radius:20px;letter-spacing:.06em;display:none}
+.admin-badge.super{background:rgba(245,199,66,.15);color:var(--yellow);border:1px solid rgba(245,199,66,.2)}
+.admin-badge.full{background:rgba(91,141,248,.15);color:var(--accent);border:1px solid rgba(91,141,248,.2)}
+.admin-badge.standard{background:rgba(34,211,160,.15);color:var(--green);border:1px solid rgba(34,211,160,.2)}
+.admin-name{font-size:13px;color:var(--text2);font-family:var(--mono);display:none}
+.admin-name strong{color:var(--text)}
 .btn-sm{padding:7px 14px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
 .btn-ghost{background:transparent;color:var(--text2);border:1.5px solid var(--bord2)}
 .btn-ghost:hover{color:var(--text);border-color:var(--text2)}
@@ -119,13 +123,17 @@ body{overflow-x:hidden}
 .sc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
 .sc-code{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:.12em;color:var(--accent)}
 .sc-showname{font-family:var(--syne);font-size:16px;font-weight:700}
-.sc-meta{display:flex;gap:14px;flex-wrap:wrap}
+.sc-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .sc-m{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);font-family:var(--mono)}
 .sc-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .sc-dot.off{background:var(--text3)}
 .sc-pill{padding:3px 9px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;letter-spacing:.06em}
 .sc-pill.active{background:rgba(34,211,160,.15);color:var(--green)}
 .sc-pill.idle{background:rgba(65,78,114,.2);color:var(--text3)}
+
+/* Cue type dots */
+.cue-types{display:flex;gap:4px;align-items:center}
+.ct-dot{width:8px;height:8px;border-radius:50%}
 
 .sc-right{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 .sc-btn{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
@@ -192,6 +200,16 @@ body{overflow-x:hidden}
 .p-role.stud{background:rgba(34,211,160,.15);color:var(--green)}
 .p-joined{font-size:10px;color:var(--text3);font-family:var(--mono)}
 
+/* Admin level row in detail */
+.level-tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-family:var(--mono);letter-spacing:.06em}
+.level-tag.super{background:rgba(245,199,66,.15);color:var(--yellow)}
+.level-tag.full{background:rgba(91,141,248,.15);color:var(--accent)}
+.level-tag.standard{background:rgba(34,211,160,.15);color:var(--green)}
+
+/* Setup notice */
+.setup-notice{font-size:12px;color:var(--text2);background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;padding:12px 14px;line-height:1.7}
+.setup-notice strong{color:var(--yellow)}
+
 /* Toast */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--s3);border:1px solid var(--bord2);border-radius:10px;padding:12px 20px;font-size:13px;font-family:var(--mono);color:var(--text);z-index:500;transition:transform .3s cubic-bezier(.16,1,.3,1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.show{transform:translateX(-50%) translateY(0)}
@@ -230,12 +248,13 @@ body{overflow-x:hidden}
     <div>
       <span class="brand-text">Cue<span>ola</span></span>
     </div>
-    <span class="brand-tag">Instructor</span>
+    <span class="brand-tag">Admin</span>
   </div>
   <div class="tb-right">
-    <div class="inst-name" id="topInstName" style="display:none">Welcome, <strong id="topInstNameVal">—</strong></div>
-    <button class="btn-sm btn-ghost" onclick="switchInstructor()">Switch Instructor</button>
-    <button class="btn-sm btn-accent" onclick="openNewSession()">+ New Session</button>
+    <div class="admin-name" id="topAdminName">Signed in as <strong id="topAdminNameVal">—</strong></div>
+    <div class="admin-badge" id="topAdminBadge">—</div>
+    <button class="btn-sm btn-ghost" id="switchBtn" onclick="switchAdmin()" style="display:none">Sign Out</button>
+    <button class="btn-sm btn-accent" id="newSessionBtn" onclick="openNewSession()" style="display:none">+ New Session</button>
   </div>
 </nav>
 
@@ -245,62 +264,65 @@ body{overflow-x:hidden}
   <!-- Hero -->
   <div class="hero" id="hero">
     <div class="hero-left">
-      <div class="hero-greeting">Instructor Dashboard</div>
+      <div class="hero-greeting">Admin Dashboard</div>
       <div class="hero-name" id="heroName">Welcome to Cueola</div>
-      <div class="hero-sub" id="heroSub">Create a session to get started, or return to an existing one.</div>
+      <div class="hero-sub" id="heroSub">Sign in with your admin code to manage sessions.</div>
     </div>
     <div class="hero-stats">
       <div class="hstat">
-        <div class="hstat-val" id="stat-sessions">0</div>
+        <div class="hstat-val" id="stat-sessions">—</div>
         <div class="hstat-lbl">Sessions</div>
       </div>
       <div class="hstat">
-        <div class="hstat-val" id="stat-cues">0</div>
+        <div class="hstat-val" id="stat-cues">—</div>
         <div class="hstat-lbl">Total Cues</div>
       </div>
       <div class="hstat">
-        <div class="hstat-val" id="stat-active">0</div>
+        <div class="hstat-val" id="stat-active">—</div>
         <div class="hstat-lbl">Active</div>
       </div>
     </div>
   </div>
 
   <!-- Sessions -->
-  <div class="sec-head">
+  <div class="sec-head" id="sessionsHead" style="display:none">
     <div class="sec-title">Your <span>Sessions</span></div>
     <button class="btn-sm btn-ghost" onclick="refreshSessions()">↻ Refresh</button>
   </div>
 
   <!-- New session CTA -->
-  <div class="new-session-card" onclick="openNewSession()">
+  <div class="new-session-card" id="newSessionCard" onclick="openNewSession()" style="display:none">
     <div class="ns-icon">+</div>
     <div class="ns-body">
       <div class="ns-title">Create a New Session</div>
-      <div class="ns-desc">Cueola generates your session code automatically — share it with your class.</div>
+      <div class="ns-desc">Cueola generates your session code automatically — share it with your crew.</div>
     </div>
   </div>
 
   <!-- Session list -->
-  <div id="sessionArea">
-    <div class="loading" id="loadingState">
-      <div class="spinner"></div>
-      <div class="loading-text">Loading sessions…</div>
-    </div>
-  </div>
+  <div id="sessionArea"></div>
 
 </div>
 
-<!-- ── MODAL: INSTRUCTOR LOGIN ── -->
+<!-- ── MODAL: ADMIN LOGIN ── -->
 <div class="modal-wrap on" id="modal-login">
   <div class="modal">
-    <div class="modal-title">🔒 Admin Access</div>
-    <div class="modal-sub">Enter your admin code to access your sessions. Use the same code each time.</div>
+    <div class="modal-title">🔑 Admin Sign In</div>
+    <div class="modal-sub">Enter your admin code to access your sessions.</div>
     <div class="field">
       <label class="field-lbl">Admin Code</label>
-      <input class="field-in" id="login-name" type="password" placeholder="Enter your code" maxlength="40" onkeydown="if(event.key==='Enter')loginInstructor()">
+      <input class="field-in" id="login-code" type="password" placeholder="Enter your admin code" maxlength="40" onkeydown="if(event.key==='Enter')loginAdmin()">
     </div>
-    <div class="modal-err" id="login-err">Please enter your admin code.</div>
-    <button class="btn-full btn-primary" onclick="loginInstructor()">Enter Dashboard →</button>
+    <div id="setup-notice" class="setup-notice" style="display:none">
+      <strong>First time?</strong> No admin accounts exist yet. Your first sign-in will create a Super Admin account. Enter a name and code below.
+    </div>
+    <div class="field" id="setup-name-field" style="display:none">
+      <label class="field-lbl">Your Name</label>
+      <input class="field-in" id="login-name" type="text" placeholder="e.g. Jordan" maxlength="30">
+    </div>
+    <div class="modal-err" id="login-err">Incorrect code. Try again.</div>
+    <button class="btn-full btn-primary" onclick="loginAdmin()" id="login-btn">Sign In →</button>
+    <div style="font-size:11px;color:var(--text3);text-align:center">Codes are stored locally on this device.</div>
   </div>
 </div>
 
@@ -310,9 +332,17 @@ body{overflow-x:hidden}
     <div class="modal-title">New Session</div>
     <div class="modal-sub">Set your own session code or leave it blank and Cueola will generate one automatically.</div>
     <div class="field">
+      <label class="field-lbl">Show Name</label>
+      <input class="field-in" id="new-showname" type="text" placeholder="e.g. Campus News" maxlength="60">
+    </div>
+    <div class="field">
       <label class="field-lbl">Session Code <span style="color:var(--text3)">(optional)</span></label>
       <input class="field-in" id="new-code" type="text" placeholder="e.g. 2604A" maxlength="8" style="font-family:var(--mono);font-size:22px;letter-spacing:.15em;text-transform:uppercase;text-align:center" oninput="this.value=this.value.toUpperCase()">
-      <div class="field-hint" style="font-size:11px;color:var(--text3);margin-top:2px">Leave blank to auto-generate · Format: YYMM + letter e.g. 2604A</div>
+      <div class="field-hint">Leave blank to auto-generate · Format: YYMM + letter e.g. 2604A</div>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Show Start Time <span style="color:var(--text3)">(optional)</span></label>
+      <input class="field-in" id="new-start" type="time">
     </div>
     <div class="modal-err" id="new-err">Could not connect. Check your internet and try again.</div>
     <button class="btn-full btn-primary" onclick="createNewSession()" id="new-btn">Create Session →</button>
@@ -324,13 +354,13 @@ body{overflow-x:hidden}
 <div class="modal-wrap" id="modal-created">
   <div class="modal">
     <div class="modal-title">Session Ready! 🎉</div>
-    <div class="modal-sub">Share this code with your students. They'll use it to join your rundown from any device.</div>
+    <div class="modal-sub">Share this code with your crew. They'll use it to join the rundown from any device.</div>
     <div class="code-box">
       <div class="code-big" id="created-code">—</div>
       <div class="code-lbl">Session Code</div>
       <div class="code-share">
         <div class="code-url" id="created-url">cueola.app/?code=—</div>
-        <button class="btn-sm btn-ghost" onclick="copyCode()">Copy</button>
+        <button class="btn-sm btn-ghost" onclick="copyCreatedCode()">Copy</button>
       </div>
     </div>
     <div style="font-size:12px;color:var(--text2);line-height:1.7;background:var(--s2);border-radius:8px;padding:12px;border-left:3px solid var(--accent)">
@@ -350,6 +380,7 @@ body{overflow-x:hidden}
       <div class="sd-row"><span class="sd-lbl">Show Name</span><span class="sd-val" id="detail-show">—</span></div>
       <div class="sd-row"><span class="sd-lbl">Start Time</span><span class="sd-val" id="detail-start">—</span></div>
       <div class="sd-row"><span class="sd-lbl">Cues</span><span class="sd-val" id="detail-cues">—</span></div>
+      <div class="sd-row"><span class="sd-lbl">Created By</span><span class="sd-val" id="detail-created-by">—</span></div>
       <div class="sd-row"><span class="sd-lbl">Created</span><span class="sd-val" id="detail-created">—</span></div>
     </div>
     <div style="font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Participants</div>
@@ -358,7 +389,7 @@ body{overflow-x:hidden}
     </div>
     <button class="btn-full btn-primary" onclick="openDetailSession()" style="margin-top:4px">Open Rundown →</button>
     <button class="btn-full btn-secondary" onclick="hideModal('modal-detail')" style="margin-top:4px">Close</button>
-    <button class="btn-full btn-danger" onclick="confirmDelete()" style="margin-top:4px">Delete Session</button>
+    <button class="btn-full btn-danger" onclick="confirmDelete()" style="margin-top:4px" id="detail-delete-btn">Delete Session</button>
   </div>
 </div>
 
@@ -366,7 +397,7 @@ body{overflow-x:hidden}
 <div class="modal-wrap" id="modal-delete">
   <div class="modal">
     <div class="modal-title">Delete Session?</div>
-    <div class="modal-sub">This will permanently remove the session and all its cues. Students will no longer be able to join with this code.</div>
+    <div class="modal-sub">This will permanently remove the session and all its cues. Anyone with the code will no longer be able to join.</div>
     <div class="confirm-name" id="delete-code-display">—</div>
     <div style="font-size:12px;color:var(--red);text-align:center">This cannot be undone.</div>
     <button class="btn-full btn-danger" onclick="deleteSession()">Yes, Delete Session</button>
@@ -378,112 +409,203 @@ body{overflow-x:hidden}
 <div class="toast" id="toast">Copied!</div>
 
 <script>
-// ── STATE ──────────────────────────────────────────────
-let instructor = { name: '' };
-let sessions   = [];
-let activeCode = null; // for detail modal
-let createdCode = null;
+// ── ADMIN SYSTEM (mirrors cueola-app.js) ──────────────────────
+const ADMIN_KEY         = 'cueola_admins_v2';
+const ADMIN_SESSION_KEY = 'cueola_admin_sess';
 
-// ── FIREBASE (loaded as module below, exposed to window) ──
-function db(){ return window._db; }
-
-// ── LOGIN ──────────────────────────────────────────────
-function loginInstructor(){
-  const name = document.getElementById('login-name').value.trim();
-  if(!name){ document.getElementById('login-err').classList.add('on'); return; }
-  document.getElementById('login-err').classList.remove('on');
-  instructor.name = name;
-  localStorage.setItem('cueola_instructor', name);
-  hideModal('modal-login');
-  updateDashboard();
-  loadSessions();
+function hashStr(s) {
+  let h = 0;
+  for (let i=0;i<s.length;i++) { h = Math.imul(31,h)+s.charCodeAt(i)|0; }
+  return (h>>>0).toString(16).padStart(8,'0');
 }
 
-function switchInstructor(){
-  localStorage.removeItem('cueola_instructor');
-  instructor.name = '';
+function getAdmins() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; }
+}
+function saveAdmins(a) { localStorage.setItem(ADMIN_KEY, JSON.stringify(a)); }
+function hasSuperAdmin() { return getAdmins().some(a=>a.level==='super'); }
+
+function doLoginAdmin(code) {
+  const h = hashStr(code);
+  const a = getAdmins().find(x=>x.codeHash===h);
+  if (!a) return null;
+  const s = { id:a.id, name:a.name, level:a.level };
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(s));
+  return s;
+}
+
+function createSuperAdmin(name, code) {
+  const admins = getAdmins();
+  const id = 'adm_'+Date.now().toString(36);
+  admins.push({ id, name, codeHash:hashStr(code), level:'super', createdBy:null });
+  saveAdmins(admins);
+  const s = { id, name, level:'super' };
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(s));
+  return s;
+}
+
+// ── STATE ─────────────────────────────────────────────────────
+let adminSession = null; // { id, name, level }
+let sessions     = [];
+let activeCode   = null;
+let createdCode  = null;
+
+function db(){ return window._db; }
+
+// ── LOGIN FLOW ────────────────────────────────────────────────
+function loginAdmin() {
+  const code = document.getElementById('login-code').value.trim();
+  if (!code) {
+    showErr('login-err', 'Please enter your admin code.');
+    return;
+  }
+  document.getElementById('login-err').classList.remove('on');
+
+  // First-time setup — no super admin yet
+  if (!hasSuperAdmin()) {
+    const name = document.getElementById('login-name').value.trim();
+    if (!name) {
+      showErr('login-err', 'Please enter your name to create the Super Admin account.');
+      return;
+    }
+    adminSession = createSuperAdmin(name, code);
+    hideModal('modal-login');
+    onLoggedIn();
+    showToast(`Super Admin "${name}" created`);
+    return;
+  }
+
+  const result = doLoginAdmin(code);
+  if (!result) {
+    showErr('login-err', 'Incorrect code. Try again.');
+    return;
+  }
+  adminSession = result;
+  hideModal('modal-login');
+  onLoggedIn();
+}
+
+function switchAdmin() {
+  localStorage.removeItem(ADMIN_SESSION_KEY);
+  adminSession = null;
   sessions = [];
   document.getElementById('sessionArea').innerHTML = '';
+  document.getElementById('sessionsHead').style.display = 'none';
+  document.getElementById('newSessionCard').style.display = 'none';
+  document.getElementById('newSessionBtn').style.display = 'none';
+  document.getElementById('switchBtn').style.display = 'none';
+  document.getElementById('topAdminName').style.display = 'none';
+  document.getElementById('topAdminBadge').style.display = 'none';
+  document.getElementById('heroName').textContent = 'Welcome to Cueola';
+  document.getElementById('heroSub').textContent = 'Sign in with your admin code to manage sessions.';
+  document.getElementById('stat-sessions').textContent = '—';
+  document.getElementById('stat-cues').textContent = '—';
+  document.getElementById('stat-active').textContent = '—';
+  // Reset login form
+  document.getElementById('login-code').value = '';
+  document.getElementById('login-err').classList.remove('on');
+  checkFirstTime();
   showModal('modal-login');
 }
 
-// ── DASHBOARD ──────────────────────────────────────────
-function updateDashboard(){
-  document.getElementById('heroName').textContent = `Instructor Dashboard`;
+function checkFirstTime() {
+  const isFirst = !hasSuperAdmin();
+  document.getElementById('setup-notice').style.display = isFirst ? 'block' : 'none';
+  document.getElementById('setup-name-field').style.display = isFirst ? 'block' : 'none';
+  document.getElementById('login-btn').textContent = isFirst ? 'Create Super Admin →' : 'Sign In →';
+}
+
+function onLoggedIn() {
+  // Topbar
+  const nameEl  = document.getElementById('topAdminName');
+  const badgeEl = document.getElementById('topAdminBadge');
+  const nameVal = document.getElementById('topAdminNameVal');
+  nameVal.textContent = adminSession.name;
+  nameEl.style.display = '';
+  badgeEl.className = `admin-badge ${adminSession.level}`;
+  badgeEl.textContent = adminSession.level.toUpperCase();
+  badgeEl.style.display = '';
+  document.getElementById('switchBtn').style.display = '';
+  document.getElementById('newSessionBtn').style.display = '';
+  document.getElementById('sessionsHead').style.display = '';
+  document.getElementById('newSessionCard').style.display = '';
+
+  // Hero
+  document.getElementById('heroName').textContent = `Hey, ${adminSession.name.split(' ')[0]}`;
   document.getElementById('heroSub').textContent = 'Manage your sessions below. Create a new one or return to an existing rundown.';
-  document.getElementById('topInstName').style.display = 'none';
+
+  loadSessions();
 }
 
-function updateStats(){
-  document.getElementById('stat-sessions').textContent = sessions.length;
-  const totalCues = sessions.reduce((a,s)=>(a + (s.cues||[]).length),0);
-  document.getElementById('stat-cues').textContent = totalCues;
-  const active = sessions.filter(s=>s.status==='active').length;
-  document.getElementById('stat-active').textContent = active;
-}
-
-// ── LOAD SESSIONS ──────────────────────────────────────
-async function loadSessions(){
+// ── LOAD SESSIONS ─────────────────────────────────────────────
+async function loadSessions() {
   const area = document.getElementById('sessionArea');
-  area.innerHTML = `<div class="loading" id="loadingState"><div class="spinner"></div><div class="loading-text">Loading sessions…</div></div>`;
+  area.innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Loading sessions…</div></div>`;
 
-  if(!window._firebaseReady){
+  if (!window._firebaseReady) {
     window.addEventListener('firebaseReady', loadSessions, {once:true});
     return;
   }
 
   try {
-    const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const { collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const q = query(
       collection(db(), 'sessions'),
-      where('createdBy', '==', instructor.name)
+      where('createdBy', '==', adminSession.name)
     );
     const snap = await getDocs(q);
     sessions = [];
-    snap.forEach(doc => sessions.push({ id: doc.id, ...doc.data() }));
-    // Sort by createdAt descending (most recent first)
+    snap.forEach(doc => sessions.push({ id:doc.id, ...doc.data() }));
     sessions.sort((a,b)=>{
-      const ta = a.createdAt?.seconds||0;
-      const tb = b.createdAt?.seconds||0;
-      return tb - ta;
+      return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
     });
     renderSessions();
     updateStats();
-  } catch(e){
-    console.error('Load sessions error:', e);
+  } catch(e) {
     area.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load sessions</div><div class="empty-sub">${e.message}</div></div>`;
   }
 }
 
-async function refreshSessions(){
+async function refreshSessions() {
   await loadSessions();
   showToast('Sessions refreshed');
 }
 
-// ── RENDER SESSIONS ────────────────────────────────────
-function renderSessions(){
+// ── RENDER SESSIONS ───────────────────────────────────────────
+const CUE_COLORS = {
+  video:'#5b8df8', audio:'#22d3a0', lighting:'#b06ef8',
+  playback:'#f05252', gfx:'#f5b731', script:'#22d3d3'
+};
+const CARD_PALETTE = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316','#ec4899'];
+
+function renderSessions() {
   const area = document.getElementById('sessionArea');
-  if(!sessions.length){
+  if (!sessions.length) {
     area.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">📋</div>
         <div class="empty-title">No sessions yet</div>
-        <div class="empty-sub">Create your first session to get started.<br>Your students will join with the code you generate.</div>
+        <div class="empty-sub">Create your first session to get started.<br>Your crew will join with the session code.</div>
       </div>`;
     return;
   }
 
   area.innerHTML = '';
-  const COLORS = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316','#ec4899'];
-
   sessions.forEach((s, i) => {
-    const color = COLORS[i % COLORS.length];
-    const cueCount = (s.cues||[]).length;
-    const created = s.createdAt?.seconds
-      ? new Date(s.createdAt.seconds*1000).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'})
+    const color    = CARD_PALETTE[i % CARD_PALETTE.length];
+    const beats    = s.beats || s.cues || [];
+    const cueCount = beats.length;
+    const created  = s.createdAt?.seconds
+      ? new Date(s.createdAt.seconds*1000).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'})
       : 'Unknown';
     const startDisplay = s.startTime ? formatTime12(s.startTime) : '—';
     const isActive = s.status === 'active';
+
+    // Collect unique cue types present in this session
+    const typeSet = new Set(beats.map(b=>b.type).filter(Boolean));
+    const typeDots = [...typeSet].map(t =>
+      `<div class="ct-dot" title="${t}" style="background:${CUE_COLORS[t]||'#666'}"></div>`
+    ).join('');
 
     const card = document.createElement('div');
     card.className = 'session-card';
@@ -498,60 +620,70 @@ function renderSessions(){
         </div>
         <div class="sc-meta">
           <div class="sc-m"><span class="sc-dot ${isActive?'':'off'}"></span>${cueCount} cue${cueCount!==1?'s':''}</div>
+          ${typeDots ? `<div class="cue-types">${typeDots}</div>` : ''}
           <div class="sc-m">⏰ ${startDisplay}</div>
           <div class="sc-m">📅 ${created}</div>
         </div>
       </div>
       <div class="sc-right">
-        <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code || s.id}', event)">Copy Code</button>
-        <button class="sc-btn sc-btn-open" onclick="openSession('${s.code || s.id}')">Open →</button>
-        <button class="sc-btn sc-btn-del" onclick="showDetail('${s.code || s.id}', event)">Details</button>
+        <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
+        <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
+        <button class="sc-btn sc-btn-del" onclick="showDetail('${s.code||s.id}',event)">Details</button>
       </div>
     `;
     area.appendChild(card);
   });
 }
 
-// ── CREATE SESSION ─────────────────────────────────────
-function openNewSession(){
+function updateStats() {
+  document.getElementById('stat-sessions').textContent = sessions.length;
+  const totalCues = sessions.reduce((a,s)=>a+((s.beats||s.cues||[]).length),0);
+  document.getElementById('stat-cues').textContent = totalCues;
+  document.getElementById('stat-active').textContent = sessions.filter(s=>s.status==='active').length;
+}
+
+// ── CREATE SESSION ─────────────────────────────────────────────
+function openNewSession() {
+  document.getElementById('new-showname').value = '';
   document.getElementById('new-code').value = '';
+  document.getElementById('new-start').value = '';
   document.getElementById('new-err').classList.remove('on');
   showModal('modal-new');
 }
 
-async function waitForFirebase(ms=8000){
-  if(window._firebaseReady) return true;
+async function waitForFirebase(ms=8000) {
+  if (window._firebaseReady) return true;
   return new Promise(res=>{
     const t=setTimeout(()=>res(false),ms);
     window.addEventListener('firebaseReady',()=>{clearTimeout(t);res(true)},{once:true});
   });
 }
 
-async function createNewSession(){
+async function createNewSession() {
   const btn = document.getElementById('new-btn');
   btn.textContent = 'Connecting…';
   btn.disabled = true;
 
   const ready = await waitForFirebase();
-  if(!ready){
-    document.getElementById('new-err').textContent = 'Could not connect to Firebase. Check your internet and try again.';
-    document.getElementById('new-err').classList.add('on');
+  if (!ready) {
+    showErr('new-err','Could not connect to Firebase. Check your internet and try again.');
     btn.textContent = 'Create Session →'; btn.disabled = false;
     return;
   }
 
   btn.textContent = 'Creating…';
-  const showName = 'Untitled Show';
-  const startTime = '';
+  const showName   = document.getElementById('new-showname').value.trim() || 'Untitled Show';
+  const startTime  = document.getElementById('new-start').value || '';
   const customCode = document.getElementById('new-code').value.trim().toUpperCase();
-  const code = customCode || genCode();
+  const code       = customCode || genCode();
 
   try {
     await window._setDoc(window._doc(db(), 'sessions', code), {
       code,
       showName,
       startTime,
-      createdBy: instructor.name,
+      createdBy: adminSession.name,
+      beats: [],
       cues: [],
       activeIdx: 0,
       status: 'idle',
@@ -561,58 +693,59 @@ async function createNewSession(){
 
     createdCode = code;
     document.getElementById('created-code').textContent = code;
-    document.getElementById('created-url').textContent = `${window.location.origin}/?code=${code}`;
+    document.getElementById('created-url').textContent = `${window.location.origin}/index.html?code=${code}`;
 
     hideModal('modal-new');
     showModal('modal-created');
     btn.textContent = 'Create Session →'; btn.disabled = false;
 
-    // Refresh list
     await loadSessions();
-  } catch(e){
-    document.getElementById('new-err').textContent = 'Error: ' + e.message;
-    document.getElementById('new-err').classList.add('on');
+  } catch(e) {
+    showErr('new-err', 'Error: ' + e.message);
     btn.textContent = 'Create Session →'; btn.disabled = false;
   }
 }
 
-function openCreatedSession(){
+function openCreatedSession() {
   hideModal('modal-created');
-  if(createdCode) launchRundown(createdCode);
+  if (createdCode) launchRundown(createdCode);
 }
 
-// ── SESSION DETAIL ─────────────────────────────────────
-async function showDetail(code, e){
-  if(e) e.stopPropagation();
+// ── SESSION DETAIL ─────────────────────────────────────────────
+async function showDetail(code, e) {
+  if (e) e.stopPropagation();
   activeCode = code;
   const s = sessions.find(x=>(x.code||x.id)===code);
-  if(!s) return;
+  if (!s) return;
 
-  document.getElementById('detail-title').textContent = s.showName || 'Session Details';
-  document.getElementById('detail-code').textContent = code;
-  document.getElementById('detail-show').textContent = s.showName || 'Untitled Show';
-  document.getElementById('detail-start').textContent = s.startTime ? formatTime12(s.startTime) : 'Not set';
-  document.getElementById('detail-cues').textContent = (s.cues||[]).length + ' cues';
-  document.getElementById('detail-created').textContent = s.createdAt?.seconds
+  const beats    = s.beats || s.cues || [];
+  const cueCount = beats.length;
+
+  document.getElementById('detail-title').textContent      = s.showName || 'Session Details';
+  document.getElementById('detail-code').textContent       = code;
+  document.getElementById('detail-show').textContent       = s.showName || 'Untitled Show';
+  document.getElementById('detail-start').textContent      = s.startTime ? formatTime12(s.startTime) : 'Not set';
+  document.getElementById('detail-cues').textContent       = cueCount + ' cue' + (cueCount!==1?'s':'');
+  document.getElementById('detail-created-by').textContent = s.createdBy || '—';
+  document.getElementById('detail-created').textContent    = s.createdAt?.seconds
     ? new Date(s.createdAt.seconds*1000).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
     : 'Unknown';
 
-  // Participants
   const pList = document.getElementById('detail-participants');
   const parts = s.participants || [];
-  if(!parts.length){
+  if (!parts.length) {
     pList.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No participants have joined yet.</div>';
   } else {
     pList.innerHTML = '';
     parts.forEach(p => {
       const colors = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316'];
-      const col = colors[Math.abs(hashStr(p.name||'')) % colors.length];
+      const col = colors[Math.abs(hashStr(p.name||'')>>1) % colors.length];
       const div = document.createElement('div');
       div.className = 'participant';
       div.innerHTML = `
         <div class="p-avatar" style="background:${col}22;color:${col}">${(p.name||'?').charAt(0).toUpperCase()}</div>
         <div class="p-name">${p.name||'Unknown'}</div>
-        <span class="p-role ${p.role==='instructor'?'inst':'stud'}">${p.role==='instructor'?'INST':'STU'}</span>
+        <span class="p-role ${p.role==='instructor'||p.role==='admin'?'inst':'stud'}">${p.role==='instructor'||p.role==='admin'?'ADMIN':'STU'}</span>
         ${p.joinedAt?`<div class="p-joined">${new Date(p.joinedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`:''}
       `;
       pList.appendChild(div);
@@ -621,22 +754,22 @@ async function showDetail(code, e){
   showModal('modal-detail');
 }
 
-function openDetailSession(){
+function openDetailSession() {
   hideModal('modal-detail');
-  if(activeCode) launchRundown(activeCode);
+  if (activeCode) launchRundown(activeCode);
 }
 
-function openSession(code){ launchRundown(code); }
+function openSession(code) { launchRundown(code); }
 
-// ── DELETE ─────────────────────────────────────────────
-function confirmDelete(){
+// ── DELETE ─────────────────────────────────────────────────────
+function confirmDelete() {
   hideModal('modal-detail');
   document.getElementById('delete-code-display').textContent = activeCode;
   showModal('modal-delete');
 }
 
-async function deleteSession(){
-  if(!activeCode) return;
+async function deleteSession() {
+  if (!activeCode) return;
   try {
     const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     await deleteDoc(doc(db(), 'sessions', activeCode));
@@ -644,40 +777,43 @@ async function deleteSession(){
     showToast(`Session ${activeCode} deleted`);
     await loadSessions();
     activeCode = null;
-  } catch(e){
+  } catch(e) {
     showToast('Delete failed: ' + e.message);
   }
 }
 
-// ── LAUNCH RUNDOWN ─────────────────────────────────────
-function launchRundown(code){
-  // Store session info for cueola-v3.1 to pick up
+// ── LAUNCH ────────────────────────────────────────────────────
+function launchRundown(code) {
   localStorage.setItem('cueola_session', JSON.stringify({
     code,
-    role: 'instructor',
-    userName: instructor.name,
+    role: 'admin',
+    userName: adminSession.name,
   }));
   window.location.href = `index.html?code=${code}`;
 }
 
-// ── COPY ──────────────────────────────────────────────
-function copySessionCode(code, e){
-  if(e) e.stopPropagation();
+// ── COPY ─────────────────────────────────────────────────────
+function copySessionCode(code, e) {
+  if (e) e.stopPropagation();
   navigator.clipboard.writeText(code).then(()=>showToast(`Code ${code} copied!`));
 }
 
-function copyCode(){
+function copyCreatedCode() {
   const code = document.getElementById('created-code').textContent;
   navigator.clipboard.writeText(code).then(()=>showToast('Code copied!'));
 }
 
-// ── MODAL ─────────────────────────────────────────────
-function showModal(id){ document.getElementById(id).classList.add('on'); }
-function hideModal(id){ document.getElementById(id).classList.remove('on'); }
+// ── MODAL / TOAST ─────────────────────────────────────────────
+function showModal(id) { document.getElementById(id).classList.add('on'); }
+function hideModal(id) { document.getElementById(id).classList.remove('on'); }
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('on');
+}
 
-// ── TOAST ─────────────────────────────────────────────
 let toastTimer;
-function showToast(msg){
+function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -685,52 +821,53 @@ function showToast(msg){
   toastTimer = setTimeout(()=>t.classList.remove('show'), 2500);
 }
 
-// ── UTILS ─────────────────────────────────────────────
-function genCode(){
-  const now = new Date();
-  const yy  = String(now.getFullYear()).slice(2); // "26"
-  const mm  = String(now.getMonth()+1).padStart(2,'0'); // "04"
-  const base = yy + mm; // "2604"
-  // Find next available letter suffix for this instructor + base
-  const used = sessions
-    .map(s => s.code || s.id)
-    .filter(c => c.startsWith(base))
-    .map(c => c.slice(4)); // the letter(s) after the base
+// ── UTILS ─────────────────────────────────────────────────────
+function genCode() {
+  const now  = new Date();
+  const yy   = String(now.getFullYear()).slice(2);
+  const mm   = String(now.getMonth()+1).padStart(2,'0');
+  const base = yy + mm;
+  const used = sessions.map(s=>s.code||s.id).filter(c=>c.startsWith(base)).map(c=>c.slice(4));
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  for(let i = 0; i < letters.length; i++){
-    const candidate = base + letters[i];
-    if(!used.includes(letters[i])) return candidate;
+  for (let i=0;i<letters.length;i++) {
+    if (!used.includes(letters[i])) return base + letters[i];
   }
-  // Fallback if all letters used (very unlikely)
   return base + Date.now().toString().slice(-2);
 }
-function pad(n){ return String(n).padStart(2,'0'); }
-function formatTime12(t24){
-  if(!t24) return '—';
+
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function formatTime12(t24) {
+  if (!t24) return '—';
   const [h,m] = t24.split(':').map(Number);
   const ap = h>=12?'PM':'AM', h12 = h%12||12;
   return `${h12}:${pad(m)} ${ap}`;
 }
-function hashStr(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
 
-// ── INIT ──────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────────
 window.addEventListener('load', ()=>{
-  // Check for saved instructor name
-  const saved = localStorage.getItem('cueola_instructor');
-  if(saved){
-    document.getElementById('login-name').value = saved;
-    instructor.name = saved;
-    hideModal('modal-login');
-    updateDashboard();
-    loadSessions();
-  }
+  checkFirstTime();
+  try {
+    const saved = JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY));
+    if (saved) {
+      const admins = getAdmins();
+      const a = admins.find(x=>x.id===saved.id);
+      if (a) {
+        adminSession = { id:a.id, name:a.name, level:a.level };
+        hideModal('modal-login');
+        onLoggedIn();
+        return;
+      }
+    }
+  } catch {}
+  showModal('modal-login');
 });
 </script>
 
 <!-- Firebase -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, serverTimestamp }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const app = initializeApp({
@@ -749,6 +886,7 @@ window.addEventListener('load', ()=>{
   window._getDoc = getDoc;
   window._onSnapshot = onSnapshot;
   window._updateDoc = updateDoc;
+  window._deleteDoc = deleteDoc;
   window._serverTimestamp = serverTimestamp;
   window._firebaseReady = true;
   window.dispatchEvent(new Event('firebaseReady'));
