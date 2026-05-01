@@ -4,36 +4,32 @@
 // CUE TYPE DEFINITIONS
 // ─────────────────────────────────────────────────────────────
 const CT = {
-  video: {
-    label:'VIDEO', color:'#5b8df8', bg:'rgba(91,141,248,.12)', icon:'📺',
-    states:['Ready','Set','Set + Media Wipe'],
-    defSources:['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1']
-  },
-  audio: {
-    label:'AUDIO', color:'#22d3a0', bg:'rgba(34,211,160,.12)', icon:'🎙',
-    actions:['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'],
-    defSources:['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains']
-  },
-  lighting: {
-    label:'LIGHTING', color:'#b06ef8', bg:'rgba(176,110,248,.12)', icon:'💡',
-    actions:['On','Off','At','Color','Gobo']
-  },
-  playback: {
-    label:'PLAYBACK', color:'#f05252', bg:'rgba(240,82,82,.12)', icon:'▶',
-    states:['Ready','Standby In','Roll']
-  },
-  gfx: {
-    label:'GFX', color:'#f5b731', bg:'rgba(245,183,49,.12)', icon:'🖼',
-    types:['Lower 3rd','Full Screen','Bug'],
-    transitions:['Cut','Auto On','Lost it','Auto Off'],
-    defSources:['GFX','Media 1','Media 2','Media 3','Media 4','ME 1']
-  },
-  script: {
-    label:'SCRIPT', color:'#22d3d3', bg:'rgba(34,211,211,.12)', icon:'📄',
-    types:['Script','Dialogue'],
-    defWho:['Host','Guest 1','Guest 2','VOU']
-  }
+  video:    { label:'VIDEO',    color:'#5b8df8', bg:'rgba(91,141,248,.12)', icon:'📺' },
+  audio:    { label:'AUDIO',    color:'#22d3a0', bg:'rgba(34,211,160,.12)', icon:'🎙' },
+  lighting: { label:'LIGHTING', color:'#b06ef8', bg:'rgba(176,110,248,.12)', icon:'💡' },
+  playback: { label:'PLAYBACK', color:'#f05252', bg:'rgba(240,82,82,.12)', icon:'▶'  },
+  gfx:      { label:'GFX',      color:'#f5b731', bg:'rgba(245,183,49,.12)', icon:'🖼'  },
+  script:   { label:'SCRIPT',   color:'#22d3d3', bg:'rgba(34,211,211,.12)', icon:'📄' },
 };
+
+// Column ordering — persisted per user in localStorage
+const COL_META = {
+  video:    { label:'📺 Video',    color:'#5b8df8' },
+  audio:    { label:'🎙 Audio',    color:'#22d3a0' },
+  playback: { label:'▶ Playback', color:'#f05252' },
+  gfx:      { label:'🖼 GFX',     color:'#f5b731' },
+  lighting: { label:'💡 Lighting', color:'#b06ef8' },
+  script:   { label:'📄 Script',  color:'#22d3d3' },
+};
+const COL_DEFAULTS = ['video','audio','playback','gfx','lighting','script'];
+let colOrder = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem('cueola_col_order')||'null');
+    if (Array.isArray(s) && s.length === 6 && s.every(c=>COL_DEFAULTS.includes(c))) return s;
+  } catch {}
+  return [...COL_DEFAULTS];
+})();
+let colDragSrc = null;
 
 // ─────────────────────────────────────────────────────────────
 // STATE
@@ -54,8 +50,8 @@ let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 // Add-row wizard state
 let arStyle = null;
 
-// Multi-select
-let selectedRows = new Set();
+// Edit mode (gates row/column drag)
+let editMode = false;
 
 // Cue config modal state
 let cueConfigBeatId = null;
@@ -321,16 +317,32 @@ function renderAdminBody() {
     </div>`;
   }
 
+  if (session.code) {
+    const presenceNames = Object.values(currentPresence||{}).map(p=>p.name).filter(Boolean);
+    const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    html += `<div class="admin-section" style="margin-top:16px">
+      <div class="admin-section-label">Live Control</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="adminFollowSelect" class="field-in" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px">
+          ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
+        </select>
+        <button class="admin-act-btn" style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red)" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">🔴 Force Everyone Live + Follow</button>
+      </div>
+    </div>`;
+  }
   html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Logout Admin</button>`;
   body.innerHTML = html;
   window._newAdminLevel = 'standard';
 }
 
 function renderSourcesRow(key, label) {
-  const defaults = key==='video' ? CT.video.defSources
-    : key==='audio' ? CT.audio.defSources
-    : key==='gfx' ? CT.gfx.defSources
-    : CT.script.defWho;
+  const SRC_DEFAULTS = {
+    video: ['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'],
+    audio: ['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains'],
+    gfx:   ['GFX','Media 1','Media 2','Media 3','Media 4','ME 1'],
+    scriptWho: ['Host','Guest 1','Guest 2','VOU'],
+  };
+  const defaults = SRC_DEFAULTS[key] || [];
   const custom = (sessionCustomSources[key]||[]);
   const all = [...defaults, ...custom];
   const chips = all.map((s,i) => {
@@ -422,11 +434,41 @@ function getSources(key) {
   return [...defaults, ...(sessionCustomSources[key]||[])];
 }
 
+function migrateOldCue(type, d) {
+  if (!d) return d;
+  if (d.ready !== undefined || d.take !== undefined) return d; // already new format
+  switch(type) {
+    case 'video':
+      return { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`Take ${d.source}`:'' };
+    case 'audio':
+      return { ready:[d.action,d.source].filter(Boolean).join(' '), take:d.action||'' };
+    case 'playback':
+      return { ready:[d.state,d.clipName].filter(Boolean).join(' '), take:d.clipName?`Roll ${d.clipName}`:'Roll' };
+    case 'gfx':
+      return { ready:[d.gfxType,d.transition].filter(Boolean).join(' / '), take:'Take GFX' };
+    case 'lighting':
+      return { ready:[d.action,d.fixture].filter(Boolean).join(' '), take:d.action==='At'?`Go ${d.intensity||0}%`:'Go' };
+    case 'script':
+      return { ready:d.who||'', take:'Begin', text:d.text||'' };
+    default: return d;
+  }
+}
+
 function migrateBeat(b) {
-  if (b.cues !== undefined) return b;
-  const cues = {};
-  if (b.type && b.cueData && Object.keys(b.cueData).length) cues[b.type] = b.cueData;
-  return { id:b.id, style:b.style||'flex', info:b.info||'', notes:b.notes||'', min:b.min||0, sec:b.sec||0, done:b.done||false, cues };
+  if (b.cues === undefined) {
+    // Very old format: { type, cueData }
+    const cues = {};
+    if (b.type && b.cueData && Object.keys(b.cueData).length) {
+      cues[b.type] = migrateOldCue(b.type, b.cueData);
+    }
+    return { id:b.id, style:b.style||'flex', info:b.info||'', notes:b.notes||'', min:b.min||0, sec:b.sec||0, done:b.done||false, cues };
+  }
+  // Has cues — migrate each cue's fields to ready/take format
+  const newCues = {};
+  Object.keys(b.cues).forEach(type => {
+    newCues[type] = CT[type] ? migrateOldCue(type, b.cues[type]) : b.cues[type];
+  });
+  return { ...b, cues: newCues };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -464,11 +506,30 @@ function enterAsInstructor() {
 function joinSession() {
   const code = document.getElementById('stud-code').value.trim().toUpperCase();
   const name = document.getElementById('stud-name').value.trim();
-  if (!code||!name) { document.getElementById('stud-err').classList.add('on'); return; }
-  document.getElementById('stud-err').classList.remove('on');
-  session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
-  hideModal('modal-stud');
-  enterRundown();
+  const errEl = document.getElementById('stud-err');
+  if (!code || !name) { errEl.textContent='Code and name required.'; errEl.classList.add('on'); return; }
+  errEl.classList.remove('on');
+  const btn = document.getElementById('stud-join-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Checking...'; }
+  const verify = () => {
+    window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
+      if (btn) { btn.disabled=false; btn.textContent='Join Session →'; }
+      if (!snap.exists()) {
+        errEl.textContent = 'Session not found. Check the code and try again.';
+        errEl.classList.add('on');
+        return;
+      }
+      session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+      hideModal('modal-stud');
+      enterRundown();
+    }).catch(() => {
+      if (btn) { btn.disabled=false; btn.textContent='Join Session →'; }
+      errEl.textContent = 'Could not connect. Check your internet connection.';
+      errEl.classList.add('on');
+    });
+  };
+  if (window._firebaseReady) verify();
+  else window.addEventListener('firebaseReady', ()=>{ verify(); }, {once:true});
 }
 
 function loadExpert() {
@@ -554,6 +615,39 @@ function setupFirestore() {
         prompterText = d.prompter.text;
         const el = document.getElementById('lsPrompterText');
         if (el) el.textContent = prompterText;
+        // Forward live to any connected PUTJ on this device, scroll-preserving
+        if (prompterChannel) sendToPrompter(false);
+      }
+      // Handle force commands
+      if (d.forceCmd && d.forceCmd.ts) {
+        const cmd = d.forceCmd;
+        const age = Date.now() - (cmd.ts||0);
+        if (age < 30000) { // only act on commands < 30 seconds old
+          if (cmd.type === 'followMe' && cmd.name !== session.userName) {
+            // Force follow this person
+            const liveOn = document.getElementById('liveshow').classList.contains('on');
+            if (liveOn) {
+              document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
+              const target = [...document.querySelectorAll('.follow-chip')].find(c=>c.textContent.trim().startsWith(cmd.name));
+              if (target) target.classList.add('active');
+              else toast(`Now following: ${cmd.name}`);
+            }
+          }
+          if (cmd.type === 'forceLive') {
+            const liveOn = document.getElementById('liveshow').classList.contains('on');
+            if (!liveOn) { goLive(); setTimeout(()=>{ /* apply follow after live loads */ }, 400); }
+            setTimeout(() => {
+              if (cmd.name === session.userName) {
+                followSelf();
+              } else {
+                document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
+                const target = [...document.querySelectorAll('.follow-chip')].find(c=>c.textContent.trim().startsWith(cmd.name));
+                if (target) target.classList.add('active');
+                else toast(`Forced live: following ${cmd.name}`);
+              }
+            }, 500);
+          }
+        }
       }
       renderPresence(d.presence||{});
       renderRundown();
@@ -584,12 +678,27 @@ async function joinPresence() {
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now()}
+      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName}
     });
     clearInterval(presenceInterval);
     presenceInterval = setInterval(async()=>{
       try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}.lastSeen`]:Date.now()}); } catch {}
     },30000);
+  } catch {}
+
+  // Persist this participant to the dashboard-visible participants list.
+  // Uses arrayUnion so each unique name+role pair is recorded once.
+  try {
+    const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
+    if (snap.exists()) {
+      const existing = snap.data().participants || [];
+      const alreadyIn = existing.some(p => p.name === name);
+      if (!alreadyIn) {
+        await window._updateDoc(window._doc(window._db,'sessions',session.code), {
+          participants: [...existing, { name, role:session.role, joinedAt: Date.now() }]
+        });
+      }
+    }
   } catch {}
 }
 
@@ -624,7 +733,69 @@ window.addEventListener('beforeunload', leavePresence);
 // ─────────────────────────────────────────────────────────────
 // RUNDOWN RENDERING
 // ─────────────────────────────────────────────────────────────
+function toggleEditMode() {
+  editMode = !editMode;
+  const btn = document.getElementById('editModeBtn');
+  if (btn) {
+    btn.textContent = editMode ? '✓ Done Editing' : '✎ Edit';
+    btn.style.background = editMode ? 'rgba(91,141,248,.15)' : '';
+    btn.style.borderColor = editMode ? 'var(--accent)' : '';
+    btn.style.color = editMode ? 'var(--accent)' : '';
+  }
+  renderRundown();
+}
+
+function renderTableHeaders() {
+  const thead = document.querySelector('.rd-head');
+  if (!thead) return;
+  const dynCols = colOrder.map(type => {
+    const m = COL_META[type];
+    if (editMode) {
+      return `<th class="col-cue${type==='script'?' col-script-c':''}"
+                style="color:${m.color};cursor:grab;user-select:none"
+                draggable="true"
+                ondragstart="colDragStart(event,'${type}')"
+                ondragover="colDragOver(event,this)"
+                ondrop="colDrop(event,'${type}')"
+                ondragend="colDragEnd(event)"
+                data-col="${type}"
+                title="Drag to reorder">${m.label} <span style="font-size:7px;opacity:.35">⠿</span></th>`;
+    }
+    return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${m.label}</th>`;
+  }).join('');
+  const dragCol = editMode ? '<th class="col-drag" title="Drag rows to reorder">⠿</th>' : '<th class="col-drag"></th>';
+  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}<th class="col-acts"></th>`;
+}
+
+function colDragStart(e, type) {
+  colDragSrc = type;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '.5';
+}
+function colDragOver(e, el) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  if (el && el.dataset.col !== colDragSrc) el.classList.add('col-drag-over');
+}
+function colDrop(e, targetType) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  if (!editMode || !colDragSrc || colDragSrc === targetType) { colDragSrc=null; return; }
+  const fi = colOrder.indexOf(colDragSrc), ti = colOrder.indexOf(targetType);
+  if (fi < 0 || ti < 0) { colDragSrc=null; return; }
+  colOrder.splice(fi, 1); colOrder.splice(ti, 0, colDragSrc);
+  localStorage.setItem('cueola_col_order', JSON.stringify(colOrder));
+  colDragSrc = null;
+  renderRundown();
+}
+function colDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  colDragSrc = null;
+}
+
 function renderRundown() {
+  renderTableHeaders();
   const name = show.name||'Untitled Show';
   document.getElementById('rd-name').textContent = name+' ✏';
   document.getElementById('rd-start').textContent = show.start ? clock(show.start,0) : '—';
@@ -649,27 +820,27 @@ function renderRundown() {
     const dur = fmtDur(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += (b.min||0)*60+(b.sec||0);
-    const sel = selectedRows.has(b.id);
 
-    html += `<tr class="cue-row${sel?' row-selected':''}" draggable="true" data-id="${b.id}">
-      <td class="cd cd-drag" title="Drag to reorder">⠿</td>
-      <td class="cd" style="padding:0 4px;vertical-align:middle"><input type="checkbox" class="row-cb"${sel?' checked':''} onclick="toggleRowSelect(${b.id},this.checked)" style="accent-color:var(--accent);cursor:pointer"></td>
+    const editActions = editMode ? `
+      <div class="row-edit-actions">
+        <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" title="Add row before">+ Before</button>
+        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">✕ Remove</button>
+        <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
+      </div>` : '';
+    html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}">
+      <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">⠿</td>
       <td class="cd cd-num">${i+1}</td>
       <td class="cd" style="padding:8px 6px">
         <div class="cd-name">${esc(b.info||'—')}</div>
         ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
         <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-block">${b.style==='timed'?'⏱':'⇔'} ${(b.style||'flex').toUpperCase()}</span>
+        ${editActions}
       </td>
       <td class="cd" style="padding:8px 6px">
         ${startStr!=='—'?`<div class="cd-time-start">${startStr}</div>`:''}
         <div class="cd-time-dur">${dur}</div>
       </td>
-      <td class="cd-cue-cell">${getCueCell(b,'video')}</td>
-      <td class="cd-cue-cell">${getCueCell(b,'audio')}</td>
-      <td class="cd-cue-cell">${getCueCell(b,'playback')}</td>
-      <td class="cd-cue-cell">${getCueCell(b,'gfx')}</td>
-      <td class="cd-cue-cell">${getCueCell(b,'lighting')}</td>
-      <td class="cd-cue-cell">${getCueCell(b,'script')}</td>
+      ${colOrder.map(type=>`<td class="cd-cue-cell">${getCueCell(b,type)}</td>`).join('')}
       <td class="cd" style="padding:4px;vertical-align:middle;text-align:center"><button class="row-act-btn" onclick="openEdit(${b.id})" title="Edit row">✎</button></td>
     </tr>`;
   });
@@ -691,43 +862,25 @@ function renderAddRowBtn(tbody) {
 function getCueCell(b, type) {
   const tc = CT[type];
   const d = b.cues?.[type];
-  const isEmpty = !d || Object.values(d).every(v => v === '' || v === false || v === 0 || v === null || v === undefined);
+  const isEmpty = !d || (!d.ready && !d.take && (type !== 'script' || !d.text));
   if (isEmpty) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label}">+</button>`;
   }
-  let lines = [];
-  switch(type) {
-    case 'video':    lines=[d.state,d.source].filter(Boolean); break;
-    case 'audio':    lines=[d.action,d.source].filter(Boolean); break;
-    case 'playback': lines=[d.state,d.clipName].filter(Boolean); break;
-    case 'gfx':      lines=[d.gfxType,d.source].filter(Boolean); break;
-    case 'lighting': lines=[d.action,d.fixture].filter(Boolean); break;
-    case 'script':   lines=[d.scriptType,d.who,d.text?(d.text.slice(0,50)+(d.text.length>50?'…':'')):null].filter(Boolean); break;
-  }
+  const lines = [
+    d.ready ? `<div class="cue-ready-line">✓ ${esc(d.ready)}</div>` : '',
+    d.take  ? `<div class="cue-take-line">→ ${esc(d.take)}</div>`  : '',
+  ].filter(Boolean).join('');
   return `<div class="cue-cell-filled" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
-    <div class="cue-cell-info">${lines.map(l=>`<div>${esc(String(l))}</div>`).join('')}</div>
+    <div class="cue-cell-info">${lines}</div>
   </div>`;
 }
 
 function getCueSummary(b) {
-  // For export — uses primary cue type
-  const types = ['video','audio','playback','gfx','lighting','script'];
-  const pType = types.find(t => b.cues?.[t] && Object.keys(b.cues[t]).length);
+  const pType = COL_DEFAULTS.find(t => b.cues?.[t] && (b.cues[t].ready || b.cues[t].take));
   if (!pType) return { stateStr:'', srcStr:'', detStr:'' };
   const d = b.cues[pType];
-  switch(pType) {
-    case 'video':    return { stateStr:d.state||'', srcStr:d.source||'', detStr:'' };
-    case 'audio':    return { stateStr:d.action||'', srcStr:d.source||'', detStr:'' };
-    case 'lighting': return { stateStr:d.action||'', srcStr:d.fixture||'', detStr:d.intensity?`@${d.intensity}`:'' };
-    case 'playback': return { stateStr:d.state||'', srcStr:d.clipName||'', detStr:(d.clipMin||d.clipSec)?`${pad(d.clipMin||0)}:${pad(d.clipSec||0)}`:'' };
-    case 'gfx': {
-      const flags=[d.transition,d.isFixed?'Fixed':null,d.isAnimated?'Animated':null].filter(Boolean);
-      return { stateStr:d.gfxType||'', srcStr:d.source||'', detStr:flags.join(' · ')+(d.contentNotes?(flags.length?' — ':'')+d.contentNotes:'') };
-    }
-    case 'script':   return { stateStr:d.scriptType||'', srcStr:d.who||'', detStr:'' };
-  }
-  return { stateStr:'', srcStr:'', detStr:'' };
+  return { stateStr:d.ready||'', srcStr:d.take||'', detStr:'' };
 }
 
 function updateBotBar() {
@@ -750,7 +903,7 @@ function updateNowNext() {
 // ─────────────────────────────────────────────────────────────
 function initDrag() {
   const tbody = document.getElementById('rdBody');
-  if (!tbody) return;
+  if (!tbody || !editMode) return;
   let dragSrc = null;
   tbody.querySelectorAll('tr.cue-row').forEach(tr=>{
     tr.addEventListener('dragstart', e => { dragSrc=tr; tr.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
@@ -766,6 +919,19 @@ function initDrag() {
       renderRundown(); syncToFirestore();
     });
   });
+}
+
+function removeRow(id) {
+  if (!confirm('Remove this row?')) return;
+  beats = beats.filter(b => b.id !== id);
+  renderRundown(); syncToFirestore(); toast('Row removed.');
+}
+
+// insertIdx = index to insert at; position = 'before'|'after'
+let _insertIdx = null;
+function addRowAt(idx, position) {
+  _insertIdx = position === 'after' ? idx + 1 : idx;
+  openAddRow();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -790,8 +956,8 @@ function openAddRow() {
 }
 
 function closeAddRowOv(e) {
-  if (e && !e.target.closest('.ar-wrap')) hideOverlay('addRowOv');
-  else if (!e) hideOverlay('addRowOv');
+  if (e && !e.target.closest('.ar-wrap')) { _insertIdx = null; hideOverlay('addRowOv'); }
+  else if (!e) { _insertIdx = null; hideOverlay('addRowOv'); }
 }
 
 function buildArContext() {
@@ -849,55 +1015,43 @@ function openCueConfig(beatId, type) {
 
 function buildCueConfigFields(type, d) {
   d = d || {};
-  let h = '';
-  switch(type) {
-    case 'video':
-      h += edChipField('cc-v-state','State',CT.video.states,d.state);
-      h += edChipField('cc-v-src','Source',getSources('video'),d.source,true);
-      break;
-    case 'audio':
-      h += edChipField('cc-a-action','Action',CT.audio.actions,d.action);
-      h += edChipField('cc-a-src','Source',getSources('audio'),d.source,true);
-      break;
-    case 'lighting':
-      h += edChipField('cc-l-action','Action',CT.lighting.actions,d.action);
-      h += `<div class="field"><label class="field-lbl">Fixture / Cue</label><input class="field-in" id="cc-l-fix" value="${esc(d.fixture||'')}" placeholder="e.g. CH1-4, Cue 12" maxlength="80"></div>`;
-      h += `<div class="field" id="cc-l-int-wrap" style="${d.action==='At'?'':'display:none'}"><label class="field-lbl">Intensity %</label><input class="field-in" id="cc-l-int" type="number" min="0" max="100" value="${d.intensity||''}"></div>`;
-      break;
-    case 'playback':
-      h += edChipField('cc-p-state','State',CT.playback.states,d.state);
-      h += `<div class="field"><label class="field-lbl">Clip Name</label><input class="field-in" id="cc-p-clip" value="${esc(d.clipName||'')}" maxlength="80"></div>`;
-      h += `<div class="field"><label class="field-lbl">Clip Duration</label><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center"><input class="field-in" id="cc-p-min" type="number" min="0" max="180" value="${d.clipMin||0}" style="text-align:center;font-family:var(--mono)"><div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div><input class="field-in" id="cc-p-sec" type="number" min="0" max="59" value="${d.clipSec||0}" style="text-align:center;font-family:var(--mono)"></div></div>`;
-      break;
-    case 'gfx':
-      h += edChipField('cc-g-type','GFX Type',[...CT.gfx.types,'Custom'],d.gfxType,true);
-      h += edChipField('cc-g-trans','Transition',CT.gfx.transitions,d.transition);
-      h += edChipField('cc-g-src','Source',getSources('gfx'),d.source);
-      h += `<div style="display:flex;gap:12px;margin-bottom:10px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cc-g-fixed"${d.isFixed?' checked':''}> Fixed</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cc-g-anim"${d.isAnimated?' checked':''}> Animated</label></div>`;
-      h += `<div class="field"><label class="field-lbl">Content Notes</label><input class="field-in" id="cc-g-content" value="${esc(d.contentNotes||'')}" maxlength="100"></div>`;
-      break;
-    case 'script':
-      h += edChipField('cc-s-type','Script Type',CT.script.types,d.scriptType);
-      h += edChipField('cc-s-who','Source / Who',getSources('scriptWho'),d.who,true);
-      h += `<div class="field"><label class="field-lbl">Script Text</label><textarea class="field-in" id="cc-s-text" rows="6" style="resize:vertical;line-height:1.6;white-space:pre-wrap">${esc(d.text||'')}</textarea></div>`;
-      h += `<div class="field"><label class="field-lbl">Upload (.txt, .pdf)</label><input type="file" id="cc-s-file" accept=".txt,.md,.pdf" style="color:var(--text2);font-size:12px" onchange="loadScriptFile(this,'cc-s-text')"></div>`;
-      break;
+  const hints = {
+    video:    { ready:'e.g. CAM 1',          take:'e.g. Take CAM 1'   },
+    audio:    { ready:'e.g. Open Mic Host',  take:'e.g. Play Music'   },
+    playback: { ready:'e.g. Standby SC_042', take:'e.g. Roll'         },
+    gfx:      { ready:'e.g. Set Lower 3rd',  take:'e.g. Take GFX'    },
+    lighting: { ready:'e.g. CH 1–4 Preset',  take:'e.g. Go'          },
+    script:   { ready:'e.g. Host',           take:'e.g. Begin'        },
+  };
+  const h = hints[type] || { ready:'', take:'' };
+  let out = `
+    <div class="field">
+      <label class="field-lbl" style="color:var(--green);letter-spacing:.04em">✓ CUE READY</label>
+      <input class="field-in" id="cc-ready" value="${esc(d.ready||'')}" placeholder="${h.ready}" maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-lbl" style="color:var(--accent);letter-spacing:.04em">→ CUE EXECUTE / TAKE</label>
+      <input class="field-in" id="cc-take" value="${esc(d.take||'')}" placeholder="${h.take}" maxlength="80" autocomplete="off">
+    </div>`;
+  if (type === 'script') {
+    out += `
+    <div class="field">
+      <label class="field-lbl">Script Text</label>
+      <textarea class="field-in" id="cc-s-text" rows="6" style="resize:vertical;line-height:1.6;white-space:pre-wrap">${esc(d.text||'')}</textarea>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Upload (.txt, .pdf)</label>
+      <input type="file" id="cc-s-file" accept=".txt,.md,.pdf" style="color:var(--text2);font-size:12px" onchange="loadScriptFile(this,'cc-s-text')">
+    </div>`;
   }
-  return h;
+  return out;
 }
 
 function saveCueConfig() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
   if (!b.cues) b.cues = {};
-  const d = {};
-  switch(cueConfigType) {
-    case 'video':    d.state=v('cc-v-state-val'); d.source=v('cc-v-src-val'); break;
-    case 'audio':    d.action=v('cc-a-action-val'); d.source=v('cc-a-src-val'); break;
-    case 'lighting': d.action=v('cc-l-action-val'); d.fixture=v('cc-l-fix'); d.intensity=v('cc-l-int'); break;
-    case 'playback': d.state=v('cc-p-state-val'); d.clipName=v('cc-p-clip'); d.clipMin=parseInt(v('cc-p-min'))||0; d.clipSec=parseInt(v('cc-p-sec'))||0; break;
-    case 'gfx':      d.gfxType=v('cc-g-type-val'); d.transition=v('cc-g-trans-val'); d.source=v('cc-g-src-val'); d.isFixed=!!document.getElementById('cc-g-fixed')?.checked; d.isAnimated=!!document.getElementById('cc-g-anim')?.checked; d.contentNotes=v('cc-g-content'); break;
-    case 'script':   d.scriptType=v('cc-s-type-val')||'Script'; d.who=v('cc-s-who-val'); d.text=document.getElementById('cc-s-text')?.value||''; break;
-  }
+  const d = { ready:v('cc-ready'), take:v('cc-take') };
+  if (cueConfigType === 'script') d.text = document.getElementById('cc-s-text')?.value||'';
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
   renderRundown(); syncToFirestore(); toast('Cue saved.');
@@ -911,46 +1065,6 @@ function removeCueCfg() {
   renderRundown(); syncToFirestore(); toast('Cue removed.');
 }
 
-// ─────────────────────────────────────────────────────────────
-// MULTI-SELECT
-// ─────────────────────────────────────────────────────────────
-function toggleRowSelect(id, checked) {
-  if (checked) selectedRows.add(id); else selectedRows.delete(id);
-  updateBulkBar();
-}
-
-function updateBulkBar() {
-  const bar = document.getElementById('bulkBar');
-  const cnt = document.getElementById('bulkCount');
-  if (!bar) return;
-  if (selectedRows.size > 0) {
-    bar.style.display = 'flex';
-    cnt.textContent = `${selectedRows.size} row${selectedRows.size>1?'s':''} selected`;
-  } else {
-    bar.style.display = 'none';
-  }
-}
-
-function clearSelection() {
-  selectedRows.clear();
-  document.querySelectorAll('.row-cb').forEach(cb=>cb.checked=false);
-  document.querySelectorAll('.cue-row').forEach(r=>r.classList.remove('row-selected'));
-  updateBulkBar();
-}
-
-function deleteSelected() {
-  if (!selectedRows.size) return;
-  if (!confirm(`Remove ${selectedRows.size} row(s)?`)) return;
-  const n = selectedRows.size;
-  beats = beats.filter(b=>!selectedRows.has(b.id));
-  clearSelection();
-  renderRundown(); syncToFirestore(); toast(`${n} rows removed.`);
-}
-
-function setStyleSelected(style) {
-  beats.forEach(b=>{ if (selectedRows.has(b.id)) b.style=style; });
-  renderRundown(); syncToFirestore(); toast(`Set to ${style}.`);
-}
 
 // Script file upload (txt + pdf)
 async function loadScriptFile(input, targetId) {
@@ -1024,7 +1138,13 @@ function arCommit() {
   const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
   const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
   const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
-  beats.push({ id:newId, style:arStyle, info, notes, min, sec, done:false, cues:{} });
+  const newBeat = { id:newId, style:arStyle, info, notes, min, sec, done:false, cues:{} };
+  if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) {
+    beats.splice(_insertIdx, 0, newBeat);
+  } else {
+    beats.push(newBeat);
+  }
+  _insertIdx = null;
   hideOverlay('addRowOv');
   renderRundown(); syncToFirestore();
   toast('Row added — click cue cells to configure.');
@@ -1125,7 +1245,30 @@ function showRundown() {
   stopTimer();
 }
 
+function isFollowingSelf() {
+  return document.querySelector('.follow-self')?.classList.contains('active') ?? true;
+}
+
+// Admin Show Caller = following self AND has any admin session
+function isAdminShowCaller() {
+  return isFollowingSelf() && adminSession != null;
+}
+
+// Standard Show Caller = following self, instructor, NO admin session
+function isStandardShowCaller() {
+  return isFollowingSelf() && session.role === 'instructor' && !adminSession;
+}
+
 function requestExitLive() {
+  const isSuper = adminSession?.level === 'super';
+  if (!isSuper && isFollowingSelf()) {
+    const followersOfMe = Object.values(currentPresence||{})
+      .filter(p => p.name !== session.userName && p.following === session.userName);
+    if (followersOfMe.length > 0) {
+      toast(`${followersOfMe.length} user(s) are following you. Remove yourself as Show Caller first.`);
+      return;
+    }
+  }
   showOverlay('exitLiveOv');
 }
 
@@ -1134,62 +1277,114 @@ function confirmExitLive() {
   showRundown();
 }
 
+function renderLiveCurrent(b, i) {
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
+  const sd = b.cues?.script;
+  const adminCaller = isAdminShowCaller();
+  const cueBlocks = types.map(t => {
+    const d = b.cues[t], tc = CT[t];
+    return `<div class="lv-cue-block" style="border-left-color:${tc.color}">
+      <div class="lv-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
+      ${d.ready?`<div class="lv-cue-ready">✓ ${esc(d.ready)}</div>`:''}
+      ${d.take?`<div class="lv-cue-take">→ ${esc(d.take)}</div>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="lv-cur-card">
+    <div class="lv-cur-badge">● NOW — Row ${i+1}</div>
+    <div class="lv-cur-name">${esc(b.info||'—')}</div>
+    ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
+    ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
+    ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
+    ${sd?.text?`<div class="lv-cur-script">${esc(sd.text)}</div>`:''}
+    ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">✎ Edit &amp; Push</button>`:''}
+  </div>`;
+}
+
+function renderLiveNext(b, i, isRunner) {
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
+  const cueSmall = types.map(t => {
+    const d = b.cues[t], tc = CT[t];
+    return `<span class="lv-next-cue" style="border-left-color:${tc.color}">
+      <span style="color:${tc.color}">${tc.icon}</span>
+      ${d.ready?`<span>✓ ${esc(d.ready)}</span>`:''}
+      ${d.take?`<span style="opacity:.6">→ ${esc(d.take)}</span>`:''}
+    </span>`;
+  }).join('');
+  const handler = isRunner ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
+  return `<div class="lv-next-card" onclick="${handler}">
+    <div class="lv-next-badge">NEXT → Row ${i+1}</div>
+    <div class="lv-next-name">${esc(b.info||'—')}</div>
+    ${b.notes?`<div class="lv-next-note">${esc(b.notes)}</div>`:''}
+    ${cueSmall?`<div class="lv-next-cues">${cueSmall}</div>`:''}
+    ${fmtDur(b)!=='—'?`<div class="lv-next-dur">${fmtDur(b)}</div>`:''}
+  </div>`;
+}
+
+function liveRowPreview(idx) {
+  const b = beats[idx]; if (!b) return;
+  const titleEl = document.getElementById('lrpTitle');
+  const bodyEl  = document.getElementById('lrpBody');
+  if (!titleEl||!bodyEl) return;
+  titleEl.textContent = `${idx+1}. ${b.info||'—'}`;
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
+  let html = '';
+  if (b.notes) html += `<div style="color:var(--text2);font-size:13px;margin-bottom:12px;line-height:1.5">${esc(b.notes)}</div>`;
+  if (fmtDur(b)!=='—') html += `<div style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:10px">Duration: ${fmtDur(b)}</div>`;
+  types.forEach(t => {
+    const d = b.cues[t], tc = CT[t];
+    html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
+      <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${tc.icon} ${tc.label}</div>
+      ${d.ready?`<div style="font-size:14px;font-weight:600;margin-bottom:2px">✓ ${esc(d.ready)}</div>`:''}
+      ${d.take?`<div style="font-size:13px;color:var(--text2)">→ ${esc(d.take)}</div>`:''}
+      ${t==='script'&&d.text?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(d.text)}</div>`:''}
+    </div>`;
+  });
+  if (!types.length) html = '<div style="color:var(--text3);text-align:center;padding:20px">No cues configured.</div>';
+  bodyEl.innerHTML = html;
+  showOverlay('lsRowPreviewOv');
+}
+
 function renderLive() {
   const body = document.getElementById('lsBody');
   if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
 
-  let html = `<div class="live-table">
-    <div class="ltr ltr-head">
-      <div class="ltc ltc-num">#</div>
-      <div class="ltc ltc-info">Name</div>
-      <div class="ltc ltc-dur">Dur</div>
-      <div class="ltc ltc-v">📺</div>
-      <div class="ltc ltc-a">🎙</div>
-      <div class="ltc ltc-p">▶</div>
-      <div class="ltc ltc-g">🖼</div>
-      <div class="ltc ltc-l">💡</div>
-      <div class="ltc ltc-s">📄 Script</div>
-    </div>`;
+  // canJump = can click arbitrary rows to jump position (admin show callers only)
+  const runner  = isFollowingSelf();
+  const canJump = runner && isAdminShowCaller();
+  let html = '';
 
-  beats.forEach((b,i) => {
-    const isCur  = i===lsIdx;
-    const isDone = i<lsIdx;
-    const cls    = isCur?'ltr-current':isDone?'ltr-done':'';
-    const types  = ['video','audio','playback','gfx','lighting','script'].filter(t=>b.cues?.[t]);
-    const sd     = b.cues?.script;
+  beats.forEach((b, i) => {
+    const isCur  = i === lsIdx;
+    const isNext = i === lsIdx + 1;
+    const isDone = i < lsIdx;
+    const ahead  = i - lsIdx;
 
-    const scriptCell = sd
-      ? `<div class="ltc ltc-s ltr-script-cell" onclick="event.stopPropagation();openLiveScript(${i})">
-           <div class="ltr-script-preview">${esc((sd.text||'').slice(0,100)+(sd.text?.length>100?'…':''))}</div>
-           <button class="ltr-edit-btn">✎ Edit &amp; Push</button>
-         </div>`
-      : `<div class="ltc ltc-s"><span style="color:var(--text3);font-size:10px">—</span></div>`;
-
-    html += `<div class="ltr ${cls}" onclick="jumpToLsCue(${i})">
-      <div class="ltc ltc-num">${i+1}</div>
-      <div class="ltc ltc-info">
-        <div class="ltr-name">${esc(b.info||'—')}</div>
-        ${b.notes?`<div class="ltr-note">${esc(b.notes)}</div>`:''}
-        <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">
-          ${types.map(t=>`<span class="type-badge tb-${t}" style="color:${CT[t].color};background:${CT[t].bg};font-size:7px;padding:1px 4px">${CT[t].icon}</span>`).join('')}
-        </div>
-      </div>
-      <div class="ltc ltc-dur">${fmtDur(b)}</div>
-      <div class="ltc ltc-v">${liveQuick(b,'video')}</div>
-      <div class="ltc ltc-a">${liveQuick(b,'audio')}</div>
-      <div class="ltc ltc-p">${liveQuick(b,'playback')}</div>
-      <div class="ltc ltc-g">${liveQuick(b,'gfx')}</div>
-      <div class="ltc ltc-l">${liveQuick(b,'lighting')}</div>
-      ${scriptCell}
-    </div>`;
+    if (isCur) {
+      html += renderLiveCurrent(b, i);
+    } else if (isNext) {
+      html += renderLiveNext(b, i, runner);
+    } else if (isDone) {
+      const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
+      html += `<div class="lv-done-row" onclick="${handler}">
+        <span class="lv-done-num">${i+1}</span>
+        <span class="lv-done-name">${esc(b.info||'—')}</span>
+      </div>`;
+    } else {
+      const op = Math.max(0.25, 0.85 - (ahead - 2) * 0.18).toFixed(2);
+      const fs = Math.max(10, 13 - (ahead - 2));
+      const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
+      html += `<div class="lv-fut-row" style="opacity:${op}" onclick="${handler}">
+        <span class="lv-fut-num">${i+1}</span>
+        <span class="lv-fut-name" style="font-size:${fs}px">${esc(b.info||'—')}</span>
+        ${fmtDur(b)!=='—'?`<span class="lv-fut-dur">${fmtDur(b)}</span>`:''}
+        <span style="display:flex;gap:3px">${Object.keys(b.cues||{}).filter(t=>CT[t]).map(t=>`<span style="color:${CT[t].color};font-size:10px">${CT[t].icon}</span>`).join('')}</span>
+      </div>`;
+    }
   });
 
-  html += '</div>';
   body.innerHTML = html;
-
-  const cur = body.querySelector('.ltr-current');
-  if (cur) cur.scrollIntoView({behavior:'smooth',block:'center'});
-
+  const cur = body.querySelector('.lv-cur-card');
+  if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
   renderFollowChips();
   updateLsPrompter();
 }
@@ -1221,17 +1416,18 @@ function openLiveScript(beatIdx) {
 function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
-  if (!b.cues.script) b.cues.script={scriptType:'Script'};
+  if (!b.cues.script) b.cues.script={ready:'',take:''};
   b.cues.script.text = document.getElementById('lsScriptEditText').value;
   const d = b.cues.script;
-  prompterText = (d.who?`${d.who.toUpperCase()}:\n`:'') + (d.text||'');
+  prompterText = (d.ready?`${d.ready.toUpperCase()}:\n`:'') + (d.text||'');
   sendToPrompter();
   hideOverlay('lsScriptEditOv');
   renderLive(); syncToFirestore(); toast('Script saved & pushed.');
 }
 
 function jumpToLsCue(i) {
-  if (session.role==='student') return; // students follow, don't jump
+  if (session.role==='student') return;
+  if (isStandardShowCaller()) return; // standard show callers may only advance sequentially
   lsIdx = i;
   renderLive();
   syncLiveIdx();
@@ -1262,17 +1458,49 @@ function renderFollowChips() {
     html+=`<div class="follow-chip" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
   });
   chips.innerHTML = html;
+  const forceBtn = document.getElementById('forceFollowBtn');
+  if (forceBtn) {
+    forceBtn.style.display = (session.role === 'instructor' && isFollowingSelf()) ? '' : 'none';
+  }
 }
 
 function followSelf() {
   document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
   document.querySelector('.follow-self')?.classList.add('active');
+  updateFollowInPresence(session.userName);
 }
 
 function followPerson(el, name) {
   document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
   toast(`Following ${name}`);
+  updateFollowInPresence(name);
+}
+
+function updateFollowInPresence(name) {
+  if (!session.code || session.isDemo || !window._firebaseReady) return;
+  window._updateDoc(window._doc(window._db,'sessions',session.code), {
+    [`presence.${presenceId}.following`]: name
+  }).catch(()=>{});
+}
+
+// Show Caller: force all users to follow them
+function forceMeAsShowCaller() {
+  if (!session.code || session.isDemo) return;
+  window._updateDoc(window._doc(window._db,'sessions',session.code), {
+    forceCmd: { type:'followMe', name:session.userName, role:session.role, ts:Date.now() }
+  }).catch(()=>{});
+  toast('Forcing all users to follow you.');
+}
+
+// Admin: force everyone live and following a specific person
+function adminForceLive(followName) {
+  if (!adminSession || !session.code) return;
+  window._updateDoc(window._doc(window._db,'sessions',session.code), {
+    forceCmd: { type:'forceLive', name:followName, ts:Date.now() }
+  }).catch(()=>{});
+  toast(`Forcing everyone live, following ${followName}.`);
+  closeAdminPanel();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1284,23 +1512,27 @@ function buildPromptFromRundown() {
   prompterText = scripts.map(b=>{
     const d = b.cues.script;
     const hdr = b.info ? `\n── ${b.info} ──\n` : '\n──────────────\n';
-    if (d.scriptType==='Dialogue') return hdr+`[${d.who||'TALENT'}: ${d.text||''}]`;
-    return hdr+(d.who?`${d.who.toUpperCase()}:\n`:'')+d.text;
+    return hdr + (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + (d.text||'');
   }).join('\n\n');
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
 }
 
 function initPrompter() {
+  // Don't tear down an existing live channel — just re-send current text as an update.
+  // Only create the channel once; PUTJ connection survives repeated goLive() calls.
+  if (prompterChannel) {
+    sendToPrompter(false); // non-interrupting refresh, scroll preserved
+    return;
+  }
   try {
-    if (prompterChannel) prompterChannel.close();
     prompterChannel = new BroadcastChannel('prompt_up_the_jam');
     prompterChannel.onmessage = (e) => {
       if (e.data?.type === 'ping') {
         document.getElementById('prompterDot').className='ls-prompter-dot';
         document.getElementById('prompterStatusTxt').textContent='Connected';
-        // Send current script immediately on connect
-        sendToPrompter();
+        // PUTJ connected/reconnected — send full text with scroll reset
+        sendToPrompter(true);
       }
     };
     prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
@@ -1316,26 +1548,28 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
   if (prevBeat?.cues?.script?.text) {
     prompterText += '\n\n⬛ ─── [Production advancing] ───\n\n';
   }
-  if (newBeat?.cues?.script) {
+  if (newBeat?.cues?.script?.text) {
     const d = newBeat.cues.script;
-    if (d.scriptType==='Dialogue') {
-      prompterText += `\n[${d.who||'TALENT'}: ${d.text||'(ad-lib)'}]\n`;
-    } else if (d.text) {
-      prompterText += (d.who?`${d.who.toUpperCase()}:\n`:'')+d.text+'\n';
-    }
+    prompterText += (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + d.text + '\n';
   }
   sendToPrompter();
 }
 
-function sendToPrompter() {
+function sendToPrompter(isInit=false) {
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
   if (prompterChannel) {
-    prompterChannel.postMessage({ type:'script_update', text:prompterText, sessionCode:session.code, ts:Date.now() });
+    prompterChannel.postMessage({
+      type: isInit ? 'script_init' : 'script_update',
+      text: prompterText,
+      sessionCode: session.code,
+      ts: Date.now()
+    });
   }
-  // Sync to Firestore
   if (window._firebaseReady && session.code && !session.isDemo) {
-    window._updateDoc(window._doc(window._db,'sessions',session.code),{ 'prompter.text':prompterText, 'prompter.updatedAt':Date.now() }).catch(()=>{});
+    window._updateDoc(window._doc(window._db,'sessions',session.code),{
+      'prompter.text':prompterText, 'prompter.updatedAt':Date.now()
+    }).catch(()=>{});
   }
 }
 
@@ -1354,7 +1588,7 @@ function pushToPrompter() {
 function clearPrompter() {
   if (!confirm('Clear prompter text?')) return;
   prompterText = '';
-  sendToPrompter();
+  sendToPrompter(true); // reset scroll on clear
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1392,6 +1626,7 @@ function applyTheme(t) { document.documentElement.setAttribute('data-theme', t==
 function selectTheme(t) {
   currentTheme = t;
   document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===t));
+  applyTheme(t); // live preview — reverted on Cancel, saved on Save
 }
 
 function saveSettings() {
@@ -1402,6 +1637,18 @@ function saveSettings() {
   localStorage.setItem('cueola_theme', currentTheme);
   hideModal('modal-settings');
   renderRundown(); syncToFirestore();
+}
+
+let _settingsOpenTheme = null; // theme at the time settings opened, for Cancel revert
+
+function cancelSettings() {
+  // Revert live preview to whatever was saved before opening
+  if (_settingsOpenTheme !== null) {
+    currentTheme = _settingsOpenTheme;
+    applyTheme(currentTheme);
+    _settingsOpenTheme = null;
+  }
+  hideModal('modal-settings');
 }
 
 // Pre-fill settings on open
@@ -1416,6 +1663,7 @@ window.showModal = function(id) {
     document.getElementById('showname-locked-hint').style.display = locked?'block':'none';
     document.getElementById('set-starttime').value = show.start||'';
     const saved = localStorage.getItem('cueola_theme')||'default';
+    _settingsOpenTheme = saved; // remember so Cancel can revert
     currentTheme = saved;
     document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===saved));
   }
@@ -1428,22 +1676,33 @@ window.showModal = function(id) {
 function exportPDF() {
   const area = document.getElementById('printArea');
   let offsetSecs = 0;
-  const rows = beats.map((b,i) => {
-    const {stateStr,srcStr,detStr} = getCueSummary(b);
+
+  // PDF always uses canonical column order, not per-user preference
+  const pdfCols = COL_DEFAULTS;
+  const cueHeaders = pdfCols.map(type => `<th>${COL_META[type].label}</th>`).join('');
+
+  const rows = beats.map((b, i) => {
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += (b.min||0)*60+(b.sec||0);
-    const types = Object.keys(b.cues||{}).filter(t=>CT[t]).map(t=>CT[t].icon+' '+CT[t].label).join(', ');
+
+    // Per-type cells: show Ready / Take on separate lines
+    const cueCells = pdfCols.map(type => {
+      const d = b.cues?.[type];
+      if (!d || (!d.ready && !d.take)) return '<td style="color:#888">—</td>';
+      let cell = '';
+      if (d.ready) cell += `<div style="color:#1a7a4a;font-size:9pt">✓ ${esc(d.ready)}</div>`;
+      if (d.take)  cell += `<div style="color:#555;font-size:9pt">→ ${esc(d.take)}</div>`;
+      if (type === 'script' && d.text) cell += `<div style="font-size:8pt;color:#333;margin-top:3px;border-top:1px solid #ddd;padding-top:2px">${esc(d.text)}</div>`;
+      return `<td>${cell}</td>`;
+    }).join('');
+
     return `<tr>
       <td>${i+1}</td>
-      <td>${esc(types||'—')}</td>
-      <td>${esc(b.info||'—')}</td>
-      <td>${b.style||'flex'}</td>
+      <td><strong>${esc(b.info||'—')}</strong>${b.notes?`<br><span style="font-size:8pt;color:#666">${esc(b.notes)}</span>`:''}</td>
+      <td>${b.style==='timed'?'⏱ Timed':'⇔ Flex'}</td>
       <td>${startStr}</td>
       <td>${fmtDur(b)}</td>
-      <td>${esc(stateStr)}</td>
-      <td>${esc(srcStr)}</td>
-      <td>${esc(detStr)}</td>
-      <td>${esc(b.notes||'')}</td>
+      ${cueCells}
     </tr>`;
   }).join('');
 
@@ -1451,7 +1710,7 @@ function exportPDF() {
     <div class="print-title">${esc(show.name||'Rundown')}</div>
     <div class="print-meta">Exported ${new Date().toLocaleString()}${session.code?' · Session '+session.code:''}</div>
     <table class="print-table">
-      <thead><tr><th>#</th><th>Cues</th><th>Name</th><th>Style</th><th>Start</th><th>Dur</th><th>Action</th><th>Source</th><th>Details</th><th>Notes</th></tr></thead>
+      <thead><tr><th>#</th><th>Name / Notes</th><th>Style</th><th>Start</th><th>Dur</th>${cueHeaders}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   window.print();
@@ -1482,7 +1741,38 @@ const DEMO_BEATS = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// INIT
+// INIT — auto-join from dashboard or ?code= URL param
 // ─────────────────────────────────────────────────────────────
 restoreAdminSession();
 applyTheme(currentTheme);
+
+(function autoJoinFromDashboard() {
+  // Check URL param first (?code=XXXX)
+  const urlCode = new URLSearchParams(window.location.search).get('code');
+  // Then check localStorage set by dashboard launchRundown()
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem('cueola_session') || 'null'); } catch {}
+  // Clear it immediately so a refresh doesn't re-trigger
+  localStorage.removeItem('cueola_session');
+
+  const code = urlCode || stored?.code;
+  if (!code) return;
+
+  const name = stored?.userName || adminSession?.name || '';
+  const role = stored?.role || 'instructor';
+
+  const doJoin = () => {
+    if (name) {
+      session = { code, role, userName:name, isDemo:false, isExpert:false };
+      enterRundown();
+    } else {
+      // No name stored — show the join modal pre-filled with the code
+      const inp = document.getElementById('stud-code');
+      if (inp) inp.value = code;
+      showModal('modal-stud');
+    }
+  };
+
+  if (window._firebaseReady) doJoin();
+  else window.addEventListener('firebaseReady', doJoin, { once: true });
+})();

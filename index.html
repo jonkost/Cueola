@@ -48,7 +48,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 /* ── TOPBAR ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:54px;background:var(--s1);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px}
 .brand{font-family:var(--syne);font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
-.brand em{color:var(--accent);font-style:normal}
+.brand .hi{color:var(--accent)}
 .session-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--s3);border:1px solid var(--bord2);border-radius:20px;font-family:var(--mono);font-size:11px;color:var(--text2)}
 .session-badge strong{color:var(--accent);letter-spacing:.08em}
 .role-badge{padding:4px 10px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;letter-spacing:.07em}
@@ -91,7 +91,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .rd-scroll{flex:1;overflow-y:auto;overflow-x:auto}
 .rd-table{min-width:800px;width:100%;border-collapse:collapse;table-layout:fixed}
 .rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top}
-.col-drag{width:22px}.col-check{width:24px}.col-num{width:30px}.col-info{min-width:130px}
+.col-drag{width:22px}.col-num{width:30px}.col-info{min-width:130px}
 .col-time{width:80px}.col-cue{width:88px}.col-script-c{width:140px}.col-acts{width:28px}
 .rd-table{min-width:1080px}
 .rd-head th{background:var(--s2);font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:6px 8px;white-space:nowrap;font-weight:500;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border)}
@@ -104,38 +104,57 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .cue-cell-filled:hover{border-color:var(--accent);background:rgba(91,141,248,.05)}
 .cue-cell-icon{font-size:10px;line-height:1}
 .cue-cell-info{font-size:9px;font-family:var(--mono);color:var(--text2);line-height:1.4;word-break:break-word}
+.cue-ready-line{color:var(--green);font-size:9px;line-height:1.4}
+.cue-take-line{color:var(--text2);font-size:9px;line-height:1.4;opacity:.8}
+.col-drag-over{background:rgba(91,141,248,.15)!important;border-right:2px solid var(--accent)!important}
 .cd-name{font-size:12px;font-weight:600;color:var(--text)}
 .cd-time-start{font-family:var(--mono);font-size:9px;color:var(--text3)}
 .cd-time-dur{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2)}
+.edit-mode-row{background:rgba(91,141,248,.03)}
+.row-edit-actions{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.row-ea-btn{font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text3);transition:all .1s}
+.row-ea-btn:hover{color:var(--text);border-color:var(--accent)}
+.row-ea-del{border-color:rgba(240,82,82,.3);color:var(--red)}
+.row-ea-del:hover{background:rgba(240,82,82,.1);border-color:var(--red)}
 
-/* Bulk action bar */
-.bulk-bar{display:none;position:sticky;bottom:0;left:0;right:0;background:rgba(91,141,248,.15);border-top:1px solid rgba(91,141,248,.3);padding:8px 16px;align-items:center;gap:10px;z-index:65;flex-shrink:0;flex-wrap:wrap;backdrop-filter:blur(6px)}
-.bulk-count{font-size:11px;font-family:var(--mono);color:var(--accent);font-weight:600;flex:1}
-.bulk-btn{padding:6px 13px;border-radius:7px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);transition:all .12s}
-.bulk-btn:hover{color:var(--text);border-color:var(--accent)}
-.bulk-btn.danger:hover{color:var(--red);border-color:var(--red)}
-.row-selected td{background:rgba(91,141,248,.06)!important}
 
-/* Live table */
-.live-table{width:100%;display:flex;flex-direction:column;min-width:900px}
-.ltr{display:flex;align-items:stretch;border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer}
-.ltr:hover{background:var(--s2)}
-.ltr-head{background:var(--s2);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
-.ltr-head .ltc{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:6px 8px}
-.ltc{padding:8px 8px;font-size:11px;display:flex;flex-direction:column;justify-content:center}
-.ltc-num{width:30px;flex-shrink:0;font-family:var(--mono);font-size:10px;color:var(--text3)}
-.ltc-info{flex:1;min-width:100px}
-.ltc-dur{width:55px;flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--text2)}
-.ltc-v,.ltc-a,.ltc-p,.ltc-g,.ltc-l{width:70px;flex-shrink:0}
-.ltc-s{min-width:160px;flex:1}
-.ltr-current{background:rgba(91,141,248,.07);border-left:3px solid var(--accent)}
-.ltr-done{opacity:.35}
-.ltr-name{font-size:13px;font-weight:600}
-.ltr-note{font-size:10px;color:var(--text2);margin-top:2px}
-.ltr-cue-quick{font-size:9px;font-family:var(--mono);border-left:2px solid;padding-left:4px;color:var(--text2);line-height:1.3;word-break:break-word}
-.ltr-script-cell{cursor:pointer}
-.ltr-script-preview{font-size:11px;color:var(--text2);line-height:1.5;word-break:break-word}
-.ltr-edit-btn{margin-top:4px;font-size:9px;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;text-align:left}
+/* Live view — hierarchical cards */
+.ltr-edit-btn{font-size:10px;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;text-align:left}
+
+/* Current row — BIG */
+.lv-cur-card{background:rgba(91,141,248,.07);border:1.5px solid rgba(91,141,248,.35);border-radius:14px;padding:16px 18px;animation:glowPulse 2.5s ease-in-out infinite;margin-bottom:2px}
+.lv-cur-badge{font-size:10px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.lv-cur-name{font-family:var(--syne);font-size:26px;font-weight:800;line-height:1.2;margin-bottom:4px}
+.lv-cur-note{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.5}
+.lv-cur-dur{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text3);margin-bottom:10px}
+.lv-cue-blocks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.lv-cue-block{border-left:3px solid var(--bord2);padding:6px 10px;border-radius:0 7px 7px 0;background:rgba(255,255,255,.03);min-width:100px}
+.lv-cue-label{font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;font-weight:700}
+.lv-cue-ready{font-size:13px;font-weight:600;color:var(--text)}
+.lv-cue-take{font-size:12px;color:var(--text2);margin-top:1px}
+.lv-cur-script{font-size:14px;color:var(--text);line-height:1.75;background:var(--s2);border-left:3px solid var(--cyan);padding:12px 14px;border-radius:0 8px 8px 0;white-space:pre-wrap;word-break:break-word;margin-top:8px}
+
+/* Next row — MEDIUM */
+.lv-next-card{background:var(--s1);border:1px solid var(--bord2);border-left:3px solid rgba(34,211,160,.5);border-radius:10px;padding:12px 14px;cursor:pointer;transition:background .15s}
+.lv-next-card:hover{background:var(--s2)}
+.lv-next-badge{font-size:9px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--green);margin-bottom:5px}
+.lv-next-name{font-size:18px;font-weight:700;margin-bottom:3px}
+.lv-next-note{font-size:12px;color:var(--text2);margin-bottom:5px}
+.lv-next-dur{font-family:var(--mono);font-size:12px;color:var(--text3);margin-top:5px}
+.lv-next-cues{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.lv-next-cue{display:inline-flex;gap:5px;align-items:center;font-size:11px;border-left:2px solid var(--bord2);padding:2px 7px;border-radius:0 4px 4px 0;color:var(--text2)}
+
+/* Future rows — progressively smaller */
+.lv-fut-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;transition:background .12s}
+.lv-fut-row:hover{background:var(--s2)}
+.lv-fut-num{font-family:var(--mono);font-size:10px;color:var(--text3);min-width:20px;flex-shrink:0}
+.lv-fut-name{flex:1;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-fut-dur{font-family:var(--mono);font-size:10px;color:var(--text3);white-space:nowrap}
+
+/* Done rows — faded strikethrough */
+.lv-done-row{display:flex;align-items:center;gap:8px;padding:3px 10px;opacity:.2;cursor:pointer;font-size:11px}
+.lv-done-num{font-family:var(--mono);color:var(--text3);min-width:20px;flex-shrink:0;font-size:10px}
+.lv-done-name{flex:1;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:line-through}
 
 /* Live script edit overlay */
 #lsScriptEditOv{align-items:center;justify-content:center;padding:24px}
@@ -217,7 +236,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .follow-lbl{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
 .follow-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
 .follow-chip{padding:5px 12px;border-radius:20px;font-size:11px;font-family:var(--mono);border:1px solid var(--bord2);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
-.follow-chip:hover{border-color:var(--accent);color:var(--accent)}.follow-chip.active{background:rgba(91,141,248,.15);border-color:var(--accent);color:var(--accent)}
+.follow-chip:hover{border-color:var(--accent);color:var(--accent)}
+.follow-chip.active:not(.follow-self){background:rgba(240,82,82,.15);border-color:var(--red);color:var(--red)}
+.follow-self.active{background:rgba(34,211,160,.1);border-color:var(--green);color:var(--green)}
 .follow-self{background:rgba(34,211,160,.1);border-color:var(--green);color:var(--green)}
 
 /* Live body split */
@@ -506,7 +527,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div class="screen" id="rundown">
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
-    <div class="brand">🐨 Cue<em>ola</em></div>
+    <div class="brand"><span>🐨 Cue<span class="hi">ola</span></span></div>
     <div class="mode-tabs">
       <div class="mtab on" id="tabBuild" onclick="showRundown()">Build</div>
       <div class="mtab" id="tabLive" onclick="goLive()">Live Show</div>
@@ -521,6 +542,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="p-tooltip" id="presenceTooltip"></div>
       </div>
       <button class="tbtn tbtn-admin" id="adminBtn" style="display:none" onclick="openAdminPanel()">🔑 Admin</button>
+      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
       <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
       <button class="tbtn tbtn-ghost" onclick="showModal('modal-settings')">⚙ Settings</button>
       <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
@@ -539,19 +561,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
   </div>
   <div class="prog"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
-  <div class="bulk-bar" id="bulkBar">
-    <span class="bulk-count" id="bulkCount">0 selected</span>
-    <button class="bulk-btn" onclick="setStyleSelected('timed')">⏱ Set Timed</button>
-    <button class="bulk-btn" onclick="setStyleSelected('flex')">⇔ Set Flex</button>
-    <button class="bulk-btn danger" onclick="deleteSelected()">✕ Delete</button>
-    <button class="bulk-btn" onclick="clearSelection()">Clear</button>
-  </div>
   <div class="rd-scroll">
     <table class="rd-table" id="rdTable">
       <thead>
         <tr class="rd-head">
           <th class="col-drag"></th>
-          <th class="col-check"></th>
           <th class="col-num">#</th>
           <th class="col-info">Name</th>
           <th class="col-time">Start / Dur</th>
@@ -595,6 +609,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="follow-chips" id="followChips">
       <div class="follow-chip follow-self active" onclick="followSelf()">Myself</div>
     </div>
+    <button id="forceFollowBtn" style="display:none;font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:rgba(240,82,82,.1);color:var(--red);cursor:pointer;white-space:nowrap" onclick="forceMeAsShowCaller()">📡 Force All to Follow Me</button>
   </div>
   <div class="ls-body">
     <div class="ls-main" id="lsBody"></div>
@@ -722,6 +737,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   </div>
 </div>
 
+<!-- Row preview overlay (non-runner tap-to-peek) -->
+<div class="overlay" id="lsRowPreviewOv" onclick="if(event.target===this)hideOverlay('lsRowPreviewOv')" style="align-items:center;justify-content:center;padding:24px">
+  <div class="warn-card" style="max-width:480px;max-height:80vh;overflow-y:auto;border-color:var(--bord2);width:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="warn-title" id="lrpTitle" style="font-size:18px;margin:0"></div>
+      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px" onclick="hideOverlay('lsRowPreviewOv')">✕</button>
+    </div>
+    <div id="lrpBody"></div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════
      ADMIN PANEL OVERLAY
 ══════════════════════════════════════════ -->
@@ -819,7 +845,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="stud-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="modal-err" id="stud-err">Please fill in both fields.</div>
-    <button class="btn-primary" onclick="joinSession()">Join Session →</button>
+    <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join Session →</button>
     <button class="btn-secondary" onclick="hideModal('modal-stud')">Cancel</button>
   </div>
 </div>
@@ -843,9 +869,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
       <button onclick="hideModal('modal-settings');openAdminLogin()" style="background:none;border:none;color:var(--text3);font-size:12px;font-family:var(--mono);cursor:pointer;padding:0">🔑 Admin Login</button>
+      <a href="dashboard.html" style="font-size:12px;font-family:var(--mono);color:var(--text3);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">📊 Dashboard →</a>
     </div>
     <button class="btn-primary" onclick="saveSettings()" style="margin-top:6px">Save</button>
-    <button class="btn-secondary" onclick="hideModal('modal-settings')" style="margin-top:6px">Cancel</button>
+    <button class="btn-secondary" onclick="cancelSettings()" style="margin-top:6px">Cancel</button>
   </div>
 </div>
 
