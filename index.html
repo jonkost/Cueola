@@ -89,11 +89,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
 /* ── RUNDOWN TABLE ── */
 .rd-scroll{flex:1;overflow-y:auto;overflow-x:auto}
-.rd-table{min-width:800px;width:100%;border-collapse:collapse;table-layout:fixed}
+.rd-table{width:100%;border-collapse:collapse;table-layout:fixed}
 .rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top}
-.col-drag{width:22px}.col-num{width:30px}.col-info{min-width:130px}
-.col-time{width:80px}.col-cue{width:88px}.col-script-c{width:140px}.col-acts{width:28px}
-.rd-table{min-width:1080px}
+.col-drag{width:22px}.col-num{width:30px}.col-info{width:auto}
+.col-time{width:80px}.col-cue{width:88px}.col-script-c{width:130px}.col-acts{width:28px}
+.rd-scroll{width:100%}
+.rd-table{min-width:900px}
 .rd-head th{background:var(--s2);font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:6px 8px;white-space:nowrap;font-weight:500;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border)}
 
 /* Cue type cells */
@@ -345,6 +346,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.07)}
 .chip.sel{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.12)}
 
+/* Wizard step 2 — cue type toggles */
+.ar-cue-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.ar-type-btn{padding:9px 6px;border-radius:9px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1.5px solid var(--bord2);background:var(--s2);color:var(--text3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+.ar-type-btn:hover{border-color:var(--oc,var(--accent));color:var(--oc,var(--accent));background:rgba(91,141,248,.06)}
+.ar-type-btn.active{border-color:var(--oc);color:var(--oc);background:var(--ob)}
+.ar-cue-block{margin-top:6px;padding:10px 12px;border-radius:0 8px 8px 0;background:var(--s2)}
+.ar-cue-block-lbl{font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
 /* Wizard nav */
 .ar-nav{display:flex;gap:8px;margin-top:4px;padding-top:12px;border-top:1px solid var(--border)}
 .ar-back{padding:11px 18px;border-radius:var(--r);font-size:14px;font-family:var(--sans);cursor:pointer;background:transparent;border:1.5px solid var(--bord2);color:var(--text2);transition:all .15s}
@@ -643,9 +651,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ar-panel">
       <div class="sheet-handle"></div>
 
-      <!-- Step 1: Cue Name + Style (single step) -->
+      <!-- Step 1: Cue Name + Style -->
       <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">New Row</div>
+        <div class="ar-step-label">New Row — Step 1 of 2</div>
         <div class="ar-heading">Add a row</div>
         <div class="field">
           <label class="field-lbl">Cue Name / Label</label>
@@ -692,7 +700,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         </div>
         <div class="ar-nav">
           <button class="ar-back" onclick="closeAddRowOv()">Cancel</button>
-          <button class="ar-next" id="ar-next-1" onclick="arCommit()" disabled>+ Add Row</button>
+          <button class="ar-next" id="ar-next-1" onclick="arGoStep2()" disabled>Configure Cues →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Configure cues (ready / take per type) -->
+      <div class="ar-step" id="ar-step-2">
+        <div class="ar-step-label">New Row — Step 2 of 2</div>
+        <div class="ar-heading">Configure Cues</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:-8px">Tap a cue type to add it. Fill in Ready and Take for each.</div>
+        <!-- Type toggles -->
+        <div class="ar-cue-type-grid" id="arCueTypeGrid"></div>
+        <!-- Dynamic fields for selected types -->
+        <div id="arCueFields"></div>
+        <div class="ar-nav">
+          <button class="ar-back" onclick="arGoStep1()">← Back</button>
+          <button class="ar-next" onclick="arCommit()">+ Add Row</button>
         </div>
       </div>
     </div>
