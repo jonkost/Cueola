@@ -59,8 +59,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tbtn-ghost{background:transparent;color:var(--text2);border:1.5px solid var(--bord2)}.tbtn-ghost:hover{color:var(--text);border-color:var(--text2)}
 .tbtn-live{background:var(--red);color:#fff;display:flex;align-items:center;gap:5px}.tbtn-live:hover{filter:brightness(1.1)}
 .tbtn-admin{background:rgba(240,82,82,.12);color:var(--red);border:1px solid rgba(240,82,82,.3)}.tbtn-admin:hover{background:rgba(240,82,82,.2)}
-.live-dot{width:6px;height:6px;background:#fff;border-radius:50%;animation:blink 1s ease-in-out infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.live-dot{width:6px;height:6px;background:#fff;border-radius:50%}
 .mode-tabs{display:flex;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px}
 .mtab{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
 .mtab.on{background:var(--s4);color:var(--text)}
@@ -92,11 +91,54 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .rd-scroll{flex:1;overflow-y:auto;overflow-x:auto}
 .rd-table{min-width:800px;width:100%;border-collapse:collapse;table-layout:fixed}
 .rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top}
-.col-drag{width:22px}.col-num{width:34px}.col-type{width:88px}.col-info{min-width:140px}
-.col-style{width:52px}.col-start{width:56px}.col-dur{width:54px}
-.col-state{width:110px}.col-src{width:110px}.col-det{width:160px}
-.col-notes{min-width:120px}.col-acts{width:36px}
+.col-drag{width:22px}.col-check{width:24px}.col-num{width:30px}.col-info{min-width:130px}
+.col-time{width:80px}.col-cue{width:88px}.col-script-c{width:140px}.col-acts{width:28px}
+.rd-table{min-width:1080px}
 .rd-head th{background:var(--s2);font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:6px 8px;white-space:nowrap;font-weight:500;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border)}
+
+/* Cue type cells */
+.cd-cue-cell{padding:5px 6px;vertical-align:middle}
+.cue-add-btn{width:100%;min-height:32px;border:1px dashed var(--bord2);border-radius:6px;background:transparent;color:var(--text3);font-size:14px;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center}
+.cue-add-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.05)}
+.cue-cell-filled{display:flex;flex-direction:column;gap:2px;padding:4px 6px;border-radius:6px;cursor:pointer;transition:all .12s;border:1px solid var(--bord2);background:var(--s2);min-height:32px}
+.cue-cell-filled:hover{border-color:var(--accent);background:rgba(91,141,248,.05)}
+.cue-cell-icon{font-size:10px;line-height:1}
+.cue-cell-info{font-size:9px;font-family:var(--mono);color:var(--text2);line-height:1.4;word-break:break-word}
+.cd-name{font-size:12px;font-weight:600;color:var(--text)}
+.cd-time-start{font-family:var(--mono);font-size:9px;color:var(--text3)}
+.cd-time-dur{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2)}
+
+/* Bulk action bar */
+.bulk-bar{display:none;position:sticky;bottom:0;left:0;right:0;background:rgba(91,141,248,.15);border-top:1px solid rgba(91,141,248,.3);padding:8px 16px;align-items:center;gap:10px;z-index:65;flex-shrink:0;flex-wrap:wrap;backdrop-filter:blur(6px)}
+.bulk-count{font-size:11px;font-family:var(--mono);color:var(--accent);font-weight:600;flex:1}
+.bulk-btn{padding:6px 13px;border-radius:7px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);transition:all .12s}
+.bulk-btn:hover{color:var(--text);border-color:var(--accent)}
+.bulk-btn.danger:hover{color:var(--red);border-color:var(--red)}
+.row-selected td{background:rgba(91,141,248,.06)!important}
+
+/* Live table */
+.live-table{width:100%;display:flex;flex-direction:column;min-width:900px}
+.ltr{display:flex;align-items:stretch;border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer}
+.ltr:hover{background:var(--s2)}
+.ltr-head{background:var(--s2);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
+.ltr-head .ltc{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:6px 8px}
+.ltc{padding:8px 8px;font-size:11px;display:flex;flex-direction:column;justify-content:center}
+.ltc-num{width:30px;flex-shrink:0;font-family:var(--mono);font-size:10px;color:var(--text3)}
+.ltc-info{flex:1;min-width:100px}
+.ltc-dur{width:55px;flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--text2)}
+.ltc-v,.ltc-a,.ltc-p,.ltc-g,.ltc-l{width:70px;flex-shrink:0}
+.ltc-s{min-width:160px;flex:1}
+.ltr-current{background:rgba(91,141,248,.07);border-left:3px solid var(--accent)}
+.ltr-done{opacity:.35}
+.ltr-name{font-size:13px;font-weight:600}
+.ltr-note{font-size:10px;color:var(--text2);margin-top:2px}
+.ltr-cue-quick{font-size:9px;font-family:var(--mono);border-left:2px solid;padding-left:4px;color:var(--text2);line-height:1.3;word-break:break-word}
+.ltr-script-cell{cursor:pointer}
+.ltr-script-preview{font-size:11px;color:var(--text2);line-height:1.5;word-break:break-word}
+.ltr-edit-btn{margin-top:4px;font-size:9px;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;text-align:left}
+
+/* Live script edit overlay */
+#lsScriptEditOv{align-items:center;justify-content:center;padding:24px}
 
 /* Cue row */
 .cue-row{transition:background .12s;cursor:pointer}
@@ -160,7 +202,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .now-next{display:flex;gap:7px;flex-wrap:wrap}
 .nn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap}
 .nn.now{background:rgba(240,82,82,.1);border:1px solid rgba(240,82,82,.3);color:var(--red)}
-.nn.nxt{background:rgba(91,141,248,.1);border:1px solid rgba(91,141,248,.25);color:var(--accent)}
+.nn.nxt{background:rgba(34,211,160,.1);border:1px solid rgba(34,211,160,.25);color:var(--green)}
 
 /* ── LIVE SHOW ── */
 #liveshow{background:var(--bg)}
@@ -497,21 +539,28 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
   </div>
   <div class="prog"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="bulk-bar" id="bulkBar">
+    <span class="bulk-count" id="bulkCount">0 selected</span>
+    <button class="bulk-btn" onclick="setStyleSelected('timed')">⏱ Set Timed</button>
+    <button class="bulk-btn" onclick="setStyleSelected('flex')">⇔ Set Flex</button>
+    <button class="bulk-btn danger" onclick="deleteSelected()">✕ Delete</button>
+    <button class="bulk-btn" onclick="clearSelection()">Clear</button>
+  </div>
   <div class="rd-scroll">
     <table class="rd-table" id="rdTable">
       <thead>
         <tr class="rd-head">
           <th class="col-drag"></th>
+          <th class="col-check"></th>
           <th class="col-num">#</th>
-          <th class="col-type">Type</th>
           <th class="col-info">Name</th>
-          <th class="col-style">Style</th>
-          <th class="col-start">Start</th>
-          <th class="col-dur">Dur</th>
-          <th class="col-state">State / Action</th>
-          <th class="col-src">Source</th>
-          <th class="col-det">Details</th>
-          <th class="col-notes">Notes</th>
+          <th class="col-time">Start / Dur</th>
+          <th class="col-cue" style="color:#5b8df8">📺 Video</th>
+          <th class="col-cue" style="color:#22d3a0">🎙 Audio</th>
+          <th class="col-cue" style="color:#f05252">▶ Playback</th>
+          <th class="col-cue" style="color:#f5b731">🖼 GFX</th>
+          <th class="col-cue" style="color:#b06ef8">💡 Lighting</th>
+          <th class="col-script-c" style="color:#22d3d3">📄 Script</th>
           <th class="col-acts"></th>
         </tr>
       </thead>
@@ -524,7 +573,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="bb-s"><span class="bb-l">Remaining</span><span class="bb-v warn" id="bb-rm">—</span></div>
     </div>
     <div class="now-next">
-      <div class="nn now" id="nn-now">● NOW —</div>
+      <div class="nn now" id="nn-now">NOW → —</div>
       <div class="nn nxt" id="nn-nxt">NEXT → —</div>
     </div>
   </div>
@@ -579,73 +628,56 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ar-panel">
       <div class="sheet-handle"></div>
 
-      <!-- Step 1: Row Style -->
+      <!-- Step 1: Cue Name + Style (single step) -->
       <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">Step 1 of 3 · Row Style</div>
-        <div class="ar-heading">What kind of row is this?</div>
-        <div class="ar-ctx-help">A <strong>Timed</strong> row has a set duration — the clock counts down. A <strong>Flex</strong> row has no fixed time and expands as needed.</div>
-        <div class="opt-grid-2">
-          <div class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:rgba(91,141,248,.07)">
-            <div class="opt-icon">⏱</div>
-            <div class="opt-name">Timed</div>
-            <div class="opt-desc">Fixed duration. Clock counts down.</div>
+        <div class="ar-step-label">New Row</div>
+        <div class="ar-heading">Add a row</div>
+        <div class="field">
+          <label class="field-lbl">Cue Name / Label</label>
+          <input class="field-in" id="ar-name-input" type="text" placeholder='e.g. "Show Open"' maxlength="80" autocomplete="off" oninput="updateArNextEnabled()">
+        </div>
+        <div class="chip-grid" style="margin-top:-6px">
+          <button class="chip" onclick="arPickName('Show Open')">Show Open</button>
+          <button class="chip" onclick="arPickName('Cold Open')">Cold Open</button>
+          <button class="chip" onclick="arPickName('PKG')">PKG</button>
+          <button class="chip" onclick="arPickName('Toss')">Toss</button>
+          <button class="chip" onclick="arPickName('Live Shot')">Live Shot</button>
+          <button class="chip" onclick="arPickName('Bumper')">Bumper</button>
+          <button class="chip" onclick="arPickName('Signoff')">Signoff</button>
+          <button class="chip" onclick="arPickName('Break')">Break</button>
+          <button class="chip" onclick="arPickName('Intro')">Intro</button>
+        </div>
+        <div>
+          <div class="field-lbl" style="margin-bottom:8px">Style</div>
+          <div class="opt-grid-2">
+            <div class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:rgba(91,141,248,.07)">
+              <div class="opt-icon">⏱</div>
+              <div class="opt-name">Timed</div>
+              <div class="opt-desc">Fixed duration. Clock counts down.</div>
+            </div>
+            <div class="opt-card" id="opt-flex" onclick="arSelectStyle('flex')" style="--oc:var(--text2);--ob:rgba(100,116,139,.07)">
+              <div class="opt-icon">⇔</div>
+              <div class="opt-name">Flex</div>
+              <div class="opt-desc">No fixed time. Expand as needed.</div>
+            </div>
           </div>
-          <div class="opt-card" id="opt-flex" onclick="arSelectStyle('flex')" style="--oc:var(--text2);--ob:rgba(100,116,139,.07)">
-            <div class="opt-icon">⇔</div>
-            <div class="opt-name">Flex</div>
-            <div class="opt-desc">No fixed time. Expand as needed.</div>
+        </div>
+        <div id="ar-dur-wrap" style="display:none">
+          <label class="field-lbl">Duration</label>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-top:6px">
+            <input class="field-in" id="ar-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono);font-size:18px">
+            <div style="font-family:var(--mono);font-size:18px;color:var(--text3);text-align:center">:</div>
+            <input class="field-in" id="ar-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:18px">
           </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:2px"><span>MIN</span><span>SEC</span></div>
+        </div>
+        <div class="field">
+          <label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label>
+          <input class="field-in" id="ar-notes-input" type="text" placeholder="Additional info for crew..." maxlength="120" autocomplete="off">
         </div>
         <div class="ar-nav">
           <button class="ar-back" onclick="closeAddRowOv()">Cancel</button>
-          <button class="ar-next" id="ar-next-1" onclick="arStep2()" disabled>Next →</button>
-        </div>
-      </div>
-
-      <!-- Step 2: Cue Type -->
-      <div class="ar-step" id="ar-step-2">
-        <div class="ar-step-label">Step 2 of 3 · Cue Type</div>
-        <div class="ar-heading">What type of cue is this?</div>
-        <div class="opt-grid-3">
-          <div class="opt-card" onclick="arSelectType('video')" style="--oc:#5b8df8;--ob:rgba(91,141,248,.1)">
-            <div class="opt-icon">📺</div><div class="opt-name" style="color:#5b8df8">Video</div>
-            <div class="opt-desc">Camera, source switch</div>
-          </div>
-          <div class="opt-card" onclick="arSelectType('audio')" style="--oc:#22d3a0;--ob:rgba(34,211,160,.1)">
-            <div class="opt-icon">🎙</div><div class="opt-name" style="color:#22d3a0">Audio</div>
-            <div class="opt-desc">Mics, music, sound</div>
-          </div>
-          <div class="opt-card" onclick="arSelectType('lighting')" style="--oc:#b06ef8;--ob:rgba(176,110,248,.1)">
-            <div class="opt-icon">💡</div><div class="opt-name" style="color:#b06ef8">Lighting</div>
-            <div class="opt-desc">Fixtures, scenes, looks</div>
-          </div>
-          <div class="opt-card" onclick="arSelectType('playback')" style="--oc:#f05252;--ob:rgba(240,82,82,.1)">
-            <div class="opt-icon">▶</div><div class="opt-name" style="color:#f05252">Playback</div>
-            <div class="opt-desc">Clip rolls, VT, media</div>
-          </div>
-          <div class="opt-card" onclick="arSelectType('gfx')" style="--oc:#f5b731;--ob:rgba(245,183,49,.1)">
-            <div class="opt-icon">🖼</div><div class="opt-name" style="color:#f5b731">GFX</div>
-            <div class="opt-desc">Graphics, lower thirds</div>
-          </div>
-          <div class="opt-card" onclick="arSelectType('script')" style="--oc:#22d3d3;--ob:rgba(34,211,211,.1)">
-            <div class="opt-icon">📄</div><div class="opt-name" style="color:#22d3d3">Script</div>
-            <div class="opt-desc">Copy, dialogue, prompter</div>
-          </div>
-        </div>
-        <div class="ar-nav">
-          <button class="ar-back" onclick="arStep1()">← Back</button>
-          <button class="ar-next" id="ar-next-2" onclick="arStep3()" disabled>Next →</button>
-        </div>
-      </div>
-
-      <!-- Step 3: Details (rendered by JS) -->
-      <div class="ar-step" id="ar-step-3">
-        <div class="ar-step-label" id="ar-step3-label">Step 3 of 3 · Details</div>
-        <div class="ar-heading" id="ar-step3-heading">Fill in the details</div>
-        <div id="ar-fields"></div>
-        <div class="ar-nav">
-          <button class="ar-back" onclick="arStep2()">← Back</button>
-          <button class="ar-next" onclick="arCommit()">+ Add Row</button>
+          <button class="ar-next" id="ar-next-1" onclick="arCommit()" disabled>+ Add Row</button>
         </div>
       </div>
     </div>
@@ -662,6 +694,31 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="edit-fields" id="editFields"></div>
     <button class="save-btn" onclick="saveEdit()">Save Changes ✓</button>
     <button class="del-btn" onclick="deleteCue()">Remove this row</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CUE CONFIG MODAL
+══════════════════════════════════════════ -->
+<div class="modal-wrap" id="cueConfigModal">
+  <div class="modal" style="max-width:460px;max-height:85vh;overflow-y:auto">
+    <div class="modal-title" id="cueConfigTitle">Configure Cue</div>
+    <div id="cueConfigFields"></div>
+    <button class="btn-primary" onclick="saveCueConfig()">Save</button>
+    <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Remove this cue</button>
+    <button class="btn-secondary" onclick="hideModal('cueConfigModal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     LIVE SCRIPT EDIT OVERLAY
+══════════════════════════════════════════ -->
+<div class="overlay" id="lsScriptEditOv" onclick="if(event.target===this)hideOverlay('lsScriptEditOv')">
+  <div class="warn-card" style="max-width:520px;border-color:var(--bord2)">
+    <div class="warn-title" id="lsScriptEditTitle" style="font-size:16px">Script</div>
+    <textarea class="field-in" id="lsScriptEditText" rows="10" style="resize:vertical;line-height:1.7;white-space:pre-wrap;font-size:13px"></textarea>
+    <button class="btn-primary" onclick="saveLiveScript()">⬆ Save &amp; Push to Prompter</button>
+    <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
   </div>
 </div>
 
@@ -798,6 +855,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <!-- Toast -->
 <div id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-app.js"></script>
 
 <script type="module">

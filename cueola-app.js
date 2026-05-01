@@ -20,7 +20,7 @@ const CT = {
   },
   playback: {
     label:'PLAYBACK', color:'#f05252', bg:'rgba(240,82,82,.12)', icon:'▶',
-    states:['Ready','Play']
+    states:['Ready','Standby In','Roll']
   },
   gfx: {
     label:'GFX', color:'#f5b731', bg:'rgba(245,183,49,.12)', icon:'🖼',
@@ -53,7 +53,22 @@ let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 
 // Add-row wizard state
 let arStyle = null;
-let arType  = null;
+
+// Multi-select
+let selectedRows = new Set();
+
+// Cue config modal state
+let cueConfigBeatId = null;
+let cueConfigType   = null;
+
+// Presence cache for follow chips
+let currentPresence = {};
+
+// Live script edit
+let liveScriptEditIdx = null;
+
+// Edit style (for edit overlay)
+let editStyle = null;
 
 // ─────────────────────────────────────────────────────────────
 // UTILS
@@ -407,6 +422,13 @@ function getSources(key) {
   return [...defaults, ...(sessionCustomSources[key]||[])];
 }
 
+function migrateBeat(b) {
+  if (b.cues !== undefined) return b;
+  const cues = {};
+  if (b.type && b.cueData && Object.keys(b.cueData).length) cues[b.type] = b.cueData;
+  return { id:b.id, style:b.style||'flex', info:b.info||'', notes:b.notes||'', min:b.min||0, sec:b.sec||0, done:b.done||false, cues };
+}
+
 // ─────────────────────────────────────────────────────────────
 // SESSION MANAGEMENT
 // ─────────────────────────────────────────────────────────────
@@ -459,7 +481,7 @@ function loadExpert() {
 function loadDemo() {
   session = { code:'DEMO1', role:'student', userName:'Demo', isDemo:true, isExpert:false };
   show = { name:'Campus News — Demo Show', start:'19:00' };
-  beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1}));
+  beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
   enterRundown();
 }
 
@@ -496,6 +518,8 @@ function enterRundown() {
 
   renderRundown();
   joinPresence();
+  // Restore last screen
+  if (sessionStorage.getItem('cueola_screen') === 'live') setTimeout(goLive, 300);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -518,7 +542,7 @@ function setupFirestore() {
     firestoreUnsub = window._onSnapshot(ref, snap => {
       if (!snap.exists()) return;
       const d = snap.data();
-      if (d.beats && Array.isArray(d.beats)) beats = d.beats;
+      if (d.beats && Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
       if (d.showName) show.name = d.showName;
       if (d.startTime !== undefined) show.start = d.startTime;
       if (d.customSources) sessionCustomSources = d.customSources;
@@ -576,6 +600,7 @@ async function leavePresence() {
 }
 
 function renderPresence(map) {
+  currentPresence = map || {};
   const now = Date.now();
   const active = Object.values(map||{}).filter(p=>(now-(p.lastSeen||0))<90000)
     .sort((a,b)=>a.role==='instructor'?-1:b.role==='instructor'?1:0);
@@ -620,33 +645,32 @@ function renderRundown() {
 
   let offsetSecs = 0;
   let html = '';
-  beats.forEach((b,i) => {
-    const t = CT[b.type]||{label:'?',color:'#555',icon:'?'};
+  beats.forEach((b, i) => {
     const dur = fmtDur(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += (b.min||0)*60+(b.sec||0);
+    const sel = selectedRows.has(b.id);
 
-    const {stateStr, srcStr, detStr} = getCueSummary(b);
-    const scriptPreview = (b.type==='script'&&b.cueData?.text) ? b.cueData.text.slice(0,120)+(b.cueData.text.length>120?'…':'') : '';
-
-    html += `<tr class="cue-row type-${b.type}" draggable="true" data-id="${b.id}" ondblclick="openEdit(${b.id})">
+    html += `<tr class="cue-row${sel?' row-selected':''}" draggable="true" data-id="${b.id}">
       <td class="cd cd-drag" title="Drag to reorder">⠿</td>
+      <td class="cd" style="padding:0 4px;vertical-align:middle"><input type="checkbox" class="row-cb"${sel?' checked':''} onclick="toggleRowSelect(${b.id},this.checked)" style="accent-color:var(--accent);cursor:pointer"></td>
       <td class="cd cd-num">${i+1}</td>
-      <td class="cd">
-        <span class="type-badge tb-${b.type}" style="color:${t.color};background:${t.bg}">${t.icon} ${t.label}</span>
+      <td class="cd" style="padding:8px 6px">
+        <div class="cd-name">${esc(b.info||'—')}</div>
+        ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
+        <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-block">${b.style==='timed'?'⏱':'⇔'} ${(b.style||'flex').toUpperCase()}</span>
       </td>
-      <td class="cd">
-        <div class="cd-info">${esc(b.info||'—')}</div>
-        ${scriptPreview ? `<div class="cd-subnote">${esc(scriptPreview)}</div>` : ''}
+      <td class="cd" style="padding:8px 6px">
+        ${startStr!=='—'?`<div class="cd-time-start">${startStr}</div>`:''}
+        <div class="cd-time-dur">${dur}</div>
       </td>
-      <td class="cd"><span class="style-pill style-${b.style||'flex'}">${b.style==='timed'?'⏱ TIMED':'⇔ FLEX'}</span></td>
-      <td class="cd cd-start">${startStr}</td>
-      <td class="cd cd-dur">${dur}</td>
-      <td class="cd cd-state ${stateStr?'filled':''}">${stateStr ? esc(stateStr) : '<span class="cd-empty">—</span>'}</td>
-      <td class="cd cd-src ${srcStr?'filled':''}">${srcStr ? esc(srcStr) : '<span class="cd-empty">—</span>'}</td>
-      <td class="cd cd-det col-det ${detStr?'filled':''}">${detStr ? esc(detStr) : '<span class="cd-empty">—</span>'}</td>
-      <td class="cd cd-notes">${b.notes ? esc(b.notes) : '<span class="cd-empty">—</span>'}</td>
-      <td class="cd"><button class="row-act-btn" onclick="openEdit(${b.id})" title="Edit">✎</button></td>
+      <td class="cd-cue-cell">${getCueCell(b,'video')}</td>
+      <td class="cd-cue-cell">${getCueCell(b,'audio')}</td>
+      <td class="cd-cue-cell">${getCueCell(b,'playback')}</td>
+      <td class="cd-cue-cell">${getCueCell(b,'gfx')}</td>
+      <td class="cd-cue-cell">${getCueCell(b,'lighting')}</td>
+      <td class="cd-cue-cell">${getCueCell(b,'script')}</td>
+      <td class="cd" style="padding:4px;vertical-align:middle;text-align:center"><button class="row-act-btn" onclick="openEdit(${b.id})" title="Edit row">✎</button></td>
     </tr>`;
   });
 
@@ -664,41 +688,46 @@ function renderAddRowBtn(tbody) {
   tbody.appendChild(tr);
 }
 
-function getCueSummary(b) {
-  const d = b.cueData||{};
-  let stateStr='', srcStr='', detStr='';
-  switch(b.type) {
-    case 'video':
-      stateStr = d.state||'';
-      srcStr   = d.source||'';
-      break;
-    case 'audio':
-      stateStr = d.action||'';
-      srcStr   = d.source||'';
-      break;
-    case 'lighting':
-      stateStr = d.action||'';
-      srcStr   = d.fixture||'';
-      detStr   = d.intensity ? `@${d.intensity}` : '';
-      break;
-    case 'playback':
-      stateStr = d.state||'';
-      srcStr   = d.clipName||'';
-      if (d.clipMin||d.clipSec) detStr = `${pad(d.clipMin||0)}:${pad(d.clipSec||0)}`;
-      break;
-    case 'gfx':
-      stateStr = d.gfxType||'';
-      srcStr   = d.source||'';
-      const flags = [d.transition, d.isFixed?'Fixed':null, d.isAnimated?'Animated':null].filter(Boolean);
-      detStr = flags.join(' · ');
-      if (d.contentNotes) detStr += (detStr?' — ':'')+d.contentNotes;
-      break;
-    case 'script':
-      stateStr = d.scriptType||'';
-      srcStr   = d.who||'';
-      break;
+function getCueCell(b, type) {
+  const tc = CT[type];
+  const d = b.cues?.[type];
+  const isEmpty = !d || Object.values(d).every(v => v === '' || v === false || v === 0 || v === null || v === undefined);
+  if (isEmpty) {
+    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label}">+</button>`;
   }
-  return {stateStr, srcStr, detStr};
+  let lines = [];
+  switch(type) {
+    case 'video':    lines=[d.state,d.source].filter(Boolean); break;
+    case 'audio':    lines=[d.action,d.source].filter(Boolean); break;
+    case 'playback': lines=[d.state,d.clipName].filter(Boolean); break;
+    case 'gfx':      lines=[d.gfxType,d.source].filter(Boolean); break;
+    case 'lighting': lines=[d.action,d.fixture].filter(Boolean); break;
+    case 'script':   lines=[d.scriptType,d.who,d.text?(d.text.slice(0,50)+(d.text.length>50?'…':'')):null].filter(Boolean); break;
+  }
+  return `<div class="cue-cell-filled" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
+    <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
+    <div class="cue-cell-info">${lines.map(l=>`<div>${esc(String(l))}</div>`).join('')}</div>
+  </div>`;
+}
+
+function getCueSummary(b) {
+  // For export — uses primary cue type
+  const types = ['video','audio','playback','gfx','lighting','script'];
+  const pType = types.find(t => b.cues?.[t] && Object.keys(b.cues[t]).length);
+  if (!pType) return { stateStr:'', srcStr:'', detStr:'' };
+  const d = b.cues[pType];
+  switch(pType) {
+    case 'video':    return { stateStr:d.state||'', srcStr:d.source||'', detStr:'' };
+    case 'audio':    return { stateStr:d.action||'', srcStr:d.source||'', detStr:'' };
+    case 'lighting': return { stateStr:d.action||'', srcStr:d.fixture||'', detStr:d.intensity?`@${d.intensity}`:'' };
+    case 'playback': return { stateStr:d.state||'', srcStr:d.clipName||'', detStr:(d.clipMin||d.clipSec)?`${pad(d.clipMin||0)}:${pad(d.clipSec||0)}`:'' };
+    case 'gfx': {
+      const flags=[d.transition,d.isFixed?'Fixed':null,d.isAnimated?'Animated':null].filter(Boolean);
+      return { stateStr:d.gfxType||'', srcStr:d.source||'', detStr:flags.join(' · ')+(d.contentNotes?(flags.length?' — ':'')+d.contentNotes:'') };
+    }
+    case 'script':   return { stateStr:d.scriptType||'', srcStr:d.who||'', detStr:'' };
+  }
+  return { stateStr:'', srcStr:'', detStr:'' };
 }
 
 function updateBotBar() {
@@ -712,8 +741,8 @@ function updateBotBar() {
 function updateNowNext() {
   const now  = beats[lsIdx];
   const next = beats[lsIdx+1];
-  document.getElementById('nn-now').textContent  = '● NOW → '+(now?esc(now.info):'—');
-  document.getElementById('nn-nxt').textContent  = 'NEXT → '+(next?esc(next.info):'—');
+  document.getElementById('nn-now').textContent = 'NOW → '+(now?now.info:'—');
+  document.getElementById('nn-nxt').textContent = 'NEXT → '+(next?next.info:'—');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -743,11 +772,19 @@ function initDrag() {
 // ADD ROW WIZARD
 // ─────────────────────────────────────────────────────────────
 function openAddRow() {
-  arStyle = null; arType = null;
+  arStyle = null;
+  const nameIn = document.getElementById('ar-name-input');
+  if (nameIn) nameIn.value = '';
+  const notesIn = document.getElementById('ar-notes-input');
+  if (notesIn) notesIn.value = '';
+  const minIn = document.getElementById('ar-min');
+  if (minIn) minIn.value = '';
+  const secIn = document.getElementById('ar-sec');
+  if (secIn) secIn.value = '';
   document.getElementById('ar-next-1').disabled = true;
-  document.getElementById('ar-next-2').disabled = true;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
-  arShowStep(1);
+  const durWrap = document.getElementById('ar-dur-wrap');
+  if (durWrap) durWrap.style.display = 'none';
   buildArContext();
   showOverlay('addRowOv');
 }
@@ -762,122 +799,187 @@ function buildArContext() {
   const last4 = beats.slice(-4);
   if (!last4.length) { ctx.innerHTML=''; return; }
   ctx.innerHTML = `<div class="ar-ctx-label">Last ${last4.length} row${last4.length>1?'s':''}</div>`+
-    last4.map((b,i)=>{
-      const t = CT[b.type]||{label:'?',icon:'?',color:'#555'};
+    last4.map(b => {
+      const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
+      const badges = types.map(t=>`<span class="type-badge tb-${t}" style="font-size:7px;color:${CT[t].color};background:${CT[t].bg}">${CT[t].icon}</span>`).join('');
       return `<div class="ar-ctx-row">
         <span class="ar-ctx-num">${beats.indexOf(b)+1}</span>
-        <span class="type-badge tb-${b.type}" style="font-size:8px;color:${t.color};background:${t.bg}">${t.icon} ${t.label}</span>
+        <span style="display:flex;gap:2px;align-items:center">${badges||'<span style="color:var(--text3);font-size:10px">—</span>'}</span>
         <span class="ar-ctx-name">${esc(b.info||'—')}</span>
         <span class="ar-ctx-dur">${fmtDur(b)}</span>
       </div>`;
     }).join('');
 }
 
-function arShowStep(n) {
-  [1,2,3].forEach(i=>{
-    document.getElementById(`ar-step-${i}`).classList.toggle('on', i===n);
-  });
-}
-
 function arSelectStyle(s) {
   arStyle = s;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
   document.getElementById(`opt-${s}`).classList.add('sel');
-  document.getElementById('ar-next-1').disabled = false;
+  const durWrap = document.getElementById('ar-dur-wrap');
+  if (durWrap) durWrap.style.display = s==='timed' ? '' : 'none';
+  updateArNextEnabled();
 }
 
-function arStep2() {
-  if (!arStyle) return;
-  arType = null;
-  document.getElementById('ar-next-2').disabled = true;
-  document.querySelectorAll('#ar-step-2 .opt-card').forEach(c=>c.classList.remove('sel'));
-  arShowStep(2);
+function updateArNextEnabled() {
+  document.getElementById('ar-next-1').disabled = !arStyle;
 }
 
-function arSelectType(t) {
-  arType = t;
-  document.querySelectorAll('#ar-step-2 .opt-card').forEach(c=>c.classList.remove('sel'));
-  event.currentTarget.classList.add('sel');
-  document.getElementById('ar-next-2').disabled = false;
+function arPickName(name) {
+  const el = document.getElementById('ar-name-input');
+  if (el) el.value = name;
+  updateArNextEnabled();
 }
 
-function arStep3() {
-  if (!arType) return;
-  const tc = CT[arType];
-  document.getElementById('ar-step3-label').textContent = `Step 3 of 3 · ${tc.label} Details`;
-  document.getElementById('ar-step3-heading').textContent = `Configure this ${tc.label.toLowerCase()} cue`;
-  document.getElementById('ar-fields').innerHTML = buildArFields(arType);
-  arShowStep(3);
+// buildArFields removed — wizard now single-step; cue types configured via table cells
+
+// ─────────────────────────────────────────────────────────────
+// CUE CONFIG MODAL (per-cell)
+// ─────────────────────────────────────────────────────────────
+function openCueConfig(beatId, type) {
+  cueConfigBeatId = beatId;
+  cueConfigType   = type;
+  const b = beats.find(x=>x.id===beatId); if (!b) return;
+  const existing = b.cues?.[type] || null;
+  const tc = CT[type];
+  document.getElementById('cueConfigTitle').textContent = `${tc.icon} ${tc.label}`;
+  document.getElementById('cueConfigFields').innerHTML = buildCueConfigFields(type, existing);
+  document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
+  showModal('cueConfigModal');
 }
 
-function arStep1() { arShowStep(1); }
-
-function buildArFields(type) {
-  const sources = getSources;
-  let h = `
-    <div class="field" style="margin-bottom:10px">
-      <label class="field-lbl">Cue Name / Label</label>
-      <input class="field-in" id="ar-info" type="text" placeholder='e.g. "Show Open"' maxlength="80" autocomplete="off">
-    </div>`;
-
-  if (arStyle==='timed') {
-    h += `<div class="field" style="margin-bottom:10px">
-      <label class="field-lbl">Duration</label>
-      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center">
-        <input class="field-in" id="ar-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono);font-size:18px">
-        <div style="font-family:var(--mono);font-size:18px;color:var(--text3);text-align:center">:</div>
-        <input class="field-in" id="ar-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:18px">
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:2px"><span>MIN</span><span>SEC</span></div>
-    </div>`;
-  }
-
+function buildCueConfigFields(type, d) {
+  d = d || {};
+  let h = '';
   switch(type) {
     case 'video':
-      h += chipField('ar-video-state','State',CT.video.states);
-      h += chipField('ar-video-src','Source',getSources('video'),true);
+      h += edChipField('cc-v-state','State',CT.video.states,d.state);
+      h += edChipField('cc-v-src','Source',getSources('video'),d.source,true);
       break;
     case 'audio':
-      h += chipField('ar-audio-action','Action',CT.audio.actions);
-      h += chipField('ar-audio-src','Source',getSources('audio'),true);
+      h += edChipField('cc-a-action','Action',CT.audio.actions,d.action);
+      h += edChipField('cc-a-src','Source',getSources('audio'),d.source,true);
       break;
     case 'lighting':
-      h += chipField('ar-light-action','Action',CT.lighting.actions);
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Fixture / Cue</label><input class="field-in" id="ar-light-fix" type="text" placeholder="e.g. CH1-4, Cue 12, Wash Blue" maxlength="80" autocomplete="off"></div>`;
-      h += `<div class="field" id="ar-light-int-wrap" style="margin-bottom:10px;display:none"><label class="field-lbl">Intensity %</label><input class="field-in" id="ar-light-int" type="number" min="0" max="100" placeholder="e.g. 80"></div>`;
+      h += edChipField('cc-l-action','Action',CT.lighting.actions,d.action);
+      h += `<div class="field"><label class="field-lbl">Fixture / Cue</label><input class="field-in" id="cc-l-fix" value="${esc(d.fixture||'')}" placeholder="e.g. CH1-4, Cue 12" maxlength="80"></div>`;
+      h += `<div class="field" id="cc-l-int-wrap" style="${d.action==='At'?'':'display:none'}"><label class="field-lbl">Intensity %</label><input class="field-in" id="cc-l-int" type="number" min="0" max="100" value="${d.intensity||''}"></div>`;
       break;
     case 'playback':
-      h += chipField('ar-play-state','State',CT.playback.states);
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Clip Name</label><input class="field-in" id="ar-play-clip" type="text" placeholder='e.g. "Show Open V2"' maxlength="80" autocomplete="off"></div>`;
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Clip Duration <span style="color:var(--text3)">(optional)</span></label>
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center">
-          <input class="field-in" id="ar-play-min" type="number" min="0" max="180" placeholder="0" style="text-align:center;font-family:var(--mono)">
-          <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
-          <input class="field-in" id="ar-play-sec" type="number" min="0" max="59" placeholder="00" style="text-align:center;font-family:var(--mono)">
-        </div></div>`;
+      h += edChipField('cc-p-state','State',CT.playback.states,d.state);
+      h += `<div class="field"><label class="field-lbl">Clip Name</label><input class="field-in" id="cc-p-clip" value="${esc(d.clipName||'')}" maxlength="80"></div>`;
+      h += `<div class="field"><label class="field-lbl">Clip Duration</label><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center"><input class="field-in" id="cc-p-min" type="number" min="0" max="180" value="${d.clipMin||0}" style="text-align:center;font-family:var(--mono)"><div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div><input class="field-in" id="cc-p-sec" type="number" min="0" max="59" value="${d.clipSec||0}" style="text-align:center;font-family:var(--mono)"></div></div>`;
       break;
     case 'gfx':
-      h += chipField('ar-gfx-type','GFX Type',[...CT.gfx.types,'Custom'],true);
-      h += chipField('ar-gfx-trans','Transition',CT.gfx.transitions);
-      h += chipField('ar-gfx-src','Source',getSources('gfx'));
-      h += `<div style="display:flex;gap:12px;margin-bottom:10px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="ar-gfx-fixed"> Fixed</label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="ar-gfx-anim"> Animated</label>
-      </div>`;
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Content Notes</label><input class="field-in" id="ar-gfx-content" type="text" placeholder='e.g. "Host lower third — name/title"' maxlength="100" autocomplete="off"></div>`;
+      h += edChipField('cc-g-type','GFX Type',[...CT.gfx.types,'Custom'],d.gfxType,true);
+      h += edChipField('cc-g-trans','Transition',CT.gfx.transitions,d.transition);
+      h += edChipField('cc-g-src','Source',getSources('gfx'),d.source);
+      h += `<div style="display:flex;gap:12px;margin-bottom:10px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cc-g-fixed"${d.isFixed?' checked':''}> Fixed</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cc-g-anim"${d.isAnimated?' checked':''}> Animated</label></div>`;
+      h += `<div class="field"><label class="field-lbl">Content Notes</label><input class="field-in" id="cc-g-content" value="${esc(d.contentNotes||'')}" maxlength="100"></div>`;
       break;
     case 'script':
-      h += chipField('ar-script-type','Script Type',CT.script.types);
-      h += chipField('ar-script-who','Source',getSources('scriptWho'),true);
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Script / Dialogue Notes</label>
-        <textarea class="field-in" id="ar-script-text" rows="5" placeholder="Type or paste script here..." style="resize:vertical;line-height:1.6"></textarea></div>`;
-      h += `<div class="field" style="margin-bottom:10px"><label class="field-lbl">Or Upload Script File</label>
-        <input type="file" id="ar-script-file" accept=".txt,.md" style="color:var(--text2);font-size:12px" onchange="loadScriptFile(this)"></div>`;
+      h += edChipField('cc-s-type','Script Type',CT.script.types,d.scriptType);
+      h += edChipField('cc-s-who','Source / Who',getSources('scriptWho'),d.who,true);
+      h += `<div class="field"><label class="field-lbl">Script Text</label><textarea class="field-in" id="cc-s-text" rows="6" style="resize:vertical;line-height:1.6;white-space:pre-wrap">${esc(d.text||'')}</textarea></div>`;
+      h += `<div class="field"><label class="field-lbl">Upload (.txt, .pdf)</label><input type="file" id="cc-s-file" accept=".txt,.md,.pdf" style="color:var(--text2);font-size:12px" onchange="loadScriptFile(this,'cc-s-text')"></div>`;
       break;
   }
-
-  h += `<div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ar-notes" type="text" placeholder="Additional info for crew..." maxlength="120" autocomplete="off"></div>`;
   return h;
+}
+
+function saveCueConfig() {
+  const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
+  if (!b.cues) b.cues = {};
+  const d = {};
+  switch(cueConfigType) {
+    case 'video':    d.state=v('cc-v-state-val'); d.source=v('cc-v-src-val'); break;
+    case 'audio':    d.action=v('cc-a-action-val'); d.source=v('cc-a-src-val'); break;
+    case 'lighting': d.action=v('cc-l-action-val'); d.fixture=v('cc-l-fix'); d.intensity=v('cc-l-int'); break;
+    case 'playback': d.state=v('cc-p-state-val'); d.clipName=v('cc-p-clip'); d.clipMin=parseInt(v('cc-p-min'))||0; d.clipSec=parseInt(v('cc-p-sec'))||0; break;
+    case 'gfx':      d.gfxType=v('cc-g-type-val'); d.transition=v('cc-g-trans-val'); d.source=v('cc-g-src-val'); d.isFixed=!!document.getElementById('cc-g-fixed')?.checked; d.isAnimated=!!document.getElementById('cc-g-anim')?.checked; d.contentNotes=v('cc-g-content'); break;
+    case 'script':   d.scriptType=v('cc-s-type-val')||'Script'; d.who=v('cc-s-who-val'); d.text=document.getElementById('cc-s-text')?.value||''; break;
+  }
+  b.cues[cueConfigType] = d;
+  hideModal('cueConfigModal');
+  renderRundown(); syncToFirestore(); toast('Cue saved.');
+}
+
+function removeCueCfg() {
+  if (!confirm('Remove this cue type from the row?')) return;
+  const b = beats.find(x=>x.id===cueConfigBeatId); if (!b||!b.cues) return;
+  delete b.cues[cueConfigType];
+  hideModal('cueConfigModal');
+  renderRundown(); syncToFirestore(); toast('Cue removed.');
+}
+
+// ─────────────────────────────────────────────────────────────
+// MULTI-SELECT
+// ─────────────────────────────────────────────────────────────
+function toggleRowSelect(id, checked) {
+  if (checked) selectedRows.add(id); else selectedRows.delete(id);
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const cnt = document.getElementById('bulkCount');
+  if (!bar) return;
+  if (selectedRows.size > 0) {
+    bar.style.display = 'flex';
+    cnt.textContent = `${selectedRows.size} row${selectedRows.size>1?'s':''} selected`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function clearSelection() {
+  selectedRows.clear();
+  document.querySelectorAll('.row-cb').forEach(cb=>cb.checked=false);
+  document.querySelectorAll('.cue-row').forEach(r=>r.classList.remove('row-selected'));
+  updateBulkBar();
+}
+
+function deleteSelected() {
+  if (!selectedRows.size) return;
+  if (!confirm(`Remove ${selectedRows.size} row(s)?`)) return;
+  const n = selectedRows.size;
+  beats = beats.filter(b=>!selectedRows.has(b.id));
+  clearSelection();
+  renderRundown(); syncToFirestore(); toast(`${n} rows removed.`);
+}
+
+function setStyleSelected(style) {
+  beats.forEach(b=>{ if (selectedRows.has(b.id)) b.style=style; });
+  renderRundown(); syncToFirestore(); toast(`Set to ${style}.`);
+}
+
+// Script file upload (txt + pdf)
+async function loadScriptFile(input, targetId) {
+  const file = input.files[0]; if (!file) return;
+  const target = document.getElementById(targetId||'cc-s-text');
+  if (file.name.toLowerCase().endsWith('.pdf') && window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    try {
+      const ab = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:ab}).promise;
+      let text = '';
+      for (let i=1;i<=pdf.numPages;i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        let lastY = null;
+        content.items.forEach(item => {
+          if (lastY!==null && Math.abs(item.transform[5]-lastY)>5) text+='\n';
+          text += item.str+' ';
+          lastY = item.transform[5];
+        });
+        if (i<pdf.numPages) text+='\n\n';
+      }
+      if (target) target.value = text.trim();
+    } catch { toast('PDF read failed — try a .txt file'); }
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => { if (target) target.value = e.target.result; };
+  reader.readAsText(file);
 }
 
 function chipField(id, label, options, allowCustom=false) {
@@ -894,9 +996,8 @@ function chipSel(id, el, val) {
   el.closest('.chip-grid').querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel');
   document.getElementById(`${id}-val`).value = val;
-  // Show intensity field for lighting
-  if (id==='ar-light-action') {
-    const wrap = document.getElementById('ar-light-int-wrap');
+  if (id==='cc-l-action') {
+    const wrap = document.getElementById('cc-l-int-wrap');
     if (wrap) wrap.style.display = val==='At' ? '' : 'none';
   }
 }
@@ -914,77 +1015,29 @@ function chipCustom(id, el) {
   document.getElementById(`${id}-val`).value = val.trim();
 }
 
-function loadScriptFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const ta = document.getElementById('ar-script-text');
-    if (ta) ta.value = e.target.result;
-  };
-  reader.readAsText(file);
-}
+// loadScriptFile defined above (async, supports PDF)
 
 function arCommit() {
-  const info = (document.getElementById('ar-info')||{}).value?.trim()||'';
-  const notes = (document.getElementById('ar-notes')||{}).value?.trim()||'';
-  const min = parseInt(document.getElementById('ar-min')?.value)||0;
-  const sec = parseInt(document.getElementById('ar-sec')?.value)||0;
-
-  const cueData = {};
-  switch(arType) {
-    case 'video':
-      cueData.state  = document.getElementById('ar-video-state-val')?.value||'';
-      cueData.source = document.getElementById('ar-video-src-val')?.value||'';
-      break;
-    case 'audio':
-      cueData.action = document.getElementById('ar-audio-action-val')?.value||'';
-      cueData.source = document.getElementById('ar-audio-src-val')?.value||'';
-      break;
-    case 'lighting':
-      cueData.action    = document.getElementById('ar-light-action-val')?.value||'';
-      cueData.fixture   = document.getElementById('ar-light-fix')?.value.trim()||'';
-      cueData.intensity = document.getElementById('ar-light-int')?.value||'';
-      break;
-    case 'playback':
-      cueData.state    = document.getElementById('ar-play-state-val')?.value||'';
-      cueData.clipName = document.getElementById('ar-play-clip')?.value.trim()||'';
-      cueData.clipMin  = parseInt(document.getElementById('ar-play-min')?.value)||0;
-      cueData.clipSec  = parseInt(document.getElementById('ar-play-sec')?.value)||0;
-      break;
-    case 'gfx':
-      cueData.gfxType      = document.getElementById('ar-gfx-type-val')?.value||'';
-      cueData.transition   = document.getElementById('ar-gfx-trans-val')?.value||'';
-      cueData.source       = document.getElementById('ar-gfx-src-val')?.value||'';
-      cueData.isFixed      = document.getElementById('ar-gfx-fixed')?.checked||false;
-      cueData.isAnimated   = document.getElementById('ar-gfx-anim')?.checked||false;
-      cueData.contentNotes = document.getElementById('ar-gfx-content')?.value.trim()||'';
-      break;
-    case 'script':
-      cueData.scriptType = document.getElementById('ar-script-type-val')?.value||'Script';
-      cueData.who        = document.getElementById('ar-script-who-val')?.value||'';
-      cueData.text       = document.getElementById('ar-script-text')?.value.trim()||'';
-      break;
-  }
-
+  if (!arStyle) return;
+  const info  = document.getElementById('ar-name-input')?.value?.trim()||'';
+  const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
+  const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
+  const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
   const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
-  beats.push({ id:newId, style:arStyle, type:arType, info, notes, min, sec, cueData, done:false });
+  beats.push({ id:newId, style:arStyle, info, notes, min, sec, done:false, cues:{} });
   hideOverlay('addRowOv');
-  renderRundown();
-  syncToFirestore();
-  toast('Row added.');
+  renderRundown(); syncToFirestore();
+  toast('Row added — click cue cells to configure.');
 }
 
 // ─────────────────────────────────────────────────────────────
 // EDIT
 // ─────────────────────────────────────────────────────────────
 function openEdit(id) {
-  const b = beats.find(x=>x.id===id);
-  if (!b) return;
+  const b = beats.find(x=>x.id===id); if (!b) return;
   editId = id;
-  const t = CT[b.type]||{};
-  document.getElementById('editTitle').textContent = `Edit ${t.label||'Cue'}`;
-  const d = b.cueData||{};
+  editStyle = b.style||'flex';
+  document.getElementById('editTitle').textContent = 'Edit Row';
   let h = `
     <div class="field"><label class="field-lbl">Name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80"></div>
     <div class="field"><label class="field-lbl">Notes</label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
@@ -993,44 +1046,20 @@ function openEdit(id) {
         <input class="field-in" id="ed-min" type="number" min="0" max="180" value="${b.min||0}" style="text-align:center;font-family:var(--mono)">
         <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
         <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
+      </div></div>
+    <div class="field"><label class="field-lbl">Style</label>
+      <div class="chip-grid">
+        <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">⏱ Timed</button>
+        <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">⇔ Flex</button>
       </div></div>`;
-
-  switch(b.type) {
-    case 'video':
-      h += edChipField('ed-v-state','State',CT.video.states,d.state);
-      h += edChipField('ed-v-src','Source',getSources('video'),d.source,true);
-      break;
-    case 'audio':
-      h += edChipField('ed-a-action','Action',CT.audio.actions,d.action);
-      h += edChipField('ed-a-src','Source',getSources('audio'),d.source,true);
-      break;
-    case 'lighting':
-      h += edChipField('ed-l-action','Action',CT.lighting.actions,d.action);
-      h += `<div class="field"><label class="field-lbl">Fixture / Cue</label><input class="field-in" id="ed-l-fix" value="${esc(d.fixture||'')}" maxlength="80"></div>`;
-      h += `<div class="field" id="ed-l-int-wrap" style="${d.action==='At'?'':'display:none'}"><label class="field-lbl">Intensity %</label><input class="field-in" id="ed-l-int" type="number" min="0" max="100" value="${d.intensity||''}"></div>`;
-      break;
-    case 'playback':
-      h += edChipField('ed-p-state','State',CT.playback.states,d.state);
-      h += `<div class="field"><label class="field-lbl">Clip Name</label><input class="field-in" id="ed-p-clip" value="${esc(d.clipName||'')}" maxlength="80"></div>`;
-      h += `<div class="field"><label class="field-lbl">Clip Duration</label><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center"><input class="field-in" id="ed-p-min" type="number" min="0" max="180" value="${d.clipMin||0}" style="text-align:center;font-family:var(--mono)"><div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div><input class="field-in" id="ed-p-sec" type="number" min="0" max="59" value="${d.clipSec||0}" style="text-align:center;font-family:var(--mono)"></div></div>`;
-      break;
-    case 'gfx':
-      h += edChipField('ed-g-type','GFX Type',[...CT.gfx.types,'Custom'],d.gfxType,true);
-      h += edChipField('ed-g-trans','Transition',CT.gfx.transitions,d.transition);
-      h += edChipField('ed-g-src','Source',getSources('gfx'),d.source);
-      h += `<div style="display:flex;gap:12px;margin-bottom:10px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="ed-g-fixed" ${d.isFixed?'checked':''}> Fixed</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="ed-g-anim" ${d.isAnimated?'checked':''}> Animated</label></div>`;
-      h += `<div class="field"><label class="field-lbl">Content Notes</label><input class="field-in" id="ed-g-content" value="${esc(d.contentNotes||'')}" maxlength="100"></div>`;
-      break;
-    case 'script':
-      h += edChipField('ed-s-type','Script Type',CT.script.types,d.scriptType);
-      h += edChipField('ed-s-who','Source / Who',getSources('scriptWho'),d.who,true);
-      h += `<div class="field"><label class="field-lbl">Script Text</label><textarea class="field-in" id="ed-s-text" rows="6" style="resize:vertical;line-height:1.6">${esc(d.text||'')}</textarea></div>`;
-      h += `<div class="field"><label class="field-lbl">Upload Script File</label><input type="file" id="ed-s-file" accept=".txt,.md" style="color:var(--text2);font-size:12px" onchange="loadEditScriptFile(this)"></div>`;
-      break;
-  }
-
   document.getElementById('editFields').innerHTML = h;
   document.getElementById('editOv').classList.add('on');
+}
+
+function edSetStyle(s, el) {
+  editStyle = s;
+  document.querySelectorAll('#editFields .chip').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
 }
 
 function edChipField(id, label, options, current, allowCustom=false) {
@@ -1050,17 +1079,7 @@ function saveEdit() {
   b.notes = document.getElementById('ed-notes').value.trim();
   b.min   = parseInt(document.getElementById('ed-min').value)||0;
   b.sec   = parseInt(document.getElementById('ed-sec').value)||0;
-  const d = b.cueData = b.cueData||{};
-
-  switch(b.type) {
-    case 'video':   d.state=v('ed-v-state-val'); d.source=v('ed-v-src-val'); break;
-    case 'audio':   d.action=v('ed-a-action-val'); d.source=v('ed-a-src-val'); break;
-    case 'lighting':d.action=v('ed-l-action-val'); d.fixture=v('ed-l-fix'); d.intensity=v('ed-l-int'); break;
-    case 'playback':d.state=v('ed-p-state-val'); d.clipName=v('ed-p-clip'); d.clipMin=parseInt(v('ed-p-min'))||0; d.clipSec=parseInt(v('ed-p-sec'))||0; break;
-    case 'gfx':     d.gfxType=v('ed-g-type-val'); d.transition=v('ed-g-trans-val'); d.source=v('ed-g-src-val'); d.isFixed=!!document.getElementById('ed-g-fixed')?.checked; d.isAnimated=!!document.getElementById('ed-g-anim')?.checked; d.contentNotes=v('ed-g-content'); break;
-    case 'script':  d.scriptType=v('ed-s-type-val'); d.who=v('ed-s-who-val'); d.text=document.getElementById('ed-s-text')?.value.trim()||''; break;
-  }
-
+  if (editStyle) b.style = editStyle;
   document.getElementById('editOv').classList.remove('on');
   renderRundown(); syncToFirestore(); toast('Saved.');
 }
@@ -1074,7 +1093,7 @@ function deleteCue() {
   renderRundown(); syncToFirestore(); toast('Row removed.');
 }
 
-function loadEditScriptFile(input) {
+function _removedLoadEditScriptFile(input) {
   const file = input.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => { const ta=document.getElementById('ed-s-text'); if(ta) ta.value=e.target.result; };
@@ -1090,6 +1109,8 @@ function goLive() {
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('tabLive').classList.add('on');
   document.getElementById('tabBuild').classList.remove('on');
+  sessionStorage.setItem('cueola_screen','live');
+  buildPromptFromRundown();
   initPrompter();
   renderLive();
   startTimer();
@@ -1100,6 +1121,7 @@ function showRundown() {
   document.getElementById('rundown').classList.add('on');
   document.getElementById('tabBuild').classList.add('on');
   document.getElementById('tabLive').classList.remove('on');
+  sessionStorage.setItem('cueola_screen','build');
   stopTimer();
 }
 
@@ -1116,68 +1138,96 @@ function renderLive() {
   const body = document.getElementById('lsBody');
   if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
 
-  const cur = beats[lsIdx];
-  let html = '';
-
-  // NOW card
-  if (cur) {
-    const t = CT[cur.type]||{};
-    const d = cur.cueData||{};
-    const {stateStr,srcStr,detStr} = getCueSummary(cur);
-
-    html += `<div class="ls-now">
-      <div class="ls-now-lbl">
-        <span class="type-badge tb-${cur.type}" style="color:${t.color};background:${t.bg}">${t.icon} ${t.label}</span>
-        NOW — Cue ${lsIdx+1} of ${beats.length}
-      </div>
-      <div class="ls-cue-name">${esc(cur.info||'—')}</div>
-      ${cur.notes ? `<div class="ls-cue-note">${esc(cur.notes)}</div>` : ''}
-      <div class="ls-meta">
-        ${stateStr ? `<div class="ls-mi"><div class="ls-ml">State / Action</div><div class="ls-mv">${esc(stateStr)}</div></div>` : ''}
-        ${srcStr ? `<div class="ls-mi"><div class="ls-ml">Source</div><div class="ls-mv">${esc(srcStr)}</div></div>` : ''}
-        ${detStr ? `<div class="ls-mi"><div class="ls-ml">Details</div><div class="ls-mv">${esc(detStr)}</div></div>` : ''}
-        ${fmtDur(cur)!=='—' ? `<div class="ls-mi"><div class="ls-ml">Duration</div><div class="ls-mv">${fmtDur(cur)}</div></div>` : ''}
-      </div>
-      ${cur.type==='script' && d.text ? `<div class="ls-cue-script" id="liveScriptEdit" contenteditable="true" spellcheck="true">${esc(d.text)}</div>` : ''}
+  let html = `<div class="live-table">
+    <div class="ltr ltr-head">
+      <div class="ltc ltc-num">#</div>
+      <div class="ltc ltc-info">Name</div>
+      <div class="ltc ltc-dur">Dur</div>
+      <div class="ltc ltc-v">📺</div>
+      <div class="ltc ltc-a">🎙</div>
+      <div class="ltc ltc-p">▶</div>
+      <div class="ltc ltc-g">🖼</div>
+      <div class="ltc ltc-l">💡</div>
+      <div class="ltc ltc-s">📄 Script</div>
     </div>`;
-  }
 
-  // NEXT card
-  const nxt = beats[lsIdx+1];
-  if (nxt) {
-    const nt = CT[nxt.type]||{};
-    html += `<div class="ls-next">
-      <div class="ls-next-info">
-        <div class="ls-next-lbl">NEXT UP</div>
-        <div class="ls-next-name"><span class="type-badge tb-${nxt.type}" style="color:${nt.color};background:${nt.bg};font-size:8px">${nt.icon} ${nt.label}</span> ${esc(nxt.info||'—')}</div>
-        ${nxt.notes ? `<div style="font-size:11px;color:var(--text3);margin-top:3px">${esc(nxt.notes)}</div>` : ''}
-      </div>
-      <div style="font-family:var(--mono);font-size:12px;color:var(--text3)">${fmtDur(nxt)}</div>
-    </div>`;
-  }
-
-  // All cues list
-  html += `<div class="ls-all-title">ALL CUES</div>`;
   beats.forEach((b,i) => {
-    const bt = CT[b.type]||{};
-    const cls = i===lsIdx ? 'ls-active' : i<lsIdx ? 'ls-done' : '';
-    html += `<div class="ls-cue-item type-${b.type} ${cls}" onclick="jumpToLsCue(${i})" style="border-left-color:${bt.color}">
-      <span class="ls-ci-num">${i+1}</span>
-      <span class="ls-ci-badge"><span class="type-badge tb-${b.type}" style="color:${bt.color};background:${bt.bg};font-size:8px">${bt.icon}</span></span>
-      <span class="ls-ci-name">${esc(b.info||'—')}</span>
-      <span class="ls-ci-dur">${fmtDur(b)}</span>
+    const isCur  = i===lsIdx;
+    const isDone = i<lsIdx;
+    const cls    = isCur?'ltr-current':isDone?'ltr-done':'';
+    const types  = ['video','audio','playback','gfx','lighting','script'].filter(t=>b.cues?.[t]);
+    const sd     = b.cues?.script;
+
+    const scriptCell = sd
+      ? `<div class="ltc ltc-s ltr-script-cell" onclick="event.stopPropagation();openLiveScript(${i})">
+           <div class="ltr-script-preview">${esc((sd.text||'').slice(0,100)+(sd.text?.length>100?'…':''))}</div>
+           <button class="ltr-edit-btn">✎ Edit &amp; Push</button>
+         </div>`
+      : `<div class="ltc ltc-s"><span style="color:var(--text3);font-size:10px">—</span></div>`;
+
+    html += `<div class="ltr ${cls}" onclick="jumpToLsCue(${i})">
+      <div class="ltc ltc-num">${i+1}</div>
+      <div class="ltc ltc-info">
+        <div class="ltr-name">${esc(b.info||'—')}</div>
+        ${b.notes?`<div class="ltr-note">${esc(b.notes)}</div>`:''}
+        <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">
+          ${types.map(t=>`<span class="type-badge tb-${t}" style="color:${CT[t].color};background:${CT[t].bg};font-size:7px;padding:1px 4px">${CT[t].icon}</span>`).join('')}
+        </div>
+      </div>
+      <div class="ltc ltc-dur">${fmtDur(b)}</div>
+      <div class="ltc ltc-v">${liveQuick(b,'video')}</div>
+      <div class="ltc ltc-a">${liveQuick(b,'audio')}</div>
+      <div class="ltc ltc-p">${liveQuick(b,'playback')}</div>
+      <div class="ltc ltc-g">${liveQuick(b,'gfx')}</div>
+      <div class="ltc ltc-l">${liveQuick(b,'lighting')}</div>
+      ${scriptCell}
     </div>`;
   });
 
+  html += '</div>';
   body.innerHTML = html;
 
-  // Scroll active into view
-  const active = body.querySelector('.ls-active');
-  if (active) active.scrollIntoView({behavior:'smooth',block:'nearest'});
+  const cur = body.querySelector('.ltr-current');
+  if (cur) cur.scrollIntoView({behavior:'smooth',block:'center'});
 
-  // Update follow chips
   renderFollowChips();
   updateLsPrompter();
+}
+
+function liveQuick(b, type) {
+  const d = b.cues?.[type];
+  if (!d) return '<span style="color:var(--text3);font-size:10px">—</span>';
+  const tc = CT[type];
+  let s = '';
+  switch(type) {
+    case 'video':    s=d.state||d.source||''; break;
+    case 'audio':    s=d.action||d.source||''; break;
+    case 'playback': s=d.state||d.clipName||''; break;
+    case 'gfx':      s=d.gfxType||d.source||''; break;
+    case 'lighting': s=d.action||d.fixture||''; break;
+  }
+  return `<div class="ltr-cue-quick" style="border-left-color:${tc.color};color:${tc.color}">${esc(s)}</div>`;
+}
+
+function openLiveScript(beatIdx) {
+  const b = beats[beatIdx]; if (!b) return;
+  liveScriptEditIdx = beatIdx;
+  const d = b.cues?.script||{};
+  document.getElementById('lsScriptEditTitle').textContent = b.info||`Row ${beatIdx+1}`;
+  document.getElementById('lsScriptEditText').value = d.text||'';
+  showOverlay('lsScriptEditOv');
+}
+
+function saveLiveScript() {
+  const b = beats[liveScriptEditIdx]; if (!b) return;
+  if (!b.cues) b.cues={};
+  if (!b.cues.script) b.cues.script={scriptType:'Script'};
+  b.cues.script.text = document.getElementById('lsScriptEditText').value;
+  const d = b.cues.script;
+  prompterText = (d.who?`${d.who.toUpperCase()}:\n`:'') + (d.text||'');
+  sendToPrompter();
+  hideOverlay('lsScriptEditOv');
+  renderLive(); syncToFirestore(); toast('Script saved & pushed.');
 }
 
 function jumpToLsCue(i) {
@@ -1202,9 +1252,16 @@ function lsPrev() {
 }
 
 function renderFollowChips() {
-  // Placeholder — in full implementation, populate from presence
   const chips = document.getElementById('followChips');
   if (!chips) return;
+  const now = Date.now();
+  const others = Object.values(currentPresence||{})
+    .filter(p=>p.name!==session.userName&&(now-(p.lastSeen||0))<90000);
+  let html = `<div class="follow-chip follow-self active" onclick="followSelf()">Myself</div>`;
+  others.forEach(p=>{
+    html+=`<div class="follow-chip" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+  });
+  chips.innerHTML = html;
 }
 
 function followSelf() {
@@ -1212,9 +1269,28 @@ function followSelf() {
   document.querySelector('.follow-self')?.classList.add('active');
 }
 
+function followPerson(el, name) {
+  document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  toast(`Following ${name}`);
+}
+
 // ─────────────────────────────────────────────────────────────
 // PROMPTER
 // ─────────────────────────────────────────────────────────────
+function buildPromptFromRundown() {
+  const scripts = beats.filter(b=>b.cues?.script?.text);
+  if (!scripts.length) return;
+  prompterText = scripts.map(b=>{
+    const d = b.cues.script;
+    const hdr = b.info ? `\n── ${b.info} ──\n` : '\n──────────────\n';
+    if (d.scriptType==='Dialogue') return hdr+`[${d.who||'TALENT'}: ${d.text||''}]`;
+    return hdr+(d.who?`${d.who.toUpperCase()}:\n`:'')+d.text;
+  }).join('\n\n');
+  const el = document.getElementById('lsPrompterText');
+  if (el) el.textContent = prompterText;
+}
+
 function initPrompter() {
   try {
     if (prompterChannel) prompterChannel.close();
@@ -1223,9 +1299,10 @@ function initPrompter() {
       if (e.data?.type === 'ping') {
         document.getElementById('prompterDot').className='ls-prompter-dot';
         document.getElementById('prompterStatusTxt').textContent='Connected';
+        // Send current script immediately on connect
+        sendToPrompter();
       }
     };
-    // Announce presence
     prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
     document.getElementById('prompterDot').className='ls-prompter-dot';
     document.getElementById('prompterStatusTxt').textContent='Ready';
@@ -1236,24 +1313,17 @@ function initPrompter() {
 }
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
-  // If leaving a script cue, add break if it seems unfinished
-  if (prevBeat?.type==='script' && prevBeat.cueData?.text) {
-    const editEl = document.getElementById('liveScriptEdit');
-    const liveText = editEl ? editEl.textContent.trim() : prevBeat.cueData.text;
-    // Always append a break when advancing away from a script cue
-    prompterText += '\n\n⬛ ─── [NOTE: Production advancing — wrap current copy, continue with next segment] ───\n\n';
+  if (prevBeat?.cues?.script?.text) {
+    prompterText += '\n\n⬛ ─── [Production advancing] ───\n\n';
   }
-
-  // If new cue is a script cue, append its text
-  if (newBeat?.type==='script') {
-    const d = newBeat.cueData||{};
-    if (d.scriptType==='Script' && d.text) {
-      prompterText += (d.who ? `${d.who.toUpperCase()}:\n` : '') + d.text + '\n';
-    } else if (d.scriptType==='Dialogue') {
-      prompterText += `\n[${d.who||'TALENT'}: ${d.text||'(ad-lib / dialogue)'}]\n`;
+  if (newBeat?.cues?.script) {
+    const d = newBeat.cues.script;
+    if (d.scriptType==='Dialogue') {
+      prompterText += `\n[${d.who||'TALENT'}: ${d.text||'(ad-lib)'}]\n`;
+    } else if (d.text) {
+      prompterText += (d.who?`${d.who.toUpperCase()}:\n`:'')+d.text+'\n';
     }
   }
-
   sendToPrompter();
 }
 
@@ -1359,13 +1429,13 @@ function exportPDF() {
   const area = document.getElementById('printArea');
   let offsetSecs = 0;
   const rows = beats.map((b,i) => {
-    const t = CT[b.type]||{label:'?'};
     const {stateStr,srcStr,detStr} = getCueSummary(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += (b.min||0)*60+(b.sec||0);
+    const types = Object.keys(b.cues||{}).filter(t=>CT[t]).map(t=>CT[t].icon+' '+CT[t].label).join(', ');
     return `<tr>
       <td>${i+1}</td>
-      <td><span class="pt-badge" style="background:${t.bg||'#eee'};color:${t.color||'#000'}">${t.label}</span></td>
+      <td>${esc(types||'—')}</td>
       <td>${esc(b.info||'—')}</td>
       <td>${b.style||'flex'}</td>
       <td>${startStr}</td>
@@ -1381,7 +1451,7 @@ function exportPDF() {
     <div class="print-title">${esc(show.name||'Rundown')}</div>
     <div class="print-meta">Exported ${new Date().toLocaleString()}${session.code?' · Session '+session.code:''}</div>
     <table class="print-table">
-      <thead><tr><th>#</th><th>Type</th><th>Name</th><th>Style</th><th>Start</th><th>Dur</th><th>State/Action</th><th>Source</th><th>Details</th><th>Notes</th></tr></thead>
+      <thead><tr><th>#</th><th>Cues</th><th>Name</th><th>Style</th><th>Start</th><th>Dur</th><th>Action</th><th>Source</th><th>Details</th><th>Notes</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   window.print();
