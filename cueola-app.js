@@ -106,9 +106,9 @@ function toast(msg, dur=2500) {
 
 function showModal(id)  { document.getElementById(id).classList.add('on'); }
 function hideModal(id)  { document.getElementById(id).classList.remove('on'); }
-function hideOverlay(id){ document.getElementById(id).classList.remove('on'); }
+function hideOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.remove('on'); }
 
-function showOverlay(id){ document.getElementById(id).classList.add('on'); }
+function showOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
 
 // ─────────────────────────────────────────────────────────────
 // ADMIN SYSTEM (localStorage)
