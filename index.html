@@ -428,18 +428,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 ══════════════════════════════════════════ -->
 <div class="screen on" id="entry">
   <div class="entry-wrap">
-    <div class="e-logo">🎬</div>
+    <div class="e-logo">🐨</div>
     <div class="e-title">Cueola</div>
     <div class="e-sub">Professional production rundown — build cues, go live, <em>sync the prompter.</em></div>
     <div class="e-cards">
-      <div class="e-card inst" onclick="showModal('modal-inst')">
-        <div class="ec-icon">🎙</div>
-        <div class="ec-title">Create Session</div>
-        <div class="ec-desc">Start a new rundown. Get a session code for your crew.</div>
-        <span class="ec-pill">Instructor / Director</span>
-      </div>
-      <div class="e-card stud" onclick="showModal('modal-stud')">
-        <div class="ec-icon">🎬</div>
+      <div class="e-card stud e-card-full" onclick="showModal('modal-stud')">
+        <div class="ec-icon">🐨</div>
         <div class="ec-title">Join Session</div>
         <div class="ec-desc">Enter the session code your director gave you.</div>
         <span class="ec-pill">Enter session code</span>
@@ -470,7 +464,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div class="screen" id="rundown">
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
-    <div class="brand">🎬 Cue<em>ola</em></div>
+    <div class="brand">🐨 Cue<em>ola</em></div>
     <div class="mode-tabs">
       <div class="mtab on" id="tabBuild" onclick="showRundown()">Build</div>
       <div class="mtab" id="tabLive" onclick="goLive()">Live Show</div>
@@ -541,7 +535,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 ══════════════════════════════════════════ -->
 <div class="screen" id="liveshow">
   <div class="ls-bar">
-    <div class="ls-brand">🎬 Cueola <span>● LIVE</span></div>
+    <div class="ls-brand">🐨 Cueola <span>● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
@@ -778,7 +772,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="modal-title">Settings</div>
     <div class="settings-section">
       <div class="settings-sec-label">Show</div>
-      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none">🔒 Locked — only the session creator can change this.</div></div>
+      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none">🔒 Locked — only an admin can change this.</div></div>
       <div class="field"><label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="set-starttime" type="time"></div>
     </div>
     <div class="settings-section" style="margin-top:12px">
@@ -791,7 +785,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <button onclick="openAdminLogin()" style="background:none;border:none;color:var(--text3);font-size:12px;font-family:var(--mono);cursor:pointer;padding:0">🔑 Admin Login</button>
+      <button onclick="hideModal('modal-settings');openAdminLogin()" style="background:none;border:none;color:var(--text3);font-size:12px;font-family:var(--mono);cursor:pointer;padding:0">🔑 Admin Login</button>
     </div>
     <button class="btn-primary" onclick="saveSettings()" style="margin-top:6px">Save</button>
     <button class="btn-secondary" onclick="hideModal('modal-settings')" style="margin-top:6px">Cancel</button>

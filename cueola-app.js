@@ -1338,7 +1338,7 @@ function saveSettings() {
 const _origShowModal = window.showModal;
 window.showModal = function(id) {
   if (id==='modal-settings') {
-    const locked = session.role==='student' && !!show.name;
+    const locked = !adminSession;
     const nameIn = document.getElementById('set-showname');
     nameIn.value = show.name||'';
     nameIn.disabled = locked;
