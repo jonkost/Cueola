@@ -49,7 +49,7 @@ let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 
 // Add-row wizard state
 let arStyle = null;
-let _arSelectedTypes = new Set();
+let arCueType = null; // single selected type in step 2
 
 // Edit mode (gates row/column drag)
 let editMode = false;
@@ -964,9 +964,27 @@ function addRowAt(idx, position) {
 // ─────────────────────────────────────────────────────────────
 // ADD ROW WIZARD
 // ─────────────────────────────────────────────────────────────
+const AR_TYPE_DESC = {
+  video:    'Camera, source switch',
+  audio:    'Mics, music, sound',
+  lighting: 'Fixtures, scenes, looks',
+  playback: 'Clip rolls, VT, media',
+  gfx:      'Graphics, lower thirds',
+  script:   'Copy, dialogue, prompter',
+};
+
+const AR_CUE_HINTS = {
+  video:    { ready:'e.g. CAM 1',          take:'e.g. Take CAM 1'   },
+  audio:    { ready:'e.g. Open Mic Host',  take:'e.g. Play Music'   },
+  playback: { ready:'e.g. Standby SC_042', take:'e.g. Roll'         },
+  gfx:      { ready:'e.g. Set Lower 3rd',  take:'e.g. Take GFX'    },
+  lighting: { ready:'e.g. CH 1–4 Preset',  take:'e.g. Go'          },
+  script:   { ready:'e.g. Host',           take:'e.g. Begin'        },
+};
+
 function openAddRow() {
   arStyle = null;
-  _arSelectedTypes = new Set();
+  arCueType = null;
   const nameIn = document.getElementById('ar-name-input');
   if (nameIn) nameIn.value = '';
   const notesIn = document.getElementById('ar-notes-input');
@@ -979,80 +997,70 @@ function openAddRow() {
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
   const durWrap = document.getElementById('ar-dur-wrap');
   if (durWrap) durWrap.style.display = 'none';
-  // Always start on step 1
   document.getElementById('ar-step-1').classList.add('on');
   document.getElementById('ar-step-2').classList.remove('on');
+  document.getElementById('ar-step-3').classList.remove('on');
   buildArContext();
   showOverlay('addRowOv');
 }
 
 function arGoStep2() {
   if (!arStyle) return;
-  _arSelectedTypes = new Set();
-  const grid = document.getElementById('arCueTypeGrid');
+  arCueType = null;
+  const grid = document.getElementById('arTypeGrid');
   grid.innerHTML = Object.keys(CT).map(type => {
     const tc = CT[type];
-    return `<button class="ar-type-btn" data-type="${type}"
-      style="--oc:${tc.color};--ob:${tc.bg}"
-      onclick="arToggleCueType('${type}')">${tc.icon} ${tc.label}</button>`;
+    return `<div class="opt-card" id="artype-${type}"
+        style="--oc:${tc.color};--ob:${tc.bg}"
+        onclick="arSelectCueType('${type}')">
+      <div class="opt-icon" style="font-size:24px">${tc.icon}</div>
+      <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
+      <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
+    </div>`;
   }).join('');
-  document.getElementById('arCueFields').innerHTML =
-    `<div style="color:var(--text3);font-size:11px;font-family:var(--mono);text-align:center;padding:12px 0">Tap a cue type above to configure it.</div>`;
+  document.getElementById('ar-next-2').disabled = true;
   document.getElementById('ar-step-1').classList.remove('on');
+  document.getElementById('ar-step-3').classList.remove('on');
   document.getElementById('ar-step-2').classList.add('on');
+}
+
+function arSelectCueType(type) {
+  arCueType = type;
+  document.querySelectorAll('#arTypeGrid .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById(`artype-${type}`)?.classList.add('sel');
+  document.getElementById('ar-next-2').disabled = false;
+}
+
+function arGoStep3() {
+  if (!arCueType) return;
+  const tc = CT[arCueType];
+  document.getElementById('ar-step3-heading').textContent = `${tc.icon} ${tc.label} Cue`;
+  const h = AR_CUE_HINTS[arCueType] || { ready:'', take:'' };
+  let fields = `
+    <div class="field">
+      <label class="field-lbl" style="color:var(--green)">✓ CUE READY</label>
+      <input class="field-in" id="ar-cue-ready" placeholder="${h.ready}" maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-lbl" style="color:var(--accent)">→ CUE EXECUTE / TAKE</label>
+      <input class="field-in" id="ar-cue-take" placeholder="${h.take}" maxlength="80" autocomplete="off">
+    </div>`;
+  if (arCueType === 'script') {
+    fields += `
+    <div class="field">
+      <label class="field-lbl">Script Text</label>
+      <textarea class="field-in" id="ar-cue-text" rows="4" style="resize:vertical;line-height:1.6"></textarea>
+    </div>`;
+  }
+  document.getElementById('arCueFields').innerHTML = fields;
+  document.getElementById('ar-step-2').classList.remove('on');
+  document.getElementById('ar-step-3').classList.add('on');
 }
 
 function arGoStep1() {
   document.getElementById('ar-step-2').classList.remove('on');
+  document.getElementById('ar-step-3').classList.remove('on');
   document.getElementById('ar-step-1').classList.add('on');
-}
-
-function arToggleCueType(type) {
-  if (_arSelectedTypes.has(type)) {
-    _arSelectedTypes.delete(type);
-  } else {
-    _arSelectedTypes.add(type);
-  }
-  const btn = document.querySelector(`#arCueTypeGrid [data-type="${type}"]`);
-  if (btn) btn.classList.toggle('active', _arSelectedTypes.has(type));
-  arRenderCueFields();
-}
-
-function arRenderCueFields() {
-  const container = document.getElementById('arCueFields');
-  if (_arSelectedTypes.size === 0) {
-    container.innerHTML =
-      `<div style="color:var(--text3);font-size:11px;font-family:var(--mono);text-align:center;padding:12px 0">Tap a cue type above to configure it.</div>`;
-    return;
-  }
-  const hints = {
-    video:    { ready:'e.g. CAM 1',          take:'e.g. Take CAM 1'   },
-    audio:    { ready:'e.g. Open Mic Host',  take:'e.g. Play Music'   },
-    playback: { ready:'e.g. Standby SC_042', take:'e.g. Roll'         },
-    gfx:      { ready:'e.g. Set Lower 3rd',  take:'e.g. Take GFX'    },
-    lighting: { ready:'e.g. CH 1–4 Preset',  take:'e.g. Go'          },
-    script:   { ready:'e.g. Host',           take:'e.g. Begin'        },
-  };
-  container.innerHTML = Array.from(_arSelectedTypes).map(type => {
-    const tc = CT[type];
-    const h = hints[type] || { ready:'', take:'' };
-    return `<div class="ar-cue-block" data-type-block="${type}"
-        style="border-left:3px solid ${tc.color};background:${tc.bg}">
-      <div class="ar-cue-block-lbl" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
-      <div class="field" style="margin-bottom:8px">
-        <label class="field-lbl" style="color:var(--green)">✓ CUE READY</label>
-        <input class="field-in" id="ar-${type}-ready" placeholder="${h.ready}" maxlength="80" autocomplete="off">
-      </div>
-      <div class="field">
-        <label class="field-lbl" style="color:var(--accent)">→ CUE EXECUTE / TAKE</label>
-        <input class="field-in" id="ar-${type}-take" placeholder="${h.take}" maxlength="80" autocomplete="off">
-      </div>
-      ${type === 'script' ? `<div class="field" style="margin-top:8px">
-        <label class="field-lbl">Script Text</label>
-        <textarea class="field-in" id="ar-script-text" rows="3" style="resize:vertical;line-height:1.6"></textarea>
-      </div>` : ''}
-    </div>`;
-  }).join('');
 }
 
 function closeAddRowOv(e) {
@@ -1238,15 +1246,15 @@ function arCommit() {
   const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
   const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
   const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
-  // Collect cues configured in step 2
   const cues = {};
-  _arSelectedTypes.forEach(type => {
-    const ready = document.getElementById(`ar-${type}-ready`)?.value?.trim()||'';
-    const take  = document.getElementById(`ar-${type}-take`)?.value?.trim()||'';
-    const d = { ready, take };
-    if (type === 'script') d.text = document.getElementById('ar-script-text')?.value?.trim()||'';
-    cues[type] = d;
-  });
+  if (arCueType) {
+    const d = {
+      ready: document.getElementById('ar-cue-ready')?.value?.trim()||'',
+      take:  document.getElementById('ar-cue-take')?.value?.trim()||'',
+    };
+    if (arCueType === 'script') d.text = document.getElementById('ar-cue-text')?.value?.trim()||'';
+    cues[arCueType] = d;
+  }
   const newBeat = { id:newId, style:arStyle, info, notes, min, sec, done:false, cues };
   if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) {
     beats.splice(_insertIdx, 0, newBeat);

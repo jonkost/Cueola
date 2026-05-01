@@ -653,7 +653,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
       <!-- Step 1: Cue Name + Style -->
       <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">New Row — Step 1 of 2</div>
+        <div class="ar-step-label">New Row — Step 1 of 3</div>
         <div class="ar-heading">Add a row</div>
         <div class="field">
           <label class="field-lbl">Cue Name / Label</label>
@@ -704,17 +704,24 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         </div>
       </div>
 
-      <!-- Step 2: Configure cues (ready / take per type) -->
+      <!-- Step 2: Cue type selection -->
       <div class="ar-step" id="ar-step-2">
-        <div class="ar-step-label">New Row — Step 2 of 2</div>
-        <div class="ar-heading">Configure Cues</div>
-        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:-8px">Tap a cue type to add it. Fill in Ready and Take for each.</div>
-        <!-- Type toggles -->
-        <div class="ar-cue-type-grid" id="arCueTypeGrid"></div>
-        <!-- Dynamic fields for selected types -->
-        <div id="arCueFields"></div>
+        <div class="ar-step-label">Step 2 of 3 · Cue Type</div>
+        <div class="ar-heading">What type of cue is this?</div>
+        <div class="opt-grid-3" id="arTypeGrid"></div>
         <div class="ar-nav">
           <button class="ar-back" onclick="arGoStep1()">← Back</button>
+          <button class="ar-next" id="ar-next-2" onclick="arGoStep3()" disabled>Next →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Ready / Take configuration -->
+      <div class="ar-step" id="ar-step-3">
+        <div class="ar-step-label">Step 3 of 3 · Cue Details</div>
+        <div class="ar-heading" id="ar-step3-heading">Configure Cue</div>
+        <div id="arCueFields"></div>
+        <div class="ar-nav">
+          <button class="ar-back" onclick="arGoStep2()">← Back</button>
           <button class="ar-next" onclick="arCommit()">+ Add Row</button>
         </div>
       </div>
