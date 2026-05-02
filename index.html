@@ -347,6 +347,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .chip.sel{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.12)}
 
 /* Wizard step 2 — cue type toggles */
+/* Cue config rich builder */
+.cc-section{margin-bottom:10px}
+.cc-section-lbl{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:6px}
+.cc-chip-grid{display:flex;flex-wrap:wrap;gap:5px}
+.cc-chip{padding:5px 11px;border-radius:7px;font-size:12px;font-family:var(--mono);cursor:pointer;border:1.5px solid var(--bord2);background:var(--s2);color:var(--text2);transition:all .15s;white-space:nowrap}
+.cc-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.08)}
+.cc-chip.sel{border-color:var(--accent);color:var(--accent);background:rgba(91,141,248,.13);font-weight:600}
+.cc-divider{height:1px;background:var(--bord2);margin:12px 0}
 .ar-cue-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .ar-type-btn{padding:9px 6px;border-radius:9px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1.5px solid var(--bord2);background:var(--s2);color:var(--text3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
 .ar-type-btn:hover{border-color:var(--oc,var(--accent));color:var(--oc,var(--accent));background:rgba(91,141,248,.06)}
@@ -746,7 +754,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
      CUE CONFIG MODAL
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="cueConfigModal">
-  <div class="modal" style="max-width:460px;max-height:85vh;overflow-y:auto">
+  <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
     <div class="modal-title" id="cueConfigTitle">Configure Cue</div>
     <div id="cueConfigFields"></div>
     <button class="btn-primary" onclick="saveCueConfig()">Save</button>
@@ -913,7 +921,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260501c"></script>
+<script src="cueola-app.js?v=20260502a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
