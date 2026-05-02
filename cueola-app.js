@@ -1192,19 +1192,17 @@ function buildCueConfigFields(type, d) {
         </div>
         ${ccCustomSrcField('cc-v-custom', d.customSrc)}
       </div>
-      <div id="vOn-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Action</div>
-          <div class="cc-chip-grid" id="vOn-act">
-            ${ccChips(['Ready','Set','Set with Media Wipe'], 'ccVOnAct')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Action</div>
+        <div class="cc-chip-grid" id="vOn-act">
+          ${ccChips(['Ready','Set','Set with Media Wipe'], 'ccVOnAct')}
         </div>
-        <div class="cc-section" id="vOn-shot-row" style="display:none">
-          <div class="cc-section-lbl">Shot type</div>
-          <div class="cc-chip-grid" id="vOn-shot">
-            ${ccChips(['Wide','MCU','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
-          </div>
+      </div>
+      <div class="cc-section" id="vOn-shot-row" style="display:none">
+        <div class="cc-section-lbl">Shot type</div>
+        <div class="cc-chip-grid" id="vOn-shot">
+          ${ccChips(['Wide','MCU','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1246,13 +1244,11 @@ function buildCueConfigFields(type, d) {
         </div>
         ${ccCustomSrcField('cc-a-custom', d.customSrc)}
       </div>
-      <div id="aOn-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Cue type</div>
-          <div class="cc-chip-grid" id="aOn-cue">
-            ${ccChips(['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'], 'ccAOnCueType')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Cue type</div>
+        <div class="cc-chip-grid" id="aOn-cue">
+          ${ccChips(['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'], 'ccAOnCueType')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1271,13 +1267,11 @@ function buildCueConfigFields(type, d) {
         </div>
         <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none;margin-top:8px" oninput="_ccAOffBuild()">
       </div>
-      <div id="aOff-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Cue</div>
-          <div class="cc-chip-grid" id="aOff-call">
-            ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Cue</div>
+        <div class="cc-chip-grid" id="aOff-call">
+          ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1392,13 +1386,11 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['Lower 3rd','Full Screen','Bug','This GFX'], 'ccGOffType')}
         </div>
       </div>
-      <div id="gOff-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Take it out</div>
-          <div class="cc-chip-grid" id="gOff-how">
-            ${ccChips(['Lost It','Auto Off','Cut GFX','Fade GFX','Clear L3','Clear All','Kill Bug'], 'ccGOffHow')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Take it out</div>
+        <div class="cc-chip-grid" id="gOff-how">
+          ${ccChips(['Lost It','Auto Off','Cut GFX','Fade GFX','Clear L3','Clear All','Kill Bug'], 'ccGOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1417,32 +1409,30 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
         </div>
       </div>
-      <div id="lOn-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Action</div>
-          <div class="cc-chip-grid" id="lOn-act">
-            ${ccChips(['Cue On','Off','At','Color','Gobo'], 'ccLOnAct')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Action</div>
+        <div class="cc-chip-grid" id="lOn-act">
+          ${ccChips(['Cue On','Off','At','Color','Gobo'], 'ccLOnAct')}
         </div>
-        <div class="cc-section" id="lOn-intensity-row" style="display:none">
-          <div class="cc-section-lbl">Intensity</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="field-in" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" style="max-width:120px" oninput="_ccLOnBuild()">
-            <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
-          </div>
+      </div>
+      <div class="cc-section" id="lOn-intensity-row" style="display:none">
+        <div class="cc-section-lbl">Intensity</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="field-in" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" style="max-width:120px" oninput="_ccLOnBuild()">
+          <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
         </div>
-        <div class="cc-section" id="lOn-color-row" style="display:none">
-          <div class="cc-section-lbl">Color</div>
-          <div class="cc-chip-grid" id="lOn-color">
-            ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
-          </div>
-          <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" style="margin-top:6px" oninput="_ccLOnBuild()">
+      </div>
+      <div class="cc-section" id="lOn-color-row" style="display:none">
+        <div class="cc-section-lbl">Color</div>
+        <div class="cc-chip-grid" id="lOn-color">
+          ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
         </div>
-        <div class="cc-section" id="lOn-gobo-row" style="display:none">
-          <div class="cc-section-lbl">Gobo</div>
-          <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 — Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
-        </div>
+        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" style="margin-top:6px" oninput="_ccLOnBuild()">
+      </div>
+      <div class="cc-section" id="lOn-gobo-row" style="display:none">
+        <div class="cc-section-lbl">Gobo</div>
+        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 — Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
       </div>
       <div class="field">
         <label class="field-lbl">Lighting notes <span style="color:var(--text3);font-weight:400">— cue numbers, focus, wash details</span></label>
@@ -1462,13 +1452,11 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
         </div>
       </div>
-      <div id="lOff-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">Lighting out</div>
-          <div class="cc-chip-grid" id="lOff-how">
-            ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','Snap Off','House Up','Cross Fade','Hold'], 'ccLOffHow')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Lighting out</div>
+        <div class="cc-chip-grid" id="lOff-how">
+          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','Snap Off','House Up','Cross Fade','Hold'], 'ccLOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1530,13 +1518,11 @@ function buildCueConfigFields(type, d) {
         </div>
         <input class="field-in cc-custom-in" id="cc-s-off-custom" value="" placeholder="Type custom speaker…" style="display:none;margin-top:8px" oninput="_ccSOffBuild()">
       </div>
-      <div id="sOff-step2" style="display:none">
-        ${step(2,'What will you do with it?')}
-        <div class="cc-section">
-          <div class="cc-section-lbl">How it ends</div>
-          <div class="cc-chip-grid" id="sOff-how">
-            ${ccChips(['Tag','Toss','Back to Anchor','Throw to Break','End Segment','Outro','Wrap'], 'ccSOffHow')}
-          </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">How it ends</div>
+        <div class="cc-chip-grid" id="sOff-how">
+          ${ccChips(['Tag','Toss','Back to Anchor','Throw to Break','End Segment','Outro','Wrap'], 'ccSOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1567,7 +1553,6 @@ function ccVOnSrc(src) {
   _vOnSrc=src; _vOnAct=''; _vOnShot='';
   ccSelChip('vOn-src',src);
   document.querySelectorAll('#vOn-act .cc-chip,#vOn-shot .cc-chip').forEach(c=>c.classList.remove('sel'));
-  document.getElementById('vOn-step2').style.display = src ? '' : 'none';
   document.getElementById('vOn-shot-row').style.display = 'none';
   _ccVOnBuild();
 }
@@ -1604,7 +1589,6 @@ function _ccVOffBuild() {
 let _aOnSrc='',_aOnCueType='';
 function ccAOnSrc(src) {
   _aOnSrc=src; ccSelChip('aOn-src',src);
-  document.getElementById('aOn-step2').style.display = src ? '' : 'none';
   _ccAOnBuild();
 }
 function ccAOnCueType(t) { _aOnCueType=t; ccSelChip('aOn-cue',t); _ccAOnBuild(); }
@@ -1621,7 +1605,6 @@ function _ccAOnBuild() {
 let _aOffSrc='',_aOffCall='';
 function ccAOffSrc(src) {
   _aOffSrc=src; ccSelChip('aOff-src',src);
-  document.getElementById('aOff-step2').style.display = src ? '' : 'none';
   _ccAOffBuild();
 }
 function ccAOffCall(val) { _aOffCall=val; ccSelChip('aOff-call',val); _ccAOffBuild(); }
@@ -1679,7 +1662,6 @@ function ccGOnBuild(){
 let _gOffType='',_gOffHow='';
 function ccGOffType(t){
   _gOffType=t; ccSelChip('gOff-type',t);
-  document.getElementById('gOff-step2').style.display = t ? '' : 'none';
   _ccGOffBuild();
 }
 function ccGOffHow(val){ _gOffHow=val; ccSelChip('gOff-how',val); _ccGOffBuild(); }
@@ -1694,7 +1676,6 @@ function _ccGOffBuild(){
 let _lOnAction='',_lOnFix='';
 function ccLOnFix(v){
   _lOnFix=v; ccSelChip('lOn-fix',v);
-  document.getElementById('lOn-step2').style.display = v ? '' : 'none';
   _ccLOnBuild();
 }
 function ccLOnAct(v){
@@ -1732,7 +1713,6 @@ function _ccLOnBuild(){
 let _lOffFix='',_lOffHow='';
 function ccLOffFix(v){
   _lOffFix=v; ccSelChip('lOff-fix',v);
-  document.getElementById('lOff-step2').style.display = v ? '' : 'none';
   _ccLOffBuild();
 }
 function ccLOffHow(val){ _lOffHow=val; ccSelChip('lOff-how',val); _ccLOffBuild(); }
@@ -1763,7 +1743,6 @@ function _ccSOnBuild(){
 let _sOffSrc='',_sOffHow='';
 function ccSOffSrc(v){
   _sOffSrc=v; ccSelChip('sOff-src',v);
-  document.getElementById('sOff-step2').style.display = v ? '' : 'none';
   _ccSOffBuild();
 }
 function ccSOffHow(v){ _sOffHow=v; ccSelChip('sOff-how',v); _ccSOffBuild(); }
