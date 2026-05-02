@@ -365,6 +365,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .cc-divider{height:1px;background:var(--bord2);margin:14px 0}
 .cc-result-lbl{font-size:10px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
 .cc-result-in{border-width:1.5px!important;font-size:14px!important}
+.cc-checks{display:flex;gap:16px;margin:6px 0}
+.cc-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer}
+.cc-check input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px}
+.cc-custom-in{margin-top:6px}
+.cc-chip-add{border-style:dashed!important;color:var(--text3)!important}
+.cc-chip-add:hover{border-color:var(--accent)!important;color:var(--accent)!important;border-style:solid!important}
 /* Cue cell on/off display */
 .cue-on-line{font-size:10px;line-height:1.4;color:var(--text);display:flex;align-items:baseline;gap:4px}
 .cue-off-line{font-size:10px;line-height:1.4;color:var(--text2);display:flex;align-items:baseline;gap:4px}
@@ -936,7 +942,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260502b"></script>
+<script src="cueola-app.js?v=20260502c"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
