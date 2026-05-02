@@ -1119,11 +1119,11 @@ function openCueConfig(beatId, type) {
   cueConfigType   = type;
   // Reset all state
   _vOnSrc='';_vOnAct='';_vOnShot='';_vOffTrans='';_vOffDest='';
-  _aOnSrc='';_aOnCueType='';_aOffCall='';
+  _aOnSrc='';_aOnCueType='';_aOffSrc='';_aOffCall='';
   _pOnAction='';_pOffHow='';_pOffRet='';
-  _gOnType='';_gOnSrc='';_gOnTrans='';
-  _lOnAction='';_lOnFix='';_lOnPreset='';
-  _sOnType='Script';_sOnSrc='';_sOffHow='';
+  _gOnType='';_gOnSrc='';_gOnTrans='';_gOffType='';_gOffHow='';
+  _lOnAction='';_lOnFix='';_lOffFix='';_lOffHow='';
+  _sOnType='Script';_sOnSrc='';_sOffSrc='';_sOffHow='';
   const b = beats.find(x=>x.id===beatId); if (!b) return;
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
@@ -1176,10 +1176,14 @@ function buildCueConfigFields(type, d) {
   const notes  = d.notes || '';
   let onPanel = '', offPanel = '';
 
+  // Step header helper
+  const step = (n, lbl) =>
+    `<div class="cc-step-lbl"><span class="cc-step-num">${n}</span>${lbl}</div>`;
+
   // ══ VIDEO ══════════════════════════════════════════
   if (type === 'video') {
     onPanel = `
-      ${ccTabHint('📺','Select your source, then the action. Ready = standby call. Set = execute. Set with Media Wipe = execute with a media wipe transition.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="vOn-src">
@@ -1188,48 +1192,52 @@ function buildCueConfigFields(type, d) {
         </div>
         ${ccCustomSrcField('cc-v-custom', d.customSrc)}
       </div>
-      <div class="cc-section" id="vOn-act-row" style="display:none">
-        <div class="cc-section-lbl">Action — how does this source come in?</div>
-        <div class="cc-chip-grid" id="vOn-act">
-          ${ccChips(['Ready','Set','Set with Media Wipe'], 'ccVOnAct')}
+      <div id="vOn-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Action</div>
+          <div class="cc-chip-grid" id="vOn-act">
+            ${ccChips(['Ready','Set','Set with Media Wipe'], 'ccVOnAct')}
+          </div>
         </div>
-      </div>
-      <div class="cc-section" id="vOn-shot-row" style="display:none">
-        <div class="cc-section-lbl">Shot type (optional)</div>
-        <div class="cc-chip-grid" id="vOn-shot">
-          ${ccChips(['Wide','MCU','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
+        <div class="cc-section" id="vOn-shot-row" style="display:none">
+          <div class="cc-section-lbl">Shot type</div>
+          <div class="cc-chip-grid" id="vOn-shot">
+            ${ccChips(['Wide','MCU','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 — Wide" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('⏹','How does this source exit? Pick the transition, then the destination.')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Transition out</div>
-        <div class="cc-chip-grid" id="vOff-trans">
-          ${ccChips(['Cut','Fade','Dissolve','Wipe','Dip to Black'], 'ccVOffTrans')}
-        </div>
-      </div>
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Destination</div>
         <div class="cc-chip-grid" id="vOff-dest">
           ${ccChips(['Black','CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1','Return'], 'ccVOffDest')}
         </div>
       </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Transition</div>
+        <div class="cc-chip-grid" id="vOff-trans">
+          ${ccChips(['Cut','Fade','Dissolve','Wipe','Dip to Black'], 'ccVOffTrans')}
+        </div>
+      </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut to Black" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ AUDIO ══════════════════════════════════════════
   } else if (type === 'audio') {
     onPanel = `
-      ${ccTabHint('🎙','Pick the source, then what you need it to do. The cue builds automatically.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="aOn-src">
@@ -1238,40 +1246,55 @@ function buildCueConfigFields(type, d) {
         </div>
         ${ccCustomSrcField('cc-a-custom', d.customSrc)}
       </div>
-      <div class="cc-section" id="aOn-cue-row" style="display:none">
-        <div class="cc-section-lbl">Cue type</div>
-        <div class="cc-chip-grid" id="aOn-cue">
-          ${ccChips(['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'], 'ccAOnCueType')}
+      <div id="aOn-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Cue type</div>
+          <div class="cc-chip-grid" id="aOn-cue">
+            ${ccChips(['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'], 'ccAOnCueType')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic — Host" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('🔇','How does this audio exit? One tap to cut, fade, or close.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Audio out call</div>
-        <div class="cc-chip-grid" id="aOff-call">
-          ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
+        <div class="cc-section-lbl">Source</div>
+        <div class="cc-chip-grid" id="aOff-src">
+          ${ccChips(['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains','All'], 'ccAOffSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-off-custom','_ccAOffBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none;margin-top:8px" oninput="_ccAOffBuild()">
+      </div>
+      <div id="aOff-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Cue</div>
+          <div class="cc-chip-grid" id="aOff-call">
+            ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic — Host" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ PLAYBACK ════════════════════════════════════════
   } else if (type === 'playback') {
     onPanel = `
-      ${ccTabHint('▶','Name the clip, set duration if needed, then choose Ready (standby) or Play (roll it).')}
+      ${step(1,'What is it?')}
       <div class="field">
         <label class="field-lbl">Clip name / slug</label>
         <input class="field-in" id="cc-play-clip" value="${esc(d.clip||'')}" placeholder="e.g. SC_042 or HOFL_122_Open" maxlength="60" autocomplete="off" oninput="ccPOnBuild()">
       </div>
+      ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Action</div>
         <div class="cc-chip-grid" id="pOn-act">
@@ -1279,7 +1302,7 @@ function buildCueConfigFields(type, d) {
         </div>
       </div>
       <div class="cc-section" id="pOn-dur-row" style="display:none">
-        <div class="cc-section-lbl">Clip duration (TRT) — optional, skip if unknown</div>
+        <div class="cc-section-lbl">Clip duration (TRT)</div>
         <div style="display:flex;gap:10px;align-items:flex-start">
           <div class="field" style="flex:1;text-align:center">
             <label class="field-lbl">Min</label>
@@ -1294,34 +1317,35 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Play SC_042 — 0:45 TRT" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('⏹','How does this clip end? Cut it, fade it, or roll to something else.')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">How it ends</div>
-        <div class="cc-chip-grid" id="pOff-how">
-          ${ccChips(['Cut VT','Fade Out VT','Stop','Roll Next','Take Live'], 'ccPOffHow')}
-        </div>
-      </div>
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Return to</div>
         <div class="cc-chip-grid" id="pOff-ret">
           ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','Host','Anchor','Studio','Live'], 'ccPOffReturn')}
         </div>
       </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">How it ends</div>
+        <div class="cc-chip-grid" id="pOff-how">
+          ${ccChips(['Cut VT','Fade Out VT','Stop','Roll Next','Take Live'], 'ccPOffHow')}
+        </div>
+      </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut VT — Take CAM 1" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ GFX ═════════════════════════════════════════════
   } else if (type === 'gfx') {
     onPanel = `
-      ${ccTabHint('🖼','Pick the graphic type, source, and transition. Check Fixed or Animated, then add content notes so your GFX op knows exactly what to build.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Graphic type</div>
         <div class="cc-chip-grid" id="gOn-type">
@@ -1336,6 +1360,7 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['GFX','Media 1','Media 2','Media 3','Media 4','ME 1'], 'ccGOnSrc')}
         </div>
       </div>
+      ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Transition</div>
         <div class="cc-chip-grid" id="gOn-trans">
@@ -1343,69 +1368,81 @@ function buildCueConfigFields(type, d) {
         </div>
       </div>
       <div class="cc-section">
-        <div class="cc-section-lbl">Type</div>
+        <div class="cc-section-lbl">Motion type</div>
         <div class="cc-checks">
           <label class="cc-check"><input type="checkbox" id="cc-g-fixed" ${d.isFixed?'checked':''}> Fixed</label>
           <label class="cc-check"><input type="checkbox" id="cc-g-animated" ${d.isAnimated?'checked':''}> Animated</label>
         </div>
       </div>
       <div class="field">
-        <label class="field-lbl">Content notes <span style="color:var(--text3);font-weight:400">— what it reads / shows</span></label>
-        <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, Intro video, Sponsor bug" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
+        <label class="field-lbl">Content <span style="color:var(--text3);font-weight:400">— what it reads / shows</span></label>
+        <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, sponsor bug, intro card" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On — Lower 3rd GFX" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('🚫','How does this graphic come off? Pick the call and it goes.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Take it out</div>
-        <div class="cc-chip-grid" id="gOff-how">
-          ${ccChips(['Lost It','Auto Off','Cut GFX','Fade GFX','Clear L3','Clear All','Kill Bug'], 'ccGOffHow')}
+        <div class="cc-section-lbl">Graphic type</div>
+        <div class="cc-chip-grid" id="gOff-type">
+          ${ccChips(['Lower 3rd','Full Screen','Bug','This GFX'], 'ccGOffType')}
+        </div>
+      </div>
+      <div id="gOff-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Take it out</div>
+          <div class="cc-chip-grid" id="gOff-how">
+            ${ccChips(['Lost It','Auto Off','Cut GFX','Fade GFX','Clear L3','Clear All','Kill Bug'], 'ccGOffHow')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It" maxlength="120" autocomplete="off">
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It — Lower 3rd" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ LIGHTING ════════════════════════════════════════
   } else if (type === 'lighting') {
     onPanel = `
-      ${ccTabHint('💡','Build your lighting call. Select the action, fixture, and any intensity, color, or gobo details. Your LD gets everything in one place.')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Action</div>
-        <div class="cc-chip-grid" id="lOn-act">
-          ${ccChips(['Cue On','Off','At','Color','Gobo'], 'ccLOnAct')}
-        </div>
-      </div>
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Fixture / Channel</div>
         <div class="cc-chip-grid" id="lOn-fix">
           ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
         </div>
       </div>
-      <div class="cc-section" id="lOn-intensity-row" style="display:none">
-        <div class="cc-section-lbl">Intensity (At)</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="field-in" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" style="max-width:120px" oninput="_ccLOnBuild()">
-          <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
+      <div id="lOn-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Action</div>
+          <div class="cc-chip-grid" id="lOn-act">
+            ${ccChips(['Cue On','Off','At','Color','Gobo'], 'ccLOnAct')}
+          </div>
         </div>
-      </div>
-      <div class="cc-section" id="lOn-color-row" style="display:none">
-        <div class="cc-section-lbl">Color</div>
-        <div class="cc-chip-grid" id="lOn-color">
-          ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV','Open White'], 'ccLOnColor')}
+        <div class="cc-section" id="lOn-intensity-row" style="display:none">
+          <div class="cc-section-lbl">Intensity</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="field-in" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" style="max-width:120px" oninput="_ccLOnBuild()">
+            <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
+          </div>
         </div>
-        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" style="margin-top:6px" oninput="_ccLOnBuild()">
-      </div>
-      <div class="cc-section" id="lOn-gobo-row" style="display:none">
-        <div class="cc-section-lbl">Gobo</div>
-        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 — Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
+        <div class="cc-section" id="lOn-color-row" style="display:none">
+          <div class="cc-section-lbl">Color</div>
+          <div class="cc-chip-grid" id="lOn-color">
+            ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
+          </div>
+          <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" style="margin-top:6px" oninput="_ccLOnBuild()">
+        </div>
+        <div class="cc-section" id="lOn-gobo-row" style="display:none">
+          <div class="cc-section-lbl">Gobo</div>
+          <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 — Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
+        </div>
       </div>
       <div class="field">
         <label class="field-lbl">Lighting notes <span style="color:var(--text3);font-weight:400">— cue numbers, focus, wash details</span></label>
@@ -1413,29 +1450,38 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. CH 1–4 Cue On — Preset 2" maxlength="120" autocomplete="off">
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key — Cue On" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('🌑','How do the lights end this look?')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Lighting out</div>
-        <div class="cc-chip-grid" id="lOff-how">
-          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','Snap Off','House Up','Cross Fade','Hold'], 'ccLOffHow')}
+        <div class="cc-section-lbl">Fixture / Channel</div>
+        <div class="cc-chip-grid" id="lOff-fix">
+          ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
+        </div>
+      </div>
+      <div id="lOff-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">Lighting out</div>
+          <div class="cc-chip-grid" id="lOff-how">
+            ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','Snap Off','House Up','Cross Fade','Hold'], 'ccLOffHow')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Fade Out — Black Out" maxlength="120" autocomplete="off">
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key — Fade Out" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ SCRIPT ══════════════════════════════════════════
   } else if (type === 'script') {
     const isDialogue = d.scriptType === 'Dialogue';
     onPanel = `
-      ${ccTabHint('📄','Script = written out word-for-word and fed to the prompter. Dialogue = a quick note about what happens — no full copy needed.')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Type</div>
         <div class="cc-chip-grid" id="sOn-type">
@@ -1451,10 +1497,11 @@ function buildCueConfigFields(type, d) {
         </div>
         ${ccCustomSrcField('cc-s-custom', d.customSrc)}
       </div>
+      ${step(2,'What will you do with it?')}
       <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
         <div class="field">
           <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds prompter</span></label>
-          <textarea class="field-in" id="cc-s-text" rows="6" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
+          <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
         </div>
         <div class="field">
           <label class="field-lbl">Upload script <span style="color:var(--text3);font-weight:400">(.txt or .pdf)</span></label>
@@ -1469,22 +1516,33 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE — what you call out</label>
+        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host — Begin" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
-      ${ccTabHint('🏁','How does this script moment end?')}
+      ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">How it ends</div>
-        <div class="cc-chip-grid" id="sOff-how">
-          ${ccChips(['Tag','Toss','Back to Anchor','Throw to Break','End Segment','Outro','Wrap'], 'ccSOffHow')}
+        <div class="cc-section-lbl">Who delivers the close</div>
+        <div class="cc-chip-grid" id="sOff-src">
+          ${ccChips(['Host','Guest 1','Guest 2','VOU','Anchor','Narrator'], 'ccSOffSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-off-custom','_ccSOffBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-s-off-custom" value="" placeholder="Type custom speaker…" style="display:none;margin-top:8px" oninput="_ccSOffBuild()">
+      </div>
+      <div id="sOff-step2" style="display:none">
+        ${step(2,'What will you do with it?')}
+        <div class="cc-section">
+          <div class="cc-section-lbl">How it ends</div>
+          <div class="cc-chip-grid" id="sOff-how">
+            ${ccChips(['Tag','Toss','Back to Anchor','Throw to Break','End Segment','Outro','Wrap'], 'ccSOffHow')}
+          </div>
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE — what ends this</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Anchor — Tag and toss" maxlength="120" autocomplete="off">
+        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Host — Tag and toss" maxlength="120" autocomplete="off">
       </div>`;
   }
 
@@ -1509,8 +1567,7 @@ function ccVOnSrc(src) {
   _vOnSrc=src; _vOnAct=''; _vOnShot='';
   ccSelChip('vOn-src',src);
   document.querySelectorAll('#vOn-act .cc-chip,#vOn-shot .cc-chip').forEach(c=>c.classList.remove('sel'));
-  const isLive = /^(CAM|CPU|ME)/.test(src);
-  document.getElementById('vOn-act-row').style.display = src ? '' : 'none';
+  document.getElementById('vOn-step2').style.display = src ? '' : 'none';
   document.getElementById('vOn-shot-row').style.display = 'none';
   _ccVOnBuild();
 }
@@ -1547,7 +1604,7 @@ function _ccVOffBuild() {
 let _aOnSrc='',_aOnCueType='';
 function ccAOnSrc(src) {
   _aOnSrc=src; ccSelChip('aOn-src',src);
-  document.getElementById('aOn-cue-row').style.display = src ? '' : 'none';
+  document.getElementById('aOn-step2').style.display = src ? '' : 'none';
   _ccAOnBuild();
 }
 function ccAOnCueType(t) { _aOnCueType=t; ccSelChip('aOn-cue',t); _ccAOnBuild(); }
@@ -1561,9 +1618,20 @@ function _ccAOnBuild() {
 }
 
 // ══ AUDIO Off helpers ═══════════════════════════════
-let _aOffCall='';
-function ccAOffCall(val){ _aOffCall=val; ccSelChip('aOff-call',val);
-  const el=document.getElementById('cc-off-text'); if(el) el.value=val; }
+let _aOffSrc='',_aOffCall='';
+function ccAOffSrc(src) {
+  _aOffSrc=src; ccSelChip('aOff-src',src);
+  document.getElementById('aOff-step2').style.display = src ? '' : 'none';
+  _ccAOffBuild();
+}
+function ccAOffCall(val) { _aOffCall=val; ccSelChip('aOff-call',val); _ccAOffBuild(); }
+function _ccAOffBuild() {
+  const src = document.getElementById('cc-a-off-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-a-off-custom')?.value||_aOffSrc) : _aOffSrc;
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const parts=[_aOffCall,src].filter(Boolean);
+  el.value = parts.join(' — ');
+}
 
 // ══ PLAYBACK On helpers ═════════════════════════════
 let _pOnAction='';
@@ -1601,18 +1669,34 @@ function ccGOnBuild(){
   const type = document.getElementById('cc-g-custom')?.style.display!=='none'
     ? (document.getElementById('cc-g-custom')?.value?.trim()||_gOnType) : _gOnType;
   const content=document.getElementById('cc-gfx-content')?.value?.trim()||'';
-  const src=_gOnSrc; const trans=_gOnTrans||'Cut';
+  const trans=_gOnTrans||'Cut';
   const el=document.getElementById('cc-on-text'); if(!el) return;
   const parts=[trans,type||(content?'GFX':''),content?`(${content})`:''].filter(Boolean);
   el.value=parts.join(' — ');
 }
 
 // ══ GFX Off helpers ═════════════════════════════════
-function ccGOffHow(val){ ccSelChip('gOff-how',val);
-  const el=document.getElementById('cc-off-text'); if(el) el.value=val; }
+let _gOffType='',_gOffHow='';
+function ccGOffType(t){
+  _gOffType=t; ccSelChip('gOff-type',t);
+  document.getElementById('gOff-step2').style.display = t ? '' : 'none';
+  _ccGOffBuild();
+}
+function ccGOffHow(val){ _gOffHow=val; ccSelChip('gOff-how',val); _ccGOffBuild(); }
+function _ccGOffBuild(){
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const label=(_gOffType&&_gOffType!=='This GFX')?_gOffType:'';
+  const parts=[_gOffHow,label].filter(Boolean);
+  el.value=parts.join(' — ')||_gOffHow;
+}
 
 // ══ LIGHTING On helpers ═════════════════════════════
-let _lOnAction='',_lOnFix='',_lOnPreset='';
+let _lOnAction='',_lOnFix='';
+function ccLOnFix(v){
+  _lOnFix=v; ccSelChip('lOn-fix',v);
+  document.getElementById('lOn-step2').style.display = v ? '' : 'none';
+  _ccLOnBuild();
+}
 function ccLOnAct(v){
   _lOnAction=v; ccSelChip('lOn-act',v);
   document.getElementById('lOn-intensity-row').style.display = v==='At'    ? '' : 'none';
@@ -1620,8 +1704,6 @@ function ccLOnAct(v){
   document.getElementById('lOn-gobo-row').style.display      = v==='Gobo'  ? '' : 'none';
   _ccLOnBuild();
 }
-function ccLOnFix(v){ _lOnFix=v; ccSelChip('lOn-fix',v); _ccLOnBuild(); }
-function ccLOnPreset(v){ _lOnPreset=v; ccSelChip('lOn-preset'||'',v); _ccLOnBuild(); }
 function ccLOnIntensity(v){
   const el=document.getElementById('cc-l-intensity'); if(el) el.value=v; _ccLOnBuild();
 }
@@ -1647,8 +1729,18 @@ function _ccLOnBuild(){
 }
 
 // ══ LIGHTING Off helpers ════════════════════════════
-function ccLOffHow(val){ ccSelChip('lOff-how',val);
-  const el=document.getElementById('cc-off-text'); if(el) el.value=val; }
+let _lOffFix='',_lOffHow='';
+function ccLOffFix(v){
+  _lOffFix=v; ccSelChip('lOff-fix',v);
+  document.getElementById('lOff-step2').style.display = v ? '' : 'none';
+  _ccLOffBuild();
+}
+function ccLOffHow(val){ _lOffHow=val; ccSelChip('lOff-how',val); _ccLOffBuild(); }
+function _ccLOffBuild(){
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const parts=[_lOffFix,_lOffHow].filter(Boolean);
+  el.value=parts.join(' — ')||_lOffHow;
+}
 
 // ══ SCRIPT On helpers ═══════════════════════════════
 let _sOnType='Script',_sOnSrc='';
@@ -1668,9 +1760,20 @@ function _ccSOnBuild(){
 }
 
 // ══ SCRIPT Off helpers ══════════════════════════════
-let _sOffHow='';
-function ccSOffHow(v){ _sOffHow=v; ccSelChip('sOff-how',v);
-  const el=document.getElementById('cc-off-text'); if(el) el.value=v; }
+let _sOffSrc='',_sOffHow='';
+function ccSOffSrc(v){
+  _sOffSrc=v; ccSelChip('sOff-src',v);
+  document.getElementById('sOff-step2').style.display = v ? '' : 'none';
+  _ccSOffBuild();
+}
+function ccSOffHow(v){ _sOffHow=v; ccSelChip('sOff-how',v); _ccSOffBuild(); }
+function _ccSOffBuild(){
+  const src=document.getElementById('cc-s-off-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-s-off-custom')?.value||_sOffSrc) : _sOffSrc;
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const parts=[src,_sOffHow].filter(Boolean);
+  el.value=parts.join(' — ')||_sOffHow;
+}
 
 function saveCueConfig() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
