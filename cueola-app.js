@@ -670,8 +670,8 @@ function setupFirestore() {
         lsIdx = d.activeIdx;
         if (document.getElementById('liveshow').classList.contains('on')) renderLive();
       }
-      if (d.prompter && d.prompter.text && session.role==='student') {
-        prompterText = d.prompter.text;
+      if (d.prompter && d.prompter.text !== undefined && session.role==='student') {
+        prompterText = d.prompter.text || '';
         const el = document.getElementById('lsPrompterText');
         if (el) el.textContent = prompterText;
         // Forward live to any connected PUTJ on this device, scroll-preserving
@@ -2132,6 +2132,7 @@ function goLive() {
   buildPromptFromRundown();
   initPrompter();
   renderLive();
+  syncLiveIdx();
   startTimer();
 }
 
@@ -2176,10 +2177,51 @@ function confirmExitLive() {
   showRundown();
 }
 
+function offsetBeforeIndex(idx) {
+  return beats.slice(0, Math.max(0, idx)).reduce((acc,b)=>acc+(b.min||0)*60+(b.sec||0),0);
+}
+
+function liveRemainingSecs() {
+  return Math.max(totalSecs() - elapsedSecs, 0);
+}
+
+function getPrompterPayload(isInit=false) {
+  const cur = beats[lsIdx] || null;
+  const next = beats[lsIdx+1] || null;
+  return {
+    type: isInit ? 'script_init' : 'script_update',
+    text: prompterText,
+    sessionCode: session.code,
+    showName: show.name || 'Untitled Show',
+    activeIdx: lsIdx,
+    currentRow: cur ? { index:lsIdx, name:cur.info||'', notes:cur.notes||'', duration:fmtDur(cur) } : null,
+    nextRow: next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null,
+    ts: Date.now()
+  };
+}
+
+function updateLiveOverview() {
+  const cur = beats[lsIdx] || null;
+  const next = beats[lsIdx+1] || null;
+  const total = totalSecs();
+  const remain = liveRemainingSecs();
+  const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (lsIdx+1)/beats.length*100 : 0);
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('ls-show-title', show.name || 'Untitled Show');
+  setText('ls-show-sub', `${beats.length ? `Row ${Math.min(lsIdx+1, beats.length)} of ${beats.length}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
+  setText('ls-stat-now', cur ? cur.info || `Row ${lsIdx+1}` : '—');
+  setText('ls-stat-next', next ? next.info || `Row ${lsIdx+2}` : 'End');
+  setText('ls-stat-remain', remain ? fmtSecs(remain) : '—');
+  const fill = document.getElementById('ls-progress-fill');
+  if (fill) fill.style.width = `${progress}%`;
+}
+
 function renderLiveCurrent(b, i) {
   const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
   const sd = b.cues?.script;
   const adminCaller = isAdminShowCaller();
+  const rowStart = show.start ? clock(show.start, offsetBeforeIndex(i)) : '—';
+  const elapsedRows = `${i+1} / ${beats.length}`;
   const cueBlocks = types.map(t => {
     const d = b.cues[t], tc = CT[t];
     const on  = getCueOn(d);
@@ -2195,6 +2237,11 @@ function renderLiveCurrent(b, i) {
     <div class="lv-cur-name">${esc(b.info||'—')}</div>
     ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
     ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
+    <div class="lv-cur-meta">
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Scheduled</div><div class="lv-cur-mv">${rowStart}</div></div>
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Position</div><div class="lv-cur-mv">${elapsedRows}</div></div>
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtSecs(liveRemainingSecs()):'—'}</div></div>
+    </div>
     ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
     ${sd?.text?`<div class="lv-cur-script">${esc(sd.text)}</div>`:''}
     ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">✎ Edit &amp; Push</button>`:''}
@@ -2299,6 +2346,7 @@ function renderLive() {
   const cur = body.querySelector('.lv-cur-card');
   if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
   renderFollowChips();
+  updateLiveOverview();
   updateLsPrompter();
 }
 
@@ -2343,6 +2391,7 @@ function jumpToLsCue(i) {
   if (isStandardShowCaller()) return; // standard show callers may only advance sequentially
   lsIdx = i;
   renderLive();
+  sendToPrompter(false);
   syncLiveIdx();
 }
 
@@ -2357,7 +2406,7 @@ function lsNext() {
 }
 
 function lsPrev() {
-  if (lsIdx > 0) { lsIdx--; renderLive(); syncLiveIdx(); }
+  if (lsIdx > 0) { lsIdx--; renderLive(); sendToPrompter(false); syncLiveIdx(); }
 }
 
 function renderFollowChips() {
@@ -2421,7 +2470,12 @@ function adminForceLive(followName) {
 // ─────────────────────────────────────────────────────────────
 function buildPromptFromRundown() {
   const scripts = beats.filter(b=>b.cues?.script?.text);
-  if (!scripts.length) return;
+  if (!scripts.length) {
+    prompterText = '';
+    const emptyEl = document.getElementById('lsPrompterText');
+    if (emptyEl) emptyEl.textContent = '';
+    return;
+  }
   prompterText = scripts.map(b=>{
     const d = b.cues.script;
     const hdr = b.info ? `\n── ${b.info} ──\n` : '\n──────────────\n';
@@ -2462,10 +2516,20 @@ function initPrompter() {
 function _setPrompterStatus(connected, unavailable=false) {
   const dot = document.getElementById('prompterDot');
   const txt = document.getElementById('prompterStatusTxt');
+  const stat = document.getElementById('ls-stat-prompter');
   if (!dot||!txt) return;
-  if (unavailable) { dot.className='ls-prompter-dot off'; txt.textContent='Not available'; return; }
-  if (connected)   { dot.className='ls-prompter-dot'; txt.textContent='Connected'; }
-  else             { dot.className='ls-prompter-dot off'; txt.textContent='Waiting for PUTJ…'; }
+  if (unavailable) {
+    dot.className='ls-prompter-dot off'; txt.textContent='Not available';
+    if (stat) stat.textContent='Offline';
+    return;
+  }
+  if (connected) {
+    dot.className='ls-prompter-dot'; txt.textContent='Connected';
+    if (stat) stat.textContent='Connected';
+  } else {
+    dot.className='ls-prompter-dot off'; txt.textContent='Waiting for PUTJ…';
+    if (stat) stat.textContent='Waiting';
+  }
 }
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
@@ -2483,16 +2547,18 @@ function sendToPrompter(isInit=false) {
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
   if (prompterChannel) {
-    prompterChannel.postMessage({
-      type: isInit ? 'script_init' : 'script_update',
-      text: prompterText,
-      sessionCode: session.code,
-      ts: Date.now()
-    });
+    prompterChannel.postMessage(getPrompterPayload(isInit));
   }
   if (window._firebaseReady && session.code && !session.isDemo) {
+    const cur = beats[lsIdx] || null;
+    const next = beats[lsIdx+1] || null;
     window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.text':prompterText, 'prompter.updatedAt':Date.now()
+      'prompter.text':prompterText,
+      'prompter.updatedAt':Date.now(),
+      'prompter.showName':show.name||'Untitled Show',
+      'prompter.activeIdx':lsIdx,
+      'prompter.currentRow':cur ? { index:lsIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
+      'prompter.nextRow':next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null
     }).catch(()=>{});
   }
 }
@@ -2530,6 +2596,7 @@ function startTimer() {
       el.classList.toggle('warn', total>0 && elapsedSecs>total*0.9);
     }
     updateBotBar();
+    updateLiveOverview();
     const clockEl = document.getElementById('ls-clock');
     if (clockEl) {
       const now = new Date();
