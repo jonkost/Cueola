@@ -547,6 +547,15 @@ function loadDemo() {
   enterRundown();
 }
 
+function goHome() {
+  if (!confirm('Go back to the home screen? You can rejoin or reload your session.')) return;
+  stopTimer();
+  document.getElementById('rundown').classList.remove('on');
+  document.getElementById('liveshow').classList.remove('on');
+  document.getElementById('entry').classList.add('on');
+  sessionStorage.removeItem('cueola_screen');
+}
+
 function enterRundown() {
   applyTheme(currentTheme);
   document.getElementById('entry').classList.remove('on');
@@ -1122,8 +1131,9 @@ function openCueConfig(beatId, type) {
   _aOnSrc='';_aOnCueType='';_aOffSrc='';_aOffCall='';
   _pOnAction='';_pOffHow='';_pOffRet='';
   _gOnType='';_gOnSrc='';_gOnTrans='';_gOffType='';_gOffHow='';
-  _lOnAction='';_lOnFix='';_lOffFix='';_lOffHow='';
+  _lOnAction='';_lOnFix='';_lOnSpecial='';_lOffFix='';_lOffHow='';_lOffSpecial='';
   _sOnType='Script';_sOnSrc='';_sOffSrc='';_sOffHow='';
+  _sOnTags = [...(beats.find(x=>x.id===beatId)?.cues?.script?.scriptTags||[])];
   const b = beats.find(x=>x.id===beatId); if (!b) return;
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
@@ -1216,20 +1226,24 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Destination</div>
         <div class="cc-chip-grid" id="vOff-dest">
-          ${ccChips(['Black','CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1','Return'], 'ccVOffDest')}
+          ${ccChips(['Black','CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'], 'ccVOffDest')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-dest-custom','_ccVOffBuild')">+ Custom</button>
         </div>
+        <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none;margin-top:8px" oninput="_ccVOffBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Transition</div>
         <div class="cc-chip-grid" id="vOff-trans">
-          ${ccChips(['Cut','Fade','Dissolve','Wipe','Dip to Black'], 'ccVOffTrans')}
+          ${ccChips(['Take','Dissolve','Media Wipe','Fade to Black'], 'ccVOffTrans')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-trans-custom','_ccVOffBuild')">+ Custom</button>
         </div>
+        <input class="field-in cc-custom-in" id="cc-v-off-trans-custom" value="" placeholder="Type custom transition…" style="display:none;margin-top:8px" oninput="_ccVOffBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut to Black" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Dissolve to Black" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ AUDIO ══════════════════════════════════════════
@@ -1248,8 +1262,10 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Cue type</div>
         <div class="cc-chip-grid" id="aOn-cue">
-          ${ccChips(['Open Mic','Close Mic','Track PLBK','Fade In','Fade Out','Play'], 'ccAOnCueType')}
+          ${ccChips(['Open Mic','Track PLBK','Fade In','Play'], 'ccAOnCueType')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-cue-custom','_ccAOnBuild')">+ Custom</button>
         </div>
+        <input class="field-in cc-custom-in" id="cc-a-cue-custom" value="" placeholder="Type custom cue type…" style="display:none;margin-top:8px" oninput="_ccAOnBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
@@ -1285,18 +1301,18 @@ function buildCueConfigFields(type, d) {
     onPanel = `
       ${step(1,'What is it?')}
       <div class="field">
-        <label class="field-lbl">Clip name / slug</label>
+        <label class="field-lbl">Clip name</label>
         <input class="field-in" id="cc-play-clip" value="${esc(d.clip||'')}" placeholder="e.g. SC_042 or HOFL_122_Open" maxlength="60" autocomplete="off" oninput="ccPOnBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Action</div>
         <div class="cc-chip-grid" id="pOn-act">
-          ${ccChips(['Ready','Play'], 'ccPOnAct')}
+          ${ccChips(['Ready','Roll'], 'ccPOnAct')}
         </div>
       </div>
       <div class="cc-section" id="pOn-dur-row" style="display:none">
-        <div class="cc-section-lbl">Clip duration (TRT)</div>
+        <div class="cc-section-lbl">Duration (TRT)</div>
         <div style="display:flex;gap:10px;align-items:flex-start">
           <div class="field" style="flex:1;text-align:center">
             <label class="field-lbl">Min</label>
@@ -1308,11 +1324,15 @@ function buildCueConfigFields(type, d) {
             <input class="field-in" id="cc-play-sec" type="number" min="0" max="59" value="${d.trtSec||''}" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:20px" oninput="ccPOnBuild()">
           </div>
         </div>
+        <div class="field" style="margin-top:10px">
+          <label class="field-lbl">SMPTE Timecode <span style="color:var(--text3);font-weight:400">— HH:MM:SS:FF</span></label>
+          <input class="field-in" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" style="font-family:var(--mono)" oninput="ccPOnBuild()">
+        </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Play SC_042 — 0:45 TRT" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 — 0:45 TRT" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -1320,20 +1340,20 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Return to</div>
         <div class="cc-chip-grid" id="pOff-ret">
-          ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','Host','Anchor','Studio','Live'], 'ccPOffReturn')}
+          ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','PLBK','Host','Anchor','Studio','Live'], 'ccPOffReturn')}
         </div>
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">How it ends</div>
         <div class="cc-chip-grid" id="pOff-how">
-          ${ccChips(['Cut VT','Fade Out VT','Stop','Roll Next','Take Live'], 'ccPOffHow')}
+          ${ccChips(['Cut PLBK','Fade PLBK','Stop','Roll Next','Take Live'], 'ccPOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut VT — Take CAM 1" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK — Take CAM 1" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ GFX ═════════════════════════════════════════════
@@ -1358,7 +1378,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Transition</div>
         <div class="cc-chip-grid" id="gOn-trans">
-          ${ccChips(['Cut','Auto On','Auto Off','Lost It'], 'ccGOnTrans')}
+          ${ccChips(['Cut','Auto On'], 'ccGOnTrans')}
         </div>
       </div>
       <div class="cc-section">
@@ -1390,7 +1410,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Take it out</div>
         <div class="cc-chip-grid" id="gOff-how">
-          ${ccChips(['Lost It','Auto Off','Cut GFX','Fade GFX','Clear L3','Clear All','Kill Bug'], 'ccGOffHow')}
+          ${ccChips(['Lost It','Auto Off','Clear All'], 'ccGOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1404,16 +1424,26 @@ function buildCueConfigFields(type, d) {
     onPanel = `
       ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Fixture / Channel</div>
+        <div class="cc-section-lbl">Fixture / Area</div>
         <div class="cc-chip-grid" id="lOn-fix">
-          ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
+          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
+          <button type="button" class="cc-chip ${d.lightingGoFeature?'sel':''}" onclick="ccLOnSpecial('GoFeature')">Go to Feature</button>
+          <button type="button" class="cc-chip ${d.lightingGoCue?'sel':''}" onclick="ccLOnSpecial('GoCue')">Go to Cue</button>
         </div>
+      </div>
+      <div class="cc-section" id="lOn-gofeature-row" style="display:${d.lightingGoFeature?'':'none'}">
+        <div class="cc-section-lbl">Feature name / details</div>
+        <input class="field-in" id="cc-l-gofeature" value="${esc(d.lightingGoFeature||'')}" placeholder="e.g. Front wash warm, interview key" maxlength="80" oninput="_ccLOnBuild()">
+      </div>
+      <div class="cc-section" id="lOn-gocue-row" style="display:${d.lightingGoCue?'':'none'}">
+        <div class="cc-section-lbl">Board cue number / label</div>
+        <input class="field-in" id="cc-l-gocue" value="${esc(d.lightingGoCue||'')}" placeholder="e.g. Cue 14.5" maxlength="60" oninput="_ccLOnBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Action</div>
         <div class="cc-chip-grid" id="lOn-act">
-          ${ccChips(['Cue On','Off','At','Color','Gobo'], 'ccLOnAct')}
+          ${ccChips(['Cue On','At','Color','Gobo'], 'ccLOnAct')}
         </div>
       </div>
       <div class="cc-section" id="lOn-intensity-row" style="display:none">
@@ -1447,16 +1477,26 @@ function buildCueConfigFields(type, d) {
     offPanel = `
       ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Fixture / Channel</div>
+        <div class="cc-section-lbl">Fixture / Area</div>
         <div class="cc-chip-grid" id="lOff-fix">
-          ${ccChips(['CH 1','CH 2','CH 3','CH 4','CH 1–4','Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
+          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
+          <button type="button" class="cc-chip ${d.lightingOffGoFeature?'sel':''}" onclick="ccLOffSpecial('GoFeature')">Go to Feature</button>
+          <button type="button" class="cc-chip ${d.lightingOffGoCue?'sel':''}" onclick="ccLOffSpecial('GoCue')">Go to Cue</button>
         </div>
+      </div>
+      <div class="cc-section" id="lOff-gofeature-row" style="display:${d.lightingOffGoFeature?'':'none'}">
+        <div class="cc-section-lbl">Feature name / details</div>
+        <input class="field-in" id="cc-l-off-gofeature" value="${esc(d.lightingOffGoFeature||'')}" placeholder="e.g. House lights up full" maxlength="80" oninput="_ccLOffBuild()">
+      </div>
+      <div class="cc-section" id="lOff-gocue-row" style="display:${d.lightingOffGoCue?'':'none'}">
+        <div class="cc-section-lbl">Board cue number / label</div>
+        <input class="field-in" id="cc-l-off-gocue" value="${esc(d.lightingOffGoCue||'')}" placeholder="e.g. Cue 20" maxlength="60" oninput="_ccLOffBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
         <div class="cc-section-lbl">Lighting out</div>
         <div class="cc-chip-grid" id="lOff-how">
-          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','Snap Off','House Up','Cross Fade','Hold'], 'ccLOffHow')}
+          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','House Up','Cross Fade','Hold'], 'ccLOffHow')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1471,10 +1511,16 @@ function buildCueConfigFields(type, d) {
     onPanel = `
       ${step(1,'What is it?')}
       <div class="cc-section">
-        <div class="cc-section-lbl">Type</div>
+        <div class="cc-section-lbl">Script type</div>
         <div class="cc-chip-grid" id="sOn-type">
           <button type="button" class="cc-chip ${isDialogue?'':'sel'}" onclick="ccSOnType('Script')">Script</button>
           <button type="button" class="cc-chip ${isDialogue?'sel':''}" onclick="ccSOnType('Dialogue')">Dialogue</button>
+        </div>
+      </div>
+      <div class="cc-section">
+        <div class="cc-section-lbl">Tags</div>
+        <div class="cc-chip-grid" id="sOn-tags">
+          ${(()=>{const tags=['Cold Open','Show Open','PKG Intro','Live Shot','VO','Toss','Guest Intro','Tease','Throw to Break','Signoff'];const cur=d.scriptTags||[];return tags.map(t=>`<button type="button" class="cc-chip ${cur.includes(t)?'sel':''}" onclick="ccSOnTag('${t}')">${t}</button>`).join('');})()}
         </div>
       </div>
       <div class="cc-section">
@@ -1504,42 +1550,24 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ SCRIPT CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host — Begin" maxlength="120" autocomplete="off">
       </div>`;
 
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Who delivers the close</div>
-        <div class="cc-chip-grid" id="sOff-src">
-          ${ccChips(['Host','Guest 1','Guest 2','VOU','Anchor','Narrator'], 'ccSOffSrc')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-off-custom','_ccSOffBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-s-off-custom" value="" placeholder="Type custom speaker…" style="display:none;margin-top:8px" oninput="_ccSOffBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">How it ends</div>
-        <div class="cc-chip-grid" id="sOff-how">
-          ${ccChips(['Tag','Toss','Back to Anchor','Throw to Break','End Segment','Outro','Wrap'], 'ccSOffHow')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Host — Tag and toss" maxlength="120" autocomplete="off">
-      </div>`;
+    offPanel = '';
   }
 
-  // Shared notes + tab wrapper
-  return `
+  // Script: single tab; all others: On/Off tabs
+  const isScript = type === 'script';
+  const tabHtml = isScript ? '' : `
     <div class="cc-tabs">
       <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">▶&nbsp; On Cue</button>
       <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">■&nbsp; Off Cue</button>
-    </div>
+    </div>`;
+  return `
+    ${tabHtml}
     <div class="cc-panel" data-tab="on">${onPanel}</div>
-    <div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>
+    ${isScript ? '' : `<div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>`}
     <div class="cc-divider"></div>
     <div class="field">
       <label class="field-lbl">Notes <span style="color:var(--text3);font-weight:400">— for your crew</span></label>
@@ -1559,7 +1587,7 @@ function ccVOnSrc(src) {
 function ccVOnAct(act) {
   _vOnAct=act; ccSelChip('vOn-act',act);
   const isLive = /^(CAM|CPU|ME)/.test(_vOnSrc);
-  document.getElementById('vOn-shot-row').style.display = isLive && act!=='Ready' ? '' : 'none';
+  document.getElementById('vOn-shot-row').style.display = isLive ? '' : 'none';
   _ccVOnBuild();
 }
 function ccVOnShot(shot) {
@@ -1581,7 +1609,10 @@ function ccVOffTrans(t){ _vOffTrans=t; ccSelChip('vOff-trans',t); _ccVOffBuild()
 function ccVOffDest(d) { _vOffDest=d;  ccSelChip('vOff-dest',d);  _ccVOffBuild(); }
 function _ccVOffBuild() {
   const el=document.getElementById('cc-off-text'); if(!el) return;
-  const t=_vOffTrans||'Cut'; const d=_vOffDest||'Black';
+  const destCustomEl = document.getElementById('cc-v-off-dest-custom');
+  const transCustomEl = document.getElementById('cc-v-off-trans-custom');
+  const d = (destCustomEl?.style.display!=='none' && destCustomEl?.value) ? destCustomEl.value : (_vOffDest||'Black');
+  const t = (transCustomEl?.style.display!=='none' && transCustomEl?.value) ? transCustomEl.value : (_vOffTrans||'Take');
   el.value = d==='Black' ? `${t} to Black` : `${t} to ${d}`;
 }
 
@@ -1595,7 +1626,8 @@ function ccAOnCueType(t) { _aOnCueType=t; ccSelChip('aOn-cue',t); _ccAOnBuild();
 function _ccAOnBuild() {
   const src = document.getElementById('cc-a-custom')?.style.display!=='none'
     ? (document.getElementById('cc-a-custom')?.value||_aOnSrc) : _aOnSrc;
-  const cue = _aOnCueType;
+  const cueCustomEl = document.getElementById('cc-a-cue-custom');
+  const cue = (cueCustomEl?.style.display!=='none' && cueCustomEl?.value) ? cueCustomEl.value : _aOnCueType;
   const el  = document.getElementById('cc-on-text'); if(!el) return;
   const parts=[cue,src].filter(Boolean);
   el.value = parts.join(' — ');
@@ -1620,17 +1652,19 @@ function _ccAOffBuild() {
 let _pOnAction='';
 function ccPOnAct(act){
   _pOnAction=act; ccSelChip('pOn-act',act);
-  document.getElementById('pOn-dur-row').style.display = act==='Play' ? '' : 'none';
+  document.getElementById('pOn-dur-row').style.display = act==='Roll' ? '' : 'none';
   ccPOnBuild();
 }
 function ccPOnBuild(){
   const clip=document.getElementById('cc-play-clip')?.value?.trim()||'';
   const min=parseInt(document.getElementById('cc-play-min')?.value)||0;
   const sec=parseInt(document.getElementById('cc-play-sec')?.value)||0;
+  const smpte=document.getElementById('cc-play-smpte')?.value?.trim()||'';
   const trt=(min||sec)?` — ${min}:${sec.toString().padStart(2,'0')} TRT`:'';
-  const act=_pOnAction||'Play';
+  const smpteStr=smpte?` [${smpte}]`:'';
+  const act=_pOnAction||'Roll';
   const el=document.getElementById('cc-on-text'); if(!el) return;
-  el.value=clip?`${act} ${clip}${trt}`:act;
+  el.value=clip?`${act} ${clip}${trt}${smpteStr}`:act;
 }
 
 // ══ PLAYBACK Off helpers ════════════════════════════
@@ -1673,9 +1707,24 @@ function _ccGOffBuild(){
 }
 
 // ══ LIGHTING On helpers ═════════════════════════════
-let _lOnAction='',_lOnFix='';
+let _lOnAction='',_lOnFix='',_lOnSpecial=''; // special: 'GoFeature'|'GoCue'|''
 function ccLOnFix(v){
-  _lOnFix=v; ccSelChip('lOn-fix',v);
+  _lOnFix=v; _lOnSpecial='';
+  // deselect Go to Feature / Go to Cue visually
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
+  ccSelChip('lOn-fix',v);
+  document.getElementById('lOn-gofeature-row').style.display='none';
+  document.getElementById('lOn-gocue-row').style.display='none';
+  _ccLOnBuild();
+}
+function ccLOnSpecial(which){
+  _lOnSpecial=which; _lOnFix='';
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
+  // highlight the clicked special button
+  const label = which==='GoFeature'?'Go to Feature':'Go to Cue';
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
+  document.getElementById('lOn-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
+  document.getElementById('lOn-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
   _ccLOnBuild();
 }
 function ccLOnAct(v){
@@ -1693,7 +1742,19 @@ function ccLOnColor(v){
 }
 function _ccLOnBuild(){
   const el=document.getElementById('cc-on-text'); if(!el) return;
-  const act=_lOnAction||'Cue On'; const fix=_lOnFix;
+  // Determine fixture string
+  let fix=_lOnFix;
+  if(_lOnSpecial==='GoFeature'){
+    const val=document.getElementById('cc-l-gofeature')?.value?.trim()||'';
+    fix=val?`Go to Feature: ${val}`:'Go to Feature';
+    el.value=fix; return;
+  }
+  if(_lOnSpecial==='GoCue'){
+    const val=document.getElementById('cc-l-gocue')?.value?.trim()||'';
+    fix=val?`Go to Cue ${val}`:'Go to Cue';
+    el.value=fix; return;
+  }
+  const act=_lOnAction||'Cue On';
   let detail='';
   if(_lOnAction==='At'){
     const int=document.getElementById('cc-l-intensity')?.value||'';
@@ -1710,16 +1771,48 @@ function _ccLOnBuild(){
 }
 
 // ══ LIGHTING Off helpers ════════════════════════════
-let _lOffFix='',_lOffHow='';
+let _lOffFix='',_lOffHow='',_lOffSpecial='';
 function ccLOffFix(v){
-  _lOffFix=v; ccSelChip('lOff-fix',v);
+  _lOffFix=v; _lOffSpecial='';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
+  ccSelChip('lOff-fix',v);
+  document.getElementById('lOff-gofeature-row').style.display='none';
+  document.getElementById('lOff-gocue-row').style.display='none';
+  _ccLOffBuild();
+}
+function ccLOffSpecial(which){
+  _lOffSpecial=which; _lOffFix='';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
+  const label=which==='GoFeature'?'Go to Feature':'Go to Cue';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
+  document.getElementById('lOff-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
+  document.getElementById('lOff-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
   _ccLOffBuild();
 }
 function ccLOffHow(val){ _lOffHow=val; ccSelChip('lOff-how',val); _ccLOffBuild(); }
 function _ccLOffBuild(){
   const el=document.getElementById('cc-off-text'); if(!el) return;
+  if(_lOffSpecial==='GoFeature'){
+    const val=document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
+    el.value=val?`Go to Feature: ${val}`:'Go to Feature'; return;
+  }
+  if(_lOffSpecial==='GoCue'){
+    const val=document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
+    el.value=val?`Go to Cue ${val}`:'Go to Cue'; return;
+  }
   const parts=[_lOffFix,_lOffHow].filter(Boolean);
   el.value=parts.join(' — ')||_lOffHow;
+}
+
+// ══ SCRIPT tag helpers ══════════════════════════════
+let _sOnTags = [];
+function ccSOnTag(tag) {
+  const idx = _sOnTags.indexOf(tag);
+  if (idx>=0) _sOnTags.splice(idx,1); else _sOnTags.push(tag);
+  document.querySelectorAll('#sOn-tags .cc-chip').forEach(c=>{
+    c.classList.toggle('sel', _sOnTags.includes(c.textContent));
+  });
+  _ccSOnBuild();
 }
 
 // ══ SCRIPT On helpers ═══════════════════════════════
@@ -1774,6 +1867,7 @@ function saveCueConfig() {
       d.clip    = document.getElementById('cc-play-clip')?.value?.trim()||'';
       d.trtMin  = document.getElementById('cc-play-min')?.value||'';
       d.trtSec  = document.getElementById('cc-play-sec')?.value||'';
+      d.smpte   = document.getElementById('cc-play-smpte')?.value?.trim()||'';
       break;
     case 'gfx':
       d.customType  = document.getElementById('cc-g-custom')?.value?.trim()||'';
@@ -1782,16 +1876,21 @@ function saveCueConfig() {
       d.isAnimated  = document.getElementById('cc-g-animated')?.checked||false;
       break;
     case 'lighting':
-      d.lightingDetail = document.getElementById('cc-l-notes-detail')?.value?.trim()||'';
-      d.intensity      = document.getElementById('cc-l-intensity')?.value?.trim()||'';
-      d.color          = document.getElementById('cc-l-color')?.value?.trim()||'';
-      d.gobo           = document.getElementById('cc-l-gobo')?.value?.trim()||'';
+      d.lightingDetail      = document.getElementById('cc-l-notes-detail')?.value?.trim()||'';
+      d.intensity           = document.getElementById('cc-l-intensity')?.value?.trim()||'';
+      d.color               = document.getElementById('cc-l-color')?.value?.trim()||'';
+      d.gobo                = document.getElementById('cc-l-gobo')?.value?.trim()||'';
+      d.lightingGoFeature   = document.getElementById('cc-l-gofeature')?.value?.trim()||'';
+      d.lightingGoCue       = document.getElementById('cc-l-gocue')?.value?.trim()||'';
+      d.lightingOffGoFeature= document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
+      d.lightingOffGoCue    = document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
       break;
     case 'script':
       d.scriptType  = _sOnType;
       d.customSrc   = document.getElementById('cc-s-custom')?.value?.trim()||'';
       d.text        = document.getElementById('cc-s-text')?.value||'';
       d.dialogueNote= document.getElementById('cc-s-dialogue')?.value?.trim()||'';
+      d.scriptTags  = [..._sOnTags];
       break;
   }
   b.cues[cueConfigType] = d;
@@ -2034,10 +2133,12 @@ function renderLiveCurrent(b, i) {
   const adminCaller = isAdminShowCaller();
   const cueBlocks = types.map(t => {
     const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
     return `<div class="lv-cue-block" style="border-left-color:${tc.color}">
       <div class="lv-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
-      ${d.ready?`<div class="lv-cue-ready">✓ ${esc(d.ready)}</div>`:''}
-      ${d.take?`<div class="lv-cue-take">→ ${esc(d.take)}</div>`:''}
+      ${on  ? `<div class="lv-cue-ready">▶ ${esc(on)}</div>`  : ''}
+      ${off ? `<div class="lv-cue-take">■ ${esc(off)}</div>` : ''}
     </div>`;
   }).join('');
   return `<div class="lv-cur-card">
@@ -2055,10 +2156,12 @@ function renderLiveNext(b, i, isRunner) {
   const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
   const cueSmall = types.map(t => {
     const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
     return `<span class="lv-next-cue" style="border-left-color:${tc.color}">
       <span style="color:${tc.color}">${tc.icon}</span>
-      ${d.ready?`<span>✓ ${esc(d.ready)}</span>`:''}
-      ${d.take?`<span style="opacity:.6">→ ${esc(d.take)}</span>`:''}
+      ${on  ? `<span>▶ ${esc(on)}</span>`  : ''}
+      ${off ? `<span style="opacity:.7">■ ${esc(off)}</span>` : ''}
     </span>`;
   }).join('');
   const handler = isRunner ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
@@ -2083,10 +2186,12 @@ function liveRowPreview(idx) {
   if (fmtDur(b)!=='—') html += `<div style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:10px">Duration: ${fmtDur(b)}</div>`;
   types.forEach(t => {
     const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
     html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${tc.icon} ${tc.label}</div>
-      ${d.ready?`<div style="font-size:14px;font-weight:600;margin-bottom:2px">✓ ${esc(d.ready)}</div>`:''}
-      ${d.take?`<div style="font-size:13px;color:var(--text2)">→ ${esc(d.take)}</div>`:''}
+      ${on  ? `<div style="font-size:14px;font-weight:600;margin-bottom:2px">▶ ${esc(on)}</div>`  : ''}
+      ${off ? `<div style="font-size:13px;color:var(--text2)">■ ${esc(off)}</div>` : ''}
       ${t==='script'&&d.text?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(d.text)}</div>`:''}
     </div>`;
   });
@@ -2121,14 +2226,22 @@ function renderLive() {
         <span class="lv-done-name">${esc(b.info||'—')}</span>
       </div>`;
     } else {
-      const op = Math.max(0.25, 0.85 - (ahead - 2) * 0.18).toFixed(2);
-      const fs = Math.max(10, 13 - (ahead - 2));
+      const op = Math.max(0.4, 0.95 - (ahead - 2) * 0.15).toFixed(2);
       const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-      html += `<div class="lv-fut-row" style="opacity:${op}" onclick="${handler}">
-        <span class="lv-fut-num">${i+1}</span>
-        <span class="lv-fut-name" style="font-size:${fs}px">${esc(b.info||'—')}</span>
-        ${fmtDur(b)!=='—'?`<span class="lv-fut-dur">${fmtDur(b)}</span>`:''}
-        <span style="display:flex;gap:3px">${Object.keys(b.cues||{}).filter(t=>CT[t]).map(t=>`<span style="color:${CT[t].color};font-size:10px">${CT[t].icon}</span>`).join('')}</span>
+      const cueTags = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script').map(t=>{
+        const d=b.cues[t], tc=CT[t], on=getCueOn(d), off=getCueOff(d);
+        return `<div style="border-left:2px solid ${tc.color};padding:2px 7px;border-radius:0 4px 4px 0;background:rgba(0,0,0,.2);min-width:0">
+          <div style="font-size:9px;font-family:var(--mono);color:${tc.color};letter-spacing:.07em;margin-bottom:1px">${tc.icon} ${tc.label}</div>
+          ${on  ? `<div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">▶ ${esc(on)}</div>`  : ''}
+          ${off ? `<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">■ ${esc(off)}</div>` : ''}
+        </div>`;
+      }).join('');
+      html += `<div class="lv-fut-row" style="opacity:${op};align-items:flex-start;padding:8px 10px;gap:10px" onclick="${handler}">
+        <span class="lv-fut-num" style="font-size:14px;font-weight:700;min-width:28px;padding-top:2px">${i+1}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:${cueTags?'5px':'0'}">${esc(b.info||'—')}${fmtDur(b)!=='—'?`<span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:7px">${fmtDur(b)}</span>`:''}</div>
+          ${cueTags?`<div style="display:flex;flex-wrap:wrap;gap:4px">${cueTags}</div>`:''}
+        </div>
       </div>`;
     }
   });
@@ -2269,30 +2382,41 @@ function buildPromptFromRundown() {
   if (el) el.textContent = prompterText;
 }
 
+let _prompterPingInterval = null;
+
 function initPrompter() {
-  // Don't tear down an existing live channel — just re-send current text as an update.
-  // Only create the channel once; PUTJ connection survives repeated goLive() calls.
+  // Don't tear down an existing live channel — just re-send current text.
   if (prompterChannel) {
-    sendToPrompter(false); // non-interrupting refresh, scroll preserved
+    sendToPrompter(false);
     return;
   }
   try {
     prompterChannel = new BroadcastChannel('prompt_up_the_jam');
     prompterChannel.onmessage = (e) => {
       if (e.data?.type === 'ping') {
-        document.getElementById('prompterDot').className='ls-prompter-dot';
-        document.getElementById('prompterStatusTxt').textContent='Connected';
-        // PUTJ connected/reconnected — send full text with scroll reset
-        sendToPrompter(true);
+        _setPrompterStatus(true);
+        sendToPrompter(true); // reconnected — full send with scroll reset
       }
     };
+    // Periodic hello so PUTJ reconnects automatically if it was closed and reopened
+    clearInterval(_prompterPingInterval);
+    _prompterPingInterval = setInterval(() => {
+      if (prompterChannel) prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
+    }, 5000);
     prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
-    document.getElementById('prompterDot').className='ls-prompter-dot';
-    document.getElementById('prompterStatusTxt').textContent='Ready';
+    _setPrompterStatus(false); // unknown until ping reply
   } catch {
-    document.getElementById('prompterDot').className='ls-prompter-dot off';
-    document.getElementById('prompterStatusTxt').textContent='Not available';
+    _setPrompterStatus(false, true);
   }
+}
+
+function _setPrompterStatus(connected, unavailable=false) {
+  const dot = document.getElementById('prompterDot');
+  const txt = document.getElementById('prompterStatusTxt');
+  if (!dot||!txt) return;
+  if (unavailable) { dot.className='ls-prompter-dot off'; txt.textContent='Not available'; return; }
+  if (connected)   { dot.className='ls-prompter-dot'; txt.textContent='Connected'; }
+  else             { dot.className='ls-prompter-dot off'; txt.textContent='Waiting for PUTJ…'; }
 }
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
@@ -2367,7 +2491,7 @@ function startTimer() {
   },1000);
 }
 
-function stopTimer() { clearInterval(timerInterval); timerInterval=null; }
+function stopTimer() { clearInterval(timerInterval); timerInterval=null; clearInterval(_prompterPingInterval); _prompterPingInterval=null; }
 
 // ─────────────────────────────────────────────────────────────
 // SETTINGS & THEME
@@ -2495,6 +2619,7 @@ const DEMO_BEATS = [
 // INIT — auto-join from dashboard or ?code= URL param
 // ─────────────────────────────────────────────────────────────
 restoreAdminSession();
+updateAdminUI();
 applyTheme(currentTheme);
 
 (function autoJoinFromDashboard() {

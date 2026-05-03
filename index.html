@@ -567,7 +567,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div class="screen" id="rundown">
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
-    <div class="brand"><span>🐨 Cue<span class="hi">ola</span></span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="tbtn tbtn-ghost" onclick="goHome()" title="Back to Home" style="padding:7px 11px;font-size:13px">⌂</button>
+      <div class="brand"><span>🐨 Cue<span class="hi">ola</span></span></div>
+    </div>
     <div class="mode-tabs">
       <div class="mtab on" id="tabBuild" onclick="showRundown()">Build</div>
       <div class="mtab" id="tabLive" onclick="goLive()">Live Show</div>
@@ -655,13 +658,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-sidebar">
       <div class="ls-sidebar-head">
-        <div class="ls-sidebar-title">Prompt Up The Jam</div>
-        <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Not connected</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div class="ls-sidebar-title">Prompt Up The Jam</div>
+          <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" style="font-size:10px">Waiting…</span></div>
+        </div>
       </div>
       <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live prompter script"></div>
-      <div class="ls-prompter-actions">
-        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()">⬆ Push to Prompter</button>
-        <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()">Clear</button>
+      <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
+        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO PROMPTER</button>
+        <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()" style="font-size:11px">Clear script</button>
       </div>
     </div>
   </div>
