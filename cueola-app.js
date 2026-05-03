@@ -111,10 +111,15 @@ function hideOverlay(id){ const el=document.getElementById(id); if(!el)return; e
 function showOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
 
 // ─────────────────────────────────────────────────────────────
-// ADMIN SYSTEM (localStorage)
+// ADMIN SYSTEM (Firestore-backed, localStorage fallback cache)
 // ─────────────────────────────────────────────────────────────
-const ADMIN_KEY = 'cueola_admins_v2';
-const ADMIN_SESSION_KEY = 'cueola_admin_sess';
+const ADMIN_KEY = 'cueola_admins_v2';         // localStorage mirror key
+const ADMIN_SESSION_KEY = 'cueola_admin_sess'; // localStorage session key
+const ADMINS_DOC = 'admins/global';            // Firestore document path
+
+let _adminsCache = [];      // in-memory list, always current
+let _adminsCacheReady = false; // true once Firestore (or fallback) has loaded
+let _adminsUnsub = null;    // Firestore onSnapshot unsubscribe
 
 function hashStr(s) {
   let h = 0;
@@ -122,24 +127,69 @@ function hashStr(s) {
   return (h>>>0).toString(16).padStart(8,'0');
 }
 
-function getAdmins() {
-  try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; }
-}
-function saveAdmins(a) { localStorage.setItem(ADMIN_KEY, JSON.stringify(a)); }
-function hasSuperAdmin() { return getAdmins().some(a=>a.level==='super'); }
+// ── Read helpers (always sync against in-memory cache) ──────
+function getAdmins()      { return _adminsCache; }
+function hasSuperAdmin()  { return _adminsCache.some(a=>a.level==='super'); }
+function countFullAccess(){ return _adminsCache.filter(a=>a.level==='super'||a.level==='full').length; }
 
+// ── Write: update cache + localStorage mirror + Firestore ───
+function saveAdmins(list) {
+  _adminsCache = list;
+  try { localStorage.setItem(ADMIN_KEY, JSON.stringify(list)); } catch {}
+  if (window._firebaseReady) {
+    window._setDoc(window._doc(window._db, 'admins', 'global'), { list })
+      .catch(() => {});
+  }
+}
+
+// ── Load from Firestore; migrate localStorage admins if first run ──
+function initAdminsFromFirestore() {
+  if (!window._firebaseReady) return;
+  const ref = window._doc(window._db, 'admins', 'global');
+
+  // Set up real-time listener — changes on any device propagate here instantly
+  if (_adminsUnsub) _adminsUnsub();
+  _adminsUnsub = window._onSnapshot(ref, snap => {
+    if (snap.exists()) {
+      _adminsCache = snap.data().list || [];
+    } else {
+      // First run: migrate any existing localStorage admins to Firestore
+      const local = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
+      _adminsCache = local;
+      if (local.length) {
+        window._setDoc(ref, { list: local }).catch(() => {});
+      }
+    }
+    _adminsCacheReady = true;
+    // Re-run session restore now that we have real data
+    restoreAdminSession();
+    updateAdminUI();
+  }, () => {
+    // Firestore read failed — fall back to localStorage
+    _adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
+    _adminsCacheReady = true;
+    restoreAdminSession();
+    updateAdminUI();
+  });
+}
+
+// ── Session: device-local, verified against cache ───────────
 function loginAdmin(code) {
+  if (!_adminsCacheReady) {
+    toast('Admin data loading — try again in a moment.');
+    return null;
+  }
   const h = hashStr(code);
-  const a = getAdmins().find(x=>x.codeHash===h);
+  const a = _adminsCache.find(x=>x.codeHash===h);
   if (!a) return null;
   adminSession = { id:a.id, name:a.name, level:a.level };
-  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession));
+  try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
   return adminSession;
 }
 
 function logoutAdmin() {
   adminSession = null;
-  localStorage.removeItem(ADMIN_SESSION_KEY);
+  try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch {}
   updateAdminUI();
 }
 
@@ -147,33 +197,32 @@ function restoreAdminSession() {
   try {
     const s = JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY));
     if (s) {
-      const a = getAdmins().find(x=>x.id===s.id);
+      const a = _adminsCache.find(x=>x.id===s.id);
       if (a) adminSession = { id:a.id, name:a.name, level:a.level };
+      else   adminSession = null; // admin was removed — invalidate session
     }
   } catch {}
 }
 
+// ── CRUD helpers ─────────────────────────────────────────────
 function createAdmin(name, code, level, createdBy=null) {
-  const admins = getAdmins();
+  const list = [..._adminsCache];
   const id = 'adm_'+Date.now().toString(36);
-  admins.push({ id, name, codeHash:hashStr(code), level, createdBy });
-  saveAdmins(admins);
+  list.push({ id, name, codeHash:hashStr(code), level, createdBy });
+  saveAdmins(list);
   return id;
 }
 
 function removeAdmin(id) {
-  saveAdmins(getAdmins().filter(a=>a.id!==id));
+  saveAdmins(_adminsCache.filter(a=>a.id!==id));
 }
 
 function updateAdminCode(id, newCode) {
-  const admins = getAdmins();
-  const a = admins.find(x=>x.id===id);
-  if (a) { a.codeHash = hashStr(newCode); saveAdmins(admins); return true; }
-  return false;
-}
-
-function countFullAccess() {
-  return getAdmins().filter(a=>a.level==='super'||a.level==='full').length;
+  const idx = _adminsCache.findIndex(a=>a.id===id);
+  if (idx < 0) return false;
+  const list = _adminsCache.map(a=>a.id===id ? {...a, codeHash:hashStr(newCode)} : a);
+  saveAdmins(list);
+  return true;
 }
 
 function updateAdminUI() {
@@ -2618,9 +2667,16 @@ const DEMO_BEATS = [
 // ─────────────────────────────────────────────────────────────
 // INIT — auto-join from dashboard or ?code= URL param
 // ─────────────────────────────────────────────────────────────
+// Seed cache from localStorage immediately (best-effort, before Firebase loads)
+// so the login UI is usable even on a slow connection.
+_adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
 restoreAdminSession();
 updateAdminUI();
 applyTheme(currentTheme);
+
+// Then load from Firestore (source of truth) — updates cache + restores session again
+if (window._firebaseReady) initAdminsFromFirestore();
+else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: true });
 
 (function autoJoinFromDashboard() {
   // Check URL param first (?code=XXXX)
