@@ -2504,6 +2504,29 @@ function buildPromptFromRundown() {
 }
 
 let _prompterPingInterval = null;
+let _prompterStorageHandler = null;
+const PUTJ_CHANNEL = 'prompt_up_the_jam';
+const PUTJ_STORAGE_MSG = 'prompt_up_the_jam_msg';
+const PUTJ_STORAGE_PING = 'prompt_up_the_jam_ping';
+
+function _postPrompterMessage(payload) {
+  if (prompterChannel) {
+    try { prompterChannel.postMessage(payload); } catch {}
+  }
+  try {
+    localStorage.setItem(PUTJ_STORAGE_MSG, JSON.stringify({...payload, storageNonce:Date.now()+Math.random()}));
+  } catch {}
+}
+
+function _postPrompterHello() {
+  const hello = { type:'cueola_hello', sessionCode:session.code, showName:show.name||'Untitled Show', ts:Date.now() };
+  if (prompterChannel) {
+    try { prompterChannel.postMessage(hello); } catch {}
+  }
+  try {
+    localStorage.setItem(PUTJ_STORAGE_MSG, JSON.stringify({...hello, storageNonce:Date.now()+Math.random()}));
+  } catch {}
+}
 
 function initPrompter() {
   // Don't tear down an existing live channel — just re-send current text.
@@ -2512,22 +2535,47 @@ function initPrompter() {
     return;
   }
   try {
-    prompterChannel = new BroadcastChannel('prompt_up_the_jam');
+    prompterChannel = new BroadcastChannel(PUTJ_CHANNEL);
     prompterChannel.onmessage = (e) => {
       if (e.data?.type === 'ping') {
         _setPrompterStatus(true);
         sendToPrompter(true); // reconnected — full send with scroll reset
       }
     };
+    if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
+    _prompterStorageHandler = (e) => {
+      if (e.key !== PUTJ_STORAGE_PING || !e.newValue) return;
+      try {
+        const msg = JSON.parse(e.newValue);
+        if (msg?.type === 'ping') {
+          _setPrompterStatus(true);
+          sendToPrompter(true);
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', _prompterStorageHandler);
     // Periodic hello so PUTJ reconnects automatically if it was closed and reopened
     clearInterval(_prompterPingInterval);
-    _prompterPingInterval = setInterval(() => {
-      if (prompterChannel) prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
-    }, 5000);
-    prompterChannel.postMessage({ type:'cueola_hello', sessionCode:session.code });
+    _prompterPingInterval = setInterval(_postPrompterHello, 5000);
+    _postPrompterHello();
     _setPrompterStatus(false); // unknown until ping reply
   } catch {
-    _setPrompterStatus(false, true);
+    if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
+    _prompterStorageHandler = (e) => {
+      if (e.key !== PUTJ_STORAGE_PING || !e.newValue) return;
+      try {
+        const msg = JSON.parse(e.newValue);
+        if (msg?.type === 'ping') {
+          _setPrompterStatus(true);
+          sendToPrompter(true);
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', _prompterStorageHandler);
+    clearInterval(_prompterPingInterval);
+    _prompterPingInterval = setInterval(_postPrompterHello, 5000);
+    _postPrompterHello();
+    _setPrompterStatus(false);
   }
 }
 
@@ -2564,9 +2612,7 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
 function sendToPrompter(isInit=false) {
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
-  if (prompterChannel) {
-    prompterChannel.postMessage(getPrompterPayload(isInit));
-  }
+  _postPrompterMessage(getPrompterPayload(isInit));
   if (window._firebaseReady && session.code && !session.isDemo) {
     const cur = beats[lsIdx] || null;
     const next = beats[lsIdx+1] || null;
@@ -2625,7 +2671,14 @@ function startTimer() {
   },1000);
 }
 
-function stopTimer() { clearInterval(timerInterval); timerInterval=null; clearInterval(_prompterPingInterval); _prompterPingInterval=null; }
+function stopTimer() {
+  clearInterval(timerInterval); timerInterval=null;
+  clearInterval(_prompterPingInterval); _prompterPingInterval=null;
+  if (_prompterStorageHandler) {
+    window.removeEventListener('storage', _prompterStorageHandler);
+    _prompterStorageHandler = null;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // SETTINGS & THEME
