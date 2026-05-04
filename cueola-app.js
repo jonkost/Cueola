@@ -116,6 +116,8 @@ function showOverlay(id){ const el=document.getElementById(id); if(!el)return; e
 const ADMIN_KEY = 'cueola_admins_v2';         // localStorage mirror key
 const ADMIN_SESSION_KEY = 'cueola_admin_sess'; // localStorage session key
 const ADMINS_DOC = 'admins/global';            // Firestore document path
+const OWNER_BOOTSTRAP_HASH = '045515f2';
+const OWNER_ADMIN_ID = 'adm_owner_jonkost';
 
 let _adminsCache = [];      // in-memory list, always current
 let _adminsCacheReady = false; // true once Firestore (or fallback) has loaded
@@ -125,6 +127,10 @@ function hashStr(s) {
   let h = 0;
   for (let i=0;i<s.length;i++) { h = Math.imul(31,h)+s.charCodeAt(i)|0; }
   return (h>>>0).toString(16).padStart(8,'0');
+}
+
+function isOwnerBootstrapCode(code) {
+  return hashStr(code || '') === OWNER_BOOTSTRAP_HASH;
 }
 
 // ── Read helpers (always sync against in-memory cache) ──────
@@ -176,13 +182,20 @@ function initAdminsFromFirestore() {
 // ── Session: device-local, verified against cache ───────────
 function loginAdmin(code) {
   if (!_adminsCacheReady) {
+    const owner = ensureOwnerSuperAdmin(code);
+    if (owner) {
+      adminSession = { id:owner.id, name:owner.name, level:owner.level };
+      try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
+      return adminSession;
+    }
     toast('Admin data loading — try again in a moment.');
     return null;
   }
   const h = hashStr(code);
   const a = _adminsCache.find(x=>x.codeHash===h);
-  if (!a) return null;
-  adminSession = { id:a.id, name:a.name, level:a.level };
+  const resolved = a || ensureOwnerSuperAdmin(code);
+  if (!resolved) return null;
+  adminSession = { id:resolved.id, name:resolved.name, level:resolved.level };
   try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
   return adminSession;
 }
@@ -211,6 +224,22 @@ function createAdmin(name, code, level, createdBy=null) {
   list.push({ id, name, codeHash:hashStr(code), level, createdBy });
   saveAdmins(list);
   return id;
+}
+
+function ensureOwnerSuperAdmin(code) {
+  if (!isOwnerBootstrapCode(code)) return null;
+  const existingOwner = _adminsCache.find(a=>a.id===OWNER_ADMIN_ID);
+  const owner = {
+    id: OWNER_ADMIN_ID,
+    name: existingOwner?.name || 'Jon Kost',
+    codeHash: OWNER_BOOTSTRAP_HASH,
+    level: 'super',
+    createdBy: 'owner-bootstrap'
+  };
+  const list = _adminsCache.filter(a=>a.id!==OWNER_ADMIN_ID);
+  list.unshift(owner);
+  saveAdmins(list);
+  return owner;
 }
 
 function removeAdmin(id) {
@@ -266,19 +295,25 @@ function submitAdminLogin() {
 
 function openAdminSetup() {
   hideModal('adminLoginModal');
+  document.getElementById('setupOwnerCode').value = '';
   showModal('adminSetupModal');
 }
 
 function submitAdminSetup() {
   const name  = document.getElementById('setupAdminName').value.trim();
+  const owner = document.getElementById('setupOwnerCode').value;
   const code  = document.getElementById('setupAdminCode').value;
   const code2 = document.getElementById('setupAdminCode2').value;
   const err   = document.getElementById('setupAdminErr');
   err.classList.remove('on');
-  if (!name || !code) { err.textContent='Name and code are required.'; err.classList.add('on'); return; }
+  if (!name || !owner || !code) { err.textContent='Name, owner bootstrap code, and admin code are required.'; err.classList.add('on'); return; }
+  if (!isOwnerBootstrapCode(owner)) { err.textContent='Owner bootstrap code is required to create a super admin.'; err.classList.add('on'); return; }
   if (code !== code2) { err.textContent='Codes do not match.'; err.classList.add('on'); return; }
-  if (hasSuperAdmin()) { err.textContent='Super admin already exists.'; err.classList.add('on'); return; }
-  createAdmin(name, code, 'super');
+  if (hasSuperAdmin() && !_adminsCache.some(a=>a.id===OWNER_ADMIN_ID)) { err.textContent='Super admin already exists.'; err.classList.add('on'); return; }
+  ensureOwnerSuperAdmin(owner);
+  updateAdminCode(OWNER_ADMIN_ID, code);
+  const admins = getAdmins().map(a=>a.id===OWNER_ADMIN_ID ? {...a, name:name||'Jon Kost'} : a);
+  saveAdmins(admins);
   loginAdmin(code);
   hideModal('adminSetupModal');
   updateAdminUI();
@@ -312,7 +347,7 @@ function renderAdminBody() {
   let html = '';
 
   // ── Admin management ──
-  if (isFull) {
+  if (isSuper) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Admin Management</div>
       <div class="admin-list">`;
@@ -833,7 +868,7 @@ function renderTableHeaders() {
     return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${m.label}</th>`;
   }).join('');
   const dragCol = editMode ? '<th class="col-drag" title="Drag rows to reorder">⠿</th>' : '<th class="col-drag"></th>';
-  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}<th class="col-acts"></th>`;
+  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
 }
 
 function colDragStart(e, type) {
@@ -877,7 +912,7 @@ function renderRundown() {
 
   const tbody = document.getElementById('rdBody');
   if (!beats.length) {
-    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">No rows yet — click Add Row below to build your rundown.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">No rows yet — click Add Row below to build your rundown.</td></tr>`;
     renderAddRowBtn(tbody);
     updateBotBar();
     return;
@@ -912,7 +947,6 @@ function renderRundown() {
         <div class="cd-time-dur">${dur}</div>
       </td>
       ${colOrder.map(type=>`<td class="cd-cue-cell">${getCueCell(b,type)}</td>`).join('')}
-      <td class="cd" style="padding:4px;vertical-align:middle;text-align:center"><button class="row-act-btn" onclick="event.stopPropagation();openEdit(${b.id})" title="Edit row">Edit</button></td>
     </tr>`;
   });
 
@@ -926,7 +960,7 @@ function renderRundown() {
 function renderAddRowBtn(tbody) {
   const tr = document.createElement('tr');
   tr.className = 'add-row-tr';
-  tr.innerHTML = `<td colspan="12"><button class="add-row-btn-el" onclick="openAddRow()">+ Add Row</button></td>`;
+  tr.innerHTML = `<td colspan="10"><button class="add-row-btn-el" onclick="openAddRow()">+ Add Row</button></td>`;
   tbody.appendChild(tr);
 }
 
@@ -1100,6 +1134,9 @@ function arGoStep3() {
   document.getElementById('ar-step3-heading').textContent = `${tc.icon} ${tc.label} Cue`;
   const h = AR_CUE_HINTS[arCueType] || { ready:'', take:'' };
   let fields = `
+    <div class="ar-ctx-help">
+      <strong>Guided cue builder:</strong> write the standby/prep call first, then the exact execute call the operator should take live.
+    </div>
     <div class="field">
       <label class="field-lbl" style="color:var(--green)">✓ CUE READY</label>
       <input class="field-in" id="ar-cue-ready" placeholder="${h.ready}" maxlength="80" autocomplete="off">
