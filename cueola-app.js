@@ -898,7 +898,7 @@ function renderRundown() {
         <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">✕ Remove</button>
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
       </div>` : '';
-    html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}">
+    html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
       <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">⠿</td>
       <td class="cd cd-num">${i+1}</td>
       <td class="cd" style="padding:8px 6px">
@@ -912,7 +912,7 @@ function renderRundown() {
         <div class="cd-time-dur">${dur}</div>
       </td>
       ${colOrder.map(type=>`<td class="cd-cue-cell">${getCueCell(b,type)}</td>`).join('')}
-      <td class="cd" style="padding:4px;vertical-align:middle;text-align:center"><button class="row-act-btn" onclick="openEdit(${b.id})" title="Edit row">✎</button></td>
+      <td class="cd" style="padding:4px;vertical-align:middle;text-align:center"><button class="row-act-btn" onclick="event.stopPropagation();openEdit(${b.id})" title="Edit row">Edit</button></td>
     </tr>`;
   });
 
@@ -940,7 +940,7 @@ function getCueCell(b, type) {
   const off = getCueOff(d);
   const isEmpty = !on && !off && (type !== 'script' || !d?.text);
   if (isEmpty) {
-    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label}">+</button>`;
+    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label}"><span>+</span><span>Add</span></button>`;
   }
   const lines = [
     on  ? `<div class="cue-on-line"><span class="cue-on-dot">▶</span>${esc(on)}</div>`  : '',
@@ -2296,6 +2296,27 @@ function liveRowPreview(idx) {
   showOverlay('lsRowPreviewOv');
 }
 
+function liveCellForBeat(b, type, beatIdx) {
+  const tc = CT[type];
+  const d = b.cues?.[type];
+  if (!d && type === 'script') {
+    return `<div class="live-cue-empty live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})">Open script</div>`;
+  }
+  if (!d) return `<div class="live-cue-empty">—</div>`;
+  const on = getCueOn(d);
+  const off = getCueOff(d);
+  const isScript = type === 'script';
+  const script = isScript && d.text ? `<div class="live-script-copy">${esc(d.text)}</div>` : '';
+  if (!on && !off && !script) return `<div class="live-cue-empty">—</div>`;
+  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="border-left-color:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
+    <div class="live-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
+    ${on ? `<div class="live-cue-on">▶ ${esc(on)}</div>` : ''}
+    ${off ? `<div class="live-cue-off">■ ${esc(off)}</div>` : ''}
+    ${script}
+    ${isScript ? '<div class="live-script-action">View / edit / push</div>' : ''}
+  </div>`;
+}
+
 function renderLive() {
   const body = document.getElementById('lsBody');
   if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
@@ -2303,47 +2324,42 @@ function renderLive() {
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
-  let html = '';
+  let offsetSecs = 0;
+  let html = `<div class="live-grid-wrap"><table class="live-grid">
+    <thead><tr>
+      <th class="live-col-num">#</th>
+      <th class="live-col-status">State</th>
+      <th class="live-col-name">Row</th>
+      <th class="live-col-time">Time</th>
+      ${colOrder.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${COL_META[type].label}</th>`).join('')}
+    </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
     const isCur  = i === lsIdx;
     const isNext = i === lsIdx + 1;
     const isDone = i < lsIdx;
-    const ahead  = i - lsIdx;
-
-    if (isCur) {
-      html += renderLiveCurrent(b, i);
-    } else if (isNext) {
-      html += renderLiveNext(b, i, runner);
-    } else if (isDone) {
-      const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-      html += `<div class="lv-done-row" onclick="${handler}">
-        <span class="lv-done-num">${i+1}</span>
-        <span class="lv-done-name">${esc(b.info||'—')}</span>
-      </div>`;
-    } else {
-      const op = Math.max(0.4, 0.95 - (ahead - 2) * 0.15).toFixed(2);
-      const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-      const cueTags = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script').map(t=>{
-        const d=b.cues[t], tc=CT[t], on=getCueOn(d), off=getCueOff(d);
-        return `<div style="border-left:2px solid ${tc.color};padding:2px 7px;border-radius:0 4px 4px 0;background:rgba(0,0,0,.2);min-width:0">
-          <div style="font-size:9px;font-family:var(--mono);color:${tc.color};letter-spacing:.07em;margin-bottom:1px">${tc.icon} ${tc.label}</div>
-          ${on  ? `<div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">▶ ${esc(on)}</div>`  : ''}
-          ${off ? `<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">■ ${esc(off)}</div>` : ''}
-        </div>`;
-      }).join('');
-      html += `<div class="lv-fut-row" style="opacity:${op};align-items:flex-start;padding:8px 10px;gap:10px" onclick="${handler}">
-        <span class="lv-fut-num" style="font-size:14px;font-weight:700;min-width:28px;padding-top:2px">${i+1}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:${cueTags?'5px':'0'}">${esc(b.info||'—')}${fmtDur(b)!=='—'?`<span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:7px">${fmtDur(b)}</span>`:''}</div>
-          ${cueTags?`<div style="display:flex;flex-wrap:wrap;gap:4px">${cueTags}</div>`:''}
-        </div>
-      </div>`;
-    }
+    const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
+    const startStr = show.start ? clock(show.start, offsetSecs) : '—';
+    const durSecs = (b.min||0)*60+(b.sec||0);
+    offsetSecs += durSecs;
+    const statusClass = isCur ? 'now' : isNext ? 'next' : isDone ? 'done' : 'later';
+    const statusText = isCur ? 'Now' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
+    const rowClass = isCur ? 'live-row-current' : isNext ? 'live-row-next' : isDone ? 'live-row-done' : '';
+    html += `<tr class="${rowClass}" onclick="${handler}">
+      <td><div class="live-num">${i+1}</div></td>
+      <td><span class="live-status ${statusClass}">${statusText}</span></td>
+      <td>
+        <div class="live-name">${esc(b.info||'—')}</div>
+        ${b.notes?`<div class="live-note">${esc(b.notes)}</div>`:''}
+      </td>
+      <td><div class="live-time"><strong>${fmtDur(b)}</strong>${startStr}</div></td>
+      ${colOrder.map(type=>`<td>${liveCellForBeat(b,type,i)}</td>`).join('')}
+    </tr>`;
   });
+  html += `</tbody></table></div>`;
 
   body.innerHTML = html;
-  const cur = body.querySelector('.lv-cur-card');
+  const cur = body.querySelector('.live-row-current');
   if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
   renderFollowChips();
   updateLiveOverview();
@@ -2369,9 +2385,10 @@ function openLiveScript(beatIdx) {
   const b = beats[beatIdx]; if (!b) return;
   liveScriptEditIdx = beatIdx;
   const d = b.cues?.script||{};
-  document.getElementById('lsScriptEditTitle').textContent = b.info||`Row ${beatIdx+1}`;
+  document.getElementById('lsScriptEditTitle').textContent = `Script • ${b.info||`Row ${beatIdx+1}`}`;
   document.getElementById('lsScriptEditText').value = d.text||'';
   showOverlay('lsScriptEditOv');
+  setTimeout(()=>document.getElementById('lsScriptEditText')?.focus(),80);
 }
 
 function saveLiveScript() {
@@ -2380,7 +2397,8 @@ function saveLiveScript() {
   if (!b.cues.script) b.cues.script={ready:'',take:''};
   b.cues.script.text = document.getElementById('lsScriptEditText').value;
   const d = b.cues.script;
-  prompterText = (d.ready?`${d.ready.toUpperCase()}:\n`:'') + (d.text||'');
+  const speaker = getCueOff(d);
+  prompterText = (speaker?`${speaker.toUpperCase()}:\n`:'') + (d.text||'');
   sendToPrompter();
   hideOverlay('lsScriptEditOv');
   renderLive(); syncToFirestore(); toast('Script saved & pushed.');
