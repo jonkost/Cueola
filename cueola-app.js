@@ -41,9 +41,27 @@ let lsIdx = -1;
 let editId = null;
 let timerInterval = null;
 let elapsedSecs = 0;
+let liveTimerStartMs = null;
 let prompterText = '';
 let prompterChannel = null;
-let currentTheme = localStorage.getItem('cueola_theme') || 'default';
+let prompterLegacyChannel = null;
+const CLIENT_ID = (() => {
+  try {
+    const key = 'cueola_client_id';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = 'cl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return 'cl_' + Math.random().toString(36).slice(2, 10);
+  }
+})();
+const CUEOLA_THEMES = ['warm','cool','white','green','black'];
+function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
+function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
+let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
+let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 
@@ -88,6 +106,21 @@ function totalSecs() {
 function fmtSecs(t) {
   const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function fmtProductionClock(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  const safeMs = Math.max(0, ms);
+  const totalSeconds = Math.floor(safeMs / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const f = Math.min(frameRate - 1, Math.floor((safeMs % 1000) / 1000 * frameRate));
+  return `${pad(h)}:${pad(m)}:${pad(s)}:${pad(f)}`;
+}
+
+function fmtProductionSecs(t) {
+  return fmtProductionClock((t || 0) * 1000);
 }
 
 function clock(time24, offsetSecs) {
@@ -728,8 +761,16 @@ function setupFirestore() {
         prompterText = d.prompter.text || '';
         const el = document.getElementById('lsPrompterText');
         if (el) el.textContent = prompterText;
-        // Forward live to any connected PUTJ on this device, scroll-preserving
-        if (prompterChannel) sendToPrompter(false);
+        // Forward live to any connected Promptypus on this device, scroll-preserving.
+        _postPrompterMessage(getPrompterPayload(false));
+        ptUpdateFromCueola(prompterText);
+      }
+      if (d.prompter?.control?.ts && d.prompter.control.ts > _lastPrompterControlTs) {
+        const control = d.prompter.control;
+        _lastPrompterControlTs = control.ts;
+        if (control.sender !== CLIENT_ID && Date.now() - control.ts < 30000) {
+          ptHandleRemoteControl(control.action);
+        }
       }
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
@@ -1016,8 +1057,8 @@ function updateBotBar() {
   const total = totalSecs();
   const elapsed = Math.min(elapsedSecs, total);
   const remain  = Math.max(total-elapsed, 0);
-  document.getElementById('bb-el').textContent = fmtSecs(elapsed);
-  document.getElementById('bb-rm').textContent = remain>0 ? fmtSecs(remain) : '—';
+  document.getElementById('bb-el').textContent = fmtProductionSecs(elapsed);
+  document.getElementById('bb-rm').textContent = remain>0 ? fmtProductionSecs(remain) : '—';
 }
 
 function updateNowNext() {
@@ -2182,6 +2223,7 @@ function goLive() {
   if (lsIdx<0) lsIdx=0;
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
+  document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
   document.getElementById('tabLive').classList.add('on');
   document.getElementById('tabBuild').classList.remove('on');
   sessionStorage.setItem('cueola_screen','live');
@@ -2194,6 +2236,7 @@ function goLive() {
 
 function showRundown() {
   document.getElementById('liveshow').classList.remove('on');
+  document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
   document.getElementById('tabBuild').classList.add('on');
   document.getElementById('tabLive').classList.remove('on');
@@ -2241,6 +2284,11 @@ function liveRemainingSecs() {
   return Math.max(totalSecs() - elapsedSecs, 0);
 }
 
+function liveRemainingMs() {
+  const elapsedMs = liveTimerStartMs ? Date.now() - liveTimerStartMs : elapsedSecs * 1000;
+  return Math.max(totalSecs() * 1000 - elapsedMs, 0);
+}
+
 function getPrompterPayload(isInit=false) {
   const cur = beats[lsIdx] || null;
   const next = beats[lsIdx+1] || null;
@@ -2267,7 +2315,7 @@ function updateLiveOverview() {
   setText('ls-show-sub', `${beats.length ? `Row ${Math.min(lsIdx+1, beats.length)} of ${beats.length}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
   setText('ls-stat-now', cur ? cur.info || `Row ${lsIdx+1}` : '—');
   setText('ls-stat-next', next ? next.info || `Row ${lsIdx+2}` : 'End');
-  setText('ls-stat-remain', remain ? fmtSecs(remain) : '—');
+  setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   const fill = document.getElementById('ls-progress-fill');
   if (fill) fill.style.width = `${progress}%`;
 }
@@ -2296,7 +2344,7 @@ function renderLiveCurrent(b, i) {
     <div class="lv-cur-meta">
       <div class="lv-cur-mi"><div class="lv-cur-ml">Scheduled</div><div class="lv-cur-mv">${rowStart}</div></div>
       <div class="lv-cur-mi"><div class="lv-cur-ml">Position</div><div class="lv-cur-mv">${elapsedRows}</div></div>
-      <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtSecs(liveRemainingSecs()):'—'}</div></div>
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtProductionSecs(liveRemainingSecs()):'—'}</div></div>
     </div>
     ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
     ${sd?.text?`<div class="lv-cur-script">${esc(sd.text)}</div>`:''}
@@ -2562,26 +2610,39 @@ function buildPromptFromRundown() {
 
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
-const PUTJ_CHANNEL = 'prompt_up_the_jam';
-const PUTJ_STORAGE_MSG = 'prompt_up_the_jam_msg';
-const PUTJ_STORAGE_PING = 'prompt_up_the_jam_ping';
+let _lastPrompterControlTs = 0;
+const PROMPTYPUS_CHANNEL = 'promptypus';
+const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
+const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
+const PROMPTYPUS_LEGACY_CHANNEL = 'prompt_up_the_jam';
+const PROMPTYPUS_LEGACY_STORAGE_MSG = 'prompt_up_the_jam_msg';
+const PROMPTYPUS_LEGACY_STORAGE_PING = 'prompt_up_the_jam_ping';
 
 function _postPrompterMessage(payload) {
-  if (prompterChannel) {
-    try { prompterChannel.postMessage(payload); } catch {}
-  }
+  payload = { sender:CLIENT_ID, ...payload };
+  [prompterChannel, prompterLegacyChannel].forEach(ch => {
+    if (ch) {
+      try { ch.postMessage(payload); } catch {}
+    }
+  });
   try {
-    localStorage.setItem(PUTJ_STORAGE_MSG, JSON.stringify({...payload, storageNonce:Date.now()+Math.random()}));
+    const msg = JSON.stringify({...payload, storageNonce:Date.now()+Math.random()});
+    localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
+    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
   } catch {}
 }
 
 function _postPrompterHello() {
-  const hello = { type:'cueola_hello', sessionCode:session.code, showName:show.name||'Untitled Show', ts:Date.now() };
-  if (prompterChannel) {
-    try { prompterChannel.postMessage(hello); } catch {}
-  }
+  const hello = { type:'cueola_hello', sender:CLIENT_ID, sessionCode:session.code, showName:show.name||'Untitled Show', ts:Date.now() };
+  [prompterChannel, prompterLegacyChannel].forEach(ch => {
+    if (ch) {
+      try { ch.postMessage(hello); } catch {}
+    }
+  });
   try {
-    localStorage.setItem(PUTJ_STORAGE_MSG, JSON.stringify({...hello, storageNonce:Date.now()+Math.random()}));
+    const msg = JSON.stringify({...hello, storageNonce:Date.now()+Math.random()});
+    localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
+    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
   } catch {}
 }
 
@@ -2591,43 +2652,38 @@ function initPrompter() {
     sendToPrompter(false);
     return;
   }
-  try {
-    prompterChannel = new BroadcastChannel(PUTJ_CHANNEL);
-    prompterChannel.onmessage = (e) => {
-      if (e.data?.type === 'ping') {
+  const handlePrompterMessage = (e) => {
+    if (e.data?.type === 'ping') {
+      _setPrompterStatus(true);
+      sendToPrompter(true); // reconnected — full send with scroll reset
+    }
+  };
+  const handleStoragePing = (e) => {
+    if (![PROMPTYPUS_STORAGE_PING, PROMPTYPUS_LEGACY_STORAGE_PING].includes(e.key) || !e.newValue) return;
+    try {
+      const msg = JSON.parse(e.newValue);
+      if (msg?.type === 'ping') {
         _setPrompterStatus(true);
-        sendToPrompter(true); // reconnected — full send with scroll reset
+        sendToPrompter(true);
       }
-    };
+    } catch {}
+  };
+  try {
+    prompterChannel = new BroadcastChannel(PROMPTYPUS_CHANNEL);
+    prompterChannel.onmessage = handlePrompterMessage;
+    prompterLegacyChannel = new BroadcastChannel(PROMPTYPUS_LEGACY_CHANNEL);
+    prompterLegacyChannel.onmessage = handlePrompterMessage;
     if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
-    _prompterStorageHandler = (e) => {
-      if (e.key !== PUTJ_STORAGE_PING || !e.newValue) return;
-      try {
-        const msg = JSON.parse(e.newValue);
-        if (msg?.type === 'ping') {
-          _setPrompterStatus(true);
-          sendToPrompter(true);
-        }
-      } catch {}
-    };
+    _prompterStorageHandler = handleStoragePing;
     window.addEventListener('storage', _prompterStorageHandler);
-    // Periodic hello so PUTJ reconnects automatically if it was closed and reopened
+    // Periodic hello so Promptypus reconnects automatically if it was closed and reopened.
     clearInterval(_prompterPingInterval);
     _prompterPingInterval = setInterval(_postPrompterHello, 5000);
     _postPrompterHello();
     _setPrompterStatus(false); // unknown until ping reply
   } catch {
     if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
-    _prompterStorageHandler = (e) => {
-      if (e.key !== PUTJ_STORAGE_PING || !e.newValue) return;
-      try {
-        const msg = JSON.parse(e.newValue);
-        if (msg?.type === 'ping') {
-          _setPrompterStatus(true);
-          sendToPrompter(true);
-        }
-      } catch {}
-    };
+    _prompterStorageHandler = handleStoragePing;
     window.addEventListener('storage', _prompterStorageHandler);
     clearInterval(_prompterPingInterval);
     _prompterPingInterval = setInterval(_postPrompterHello, 5000);
@@ -2640,17 +2696,19 @@ function _setPrompterStatus(connected, unavailable=false) {
   const dot = document.getElementById('prompterDot');
   const txt = document.getElementById('prompterStatusTxt');
   const stat = document.getElementById('ls-stat-prompter');
-  if (!dot||!txt) return;
   if (unavailable) {
-    dot.className='ls-prompter-dot off'; txt.textContent='Not available';
+    if (dot) dot.className='ls-prompter-dot off';
+    if (txt) txt.textContent='Not available';
     if (stat) stat.textContent='Offline';
     return;
   }
   if (connected) {
-    dot.className='ls-prompter-dot'; txt.textContent='Connected';
+    if (dot) dot.className='ls-prompter-dot';
+    if (txt) txt.textContent='Connected';
     if (stat) stat.textContent='Connected';
   } else {
-    dot.className='ls-prompter-dot off'; txt.textContent='Waiting for Promptypus…';
+    if (dot) dot.className='ls-prompter-dot off';
+    if (txt) txt.textContent='Waiting for Promptypus…';
     if (stat) stat.textContent='Waiting';
   }
 }
@@ -2699,6 +2757,7 @@ function pushToPrompter() {
   const el = document.getElementById('lsPrompterText');
   if (el) prompterText = el.textContent;
   sendToPrompter();
+  if (promptOpMode) renderLivePromptOp();
   toast('Pushed to prompter');
 }
 
@@ -2709,14 +2768,29 @@ function clearPrompter() {
 }
 
 function openPrompterApp() {
+  sessionStorage.setItem('cueola_screen', 'entry');
   enterPrompter();
 }
 
 function sendPrompterControl(action) {
   _postPrompterMessage({ type:'prompter_control', action, ts:Date.now() });
   ptHandleRemoteControl(action);
-  const labels = { pause:'Paused', resume:'Resumed', speed_up:'Faster', speed_down:'Slower', rewind:'Rewound' };
-  toast(`Promptypus: ${labels[action] || action}`);
+  if (promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePromptOp();
+  if (window._firebaseReady && session.code && !session.isDemo) {
+    window._updateDoc(window._doc(window._db,'sessions',session.code),{
+      'prompter.control': { action, ts:Date.now(), sender:CLIENT_ID }
+    }).catch(()=>{});
+  }
+  const labels = {
+    pause:'Paused', resume:'Resumed', speed_up:'Faster', speed_down:'Slower',
+    size_up:'Bigger text', size_down:'Smaller text', rewind:'Rewound', reset:'Reset',
+    align_left:'Left aligned', align_center:'Centered', align_right:'Right aligned',
+    mirror:'Mirror toggled', fullscreen:'Fullscreen requested',
+    theme_warm:'Warm theme', theme_cool:'Cool theme', theme_white:'White theme',
+    theme_green:'Green theme', theme_black:'Black theme',
+    brake_start:'Braking', boost_start:'Boosting'
+  };
+  if (!action.endsWith('_stop') && !action.includes('_set_')) toast(`Promptypus: ${labels[action] || action}`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2737,13 +2811,16 @@ let ptMirrored = false;
 let ptPanelVisible = true;
 let ptFontSize = 52;
 let ptAlign = 'center';
-let ptThemeName = 'warm';
+let ptThemeName = normalizeCueolaTheme(localStorage.getItem('promptypus_theme') || 'cool');
 let ptIdleTimer = null;
 let ptKeydownHandler = null;
 let ptKeyupHandler = null;
+let ptReceiverChannels = [];
+let ptReceiverStorageHandler = null;
+let ptLastRemoteMsgTs = 0;
 
 const PT_THEMES = {
-  warm:  { bg:'#0a0a0a', text:'#f0ead6', accent:'#c8a97e', uiBg:'rgba(20,20,20,.92)',    uiBorder:'rgba(200,169,126,.25)' },
+  warm:  { bg:'#100b06', text:'#f4ead6', accent:'#d2ad74', uiBg:'rgba(22,16,10,.92)',    uiBorder:'rgba(210,173,116,.25)' },
   cool:  { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
   white: { bg:'#f5f5f0', text:'#1a1a1a', accent:'#666',    uiBg:'rgba(225,225,220,.95)', uiBorder:'rgba(100,100,100,.25)' },
   green: { bg:'#050f07', text:'#cff0d6', accent:'#7ec87e', uiBg:'rgba(8,20,10,.92)',     uiBorder:'rgba(126,200,126,.25)' },
@@ -2754,6 +2831,78 @@ const PT_SVG_PLAY  = `<svg width="10" height="12" viewBox="0 0 10 12" fill="curr
 const PT_SVG_PAUSE = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><rect x="0" y="0" width="3.5" height="12" rx="1"/><rect x="6.5" y="0" width="3.5" height="12" rx="1"/></svg>`;
 
 function ptEl(id) { return document.getElementById(id); }
+
+function ptPostPing() {
+  const ping = { type:'ping', ts:Date.now(), sender:CLIENT_ID };
+  ptReceiverChannels.forEach(ch => {
+    try { ch.postMessage(ping); } catch {}
+  });
+  try {
+    const msg = JSON.stringify({...ping, storageNonce:Date.now()+Math.random()});
+    localStorage.setItem(PROMPTYPUS_STORAGE_PING, msg);
+    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_PING, msg);
+  } catch {}
+}
+
+function ptHandleCueolaMessage(msg) {
+  if (!msg || msg.sender === CLIENT_ID) return;
+  const msgTs = msg.ts || 0;
+  if (msgTs && msgTs < ptLastRemoteMsgTs) return;
+  if (msgTs) ptLastRemoteMsgTs = msgTs;
+  if (msg.type === 'cueola_hello') {
+    ptPostPing();
+    ptUpdateSyncLabel();
+  }
+  if (msg.type === 'script_init' && msg.text != null) {
+    prompterText = msg.text || '';
+    ptInitScriptFromCueola(prompterText);
+    ptPostPing();
+  }
+  if (msg.type === 'script_update' && msg.text != null) {
+    prompterText = msg.text || '';
+    ptUpdateFromCueola(prompterText);
+  }
+  if (msg.type === 'prompter_control' && msg.action) {
+    ptHandleRemoteControl(msg.action);
+  }
+}
+
+function ptLoadSavedOrDefault() {
+  const textEl = ptEl('pt-text');
+  if (!textEl || textEl.textContent.trim()) return;
+  const saved = (() => { try { return localStorage.getItem('promptypus_script_html'); } catch { return null; } })();
+  if (saved) {
+    ptSetScriptHTML(saved);
+    return;
+  }
+  ptSetScriptText(
+    'Welcome to Promptypus\n\n' +
+    'Upload a PDF, DOCX, Pages, TXT, or Markdown file, or paste your script directly.\n\n' +
+    'Cueola can feed this prompter when you have a session code, but it is optional.\n\n' +
+    'Press PLAY, or tap the stage, to begin scrolling.\n\n' +
+    'Use the controls to adjust speed, text size, alignment, theme, mirror, and fullscreen.'
+  );
+}
+
+function ptInitReceiver() {
+  if (ptReceiverChannels.length || ptReceiverStorageHandler) {
+    ptPostPing();
+    return;
+  }
+  try {
+    [PROMPTYPUS_CHANNEL, PROMPTYPUS_LEGACY_CHANNEL].forEach(name => {
+      const ch = new BroadcastChannel(name);
+      ch.onmessage = e => ptHandleCueolaMessage(e.data);
+      ptReceiverChannels.push(ch);
+    });
+  } catch {}
+  ptReceiverStorageHandler = (e) => {
+    if (![PROMPTYPUS_STORAGE_MSG, PROMPTYPUS_LEGACY_STORAGE_MSG].includes(e.key) || !e.newValue) return;
+    try { ptHandleCueolaMessage(JSON.parse(e.newValue)); } catch {}
+  };
+  window.addEventListener('storage', ptReceiverStorageHandler);
+  ptPostPing();
+}
 
 function ptGetMaxScroll() {
   const track = ptEl('pt-track');
@@ -2806,6 +2955,45 @@ function ptSyncPlayIcons(isPlaying) {
   }
 }
 
+function promptOpControlsHTML() {
+  const playAction = ptPlaying ? 'pause' : 'resume';
+  const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
+  const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
+  return `<div class="prompt-op-panel">
+    <div class="pt-ctrl-group">
+      <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')">${playIcon} ${playLabel}</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Speed</span>
+      <button class="pt-btn" onclick="sendPrompterControl('speed_down')">−</button>
+      <input type="range" class="pt-range" min="5" max="200" value="${ptTargetSpeed}" oninput="ptSetSpeed(this.value);sendPrompterControl('speed_set_'+this.value)">
+      <button class="pt-btn" onclick="sendPrompterControl('speed_up')">+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Size</span>
+      <button class="pt-btn" onclick="sendPrompterControl('size_down')">−</button>
+      <input type="range" class="pt-range" min="24" max="120" value="${ptFontSize}" oninput="ptSetSize(this.value);sendPrompterControl('size_set_'+this.value)">
+      <button class="pt-btn" onclick="sendPrompterControl('size_up')">+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Align</span>
+      <button class="pt-btn${ptAlign==='left'?' active':''}" onclick="sendPrompterControl('align_left')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn${ptAlign==='center'?' active':''}" onclick="sendPrompterControl('align_center')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn${ptAlign==='right'?' active':''}" onclick="sendPrompterControl('align_right')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Theme</span>
+      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].accent}${name==='black'?';border-color:#555':''}" onclick="sendPrompterControl('theme_${name}')" title="${name}"></div>`).join('')}
+    </div>
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>
+      <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
+      <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
+      <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
+    </div>
+  </div>`;
+}
+
 function ptStartPlay() {
   ptPlaying = true;
   ptLastTime = null;
@@ -2839,6 +3027,7 @@ function ptSetSize(val) {
   ptFontSize = parseInt(val);
   const screen = ptEl('promptypus');
   if (screen) screen.style.setProperty('--pt-size', val + 'px');
+  document.documentElement.style.setProperty('--pt-size', val + 'px');
   const sl = ptEl('pt-size-slider');
   if (sl) sl.value = val;
 }
@@ -2851,6 +3040,7 @@ function ptSetAlign(a) {
   ptAlign = a;
   const screen = ptEl('promptypus');
   if (screen) screen.style.setProperty('--pt-align', a);
+  document.documentElement.style.setProperty('--pt-align', a);
   ['l','c','r'].forEach(x => {
     const btn = ptEl('pt-align-' + x);
     if (btn) btn.classList.toggle('active', x === a[0]);
@@ -2887,7 +3077,9 @@ function ptToggleFullscreen() {
 function ptTogglePanel() {
   ptPanelVisible = !ptPanelVisible;
   const panel = ptEl('pt-panel');
+  const hint = ptEl('pt-hint');
   if (panel) panel.classList.toggle('hidden', !ptPanelVisible);
+  if (hint) hint.classList.toggle('hidden', !ptPanelVisible);
   // Update Controls button label
   const btn = document.querySelector('.pt-bar-controls-btn');
   if (btn) btn.textContent = ptPanelVisible ? 'Controls' : 'Show Controls';
@@ -2905,6 +3097,12 @@ function ptSetTheme(name) {
   screen.style.setProperty('--pt-ui-bg', t.uiBg);
   screen.style.setProperty('--pt-ui-border', t.uiBorder);
   screen.style.background = t.bg;
+  document.documentElement.style.setProperty('--pt-bg', t.bg);
+  document.documentElement.style.setProperty('--pt-text', t.text);
+  document.documentElement.style.setProperty('--pt-accent', t.accent);
+  document.documentElement.style.setProperty('--pt-ui-bg', t.uiBg);
+  document.documentElement.style.setProperty('--pt-ui-border', t.uiBorder);
+  try { localStorage.setItem('promptypus_theme', name); } catch {}
   document.querySelectorAll('.pt-theme-dot').forEach(d => d.classList.remove('active'));
   const dot = ptEl('pt-t-' + name);
   if (dot) dot.classList.add('active');
@@ -2914,15 +3112,174 @@ function ptPlainTextToHTML(text) {
   return (text || '').split('\n').map(line => `<p>${line || ' '}</p>`).join('');
 }
 
+function ptSanitizeHTML(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(el => el.remove());
+  doc.body.querySelectorAll('*').forEach(el => {
+    [...el.attributes].forEach(attr => {
+      if (/^on/i.test(attr.name) || attr.name === 'style') el.removeAttribute(attr.name);
+    });
+  });
+  return doc.body.innerHTML;
+}
+
 function ptSetScriptHTML(html) {
   const el = ptEl('pt-text');
   if (!el) return;
-  el.innerHTML = html;
+  el.innerHTML = ptSanitizeHTML(html);
+  prompterText = el.innerText || '';
+  try { localStorage.setItem('promptypus_script_html', el.innerHTML); } catch {}
   ptResetScroll();
+  ptUpdateSyncLabel();
 }
 
 function ptSetScriptText(text) {
   ptSetScriptHTML(ptPlainTextToHTML(text));
+}
+
+function ptLoadLibrary(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Could not load import support.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function ptExtractFromPDF(arrayBuffer) {
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const lines = [];
+    let lastY = null;
+    let lineAccum = '';
+    for (const item of content.items) {
+      const y = item.transform[5];
+      if (lastY !== null && Math.abs(y - lastY) > 2) {
+        if (lineAccum.trim()) lines.push(lineAccum.trimEnd());
+        lineAccum = '';
+      }
+      lineAccum += item.str;
+      lastY = y;
+    }
+    if (lineAccum.trim()) lines.push(lineAccum.trimEnd());
+    if (lines.length) pages.push(lines.join('\n'));
+  }
+  return pages.join('\n\n');
+}
+
+async function ptExtractFromDOCX(arrayBuffer) {
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+  const result = await mammoth.convertToHtml({ arrayBuffer });
+  return result.value.replace(/<p>\s*<\/p>/g, '<p> </p>');
+}
+
+async function ptExtractFromPages(arrayBuffer) {
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const pdfEntry = zip.file('QuickLook/Preview.pdf');
+  if (pdfEntry) {
+    const pdfBuf = await pdfEntry.async('arraybuffer');
+    return { text: await ptExtractFromPDF(pdfBuf) };
+  }
+  const xmlEntry = zip.file('index.apxl');
+  if (xmlEntry) {
+    const xmlStr = await xmlEntry.async('string');
+    const xmlDoc = new DOMParser().parseFromString(xmlStr, 'text/xml');
+    const paras = Array.from(xmlDoc.querySelectorAll('p')).map(n => n.textContent).filter(Boolean);
+    return { text: paras.join('\n\n') };
+  }
+  throw new Error('Cannot read this Pages file. Export it as PDF or DOCX and try again.');
+}
+
+function ptChooseScriptFile() {
+  const input = ptEl('pt-file-input');
+  if (input) input.click();
+}
+
+function ptSetUploadStatus(text, isError=false) {
+  const status = ptEl('pt-upload-status');
+  if (!status) return;
+  status.textContent = text;
+  status.style.color = isError ? '#f05252' : '';
+  status.classList.add('on');
+}
+
+async function ptHandleScriptFile(file) {
+  const uploadBtn = ptEl('pt-upload-file-btn');
+  if (uploadBtn) uploadBtn.disabled = true;
+  ptSetUploadStatus('Reading...');
+  try {
+    const buf = await file.arrayBuffer();
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.pdf')) {
+      ptSetScriptText(await ptExtractFromPDF(buf));
+    } else if (name.endsWith('.docx')) {
+      ptSetScriptHTML(await ptExtractFromDOCX(buf));
+    } else if (name.endsWith('.pages')) {
+      const result = await ptExtractFromPages(buf);
+      if (result.html) ptSetScriptHTML(result.html);
+      else ptSetScriptText(result.text || '');
+    } else if (name.endsWith('.txt') || name.endsWith('.md')) {
+      ptSetScriptText(await file.text());
+    } else {
+      throw new Error('Unsupported file type. Use PDF, DOCX, Pages, TXT, or MD.');
+    }
+    const ta = ptEl('pt-script-input');
+    const textEl = ptEl('pt-text');
+    if (ta && textEl) ta.value = textEl.innerText.trim();
+    ptSetUploadStatus('Loaded');
+    setTimeout(() => ptEl('pt-upload-status')?.classList.remove('on'), 2500);
+  } catch (err) {
+    ptSetUploadStatus(err.message || 'Import failed', true);
+    console.warn('Promptypus import error:', err);
+  } finally {
+    if (uploadBtn) uploadBtn.disabled = false;
+  }
+}
+
+function ptDownloadText() {
+  const ta = ptEl('pt-script-input');
+  const textEl = ptEl('pt-text');
+  return (ta?.value.trim()) || (textEl?.innerText.trim()) || '';
+}
+
+function ptDownloadAsTxt() {
+  const txt = ptDownloadText();
+  if (!txt) return;
+  const blob = new Blob([txt], { type:'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'promptypus-script.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function ptDownloadAsPDF() {
+  const txt = ptDownloadText();
+  if (!txt) return;
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const margin = 20;
+  const pageW = doc.internal.pageSize.width - margin * 2;
+  const pageH = doc.internal.pageSize.height - margin * 2;
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  const lines = doc.splitTextToSize(txt, pageW);
+  let y = margin;
+  for (const line of lines) {
+    if (y + 7 > margin + pageH) { doc.addPage(); y = margin; }
+    doc.text(line, margin, y);
+    y += 7;
+  }
+  doc.save('promptypus-script.pdf');
 }
 
 // Called by Cueola when script changes — scroll reset (new cue/session)
@@ -2964,11 +3321,30 @@ function ptUpdateSyncLabel() {
 
 // Called by sendPrompterControl to mirror controls into the native prompter
 function ptHandleRemoteControl(action) {
+  if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
+  if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   switch (action) {
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;
     case 'speed_down': ptAdjustSpeed(-10); break;
+    case 'size_up':    ptAdjustSize(4); break;
+    case 'size_down':  ptAdjustSize(-4); break;
+    case 'align_left':   ptSetAlign('left'); break;
+    case 'align_center': ptSetAlign('center'); break;
+    case 'align_right':  ptSetAlign('right'); break;
+    case 'theme_warm':  ptSetTheme('warm'); break;
+    case 'theme_cool':  ptSetTheme('cool'); break;
+    case 'theme_white': ptSetTheme('white'); break;
+    case 'theme_green': ptSetTheme('green'); break;
+    case 'theme_black': ptSetTheme('black'); break;
+    case 'mirror':     ptToggleMirror(); break;
+    case 'fullscreen': ptToggleFullscreen(); break;
+    case 'brake_start': ptBraking = true; break;
+    case 'brake_stop':  ptBraking = false; break;
+    case 'boost_start': ptBoosting = true; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); break;
+    case 'boost_stop':  ptBoosting = false; break;
+    case 'reset':
     case 'rewind':     ptResetScroll(); break;
   }
 }
@@ -2978,6 +3354,8 @@ function ptOpenEdit() {
   const ta = ptEl('pt-script-input');
   const textEl = ptEl('pt-text');
   if (ta && textEl) ta.value = textEl.innerText.trim();
+  const codeIn = ptEl('pt-cueola-code-input');
+  if (codeIn && session?.code) codeIn.value = session.code;
   const ov = ptEl('pt-edit-overlay');
   if (ov) ov.classList.add('open');
   setTimeout(() => { if (ta) ta.focus(); }, 50);
@@ -3004,6 +3382,66 @@ function ptLoadFromCueola() {
   }
 }
 
+let ptCueolaSub = null;
+
+function ptSetCueolaStatus(text, isError=false) {
+  const status = ptEl('pt-cueola-status');
+  if (!status) return;
+  status.textContent = text;
+  status.style.color = isError ? '#f05252' : '';
+  status.classList.add('on');
+}
+
+function ptAssembleCueolaScript(data) {
+  if (data?.prompter?.text && data.prompter.text.trim()) return data.prompter.text;
+  const lines = [];
+  (data?.beats || []).forEach(beat => {
+    const text = beat?.cues?.script?.text || beat?.cueData?.text || beat?.script || '';
+    if (text) lines.push(text);
+  });
+  return lines.join('\n\n');
+}
+
+function ptLoadFromCueolaCode() {
+  const code = ptEl('pt-cueola-code-input')?.value.trim().toUpperCase();
+  const btn = ptEl('pt-cueola-load-btn');
+  if (!code) return;
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  ptSetCueolaStatus('Loading...');
+  const load = () => {
+    try {
+      if (ptCueolaSub) { ptCueolaSub(); ptCueolaSub = null; }
+      ptCueolaSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
+        if (!snap.exists()) {
+          ptSetCueolaStatus('Not found', true);
+          if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+          return;
+        }
+        const text = ptAssembleCueolaScript(snap.data());
+        if (text.trim()) {
+          prompterText = text;
+          ptSetScriptText(text);
+          const ta = ptEl('pt-script-input');
+          if (ta) ta.value = text.trim();
+          ptSetCueolaStatus(`Live · ${code}`);
+          ptUpdateSyncLabel();
+        } else {
+          ptSetCueolaStatus('No script yet', true);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+      }, () => {
+        ptSetCueolaStatus('Error', true);
+        if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+      });
+    } catch (err) {
+      ptSetCueolaStatus('Error', true);
+      if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+    }
+  };
+  if (window._firebaseReady) load();
+  else window.addEventListener('firebaseReady', load, { once:true });
+}
+
 function ptResetIdle() {
   const screen = ptEl('promptypus');
   if (!screen) return;
@@ -3022,6 +3460,7 @@ function enterPrompter() {
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('promptypus').classList.add('on');
+  ptInitReceiver();
 
   // Sync live script from Cueola if available (always takes priority over previous content)
   const textEl = ptEl('pt-text');
@@ -3029,21 +3468,13 @@ function enterPrompter() {
     // Always load the latest live script from Cueola when entering
     ptSetScriptText(prompterText);
   } else if (!textEl || !textEl.textContent.trim()) {
-    // No live script and screen is blank — show welcome message
-    ptSetScriptText(
-      'Welcome to Promptypus\n\n' +
-      'Hit Script to load or paste your script.\n\n' +
-      'Or go Live in Cueola — script cues will sync here automatically.\n\n' +
-      'Press PLAY to begin scrolling.\n\n' +
-      'Space = play / pause\n' +
-      'H = hide controls\n' +
-      'F = fullscreen\n' +
-      'M = mirror'
-    );
+    ptLoadSavedOrDefault();
   }
   // (If textEl has content from a previous manual load and no live script, keep it)
   // Initialize theme
   ptSetTheme(ptThemeName);
+  ptSetAlign(ptAlign);
+  ptSetSize(ptFontSize);
   ptUpdateSyncLabel();
 
   // Keyboard handler (scoped to when this screen is active)
@@ -3114,6 +3545,15 @@ function enterPrompter() {
       _tDrag = false;
     }, { passive: true });
   }
+  const fileInput = ptEl('pt-file-input');
+  if (fileInput && !fileInput._ptBound) {
+    fileInput._ptBound = true;
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) ptHandleScriptFile(file);
+      e.target.value = '';
+    });
+  }
 }
 
 function exitPrompter() {
@@ -3132,13 +3572,14 @@ function exitPrompter() {
 
 function togglePromptOpMode() {
   promptOpMode = !promptOpMode;
+  document.getElementById('liveshow')?.classList.toggle('prompt-op-active', promptOpMode);
   const btn = document.getElementById('promptOpBtn');
   if (btn) {
     if (promptOpMode) {
       btn.style.color = 'var(--cyan)';
       btn.style.borderColor = 'var(--cyan)';
       btn.style.background = 'rgba(34,211,211,.1)';
-      btn.textContent = '⊞ Cue View';
+      btn.textContent = '▦ Rundown View';
     } else {
       btn.style.color = '';
       btn.style.borderColor = '';
@@ -3151,6 +3592,7 @@ function togglePromptOpMode() {
 
 function renderLivePromptOp() {
   const body = document.getElementById('lsBody');
+  ptSetTheme(ptThemeName);
   if (!beats.length) {
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
     return;
@@ -3158,17 +3600,14 @@ function renderLivePromptOp() {
   const cur  = beats[lsIdx] || null;
   const next = beats[lsIdx + 1] || null;
   const sd   = cur?.cues?.script;
-  const adminCaller = isAdminShowCaller();
-  body.innerHTML = `<div class="po-wrap">
-    <div class="po-now-badge">
-      <span style="width:8px;height:8px;background:var(--red);border-radius:50%;display:inline-block;flex-shrink:0"></span>
-      NOW — ${esc(cur?.info || '—')} &nbsp;·&nbsp; Row ${lsIdx + 1} of ${beats.length}
+  const script = (prompterText && prompterText.trim()) || sd?.text || '';
+  body.innerHTML = `<div class="prompt-op-stage">
+    <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
+    <div class="prompt-op-read-line"></div>
+    <div class="prompt-op-track">
+      <div class="prompt-op-text">${script ? esc(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live prompter text.'}</div>
     </div>
-    ${sd?.text
-      ? `<div class="po-script-text">${esc(sd.text)}</div>
-         ${adminCaller ? `<button class="ltr-edit-btn" onclick="openLiveScript(${lsIdx})">✎ Edit &amp; Push Script</button>` : ''}`
-      : `<div class="po-no-script">No script for this cue.<br><span style="font-size:12px;color:var(--text3)">Add script in build mode or edit via the sidebar.</span></div>`}
-    ${next ? `<div class="po-next"><span style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.1em">NEXT →</span>&nbsp; ${esc(next.info || '—')}</div>` : ''}
+    ${promptOpControlsHTML()}
   </div>`;
 }
 
@@ -3177,12 +3616,14 @@ function renderLivePromptOp() {
 // ─────────────────────────────────────────────────────────────
 function startTimer() {
   stopTimer();
-  const start = Date.now() - elapsedSecs*1000;
+  const start = Date.now() - elapsedSecs * 1000;
+  liveTimerStartMs = start;
   timerInterval = setInterval(()=>{
-    elapsedSecs = Math.floor((Date.now()-start)/1000);
+    const elapsedMs = Date.now() - start;
+    elapsedSecs = Math.floor(elapsedMs / 1000);
     const el = document.getElementById('ls-timer');
     if (el) {
-      el.textContent = fmtSecs(elapsedSecs);
+      el.textContent = fmtProductionClock(elapsedMs);
       const total = totalSecs();
       el.classList.toggle('warn', total>0 && elapsedSecs>total*0.9);
     }
@@ -3195,11 +3636,12 @@ function startTimer() {
       const ap=h>=12?'PM':'AM', h12=h%12||12;
       clockEl.textContent=`${h12}:${pad(m)}:${pad(s)} ${ap}`;
     }
-  },1000);
+  },1000 / Math.min(frameRate, 30));
 }
 
 function stopTimer() {
   clearInterval(timerInterval); timerInterval=null;
+  liveTimerStartMs = null;
   clearInterval(_prompterPingInterval); _prompterPingInterval=null;
   if (_prompterStorageHandler) {
     window.removeEventListener('storage', _prompterStorageHandler);
@@ -3210,20 +3652,22 @@ function stopTimer() {
 // ─────────────────────────────────────────────────────────────
 // SETTINGS & THEME
 // ─────────────────────────────────────────────────────────────
-function applyTheme(t) { document.documentElement.setAttribute('data-theme', t==='default'?'':t); }
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', normalizeCueolaTheme(t)); }
 
 function selectTheme(t) {
-  currentTheme = t;
+  currentTheme = normalizeCueolaTheme(t);
   document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===t));
-  applyTheme(t); // live preview — reverted on Cancel, saved on Save
+  applyTheme(currentTheme); // live preview — reverted on Cancel, saved on Save
 }
 
 function saveSettings() {
   const nameIn = document.getElementById('set-showname');
   if (!nameIn.disabled) show.name = nameIn.value.trim()||show.name;
   show.start = document.getElementById('set-starttime').value||'';
+  frameRate = normalizeFrameRate(document.getElementById('set-framerate')?.value);
   applyTheme(currentTheme);
   localStorage.setItem('cueola_theme', currentTheme);
+  localStorage.setItem('cueola_frame_rate', String(frameRate));
   hideModal('modal-settings');
   renderRundown(); syncToFirestore();
 }
@@ -3251,7 +3695,9 @@ window.showModal = function(id) {
     nameIn.style.opacity = locked?'0.5':'1';
     document.getElementById('showname-locked-hint').style.display = locked?'block':'none';
     document.getElementById('set-starttime').value = show.start||'';
-    const saved = localStorage.getItem('cueola_theme')||'default';
+    const fps = document.getElementById('set-framerate');
+    if (fps) fps.value = String(frameRate);
+    const saved = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
     _settingsOpenTheme = saved; // remember so Cancel can revert
     currentTheme = saved;
     document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===saved));
@@ -3344,8 +3790,14 @@ if (window._firebaseReady) initAdminsFromFirestore();
 else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: true });
 
 (function autoJoinFromDashboard() {
+  const params = new URLSearchParams(window.location.search);
+  if (location.hash === '#promptypus' || params.has('prompter') || params.has('promptypus')) {
+    sessionStorage.setItem('cueola_screen', 'entry');
+    setTimeout(enterPrompter, 0);
+    return;
+  }
   // Check URL param first (?code=XXXX)
-  const urlCode = new URLSearchParams(window.location.search).get('code');
+  const urlCode = params.get('code');
   // Then check localStorage set by dashboard launchRundown()
   let stored = null;
   try { stored = JSON.parse(localStorage.getItem('cueola_session') || 'null'); } catch {}

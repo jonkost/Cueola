@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -57,6 +57,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tb-right{display:flex;gap:6px;align-items:center}
 .tbtn{padding:7px 13px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
 .tbtn-ghost{background:transparent;color:var(--text2);border:1.5px solid var(--bord2)}.tbtn-ghost:hover{color:var(--text);border-color:var(--text2)}
+.tbtn.icon-only{width:36px;height:36px;padding:0;justify-content:center;font-size:16px}
 .tbtn-live{background:var(--red);color:#fff;display:flex;align-items:center;gap:5px}.tbtn-live:hover{filter:brightness(1.1)}
 .tbtn-admin{background:rgba(240,82,82,.12);color:var(--red);border:1px solid rgba(240,82,82,.3)}.tbtn-admin:hover{background:rgba(240,82,82,.2)}
 .live-dot{width:6px;height:6px;background:#fff;border-radius:50%}
@@ -226,6 +227,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .bb-s{display:flex;flex-direction:column;gap:1px}
 .bb-l{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
 .bb-v{font-family:var(--mono);font-size:15px;font-weight:600}
+.bb-v,.ls-timer,.ls-stat-value{font-variant-numeric:tabular-nums}
 .bb-v.warn{color:var(--yellow)}
 .now-next{display:flex;gap:7px;flex-wrap:wrap}
 .nn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap}
@@ -362,10 +364,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .po-next{font-size:13px;font-family:var(--mono);color:var(--green);padding:10px 14px;background:rgba(34,211,160,.06);border:1px solid rgba(34,211,160,.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 
 /* Prompter remote controls */
+.prompter-remote-stack{display:flex;flex-direction:column;gap:8px}
 .prompter-remote-row{display:flex;gap:5px}
-.prompter-remote-btn{flex:1;padding:8px 4px;border-radius:7px;font-size:14px;cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);transition:all .15s;line-height:1}
+.prompter-remote-btn{flex:1;min-width:0;padding:8px 4px;border-radius:7px;font-size:13px;cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);transition:all .15s;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;user-select:none}
 .prompter-remote-btn:hover{border-color:var(--cyan);background:rgba(34,211,211,.08);color:var(--text)}
+.prompter-remote-btn.active{border-color:var(--cyan);background:rgba(34,211,211,.15);color:var(--cyan)}
 .prompter-remote-lbl{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+.prompter-remote-field{display:grid;grid-template-columns:42px 1fr 42px;gap:5px;align-items:center}
+.prompter-remote-field span{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+.prompter-theme-dot{width:24px;height:24px;border-radius:50%;padding:0;border:2px solid transparent;background:var(--s3);cursor:pointer;transition:all .15s}
+.prompter-theme-dot:hover,.prompter-theme-dot.active{border-color:var(--cyan);transform:translateY(-1px)}
 
 /* Live bottom bar */
 .ls-bot{position:sticky;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:60;flex-shrink:0}
@@ -553,7 +561,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .settings-sheet{max-height:80vh;overflow-y:auto;padding-bottom:16px}
 .settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .settings-section{display:flex;flex-direction:column;gap:12px}
-.theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.theme-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .theme-swatch{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
 .ts-preview{width:100%;aspect-ratio:3/2;border-radius:8px;border:2px solid;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .theme-swatch:hover .ts-preview{filter:brightness(1.2)}
@@ -561,9 +569,29 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .theme-swatch.active .ts-preview{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ── THEMES ── */
-[data-theme="midnight"]{--bg:#000;--s1:#080808;--s2:#101010;--s3:#181818;--s4:#222;--border:#1c1c1c;--bord2:#272727}
-[data-theme="warm"]{--bg:#0e0904;--s1:#140e07;--s2:#1b150c;--s3:#231c12;--s4:#2c2318;--border:#2a2015;--bord2:#342a1e;--text:#f5ede0;--accent:#f59e0b;--acg:#f97316}
-[data-theme="forest"]{--bg:#060f09;--s1:#0a150d;--s2:#0f1e12;--s3:#152618;--s4:#1c301f;--border:#1a2d1e;--bord2:#213726;--text:#e0f5e8;--accent:#22d3a0;--acg:#16a98a}
+[data-theme="warm"]{--bg:#100b06;--s1:#15100b;--s2:#1e1710;--s3:#291f15;--s4:#352719;--border:#332619;--bord2:#473521;--text:#f4ead6;--text2:#bba987;--text3:#806f50;--accent:#d2ad74;--acg:#b98245;--cyan:#d2ad74}
+[data-theme="cool"]{--bg:#08090f;--s1:#0e111d;--s2:#141927;--s3:#1b2132;--s4:#242b40;--border:#20283b;--bord2:#2c3650;--text:#d6e8f0;--text2:#86a9b7;--text3:#526b76;--accent:#7eb8c8;--acg:#82a4e6}
+[data-theme="white"]{--bg:#f5f5f0;--s1:#ffffff;--s2:#ebeae3;--s3:#deddd4;--s4:#d0cec2;--border:#d8d6cb;--bord2:#c4c1b5;--text:#1a1a1a;--text2:#5e5e59;--text3:#85857d;--accent:#666;--acg:#333}
+[data-theme="green"]{--bg:#050f07;--s1:#08140b;--s2:#0d1c10;--s3:#142716;--s4:#1b321f;--border:#1a2d1e;--bord2:#263d29;--text:#cff0d6;--text2:#82aa8a;--text3:#506c56;--accent:#7ec87e;--acg:#22d3a0}
+[data-theme="black"]{--bg:#000;--s1:#090909;--s2:#111;--s3:#1a1a1a;--s4:#242424;--border:#1f1f1f;--bord2:#333;--text:#fff;--text2:#aaa;--text3:#666;--accent:#fff;--acg:#c8c8c8}
+
+/* Prompt Op */
+.prompt-op-active .ls-body{position:relative;background:var(--pt-bg,#08090f)}
+.prompt-op-active .ls-sidebar{display:none}
+.prompt-op-active .ls-main{width:100%;position:relative;background:var(--pt-bg,#08090f);overflow:hidden}
+.prompt-op-stage{position:absolute;inset:0;display:flex;justify-content:center;align-items:flex-start;overflow:hidden;background:var(--pt-bg,#08090f)}
+.prompt-op-stage::before,.prompt-op-stage::after{content:'';position:absolute;left:0;right:0;height:28%;pointer-events:none;z-index:3}
+.prompt-op-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#08090f),transparent)}
+.prompt-op-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#08090f),transparent)}
+.prompt-op-track{width:min(900px,88vw);padding:18vh 0 42vh}
+.prompt-op-text{font-family:'Barlow',var(--sans);font-size:clamp(34px,5vw,72px);line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#d6e8f0);white-space:pre-wrap;word-break:break-word;letter-spacing:.01em}
+.prompt-op-read-line{position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#7eb8c8) 18%,var(--pt-accent,#7eb8c8) 82%,transparent 100%);opacity:.75;z-index:4;pointer-events:none}
+.prompt-op-read-line::before,.prompt-op-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0}
+.prompt-op-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#7eb8c8)}
+.prompt-op-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#7eb8c8)}
+.prompt-op-info{position:absolute;top:16px;left:20px;z-index:6;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--pt-accent,#7eb8c8);background:var(--pt-ui-bg,rgba(15,15,25,.92));border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:10px;padding:10px 14px}
+.prompt-op-panel{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:7;background:var(--pt-ui-bg,rgba(15,15,25,.92));border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:18px;padding:14px 18px;display:flex;flex-direction:column;gap:10px;font-family:var(--mono);width:min(340px,92vw);backdrop-filter:blur(20px)}
+.prompt-op-panel .pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 
 /* ── TOAST ── */
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--s4);border:1px solid var(--bord2);border-radius:10px;padding:10px 18px;font-size:13px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:999;display:none;white-space:nowrap;animation:rise .2s ease both}
@@ -614,11 +642,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 #promptypus.show-cursor{cursor:default}
 
 /* Top nav bar */
-#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
+#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
 #pt-bar.hidden{opacity:0;pointer-events:none}
 .pt-back-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-accent,#c8a97e);border-radius:7px;padding:5px 11px;cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
-.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);flex:1;text-align:center;opacity:.85;letter-spacing:.04em}
+.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);text-align:center;opacity:.85;letter-spacing:.04em;position:absolute;left:50%;transform:translateX(-50%);pointer-events:none}
 .pt-bar-sync{font-size:10px;color:var(--pt-accent,#c8a97e);opacity:.55;letter-spacing:.08em;white-space:nowrap}
 .pt-bar-controls-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;transition:background .15s;opacity:.7}
 .pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
@@ -646,6 +674,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 /* Floating control panel */
 #pt-panel{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:14px 18px;display:flex;flex-direction:column;gap:10px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:opacity .4s;font-family:var(--mono);font-size:11px;width:min(340px,92vw)}
 #pt-panel.hidden{opacity:0;pointer-events:none}
+.pt-hint{position:absolute;top:68px;right:24px;z-index:120;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:16px;padding:18px 22px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);font-family:var(--mono);font-size:13px;transition:opacity .4s}
+.pt-hint.hidden{opacity:0;pointer-events:none}
+.pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:28px;line-height:2.15}
+.pt-hint-key{color:var(--pt-accent,#c8a97e);font-weight:700;white-space:nowrap;letter-spacing:.04em}
+.pt-hint-desc{color:var(--pt-text,#f0ead6);opacity:.58;white-space:nowrap;text-align:right}
 .pt-ctrl-group{display:flex;align-items:center;gap:8px}
 .pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:9px;min-width:40px}
@@ -662,11 +695,22 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #pt-edit-overlay.open{display:flex}
-#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:24px 28px;width:min(600px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
+#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
 #pt-edit-box h2{font-family:var(--mono);font-size:12px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.12em;margin:0}
 #pt-script-input{background:rgba(0,0,0,.5);border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:10px;padding:14px;font-size:13px;font-family:var(--mono);resize:vertical;min-height:200px;outline:none;line-height:1.6;width:100%}
 #pt-script-input:focus{border-color:var(--pt-accent,#c8a97e)}
 #pt-script-input::placeholder{color:rgba(200,169,126,.35)}
+.pt-upload-bar{display:flex;align-items:center;gap:10px}
+.pt-upload-btn{border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e);white-space:nowrap}
+.pt-upload-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;transition:opacity .2s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-upload-status.on{opacity:1}
+.pt-modal-sep{border:none;border-top:1px solid var(--pt-ui-border,rgba(200,169,126,.25));margin:0}
+.pt-cueola-bar{display:grid;grid-template-columns:auto minmax(120px,1fr) auto auto;gap:8px;align-items:center}
+.pt-cueola-label{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--pt-accent,#c8a97e);opacity:.65;white-space:nowrap}
+.pt-cueola-input{background:rgba(0,0,0,.45);border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;outline:none;min-width:0}
+.pt-cueola-input:focus{border-color:var(--pt-accent,#c8a97e)}
+.pt-cueola-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;white-space:nowrap}
+.pt-cueola-status.on{opacity:1}
 .pt-edit-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .pt-edit-actions .pt-btn{padding:7px 18px}
 .pt-save-btn{background:rgba(200,169,126,.15);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
@@ -739,7 +783,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">🔑 Admin</button>
       <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
       <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
-      <button class="tbtn tbtn-ghost" onclick="showModal('modal-settings')">⚙ Settings</button>
+      <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings">⚙</button>
       <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
     </div>
   </div>
@@ -777,7 +821,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
   <div class="bot-bar">
     <div class="bb-stats">
-      <div class="bb-s"><span class="bb-l">Elapsed</span><span class="bb-v" id="bb-el">00:00:00</span></div>
+      <div class="bb-s"><span class="bb-l">Elapsed</span><span class="bb-v" id="bb-el">00:00:00:00</span></div>
       <div class="bb-s"><span class="bb-l">Remaining</span><span class="bb-v warn" id="bb-rm">—</span></div>
     </div>
     <div class="now-next">
@@ -822,23 +866,44 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="ls-body">
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-sidebar">
-      <div class="ls-sidebar-head">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div class="ls-sidebar-title">📺 Promptypus</div>
-          <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" style="font-size:10px">Waiting…</span></div>
-        </div>
-      </div>
       <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live prompter script"></div>
       <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
         <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO PROMPTER</button>
-        <div>
+        <div class="prompter-remote-stack">
           <div class="prompter-remote-lbl">Remote Controls</div>
           <div class="prompter-remote-row">
             <button class="prompter-remote-btn" onclick="sendPrompterControl('rewind')" title="Rewind to top">⏮</button>
-            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_down')" title="Slower">🐢</button>
             <button class="prompter-remote-btn" onclick="sendPrompterControl('pause')" title="Pause">⏸</button>
             <button class="prompter-remote-btn" onclick="sendPrompterControl('resume')" title="Resume/Play">▶</button>
-            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_up')" title="Faster">🐇</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('reset')" title="Reset scroll">↺</button>
+          </div>
+          <div class="prompter-remote-field">
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_down')" title="Slower">−</button>
+            <span>Speed</span>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_up')" title="Faster">+</button>
+          </div>
+          <div class="prompter-remote-field">
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('size_down')" title="Smaller text">−</button>
+            <span>Size</span>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('size_up')" title="Bigger text">+</button>
+          </div>
+          <div class="prompter-remote-row">
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('align_left')" title="Align left">☰</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('align_center')" title="Align center">☷</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('align_right')" title="Align right">☰</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('mirror')" title="Mirror">⇄</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('fullscreen')" title="Fullscreen">⛶</button>
+          </div>
+          <div class="prompter-remote-row">
+            <button class="prompter-theme-dot" style="background:#d2ad74" onclick="sendPrompterControl('theme_warm')" title="Warm"></button>
+            <button class="prompter-theme-dot" style="background:#7eb8c8" onclick="sendPrompterControl('theme_cool')" title="Cool"></button>
+            <button class="prompter-theme-dot" style="background:#c8c8c8" onclick="sendPrompterControl('theme_white')" title="White"></button>
+            <button class="prompter-theme-dot" style="background:#7ec87e" onclick="sendPrompterControl('theme_green')" title="Green"></button>
+            <button class="prompter-theme-dot" style="background:#111;border-color:#555" onclick="sendPrompterControl('theme_black')" title="Black"></button>
+          </div>
+          <div class="prompter-remote-row">
+            <button class="prompter-remote-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')" title="Hold to brake">Brake</button>
+            <button class="prompter-remote-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')" title="Hold to boost">Boost</button>
           </div>
         </div>
         <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()" style="font-size:11px">Clear script</button>
@@ -846,7 +911,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
   </div>
   <div class="ls-bot">
-    <div class="ls-timer" id="ls-timer">00:00:00</div>
+    <div class="ls-timer" id="ls-timer">00:00:00:00</div>
     <div class="ls-nav">
       <button class="ls-btn ls-prev" onclick="lsPrev()">← Prev</button>
       <button class="ls-btn ls-next-btn" onclick="lsNext()">Next →</button>
@@ -871,6 +936,18 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
   <!-- Reading line -->
   <div id="pt-read-line"></div>
+
+  <div class="pt-hint" id="pt-hint">
+    <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">OPT + DOWN</span><span class="pt-hint-desc">reverse</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">OPT + UP</span><span class="pt-hint-desc">forward</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">fullscreen</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">script</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">hide controls</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">mirror mode</span></div>
+  </div>
 
   <!-- Stage -->
   <div id="pt-stage">
@@ -907,8 +984,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
-      <div class="pt-theme-dot active" id="pt-t-warm" style="background:#c8a97e" onclick="ptSetTheme('warm')" title="Warm"></div>
-      <div class="pt-theme-dot" id="pt-t-cool" style="background:#7eb8c8" onclick="ptSetTheme('cool')" title="Cool"></div>
+      <div class="pt-theme-dot" id="pt-t-warm" style="background:#d2ad74" onclick="ptSetTheme('warm')" title="Warm"></div>
+      <div class="pt-theme-dot active" id="pt-t-cool" style="background:#7eb8c8" onclick="ptSetTheme('cool')" title="Cool"></div>
       <div class="pt-theme-dot" id="pt-t-white" style="background:#c8c8c8" onclick="ptSetTheme('white')" title="White"></div>
       <div class="pt-theme-dot" id="pt-t-green" style="background:#7ec87e" onclick="ptSetTheme('green')" title="Green"></div>
       <div class="pt-theme-dot" id="pt-t-black" style="background:#111;border-color:#555" onclick="ptSetTheme('black')" title="Black"></div>
@@ -922,12 +999,35 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
 
   <!-- Script editor overlay -->
+  <input type="file" id="pt-file-input" accept=".pdf,.docx,.pages,.txt,.md" style="display:none">
   <div id="pt-edit-overlay">
     <div id="pt-edit-box">
       <h2>Edit / Load Script</h2>
-      <textarea id="pt-script-input" rows="12" placeholder="Paste or type script here…&#10;&#10;Or just hit 'Load from Cueola' to pull the current live script."></textarea>
+      <div class="pt-upload-bar">
+        <button class="pt-btn pt-upload-btn" id="pt-upload-file-btn" onclick="ptChooseScriptFile()">
+          <svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="1" width="11" height="13" rx="1.5"/>
+            <line x1="3.5" y1="4.5" x2="9.5" y2="4.5"/>
+            <line x1="3.5" y1="7.5" x2="9.5" y2="7.5"/>
+            <line x1="3.5" y1="10.5" x2="7" y2="10.5"/>
+          </svg>
+          Upload PDF / DOCX / Pages
+        </button>
+        <span class="pt-upload-status" id="pt-upload-status"></span>
+      </div>
+      <hr class="pt-modal-sep">
+      <div class="pt-cueola-bar">
+        <span class="pt-cueola-label">Cueola</span>
+        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Session code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
+        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load →</button>
+        <span class="pt-cueola-status" id="pt-cueola-status"></span>
+      </div>
+      <hr class="pt-modal-sep">
+      <h2>Or Paste / Type</h2>
+      <textarea id="pt-script-input" rows="12" placeholder="Paste or type your script here..."></textarea>
       <div class="pt-edit-actions">
-        <button class="pt-btn" onclick="ptLoadFromCueola()">↓ Load from Cueola</button>
+        <button class="pt-btn" onclick="ptDownloadAsTxt()">↓ .txt</button>
+        <button class="pt-btn" onclick="ptDownloadAsPDF()">↓ PDF</button>
         <button class="pt-btn" onclick="ptCloseEdit()">Cancel</button>
         <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Load Script</button>
       </div>
@@ -1054,7 +1154,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div class="overlay" id="lsScriptEditOv" onclick="if(event.target===this)hideOverlay('lsScriptEditOv')">
   <div class="warn-card" style="max-width:520px;border-color:var(--bord2)">
     <div class="warn-title" id="lsScriptEditTitle" style="font-size:16px">Script</div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px">Edit the full script here. Saving pushes this row to Prompt Up The Jam.</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px">Edit the full script here. Saving pushes this row to Promptypus.</div>
     <textarea class="field-in" id="lsScriptEditText" rows="14" style="resize:vertical;line-height:1.7;white-space:pre-wrap;font-size:14px"></textarea>
     <button class="btn-primary" onclick="saveLiveScript()">⬆ Save &amp; Push to Prompter</button>
     <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
@@ -1182,14 +1282,23 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="settings-sec-label">Show</div>
       <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none">🔒 Locked — only an admin can change this.</div></div>
       <div class="field"><label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="set-starttime" type="time"></div>
+      <div class="field">
+        <label class="field-lbl">Production Clock Frame Rate</label>
+        <select class="field-in" id="set-framerate">
+          <option value="24">24 fps</option>
+          <option value="30">30 fps</option>
+          <option value="60">60 fps</option>
+        </select>
+      </div>
     </div>
     <div class="settings-section" style="margin-top:12px">
       <div class="settings-sec-label">Appearance</div>
       <div class="theme-grid">
-        <div class="theme-swatch" data-theme="default" onclick="selectTheme('default')"><div class="ts-preview" style="background:#080b12;border-color:#1e253a"><div class="ts-dot" style="background:#5b8df8"></div></div><div class="ts-name">Default</div></div>
-        <div class="theme-swatch" data-theme="midnight" onclick="selectTheme('midnight')"><div class="ts-preview" style="background:#000;border-color:#272727"><div class="ts-dot" style="background:#5b8df8"></div></div><div class="ts-name">Midnight</div></div>
-        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')"><div class="ts-preview" style="background:#0e0904;border-color:#342a1e"><div class="ts-dot" style="background:#f59e0b"></div></div><div class="ts-name">Warm</div></div>
-        <div class="theme-swatch" data-theme="forest" onclick="selectTheme('forest')"><div class="ts-preview" style="background:#060f09;border-color:#213726"><div class="ts-dot" style="background:#22d3a0"></div></div><div class="ts-name">Forest</div></div>
+        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')"><div class="ts-preview" style="background:#100b06;border-color:#473521"><div class="ts-dot" style="background:#d2ad74"></div></div><div class="ts-name">Warm</div></div>
+        <div class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')"><div class="ts-preview" style="background:#08090f;border-color:#2c3650"><div class="ts-dot" style="background:#7eb8c8"></div></div><div class="ts-name">Cool</div></div>
+        <div class="theme-swatch" data-theme="white" onclick="selectTheme('white')"><div class="ts-preview" style="background:#f5f5f0;border-color:#c4c1b5"><div class="ts-dot" style="background:#666"></div></div><div class="ts-name">White</div></div>
+        <div class="theme-swatch" data-theme="green" onclick="selectTheme('green')"><div class="ts-preview" style="background:#050f07;border-color:#263d29"><div class="ts-dot" style="background:#7ec87e"></div></div><div class="ts-name">Green</div></div>
+        <div class="theme-swatch" data-theme="black" onclick="selectTheme('black')"><div class="ts-preview" style="background:#000;border-color:#333"><div class="ts-dot" style="background:#fff"></div></div><div class="ts-name">Black</div></div>
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -1208,7 +1317,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260505c"></script>
+<script src="cueola-app.js?v=20260505e"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
