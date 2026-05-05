@@ -606,6 +606,70 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   .ar-panel{border-radius:16px 16px 0 0}
   .admin-wrap{max-width:100%}
 }
+
+/* ─────────────────────────────────────────────────────────────
+   PROMPTYPUS — native teleprompter screen
+───────────────────────────────────────────────────────────── */
+#promptypus{position:relative;background:#0a0a0a;cursor:none}
+#promptypus.show-cursor{cursor:default}
+
+/* Top nav bar */
+#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
+#pt-bar.hidden{opacity:0;pointer-events:none}
+.pt-back-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-accent,#c8a97e);border-radius:7px;padding:5px 11px;cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
+.pt-back-btn:hover{background:rgba(200,169,126,.12)}
+.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);flex:1;text-align:center;opacity:.85;letter-spacing:.04em}
+.pt-bar-sync{font-size:10px;color:var(--pt-accent,#c8a97e);opacity:.55;letter-spacing:.08em;white-space:nowrap}
+.pt-bar-controls-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;transition:background .15s;opacity:.7}
+.pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
+
+/* Stage — scrolling area */
+#pt-stage{position:absolute;top:48px;left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s}
+#pt-stage.mirrored{transform:scaleX(-1)}
+#pt-stage::before,#pt-stage::after{content:'';position:absolute;left:0;right:0;height:28vh;pointer-events:none;z-index:10}
+#pt-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
+#pt-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
+
+#pt-track{width:min(900px,90vw);padding:100vh 0;will-change:transform}
+#pt-text{font-family:'Barlow','Syne',sans-serif;font-size:var(--pt-size,52px);line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#f0ead6);white-space:pre-wrap;word-break:break-word;transition:font-size .2s,text-align .2s;letter-spacing:.01em}
+#pt-text p{margin:0;min-height:1.55em;white-space:pre-wrap}
+
+/* Reading line */
+#pt-read-line{position:absolute;left:0;right:0;top:calc(48px + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
+#pt-read-line::before,#pt-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0;opacity:1}
+#pt-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#c8a97e)}
+#pt-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#c8a97e)}
+
+/* Progress bar */
+#pt-progress{position:absolute;top:0;left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none;box-shadow:0 0 8px var(--pt-accent,#c8a97e)}
+
+/* Floating control panel */
+#pt-panel{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:14px 18px;display:flex;flex-direction:column;gap:10px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:opacity .4s;font-family:var(--mono);font-size:11px;width:min(340px,92vw)}
+#pt-panel.hidden{opacity:0;pointer-events:none}
+.pt-ctrl-group{display:flex;align-items:center;gap:8px}
+.pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:9px;min-width:40px}
+.pt-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:var(--mono);font-size:11px;transition:background .15s,border-color .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.pt-btn:hover{background:rgba(200,169,126,.12);border-color:var(--pt-accent,#c8a97e)}
+.pt-btn.active{background:rgba(200,169,126,.2);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
+#pt-play-btn{width:100%;padding:9px;font-size:13px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e);border-radius:10px}
+#pt-play-btn.active{background:rgba(200,169,126,.2)}
+input.pt-range{-webkit-appearance:none;flex:1;height:3px;background:rgba(200,169,126,.25);border-radius:2px;outline:none}
+input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--pt-accent,#c8a97e);cursor:pointer}
+.pt-theme-dot{width:16px;height:16px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s;flex-shrink:0}
+.pt-theme-dot.active{border-color:var(--pt-accent,#c8a97e)}
+
+/* Script edit overlay */
+#pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#pt-edit-overlay.open{display:flex}
+#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:24px 28px;width:min(600px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
+#pt-edit-box h2{font-family:var(--mono);font-size:12px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.12em;margin:0}
+#pt-script-input{background:rgba(0,0,0,.5);border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:10px;padding:14px;font-size:13px;font-family:var(--mono);resize:vertical;min-height:200px;outline:none;line-height:1.6;width:100%}
+#pt-script-input:focus{border-color:var(--pt-accent,#c8a97e)}
+#pt-script-input::placeholder{color:rgba(200,169,126,.35)}
+.pt-edit-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.pt-edit-actions .pt-btn{padding:7px 18px}
+.pt-save-btn{background:rgba(200,169,126,.15);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
 </style>
 </head>
 <body>
@@ -732,6 +796,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Prompt Operator view">📜 Prompt Op</button>
+      <button class="ls-exit-btn" onclick="enterPrompter()" title="Open Promptypus teleprompter" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">📺 Promptypus</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
   </div>
@@ -785,6 +850,87 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-nav">
       <button class="ls-btn ls-prev" onclick="lsPrev()">← Prev</button>
       <button class="ls-btn ls-next-btn" onclick="lsNext()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PROMPTYPUS — NATIVE TELEPROMPTER SCREEN
+══════════════════════════════════════════ -->
+<div class="screen" id="promptypus">
+  <!-- Progress bar -->
+  <div id="pt-progress"></div>
+
+  <!-- Navigation bar -->
+  <div id="pt-bar">
+    <button class="pt-back-btn" onclick="exitPrompter()">← Cueola</button>
+    <div class="pt-bar-title">📺 Promptypus</div>
+    <div class="pt-bar-sync" id="pt-sync-label">Not synced</div>
+    <button class="pt-bar-controls-btn" onclick="ptTogglePanel()">Controls</button>
+  </div>
+
+  <!-- Reading line -->
+  <div id="pt-read-line"></div>
+
+  <!-- Stage -->
+  <div id="pt-stage">
+    <div id="pt-track">
+      <div id="pt-text"></div>
+    </div>
+  </div>
+
+  <!-- Floating control panel -->
+  <div id="pt-panel">
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" id="pt-play-btn" onclick="ptTogglePlay()">
+        <svg id="pt-play-icon" width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12Z"/></svg>
+        PLAY
+      </button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Speed</span>
+      <button class="pt-btn" onclick="ptAdjustSpeed(-5)">−</button>
+      <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)">
+      <button class="pt-btn" onclick="ptAdjustSpeed(5)">+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Size</span>
+      <button class="pt-btn" onclick="ptAdjustSize(-4)">−</button>
+      <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)">
+      <button class="pt-btn" onclick="ptAdjustSize(4)">+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Align</span>
+      <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Theme</span>
+      <div class="pt-theme-dot active" id="pt-t-warm" style="background:#c8a97e" onclick="ptSetTheme('warm')" title="Warm"></div>
+      <div class="pt-theme-dot" id="pt-t-cool" style="background:#7eb8c8" onclick="ptSetTheme('cool')" title="Cool"></div>
+      <div class="pt-theme-dot" id="pt-t-white" style="background:#c8c8c8" onclick="ptSetTheme('white')" title="White"></div>
+      <div class="pt-theme-dot" id="pt-t-green" style="background:#7ec87e" onclick="ptSetTheme('green')" title="Green"></div>
+      <div class="pt-theme-dot" id="pt-t-black" style="background:#111;border-color:#555" onclick="ptSetTheme('black')" title="Black"></div>
+    </div>
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" onclick="ptOpenEdit()">Script</button>
+      <button class="pt-btn" onclick="ptResetScroll()">Reset</button>
+      <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()">Mirror</button>
+      <button class="pt-btn" onclick="ptToggleFullscreen()">Full</button>
+    </div>
+  </div>
+
+  <!-- Script editor overlay -->
+  <div id="pt-edit-overlay">
+    <div id="pt-edit-box">
+      <h2>Edit / Load Script</h2>
+      <textarea id="pt-script-input" rows="12" placeholder="Paste or type script here…&#10;&#10;Or just hit 'Load from Cueola' to pull the current live script."></textarea>
+      <div class="pt-edit-actions">
+        <button class="pt-btn" onclick="ptLoadFromCueola()">↓ Load from Cueola</button>
+        <button class="pt-btn" onclick="ptCloseEdit()">Cancel</button>
+        <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Load Script</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1062,7 +1208,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260504e"></script>
+<script src="cueola-app.js?v=20260505c"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
