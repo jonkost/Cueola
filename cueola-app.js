@@ -4,7 +4,7 @@
 // CUE TYPE DEFINITIONS
 // ─────────────────────────────────────────────────────────────
 const CT = {
-  video:    { label:'VIDEO',    color:'#5b8df8', bg:'rgba(91,141,248,.12)', icon:'📺' },
+  video:    { label:'VIDEO',    color:'var(--video)', bg:'var(--video-bg)', icon:'📺' },
   audio:    { label:'AUDIO',    color:'#22d3a0', bg:'rgba(34,211,160,.12)', icon:'🎙' },
   lighting: { label:'LIGHTING', color:'#b06ef8', bg:'rgba(176,110,248,.12)', icon:'💡' },
   playback: { label:'PLAYBACK', color:'#f05252', bg:'rgba(240,82,82,.12)', icon:'▶'  },
@@ -14,7 +14,7 @@ const CT = {
 
 // Column ordering — persisted per user in localStorage
 const COL_META = {
-  video:    { label:'📺 Video',    color:'#5b8df8' },
+  video:    { label:'📺 Video',    color:'var(--video)' },
   audio:    { label:'🎙 Audio',    color:'#22d3a0' },
   playback: { label:'▶ Playback', color:'#f05252' },
   gfx:      { label:'🖼 GFX',     color:'#f5b731' },
@@ -65,6 +65,47 @@ let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 
+const LOCAL_DRAFT_PREFIX = 'cueola_local_draft_';
+
+function localDraftKey() {
+  if (session.isDemo) return '';
+  if (session.code) return `${LOCAL_DRAFT_PREFIX}${session.code}`;
+  return `${LOCAL_DRAFT_PREFIX}expert`;
+}
+
+function saveLocalDraft() {
+  const key = localDraftKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      show,
+      beats,
+      customSources: sessionCustomSources,
+      updatedAt: Date.now(),
+    }));
+  } catch {}
+}
+
+function restoreLocalDraft() {
+  const key = localDraftKey();
+  if (!key) return false;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    if (!draft || !Array.isArray(draft.beats)) return false;
+    show = {
+      name: draft.show?.name || 'Untitled Show',
+      start: draft.show?.start || '',
+    };
+    beats = draft.beats.map(migrateBeat);
+    sessionCustomSources = draft.customSources || {};
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Add-row wizard state
 let arStyle = null;
 let arCueType = null; // single selected type in step 2
@@ -87,6 +128,26 @@ let editStyle = null;
 
 // Prompt Op Mode — teleprompter-operator focused live view
 let promptOpMode = false;
+let browserBackGuardReady = false;
+
+function pushSessionHistoryState(screen) {
+  if (!history.pushState) return;
+  try {
+    history.pushState({ cueolaSession:true, screen }, '', location.href);
+    browserBackGuardReady = true;
+  } catch {}
+}
+
+function leaveSessionForFrontPage() {
+  stopTimer();
+  if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
+  document.getElementById('rundown')?.classList.remove('on');
+  document.getElementById('liveshow')?.classList.remove('on');
+  document.getElementById('liveshow')?.classList.remove('prompt-op-active');
+  document.getElementById('promptypus')?.classList.remove('on');
+  document.getElementById('entry')?.classList.add('on');
+  sessionStorage.removeItem('cueola_screen');
+}
 
 // ─────────────────────────────────────────────────────────────
 // UTILS
@@ -158,6 +219,13 @@ const OWNER_ADMIN_ID = 'adm_owner_jonkost';
 let _adminsCache = [];      // in-memory list, always current
 let _adminsCacheReady = false; // true once Firestore (or fallback) has loaded
 let _adminsUnsub = null;    // Firestore onSnapshot unsubscribe
+
+const SESSION_SOURCE_DEFAULTS = {
+  video: ['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'],
+  audio: ['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains'],
+  gfx:   ['GFX','Media 1','Media 2','Media 3','Media 4','ME 1'],
+  scriptWho: ['Host','Guest 1','Guest 2','VOU'],
+};
 
 function hashStr(s) {
   let h = 0;
@@ -388,6 +456,11 @@ function renderAdminBody() {
   if (isSuper) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Admin Management</div>
+      ${session.code ? `<div class="admin-session-actions">
+        <button class="admin-act-btn" onclick="copySessionCode()">Copy Session Code</button>
+        <button class="admin-act-btn" onclick="copySessionLink()">Copy Session Link</button>
+        <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
+      </div>` : ''}
       <div class="admin-list">`;
     admins.forEach(a => {
       const isMe = a.id===adminSession.id;
@@ -403,7 +476,8 @@ function renderAdminBody() {
         <div style="flex:1"></div>
         ${isMe ? '<span class="admin-item-you">YOU</span>' : ''}
         <div class="admin-item-acts">
-          ${canEditCode ? `<button class="admin-act-btn" onclick="promptEditCode('${a.id}','${esc(a.name)}')">Edit Code</button>` : ''}
+          ${session.code ? `<button class="admin-act-btn" onclick="shareSessionInvite(${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Send Session</button>` : ''}
+          ${canEditCode ? `<button class="admin-act-btn" onclick="promptEditCode('${a.id}',${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Edit Code</button>` : ''}
           ${isSuper && !isMe && a.level==='standard' ? `<button class="admin-act-btn" onclick="promoteToFull('${a.id}')">→ Full</button>` : ''}
           ${isSuper && !isMe && a.level==='full' ? `<button class="admin-act-btn" onclick="promoteToSuper('${a.id}')">→ Super</button><button class="admin-act-btn" onclick="demoteToStandard('${a.id}')">→ Standard</button>` : ''}
           ${isSuper && !isMe && a.level==='super' ? `<button class="admin-act-btn" onclick="demoteToFull('${a.id}')">→ Full</button>` : ''}
@@ -443,7 +517,7 @@ function renderAdminBody() {
   }
 
   if (session.code) {
-    const presenceNames = Object.values(currentPresence||{}).map(p=>p.name).filter(Boolean);
+    const presenceNames = getActivePresencePeople().map(p=>p.name);
     const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     html += `<div class="admin-section" style="margin-top:16px">
       <div class="admin-section-label">Live Control</div>
@@ -451,7 +525,7 @@ function renderAdminBody() {
         <select id="adminFollowSelect" class="field-in" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn" style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red)" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">🔴 Force Everyone Live + Follow</button>
+        <button class="admin-act-btn" ${presenceNames.length?'':'disabled'} style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red);${presenceNames.length?'':'opacity:.45;cursor:not-allowed'}" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">🔴 Force Everyone Live + Follow</button>
       </div>
     </div>`;
   }
@@ -461,18 +535,12 @@ function renderAdminBody() {
 }
 
 function renderSourcesRow(key, label) {
-  const SRC_DEFAULTS = {
-    video: ['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'],
-    audio: ['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains'],
-    gfx:   ['GFX','Media 1','Media 2','Media 3','Media 4','ME 1'],
-    scriptWho: ['Host','Guest 1','Guest 2','VOU'],
-  };
-  const defaults = SRC_DEFAULTS[key] || [];
+  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
+  const removed = sessionCustomSources.__removed?.[key] || [];
   const custom = (sessionCustomSources[key]||[]);
-  const all = [...defaults, ...custom];
-  const chips = all.map((s,i) => {
-    const isCustom = i>=defaults.length;
-    return `<span class="admin-src-chip">${esc(s)}${isCustom?`<span class="rm" onclick="removeCustomSource('${key}',${i-defaults.length})">✕</span>`:''}</span>`;
+  const all = [...defaults.filter(s=>!removed.includes(s)), ...custom];
+  const chips = all.map(s => {
+    return `<span class="admin-src-chip">${esc(s)}<button class="rm" onclick="removeSessionSource('${key}',${JSON.stringify(s).replace(/"/g,'&quot;')})" title="Remove ${esc(s)}">x</button></span>`;
   }).join('');
   return `<div class="admin-src-row">
     <span class="admin-src-label">${label}</span>
@@ -506,6 +574,41 @@ function promptEditCode(id, name) {
   const code = prompt(`New code for ${name}:`);
   if (!code) return;
   if (updateAdminCode(id, code)) toast('Code updated.');
+}
+
+function sessionInviteLink() {
+  const url = new URL(location.href);
+  url.searchParams.set('code', session.code || '');
+  url.hash = '';
+  return url.toString();
+}
+
+function writeClipboard(text, doneMsg) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(()=>toast(doneMsg)).catch(()=>prompt('Copy this:', text));
+  } else {
+    prompt('Copy this:', text);
+  }
+}
+
+function copySessionCode() {
+  if (!session.code) return;
+  writeClipboard(session.code, 'Session code copied.');
+}
+
+function copySessionLink() {
+  if (!session.code) return;
+  writeClipboard(sessionInviteLink(), 'Session link copied.');
+}
+
+function shareSessionInvite(name='') {
+  if (!session.code) return;
+  const text = `${name ? `${name}, join` : 'Join'} ${show.name || 'Cueola'}\nCode: ${session.code}\n${sessionInviteLink()}`;
+  if (navigator.share) {
+    navigator.share({ title:'Cueola Session', text }).catch(()=>{});
+  } else {
+    writeClipboard(text, 'Session invite copied.');
+  }
 }
 
 function promoteToFull(id) {
@@ -543,8 +646,19 @@ function confirmRemoveAdmin(id, name) {
 function addCustomSource(key) {
   const val = prompt(`Add custom source for ${key}:`);
   if (!val||!val.trim()) return;
+  const clean = val.trim();
+  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
+  if (!sessionCustomSources.__removed) sessionCustomSources.__removed = {};
+  if (!sessionCustomSources.__removed[key]) sessionCustomSources.__removed[key] = [];
+  if (defaults.includes(clean)) {
+    sessionCustomSources.__removed[key] = sessionCustomSources.__removed[key].filter(s=>s!==clean);
+    syncSessionSources();
+    renderAdminBody();
+    return;
+  }
   if (!sessionCustomSources[key]) sessionCustomSources[key]=[];
-  sessionCustomSources[key].push(val.trim());
+  if (sessionCustomSources[key].includes(clean)) return;
+  sessionCustomSources[key].push(clean);
   syncSessionSources();
   renderAdminBody();
 }
@@ -552,6 +666,19 @@ function addCustomSource(key) {
 function removeCustomSource(key, idx) {
   if (!sessionCustomSources[key]) return;
   sessionCustomSources[key].splice(idx,1);
+  syncSessionSources();
+  renderAdminBody();
+}
+
+function removeSessionSource(key, value) {
+  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
+  if (!sessionCustomSources.__removed) sessionCustomSources.__removed = {};
+  if (!sessionCustomSources.__removed[key]) sessionCustomSources.__removed[key] = [];
+  if (defaults.includes(value)) {
+    if (!sessionCustomSources.__removed[key].includes(value)) sessionCustomSources.__removed[key].push(value);
+  } else if (sessionCustomSources[key]) {
+    sessionCustomSources[key] = sessionCustomSources[key].filter(s=>s!==value);
+  }
   syncSessionSources();
   renderAdminBody();
 }
@@ -564,11 +691,9 @@ function syncSessionSources() {
 }
 
 function getSources(key) {
-  const defaults = key==='video' ? CT.video.defSources
-    : key==='audio' ? CT.audio.defSources
-    : key==='gfx' ? CT.gfx.defSources
-    : CT.script.defWho;
-  return [...defaults, ...(sessionCustomSources[key]||[])];
+  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
+  const removed = sessionCustomSources.__removed?.[key] || [];
+  return [...defaults.filter(s=>!removed.includes(s)), ...(sessionCustomSources[key]||[])];
 }
 
 function migrateOldCue(type, d) {
@@ -673,6 +798,7 @@ function loadExpert() {
   session = { code:'', role:'instructor', userName:'You', isDemo:false, isExpert:true };
   show = { name:'Untitled Show', start:'' };
   beats = [];
+  restoreLocalDraft();
   enterRundown();
 }
 
@@ -685,11 +811,7 @@ function loadDemo() {
 
 function goHome() {
   if (!confirm('Go back to the home screen? You can rejoin or reload your session.')) return;
-  stopTimer();
-  document.getElementById('rundown').classList.remove('on');
-  document.getElementById('liveshow').classList.remove('on');
-  document.getElementById('entry').classList.add('on');
-  sessionStorage.removeItem('cueola_screen');
+  leaveSessionForFrontPage();
 }
 
 function enterRundown() {
@@ -697,6 +819,7 @@ function enterRundown() {
   document.getElementById('entry').classList.remove('on');
   document.getElementById('rundown').classList.add('on');
   document.getElementById('liveshow').classList.remove('on');
+  pushSessionHistoryState('build');
 
   updateAdminUI();
 
@@ -813,6 +936,7 @@ function setupFirestore() {
 }
 
 function syncToFirestore() {
+  saveLocalDraft();
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code),{
     beats, showName:show.name, startTime:show.start||''
@@ -862,13 +986,29 @@ async function leavePresence() {
   try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}`]:window._deleteField()}); } catch {}
 }
 
+function getActivePresencePeople() {
+  const now = Date.now();
+  const seen = new Set();
+  return Object.values(currentPresence||{})
+    .filter(p => p?.name && (now - (p.lastSeen||0)) < 90000)
+    .sort((a,b)=>a.role==='instructor'?-1:b.role==='instructor'?1:0)
+    .filter(p => {
+      const key = p.name.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 function renderPresence(map) {
   currentPresence = map || {};
-  const now = Date.now();
-  const active = Object.values(map||{}).filter(p=>(now-(p.lastSeen||0))<90000)
-    .sort((a,b)=>a.role==='instructor'?-1:b.role==='instructor'?1:0);
+  const active = getActivePresencePeople();
   const wrap = document.getElementById('presenceWrap');
-  if (!active.length||!session.code||session.isDemo||session.isExpert){wrap.style.display='none';return;}
+  if (!active.length||!session.code||session.isDemo||session.isExpert){
+    wrap.style.display='none';
+    if (document.getElementById('adminPanel')?.classList.contains('on')) renderAdminBody();
+    return;
+  }
   wrap.style.display='flex';
   const shown = active.slice(0,4), extra = active.length-4;
   document.getElementById('presenceAvatars').innerHTML =
@@ -880,6 +1020,7 @@ function renderPresence(map) {
       const col=p.role==='instructor'?'var(--accent)':'var(--green)';
       return `<div class="p-tip-row"><div class="p-tip-dot" style="background:${col}"></div>${esc(p.name)}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
+  if (document.getElementById('adminPanel')?.classList.contains('on')) renderAdminBody();
 }
 
 window.addEventListener('beforeunload', leavePresence);
@@ -902,7 +1043,7 @@ function toggleEditMode() {
   const btn = document.getElementById('editModeBtn');
   if (btn) {
     btn.textContent = editMode ? '✓ Done Editing' : '✎ Edit';
-    btn.style.background = editMode ? 'rgba(91,141,248,.15)' : '';
+    btn.style.background = editMode ? 'color-mix(in srgb,var(--accent) 16%,transparent)' : '';
     btn.style.borderColor = editMode ? 'var(--accent)' : '';
     btn.style.color = editMode ? 'var(--accent)' : '';
   }
@@ -1130,15 +1271,6 @@ const AR_TYPE_DESC = {
   script:   'Copy, dialogue, prompter',
 };
 
-const AR_CUE_HINTS = {
-  video:    { ready:'e.g. CAM 1',          take:'e.g. Take CAM 1'   },
-  audio:    { ready:'e.g. Open Mic Host',  take:'e.g. Play Music'   },
-  playback: { ready:'e.g. Standby SC_042', take:'e.g. Roll'         },
-  gfx:      { ready:'e.g. Set Lower 3rd',  take:'e.g. Take GFX'    },
-  lighting: { ready:'e.g. CH 1–4 Preset',  take:'e.g. Go'          },
-  script:   { ready:'e.g. Host',           take:'e.g. Begin'        },
-};
-
 function openAddRow() {
   arStyle = null;
   arCueType = null;
@@ -1156,7 +1288,7 @@ function openAddRow() {
   if (durWrap) durWrap.style.display = 'none';
   document.getElementById('ar-step-1').classList.add('on');
   document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-3').classList.remove('on');
+  document.getElementById('ar-step-3')?.classList.remove('on');
   buildArContext();
   showOverlay('addRowOv');
 }
@@ -1177,7 +1309,7 @@ function arGoStep2() {
   }).join('');
   document.getElementById('ar-next-2').disabled = true;
   document.getElementById('ar-step-1').classList.remove('on');
-  document.getElementById('ar-step-3').classList.remove('on');
+  document.getElementById('ar-step-3')?.classList.remove('on');
   document.getElementById('ar-step-2').classList.add('on');
 }
 
@@ -1188,38 +1320,43 @@ function arSelectCueType(type) {
   document.getElementById('ar-next-2').disabled = false;
 }
 
-function arGoStep3() {
-  if (!arCueType) return;
-  const tc = CT[arCueType];
-  document.getElementById('ar-step3-heading').textContent = `${tc.icon} ${tc.label} Cue`;
-  const h = AR_CUE_HINTS[arCueType] || { ready:'', take:'' };
-  let fields = `
-    <div class="ar-ctx-help">
-      <strong>Guided cue builder:</strong> write the standby/prep call first, then the exact execute call the operator should take live.
-    </div>
-    <div class="field">
-      <label class="field-lbl" style="color:var(--green)">✓ CUE READY</label>
-      <input class="field-in" id="ar-cue-ready" placeholder="${h.ready}" maxlength="80" autocomplete="off">
-    </div>
-    <div class="field">
-      <label class="field-lbl" style="color:var(--accent)">→ CUE EXECUTE / TAKE</label>
-      <input class="field-in" id="ar-cue-take" placeholder="${h.take}" maxlength="80" autocomplete="off">
-    </div>`;
-  if (arCueType === 'script') {
-    fields += `
-    <div class="field">
-      <label class="field-lbl">Script Text</label>
-      <textarea class="field-in" id="ar-cue-text" rows="4" style="resize:vertical;line-height:1.6"></textarea>
-    </div>`;
+function buildAddRowBeat() {
+  const info  = document.getElementById('ar-name-input')?.value?.trim()||'';
+  const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
+  const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
+  const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
+  const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
+  return { id:newId, style:arStyle, info, notes, min, sec, done:false, cues:{} };
+}
+
+function insertAddRowBeat() {
+  const newBeat = buildAddRowBeat();
+  if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) {
+    beats.splice(_insertIdx, 0, newBeat);
+  } else {
+    beats.push(newBeat);
   }
-  document.getElementById('arCueFields').innerHTML = fields;
-  document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-3').classList.add('on');
+  _insertIdx = null;
+  return newBeat;
+}
+
+function arCreateRowAndOpenCueBuilder() {
+  if (!arStyle || !arCueType) return;
+  const newBeat = insertAddRowBeat();
+  hideOverlay('addRowOv');
+  renderRundown();
+  syncToFirestore();
+  toast('Row added. Configure the cue.');
+  setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
+}
+
+function arGoStep3() {
+  arCreateRowAndOpenCueBuilder();
 }
 
 function arGoStep1() {
   document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-3').classList.remove('on');
+  document.getElementById('ar-step-3')?.classList.remove('on');
   document.getElementById('ar-step-1').classList.add('on');
 }
 
@@ -1343,7 +1480,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="vOn-src">
-          ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'], 'ccVOnSrc')}
+          ${ccChips(getSources('video'), 'ccVOnSrc')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-custom','_ccVOnBuild')">+ Custom</button>
         </div>
         ${ccCustomSrcField('cc-v-custom', d.customSrc)}
@@ -1372,7 +1509,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Destination</div>
         <div class="cc-chip-grid" id="vOff-dest">
-          ${ccChips(['Black','CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'], 'ccVOffDest')}
+          ${ccChips(['Black', ...getSources('video')], 'ccVOffDest')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-dest-custom','_ccVOffBuild')">+ Custom</button>
         </div>
         <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none;margin-top:8px" oninput="_ccVOffBuild()">
@@ -1399,7 +1536,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="aOn-src">
-          ${ccChips(['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains'], 'ccAOnSrc')}
+          ${ccChips(getSources('audio'), 'ccAOnSrc')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-custom','_ccAOnBuild')">+ Custom</button>
         </div>
         ${ccCustomSrcField('cc-a-custom', d.customSrc)}
@@ -1424,7 +1561,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="aOff-src">
-          ${ccChips(['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains','All'], 'ccAOffSrc')}
+          ${ccChips([...getSources('audio'), 'All'], 'ccAOffSrc')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-off-custom','_ccAOffBuild')">+ Custom</button>
         </div>
         <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none;margin-top:8px" oninput="_ccAOffBuild()">
@@ -1517,7 +1654,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
         <div class="cc-chip-grid" id="gOn-src">
-          ${ccChips(['GFX','Media 1','Media 2','Media 3','Media 4','ME 1'], 'ccGOnSrc')}
+          ${ccChips(getSources('gfx'), 'ccGOnSrc')}
         </div>
       </div>
       ${step(2,'What will you do with it?')}
@@ -1672,7 +1809,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Source / Speaker</div>
         <div class="cc-chip-grid" id="sOn-src">
-          ${ccChips(['Host','Guest 1','Guest 2','VOU','Narrator','Anchor'], 'ccSOnSrc')}
+          ${ccChips([...getSources('scriptWho'), 'Narrator','Anchor'], 'ccSOnSrc')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-custom','_ccSOnBuild')">+ Custom</button>
         </div>
         ${ccCustomSrcField('cc-s-custom', d.customSrc)}
@@ -2120,27 +2257,15 @@ function chipCustom(id, el) {
 
 function arCommit() {
   if (!arStyle) return;
-  const info  = document.getElementById('ar-name-input')?.value?.trim()||'';
-  const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
-  const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
-  const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
-  const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
-  const cues = {};
+  const newBeat = insertAddRowBeat();
   if (arCueType) {
     const d = {
       ready: document.getElementById('ar-cue-ready')?.value?.trim()||'',
       take:  document.getElementById('ar-cue-take')?.value?.trim()||'',
     };
     if (arCueType === 'script') d.text = document.getElementById('ar-cue-text')?.value?.trim()||'';
-    cues[arCueType] = d;
+    newBeat.cues[arCueType] = d;
   }
-  const newBeat = { id:newId, style:arStyle, info, notes, min, sec, done:false, cues };
-  if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) {
-    beats.splice(_insertIdx, 0, newBeat);
-  } else {
-    beats.push(newBeat);
-  }
-  _insertIdx = null;
   hideOverlay('addRowOv');
   renderRundown(); syncToFirestore();
   toast('Row added.');
@@ -2227,6 +2352,7 @@ function goLive() {
   document.getElementById('tabLive').classList.add('on');
   document.getElementById('tabBuild').classList.remove('on');
   sessionStorage.setItem('cueola_screen','live');
+  pushSessionHistoryState('live');
   buildPromptFromRundown();
   initPrompter();
   renderLive();
@@ -2241,6 +2367,7 @@ function showRundown() {
   document.getElementById('tabBuild').classList.add('on');
   document.getElementById('tabLive').classList.remove('on');
   sessionStorage.setItem('cueola_screen','build');
+  pushSessionHistoryState('build');
   stopTimer();
 }
 
@@ -2302,6 +2429,14 @@ function getPrompterPayload(isInit=false) {
     nextRow: next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null,
     ts: Date.now()
   };
+}
+
+function cleanPrompterText(text) {
+  return String(text || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function updateLiveOverview() {
@@ -2469,6 +2604,7 @@ function renderLive() {
   renderFollowChips();
   updateLiveOverview();
   updateLsPrompter();
+  renderLivePrompterControls();
 }
 
 function liveQuick(b, type) {
@@ -2581,6 +2717,7 @@ function forceMeAsShowCaller() {
 // Admin: force everyone live and following a specific person
 function adminForceLive(followName) {
   if (!adminSession || !session.code) return;
+  if (!followName || followName === 'No users online') { toast('No live users to follow.'); return; }
   window._updateDoc(window._doc(window._db,'sessions',session.code), {
     forceCmd: { type:'forceLive', name:followName, ts:Date.now() }
   }).catch(()=>{});
@@ -2604,6 +2741,7 @@ function buildPromptFromRundown() {
     const hdr = b.info ? `\n── ${b.info} ──\n` : '\n──────────────\n';
     return hdr + (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + (d.text||'');
   }).join('\n\n');
+  prompterText = cleanPrompterText(prompterText);
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
 }
@@ -2714,17 +2852,17 @@ function _setPrompterStatus(connected, unavailable=false) {
 }
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
-  if (prevBeat?.cues?.script?.text) {
-    prompterText += '\n\n⬛ ─── [Production advancing] ───\n\n';
-  }
+  prompterText = '';
   if (newBeat?.cues?.script?.text) {
     const d = newBeat.cues.script;
-    prompterText += (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + d.text + '\n';
+    prompterText = (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + d.text;
   }
+  prompterText = cleanPrompterText(prompterText);
   sendToPrompter();
 }
 
 function sendToPrompter(isInit=false) {
+  prompterText = cleanPrompterText(prompterText);
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
   _postPrompterMessage(getPrompterPayload(isInit));
@@ -2746,6 +2884,7 @@ function sendToPrompter(isInit=false) {
       'prompter.nextRow':next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null
     }).catch(()=>{});
   }
+  renderLivePrompterControls();
 }
 
 function updateLsPrompter() {
@@ -2753,9 +2892,14 @@ function updateLsPrompter() {
   if (el) el.textContent = prompterText;
 }
 
+function renderLivePrompterControls() {
+  const el = document.getElementById('lsPrompterRemote');
+  if (el) el.innerHTML = promptOpControlsHTML();
+}
+
 function pushToPrompter() {
   const el = document.getElementById('lsPrompterText');
-  if (el) prompterText = el.textContent;
+  if (el) prompterText = cleanPrompterText(el.innerText || el.textContent || '');
   sendToPrompter();
   if (promptOpMode) renderLivePromptOp();
   toast('Pushed to prompter');
@@ -2776,6 +2920,7 @@ function sendPrompterControl(action) {
   _postPrompterMessage({ type:'prompter_control', action, ts:Date.now() });
   ptHandleRemoteControl(action);
   if (promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePromptOp();
+  if (!promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePrompterControls();
   if (window._firebaseReady && session.code && !session.isDemo) {
     window._updateDoc(window._doc(window._db,'sessions',session.code),{
       'prompter.control': { action, ts:Date.now(), sender:CLIENT_ID }
@@ -2820,10 +2965,10 @@ let ptReceiverStorageHandler = null;
 let ptLastRemoteMsgTs = 0;
 
 const PT_THEMES = {
-  warm:  { bg:'#100b06', text:'#f4ead6', accent:'#d2ad74', uiBg:'rgba(22,16,10,.92)',    uiBorder:'rgba(210,173,116,.25)' },
+  warm:  { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
   cool:  { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
   white: { bg:'#f5f5f0', text:'#1a1a1a', accent:'#666',    uiBg:'rgba(225,225,220,.95)', uiBorder:'rgba(100,100,100,.25)' },
-  green: { bg:'#050f07', text:'#cff0d6', accent:'#7ec87e', uiBg:'rgba(8,20,10,.92)',     uiBorder:'rgba(126,200,126,.25)' },
+  green: { bg:'#041006', text:'#ddf0d2', accent:'#78ad4f', uiBg:'rgba(7,22,8,.92)',      uiBorder:'rgba(120,173,79,.25)' },
   black: { bg:'#000000', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(18,18,18,.95)',    uiBorder:'rgba(255,255,255,.2)' },
 };
 
@@ -2984,6 +3129,10 @@ function promptOpControlsHTML() {
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
       ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].accent}${name==='black'?';border-color:#555':''}" onclick="sendPrompterControl('theme_${name}')" title="${name}"></div>`).join('')}
+    </div>
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
+      <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')">Boost</button>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>
@@ -3460,6 +3609,7 @@ function enterPrompter() {
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('promptypus').classList.add('on');
+  pushSessionHistoryState('promptypus');
   ptInitReceiver();
 
   // Sync live script from Cueola if available (always takes priority over previous content)
@@ -3578,7 +3728,7 @@ function togglePromptOpMode() {
     if (promptOpMode) {
       btn.style.color = 'var(--cyan)';
       btn.style.borderColor = 'var(--cyan)';
-      btn.style.background = 'rgba(34,211,211,.1)';
+      btn.style.background = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
       btn.textContent = '▦ Rundown View';
     } else {
       btn.style.color = '';
@@ -3600,7 +3750,7 @@ function renderLivePromptOp() {
   const cur  = beats[lsIdx] || null;
   const next = beats[lsIdx + 1] || null;
   const sd   = cur?.cues?.script;
-  const script = (prompterText && prompterText.trim()) || sd?.text || '';
+  const script = cleanPrompterText((prompterText && prompterText.trim()) || sd?.text || '');
   body.innerHTML = `<div class="prompt-op-stage">
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
@@ -3784,6 +3934,19 @@ _adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))
 restoreAdminSession();
 updateAdminUI();
 applyTheme(currentTheme);
+
+window.addEventListener('popstate', () => {
+  const inSession =
+    document.getElementById('rundown')?.classList.contains('on') ||
+    document.getElementById('liveshow')?.classList.contains('on') ||
+    document.getElementById('promptypus')?.classList.contains('on');
+  if (!browserBackGuardReady || !inSession) return;
+  if (confirm('Leave this session and return to the front page?')) {
+    leaveSessionForFrontPage();
+  } else {
+    pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
+  }
+});
 
 // Then load from Firestore (source of truth) — updates cache + restores session again
 if (window._firebaseReady) initAdminsFromFirestore();
