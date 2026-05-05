@@ -67,6 +67,9 @@ let liveScriptEditIdx = null;
 // Edit style (for edit overlay)
 let editStyle = null;
 
+// Prompt Op Mode — teleprompter-operator focused live view
+let promptOpMode = false;
+
 // ─────────────────────────────────────────────────────────────
 // UTILS
 // ─────────────────────────────────────────────────────────────
@@ -256,11 +259,13 @@ function updateAdminCode(id, newCode) {
 
 function updateAdminUI() {
   const btn = document.getElementById('adminBtn');
+  if (!btn) return;
   if (adminSession) {
-    btn.style.display = '';
     btn.textContent = `🔑 ${adminSession.name.split(' ')[0]}`;
+    btn.className = 'tbtn tbtn-admin';
   } else {
-    btn.style.display = 'none';
+    btn.textContent = '🔑 Admin';
+    btn.className = 'tbtn tbtn-ghost';
   }
 }
 
@@ -356,6 +361,7 @@ function renderAdminBody() {
       const canEdit = isSuper && !isMe; // super can edit others; full cannot see codes
       const canRemove = (isSuper && !isMe) || (isFull && a.level==='standard' && !isMe);
       const levelClass = `alc-${a.level}`;
+      const canEditCode = isSuper; // super can edit any code including own
       html += `<div class="admin-item">
         <div>
           <div class="admin-item-name">${esc(a.name)}</div>
@@ -364,9 +370,10 @@ function renderAdminBody() {
         <div style="flex:1"></div>
         ${isMe ? '<span class="admin-item-you">YOU</span>' : ''}
         <div class="admin-item-acts">
-          ${canEdit ? `<button class="admin-act-btn" onclick="promptEditCode('${a.id}','${esc(a.name)}')">Edit Code</button>` : ''}
+          ${canEditCode ? `<button class="admin-act-btn" onclick="promptEditCode('${a.id}','${esc(a.name)}')">Edit Code</button>` : ''}
           ${isSuper && !isMe && a.level==='standard' ? `<button class="admin-act-btn" onclick="promoteToFull('${a.id}')">→ Full</button>` : ''}
-          ${isSuper && !isMe && a.level==='full' ? `<button class="admin-act-btn" onclick="demoteToStandard('${a.id}')">→ Standard</button>` : ''}
+          ${isSuper && !isMe && a.level==='full' ? `<button class="admin-act-btn" onclick="promoteToSuper('${a.id}')">→ Super</button><button class="admin-act-btn" onclick="demoteToStandard('${a.id}')">→ Standard</button>` : ''}
+          ${isSuper && !isMe && a.level==='super' ? `<button class="admin-act-btn" onclick="demoteToFull('${a.id}')">→ Full</button>` : ''}
           ${canRemove ? `<button class="admin-act-btn danger" onclick="confirmRemoveAdmin('${a.id}','${esc(a.name)}')">Remove</button>` : ''}
         </div>
       </div>`;
@@ -473,6 +480,18 @@ function promoteToFull(id) {
   const admins = getAdmins();
   const a = admins.find(x=>x.id===id);
   if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Full Access.`); }
+}
+
+function promoteToSuper(id) {
+  const admins = getAdmins();
+  const a = admins.find(x=>x.id===id);
+  if (a) { a.level='super'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Super Admin.`); }
+}
+
+function demoteToFull(id) {
+  const admins = getAdmins();
+  const a = admins.find(x=>x.id===id);
+  if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} set to Full Access.`); }
 }
 
 function demoteToStandard(id) {
@@ -2355,6 +2374,7 @@ function liveCellForBeat(b, type, beatIdx) {
 }
 
 function renderLive() {
+  if (promptOpMode) { renderLivePromptOp(); return; }
   const body = document.getElementById('lsBody');
   if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
 
@@ -2630,7 +2650,7 @@ function _setPrompterStatus(connected, unavailable=false) {
     dot.className='ls-prompter-dot'; txt.textContent='Connected';
     if (stat) stat.textContent='Connected';
   } else {
-    dot.className='ls-prompter-dot off'; txt.textContent='Waiting for PUTJ…';
+    dot.className='ls-prompter-dot off'; txt.textContent='Waiting for Promptypus…';
     if (stat) stat.textContent='Waiting';
   }
 }
@@ -2680,6 +2700,62 @@ function clearPrompter() {
   if (!confirm('Clear prompter text?')) return;
   prompterText = '';
   sendToPrompter(true); // reset scroll on clear
+}
+
+function openPrompterApp() {
+  const loc = window.location;
+  const url = loc.port
+    ? `${loc.protocol}//${loc.hostname}:${Number(loc.port) + 1}`
+    : loc.origin;
+  window.open(url, '_blank');
+}
+
+function sendPrompterControl(action) {
+  _postPrompterMessage({ type:'prompter_control', action, ts:Date.now() });
+  const labels = { pause:'Paused', resume:'Resumed', speed_up:'Faster', speed_down:'Slower', rewind:'Rewound' };
+  toast(`Promptypus: ${labels[action] || action}`);
+}
+
+function togglePromptOpMode() {
+  promptOpMode = !promptOpMode;
+  const btn = document.getElementById('promptOpBtn');
+  if (btn) {
+    if (promptOpMode) {
+      btn.style.color = 'var(--cyan)';
+      btn.style.borderColor = 'var(--cyan)';
+      btn.style.background = 'rgba(34,211,211,.1)';
+      btn.textContent = '⊞ Cue View';
+    } else {
+      btn.style.color = '';
+      btn.style.borderColor = '';
+      btn.style.background = '';
+      btn.textContent = '📜 Prompt Op';
+    }
+  }
+  renderLive();
+}
+
+function renderLivePromptOp() {
+  const body = document.getElementById('lsBody');
+  if (!beats.length) {
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
+    return;
+  }
+  const cur  = beats[lsIdx] || null;
+  const next = beats[lsIdx + 1] || null;
+  const sd   = cur?.cues?.script;
+  const adminCaller = isAdminShowCaller();
+  body.innerHTML = `<div class="po-wrap">
+    <div class="po-now-badge">
+      <span style="width:8px;height:8px;background:var(--red);border-radius:50%;display:inline-block;flex-shrink:0"></span>
+      NOW — ${esc(cur?.info || '—')} &nbsp;·&nbsp; Row ${lsIdx + 1} of ${beats.length}
+    </div>
+    ${sd?.text
+      ? `<div class="po-script-text">${esc(sd.text)}</div>
+         ${adminCaller ? `<button class="ltr-edit-btn" onclick="openLiveScript(${lsIdx})">✎ Edit &amp; Push Script</button>` : ''}`
+      : `<div class="po-no-script">No script for this cue.<br><span style="font-size:12px;color:var(--text3)">Add script in build mode or edit via the sidebar.</span></div>`}
+    ${next ? `<div class="po-next"><span style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.1em">NEXT →</span>&nbsp; ${esc(next.info || '—')}</div>` : ''}
+  </div>`;
 }
 
 // ─────────────────────────────────────────────────────────────

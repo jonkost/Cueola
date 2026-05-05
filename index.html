@@ -92,7 +92,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 /* ── RUNDOWN TABLE ── */
 .rd-scroll{flex:1;overflow-y:auto;overflow-x:auto;background:linear-gradient(180deg,rgba(91,141,248,.025),transparent 120px);border-top:1px solid rgba(91,141,248,.08)}
 .rd-table{width:100%;min-width:100%;border-collapse:collapse;table-layout:fixed}
-.rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top}
+.rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top;border-right:1px solid var(--bord2)}
+.rd-table th:last-child,.rd-table td:last-child{border-right:none}
 .col-drag{width:20px}.col-num{width:32px}.col-info{width:22%}
 .col-time{width:92px}.col-cue{width:12%}.col-script-c{width:14%}.col-acts{width:58px}
 .rd-scroll{width:100%}
@@ -101,7 +102,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
 /* Cue type cells */
 .cd-cue-cell{padding:4px;vertical-align:middle;background:rgba(255,255,255,.008)}
-.cue-add-btn{width:100%;min-height:34px;border:1.5px dashed rgba(91,141,248,.36);border-radius:7px;background:rgba(91,141,248,.045);color:#8fb0ff;font-size:12px;font-family:var(--mono);font-weight:700;letter-spacing:.06em;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase}
+.cue-add-btn{width:100%;min-height:52px;border:1.5px dashed rgba(91,141,248,.36);border-radius:7px;background:rgba(91,141,248,.045);color:#8fb0ff;font-size:12px;font-family:var(--mono);font-weight:700;letter-spacing:.06em;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase}
 .cue-add-btn:hover{border-color:var(--accent);color:#fff;background:rgba(91,141,248,.12)}
 .cue-cell-filled{display:flex;flex-direction:column;gap:3px;padding:5px 7px;border-radius:7px;cursor:pointer;transition:all .12s;border:1px solid var(--bord2);background:linear-gradient(180deg,var(--s2),rgba(26,31,50,.82));min-height:34px;box-shadow:0 6px 14px rgba(0,0,0,.12);position:relative}
 .cue-cell-filled:hover{border-color:var(--accent);background:rgba(91,141,248,.05)}
@@ -352,6 +353,19 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .ls-pact-btn{padding:7px 12px;border-radius:7px;font-size:11px;font-weight:600;font-family:var(--mono);cursor:pointer;border:none;transition:all .15s}
 .ls-push-btn{background:var(--accent);color:#fff;flex:1}.ls-push-btn:hover{filter:brightness(1.1)}
 .ls-clear-btn{background:var(--s3);border:1px solid var(--bord2);color:var(--text2)}.ls-clear-btn:hover{color:var(--text)}
+
+/* Prompt Op Mode */
+.po-wrap{flex:1;display:flex;flex-direction:column;padding:24px 28px 20px;gap:18px;overflow-y:auto;min-height:0}
+.po-now-badge{font-size:11px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--red);display:flex;align-items:center;gap:8px}
+.po-script-text{font-family:var(--syne);font-size:30px;font-weight:600;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word;flex:1}
+.po-no-script{font-size:16px;color:var(--text3);font-family:var(--mono);padding:40px 0}
+.po-next{font-size:13px;font-family:var(--mono);color:var(--green);padding:10px 14px;background:rgba(34,211,160,.06);border:1px solid rgba(34,211,160,.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+/* Prompter remote controls */
+.prompter-remote-row{display:flex;gap:5px}
+.prompter-remote-btn{flex:1;padding:8px 4px;border-radius:7px;font-size:14px;cursor:pointer;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);transition:all .15s;line-height:1}
+.prompter-remote-btn:hover{border-color:var(--cyan);background:rgba(34,211,211,.08);color:var(--text)}
+.prompter-remote-lbl{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
 
 /* Live bottom bar */
 .ls-bot{position:sticky;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:60;flex-shrink:0}
@@ -617,11 +631,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="ec-desc">Jump straight in — no session code, no guidance. Just build.</div>
         <span class="ec-pill">Experienced producers</span>
       </div>
-      <div class="e-card demo e-card-full" onclick="loadDemo()">
+      <div class="e-card demo" onclick="loadDemo()">
         <div class="ec-icon">▶️</div>
-        <div class="ec-title">Demo — See how it works</div>
-        <div class="ec-desc">Load a pre-built example rundown. No login needed — explore freely.</div>
+        <div class="ec-title">Demo</div>
+        <div class="ec-desc">Load a pre-built example rundown. No login needed.</div>
         <span class="ec-pill">No login required</span>
+      </div>
+      <div class="e-card" onclick="openPrompterApp()" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
+        <div class="ec-icon">📺</div>
+        <div class="ec-title">Promptypus</div>
+        <div class="ec-desc">Open the teleprompter display for on-air talent.</div>
+        <span class="ec-pill" style="background:rgba(34,211,211,.15);color:var(--cyan)">Teleprompter</span>
       </div>
     </div>
     <div class="e-footer">
@@ -641,10 +661,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <button class="tbtn tbtn-ghost" onclick="goHome()" title="Back to Home" style="padding:7px 11px;font-size:13px">⌂</button>
       <div class="brand"><span>🐨 Cue<span class="hi">ola</span></span></div>
     </div>
-    <div class="mode-tabs">
-      <div class="mtab on" id="tabBuild" onclick="showRundown()">Build</div>
-      <div class="mtab" id="tabLive" onclick="goLive()">Live Show</div>
-    </div>
+    <div id="tabBuild" style="display:none"></div>
+    <div id="tabLive" style="display:none"></div>
     <div class="tb-right">
       <div class="session-badge" id="topSessionBadge" style="display:none">
         <span class="sync-dot" id="syncDot"></span>Code: <strong id="topCode">—</strong>
@@ -654,7 +672,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="presence-avatars" id="presenceAvatars"></div>
         <div class="p-tooltip" id="presenceTooltip"></div>
       </div>
-      <button class="tbtn tbtn-admin" id="adminBtn" style="display:none" onclick="openAdminPanel()">🔑 Admin</button>
+      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">🔑 Admin</button>
       <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
       <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
       <button class="tbtn tbtn-ghost" onclick="showModal('modal-settings')">⚙ Settings</button>
@@ -713,6 +731,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-brand">🐨 Cueola <span>● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
+      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Prompt Operator view">📜 Prompt Op</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
   </div>
@@ -732,7 +751,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-stat-card"><div class="ls-stat-label">Now</div><div class="ls-stat-value live" id="ls-stat-now">—</div></div>
     <div class="ls-stat-card"><div class="ls-stat-label">Next</div><div class="ls-stat-value ok" id="ls-stat-next">—</div></div>
     <div class="ls-stat-card"><div class="ls-stat-label">Remaining</div><div class="ls-stat-value warn" id="ls-stat-remain">—</div></div>
-    <div class="ls-stat-card"><div class="ls-stat-label">Prompt Up</div><div class="ls-stat-value" id="ls-stat-prompter">Waiting</div></div>
+    <div class="ls-stat-card"><div class="ls-stat-label">Promptypus</div><div class="ls-stat-value" id="ls-stat-prompter">Waiting</div></div>
     <div class="ls-progress"><div class="ls-progress-fill" id="ls-progress-fill"></div></div>
   </div>
   <div class="ls-body">
@@ -740,13 +759,23 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="ls-sidebar">
       <div class="ls-sidebar-head">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div class="ls-sidebar-title">Prompt Up The Jam</div>
+          <div class="ls-sidebar-title">📺 Promptypus</div>
           <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" style="font-size:10px">Waiting…</span></div>
         </div>
       </div>
       <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live prompter script"></div>
       <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
         <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO PROMPTER</button>
+        <div>
+          <div class="prompter-remote-lbl">Remote Controls</div>
+          <div class="prompter-remote-row">
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('rewind')" title="Rewind to top">⏮</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_down')" title="Slower">🐢</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('pause')" title="Pause">⏸</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('resume')" title="Resume/Play">▶</button>
+            <button class="prompter-remote-btn" onclick="sendPrompterControl('speed_up')" title="Faster">🐇</button>
+          </div>
+        </div>
         <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()" style="font-size:11px">Clear script</button>
       </div>
     </div>
