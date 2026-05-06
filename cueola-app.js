@@ -1113,7 +1113,13 @@ function renderRundown() {
 
   const tbody = document.getElementById('rdBody');
   if (!beats.length) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">No rows yet — click Add Row below to build your rundown.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10">
+      <div class="empty-rundown">
+        <div class="empty-rundown-title">Start with your first row</div>
+        <div class="empty-rundown-sub">Build the rundown one production beat at a time. Each row can hold video, audio, playback, graphics, lighting, and script cues.</div>
+        <button class="empty-rundown-btn" onclick="openAddRow()">Add First Row</button>
+      </div>
+    </td></tr>`;
     renderAddRowBtn(tbody);
     updateBotBar();
     return;
@@ -1141,6 +1147,7 @@ function renderRundown() {
         <div class="cd-name">${esc(b.info||'—')}</div>
         ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
         <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-block">${b.style==='timed'?'⏱':'⇔'} ${(b.style||'flex').toUpperCase()}</span>
+        ${editMode ? '' : '<div class="row-open-hint">Click row to edit</div>'}
         ${editActions}
       </td>
       <td class="cd" style="padding:8px 6px">
@@ -1175,7 +1182,7 @@ function getCueCell(b, type) {
   const off = getCueOff(d);
   const isEmpty = !on && !off && (type !== 'script' || !d?.text);
   if (isEmpty) {
-    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label}"><span>+</span><span>Add</span></button>`;
+    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
   const lines = [
     on  ? `<div class="cue-on-line"><span class="cue-on-dot">▶</span>${esc(on)}</div>`  : '',
@@ -1203,8 +1210,9 @@ function updateBotBar() {
 }
 
 function updateNowNext() {
-  const now  = beats[lsIdx];
-  const next = beats[lsIdx+1];
+  const idx = beats.length ? Math.max(lsIdx, 0) : -1;
+  const now  = beats[idx];
+  const next = beats[idx+1];
   document.getElementById('nn-now').textContent = 'NOW → '+(now?now.info:'—');
   document.getElementById('nn-nxt').textContent = 'NEXT → '+(next?next.info:'—');
 }
@@ -1272,25 +1280,27 @@ const AR_TYPE_DESC = {
 };
 
 function openAddRow() {
-  arStyle = null;
+  arStyle = 'timed';
   arCueType = null;
   const nameIn = document.getElementById('ar-name-input');
   if (nameIn) nameIn.value = '';
   const notesIn = document.getElementById('ar-notes-input');
   if (notesIn) notesIn.value = '';
   const minIn = document.getElementById('ar-min');
-  if (minIn) minIn.value = '';
+  if (minIn) minIn.value = '0';
   const secIn = document.getElementById('ar-sec');
-  if (secIn) secIn.value = '';
-  document.getElementById('ar-next-1').disabled = true;
+  if (secIn) secIn.value = '30';
+  document.getElementById('ar-next-1').disabled = false;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('opt-timed')?.classList.add('sel');
   const durWrap = document.getElementById('ar-dur-wrap');
-  if (durWrap) durWrap.style.display = 'none';
+  if (durWrap) durWrap.style.display = '';
   document.getElementById('ar-step-1').classList.add('on');
   document.getElementById('ar-step-2').classList.remove('on');
   document.getElementById('ar-step-3')?.classList.remove('on');
   buildArContext();
   showOverlay('addRowOv');
+  setTimeout(()=>nameIn?.focus(), 80);
 }
 
 function arGoStep2() {

@@ -17,10 +17,12 @@
   --r:10px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden;scroll-behavior:smooth}
 .screen{display:none;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 .screen.on{display:flex}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
+button,input,select,textarea{font:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 78%,white);outline-offset:2px}
 
 /* ── ENTRY ── */
 #entry{align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(91,141,248,.1),transparent 60%),var(--bg);overflow-y:auto}
@@ -47,7 +49,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .e-footer-link:hover{color:var(--text2)}
 
 /* ── TOPBAR ── */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:50px;background:linear-gradient(180deg,var(--s2),var(--s1));border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 14px;min-height:50px;background:linear-gradient(180deg,var(--s2),var(--s1));border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .brand{font-family:var(--syne);font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
 .brand .hi{color:var(--accent)}
 .session-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--s3);border:1px solid var(--bord2);border-radius:20px;font-family:var(--mono);font-size:11px;color:var(--text2)}
@@ -55,7 +57,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .role-badge{padding:4px 10px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;letter-spacing:.07em}
 .role-inst{background:rgba(91,141,248,.15);color:var(--accent)}.role-stud{background:rgba(34,211,160,.15);color:var(--green)}
 .role-admin{background:rgba(240,82,82,.15);color:var(--red)}
-.tb-right{display:flex;gap:6px;align-items:center}
+.tb-right{display:flex;gap:6px;align-items:center;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;min-width:0}
+.tb-right::-webkit-scrollbar{display:none}
 .tbtn{padding:7px 13px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
 .tbtn-ghost{background:transparent;color:var(--text2);border:1.5px solid var(--bord2)}.tbtn-ghost:hover{color:var(--text);border-color:var(--text2)}
 .tbtn.icon-only{width:36px;height:36px;padding:0;justify-content:center;font-size:16px}
@@ -92,7 +95,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--acg));transition:width .5s ease}
 
 /* ── RUNDOWN TABLE ── */
-.rd-scroll{flex:1;overflow-y:auto;overflow-x:auto;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,transparent),transparent 120px);border-top:1px solid color-mix(in srgb,var(--accent) 12%,transparent)}
+.rd-scroll{flex:1;overflow-y:auto;overflow-x:auto;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,transparent),transparent 120px);border-top:1px solid color-mix(in srgb,var(--accent) 12%,transparent);scrollbar-width:thin}
 .rd-table{width:100%;min-width:100%;border-collapse:collapse;table-layout:fixed}
 .rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top;border-right:1px solid var(--bord2)}
 .rd-table th:last-child,.rd-table td:last-child{border-right:none}
@@ -101,10 +104,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .rd-scroll{width:100%}
 .rd-table{min-width:1280px}
 .rd-head th{background:color-mix(in srgb,var(--s2) 96%,black);backdrop-filter:blur(12px);font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:8px;white-space:nowrap;font-weight:700;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border);box-shadow:inset 0 -1px rgba(255,255,255,.025)}
+.rd-table th:nth-child(1),.rd-table td:nth-child(1){position:sticky;left:0;z-index:8;background:var(--bg)}
+.rd-table th:nth-child(2),.rd-table td:nth-child(2){position:sticky;left:20px;z-index:8;background:var(--bg)}
+.rd-table th:nth-child(3),.rd-table td:nth-child(3){position:sticky;left:52px;z-index:7;background:color-mix(in srgb,var(--bg) 88%,var(--s2));box-shadow:8px 0 16px rgba(0,0,0,.18)}
+.rd-head th:nth-child(1),.rd-head th:nth-child(2),.rd-head th:nth-child(3){z-index:13;background:color-mix(in srgb,var(--s2) 96%,black)}
+.cue-row:hover td:nth-child(1),.cue-row:hover td:nth-child(2),.cue-row:hover td:nth-child(3){background:color-mix(in srgb,var(--accent) 6%,var(--bg))}
 
 /* Cue type cells */
 .cd-cue-cell{padding:4px;vertical-align:middle;background:rgba(255,255,255,.008)}
-.cue-add-btn{width:100%;min-height:52px;border:1.5px dashed var(--cue-add-border);border-radius:7px;background:var(--cue-add-bg);color:var(--cue-add);font-size:12px;font-family:var(--mono);font-weight:700;letter-spacing:.06em;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase}
+.cue-add-btn{width:100%;min-height:52px;border:1.5px dashed var(--cue-add-border);border-radius:7px;background:var(--cue-add-bg);color:var(--cue-add);font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:.04em;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase}
 .cue-add-btn:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .cue-cell-filled{display:flex;flex-direction:column;gap:3px;padding:5px 7px;border-radius:7px;cursor:pointer;transition:all .12s;border:1px solid var(--bord2);background:linear-gradient(180deg,var(--s2),rgba(26,31,50,.82));min-height:34px;box-shadow:0 6px 14px rgba(0,0,0,.12);position:relative}
 .cue-cell-filled:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--s2))}
@@ -115,6 +123,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .cue-take-line{color:var(--text2);font-size:9px;line-height:1.4;opacity:.8}
 .col-drag-over{background:color-mix(in srgb,var(--accent) 16%,transparent)!important;border-right:2px solid var(--accent)!important}
 .cd-name{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.01em}
+.row-open-hint{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;text-transform:uppercase;opacity:0;transition:opacity .12s,color .12s}
+.cue-row:hover .row-open-hint{color:var(--accent);opacity:1}
 .cd-time-start{font-family:var(--mono);font-size:9px;color:var(--text3)}
 .cd-time-dur{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2)}
 .edit-mode-row{background:color-mix(in srgb,var(--accent) 5%,transparent)}
@@ -218,9 +228,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .row-act-btn{display:none}
 
 /* Add row btn */
-.add-row-tr td{padding:8px 10px;text-align:center}
+.add-row-tr td{padding:10px;text-align:center;position:sticky;left:0;background:linear-gradient(180deg,var(--bg),var(--s1));z-index:6}
 .add-row-btn-el{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;color:var(--cue-add);border:2px dashed var(--cue-add-border);border-radius:8px;padding:12px 20px;cursor:pointer;background:var(--cue-add-bg);transition:all .15s;width:100%;justify-content:center;text-transform:uppercase}
 .add-row-btn-el:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
+.empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
+.empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2)}
+.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:800;font-family:var(--mono);letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
+.empty-rundown-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
 /* ── BOT BAR ── */
 .bot-bar{position:sticky;bottom:0;background:linear-gradient(180deg,var(--s1),#0a0d18);border-top:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;z-index:60;flex-shrink:0;box-shadow:0 -10px 24px rgba(0,0,0,.2)}
@@ -432,6 +447,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .chip{padding:6px 12px;border-radius:7px;font-size:11px;font-family:var(--mono);color:var(--text2);border:1.5px solid var(--bord2);background:var(--s2);cursor:pointer;transition:all .15s;white-space:nowrap}
 .chip:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .chip.sel{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.chip.suggested-label{position:relative;display:inline-flex;align-items:center;gap:6px;padding-right:9px}
+.chip.suggested-label::before{content:'i';display:inline-flex;align-items:center;justify-content:center;order:2;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;font-size:9px;font-family:var(--mono);font-weight:800;opacity:.62;text-transform:none}
+.chip.suggested-label:hover::before,.chip.suggested-label:focus-visible::before{opacity:1}
+.chip.suggested-label::after{content:attr(data-tip);position:absolute;left:0;bottom:calc(100% + 8px);width:min(260px,78vw);padding:9px 10px;border-radius:8px;background:var(--s4);border:1px solid var(--bord2);box-shadow:0 10px 24px rgba(0,0,0,.35);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.45;white-space:normal;text-align:left;letter-spacing:0;opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity .12s,transform .12s;z-index:40}
+.chip.suggested-label:hover::after,.chip.suggested-label:focus-visible::after{opacity:1;transform:translateY(0)}
 
 /* Wizard step 2 — cue type toggles */
 /* Cue config rich builder */
@@ -629,6 +649,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 }
 @media(max-width:600px){
   .mode-tabs{display:none}
+  .topbar{align-items:flex-start;padding:8px 10px;gap:8px}
+  .brand{height:36px}
+  .tb-right{width:100%;justify-content:flex-start}
+  .tbtn{padding:7px 10px}
   .show-strip{grid-template-columns:1fr}
   .show-metas{grid-template-columns:1fr 1fr}
   .ls-overview{grid-template-columns:1fr 1fr;padding:10px 12px}
@@ -636,6 +660,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   .col-det{display:none}
   .ar-panel{border-radius:16px 16px 0 0}
   .admin-wrap{max-width:100%}
+  .rd-table{min-width:980px}
+  .col-info{width:180px}
+  .col-time{width:78px}
+  .col-cue{width:120px}
+  .col-script-c{width:135px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1020,15 +1052,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <input class="field-in" id="ar-name-input" type="text" placeholder='e.g. "Show Open"' maxlength="80" autocomplete="off" oninput="updateArNextEnabled()">
         </div>
         <div class="chip-grid" style="margin-top:-6px">
-          <button class="chip" onclick="arPickName('Show Open')">Show Open</button>
-          <button class="chip" onclick="arPickName('Cold Open')">Cold Open</button>
-          <button class="chip" onclick="arPickName('PKG')">PKG</button>
-          <button class="chip" onclick="arPickName('Toss')">Toss</button>
-          <button class="chip" onclick="arPickName('Live Shot')">Live Shot</button>
-          <button class="chip" onclick="arPickName('Bumper')">Bumper</button>
-          <button class="chip" onclick="arPickName('Signoff')">Signoff</button>
-          <button class="chip" onclick="arPickName('Break')">Break</button>
-          <button class="chip" onclick="arPickName('Intro')">Intro</button>
+          <button class="chip suggested-label" data-tip="The first full production moment after countdown: music, graphics, camera, and talent come together." onclick="arPickName('Show Open')">Show Open</button>
+          <button class="chip suggested-label" data-tip="A quick opening segment before the main show open, often used for a hook, tease, or dramatic start." onclick="arPickName('Cold Open')">Cold Open</button>
+          <button class="chip suggested-label" data-tip="Package: a pre-produced video story or edited segment that rolls from playback." onclick="arPickName('PKG')">PKG</button>
+          <button class="chip suggested-label" data-tip="A handoff from one host, guest, camera, segment, or location to another." onclick="arPickName('Toss')">Toss</button>
+          <button class="chip suggested-label" data-tip="A live camera or remote segment, usually with timing and IFB-style crew cues." onclick="arPickName('Live Shot')">Live Shot</button>
+          <button class="chip suggested-label" data-tip="A short transition into or out of a break, often with music, graphics, or a quick tease." onclick="arPickName('Bumper')">Bumper</button>
+          <button class="chip suggested-label" data-tip="The closing row for final thanks, credits, music, graphics, and fade out." onclick="arPickName('Signoff')">Signoff</button>
+          <button class="chip suggested-label" data-tip="A planned pause in the show flow, such as commercial, reset, station break, or classroom pause." onclick="arPickName('Break')">Break</button>
+          <button class="chip suggested-label" data-tip="A general setup or lead-in row before a segment, guest, topic, or scripted moment." onclick="arPickName('Intro')">Intro</button>
         </div>
         <div>
           <div class="field-lbl" style="margin-bottom:8px">Style</div>
