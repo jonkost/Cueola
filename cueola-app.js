@@ -698,7 +698,12 @@ function getSources(key) {
 
 function migrateOldCue(type, d) {
   if (!d) return d;
-  if (d.ready !== undefined || d.take !== undefined) return d; // already new format
+  if (
+    d.on !== undefined ||
+    d.off !== undefined ||
+    d.ready !== undefined ||
+    d.take !== undefined
+  ) return d; // already migrated
   switch(type) {
     case 'video':
       return { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`Take ${d.source}`:'' };
@@ -864,7 +869,6 @@ function setupFirestore() {
       window._setDoc(ref,{
         code:session.code, createdBy:session.userName,
         showName:show.name, startTime:show.start,
-        beats:[], presence:{}, customSources:{},
         createdAt:window._serverTimestamp()
       },{merge:true}).catch(()=>{});
     }
