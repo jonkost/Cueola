@@ -627,6 +627,7 @@ function renderSessions() {
       </div>
       <div class="sc-right">
         <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
+        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)">Pre-Pro</button>
         <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
         <button class="sc-btn sc-btn-del" onclick="showDetail('${s.code||s.id}',event)">Details</button>
       </div>
@@ -760,6 +761,12 @@ function openDetailSession() {
 }
 
 function openSession(code) { launchRundown(code); }
+
+function openPrePro(code, e) {
+  if (e) e.stopPropagation();
+  localStorage.setItem('cueola_open_prepro', '1');
+  launchRundown(code);
+}
 
 // ── DELETE ─────────────────────────────────────────────────────
 function confirmDelete() {

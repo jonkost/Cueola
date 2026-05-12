@@ -129,6 +129,11 @@ let editStyle = null;
 // Prompt Op Mode — teleprompter-operator focused live view
 let promptOpMode = false;
 let browserBackGuardReady = false;
+let _lastHandledForceCmdTs = 0;
+let livePrompterOpen = false;
+let liveSidebarWidth = 360;
+let previewRowIdx = 0;
+let callSheetPeople = [];
 
 function pushSessionHistoryState(screen) {
   if (!history.pushState) return;
@@ -336,7 +341,7 @@ function ensureOwnerSuperAdmin(code) {
   const owner = {
     id: OWNER_ADMIN_ID,
     name: existingOwner?.name || 'Jon Kost',
-    codeHash: OWNER_BOOTSTRAP_HASH,
+    codeHash: existingOwner?.codeHash || OWNER_BOOTSTRAP_HASH,
     level: 'super',
     createdBy: 'owner-bootstrap'
   };
@@ -460,6 +465,7 @@ function renderAdminBody() {
         <button class="admin-act-btn" onclick="copySessionCode()">Copy Session Code</button>
         <button class="admin-act-btn" onclick="copySessionLink()">Copy Session Link</button>
         <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
+        <button class="admin-act-btn" onclick="openPaperworkHub()">Open Pre-Pro Paperwork</button>
       </div>` : ''}
       <div class="admin-list">`;
     admins.forEach(a => {
@@ -799,6 +805,38 @@ function joinSession() {
   else window.addEventListener('firebaseReady', ()=>{ verify(); }, {once:true});
 }
 
+function joinPreProSession() {
+  const code = document.getElementById('pp-join-code').value.trim().toUpperCase();
+  const name = document.getElementById('pp-join-name').value.trim();
+  const errEl = document.getElementById('pp-join-err');
+  if (!code || !name) { errEl.textContent='Code and name required.'; errEl.classList.add('on'); return; }
+  errEl.classList.remove('on');
+  const openLocal = snap => {
+    const d = snap.data() || {};
+    session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+    show = { name:d.showName || 'Untitled Show', start:d.startTime || '' };
+    if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
+    hideModal('modal-prepro-join');
+    openPaperworkHub();
+    joinPresence();
+  };
+  const verify = () => {
+    window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
+      if (!snap.exists()) {
+        errEl.textContent = 'Session not found. Check the code and try again.';
+        errEl.classList.add('on');
+        return;
+      }
+      openLocal(snap);
+    }).catch(() => {
+      errEl.textContent = 'Could not connect. Check your internet connection.';
+      errEl.classList.add('on');
+    });
+  };
+  if (window._firebaseReady) verify();
+  else window.addEventListener('firebaseReady', verify, {once:true});
+}
+
 function loadExpert() {
   session = { code:'', role:'instructor', userName:'You', isDemo:false, isExpert:true };
   show = { name:'Untitled Show', start:'' };
@@ -880,6 +918,9 @@ function setupFirestore() {
       if (d.showName) show.name = d.showName;
       if (d.startTime !== undefined) show.start = d.startTime;
       if (d.customSources) sessionCustomSources = d.customSources;
+      if (d.prePro) {
+        try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
+      }
       if (d.activeIdx !== undefined && session.role==='student') {
         lsIdx = d.activeIdx;
         if (document.getElementById('liveshow').classList.contains('on')) renderLive();
@@ -903,7 +944,8 @@ function setupFirestore() {
       if (d.forceCmd && d.forceCmd.ts) {
         const cmd = d.forceCmd;
         const age = Date.now() - (cmd.ts||0);
-        if (age < 30000) { // only act on commands < 30 seconds old
+        if (age < 30000 && cmd.ts > _lastHandledForceCmdTs) { // only act on new commands < 30 seconds old
+          _lastHandledForceCmdTs = cmd.ts;
           if (cmd.type === 'followMe' && cmd.name !== session.userName) {
             // Force follow this person
             const liveOn = document.getElementById('liveshow').classList.contains('on');
@@ -1192,9 +1234,12 @@ function getCueCell(b, type) {
     on  ? `<div class="cue-on-line"><span class="cue-on-dot">▶</span>${esc(on)}</div>`  : '',
     off ? `<div class="cue-off-line"><span class="cue-off-dot">■</span>${esc(off)}</div>` : '',
   ].filter(Boolean).join('');
+  const scriptMeta = type === 'script' && d?.text
+    ? `<div class="script-present-line">Script · ${scriptLineCount(d.text)} lines</div>`
+    : '';
   return `<div class="cue-cell-filled" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
-    <div class="cue-cell-info">${lines}</div>
+    <div class="cue-cell-info">${lines}${scriptMeta}</div>
   </div>`;
 }
 
@@ -1203,6 +1248,12 @@ function getCueSummary(b) {
   if (!pType) return { stateStr:'', srcStr:'', detStr:'' };
   const d = b.cues[pType];
   return { stateStr: getCueOff(d)||'', srcStr: getCueOn(d)||'', detStr:'' };
+}
+
+function scriptLineCount(text) {
+  const clean = String(text || '').trim();
+  if (!clean) return 0;
+  return clean.split(/\n+/).filter(line => line.trim()).length;
 }
 
 function updateBotBar() {
@@ -1503,13 +1554,13 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Action</div>
         <div class="cc-chip-grid" id="vOn-act">
-          ${ccChips(['Ready','Set','Set with Media Wipe'], 'ccVOnAct')}
+          ${ccChips(['Ready','Standby','Set','Set with Media Wipe'], 'ccVOnAct')}
         </div>
       </div>
       <div class="cc-section" id="vOn-shot-row" style="display:none">
         <div class="cc-section-lbl">Shot type</div>
         <div class="cc-chip-grid" id="vOn-shot">
-          ${ccChips(['Wide','MCU','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
+          ${ccChips(['Wide','Medium','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
         </div>
       </div>
       <div class="cc-divider"></div>
@@ -1817,7 +1868,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-section">
         <div class="cc-section-lbl">Tags</div>
         <div class="cc-chip-grid" id="sOn-tags">
-          ${(()=>{const tags=['Cold Open','Show Open','PKG Intro','Live Shot','VO','Toss','Guest Intro','Tease','Throw to Break','Signoff'];const cur=d.scriptTags||[];return tags.map(t=>`<button type="button" class="cc-chip ${cur.includes(t)?'sel':''}" onclick="ccSOnTag('${t}')">${t}</button>`).join('');})()}
+          ${(()=>{const tags=['Cold Open','Show Open','PKG Intro','Live Shot','VO','Toss','Guest Intro','Open Conversation','Tease','Throw to Break','Signoff'];const cur=d.scriptTags||[];return tags.map(t=>`<button type="button" class="cc-chip ${cur.includes(t)?'sel':''}" onclick="ccSOnTag('${t}')">${t}</button>`).join('');})()}
         </div>
       </div>
       <div class="cc-section">
@@ -2400,20 +2451,12 @@ function isStandardShowCaller() {
 }
 
 function requestExitLive() {
-  const isSuper = adminSession?.level === 'super';
-  if (!isSuper && isFollowingSelf()) {
-    const followersOfMe = Object.values(currentPresence||{})
-      .filter(p => p.name !== session.userName && p.following === session.userName);
-    if (followersOfMe.length > 0) {
-      toast(`${followersOfMe.length} user(s) are following you. Remove yourself as Show Caller first.`);
-      return;
-    }
-  }
   showOverlay('exitLiveOv');
 }
 
 function confirmExitLive() {
   hideOverlay('exitLiveOv');
+  followSelf();
   showRundown();
 }
 
@@ -2467,6 +2510,43 @@ function updateLiveOverview() {
   setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   const fill = document.getElementById('ls-progress-fill');
   if (fill) fill.style.width = `${progress}%`;
+}
+
+function applyLivePrompterPanelState() {
+  const sidebar = document.getElementById('lsSidebar');
+  const resizer = document.getElementById('lsResizer');
+  const btn = document.getElementById('prompterPanelBtn');
+  if (sidebar) {
+    sidebar.classList.toggle('open', livePrompterOpen);
+    sidebar.style.width = `${liveSidebarWidth}px`;
+  }
+  if (resizer) resizer.classList.toggle('on', livePrompterOpen);
+  if (btn) {
+    btn.textContent = livePrompterOpen ? '📄 Hide Script' : '📄 Script Panel';
+    btn.style.color = livePrompterOpen ? 'var(--cyan)' : '';
+    btn.style.borderColor = livePrompterOpen ? 'rgba(34,211,211,.35)' : '';
+  }
+}
+
+function toggleLivePrompterPanel() {
+  livePrompterOpen = !livePrompterOpen;
+  applyLivePrompterPanelState();
+}
+
+function startLivePanelResize(e) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = liveSidebarWidth;
+  const move = ev => {
+    liveSidebarWidth = Math.min(620, Math.max(260, startW + (startX - ev.clientX)));
+    applyLivePrompterPanelState();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up, {once:true});
 }
 
 function renderLiveCurrent(b, i) {
@@ -2525,6 +2605,7 @@ function renderLiveNext(b, i, isRunner) {
 
 function liveRowPreview(idx) {
   const b = beats[idx]; if (!b) return;
+  previewRowIdx = idx;
   const titleEl = document.getElementById('lrpTitle');
   const bodyEl  = document.getElementById('lrpBody');
   if (!titleEl||!bodyEl) return;
@@ -2546,7 +2627,17 @@ function liveRowPreview(idx) {
   });
   if (!types.length) html = '<div style="color:var(--text3);text-align:center;padding:20px">No cues configured.</div>';
   bodyEl.innerHTML = html;
+  const prevBtn = document.getElementById('lrpPrevBtn');
+  const nextBtn = document.getElementById('lrpNextBtn');
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx >= beats.length - 1;
   showOverlay('lsRowPreviewOv');
+}
+
+function previewRelativeRow(delta) {
+  const next = previewRowIdx + delta;
+  if (next < 0 || next >= beats.length) return;
+  liveRowPreview(next);
 }
 
 function liveCellForBeat(b, type, beatIdx) {
@@ -2559,14 +2650,15 @@ function liveCellForBeat(b, type, beatIdx) {
   const on = getCueOn(d);
   const off = getCueOff(d);
   const isScript = type === 'script';
-  const script = isScript && d.text ? `<div class="live-script-copy">${esc(d.text)}</div>` : '';
-  if (!on && !off && !script) return `<div class="live-cue-empty">—</div>`;
+  const script = '';
+  const scriptMeta = isScript && d.text ? `<div class="live-script-action">Script · ${scriptLineCount(d.text)} lines</div>` : '';
+  if (!on && !off && !script && !scriptMeta) return `<div class="live-cue-empty">—</div>`;
   return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="border-left-color:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
     <div class="live-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
     ${on ? `<div class="live-cue-on">▶ ${esc(on)}</div>` : ''}
     ${off ? `<div class="live-cue-off">■ ${esc(off)}</div>` : ''}
     ${script}
-    ${isScript ? '<div class="live-script-action">View / edit / push</div>' : ''}
+    ${isScript ? (scriptMeta || '<div class="live-script-action">View / edit / push</div>') : ''}
   </div>`;
 }
 
@@ -2615,6 +2707,7 @@ function renderLive() {
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
   if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
+  applyLivePrompterPanelState();
   renderFollowChips();
   updateLiveOverview();
   updateLsPrompter();
@@ -2644,6 +2737,19 @@ function openLiveScript(beatIdx) {
   document.getElementById('lsScriptEditText').value = d.text||'';
   showOverlay('lsScriptEditOv');
   setTimeout(()=>document.getElementById('lsScriptEditText')?.focus(),80);
+}
+
+function insertScriptMarker(text) {
+  const ta = document.getElementById('lsScriptEditText');
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  ta.value = before + text + after;
+  const pos = start + text.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
 }
 
 function saveLiveScript() {
@@ -2686,11 +2792,14 @@ function renderFollowChips() {
   const chips = document.getElementById('followChips');
   if (!chips) return;
   const now = Date.now();
+  const me = Object.values(currentPresence||{}).find(p => p.name === session.userName);
+  const following = me?.following || session.userName;
   const others = Object.values(currentPresence||{})
     .filter(p=>p.name!==session.userName&&(now-(p.lastSeen||0))<90000);
-  let html = `<div class="follow-chip follow-self active" onclick="followSelf()">Myself</div>`;
+  let html = `<div class="follow-chip follow-self ${following===session.userName?'active':''}" onclick="followSelf()">Myself</div>`;
   others.forEach(p=>{
-    html+=`<div class="follow-chip" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+    const isActive = following === p.name;
+    html+=`<div class="follow-chip ${isActive?'active':''}" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
   });
   chips.innerHTML = html;
   const forceBtn = document.getElementById('forceFollowBtn');
@@ -2851,17 +2960,17 @@ function _setPrompterStatus(connected, unavailable=false) {
   if (unavailable) {
     if (dot) dot.className='ls-prompter-dot off';
     if (txt) txt.textContent='Not available';
-    if (stat) stat.textContent='Offline';
+    if (stat) { stat.textContent='PROMPTER OFF'; stat.title='Promptypus offline'; stat.classList.remove('connected'); }
     return;
   }
   if (connected) {
     if (dot) dot.className='ls-prompter-dot';
     if (txt) txt.textContent='Connected';
-    if (stat) stat.textContent='Connected';
+    if (stat) { stat.textContent='PROMPTER ON'; stat.title='Promptypus connected and functioning'; stat.classList.add('connected'); }
   } else {
     if (dot) dot.className='ls-prompter-dot off';
     if (txt) txt.textContent='Waiting for Promptypus…';
-    if (stat) stat.textContent='Waiting';
+    if (stat) { stat.textContent='PROMPTER WAIT'; stat.title='Promptypus waiting'; stat.classList.remove('connected'); }
   }
 }
 
@@ -3870,49 +3979,629 @@ window.showModal = function(id) {
 };
 
 // ─────────────────────────────────────────────────────────────
-// PDF EXPORT
+// CALL SHEET
 // ─────────────────────────────────────────────────────────────
-function exportPDF() {
-  const area = document.getElementById('printArea');
+const PAPERWORK_ITEMS = [
+  { order:1, id:'call-sheet', title:'Call Sheet', sub:'Production details, crew, talent, location, and schedule.' },
+  { order:2, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safety locations, weather, and equipment.' },
+  { order:3, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
+  { order:4, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
+  { order:5, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
+];
+let activePatchKind = '';
+
+function preProKey() {
+  return `cueola_prepro_${session.code || session.userName || 'local'}`;
+}
+
+function loadPreProData() {
+  try { return JSON.parse(localStorage.getItem(preProKey()) || '{}') || {}; } catch { return {}; }
+}
+
+function persistPreProData(patch) {
+  const next = { ...loadPreProData(), ...patch, updatedAt: Date.now() };
+  try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
+  syncPreProToFirestore(next);
+  return next;
+}
+
+function syncPreProToFirestore(data=loadPreProData()) {
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  window._updateDoc(window._doc(window._db,'sessions',session.code), { prePro:data }).catch(()=>{});
+}
+
+function openPaperworkHub() {
+  if (!session.code && !session.isDemo && !session.isExpert) {
+    showModal('modal-prepro-join');
+    return;
+  }
+  const grid = document.getElementById('paperworkGrid');
+  if (grid) {
+    grid.innerHTML = PAPERWORK_ITEMS.map(item => `<button class="paperwork-card" onclick="openPaperworkItem('${item.id}')">
+      <div class="paperwork-card-num">Item ${item.order}</div>
+      <div class="paperwork-card-title">${esc(item.title)}</div>
+      <div class="paperwork-card-sub">${esc(item.sub)}</div>
+    </button>`).join('');
+  }
+  showModal('paperworkHubModal');
+}
+
+function openPaperworkItem(id) {
+  if (id === 'call-sheet') return openPrePro();
+  if (id === 'safety-plan') return openSafetyPlan();
+  if (id === 'rundown') return showRundownPaperPreview();
+  if (id === 'video-patch') return showPatchSheetPreview('video');
+  if (id === 'audio-comms-patch') return showPatchSheetPreview('audio-comms');
+}
+
+function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')") {
+  document.getElementById('paperPreviewTitle').textContent = title;
+  document.getElementById('paperPreviewBody').innerHTML = html;
+  const primary = document.getElementById('paperPreviewPrimary');
+  primary.textContent = primaryLabel;
+  primary.setAttribute('onclick', primaryAction);
+  hideModal('paperworkHubModal');
+  hideModal('preProModal');
+  hideModal('safetyPlanModal');
+  hideModal('patchSheetModal');
+  showModal('paperPreviewModal');
+}
+
+function showRundownPaperPreview() {
   let offsetSecs = 0;
+  showPaperPreview('Rundown Paperwork Preview', `
+    <h1>${esc(show.name || 'Cueola Rundown')}</h1>
+    <div>Item 3 · Full rendered rundown</div>
+    <h2>Rundown</h2>
+    ${rundownPreviewTableHTML()}
+  `, 'Download Rundown PDF', 'exportPDF()');
+}
 
-  // PDF always uses canonical column order, not per-user preference
-  const pdfCols = COL_DEFAULTS;
-  const cueHeaders = pdfCols.map(type => `<th>${COL_META[type].label}</th>`).join('');
-
-  const rows = beats.map((b, i) => {
-    const startStr = show.start ? clock(show.start, offsetSecs) : '—';
+function rundownPreviewTableHTML() {
+  let offsetSecs = 0;
+  const cellFor = (b, type) => {
+    const d = b.cues?.[type];
+    const on = getCueOn(d), off = getCueOff(d);
+    const script = type === 'script' && d?.text ? `Script ${scriptLineCount(d.text)} lines` : '';
+    const parts = [on && `<span class="cue-type">ON</span> ${esc(on)}`, off && `<span class="cue-type">OFF</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
+    return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
+  };
+  const rows = beats.map((b,i) => {
+    const start = show.start ? clock(show.start, offsetSecs) : '-';
     offsetSecs += (b.min||0)*60+(b.sec||0);
-
-    // Per-type cells: show Ready / Take on separate lines
-    const cueCells = pdfCols.map(type => {
-      const d = b.cues?.[type];
-      if (!d || (!d.ready && !d.take)) return '<td style="color:#888">—</td>';
-      let cell = '';
-      if (d.ready) cell += `<div style="color:#1a7a4a;font-size:9pt">✓ ${esc(d.ready)}</div>`;
-      if (d.take)  cell += `<div style="color:#555;font-size:9pt">→ ${esc(d.take)}</div>`;
-      if (type === 'script' && d.text) cell += `<div style="font-size:8pt;color:#333;margin-top:3px;border-top:1px solid #ddd;padding-top:2px">${esc(d.text)}</div>`;
-      return `<td>${cell}</td>`;
-    }).join('');
-
     return `<tr>
       <td>${i+1}</td>
-      <td><strong>${esc(b.info||'—')}</strong>${b.notes?`<br><span style="font-size:8pt;color:#666">${esc(b.notes)}</span>`:''}</td>
-      <td>${b.style==='timed'?'⏱ Timed':'⇔ Flex'}</td>
-      <td>${startStr}</td>
+      <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
+      <td>${start}</td>
       <td>${fmtDur(b)}</td>
-      ${cueCells}
+      <td>${cellFor(b,'video')}</td>
+      <td>${cellFor(b,'audio')}</td>
+      <td>${cellFor(b,'playback')}</td>
+      <td>${cellFor(b,'gfx')}</td>
+      <td>${cellFor(b,'lighting')}</td>
+      <td>${cellFor(b,'script')}</td>
     </tr>`;
   }).join('');
+  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Video</th><th>Audio</th><th>Playback</th><th>GFX</th><th>Lighting</th><th>Script</th></tr></thead><tbody>${rows || '<tr><td colspan="10">No rows yet.</td></tr>'}</tbody></table></div>`;
+}
 
-  area.innerHTML = `
-    <div class="print-title">${esc(show.name||'Rundown')}</div>
-    <div class="print-meta">Exported ${new Date().toLocaleString()}${session.code?' · Session '+session.code:''}</div>
-    <table class="print-table">
-      <thead><tr><th>#</th><th>Name / Notes</th><th>Style</th><th>Start</th><th>Dur</th>${cueHeaders}</tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-  window.print();
+function showCallSheetPreview() {
+  const data = getPreProData();
+  const people = (data.people || []).filter(p => p.name || p.role || p.call);
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.role || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
+  showPaperPreview('Call Sheet Preview', `
+    <h1>Call Sheet</h1>
+    <div>Item 1</div>
+    <table><tbody>
+      <tr><th>Production</th><td>${esc(data.production || '')}</td></tr>
+      <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
+      <tr><th>Call Time</th><td>${esc(data.call || '')}</td></tr>
+      <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
+    </tbody></table>
+    <h2>Crew / Talent</h2>
+    <table><thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="3">No crew or talent entered yet.</td></tr>'}</tbody></table>
+    <h2>Schedule / Notes</h2>
+    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>
+  `, 'Back to Editor', "hideModal('paperPreviewModal');openPrePro()");
+}
+
+function showPatchSheetPreview(kind) {
+  openPatchSheetEditor(kind);
+}
+
+function callSheetPreviewHTML(data) {
+  const people = (data.people || []).filter(p => p.name || p.role || p.call);
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.role || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
+  return `
+    <h1>1. Call Sheet</h1>
+    <table><tbody>
+      <tr><th>Production</th><td>${esc(data.production || show.name || '')}</td></tr>
+      <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
+      <tr><th>Call Time</th><td>${esc(data.call || show.start || '')}</td></tr>
+      <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
+    </tbody></table>
+    <h2>Crew / Talent</h2>
+    <table><thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="3">No crew or talent entered yet.</td></tr>'}</tbody></table>
+    <h2>Schedule / Notes</h2>
+    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>`;
+}
+
+function showCuePartPreview(type) {
+  const titleMap = { video:'Camera Cue Part', audio:'Rundown Audio Cues Part', lighting:'Rundown Lighting Cues Part' };
+  const rows = beats.map((b,i) => {
+    const d = b.cues?.[type];
+    if (!d) return '';
+    const on = getCueOn(d), off = getCueOff(d);
+    return `<tr><td>${i+1}</td><td>${esc(b.info||'-')}</td><td>${esc(on||'-')}</td><td>${esc(off||'-')}</td><td>${esc(d.notes||'')}</td></tr>`;
+  }).filter(Boolean).join('');
+  showPaperPreview(titleMap[type], `
+    <h1>${titleMap[type]}</h1>
+    <div>Rendered from the rundown editor.</div>
+    <table><thead><tr><th>#</th><th>Row</th><th>On Cue</th><th>Off Cue</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
+  `);
+}
+
+function openSafetyPlan() {
+  hideModal('paperworkHubModal');
+  const data = loadPreProData();
+  const safety = data.safety || {};
+  document.getElementById('sp-hospital').value = safety.hospital || data.hospital || '';
+  document.getElementById('sp-weather').value = safety.weather || data.weather || '';
+  document.getElementById('sp-first-aid').value = safety.firstAid || '';
+  document.getElementById('sp-fire').value = safety.fire || '';
+  document.getElementById('sp-emergency').value = safety.emergency || '';
+  document.getElementById('sp-nonemergency').value = safety.nonemergency || '';
+  document.getElementById('sp-security').value = safety.security || '8822';
+  document.getElementById('sp-late').value = safety.late || data.late || '';
+  document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
+  document.getElementById('sp-notes').value = safety.notes || '';
+  showModal('safetyPlanModal');
+}
+
+function getSafetyPlanData() {
+  const existing = loadPreProData().safety || {};
+  return {
+    hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
+    weather: document.getElementById('sp-weather')?.value?.trim() ?? existing.weather ?? '',
+    firstAid: document.getElementById('sp-first-aid')?.value?.trim() ?? existing.firstAid ?? '',
+    fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
+    emergency: document.getElementById('sp-emergency')?.value?.trim() ?? existing.emergency ?? '',
+    nonemergency: document.getElementById('sp-nonemergency')?.value?.trim() ?? existing.nonemergency ?? '',
+    security: document.getElementById('sp-security')?.value?.trim() || existing.security || '8822',
+    late: document.getElementById('sp-late')?.value?.trim() ?? existing.late ?? '',
+    equipment: document.getElementById('sp-equipment')?.value?.trim() ?? existing.equipment ?? '',
+    notes: document.getElementById('sp-notes')?.value ?? existing.notes ?? '',
+  };
+}
+
+function saveSafetyPlan() {
+  persistPreProData({ safety: getSafetyPlanData() });
+  toast('Safety plan saved.');
+}
+
+function safetyPlanHTML(safety) {
+  return `
+    <h1>2. Safety Plan</h1>
+    <div>Item 2</div>
+    <table><tbody>
+      <tr><th>Local Hospital</th><td>${esc(safety.hospital || '')}</td></tr>
+      <tr><th>Weather</th><td>${esc(safety.weather || '')}</td></tr>
+      <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
+      <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
+      <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
+      <tr><th>Non-Emergency Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
+      <tr><th>Security</th><td>${esc(safety.security || '8822')}</td></tr>
+      <tr><th>Late / Lost Contact</th><td>${esc(safety.late || '')}</td></tr>
+      <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
+      <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
+    </tbody></table>
+  `;
+}
+
+function showSafetyPlanPreview() {
+  const safety = getSafetyPlanData();
+  showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()");
+}
+
+function defaultPatchRows(kind) {
+  if (kind === 'comms') return [{ position:'', out:'', gear:'', notes:'' }];
+  return [{ label:'', destination:'', source:'', cabling:'', notes:'' }];
+}
+
+function getPatchRows(kind) {
+  const data = loadPreProData();
+  const key = `${kind}PatchRows`;
+  return Array.isArray(data[key]) && data[key].length ? data[key] : defaultPatchRows(kind);
+}
+
+function patchInput(value, kind, row, field) {
+  return `<input class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field === 'label' ? 'Label' : field}">`;
+}
+
+function renderPatchTable(kind, title) {
+  const rows = getPatchRows(kind);
+  const isComms = kind === 'comms';
+  const heads = isComms ? ['Position','Out','Gear','Notes'] : ['Label','Destination','Source','Cabling','Notes'];
+  return `
+    <div class="field">
+      <label class="field-lbl">${title}</label>
+      <div class="patch-table ${isComms ? 'comms' : kind}" id="${kind}-patch-table">
+        ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div></div>
+        ${rows.map((row,i) => isComms ? `
+          ${patchInput(row.position, kind, i, 'position')}
+          ${patchInput(row.out, kind, i, 'out')}
+          ${patchInput(row.gear, kind, i, 'gear')}
+          ${patchInput(row.notes, kind, i, 'notes')}
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})">x</button>
+        ` : `
+          ${patchInput(row.label, kind, i, 'label')}
+          ${patchInput(row.destination, kind, i, 'destination')}
+          ${patchInput(row.source, kind, i, 'source')}
+          ${patchInput(row.cabling, kind, i, 'cabling')}
+          ${patchInput(row.notes, kind, i, 'notes')}
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})">x</button>
+        `).join('')}
+      </div>
+      <button class="call-add-btn" onclick="addPatchRow('${kind}')">+ Add row</button>
+      <input class="field-in" type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" style="margin-top:8px">
+    </div>`;
+}
+
+function collectPatchRows(kind, keepBlank=false) {
+  const rows = [];
+  document.querySelectorAll(`[data-patch-kind="${kind}"]`).forEach(input => {
+    const idx = Number(input.dataset.patchRow);
+    const field = input.dataset.patchField;
+    if (!rows[idx]) rows[idx] = {};
+    rows[idx][field] = input.value.trim();
+  });
+  return keepBlank ? rows.filter(Boolean) : rows.filter(row => Object.values(row).some(Boolean));
+}
+
+function savePatchRows(kind, rows) {
+  persistPreProData({ [`${kind}PatchRows`]: rows.length ? rows : defaultPatchRows(kind) });
+}
+
+function openPatchSheetEditor(kind) {
+  activePatchKind = kind;
+  hideModal('paperworkHubModal');
+  const isVideo = kind === 'video';
+  document.getElementById('patchSheetTitle').textContent = isVideo ? 'Video Patch Sheet' : 'Audio and Comms Patch Sheets';
+  document.getElementById('patchSheetSub').textContent = 'Add rows manually or upload a CSV/TSV. Imported columns fill left to right.';
+  document.getElementById('patchSheetSaveBtn').textContent = isVideo ? 'Save Video Patch Sheet' : 'Save Audio and Comms Patch Sheets';
+  document.getElementById('patchSheetBody').innerHTML = isVideo
+    ? renderPatchTable('video', 'Video Patch Sheet')
+    : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
+  showModal('patchSheetModal');
+}
+
+function addPatchRow(kind) {
+  savePatchRows(kind, collectPatchRows(kind, true).concat(defaultPatchRows(kind)));
+  openPatchSheetEditor(activePatchKind || kind);
+}
+
+function removePatchRow(kind, idx) {
+  const rows = collectPatchRows(kind, true);
+  rows.splice(idx, 1);
+  savePatchRows(kind, rows);
+  openPatchSheetEditor(activePatchKind || kind);
+}
+
+function savePatchSheet() {
+  if (activePatchKind === 'video') {
+    savePatchRows('video', collectPatchRows('video'));
+    toast('Video patch sheet saved.');
+  } else {
+    savePatchRows('audio', collectPatchRows('audio'));
+    savePatchRows('comms', collectPatchRows('comms'));
+    toast('Audio and comms patch sheets saved.');
+  }
+}
+
+function importPatchRows(kind, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const lines = String(reader.result || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const rows = lines.map(line => {
+      const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+      if (kind === 'comms') return { position:cols[0]||'', out:cols[1]||'', gear:cols[2]||'', notes:cols.slice(3).join(', ')||'' };
+      return { label:cols[0]||'', destination:cols[1]||'', source:cols[2]||'', cabling:cols[3]||'', notes:cols.slice(4).join(', ')||'' };
+    });
+    savePatchRows(kind, rows);
+    openPatchSheetEditor(activePatchKind || kind);
+    toast('Patch rows imported.');
+  };
+  reader.readAsText(file);
+}
+
+function patchTableHTML(kind, title) {
+  const rows = getPatchRows(kind).filter(row => Object.values(row).some(Boolean));
+  const isComms = kind === 'comms';
+  const body = rows.map(row => isComms
+    ? `<tr><td>${esc(row.position || '')}</td><td>${esc(row.out || '')}</td><td>${esc(row.gear || '')}</td><td>${esc(row.notes || '')}</td></tr>`
+    : `<tr><td>${esc(row.label || '')}</td><td>${esc(row.destination || '')}</td><td>${esc(row.source || '')}</td><td>${esc(row.cabling || '')}</td><td>${esc(row.notes || '')}</td></tr>`
+  ).join('');
+  return `<h2>${title}</h2><table><thead><tr>${isComms ? '<th>Position</th><th>Out</th><th>Gear</th><th>Notes</th>' : '<th>Label</th><th>Destination</th><th>Source</th><th>Cabling</th><th>Notes</th>'}</tr></thead><tbody>${body || `<tr><td colspan="${isComms ? 4 : 5}">No rows saved yet.</td></tr>`}</tbody></table>`;
+}
+
+function showPreProPackagePreview() {
+  const data = loadPreProData();
+  const safety = data.safety || {};
+  const html = `
+    ${callSheetPreviewHTML(data)}
+    <div class="paper-page-break"></div>
+    ${safetyPlanHTML(safety)}
+    <div class="paper-page-break"></div>
+    <h1>3. Full Rendered Rundown</h1>
+    <div>${esc(show.name || 'Cueola Rundown')}</div>
+    ${rundownPreviewTableHTML()}
+    <div class="paper-page-break"></div>
+    <h1>4. Video Patch Sheet</h1>
+    ${patchTableHTML('video', 'Video Patch Sheet')}
+    <div class="paper-page-break"></div>
+    <h1>5. Audio and Comms Patch Sheets</h1>
+    ${patchTableHTML('audio', 'Audio Patch Sheet')}
+    ${patchTableHTML('comms', 'Comms Patch Sheet')}
+  `;
+  showPaperPreview('PDF Package Preview', html, 'Export One PDF Package', 'exportPreProPackagePDF()');
+}
+
+function openPrePro() {
+  hideModal('paperworkHubModal');
+  let data = loadPreProData();
+  document.getElementById('pp-production').value = data.production || show.name || '';
+  document.getElementById('pp-date').value = data.date || '';
+  document.getElementById('pp-call').value = data.call || show.start || '';
+  document.getElementById('pp-location').value = data.location || '';
+  document.getElementById('pp-notes').value = data.notes || '';
+  callSheetPeople = Array.isArray(data.people) && data.people.length ? data.people : [{ name:'', role:'', call:'' }];
+  renderCallSheetPeople();
+  showModal('preProModal');
+}
+
+function getPreProData() {
+  syncCallSheetPeopleFromDOM();
+  return {
+    production: document.getElementById('pp-production')?.value?.trim() || show.name || '',
+    date: document.getElementById('pp-date')?.value || '',
+    call: document.getElementById('pp-call')?.value || '',
+    location: document.getElementById('pp-location')?.value?.trim() || '',
+    people: callSheetPeople,
+    notes: document.getElementById('pp-notes')?.value || '',
+    updatedAt: Date.now(),
+  };
+}
+
+function saveCallSheet() {
+  persistPreProData(getPreProData());
+  toast('Call sheet saved.');
+}
+
+function savePrePro() {
+  saveCallSheet();
+}
+
+function syncCallSheetPeopleFromDOM() {
+  callSheetPeople = Array.from(document.querySelectorAll('.call-person-row')).map(row => ({
+    name: row.querySelector('[data-call-field="name"]')?.value?.trim() || '',
+    role: row.querySelector('[data-call-field="role"]')?.value?.trim() || '',
+    call: row.querySelector('[data-call-field="call"]')?.value || '',
+  })).filter(p => p.name || p.role || p.call);
+  if (!callSheetPeople.length) callSheetPeople = [{ name:'', role:'', call:'' }];
+}
+
+function renderCallSheetPeople() {
+  const grid = document.getElementById('pp-crew-grid');
+  if (!grid) return;
+  const rows = callSheetPeople.length ? callSheetPeople : [{ name:'', role:'', call:'' }];
+  grid.innerHTML = `
+    <div class="call-grid-head">Name</div>
+    <div class="call-grid-head">Role</div>
+    <div class="call-grid-head">Call</div>
+    <div></div>
+    ${rows.map((p,i)=>`
+      <div class="call-person-row" style="display:contents">
+        <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="role" value="${esc(p.role||'')}" placeholder="Role" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="call" type="time" value="${esc(p.call||'')}" oninput="syncCallSheetPeopleFromDOM()">
+        <button class="call-row-remove" onclick="removeCallSheetPerson(${i})" title="Remove person">x</button>
+      </div>`).join('')}`;
+}
+
+function addCallSheetPerson() {
+  syncCallSheetPeopleFromDOM();
+  callSheetPeople.push({ name:'', role:'', call:'' });
+  renderCallSheetPeople();
+}
+
+function removeCallSheetPerson(idx) {
+  syncCallSheetPeopleFromDOM();
+  callSheetPeople.splice(idx, 1);
+  if (!callSheetPeople.length) callSheetPeople.push({ name:'', role:'', call:'' });
+  renderCallSheetPeople();
+}
+
+async function downloadCallSheetPDF() {
+  const data = getPreProData();
+  saveCallSheet();
+  try {
+    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'letter' });
+    const margin = 42;
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = margin;
+    const add = (label, value, size=10) => {
+      doc.setFont('helvetica', label ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      const prefix = label ? `${label}: ` : '';
+      const lines = doc.splitTextToSize(prefix + (value || '-'), pageW - margin * 2);
+      lines.forEach(line => { doc.text(line, margin, y); y += size + 6; });
+      y += label ? 2 : 8;
+    };
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('CALL SHEET', margin, y);
+    y += 28;
+    add('Production', data.production, 12);
+    add('Date', data.date, 10);
+    add('Call Time', data.call, 10);
+    add('Location', data.location, 10);
+    y += 8;
+    const people = (data.people || []).filter(p => p.name || p.role || p.call);
+    add('Crew / Talent', people.map(p => [p.name, p.role, p.call].filter(Boolean).join(' - ')).join('\n'), 10);
+    add('Schedule / Notes', data.notes, 10);
+    const fileName = `${(data.production || 'cueola-call-sheet').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-call-sheet'}-call-sheet.pdf`;
+    doc.save(fileName);
+    toast('Call sheet PDF downloaded.');
+  } catch {
+    toast('Could not download the call sheet PDF.');
+  }
+}
+
+async function exportPreProPackagePDF() {
+  try {
+    if (document.getElementById('preProModal')?.classList.contains('on')) persistPreProData(getPreProData());
+    if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() });
+    if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet();
+    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'letter' });
+    const margin = 36;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    let y = margin;
+    const data = loadPreProData();
+    const safety = data.safety || {};
+    const cleanFileName = (data.production || show.name || 'cueola-pre-pro-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-pre-pro-package';
+    const newPage = () => { doc.addPage(); y = margin; };
+    const line = (txt, size=9, bold=false, color=[25,25,25]) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      doc.setTextColor(...color);
+      const chunks = doc.splitTextToSize(String(txt || '-'), pageW - margin * 2);
+      chunks.forEach(chunk => {
+        if (y > pageH - margin) newPage();
+        doc.text(chunk, margin, y);
+        y += size + 5;
+      });
+    };
+    const section = title => {
+      if (y > margin + 6) newPage();
+      line(title, 18, true);
+      line(`Session ${session.code || 'local'} | Exported ${new Date().toLocaleString()}`, 8, false, [95,95,95]);
+      y += 8;
+    };
+    const field = (label, value) => line(`${label}: ${value || '-'}`, 10, Boolean(label));
+    const tableRows = (headers, rows) => {
+      line(headers.join(' | '), 8, true, [50,70,100]);
+      rows.forEach(row => line(row.map(v => v || '-').join(' | '), 8));
+      y += 8;
+    };
+
+    section('1. Call Sheet');
+    field('Production', data.production || show.name || '');
+    field('Shoot Date', data.date || '');
+    field('Call Time', data.call || '');
+    field('Location', data.location || '');
+    const people = (data.people || []).filter(p => p.name || p.role || p.call);
+    tableRows(['Name','Role','Call'], people.length ? people.map(p => [p.name, p.role, p.call]) : [['No crew or talent entered yet','','']]);
+    field('Schedule / Notes', data.notes || '');
+
+    section('2. Safety Plan');
+    ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
+      const labels = { hospital:'Local Hospital', weather:'Weather', firstAid:'First Aid Kit Location', fire:'Fire Extinguisher Location', emergency:'Emergency Numbers', nonemergency:'Non-Emergency Numbers', security:'Security', late:'Late / Lost Contact', equipment:'Equipment Needed', notes:'Safety Notes' };
+      field(labels[key], safety[key] || (key === 'security' ? '8822' : ''));
+    });
+
+    section('3. Full Rendered Rundown');
+    let offsetSecs = 0;
+    beats.forEach((b, i) => {
+      const startStr = show.start ? clock(show.start, offsetSecs) : '-';
+      offsetSecs += (b.min||0)*60+(b.sec||0);
+      line(`${i+1}. ${b.info || '-'}`, 11, true);
+      line(`${b.style === 'timed' ? 'Timed' : 'Flex'} | Start ${startStr} | Dur ${fmtDur(b)}`, 8, false, [90,90,90]);
+      if (b.notes) line(`Notes: ${b.notes}`, 8);
+      COL_DEFAULTS.forEach(type => {
+        const d = b.cues?.[type];
+        const on = getCueOn(d), off = getCueOff(d);
+        const script = type === 'script' && d?.text ? cleanPrompterText(d.text) : '';
+        if (!on && !off && !script) return;
+        line(`${CT[type].label}: ${[on ? `ON ${on}` : '', off ? `OFF ${off}` : ''].filter(Boolean).join(' | ')}`, 8, true, [45,75,110]);
+        if (script) line(script, 8);
+      });
+      y += 6;
+    });
+
+    section('4. Video Patch Sheet');
+    tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('video').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
+
+    section('5. Audio and Comms Patch Sheets');
+    line('Audio Patch Sheet', 12, true);
+    tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('audio').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
+    line('Comms Patch Sheet', 12, true);
+    tableRows(['Position','Out','Gear','Notes'], getPatchRows('comms').filter(r => Object.values(r).some(Boolean)).map(r => [r.position, r.out, r.gear, r.notes]));
+
+    doc.save(`${cleanFileName}-pre-pro-package.pdf`);
+    toast('Pre-production package PDF downloaded.');
+  } catch {
+    toast('Could not export the pre-production package.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PDF EXPORT
+// ─────────────────────────────────────────────────────────────
+async function exportPDF() {
+  try {
+    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'letter' });
+    const margin = 36;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    let y = margin;
+    let offsetSecs = 0;
+    const line = (txt, size=9, bold=false, color=[30,30,30]) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      doc.setTextColor(...color);
+      const chunks = doc.splitTextToSize(String(txt || ''), pageW - margin * 2);
+      chunks.forEach(chunk => {
+        if (y > pageH - margin) { doc.addPage(); y = margin; }
+        doc.text(chunk, margin, y);
+        y += size + 4;
+      });
+    };
+    line(show.name || 'Cueola Rundown', 18, true);
+    line(`Exported ${new Date().toLocaleString()}${session.code ? ` | Session ${session.code}` : ''}`, 8, false, [90,90,90]);
+    y += 8;
+    beats.forEach((b, i) => {
+      const startStr = show.start ? clock(show.start, offsetSecs) : '-';
+      offsetSecs += (b.min||0)*60+(b.sec||0);
+      line(`${i+1}. ${b.info || '-'}`, 12, true);
+      line(`${b.style === 'timed' ? 'Timed' : 'Flex'} | Start ${startStr} | Dur ${fmtDur(b)}`, 8, false, [90,90,90]);
+      if (b.notes) line(`Notes: ${b.notes}`, 8);
+      COL_DEFAULTS.forEach(type => {
+        const d = b.cues?.[type];
+        const on = getCueOn(d);
+        const off = getCueOff(d);
+        const script = type === 'script' && d?.text ? cleanPrompterText(d.text) : '';
+        if (!on && !off && !script) return;
+        line(`${CT[type].label}: ${[on ? `ON ${on}` : '', off ? `OFF ${off}` : ''].filter(Boolean).join(' | ')}`, 8, true, [45,75,110]);
+        if (script) line(script, 8);
+      });
+      y += 8;
+    });
+    const fileName = `${(show.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
+    doc.save(fileName);
+    toast('PDF downloaded.');
+  } catch {
+    toast('PDF library unavailable. Opening print dialog instead.');
+    window.print();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3983,6 +4672,8 @@ else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: t
 
   const code = urlCode || stored?.code;
   if (!code) return;
+  const shouldOpenPrePro = localStorage.getItem('cueola_open_prepro') === '1';
+  localStorage.removeItem('cueola_open_prepro');
 
   const name = stored?.userName || adminSession?.name || '';
   const role = stored?.role || 'instructor';
@@ -3991,6 +4682,7 @@ else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: t
     if (name) {
       session = { code, role, userName:name, isDemo:false, isExpert:false };
       enterRundown();
+      if (shouldOpenPrePro) setTimeout(openPaperworkHub, 700);
     } else {
       // No name stored — show the join modal pre-filled with the code
       const inp = document.getElementById('stud-code');
