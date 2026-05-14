@@ -57,13 +57,28 @@ const CLIENT_ID = (() => {
     return 'cl_' + Math.random().toString(36).slice(2, 10);
   }
 })();
-const CUEOLA_THEMES = ['warm','cool','white','green','black'];
+const CUEOLA_THEMES = ['warm','cool','white','green','black','koala','panda','polar','flamingo'];
+const CUEOLA_THEME_LABELS = {
+  warm: 'Honey',
+  cool: 'Lagoon',
+  white: 'Polar Bear',
+  green: 'Eucalyptus',
+  black: 'Midnight',
+  koala: 'Koala',
+  panda: 'Panda',
+  polar: 'Glacier',
+  flamingo: 'Flamingo',
+};
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
+const PREPBEAR_THEMES = ['default','honey','eucalyptus','panda','polar','party'];
+function normalizePrepBearTheme(t) { return PREPBEAR_THEMES.includes(t) ? t : 'default'; }
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
+let prepBearTheme = normalizePrepBearTheme(localStorage.getItem('cueola_prepbear_theme'));
 let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
+let freeTextMode = false;
 
 const LOCAL_DRAFT_PREFIX = 'cueola_local_draft_';
 
@@ -81,6 +96,7 @@ function saveLocalDraft() {
       show,
       beats,
       customSources: sessionCustomSources,
+      freeTextMode,
       updatedAt: Date.now(),
     }));
   } catch {}
@@ -100,6 +116,7 @@ function restoreLocalDraft() {
     };
     beats = draft.beats.map(migrateBeat);
     sessionCustomSources = draft.customSources || {};
+    freeTextMode = Boolean(draft.freeTextMode);
     return true;
   } catch {
     return false;
@@ -465,7 +482,7 @@ function renderAdminBody() {
         <button class="admin-act-btn" onclick="copySessionCode()">Copy Session Code</button>
         <button class="admin-act-btn" onclick="copySessionLink()">Copy Session Link</button>
         <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
-        <button class="admin-act-btn" onclick="openPaperworkHub()">Open Pre-Pro Paperwork</button>
+        <button class="admin-act-btn" onclick="openPaperworkHub()">Open PrepBear</button>
       </div>` : ''}
       <div class="admin-list">`;
     admins.forEach(a => {
@@ -535,9 +552,51 @@ function renderAdminBody() {
       </div>
     </div>`;
   }
+  if (session.code || session.isExpert) {
+    html += `<div class="admin-section">
+      <div class="admin-section-label">Role and PrepBear Assignments</div>
+      <div id="adminRoleAssignments">${renderRoleAssignmentRows()}</div>
+      <button class="admin-add-btn" style="margin-top:8px" onclick="saveRoleAssignmentsFromAdmin()">Save Assignments</button>
+    </div>`;
+  }
   html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Logout Admin</button>`;
   body.innerHTML = html;
   window._newAdminLevel = 'standard';
+}
+
+function defaultRoleAssignments() {
+  return [
+    { role:'PM', person:'', paperwork:'Call Sheet / Scheduler' },
+    { role:'ENG Lead', person:'', paperwork:'Patch Sheets / Tech Checklist' },
+    { role:'Show Caller', person:'', paperwork:'Rundown' },
+    { role:'Safety Lead', person:'', paperwork:'Safety Plan' },
+  ];
+}
+
+function getRoleAssignments() {
+  const rows = loadPreProData().roleAssignments;
+  return Array.isArray(rows) && rows.length ? rows : defaultRoleAssignments();
+}
+
+function renderRoleAssignmentRows() {
+  return getRoleAssignments().map((row,i)=>`
+    <div class="admin-src-row" style="align-items:flex-end;margin-bottom:8px">
+      <div class="field" style="flex:1;min-width:92px"><label class="admin-add-label">Role</label><input class="admin-in" data-role-assignment="${i}" data-role-field="role" value="${esc(row.role||'')}"></div>
+      <div class="field" style="flex:1;min-width:110px"><label class="admin-add-label">Person</label><input class="admin-in" data-role-assignment="${i}" data-role-field="person" value="${esc(row.person||'')}" placeholder="Name"></div>
+      <div class="field" style="flex:1.3;min-width:150px"><label class="admin-add-label">PrepBear File</label><input class="admin-in" data-role-assignment="${i}" data-role-field="paperwork" value="${esc(row.paperwork||'')}" placeholder="Call Sheet, Scheduler, Patch"></div>
+    </div>`).join('');
+}
+
+function saveRoleAssignmentsFromAdmin() {
+  const rows = [];
+  document.querySelectorAll('[data-role-assignment]').forEach(input => {
+    const idx = Number(input.dataset.roleAssignment);
+    const field = input.dataset.roleField;
+    if (!rows[idx]) rows[idx] = {};
+    rows[idx][field] = input.value.trim();
+  });
+  persistPreProData({ roleAssignments: rows.filter(row => row.role || row.person || row.paperwork) });
+  toast('Role assignments saved.');
 }
 
 function renderSourcesRow(key, label) {
@@ -766,6 +825,7 @@ function createSession() {
   document.getElementById('inst-err').classList.remove('on');
   session = { code:genCode(), role:'instructor', userName:name, isDemo:false, isExpert:false };
   show.name = showName||'Untitled Show';
+  freeTextMode = false;
   document.getElementById('code-display-val').textContent = session.code;
   hideModal('modal-inst');
   showModal('modal-code');
@@ -793,6 +853,7 @@ function joinSession() {
         return;
       }
       session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+      freeTextMode = false;
       hideModal('modal-stud');
       enterRundown();
     }).catch(() => {
@@ -814,6 +875,7 @@ function joinPreProSession() {
   const openLocal = snap => {
     const d = snap.data() || {};
     session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+    freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:d.startTime || '' };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
     hideModal('modal-prepro-join');
@@ -841,14 +903,82 @@ function loadExpert() {
   session = { code:'', role:'instructor', userName:'You', isDemo:false, isExpert:true };
   show = { name:'Untitled Show', start:'' };
   beats = [];
+  freeTextMode = true;
   restoreLocalDraft();
   enterRundown();
+}
+
+function openBlankSlateSetup() {
+  hideModal('modal-blank');
+  const name = document.getElementById('blank-name');
+  const code = document.getElementById('blank-code');
+  const showIn = document.getElementById('blank-show');
+  const err = document.getElementById('blank-err');
+  if (name && !name.value) name.value = adminSession?.name || localStorage.getItem('cueola_last_name') || '';
+  if (code) code.value = '';
+  if (showIn) showIn.value = '';
+  err?.classList.remove('on');
+  showModal('modal-blank');
+  setTimeout(()=>name?.focus(), 80);
+}
+
+async function startBlankSlate() {
+  const name = document.getElementById('blank-name')?.value?.trim() || '';
+  const code = (document.getElementById('blank-code')?.value?.trim() || genCode()).toUpperCase();
+  const showName = document.getElementById('blank-show')?.value?.trim() || 'Untitled Show';
+  const err = document.getElementById('blank-err');
+  const btn = document.getElementById('blank-create-btn');
+  if (!name) { if (err) { err.textContent='Please enter your name.'; err.classList.add('on'); } return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+  const ready = window._firebaseReady || await new Promise(res => {
+    const t = setTimeout(()=>res(false), 6000);
+    window.addEventListener('firebaseReady',()=>{ clearTimeout(t); res(true); }, { once:true });
+  });
+  if (!ready) {
+    if (err) { err.textContent='Could not connect. Choose Work Locally Only or try again.'; err.classList.add('on'); }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate →'; }
+    return;
+  }
+  try {
+    const ref = window._doc(window._db,'sessions',code);
+    const snap = await window._getDoc(ref);
+    if (snap.exists()) {
+      if (err) { err.textContent='That workspace code already exists. Pick another code or join it from the front page.'; err.classList.add('on'); }
+      return;
+    }
+    await window._setDoc(ref, {
+      code,
+      createdBy:name,
+      showName,
+      startTime:'',
+      beats:[],
+      cues:[],
+      freeMode:true,
+      activeIdx:0,
+      status:'idle',
+      createdAt:window._serverTimestamp(),
+      participants:[],
+    });
+    localStorage.setItem('cueola_last_name', name);
+    session = { code, role:'instructor', userName:name, isDemo:false, isExpert:false };
+    show = { name:showName, start:'' };
+    beats = [];
+    freeTextMode = true;
+    hideModal('modal-blank');
+    enterRundown();
+    toast(`Blank Slate ${code} created.`);
+  } catch (e) {
+    if (err) { err.textContent = 'Could not create the workspace. Try another code.'; err.classList.add('on'); }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate →'; }
+  }
 }
 
 function loadDemo() {
   session = { code:'DEMO1', role:'student', userName:'Demo', isDemo:true, isExpert:false };
   show = { name:'Campus News — Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
+  freeTextMode = false;
   enterRundown();
 }
 
@@ -907,6 +1037,7 @@ function setupFirestore() {
       window._setDoc(ref,{
         code:session.code, createdBy:session.userName,
         showName:show.name, startTime:show.start,
+        freeMode:freeTextMode,
         createdAt:window._serverTimestamp()
       },{merge:true}).catch(()=>{});
     }
@@ -917,6 +1048,7 @@ function setupFirestore() {
       if (d.beats && Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
       if (d.showName) show.name = d.showName;
       if (d.startTime !== undefined) show.start = d.startTime;
+      freeTextMode = Boolean(d.freeMode);
       if (d.customSources) sessionCustomSources = d.customSources;
       if (d.prePro) {
         try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
@@ -929,7 +1061,7 @@ function setupFirestore() {
         prompterText = d.prompter.text || '';
         const el = document.getElementById('lsPrompterText');
         if (el) el.textContent = prompterText;
-        // Forward live to any connected Promptypus on this device, scroll-preserving.
+        // Forward live to any connected Flowmingo on this device, scroll-preserving.
         _postPrompterMessage(getPrompterPayload(false));
         ptUpdateFromCueola(prompterText);
       }
@@ -985,7 +1117,7 @@ function syncToFirestore() {
   saveLocalDraft();
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code),{
-    beats, showName:show.name, startTime:show.start||''
+    beats, showName:show.name, startTime:show.start||'', freeMode:freeTextMode
   }).catch(()=>{});
 }
 
@@ -1162,7 +1294,7 @@ function renderRundown() {
     tbody.innerHTML = `<tr><td colspan="10">
       <div class="empty-rundown">
         <div class="empty-rundown-title">Start with your first row</div>
-        <div class="empty-rundown-sub">Build the rundown one production beat at a time. Each row can hold video, audio, playback, graphics, lighting, and script cues.</div>
+        <div class="empty-rundown-sub">${freeTextMode ? 'Blank Slate is free-form. Add a row, then type directly into any cue cell without guided setup.' : 'Build the rundown one production beat at a time. Each row can hold video, audio, playback, graphics, lighting, and script cues.'}</div>
         <button class="empty-rundown-btn" onclick="openAddRow()">Add First Row</button>
       </div>
     </td></tr>`;
@@ -1331,7 +1463,7 @@ const AR_TYPE_DESC = {
   lighting: 'Fixtures, scenes, looks',
   playback: 'Clip rolls, VT, media',
   gfx:      'Graphics, lower thirds',
-  script:   'Copy, dialogue, prompter',
+  script:   'Copy, dialogue, Flowmingo',
 };
 
 function openAddRow() {
@@ -1346,6 +1478,12 @@ function openAddRow() {
   const secIn = document.getElementById('ar-sec');
   if (secIn) secIn.value = '30';
   document.getElementById('ar-next-1').disabled = false;
+  const suggestionGrid = document.querySelector('#ar-step-1 .chip-grid');
+  if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
+  const stepLabel = document.querySelector('#ar-step-1 .ar-step-label');
+  if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row — Step 1 of 2';
+  const nextBtn = document.getElementById('ar-next-1');
+  if (nextBtn) nextBtn.textContent = freeTextMode ? 'Add Row →' : 'Choose Cue Type →';
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
   document.getElementById('opt-timed')?.classList.add('sel');
   const durWrap = document.getElementById('ar-dur-wrap');
@@ -1360,6 +1498,14 @@ function openAddRow() {
 
 function arGoStep2() {
   if (!arStyle) return;
+  if (freeTextMode) {
+    insertAddRowBeat();
+    hideOverlay('addRowOv');
+    renderRundown();
+    syncToFirestore();
+    toast('Row added.');
+    return;
+  }
   arCueType = null;
   const grid = document.getElementById('arTypeGrid');
   grid.innerHTML = Object.keys(CT).map(type => {
@@ -1486,9 +1632,30 @@ function openCueConfig(beatId, type) {
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
   document.getElementById('cueConfigTitle').textContent = `${tc.icon} ${tc.label}`;
-  document.getElementById('cueConfigFields').innerHTML = buildCueConfigFields(type, existing);
+  document.getElementById('cueConfigFields').innerHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
+}
+
+function buildFreeTextCueFields(type, d={}) {
+  const isScript = type === 'script';
+  return `
+    <div class="field">
+      <label class="field-lbl">${isScript ? 'Script Cue' : 'On Cue'}</label>
+      <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
+    </div>
+    ${isScript ? '' : `<div class="field">
+      <label class="field-lbl">Off Cue</label>
+      <input class="field-in" id="cc-off-text" value="${esc(getCueOff(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
+    </div>`}
+    ${isScript ? `<div class="field">
+      <label class="field-lbl">Script Copy</label>
+      <textarea class="field-in" id="cc-s-text" rows="8" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Type or paste the script for Flowmingo.">${esc(d.text||'')}</textarea>
+    </div>` : ''}
+    <div class="field">
+      <label class="field-lbl">Notes</label>
+      <textarea class="field-in" id="cc-notes" rows="3" style="font-size:13px;line-height:1.6" placeholder="Anything the team needs to know.">${esc(d.notes||'')}</textarea>
+    </div>`;
 }
 
 function ccChips(chips, fn) {
@@ -1882,7 +2049,7 @@ function buildCueConfigFields(type, d) {
       ${step(2,'What will you do with it?')}
       <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
         <div class="field">
-          <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds prompter</span></label>
+          <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds Flowmingo</span></label>
           <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
         </div>
         <div class="field">
@@ -2937,7 +3104,7 @@ function initPrompter() {
     if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
     _prompterStorageHandler = handleStoragePing;
     window.addEventListener('storage', _prompterStorageHandler);
-    // Periodic hello so Promptypus reconnects automatically if it was closed and reopened.
+    // Periodic hello so Flowmingo reconnects automatically if it was closed and reopened.
     clearInterval(_prompterPingInterval);
     _prompterPingInterval = setInterval(_postPrompterHello, 5000);
     _postPrompterHello();
@@ -2960,17 +3127,17 @@ function _setPrompterStatus(connected, unavailable=false) {
   if (unavailable) {
     if (dot) dot.className='ls-prompter-dot off';
     if (txt) txt.textContent='Not available';
-    if (stat) { stat.textContent='PROMPTER OFF'; stat.title='Promptypus offline'; stat.classList.remove('connected'); }
+    if (stat) { stat.textContent='FLOWMINGO OFF'; stat.title='Flowmingo offline'; stat.classList.remove('connected'); }
     return;
   }
   if (connected) {
     if (dot) dot.className='ls-prompter-dot';
     if (txt) txt.textContent='Connected';
-    if (stat) { stat.textContent='PROMPTER ON'; stat.title='Promptypus connected and functioning'; stat.classList.add('connected'); }
+    if (stat) { stat.textContent='FLOWMINGO ON'; stat.title='Flowmingo connected and functioning'; stat.classList.add('connected'); }
   } else {
     if (dot) dot.className='ls-prompter-dot off';
-    if (txt) txt.textContent='Waiting for Promptypus…';
-    if (stat) { stat.textContent='PROMPTER WAIT'; stat.title='Promptypus waiting'; stat.classList.remove('connected'); }
+    if (txt) txt.textContent='Waiting for Flowmingo…';
+    if (stat) { stat.textContent='FLOWMINGO WAIT'; stat.title='Flowmingo waiting'; stat.classList.remove('connected'); }
   }
 }
 
@@ -2989,7 +3156,7 @@ function sendToPrompter(isInit=false) {
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
   _postPrompterMessage(getPrompterPayload(isInit));
-  // Also update the native built-in Promptypus screen
+  // Also update the native built-in Flowmingo screen
   if (isInit) {
     ptInitScriptFromCueola(prompterText);
   } else {
@@ -3025,11 +3192,11 @@ function pushToPrompter() {
   if (el) prompterText = cleanPrompterText(el.innerText || el.textContent || '');
   sendToPrompter();
   if (promptOpMode) renderLivePromptOp();
-  toast('Pushed to prompter');
+  toast('Pushed to Flowmingo');
 }
 
 function clearPrompter() {
-  if (!confirm('Clear prompter text?')) return;
+  if (!confirm('Clear Flowmingo text?')) return;
   prompterText = '';
   sendToPrompter(true); // reset scroll on clear
 }
@@ -3058,7 +3225,7 @@ function sendPrompterControl(action) {
     theme_green:'Green theme', theme_black:'Black theme',
     brake_start:'Braking', boost_start:'Boosting'
   };
-  if (!action.endsWith('_stop') && !action.includes('_set_')) toast(`Promptypus: ${labels[action] || action}`);
+  if (!action.endsWith('_stop') && !action.includes('_set_')) toast(`Flowmingo: ${labels[action] || action}`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3090,9 +3257,13 @@ let ptLastRemoteMsgTs = 0;
 const PT_THEMES = {
   warm:  { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
   cool:  { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
-  white: { bg:'#f5f5f0', text:'#1a1a1a', accent:'#666',    uiBg:'rgba(225,225,220,.95)', uiBorder:'rgba(100,100,100,.25)' },
+  white: { bg:'#f6f5f1', text:'#1c1c1c', accent:'#d73737', uiBg:'rgba(246,245,241,.95)', uiBorder:'rgba(215,55,55,.25)' },
   green: { bg:'#041006', text:'#ddf0d2', accent:'#78ad4f', uiBg:'rgba(7,22,8,.92)',      uiBorder:'rgba(120,173,79,.25)' },
   black: { bg:'#000000', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(18,18,18,.95)',    uiBorder:'rgba(255,255,255,.2)' },
+  koala: { bg:'#101311', text:'#f0f3ee', accent:'#9ed8bd', uiBg:'rgba(21,25,23,.92)',    uiBorder:'rgba(158,216,189,.3)' },
+  panda: { bg:'#050607', text:'#f8f8f3', accent:'#7ad66f', uiBg:'rgba(10,12,13,.92)',    uiBorder:'rgba(122,214,111,.28)' },
+  polar: { bg:'#07131d', text:'#f3fbff', accent:'#9ee7ff', uiBg:'rgba(8,22,34,.92)',     uiBorder:'rgba(158,231,255,.28)' },
+  flamingo: { bg:'#120713', text:'#fff0f8', accent:'#ff6fae', uiBg:'rgba(35,9,33,.88)', uiBorder:'rgba(255,111,174,.34)' },
 };
 
 const PT_SVG_PLAY  = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12Z"/></svg>`;
@@ -3144,9 +3315,9 @@ function ptLoadSavedOrDefault() {
     return;
   }
   ptSetScriptText(
-    'Welcome to Promptypus\n\n' +
+    'Welcome to Flowmingo\n\n' +
     'Upload a PDF, DOCX, Pages, TXT, or Markdown file, or paste your script directly.\n\n' +
-    'Cueola can feed this prompter when you have a session code, but it is optional.\n\n' +
+    'Cueola can feed Flowmingo when you have a session code, but it is optional.\n\n' +
     'Press PLAY, or tap the stage, to begin scrolling.\n\n' +
     'Use the controls to adjust speed, text size, alignment, theme, mirror, and fullscreen.'
   );
@@ -3251,7 +3422,7 @@ function promptOpControlsHTML() {
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
-      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].accent}${name==='black'?';border-color:#555':''}" onclick="sendPrompterControl('theme_${name}')" title="${name}"></div>`).join('')}
+      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].accent}${name==='black'?';border-color:#555':''}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"></div>`).join('')}
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
@@ -3363,12 +3534,21 @@ function ptSetTheme(name) {
   ptThemeName = name;
   const screen = ptEl('promptypus');
   if (!screen) return;
+  screen.dataset.ptTheme = name;
   screen.style.setProperty('--pt-bg', t.bg);
   screen.style.setProperty('--pt-text', t.text);
   screen.style.setProperty('--pt-accent', t.accent);
   screen.style.setProperty('--pt-ui-bg', t.uiBg);
   screen.style.setProperty('--pt-ui-border', t.uiBorder);
-  screen.style.background = t.bg;
+  screen.style.background = name === 'flamingo'
+    ? 'linear-gradient(135deg,#120713 0%,#261024 42%,#083638 100%)'
+    : name === 'koala'
+      ? 'linear-gradient(135deg,#07110f 0%,#12302a 50%,#101633 100%)'
+      : name === 'panda'
+        ? 'linear-gradient(135deg,#050607 0%,#101315 48%,#18301c 100%)'
+        : name === 'polar'
+          ? 'linear-gradient(135deg,#07131d 0%,#12344b 55%,#dff9ff 180%)'
+          : t.bg;
   document.documentElement.style.setProperty('--pt-bg', t.bg);
   document.documentElement.style.setProperty('--pt-text', t.text);
   document.documentElement.style.setProperty('--pt-accent', t.accent);
@@ -3510,7 +3690,7 @@ async function ptHandleScriptFile(file) {
     setTimeout(() => ptEl('pt-upload-status')?.classList.remove('on'), 2500);
   } catch (err) {
     ptSetUploadStatus(err.message || 'Import failed', true);
-    console.warn('Promptypus import error:', err);
+    console.warn('Flowmingo import error:', err);
   } finally {
     if (uploadBtn) uploadBtn.disabled = false;
   }
@@ -3528,7 +3708,7 @@ function ptDownloadAsTxt() {
   const blob = new Blob([txt], { type:'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'promptypus-script.txt';
+  a.download = 'flowmingo-script.txt';
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -3551,7 +3731,7 @@ async function ptDownloadAsPDF() {
     doc.text(line, margin, y);
     y += 7;
   }
-  doc.save('promptypus-script.pdf');
+  doc.save('flowmingo-script.pdf');
 }
 
 // Called by Cueola when script changes — scroll reset (new cue/session)
@@ -3610,6 +3790,10 @@ function ptHandleRemoteControl(action) {
     case 'theme_white': ptSetTheme('white'); break;
     case 'theme_green': ptSetTheme('green'); break;
     case 'theme_black': ptSetTheme('black'); break;
+    case 'theme_koala': ptSetTheme('koala'); break;
+    case 'theme_panda': ptSetTheme('panda'); break;
+    case 'theme_polar': ptSetTheme('polar'); break;
+    case 'theme_flamingo': ptSetTheme('flamingo'); break;
     case 'mirror':     ptToggleMirror(); break;
     case 'fullscreen': ptToggleFullscreen(); break;
     case 'brake_start': ptBraking = true; break;
@@ -3650,7 +3834,7 @@ function ptLoadFromCueola() {
     ptCloseEdit();
     toast('Loaded script from Cueola');
   } else {
-    toast('No script in Cueola yet — add script cues and push to prompter from the live view.');
+    toast('No script in Cueola yet — add script cues and push to Flowmingo from the live view.');
   }
 }
 
@@ -3857,7 +4041,7 @@ function togglePromptOpMode() {
       btn.style.color = '';
       btn.style.borderColor = '';
       btn.style.background = '';
-      btn.textContent = '📜 Prompt Op';
+      btn.textContent = '🦩 Flowmingo Op';
     }
   }
   renderLive();
@@ -3878,7 +4062,7 @@ function renderLivePromptOp() {
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
     <div class="prompt-op-track">
-      <div class="prompt-op-text">${script ? esc(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live prompter text.'}</div>
+      <div class="prompt-op-text">${script ? esc(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live Flowmingo text.'}</div>
     </div>
     ${promptOpControlsHTML()}
   </div>`;
@@ -3926,6 +4110,27 @@ function stopTimer() {
 // SETTINGS & THEME
 // ─────────────────────────────────────────────────────────────
 function applyTheme(t) { document.documentElement.setAttribute('data-theme', normalizeCueolaTheme(t)); }
+
+function applyPrepBearTheme(t) {
+  prepBearTheme = normalizePrepBearTheme(t);
+  document.documentElement.setAttribute('data-prepbear-theme', prepBearTheme);
+  document.querySelectorAll('[data-prepbear-theme-choice]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.prepbearThemeChoice === prepBearTheme);
+  });
+}
+
+function setPrepBearTheme(t) {
+  applyPrepBearTheme(t);
+  try { localStorage.setItem('cueola_prepbear_theme', prepBearTheme); } catch {}
+}
+
+function togglePrepBearThemes() {
+  const bar = document.querySelector('#paperworkHubModal .prepbear-theme-bar');
+  const btn = document.getElementById('prepbearThemeToggle');
+  const open = !bar?.classList.contains('on');
+  bar?.classList.toggle('on', open);
+  btn?.classList.toggle('active', open);
+}
 
 function selectTheme(t) {
   currentTheme = normalizeCueolaTheme(t);
@@ -3983,10 +4188,29 @@ window.showModal = function(id) {
 // ─────────────────────────────────────────────────────────────
 const PAPERWORK_ITEMS = [
   { order:1, id:'call-sheet', title:'Call Sheet', sub:'Production details, crew, talent, location, and schedule.' },
-  { order:2, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safety locations, weather, and equipment.' },
-  { order:3, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
-  { order:4, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
-  { order:5, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
+  { order:2, id:'production-scheduler', title:'Production Scheduler', sub:'PM and ENG setup timing, readiness checklist, and expectations.' },
+  { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safety locations, weather, and equipment.' },
+  { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
+  { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
+  { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
+];
+const PRODUCTION_CHECKLIST_DEFAULTS = [
+  'Recorder cards are formatted',
+  'Records test record',
+  'Cameras are setup correctly',
+  'Cameras Balanced',
+  'Audio line check',
+  'Audio sound check',
+  'Mics checked',
+  'Zoom A/V is set',
+  'Recorder is getting audio',
+  'Switcher is setup',
+  'Lights are focused',
+  'Cameras shaded',
+  'GFX are loaded',
+  'Stream has A/V signal',
+  'Stage computer is set',
+  'Video team meeting to understand shots and cues',
 ];
 let activePatchKind = '';
 
@@ -4015,6 +4239,7 @@ function openPaperworkHub() {
     showModal('modal-prepro-join');
     return;
   }
+  applyPrepBearTheme(prepBearTheme);
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
     grid.innerHTML = PAPERWORK_ITEMS.map(item => `<button class="paperwork-card" onclick="openPaperworkItem('${item.id}')">
@@ -4028,10 +4253,16 @@ function openPaperworkHub() {
 
 function openPaperworkItem(id) {
   if (id === 'call-sheet') return openPrePro();
+  if (id === 'production-scheduler') return openProductionSchedule();
   if (id === 'safety-plan') return openSafetyPlan();
   if (id === 'rundown') return showRundownPaperPreview();
   if (id === 'video-patch') return showPatchSheetPreview('video');
   if (id === 'audio-comms-patch') return showPatchSheetPreview('audio-comms');
+}
+
+function returnToPaperworkHub() {
+  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal'].forEach(hideModal);
+  openPaperworkHub();
 }
 
 function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')") {
@@ -4042,6 +4273,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
   primary.setAttribute('onclick', primaryAction);
   hideModal('paperworkHubModal');
   hideModal('preProModal');
+  hideModal('productionScheduleModal');
   hideModal('safetyPlanModal');
   hideModal('patchSheetModal');
   showModal('paperPreviewModal');
@@ -4049,7 +4281,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
 
 function showRundownPaperPreview() {
   let offsetSecs = 0;
-  showPaperPreview('Rundown Paperwork Preview', `
+  showPaperPreview('Rundown PrepBear Preview', `
     <h1>${esc(show.name || 'Cueola Rundown')}</h1>
     <div>Item 3 · Full rendered rundown</div>
     <h2>Rundown</h2>
@@ -4074,34 +4306,21 @@ function rundownPreviewTableHTML() {
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
       <td>${fmtDur(b)}</td>
-      <td>${cellFor(b,'video')}</td>
-      <td>${cellFor(b,'audio')}</td>
-      <td>${cellFor(b,'playback')}</td>
-      <td>${cellFor(b,'gfx')}</td>
-      <td>${cellFor(b,'lighting')}</td>
-      <td>${cellFor(b,'script')}</td>
+      <td class="cue-video">${cellFor(b,'video')}</td>
+      <td class="cue-audio">${cellFor(b,'audio')}</td>
+      <td class="cue-playback">${cellFor(b,'playback')}</td>
+      <td class="cue-gfx">${cellFor(b,'gfx')}</td>
+      <td class="cue-lighting">${cellFor(b,'lighting')}</td>
+      <td class="cue-script">${cellFor(b,'script')}</td>
     </tr>`;
   }).join('');
-  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Video</th><th>Audio</th><th>Playback</th><th>GFX</th><th>Lighting</th><th>Script</th></tr></thead><tbody>${rows || '<tr><td colspan="10">No rows yet.</td></tr>'}</tbody></table></div>`;
+  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th></tr></thead><tbody>${rows || '<tr><td colspan="10">No rows yet.</td></tr>'}</tbody></table></div>`;
 }
 
 function showCallSheetPreview() {
   const data = getPreProData();
-  const people = (data.people || []).filter(p => p.name || p.role || p.call);
-  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.role || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
   showPaperPreview('Call Sheet Preview', `
-    <h1>Call Sheet</h1>
-    <div>Item 1</div>
-    <table><tbody>
-      <tr><th>Production</th><td>${esc(data.production || '')}</td></tr>
-      <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
-      <tr><th>Call Time</th><td>${esc(data.call || '')}</td></tr>
-      <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
-    </tbody></table>
-    <h2>Crew / Talent</h2>
-    <table><thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="3">No crew or talent entered yet.</td></tr>'}</tbody></table>
-    <h2>Schedule / Notes</h2>
-    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>
+    ${callSheetPreviewHTML(data)}
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPrePro()");
 }
 
@@ -4110,20 +4329,30 @@ function showPatchSheetPreview(kind) {
 }
 
 function callSheetPreviewHTML(data) {
-  const people = (data.people || []).filter(p => p.name || p.role || p.call);
-  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.role || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
+  const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
   return `
     <h1>1. Call Sheet</h1>
     <table><tbody>
       <tr><th>Production</th><td>${esc(data.production || show.name || '')}</td></tr>
       <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
       <tr><th>Call Time</th><td>${esc(data.call || show.start || '')}</td></tr>
+      <tr><th>Doors Open</th><td>${esc(data.doors || '')}</td></tr>
+      <tr><th>Show Start</th><td>${esc(data.showStart || '')}</td></tr>
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
+      <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
+      <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
+      <tr><th>Entrance</th><td>${esc(data.entrance || '')}</td></tr>
+      <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>
+      <tr><th>Stream Information</th><td>${esc(data.stream || '')}</td></tr>
+      <tr><th>Dress Code</th><td>${esc(data.dress || '')}</td></tr>
+      <tr><th>Meals Provided</th><td>${esc(data.meals || '')}</td></tr>
     </tbody></table>
     <h2>Crew / Talent</h2>
-    <table><thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="3">No crew or talent entered yet.</td></tr>'}</tbody></table>
-    <h2>Schedule / Notes</h2>
-    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>`;
+    <table><thead><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="5">No crew or talent entered yet.</td></tr>'}</tbody></table>
+    <h2>General Notes</h2>
+    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>
+    ${data.safetyPlan ? `<h2>Safety Plan</h2><table><tbody><tr><td>${esc(data.safetyPlan || '')}</td></tr></tbody></table>` : ''}`;
 }
 
 function showCuePartPreview(type) {
@@ -4201,6 +4430,102 @@ function safetyPlanHTML(safety) {
 function showSafetyPlanPreview() {
   const safety = getSafetyPlanData();
   showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()");
+}
+
+function defaultProductionSchedule() {
+  return {
+    date:'',
+    setup:'',
+    call:'',
+    show:'',
+    wrap:'',
+    owner:'',
+    checklist: PRODUCTION_CHECKLIST_DEFAULTS.map(item => ({ item, owner:'', due:'', done:false })),
+  };
+}
+
+function openProductionSchedule() {
+  hideModal('paperworkHubModal');
+  const schedule = { ...defaultProductionSchedule(), ...(loadPreProData().productionSchedule || {}) };
+  schedule.checklist = Array.isArray(schedule.checklist) && schedule.checklist.length ? schedule.checklist : defaultProductionSchedule().checklist;
+  document.getElementById('ps-date').value = schedule.date || '';
+  document.getElementById('ps-setup').value = schedule.setup || '';
+  document.getElementById('ps-call').value = schedule.call || '';
+  document.getElementById('ps-show').value = schedule.show || '';
+  document.getElementById('ps-wrap').value = schedule.wrap || '';
+  document.getElementById('ps-owner').value = schedule.owner || '';
+  renderProductionChecklist(schedule.checklist);
+  showModal('productionScheduleModal');
+}
+
+function renderProductionChecklist(items) {
+  const el = document.getElementById('ps-checklist');
+  if (!el) return;
+  const rows = Array.isArray(items) && items.length ? items : [{ item:'', owner:'', due:'', done:false }];
+  el.innerHTML = `<div class="patch-table comms" style="grid-template-columns:32px 1.4fr .8fr .6fr">
+    <div class="patch-head"></div><div class="patch-head">Task</div><div class="patch-head">Owner</div><div class="patch-head">Due</div>
+    ${rows.map((row,i)=>`
+      <input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''} style="align-self:center;justify-self:center">
+      <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="Task">
+      <input class="field-in" data-ps-row="${i}" data-ps-field="owner" value="${esc(row.owner||'')}" placeholder="PM / ENG">
+      <input class="field-in" data-ps-row="${i}" data-ps-field="due" type="time" value="${esc(row.due||'')}">
+    `).join('')}
+  </div>`;
+}
+
+function addProductionChecklistRow() {
+  const current = getProductionScheduleData();
+  current.checklist.push({ item:'', owner:current.owner || '', due:'', done:false });
+  renderProductionChecklist(current.checklist);
+}
+
+function getProductionScheduleData() {
+  const rows = [];
+  document.querySelectorAll('[data-ps-row]').forEach(input => {
+    const idx = Number(input.dataset.psRow);
+    const field = input.dataset.psField;
+    if (!rows[idx]) rows[idx] = {};
+    rows[idx][field] = field === 'done' ? input.checked : input.value.trim();
+  });
+  return {
+    date: document.getElementById('ps-date')?.value || '',
+    setup: document.getElementById('ps-setup')?.value || '',
+    call: document.getElementById('ps-call')?.value || '',
+    show: document.getElementById('ps-show')?.value || '',
+    wrap: document.getElementById('ps-wrap')?.value || '',
+    owner: document.getElementById('ps-owner')?.value?.trim() || '',
+    checklist: rows.filter(row => row && row.item),
+  };
+}
+
+function saveProductionSchedule() {
+  persistPreProData({ productionSchedule: getProductionScheduleData() });
+  toast('Production scheduler saved.');
+}
+
+function productionScheduleHTML(schedule) {
+  const s = { ...defaultProductionSchedule(), ...(schedule || {}) };
+  const rows = (s.checklist || []).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${esc(row.owner || '')}</td><td>${esc(row.due || '')}</td></tr>`).join('');
+  const assignments = getRoleAssignments().map(row => `<tr><td>${esc(row.role || '')}</td><td>${esc(row.person || '')}</td><td>${esc(row.paperwork || '')}</td></tr>`).join('');
+  return `
+    <h1>2. Production Scheduler</h1>
+    <table><tbody>
+      <tr><th>Setup Date</th><td>${esc(s.date || '')}</td></tr>
+      <tr><th>Setup Start</th><td>${esc(s.setup || '')}</td></tr>
+      <tr><th>Crew Call</th><td>${esc(s.call || '')}</td></tr>
+      <tr><th>Show Start</th><td>${esc(s.show || '')}</td></tr>
+      <tr><th>Estimated Wrap</th><td>${esc(s.wrap || '')}</td></tr>
+      <tr><th>Owner</th><td>${esc(s.owner || '')}</td></tr>
+    </tbody></table>
+    <h2>Role and PrepBear Assignments</h2>
+    <table><thead><tr><th>Role</th><th>Person</th><th>PrepBear File</th></tr></thead><tbody>${assignments}</tbody></table>
+    <h2>Readiness Checklist</h2>
+    <table><thead><tr><th>Done</th><th>Task</th><th>Owner</th><th>Due</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No checklist items.</td></tr>'}</tbody></table>`;
+}
+
+function showProductionSchedulePreview() {
+  const schedule = getProductionScheduleData();
+  showPaperPreview('Production Scheduler Preview', productionScheduleHTML(schedule), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()");
 }
 
 function defaultPatchRows(kind) {
@@ -4329,19 +4654,22 @@ function patchTableHTML(kind, title) {
 function showPreProPackagePreview() {
   const data = loadPreProData();
   const safety = data.safety || {};
+  const schedule = data.productionSchedule || defaultProductionSchedule();
   const html = `
     ${callSheetPreviewHTML(data)}
     <div class="paper-page-break"></div>
+    ${productionScheduleHTML(schedule)}
+    <div class="paper-page-break"></div>
     ${safetyPlanHTML(safety)}
     <div class="paper-page-break"></div>
-    <h1>3. Full Rendered Rundown</h1>
+    <h1>4. Full Rendered Rundown</h1>
     <div>${esc(show.name || 'Cueola Rundown')}</div>
     ${rundownPreviewTableHTML()}
     <div class="paper-page-break"></div>
-    <h1>4. Video Patch Sheet</h1>
+    <h1>5. Video Patch Sheet</h1>
     ${patchTableHTML('video', 'Video Patch Sheet')}
     <div class="paper-page-break"></div>
-    <h1>5. Audio and Comms Patch Sheets</h1>
+    <h1>6. Audio and Comms Patch Sheets</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
   `;
@@ -4354,9 +4682,19 @@ function openPrePro() {
   document.getElementById('pp-production').value = data.production || show.name || '';
   document.getElementById('pp-date').value = data.date || '';
   document.getElementById('pp-call').value = data.call || show.start || '';
+  document.getElementById('pp-show-start').value = data.showStart || show.start || '';
+  document.getElementById('pp-doors').value = data.doors || '';
   document.getElementById('pp-location').value = data.location || '';
+  document.getElementById('pp-address').value = data.address || '';
+  document.getElementById('pp-late').value = data.late || '';
+  document.getElementById('pp-parking').value = data.parking || '';
+  document.getElementById('pp-entrance').value = data.entrance || '';
+  document.getElementById('pp-stream').value = data.stream || '';
+  document.getElementById('pp-dress').value = data.dress || '';
+  document.getElementById('pp-meals').value = data.meals || '';
   document.getElementById('pp-notes').value = data.notes || '';
-  callSheetPeople = Array.isArray(data.people) && data.people.length ? data.people : [{ name:'', role:'', call:'' }];
+  document.getElementById('pp-safety').value = data.safetyPlan || '';
+  callSheetPeople = Array.isArray(data.people) && data.people.length ? data.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
   renderCallSheetPeople();
   showModal('preProModal');
 }
@@ -4367,9 +4705,19 @@ function getPreProData() {
     production: document.getElementById('pp-production')?.value?.trim() || show.name || '',
     date: document.getElementById('pp-date')?.value || '',
     call: document.getElementById('pp-call')?.value || '',
+    showStart: document.getElementById('pp-show-start')?.value || '',
+    doors: document.getElementById('pp-doors')?.value || '',
     location: document.getElementById('pp-location')?.value?.trim() || '',
+    address: document.getElementById('pp-address')?.value?.trim() || '',
+    parking: document.getElementById('pp-parking')?.value?.trim() || '',
+    entrance: document.getElementById('pp-entrance')?.value?.trim() || '',
+    late: document.getElementById('pp-late')?.value?.trim() || '',
+    stream: document.getElementById('pp-stream')?.value?.trim() || '',
+    dress: document.getElementById('pp-dress')?.value?.trim() || '',
+    meals: document.getElementById('pp-meals')?.value || '',
     people: callSheetPeople,
     notes: document.getElementById('pp-notes')?.value || '',
+    safetyPlan: document.getElementById('pp-safety')?.value || '',
     updatedAt: Date.now(),
   };
 }
@@ -4386,25 +4734,31 @@ function savePrePro() {
 function syncCallSheetPeopleFromDOM() {
   callSheetPeople = Array.from(document.querySelectorAll('.call-person-row')).map(row => ({
     name: row.querySelector('[data-call-field="name"]')?.value?.trim() || '',
-    role: row.querySelector('[data-call-field="role"]')?.value?.trim() || '',
+    position: row.querySelector('[data-call-field="position"]')?.value?.trim() || '',
+    email: row.querySelector('[data-call-field="email"]')?.value?.trim() || '',
+    phone: row.querySelector('[data-call-field="phone"]')?.value?.trim() || '',
     call: row.querySelector('[data-call-field="call"]')?.value || '',
-  })).filter(p => p.name || p.role || p.call);
-  if (!callSheetPeople.length) callSheetPeople = [{ name:'', role:'', call:'' }];
+  })).filter(p => p.name || p.position || p.email || p.phone || p.call);
+  if (!callSheetPeople.length) callSheetPeople = [{ name:'', position:'', email:'', phone:'', call:'' }];
 }
 
 function renderCallSheetPeople() {
   const grid = document.getElementById('pp-crew-grid');
   if (!grid) return;
-  const rows = callSheetPeople.length ? callSheetPeople : [{ name:'', role:'', call:'' }];
+  const rows = callSheetPeople.length ? callSheetPeople : [{ name:'', position:'', email:'', phone:'', call:'' }];
   grid.innerHTML = `
     <div class="call-grid-head">Name</div>
-    <div class="call-grid-head">Role</div>
+    <div class="call-grid-head">Position</div>
+    <div class="call-grid-head">Email</div>
+    <div class="call-grid-head">Phone</div>
     <div class="call-grid-head">Call</div>
-    <div></div>
+    <div class="call-grid-head"></div>
     ${rows.map((p,i)=>`
       <div class="call-person-row" style="display:contents">
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
-        <input class="field-in" data-call-field="role" value="${esc(p.role||'')}" placeholder="Role" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="position" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="email" value="${esc(p.email||'')}" placeholder="Email" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="phone" value="${esc(p.phone||'')}" placeholder="Phone" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="call" type="time" value="${esc(p.call||'')}" oninput="syncCallSheetPeopleFromDOM()">
         <button class="call-row-remove" onclick="removeCallSheetPerson(${i})" title="Remove person">x</button>
       </div>`).join('')}`;
@@ -4412,14 +4766,14 @@ function renderCallSheetPeople() {
 
 function addCallSheetPerson() {
   syncCallSheetPeopleFromDOM();
-  callSheetPeople.push({ name:'', role:'', call:'' });
+  callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:'' });
   renderCallSheetPeople();
 }
 
 function removeCallSheetPerson(idx) {
   syncCallSheetPeopleFromDOM();
   callSheetPeople.splice(idx, 1);
-  if (!callSheetPeople.length) callSheetPeople.push({ name:'', role:'', call:'' });
+  if (!callSheetPeople.length) callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:'' });
   renderCallSheetPeople();
 }
 
@@ -4448,11 +4802,21 @@ async function downloadCallSheetPDF() {
     add('Production', data.production, 12);
     add('Date', data.date, 10);
     add('Call Time', data.call, 10);
+    add('Doors Open', data.doors, 10);
+    add('Show Start', data.showStart, 10);
     add('Location', data.location, 10);
+    add('Address', data.address, 10);
+    add('Parking', data.parking, 10);
+    add('Entrance', data.entrance, 10);
+    add('Late / Lost Contact', data.late, 10);
+    add('Stream Information', data.stream, 10);
+    add('Dress Code', data.dress, 10);
+    add('Meals Provided', data.meals, 10);
     y += 8;
-    const people = (data.people || []).filter(p => p.name || p.role || p.call);
-    add('Crew / Talent', people.map(p => [p.name, p.role, p.call].filter(Boolean).join(' - ')).join('\n'), 10);
-    add('Schedule / Notes', data.notes, 10);
+    const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
+    add('Crew / Talent', people.map(p => [p.name, p.position || p.role, p.email, p.phone, p.call].filter(Boolean).join(' - ')).join('\n'), 10);
+    add('General Notes', data.notes, 10);
+    add('Safety Plan', data.safetyPlan, 10);
     const fileName = `${(data.production || 'cueola-call-sheet').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-call-sheet'}-call-sheet.pdf`;
     doc.save(fileName);
     toast('Call sheet PDF downloaded.');
@@ -4475,7 +4839,8 @@ async function exportPreProPackagePDF() {
     let y = margin;
     const data = loadPreProData();
     const safety = data.safety || {};
-    const cleanFileName = (data.production || show.name || 'cueola-pre-pro-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-pre-pro-package';
+    const schedule = data.productionSchedule || defaultProductionSchedule();
+    const cleanFileName = (data.production || show.name || 'cueola-prepbear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-prepbear-package';
     const newPage = () => { doc.addPage(); y = margin; };
     const line = (txt, size=9, bold=false, color=[25,25,25]) => {
       doc.setFont('helvetica', bold ? 'bold' : 'normal');
@@ -4505,18 +4870,38 @@ async function exportPreProPackagePDF() {
     field('Production', data.production || show.name || '');
     field('Shoot Date', data.date || '');
     field('Call Time', data.call || '');
+    field('Doors Open', data.doors || '');
+    field('Show Start', data.showStart || '');
     field('Location', data.location || '');
+    field('Address', data.address || '');
+    field('Parking', data.parking || '');
+    field('Entrance', data.entrance || '');
+    field('Late / Lost Contact', data.late || '');
+    field('Stream Information', data.stream || '');
+    field('Dress Code', data.dress || '');
+    field('Meals Provided', data.meals || '');
     const people = (data.people || []).filter(p => p.name || p.role || p.call);
-    tableRows(['Name','Role','Call'], people.length ? people.map(p => [p.name, p.role, p.call]) : [['No crew or talent entered yet','','']]);
-    field('Schedule / Notes', data.notes || '');
+    tableRows(['Name','Position','Email','Phone','Call'], people.length ? people.map(p => [p.name, p.position || p.role, p.email, p.phone, p.call]) : [['No crew or talent entered yet','','','','']]);
+    field('General Notes', data.notes || '');
+    field('Safety Plan', data.safetyPlan || '');
 
-    section('2. Safety Plan');
+    section('2. Production Scheduler');
+    field('Setup Date', schedule.date || '');
+    field('Setup Start', schedule.setup || '');
+    field('Crew Call', schedule.call || '');
+    field('Show Start', schedule.show || '');
+    field('Estimated Wrap', schedule.wrap || '');
+    field('Owner', schedule.owner || '');
+    tableRows(['Role','Person','PrepBear File'], getRoleAssignments().map(row => [row.role, row.person, row.paperwork]));
+    tableRows(['Done','Task','Owner','Due'], (schedule.checklist || []).map(row => [row.done ? 'Yes' : 'No', row.item, row.owner, row.due]));
+
+    section('3. Safety Plan');
     ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
       const labels = { hospital:'Local Hospital', weather:'Weather', firstAid:'First Aid Kit Location', fire:'Fire Extinguisher Location', emergency:'Emergency Numbers', nonemergency:'Non-Emergency Numbers', security:'Security', late:'Late / Lost Contact', equipment:'Equipment Needed', notes:'Safety Notes' };
       field(labels[key], safety[key] || (key === 'security' ? '8822' : ''));
     });
 
-    section('3. Full Rendered Rundown');
+    section('4. Full Rendered Rundown');
     let offsetSecs = 0;
     beats.forEach((b, i) => {
       const startStr = show.start ? clock(show.start, offsetSecs) : '-';
@@ -4535,19 +4920,19 @@ async function exportPreProPackagePDF() {
       y += 6;
     });
 
-    section('4. Video Patch Sheet');
+    section('5. Video Patch Sheet');
     tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('video').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
 
-    section('5. Audio and Comms Patch Sheets');
+    section('6. Audio and Comms Patch Sheets');
     line('Audio Patch Sheet', 12, true);
     tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('audio').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
     line('Comms Patch Sheet', 12, true);
     tableRows(['Position','Out','Gear','Notes'], getPatchRows('comms').filter(r => Object.values(r).some(Boolean)).map(r => [r.position, r.out, r.gear, r.notes]));
 
-    doc.save(`${cleanFileName}-pre-pro-package.pdf`);
-    toast('Pre-production package PDF downloaded.');
+    doc.save(`${cleanFileName}-prepbear-package.pdf`);
+    toast('PrepBear package PDF downloaded.');
   } catch {
-    toast('Could not export the pre-production package.');
+    toast('Could not export the PrepBear package.');
   }
 }
 
@@ -4558,42 +4943,89 @@ async function exportPDF() {
   try {
     await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'pt', format:'letter' });
-    const margin = 36;
+    const doc = new jsPDF({ unit:'pt', format:'letter', orientation:'landscape' });
+    const margin = 28;
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    let y = margin;
     let offsetSecs = 0;
-    const line = (txt, size=9, bold=false, color=[30,30,30]) => {
-      doc.setFont('helvetica', bold ? 'bold' : 'normal');
-      doc.setFontSize(size);
-      doc.setTextColor(...color);
-      const chunks = doc.splitTextToSize(String(txt || ''), pageW - margin * 2);
-      chunks.forEach(chunk => {
-        if (y > pageH - margin) { doc.addPage(); y = margin; }
-        doc.text(chunk, margin, y);
-        y += size + 4;
-      });
+    const cueColors = {
+      video:[91,141,248], audio:[34,211,160], playback:[240,82,82],
+      gfx:[245,183,49], lighting:[176,110,248], script:[34,211,211],
     };
-    line(show.name || 'Cueola Rundown', 18, true);
-    line(`Exported ${new Date().toLocaleString()}${session.code ? ` | Session ${session.code}` : ''}`, 8, false, [90,90,90]);
-    y += 8;
+    const columns = [
+      { key:'num', label:'#', w:24 },
+      { key:'row', label:'Row', w:128 },
+      { key:'start', label:'Start', w:52 },
+      { key:'dur', label:'Dur', w:42 },
+      ...COL_DEFAULTS.map(t => ({ key:t, label:CT[t].label, w:t==='script'?118:96 })),
+    ];
+    const tableW = columns.reduce((sum,c)=>sum+c.w,0);
+    const scale = Math.min(1, (pageW - margin*2) / tableW);
+    columns.forEach(c => c.sw = c.w * scale);
+    let y = margin;
+    const title = () => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,24,35);
+      doc.text(show.name || 'Cueola Rundown', margin, y);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(95,100,115);
+      doc.text(`Exported ${new Date().toLocaleString()}${session.code ? ` | Session ${session.code}` : ''}`, margin, y + 13);
+      y += 28;
+    };
+    const header = () => {
+      let x = margin;
+      columns.forEach(c => {
+        const color = cueColors[c.key] || [225,228,235];
+        doc.setFillColor(...(cueColors[c.key] ? color : [238,240,244]));
+        doc.setDrawColor(205,210,220);
+        doc.rect(x, y, c.sw, 18, 'FD');
+        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(cueColors[c.key] ? 255 : 45, cueColors[c.key] ? 255 : 50, cueColors[c.key] ? 255 : 60);
+        doc.text(c.label, x + 4, y + 12, { maxWidth:c.sw - 8 });
+        x += c.sw;
+      });
+      y += 18;
+    };
+    const cueText = (b, type) => {
+      const d = b.cues?.[type];
+      const on = getCueOn(d), off = getCueOff(d);
+      const script = type === 'script' && d?.text ? `Script: ${cleanPrompterText(d.text).slice(0, 220)}` : '';
+      return [on ? `ON ${on}` : '', off ? `OFF ${off}` : '', script].filter(Boolean).join('\n') || '-';
+    };
+    title();
+    header();
     beats.forEach((b, i) => {
       const startStr = show.start ? clock(show.start, offsetSecs) : '-';
       offsetSecs += (b.min||0)*60+(b.sec||0);
-      line(`${i+1}. ${b.info || '-'}`, 12, true);
-      line(`${b.style === 'timed' ? 'Timed' : 'Flex'} | Start ${startStr} | Dur ${fmtDur(b)}`, 8, false, [90,90,90]);
-      if (b.notes) line(`Notes: ${b.notes}`, 8);
-      COL_DEFAULTS.forEach(type => {
-        const d = b.cues?.[type];
-        const on = getCueOn(d);
-        const off = getCueOff(d);
-        const script = type === 'script' && d?.text ? cleanPrompterText(d.text) : '';
-        if (!on && !off && !script) return;
-        line(`${CT[type].label}: ${[on ? `ON ${on}` : '', off ? `OFF ${off}` : ''].filter(Boolean).join(' | ')}`, 8, true, [45,75,110]);
-        if (script) line(script, 8);
+      const values = {
+        num:String(i+1),
+        row:[b.info || '-', b.notes || ''].filter(Boolean).join('\n'),
+        start:startStr,
+        dur:fmtDur(b),
+      };
+      COL_DEFAULTS.forEach(type => { values[type] = cueText(b,type); });
+      const lineSets = columns.map(c => doc.splitTextToSize(String(values[c.key] || '-'), c.sw - 8));
+      const rowH = Math.max(28, ...lineSets.map(lines => lines.length * 8 + 10));
+      if (y + rowH > pageH - margin) {
+        doc.addPage('letter','landscape');
+        y = margin;
+        title();
+        header();
+      }
+      let x = margin;
+      columns.forEach((c, idx) => {
+        const color = cueColors[c.key];
+        if (color) {
+          doc.setFillColor(color[0], color[1], color[2]);
+          doc.rect(x, y, 3, rowH, 'F');
+        }
+        doc.setDrawColor(215,218,226);
+        doc.setFillColor(idx % 2 ? 252 : 255, idx % 2 ? 253 : 255, idx % 2 ? 255 : 255);
+        doc.rect(x, y, c.sw, rowH, 'S');
+        doc.setFont('helvetica', c.key === 'row' ? 'bold' : 'normal');
+        doc.setFontSize(c.key === 'row' ? 7.5 : 6.5);
+        doc.setTextColor(35,38,48);
+        doc.text(lineSets[idx], x + 5, y + 10);
+        x += c.sw;
       });
-      y += 8;
+      y += rowH;
     });
     const fileName = `${(show.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
     doc.save(fileName);
@@ -4637,6 +5069,7 @@ _adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))
 restoreAdminSession();
 updateAdminUI();
 applyTheme(currentTheme);
+applyPrepBearTheme(prepBearTheme);
 
 window.addEventListener('popstate', () => {
   const inSession =
@@ -4657,7 +5090,7 @@ else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: t
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
-  if (location.hash === '#promptypus' || params.has('prompter') || params.has('promptypus')) {
+  if (location.hash === '#flowmingo' || location.hash === '#promptypus' || params.has('flowmingo') || params.has('prompter') || params.has('promptypus')) {
     sessionStorage.setItem('cueola_screen', 'entry');
     setTimeout(enterPrompter, 0);
     return;
@@ -4681,6 +5114,7 @@ else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: t
   const doJoin = () => {
     if (name) {
       session = { code, role, userName:name, isDemo:false, isExpert:false };
+      freeTextMode = false;
       enterRundown();
       if (shouldOpenPrePro) setTimeout(openPaperworkHub, 700);
     } else {

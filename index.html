@@ -31,8 +31,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-logo{font-size:52px;margin-bottom:16px;filter:drop-shadow(0 0 24px rgba(91,141,248,.5));animation:bob 4s ease-in-out infinite}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 .e-title{font-family:var(--syne);font-size:40px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px;background:linear-gradient(135deg,#dde4f5,#5b8df8 60%,#7b6cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.e-sub{font-size:14px;color:var(--text2);text-align:center;line-height:1.7;margin-bottom:32px;max-width:360px}
+.e-sub{font-size:14px;color:var(--text2);text-align:center;line-height:1.7;margin-bottom:16px;max-width:390px}
 .e-sub em{color:var(--text);font-style:normal;font-weight:500}
+.entry-actions{width:100%;display:flex;justify-content:flex-end;margin-bottom:14px}
+.entry-admin-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;border:1.5px solid var(--bord2);background:rgba(255,255,255,.03);color:var(--text2);border-radius:999px;padding:9px 13px;font-size:12px;font-weight:700;font-family:var(--sans);cursor:pointer;transition:all .16s}
+.entry-admin-link:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 12%,transparent);transform:translateY(-1px)}
 .e-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;margin-bottom:14px}
 .e-card{background:var(--s1);border:1.5px solid var(--bord2);border-radius:14px;padding:20px 16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:8px}
 .e-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.4)}
@@ -236,7 +239,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .add-row-btn-el:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
 .empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
-.empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2)}
+.empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2);text-align:center}
 .empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:800;font-family:var(--mono);letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
 .empty-rundown-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
@@ -599,7 +602,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .settings-sheet{max-height:80vh;overflow-y:auto;padding-bottom:16px}
 .settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .settings-section{display:flex;flex-direction:column;gap:12px}
-.theme-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .theme-swatch{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
 .ts-preview{width:100%;aspect-ratio:3/2;border-radius:8px;border:2px solid;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .theme-swatch:hover .ts-preview{filter:brightness(1.2)}
@@ -609,9 +612,47 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── THEMES ── */
 [data-theme="warm"]{--bg:#130803;--s1:#180b04;--s2:#201006;--s3:#2a1608;--s4:#351d0b;--border:#34200f;--bord2:#4a2b14;--text:#f5ead8;--text2:#b89a72;--text3:#795b39;--accent:#c8843f;--acg:#9c5a28;--green:#b28748;--cyan:#c8843f;--purple:#b6693d;--video:#c8843f;--video-bg:rgba(200,132,63,.13);--cue-add:#c8843f;--cue-add-bg:rgba(200,132,63,.07);--cue-add-border:rgba(200,132,63,.46)}
 [data-theme="cool"]{--bg:#08090f;--s1:#0e111d;--s2:#141927;--s3:#1b2132;--s4:#242b40;--border:#20283b;--bord2:#2c3650;--text:#d6e8f0;--text2:#86a9b7;--text3:#526b76;--accent:#7eb8c8;--acg:#82a4e6}
-[data-theme="white"]{--bg:#f5f5f0;--s1:#ffffff;--s2:#ebeae3;--s3:#deddd4;--s4:#d0cec2;--border:#d8d6cb;--bord2:#c4c1b5;--text:#1a1a1a;--text2:#5e5e59;--text3:#85857d;--accent:#666;--acg:#333}
+[data-theme="white"]{--bg:#f6f5f1;--s1:#ffffff;--s2:#edece7;--s3:#deddd7;--s4:#d0cec6;--border:#d7d4ca;--bord2:#bdb9ad;--text:#1c1c1c;--text2:#60615f;--text3:#8a8880;--accent:#d73737;--acg:#575a5d}
 [data-theme="green"]{--bg:#041006;--s1:#071608;--s2:#0b1d0c;--s3:#112811;--s4:#183318;--border:#1a3419;--bord2:#254522;--text:#ddf0d2;--text2:#95b37f;--text3:#5e794d;--accent:#78ad4f;--acg:#4f8432;--green:#78ad4f;--cyan:#78ad4f;--purple:#8a9a4c;--video:#78ad4f;--video-bg:rgba(120,173,79,.13);--cue-add:#78ad4f;--cue-add-bg:rgba(120,173,79,.07);--cue-add-border:rgba(120,173,79,.46)}
 [data-theme="black"]{--bg:#000;--s1:#090909;--s2:#111;--s3:#1a1a1a;--s4:#242424;--border:#1f1f1f;--bord2:#333;--text:#fff;--text2:#aaa;--text3:#666;--accent:#fff;--acg:#c8c8c8}
+[data-theme="koala"]{--bg:#101311;--s1:#151917;--s2:#1d2421;--s3:#27312d;--s4:#34403b;--border:#2d3a35;--bord2:#4c625a;--text:#f0f3ee;--text2:#b9c5bd;--text3:#7c8a82;--accent:#9ed8bd;--acg:#c7c8c4;--green:#88d7a8;--yellow:#ffd166;--cyan:#aee8d2;--purple:#c6c8c4;--video:#9ed8bd;--video-bg:rgba(158,216,189,.13);--cue-add:#9ed8bd;--cue-add-bg:rgba(158,216,189,.07);--cue-add-border:rgba(158,216,189,.46)}
+[data-theme="panda"]{--bg:#050607;--s1:#0b0d0f;--s2:#111414;--s3:#1b1f20;--s4:#272c2d;--border:#242a2a;--bord2:#3e4747;--text:#f8f8f3;--text2:#b6bdb7;--text3:#69716d;--accent:#f8f8f3;--acg:#7ad66f;--green:#7ad66f;--yellow:#f2d675;--cyan:#b7f0e1;--purple:#bdb6ff;--video:#f8f8f3;--video-bg:rgba(255,255,255,.1);--cue-add:#7ad66f;--cue-add-bg:rgba(122,214,111,.07);--cue-add-border:rgba(122,214,111,.44)}
+[data-theme="polar"]{--bg:#07131d;--s1:#0c1a26;--s2:#112333;--s3:#183247;--s4:#21415b;--border:#20384d;--bord2:#335772;--text:#f3fbff;--text2:#a9d5ea;--text3:#6c98af;--accent:#c9f3ff;--acg:#8db7ff;--green:#92e6d4;--yellow:#f8e7a3;--cyan:#9ee7ff;--purple:#c9c7ff;--video:#c9f3ff;--video-bg:rgba(201,243,255,.12);--cue-add:#9ee7ff;--cue-add-bg:rgba(158,231,255,.07);--cue-add-border:rgba(158,231,255,.42)}
+[data-theme="flamingo"]{--bg:#120713;--s1:#1a0b1a;--s2:#241024;--s3:#311631;--s4:#432044;--border:#422443;--bord2:#64325d;--text:#fff0f8;--text2:#e7a2c6;--text3:#9b6287;--accent:#ff6fae;--acg:#59ebda;--green:#59ebda;--cyan:#59ebda;--purple:#ffc857;--video:#ff6fae;--video-bg:rgba(255,111,174,.13);--cue-add:#ff6fae;--cue-add-bg:rgba(255,111,174,.07);--cue-add-border:rgba(255,111,174,.46)}
+[data-theme="koala"] #entry{background:radial-gradient(circle at 50% -10%,rgba(168,183,255,.16),transparent 34%),radial-gradient(circle at 12% 20%,rgba(143,214,189,.12),transparent 26%),var(--bg)}
+[data-theme="koala"] .topbar{background:linear-gradient(90deg,color-mix(in srgb,var(--s2) 92%,black),color-mix(in srgb,var(--accent) 16%,var(--s1)),var(--s1))}
+[data-theme="koala"] .brand::after{content:'koala mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:999px;padding:3px 7px;background:rgba(143,214,189,.08);box-shadow:0 0 24px rgba(143,214,189,.08)}
+[data-theme="koala"] .show-strip{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 10%,var(--s1)),var(--bg))}
+[data-theme="koala"] .rd-scroll{background:
+  radial-gradient(circle at 14% 12%,rgba(143,214,189,.18),transparent 24%),
+  radial-gradient(circle at 86% 10%,rgba(168,183,255,.13),transparent 26%),
+  linear-gradient(180deg,color-mix(in srgb,var(--accent) 11%,transparent),transparent 230px),
+  repeating-linear-gradient(135deg,rgba(143,214,189,.04) 0 1px,transparent 1px 18px)}
+[data-theme="koala"] .rd-head th{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 16%,var(--s2)),color-mix(in srgb,var(--s2) 94%,black));color:#aee8d2;border-bottom-color:color-mix(in srgb,var(--accent) 42%,var(--border))}
+[data-theme="koala"] .rd-table th:nth-child(1),[data-theme="koala"] .rd-table td:nth-child(1),[data-theme="koala"] .rd-table th:nth-child(2),[data-theme="koala"] .rd-table td:nth-child(2),[data-theme="koala"] .rd-table th:nth-child(3),[data-theme="koala"] .rd-table td:nth-child(3){background:color-mix(in srgb,var(--bg) 80%,var(--accent))}
+[data-theme="koala"] .cue-cell-filled{background:linear-gradient(160deg,color-mix(in srgb,var(--s3) 85%,var(--accent)),rgba(18,35,43,.9));border-color:color-mix(in srgb,var(--accent) 30%,var(--bord2));box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+[data-theme="koala"] .cue-add-btn{background:rgba(143,214,189,.08);border-style:solid}
+[data-theme="panda"] .brand::after{content:'panda mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--green);border:1px solid rgba(132,204,127,.35);border-radius:999px;padding:3px 7px;background:rgba(132,204,127,.08)}
+[data-theme="polar"] .brand::after{content:'polar mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);border:1px solid rgba(158,231,255,.35);border-radius:999px;padding:3px 7px;background:rgba(158,231,255,.08)}
+[data-theme="panda"] .rd-scroll{background:radial-gradient(circle at 18% 8%,rgba(132,204,127,.12),transparent 26%),linear-gradient(180deg,rgba(255,255,255,.045),transparent 180px)}
+[data-theme="polar"] .rd-scroll{background:radial-gradient(circle at 82% 8%,rgba(158,231,255,.16),transparent 28%),linear-gradient(180deg,rgba(201,243,255,.08),transparent 210px)}
+[data-theme="koala"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 30%,transparent),0 18px 60px rgba(143,214,189,.12)}
+
+/* PrepBear local themes */
+.prepbear-tools{display:flex;justify-content:flex-end;margin-top:-4px}
+.prepbear-settings-btn{width:42px;height:42px;border-radius:12px;border:1px solid var(--bord2);background:var(--s2);color:var(--text2);font-size:18px;cursor:pointer;transition:all .15s}
+.prepbear-settings-btn:hover,.prepbear-settings-btn.active{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 12%,var(--s2))}
+.prepbear-theme-bar{display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent)}
+.prepbear-theme-bar.on{display:flex}
+.prepbear-theme-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-right:2px}
+.prepbear-theme-btn{width:auto;border:1px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:999px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.prepbear-theme-btn:hover,.prepbear-theme-btn.active{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 15%,var(--s2))}
+[data-prepbear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{--s1:#1d1306;--s2:#281a09;--s3:#35230d;--s4:#452f12;--border:#4a3216;--bord2:#704b1d;--text:#fff4dc;--text2:#d9b06f;--text3:#937044;--accent:#f5b731;--acg:#d97706;--green:#eab308;--cyan:#f59e0b;--purple:#facc15;position:relative}
+[data-prepbear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{--s1:#071512;--s2:#0c1f1a;--s3:#132b24;--s4:#1d3a31;--border:#1d3d34;--bord2:#315e51;--text:#edf8f1;--text2:#9fd0bd;--text3:#64907f;--accent:#83d6b2;--acg:#60a5fa;--green:#86efac;--cyan:#93c5fd;--purple:#c4b5fd;position:relative}
+[data-prepbear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{--s1:#080909;--s2:#111314;--s3:#1b1f20;--s4:#252a2c;--border:#252a2c;--bord2:#3e474a;--text:#f8f8f3;--text2:#aeb8b0;--text3:#68716b;--accent:#f8f8f3;--acg:#84cc7f;--green:#84cc7f;--cyan:#b7f0e1;--purple:#c8c4ff;position:relative}
+[data-prepbear-theme="polar"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{--s1:#07131d;--s2:#0d1d2a;--s3:#142b3d;--s4:#1e3a52;--border:#20384d;--bord2:#335772;--text:#f3fbff;--text2:#a9d5ea;--text3:#6c98af;--accent:#c9f3ff;--acg:#8db7ff;--green:#92e6d4;--cyan:#9ee7ff;--purple:#c9c7ff;position:relative}
+[data-prepbear-theme="party"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{--s1:#180c1f;--s2:#22112b;--s3:#31173a;--s4:#432050;--border:#44264e;--bord2:#70407a;--text:#fff3fb;--text2:#e9acd8;--text3:#a46c9b;--accent:#ff8ac7;--acg:#ffd166;--green:#8ef6c2;--cyan:#80e9ff;--purple:#c6a7ff;position:relative;box-shadow:0 26px 80px rgba(255,138,199,.16)}
+[data-prepbear-theme="party"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal::before{content:'🐻';position:absolute;right:18px;top:14px;font-size:46px;opacity:.08;pointer-events:none}
 
 /* Prompt Op */
 .prompt-op-active .ls-body{position:relative;background:var(--pt-bg,#08090f)}
@@ -639,18 +680,26 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prompt-op-active .prompt-op-panel .pt-ctrl-group:last-child{display:flex;grid-template-columns:none}
 
 /* Call sheet */
+.paperwork-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:2px}
+.paperwork-back{border:1px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:8px;padding:7px 11px;font-size:11px;font-family:var(--mono);cursor:pointer;white-space:nowrap}
+.paperwork-back:hover{border-color:var(--accent);color:var(--accent)}
+.prepro-section{border:1px solid var(--border);background:rgba(255,255,255,.018);border-radius:10px;padding:12px;margin-top:10px}
+.prepro-section-title{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
 .prepro-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.call-grid{display:grid;grid-template-columns:1.2fr 1fr .9fr 44px;gap:6px;align-items:end}
-.call-grid-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
-.call-row-remove{height:42px;border-radius:8px;border:1px solid var(--bord2);background:var(--s3);color:var(--text3);cursor:pointer}
+.call-grid{display:grid;grid-template-columns:1.1fr 1fr 1.2fr .9fr .75fr 44px;gap:0;align-items:stretch;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2);margin-top:8px}
+.call-grid-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
+.call-grid-head:nth-child(6){border-right:0}
+.call-grid .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
+.call-row-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .call-row-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
 .call-add-btn{width:100%;padding:10px;border-radius:8px;border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer}
 .call-add-btn:hover{border-color:var(--accent);color:var(--accent)}
-.patch-table{display:grid;gap:6px;margin-top:8px}
+.patch-table{display:grid;gap:0;margin-top:8px;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2)}
 .patch-table.video,.patch-table.audio{grid-template-columns:1fr 1fr 1fr 1fr 1.2fr 38px}
 .patch-table.comms{grid-template-columns:1.1fr .55fr 1fr 1.4fr 38px}
-.patch-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
-.patch-remove{height:38px;border-radius:8px;border:1px solid var(--bord2);background:var(--s3);color:var(--text3);cursor:pointer}
+.patch-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
+.patch-table .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
+.patch-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .patch-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
 .paperwork-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
 .prepro-files{display:flex;flex-direction:column;gap:6px}
@@ -684,6 +733,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .paper-rundown-grid th,.paper-rundown-grid td{padding:4px}
 .paper-rundown-grid .cue-type{font-weight:700;white-space:nowrap}
 .paper-rundown-grid .cue-muted{color:#777}
+.paper-rundown-grid th.cue-video,.paper-rundown-grid td.cue-video{border-left:3px solid #5b8df8}
+.paper-rundown-grid th.cue-audio,.paper-rundown-grid td.cue-audio{border-left:3px solid #22d3a0}
+.paper-rundown-grid th.cue-playback,.paper-rundown-grid td.cue-playback{border-left:3px solid #f05252}
+.paper-rundown-grid th.cue-gfx,.paper-rundown-grid td.cue-gfx{border-left:3px solid #f5b731}
+.paper-rundown-grid th.cue-lighting,.paper-rundown-grid td.cue-lighting{border-left:3px solid #b06ef8}
+.paper-rundown-grid th.cue-script,.paper-rundown-grid td.cue-script{border-left:3px solid #22d3d3}
 
 /* ── TOAST ── */
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--s4);border:1px solid var(--bord2);border-radius:10px;padding:10px 18px;font-size:13px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:999;display:none;white-space:nowrap;animation:rise .2s ease both}
@@ -738,8 +793,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .col-script-c{width:135px}
   .prepro-grid{grid-template-columns:1fr}
   .call-grid{grid-template-columns:1fr}
+  .call-grid .field-in{border-right:0}
   .patch-table.video,.patch-table.audio,.patch-table.comms{grid-template-columns:1fr}
   .patch-head{display:none}
+  .patch-table .field-in{border-right:0}
   .paperwork-actions{grid-template-columns:1fr}
   .call-grid-head{display:none}
   .ar-panel .chip-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -755,6 +812,27 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 ───────────────────────────────────────────────────────────── */
 #promptypus{position:relative;background:#0a0a0a;cursor:none}
 #promptypus.show-cursor{cursor:default}
+#promptypus[data-pt-theme="koala"]{background:linear-gradient(135deg,#07110f 0%,#12302a 50%,#101633 100%)}
+#promptypus[data-pt-theme="koala"]::before{content:'CUEOLA';position:absolute;left:18px;bottom:18px;z-index:2;font-family:var(--syne);font-size:clamp(42px,9vw,122px);font-weight:800;letter-spacing:.08em;color:rgba(143,214,189,.055);pointer-events:none}
+#promptypus[data-pt-theme="koala"]::after{content:'🐨';position:absolute;right:6vw;bottom:6vh;z-index:2;font-size:clamp(82px,16vw,220px);opacity:.08;filter:drop-shadow(0 0 42px rgba(143,214,189,.55));pointer-events:none}
+#promptypus[data-pt-theme="koala"] #pt-stage{background:
+  radial-gradient(circle at 18% 12%,rgba(143,214,189,.14),transparent 28%),
+  radial-gradient(circle at 82% 16%,rgba(168,183,255,.12),transparent 30%),
+  repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 1px,transparent 1px 18px)}
+#promptypus[data-pt-theme="koala"] #pt-text{text-shadow:0 0 18px rgba(143,214,189,.18),0 2px 0 rgba(7,17,15,.7)}
+#promptypus[data-pt-theme="koala"] #pt-read-line{height:4px;box-shadow:0 0 20px rgba(143,214,189,.55)}
+#promptypus[data-pt-theme="flamingo"]{background:linear-gradient(135deg,#120713 0%,#261024 42%,#083638 100%)}
+#promptypus[data-pt-theme="flamingo"]::before{content:'FLOWMINGO';position:absolute;left:18px;bottom:18px;z-index:2;font-family:var(--syne);font-size:clamp(42px,9vw,122px);font-weight:800;letter-spacing:.08em;color:rgba(255,126,182,.055);pointer-events:none}
+#promptypus[data-pt-theme="flamingo"]::after{content:'🦩';position:absolute;right:6vw;bottom:6vh;z-index:2;font-size:clamp(82px,16vw,220px);opacity:.08;filter:drop-shadow(0 0 42px rgba(255,126,182,.55));pointer-events:none}
+#promptypus[data-pt-theme="flamingo"] #pt-stage{background:
+  linear-gradient(115deg,rgba(255,126,182,.16),transparent 32%),
+  linear-gradient(245deg,rgba(89,235,218,.12),transparent 38%),
+  repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 1px,transparent 1px 18px)}
+#promptypus[data-pt-theme="flamingo"] #pt-text{text-shadow:0 0 18px rgba(255,126,182,.24),0 2px 0 rgba(8,54,56,.7)}
+#promptypus[data-pt-theme="flamingo"] #pt-read-line{height:4px;box-shadow:0 0 20px rgba(255,126,182,.65)}
+#promptypus[data-pt-theme="flamingo"] #pt-panel,
+#promptypus[data-pt-theme="flamingo"] #pt-bar,
+#promptypus[data-pt-theme="flamingo"] .pt-hint{box-shadow:0 18px 54px rgba(255,126,182,.12),inset 0 1px 0 rgba(255,255,255,.06)}
 
 /* Top nav bar */
 #pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
@@ -840,7 +918,10 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="entry-wrap">
     <div class="e-logo">🐨</div>
     <div class="e-title">Cueola</div>
-    <div class="e-sub">Professional production rundown — build cues, go live, <em>sync the prompter.</em></div>
+    <div class="e-sub">Build rundowns, prep paperwork with <em>PrepBear</em>, go live, and sync <em>Flowmingo.</em></div>
+    <div class="entry-actions">
+      <button class="entry-admin-link" onclick="location.href='dashboard.html'">🔑 Instructor Dashboard</button>
+    </div>
     <div class="e-cards">
       <div class="e-card stud e-card-full" onclick="showModal('modal-stud')">
         <div class="ec-icon">🐨</div>
@@ -849,16 +930,16 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <span class="ec-pill">Enter session code</span>
       </div>
       <div class="e-card e-card-full" onclick="showModal('modal-prepro-join')" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
-        <div class="ec-icon">📄</div>
-        <div class="ec-title">Pre-Production Paperwork</div>
-        <div class="ec-desc">Open the call sheet editor with your session code.</div>
+        <div class="ec-icon">🐻</div>
+        <div class="ec-title">PrepBear</div>
+        <div class="ec-desc">Build the pre-production package with your session code.</div>
         <span class="ec-pill" style="background:rgba(245,183,49,.15);color:var(--yellow)">Session code required</span>
       </div>
-      <div class="e-card exp e-card-full" onclick="loadExpert()">
-        <div class="ec-icon">⚡</div>
-        <div class="ec-title">Blank Slate</div>
-        <div class="ec-desc">Jump straight in — no session code, no guidance. Just build.</div>
-        <span class="ec-pill">Experienced producers</span>
+      <div class="e-card e-card-full" onclick="openPrompterApp()" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
+        <div class="ec-icon">🦩</div>
+        <div class="ec-title">Flowmingo</div>
+        <div class="ec-desc">Open the script display for on-air talent.</div>
+        <span class="ec-pill" style="background:rgba(34,211,211,.15);color:var(--cyan)">Flowmingo</span>
       </div>
       <div class="e-card demo" onclick="loadDemo()">
         <div class="ec-icon">▶️</div>
@@ -866,16 +947,12 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="ec-desc">Load a pre-built example rundown. No login needed.</div>
         <span class="ec-pill">No login required</span>
       </div>
-      <div class="e-card" onclick="openPrompterApp()" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
-        <div class="ec-icon">📺</div>
-        <div class="ec-title">Promptypus</div>
-        <div class="ec-desc">Open the teleprompter display for on-air talent.</div>
-        <span class="ec-pill" style="background:rgba(34,211,211,.15);color:var(--cyan)">Teleprompter</span>
+      <div class="e-card exp" onclick="openBlankSlateSetup()">
+        <div class="ec-icon">⚡</div>
+        <div class="ec-title">Blank Slate</div>
+        <div class="ec-desc">Make your own code and work in it together.</div>
+        <span class="ec-pill">Free text setup</span>
       </div>
-    </div>
-    <div class="e-footer">
-      <button class="e-footer-link" onclick="openAdminLogin()">🔑 Admin Login</button>
-      <a class="e-footer-link" href="dashboard.html">📊 Dashboard</a>
     </div>
   </div>
 </div>
@@ -887,7 +964,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:8px">
-      <button class="tbtn tbtn-ghost" onclick="goHome()" title="Back to Home" style="padding:7px 11px;font-size:13px">⌂</button>
+      <button class="tbtn tbtn-ghost" onclick="location.href='dashboard.html'" title="Back to Instructor Dashboard" aria-label="Back to Instructor Dashboard" style="padding:7px 11px;font-size:15px">🐨</button>
       <div class="brand"><span>🐨 Cue<span class="hi">ola</span></span></div>
     </div>
     <div id="tabBuild" style="display:none"></div>
@@ -903,9 +980,9 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       </div>
       <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">🔑 Admin</button>
       <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
-      <button class="tbtn tbtn-ghost" onclick="openPaperworkHub()">📄 Pre-Pro</button>
+      <button class="tbtn tbtn-ghost" onclick="openPaperworkHub()">🐻 PrepBear</button>
       <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
-      <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings">⚙</button>
+      <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings">⚙️</button>
       <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
     </div>
   </div>
@@ -961,9 +1038,9 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-brand">🐨 Cueola <span>● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
-      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Prompt Operator view">📜 Prompt Op</button>
+      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
       <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the script panel">📄 Script Panel</button>
-      <button class="ls-exit-btn" onclick="enterPrompter()" title="Open Promptypus teleprompter" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">📺 Promptypus</button>
+      <button class="ls-exit-btn" onclick="enterPrompter()" title="Open Flowmingo" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
   </div>
@@ -983,16 +1060,16 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-stat-card"><div class="ls-stat-label">Now</div><div class="ls-stat-value live" id="ls-stat-now">—</div></div>
     <div class="ls-stat-card"><div class="ls-stat-label">Next</div><div class="ls-stat-value ok" id="ls-stat-next">—</div></div>
     <div class="ls-stat-card"><div class="ls-stat-label">Remaining</div><div class="ls-stat-value warn" id="ls-stat-remain">—</div></div>
-    <div class="ls-prompter-mini" id="ls-stat-prompter" title="Promptypus waiting">PROMPTER OFF</div>
+    <div class="ls-prompter-mini" id="ls-stat-prompter" title="Flowmingo waiting">FLOWMINGO OFF</div>
     <div class="ls-progress"><div class="ls-progress-fill" id="ls-progress-fill"></div></div>
   </div>
   <div class="ls-body">
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-resizer" id="lsResizer" onpointerdown="startLivePanelResize(event)"></div>
     <div class="ls-sidebar" id="lsSidebar">
-      <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live prompter script"></div>
+      <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live Flowmingo script"></div>
       <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
-        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO PROMPTER</button>
+        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO FLOWMINGO</button>
         <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))" style="font-size:11px">Edit current cue script</button>
         <div id="lsPrompterRemote"></div>
         <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()" style="font-size:11px">Clear script</button>
@@ -1018,7 +1095,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <!-- Navigation bar -->
   <div id="pt-bar">
     <button class="pt-back-btn" onclick="exitPrompter()">← Cueola</button>
-    <div class="pt-bar-title">📺 Promptypus</div>
+    <div class="pt-bar-title">🦩 Flowmingo</div>
     <div class="pt-bar-sync" id="pt-sync-label">Not synced</div>
     <button class="pt-bar-controls-btn" onclick="ptTogglePanel()">Controls</button>
   </div>
@@ -1073,11 +1150,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
-      <div class="pt-theme-dot" id="pt-t-warm" style="background:#c8843f" onclick="ptSetTheme('warm')" title="Warm"></div>
-      <div class="pt-theme-dot active" id="pt-t-cool" style="background:#7eb8c8" onclick="ptSetTheme('cool')" title="Cool"></div>
-      <div class="pt-theme-dot" id="pt-t-white" style="background:#c8c8c8" onclick="ptSetTheme('white')" title="White"></div>
-      <div class="pt-theme-dot" id="pt-t-green" style="background:#78ad4f" onclick="ptSetTheme('green')" title="Green"></div>
-      <div class="pt-theme-dot" id="pt-t-black" style="background:#111;border-color:#555" onclick="ptSetTheme('black')" title="Black"></div>
+      <div class="pt-theme-dot" id="pt-t-warm" style="background:#c8843f" onclick="ptSetTheme('warm')" title="Honey"></div>
+      <div class="pt-theme-dot active" id="pt-t-cool" style="background:#7eb8c8" onclick="ptSetTheme('cool')" title="Lagoon"></div>
+      <div class="pt-theme-dot" id="pt-t-white" style="background:#c8c8c8" onclick="ptSetTheme('white')" title="Polar Bear"></div>
+      <div class="pt-theme-dot" id="pt-t-green" style="background:#78ad4f" onclick="ptSetTheme('green')" title="Eucalyptus"></div>
+      <div class="pt-theme-dot" id="pt-t-black" style="background:#111;border-color:#555" onclick="ptSetTheme('black')" title="Midnight"></div>
+      <div class="pt-theme-dot" id="pt-t-koala" style="background:linear-gradient(135deg,#8fd6bd,#a8b7ff)" onclick="ptSetTheme('koala')" title="Koala"></div>
+      <div class="pt-theme-dot" id="pt-t-panda" style="background:linear-gradient(135deg,#f7f7f2 0 48%,#84cc7f 49% 100%)" onclick="ptSetTheme('panda')" title="Panda"></div>
+      <div class="pt-theme-dot" id="pt-t-polar" style="background:linear-gradient(135deg,#f3fbff,#9ee7ff 52%,#8db7ff)" onclick="ptSetTheme('polar')" title="Glacier"></div>
+      <div class="pt-theme-dot" id="pt-t-flamingo" style="background:linear-gradient(135deg,#ff6fae,#ffd166 52%,#59ebda)" onclick="ptSetTheme('flamingo')" title="Flamingo"></div>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="ptOpenEdit()">Script</button>
@@ -1233,7 +1314,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div class="overlay" id="lsScriptEditOv" onclick="if(event.target===this)hideOverlay('lsScriptEditOv')">
   <div class="warn-card" style="max-width:520px;border-color:var(--bord2)">
     <div class="warn-title" id="lsScriptEditTitle" style="font-size:16px">Script</div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px">Edit the full script here. Saving pushes this row to Promptypus.</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px">Edit the full script here. Saving pushes this row to Flowmingo.</div>
     <div class="marker-chip-row">
       <button class="marker-chip" onclick="insertScriptMarker('[UPDATE] ')">Update</button>
       <button class="marker-chip" onclick="insertScriptMarker('[EDIT] ')">Edit</button>
@@ -1246,7 +1327,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
     <div class="marker-divider"></div>
     <textarea class="field-in" id="lsScriptEditText" rows="14" style="resize:vertical;line-height:1.7;white-space:pre-wrap;font-size:14px"></textarea>
-    <button class="btn-primary" onclick="saveLiveScript()">⬆ Save &amp; Push to Prompter</button>
+    <button class="btn-primary" onclick="saveLiveScript()">⬆ Save &amp; Push to Flowmingo</button>
     <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
   </div>
 </div>
@@ -1271,8 +1352,20 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="paperworkHubModal">
   <div class="modal" style="max-width:820px;max-height:90vh;overflow-y:auto">
-    <div class="modal-title">Pre-Production Paperwork</div>
+    <div class="modal-title">🐻 PrepBear</div>
     <div class="modal-sub">One session-code workspace for the pre-production package. Edit each section, save progress, then export one PDF for the LMS.</div>
+    <div class="prepbear-tools">
+      <button class="prepbear-settings-btn" id="prepbearThemeToggle" onclick="togglePrepBearThemes()" title="PrepBear theme settings" aria-label="PrepBear theme settings">⚙️</button>
+    </div>
+    <div class="prepbear-theme-bar" aria-label="PrepBear themes">
+      <span class="prepbear-theme-label">Theme</span>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="default" onclick="setPrepBearTheme('default')">Moonlight</button>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="honey" onclick="setPrepBearTheme('honey')">Honey</button>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="eucalyptus" onclick="setPrepBearTheme('eucalyptus')">Eucalyptus</button>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="panda" onclick="setPrepBearTheme('panda')">Panda</button>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="polar" onclick="setPrepBearTheme('polar')">Polar Bear</button>
+      <button class="prepbear-theme-btn" data-prepbear-theme-choice="party" onclick="setPrepBearTheme('party')">Bear Party</button>
+    </div>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div class="paperwork-actions">
       <button class="btn-primary" onclick="exportPreProPackagePDF()">Export One PDF Package</button>
@@ -1284,10 +1377,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
 <div class="modal-wrap" id="paperPreviewModal">
   <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
-    <div class="modal-title" id="paperPreviewTitle">Preview</div>
+    <div class="paperwork-modal-head">
+      <div class="modal-title" id="paperPreviewTitle">Preview</div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← PrepBear</button>
+    </div>
     <div class="paper-preview" id="paperPreviewBody"></div>
     <button class="btn-primary" id="paperPreviewPrimary" onclick="hideModal('paperPreviewModal')">Done</button>
-    <button class="btn-secondary" onclick="hideModal('paperPreviewModal')">Close</button>
+    <button class="btn-secondary" onclick="returnToPaperworkHub()">Back to PrepBear</button>
   </div>
 </div>
 
@@ -1296,22 +1392,48 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="preProModal">
   <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
-    <div class="modal-title">Call Sheet</div>
-    <div class="modal-sub">Simple production details for the day.</div>
-    <div class="prepro-grid">
-      <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80"></div>
-      <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date"></div>
-      <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time"></div>
-      <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100"></div>
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">Call Sheet</div>
+        <div class="modal-sub">Times, contacts, access, and crew notes.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← PrepBear</button>
     </div>
-    <div class="field">
+    <div class="prepro-section">
+      <div class="prepro-section-title">Event Info</div>
+      <div class="prepro-grid">
+        <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80"></div>
+        <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date"></div>
+        <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time"></div>
+        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="pp-show-start" type="time"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="pp-doors" type="time"></div>
+        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100"></div>
+        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160"></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120"></div>
+      </div>
+    </div>
+    <div class="prepro-section">
+      <div class="prepro-section-title">Access and Crew Notes</div>
+      <div class="prepro-grid">
+        <div class="field"><label class="field-lbl">Parking</label><input class="field-in" id="pp-parking" maxlength="160"></div>
+        <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160"></div>
+        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180"></div>
+        <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120"></div>
+        <div class="field"><label class="field-lbl">Meals Provided</label><select class="field-in" id="pp-meals"><option value="">Select</option><option>Yes</option><option>No</option></select></div>
+      </div>
+    </div>
+    <div class="prepro-section">
+      <div class="prepro-section-title">Crew / Talent Contacts</div>
       <label class="field-lbl">Crew / Talent</label>
       <div class="call-grid" id="pp-crew-grid"></div>
       <button class="call-add-btn" onclick="addCallSheetPerson()">+ Add person</button>
     </div>
-    <div class="field">
-      <label class="field-lbl">Schedule / Notes</label>
+    <div class="prepro-section">
+      <div class="prepro-section-title">Plans and Notes</div>
+      <label class="field-lbl">General Notes</label>
       <textarea class="field-in" id="pp-notes" rows="3" placeholder="Key times, reminders, transportation, access notes" style="font-size:14px;line-height:1.6"></textarea>
+      <label class="field-lbl" style="margin-top:10px">Safety Plan</label>
+      <textarea class="field-in" id="pp-safety" rows="3" placeholder="Production-specific safety notes, hazards, contacts, or weather considerations" style="font-size:14px;line-height:1.6"></textarea>
     </div>
     <button class="btn-primary" onclick="saveCallSheet()">Save Call Sheet</button>
     <button class="btn-secondary" onclick="showCallSheetPreview()">Preview Call Sheet</button>
@@ -1322,8 +1444,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
 <div class="modal-wrap" id="safetyPlanModal">
   <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
-    <div class="modal-title">Safety Plan</div>
-    <div class="modal-sub">Emergency and safety information for the production day.</div>
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">Safety Plan</div>
+        <div class="modal-sub">Emergency contacts, safety notes, and gear needs.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← PrepBear</button>
+    </div>
     <div class="prepro-grid">
       <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120"></div>
       <div class="field"><label class="field-lbl">Weather</label><input class="field-in" id="sp-weather" maxlength="120"></div>
@@ -1348,10 +1475,46 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
 </div>
 
+<div class="modal-wrap" id="productionScheduleModal">
+  <div class="modal" style="max-width:960px;max-height:90vh;overflow-y:auto">
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">Production Scheduler</div>
+        <div class="modal-sub">Setup timing and readiness checklist.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← PrepBear</button>
+    </div>
+    <div class="prepro-section">
+      <div class="prepro-section-title">Timing</div>
+      <div class="prepro-grid">
+        <div class="field"><label class="field-lbl">Setup Date</label><input class="field-in" id="ps-date" type="date"></div>
+        <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in" id="ps-setup" type="time"></div>
+        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
+        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
+        <div class="field"><label class="field-lbl">Estimated Wrap</label><input class="field-in" id="ps-wrap" type="time"></div>
+        <div class="field"><label class="field-lbl">Owner</label><input class="field-in" id="ps-owner" maxlength="80" placeholder="PM / ENG lead"></div>
+      </div>
+    </div>
+    <div class="prepro-section">
+      <div class="prepro-section-title">Pre-Production Checklist</div>
+      <div id="ps-checklist"></div>
+      <button class="call-add-btn" onclick="addProductionChecklistRow()" style="margin-top:10px">+ Add checklist row</button>
+    </div>
+    <button class="btn-primary" onclick="saveProductionSchedule()">Save Production Scheduler</button>
+    <button class="btn-secondary" onclick="showProductionSchedulePreview()">Preview Scheduler</button>
+    <button class="btn-secondary" onclick="returnToPaperworkHub()">Back to PrepBear</button>
+  </div>
+</div>
+
 <div class="modal-wrap" id="patchSheetModal">
   <div class="modal" style="max-width:1100px;max-height:92vh;overflow-y:auto">
-    <div class="modal-title" id="patchSheetTitle">Patch Sheet</div>
-    <div class="modal-sub" id="patchSheetSub">Add rows or upload a CSV/TSV to format into the generator.</div>
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title" id="patchSheetTitle">Patch Sheet</div>
+        <div class="modal-sub" id="patchSheetSub">Add rows or upload a CSV/TSV to format into the generator.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← PrepBear</button>
+    </div>
     <div id="patchSheetBody"></div>
     <button class="btn-primary" id="patchSheetSaveBtn" onclick="savePatchSheet()">Save Patch Sheet</button>
     <button class="btn-secondary" onclick="hideModal('patchSheetModal')">Close</button>
@@ -1360,12 +1523,12 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
 <div class="modal-wrap" id="modal-prepro-join">
   <div class="modal">
-    <div class="modal-title">Open Call Sheet</div>
-    <div class="modal-sub">Enter the session code to work on pre-production paperwork.</div>
+    <div class="modal-title">Open PrepBear</div>
+    <div class="modal-sub">Enter the session code to work on the PrepBear package.</div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="pp-join-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="modal-err" id="pp-join-err">Please fill in both fields.</div>
-    <button class="btn-primary" onclick="joinPreProSession()">Open Paperwork →</button>
+    <button class="btn-primary" onclick="joinPreProSession()">Open PrepBear →</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
   </div>
 </div>
@@ -1394,8 +1557,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="adminLoginModal">
   <div class="modal">
-    <div class="modal-title">Admin Login</div>
-    <div class="modal-sub">Enter your admin code to access admin features.</div>
+    <div class="modal-title">Session Admin Login</div>
+    <div class="modal-sub">Enter your admin code to use admin tools inside this rundown.</div>
     <div class="field">
       <label class="field-lbl">Admin Code</label>
       <input class="field-in" id="adminCodeIn" type="password" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')submitAdminLogin()">
@@ -1473,6 +1636,20 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
 </div>
 
+<div class="modal-wrap" id="modal-blank">
+  <div class="modal">
+    <div class="modal-title">Blank Slate</div>
+    <div class="modal-sub">Create a saved workspace with your own code. Rows and cues stay free-text so you can build without guided prompts.</div>
+    <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="blank-name" type="text" placeholder='e.g. "Alex Producer"' maxlength="40"></div>
+    <div class="field"><label class="field-lbl">Workspace Code</label><input class="field-in" id="blank-code" type="text" placeholder="e.g. SHOWA" maxlength="20" style="font-size:22px;font-family:var(--mono);letter-spacing:.16em;text-align:center;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"><div class="field-hint">Share this code with collaborators and Flowmingo. Leave blank to auto-generate.</div></div>
+    <div class="field"><label class="field-lbl">Show Name <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="blank-show" type="text" placeholder="Untitled Show" maxlength="60"></div>
+    <div class="modal-err" id="blank-err">Please enter your name.</div>
+    <button class="btn-primary" id="blank-create-btn" onclick="startBlankSlate()">Create Shared Blank Slate →</button>
+    <button class="btn-secondary" onclick="hideModal('modal-blank');loadExpert()">Work Locally Only</button>
+    <button class="btn-secondary" onclick="hideModal('modal-blank')">Cancel</button>
+  </div>
+</div>
+
 <div class="modal-wrap" id="modal-settings">
   <div class="modal settings-sheet">
     <div class="modal-title">Settings</div>
@@ -1492,16 +1669,18 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="settings-section" style="margin-top:12px">
       <div class="settings-sec-label">Appearance</div>
       <div class="theme-grid">
-        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')"><div class="ts-preview" style="background:#130803;border-color:#4a2b14"><div class="ts-dot" style="background:#c8843f"></div></div><div class="ts-name">Warm</div></div>
-        <div class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')"><div class="ts-preview" style="background:#08090f;border-color:#2c3650"><div class="ts-dot" style="background:#7eb8c8"></div></div><div class="ts-name">Cool</div></div>
-        <div class="theme-swatch" data-theme="white" onclick="selectTheme('white')"><div class="ts-preview" style="background:#f5f5f0;border-color:#c4c1b5"><div class="ts-dot" style="background:#666"></div></div><div class="ts-name">White</div></div>
-        <div class="theme-swatch" data-theme="green" onclick="selectTheme('green')"><div class="ts-preview" style="background:#041006;border-color:#254522"><div class="ts-dot" style="background:#78ad4f"></div></div><div class="ts-name">Green</div></div>
-        <div class="theme-swatch" data-theme="black" onclick="selectTheme('black')"><div class="ts-preview" style="background:#000;border-color:#333"><div class="ts-dot" style="background:#fff"></div></div><div class="ts-name">Black</div></div>
+        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')"><div class="ts-preview" style="background:#130803;border-color:#4a2b14"><div class="ts-dot" style="background:#c8843f"></div></div><div class="ts-name">Honey</div></div>
+        <div class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')"><div class="ts-preview" style="background:#08090f;border-color:#2c3650"><div class="ts-dot" style="background:#7eb8c8"></div></div><div class="ts-name">Lagoon</div></div>
+        <div class="theme-swatch" data-theme="white" onclick="selectTheme('white')"><div class="ts-preview" style="background:linear-gradient(135deg,#fff 0 40%,#d9d9d4 40% 72%,#c43b3b 72%);border-color:#bdb9ad"><div class="ts-dot" style="background:#d73737"></div></div><div class="ts-name">Polar Bear</div></div>
+        <div class="theme-swatch" data-theme="green" onclick="selectTheme('green')"><div class="ts-preview" style="background:#041006;border-color:#254522"><div class="ts-dot" style="background:#78ad4f"></div></div><div class="ts-name">Eucalyptus</div></div>
+        <div class="theme-swatch" data-theme="black" onclick="selectTheme('black')"><div class="ts-preview" style="background:#000;border-color:#333"><div class="ts-dot" style="background:#fff"></div></div><div class="ts-name">Midnight</div></div>
+        <div class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')"><div class="ts-preview" style="background:radial-gradient(circle at 28% 48%,#c8cbc6 0 16%,transparent 17%),radial-gradient(circle at 72% 48%,#c8cbc6 0 16%,transparent 17%),linear-gradient(135deg,#4f5a55,#18211d 58%,#9ed8bd);border-color:#4c625a"><div class="ts-dot" style="background:#9ed8bd"></div></div><div class="ts-name">Koala</div></div>
+        <div class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')"><div class="ts-preview" style="background:repeating-linear-gradient(90deg,rgba(122,214,111,.9) 0 2px,transparent 2px 12px),linear-gradient(135deg,#f8f8f3 0 34%,#050607 34% 68%,#f8f8f3 68%);border-color:#3e4747"><div class="ts-dot" style="background:#7ad66f"></div></div><div class="ts-name">Panda</div></div>
+        <div class="theme-swatch" data-theme="polar" onclick="selectTheme('polar')"><div class="ts-preview" style="background:#07131d;border-color:#335772"><div class="ts-dot" style="background:#9ee7ff"></div></div><div class="ts-name">Glacier</div></div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <button onclick="hideModal('modal-settings');openAdminLogin()" style="background:none;border:none;color:var(--text3);font-size:12px;font-family:var(--mono);cursor:pointer;padding:0">🔑 Admin Login</button>
-      <a href="dashboard.html" style="font-size:12px;font-family:var(--mono);color:var(--text3);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">📊 Dashboard →</a>
+    <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <a href="dashboard.html" style="font-size:12px;font-family:var(--mono);color:var(--text3);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">🔑 Instructor Dashboard →</a>
     </div>
     <button class="btn-primary" onclick="saveSettings()" style="margin-top:6px">Save</button>
     <button class="btn-secondary" onclick="cancelSettings()" style="margin-top:6px">Cancel</button>
@@ -1515,7 +1694,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260509a"></script>
+<script src="cueola-app.js?v=20260513a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
