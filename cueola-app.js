@@ -4,22 +4,22 @@
 // CUE TYPE DEFINITIONS
 // ─────────────────────────────────────────────────────────────
 const CT = {
-  video:    { label:'VIDEO',    color:'var(--video)', bg:'var(--video-bg)', icon:'📺' },
-  audio:    { label:'AUDIO',    color:'#22d3a0', bg:'rgba(34,211,160,.12)', icon:'🎙' },
-  lighting: { label:'LIGHTING', color:'#b06ef8', bg:'rgba(176,110,248,.12)', icon:'💡' },
-  playback: { label:'PLAYBACK', color:'#f05252', bg:'rgba(240,82,82,.12)', icon:'▶'  },
-  gfx:      { label:'GFX',      color:'#f5b731', bg:'rgba(245,183,49,.12)', icon:'🖼'  },
-  script:   { label:'SCRIPT',   color:'#22d3d3', bg:'rgba(34,211,211,.12)', icon:'📄' },
+  video:    { label:'VIDEO',    color:'var(--video)',  bg:'var(--video-bg)',                                       icon:'📺' },
+  audio:    { label:'AUDIO',    color:'var(--green)',  bg:'color-mix(in srgb,var(--green) 14%,transparent)',       icon:'🎙' },
+  lighting: { label:'LIGHTING', color:'var(--purple)', bg:'color-mix(in srgb,var(--purple) 14%,transparent)',      icon:'💡' },
+  playback: { label:'PLAYBACK', color:'var(--red)',    bg:'color-mix(in srgb,var(--red) 14%,transparent)',         icon:'▶'  },
+  gfx:      { label:'GFX',      color:'var(--yellow)', bg:'color-mix(in srgb,var(--yellow) 14%,transparent)',      icon:'🖼' },
+  script:   { label:'SCRIPT',   color:'var(--cyan)',   bg:'color-mix(in srgb,var(--cyan) 14%,transparent)',        icon:'📄' },
 };
 
 // Column ordering — persisted per user in localStorage
 const COL_META = {
   video:    { label:'📺 Video',    color:'var(--video)' },
-  audio:    { label:'🎙 Audio',    color:'#22d3a0' },
-  playback: { label:'▶ Playback', color:'#f05252' },
-  gfx:      { label:'🖼 GFX',     color:'#f5b731' },
-  lighting: { label:'💡 Lighting', color:'#b06ef8' },
-  script:   { label:'📄 Script',  color:'#22d3d3' },
+  audio:    { label:'🎙 Audio',    color:'var(--green)' },
+  playback: { label:'▶ Playback', color:'var(--red)' },
+  gfx:      { label:'🖼 GFX',     color:'var(--yellow)' },
+  lighting: { label:'💡 Lighting', color:'var(--purple)' },
+  script:   { label:'📄 Script',  color:'var(--cyan)' },
 };
 const COL_DEFAULTS = ['video','audio','playback','gfx','lighting','script'];
 let colOrder = (() => {
@@ -57,20 +57,19 @@ const CLIENT_ID = (() => {
     return 'cl_' + Math.random().toString(36).slice(2, 10);
   }
 })();
-const CUEOLA_THEMES = ['warm','cool','white','green','black','koala','panda','polar','flamingo'];
+const CUEOLA_THEMES = ['warm','cool','white','green','koala','panda','flamingo','prepbear'];
 const CUEOLA_THEME_LABELS = {
-  warm: 'Honey',
-  cool: 'Lagoon',
-  white: 'Polar Bear',
-  green: 'Eucalyptus',
-  black: 'Midnight',
-  koala: 'Koala',
-  panda: 'Panda',
-  polar: 'Glacier',
+  warm:     'Honey',
+  cool:     'Glacier',
+  white:    'Polar Bear',
+  green:    'Eucalyptus',
+  koala:    'Koala',
+  panda:    'Panda',
   flamingo: 'Flamingo',
+  prepbear: 'PrepBear',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
-const PREPBEAR_THEMES = ['default','honey','eucalyptus','panda','polar','party'];
+const PREPBEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];
 function normalizePrepBearTheme(t) { return PREPBEAR_THEMES.includes(t) ? t : 'default'; }
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
@@ -1196,7 +1195,7 @@ function renderPresence(map) {
     `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
     active.map(p=>{
       const col=p.role==='instructor'?'var(--accent)':'var(--green)';
-      return `<div class="p-tip-row"><div class="p-tip-dot" style="background:${col}"></div>${esc(p.name)}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+      return `<div class="p-tip-row" title="${esc(p.name)}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span><span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
   if (document.getElementById('adminPanel')?.classList.contains('on')) renderAdminBody();
 }
@@ -1280,7 +1279,7 @@ function colDragEnd(e) {
 function renderRundown() {
   renderTableHeaders();
   const name = show.name||'Untitled Show';
-  document.getElementById('rd-name').textContent = name+' ✏';
+  document.getElementById('rd-name').textContent = name;
   document.getElementById('rd-start').textContent = show.start ? clock(show.start,0) : '—';
 
   const total = totalSecs();
@@ -3255,15 +3254,14 @@ let ptReceiverStorageHandler = null;
 let ptLastRemoteMsgTs = 0;
 
 const PT_THEMES = {
-  warm:  { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
-  cool:  { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
-  white: { bg:'#f6f5f1', text:'#1c1c1c', accent:'#d73737', uiBg:'rgba(246,245,241,.95)', uiBorder:'rgba(215,55,55,.25)' },
-  green: { bg:'#041006', text:'#ddf0d2', accent:'#78ad4f', uiBg:'rgba(7,22,8,.92)',      uiBorder:'rgba(120,173,79,.25)' },
-  black: { bg:'#000000', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(18,18,18,.95)',    uiBorder:'rgba(255,255,255,.2)' },
-  koala: { bg:'#101311', text:'#f0f3ee', accent:'#9ed8bd', uiBg:'rgba(21,25,23,.92)',    uiBorder:'rgba(158,216,189,.3)' },
-  panda: { bg:'#050607', text:'#f8f8f3', accent:'#7ad66f', uiBg:'rgba(10,12,13,.92)',    uiBorder:'rgba(122,214,111,.28)' },
-  polar: { bg:'#07131d', text:'#f3fbff', accent:'#9ee7ff', uiBg:'rgba(8,22,34,.92)',     uiBorder:'rgba(158,231,255,.28)' },
-  flamingo: { bg:'#120713', text:'#fff0f8', accent:'#ff6fae', uiBg:'rgba(35,9,33,.88)', uiBorder:'rgba(255,111,174,.34)' },
+  warm:     { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
+  cool:     { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
+  white:    { bg:'#ffffff', text:'#000000', accent:'#e50000', uiBg:'rgba(255,255,255,.95)', uiBorder:'rgba(229,0,0,.20)' },
+  green:    { bg:'#040d05', text:'#e8f5d5', accent:'#7ddb33', uiBg:'rgba(7,19,8,.92)',      uiBorder:'rgba(125,219,51,.25)' },
+  koala:    { bg:'#1f1f1e', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(38,38,38,.92)',    uiBorder:'rgba(255,255,255,.28)' },
+  panda:    { bg:'#000000', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(10,10,10,.92)',    uiBorder:'rgba(255,255,255,.28)' },
+  flamingo: { bg:'#330512', text:'#ffffff', accent:'#de4b9a', uiBg:'rgba(59,20,41,.88)',    uiBorder:'rgba(222,75,154,.34)' },
+  prepbear: { bg:'#080912', text:'#ffffff', accent:'#eeca57', uiBg:'rgba(20,23,42,.92)',    uiBorder:'rgba(238,202,87,.30)' },
 };
 
 const PT_SVG_PLAY  = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12Z"/></svg>`;
@@ -3422,7 +3420,7 @@ function promptOpControlsHTML() {
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
-      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].accent}${name==='black'?';border-color:#555':''}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"></div>`).join('')}
+      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].bg}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"></div>`).join('')}
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
@@ -3541,13 +3539,13 @@ function ptSetTheme(name) {
   screen.style.setProperty('--pt-ui-bg', t.uiBg);
   screen.style.setProperty('--pt-ui-border', t.uiBorder);
   screen.style.background = name === 'flamingo'
-    ? 'linear-gradient(135deg,#120713 0%,#261024 42%,#083638 100%)'
+    ? 'linear-gradient(135deg,#330512 0%,#411b48 50%,#3b1429 100%)'
     : name === 'koala'
-      ? 'linear-gradient(135deg,#07110f 0%,#12302a 50%,#101633 100%)'
+      ? 'linear-gradient(135deg,#1f1f1e 0%,#262626 50%,#404040 100%)'
       : name === 'panda'
-        ? 'linear-gradient(135deg,#050607 0%,#101315 48%,#18301c 100%)'
-        : name === 'polar'
-          ? 'linear-gradient(135deg,#07131d 0%,#12344b 55%,#dff9ff 180%)'
+        ? 'linear-gradient(135deg,#000000 0%,#1e1e1e 50%,#000000 100%)'
+        : name === 'prepbear'
+          ? 'linear-gradient(135deg,#080912 0%,#14172a 50%,#2f357c 100%)'
           : t.bg;
   document.documentElement.style.setProperty('--pt-bg', t.bg);
   document.documentElement.style.setProperty('--pt-text', t.text);
@@ -3785,15 +3783,14 @@ function ptHandleRemoteControl(action) {
     case 'align_left':   ptSetAlign('left'); break;
     case 'align_center': ptSetAlign('center'); break;
     case 'align_right':  ptSetAlign('right'); break;
-    case 'theme_warm':  ptSetTheme('warm'); break;
-    case 'theme_cool':  ptSetTheme('cool'); break;
-    case 'theme_white': ptSetTheme('white'); break;
-    case 'theme_green': ptSetTheme('green'); break;
-    case 'theme_black': ptSetTheme('black'); break;
-    case 'theme_koala': ptSetTheme('koala'); break;
-    case 'theme_panda': ptSetTheme('panda'); break;
-    case 'theme_polar': ptSetTheme('polar'); break;
+    case 'theme_warm':     ptSetTheme('warm'); break;
+    case 'theme_cool':     ptSetTheme('cool'); break;
+    case 'theme_white':    ptSetTheme('white'); break;
+    case 'theme_green':    ptSetTheme('green'); break;
+    case 'theme_koala':    ptSetTheme('koala'); break;
+    case 'theme_panda':    ptSetTheme('panda'); break;
     case 'theme_flamingo': ptSetTheme('flamingo'); break;
+    case 'theme_prepbear': ptSetTheme('prepbear'); break;
     case 'mirror':     ptToggleMirror(); break;
     case 'fullscreen': ptToggleFullscreen(); break;
     case 'brake_start': ptBraking = true; break;
