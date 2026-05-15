@@ -594,7 +594,7 @@ function saveRoleAssignmentsFromAdmin() {
     if (!rows[idx]) rows[idx] = {};
     rows[idx][field] = input.value.trim();
   });
-  persistPreProData({ roleAssignments: rows.filter(row => row.role || row.person || row.paperwork) });
+  persistPreProData({ roleAssignments: rows.filter(row => row.role || row.person || row.paperwork) }, 'Role Assignments');
   toast('Role assignments saved.');
 }
 
@@ -877,6 +877,10 @@ function joinPreProSession() {
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:d.startTime || '' };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
+    // Seed local PrepBear cache with any shared work already saved to the session.
+    if (d.prePro && typeof d.prePro === 'object') {
+      try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
+    }
     hideModal('modal-prepro-join');
     openPaperworkHub();
     joinPresence();
@@ -1188,9 +1192,14 @@ function renderPresence(map) {
   }
   wrap.style.display='flex';
   const shown = active.slice(0,4), extra = active.length-4;
+  const initials = n => {
+    const parts = String(n||'?').trim().split(/\s+/).filter(Boolean);
+    if (parts.length>=2) return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+    return String(n||'?').slice(0,2).toUpperCase();
+  };
   document.getElementById('presenceAvatars').innerHTML =
-    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" title="${esc(p.name)}">${(p.name||'?')[0].toUpperCase()}</div>`).join('')+
-    (extra>0?`<div class="p-avatar extra">+${extra}</div>`:'');
+    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" title="${esc(p.name)} — ${p.role==='instructor'?'Instructor':'Student'}">${initials(p.name)}</div>`).join('')+
+    (extra>0?`<div class="p-avatar extra" title="${extra} more in session">+${extra}</div>`:'');
   document.getElementById('presenceTooltip').innerHTML =
     `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
     active.map(p=>{
@@ -4131,7 +4140,7 @@ function togglePrepBearThemes() {
 
 function selectTheme(t) {
   currentTheme = normalizeCueolaTheme(t);
-  document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===t));
+  document.querySelectorAll('#modal-settings .theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===t));
   applyTheme(currentTheme); // live preview — reverted on Cancel, saved on Save
 }
 
@@ -4175,7 +4184,7 @@ window.showModal = function(id) {
     const saved = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
     _settingsOpenTheme = saved; // remember so Cancel can revert
     currentTheme = saved;
-    document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===saved));
+    document.querySelectorAll('#modal-settings .theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===saved));
   }
   document.getElementById(id).classList.add('on');
 };
@@ -4219,16 +4228,43 @@ function loadPreProData() {
   try { return JSON.parse(localStorage.getItem(preProKey()) || '{}') || {}; } catch { return {}; }
 }
 
-function persistPreProData(patch) {
+function preProActor() {
+  const n = (session.userName || '').trim();
+  if (n) return n;
+  return session.role === 'instructor' ? 'Instructor' : 'Someone';
+}
+
+function persistPreProData(patch, section) {
   const next = { ...loadPreProData(), ...patch, updatedAt: Date.now() };
   try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
-  syncPreProToFirestore(next);
+  syncPreProToFirestore(next, section);
   return next;
 }
 
-function syncPreProToFirestore(data=loadPreProData()) {
+function syncPreProToFirestore(data=loadPreProData(), section) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
-  window._updateDoc(window._doc(window._db,'sessions',session.code), { prePro:data }).catch(()=>{});
+  const ref = window._doc(window._db,'sessions',session.code);
+  window._updateDoc(ref, { prePro:data }).catch(()=>{});
+  if (section && window._arrayUnion) {
+    const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+  }
+}
+
+// Pull shared PrepBear work saved by others (cloud → local) so every
+// device in the session sees the latest package.
+async function hydratePreProFromFirestore() {
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  try {
+    const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
+    if (!snap.exists()) return;
+    const server = snap.data().prePro;
+    if (!server || typeof server !== 'object') return;
+    const local = loadPreProData();
+    if (!local.updatedAt || (server.updatedAt || 0) >= (local.updatedAt || 0)) {
+      localStorage.setItem(preProKey(), JSON.stringify(server));
+    }
+  } catch {}
 }
 
 function openPaperworkHub() {
@@ -4237,15 +4273,107 @@ function openPaperworkHub() {
     return;
   }
   applyPrepBearTheme(prepBearTheme);
+  hydratePreProFromFirestore();
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
-    grid.innerHTML = PAPERWORK_ITEMS.map(item => `<button class="paperwork-card" onclick="openPaperworkItem('${item.id}')">
+    grid.innerHTML = PAPERWORK_ITEMS.map(item => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
       <div class="paperwork-card-num">Item ${item.order}</div>
       <div class="paperwork-card-title">${esc(item.title)}</div>
       <div class="paperwork-card-sub">${esc(item.sub)}</div>
+      <div class="paperwork-card-by" data-pb-by hidden></div>
     </button>`).join('');
   }
   showModal('paperworkHubModal');
+  renderPrepBearHubActivity();
+}
+
+const PB_SECTION_FOR_ITEM = {
+  'call-sheet':'Call Sheet',
+  'production-scheduler':'Production Scheduler',
+  'safety-plan':'Safety Plan',
+  'video-patch':'Video Patch',
+  'audio-comms-patch':'Audio & Comms Patch',
+};
+
+function pbAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  const m = Math.floor(diff/60000);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m/60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h/24);
+  if (d < 7) return d + 'd ago';
+  return new Date(ts).toLocaleDateString([], { month:'short', day:'numeric' });
+}
+
+function togglePbHub(head) {
+  head.parentElement.classList.toggle('open');
+}
+
+// Show "who worked on what" inside PrepBear, pulled from the session's
+// shared activity log in Firestore.
+async function renderPrepBearHubActivity() {
+  const panel = document.getElementById('prepbearHubActivity');
+  const cards = document.querySelectorAll('#paperworkGrid [data-pb-section]');
+  const clearCards = () => cards.forEach(c => {
+    const by = c.querySelector('[data-pb-by]');
+    if (by) { by.hidden = true; by.textContent = ''; by.classList.remove('done'); }
+  });
+  if (!panel) return;
+  if (!session.code || session.isDemo || session.isExpert || !window._firebaseReady) {
+    panel.innerHTML = '';
+    clearCards();
+    return;
+  }
+  let log = [];
+  try {
+    const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
+    if (snap.exists()) log = Array.isArray(snap.data().preProActivity) ? snap.data().preProActivity : [];
+  } catch {}
+  const lastBySection = {};
+  log.forEach(e => {
+    if (!e || !e.section) return;
+    if (!lastBySection[e.section] || (e.at||0) > (lastBySection[e.section].at||0)) lastBySection[e.section] = e;
+  });
+  // Annotate each paperwork card with who last touched it
+  cards.forEach(c => {
+    const sec = c.getAttribute('data-pb-section');
+    const by = c.querySelector('[data-pb-by]');
+    if (!by) return;
+    const e = sec && lastBySection[sec];
+    if (e) {
+      by.hidden = false;
+      by.classList.add('done');
+      by.textContent = `Last by ${e.by || 'Someone'} · ${pbAgo(e.at)}`;
+    } else {
+      by.hidden = true;
+      by.textContent = '';
+      by.classList.remove('done');
+    }
+  });
+  // Collapsible "who worked on what" log
+  if (!log.length) {
+    panel.innerHTML = '';
+    return;
+  }
+  const recent = log.slice().sort((a,b)=>(b.at||0)-(a.at||0)).slice(0, 40);
+  const contributors = new Set(log.map(e => e && e.by).filter(Boolean)).size;
+  panel.innerHTML = `<div class="pb-hub-activity">
+    <div class="pb-hub-activity-head" onclick="togglePbHub(this)">
+      <span>👥 Who worked on what</span>
+      <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">${log.length} change${log.length===1?'':'s'} · ${contributors} ${contributors===1?'person':'people'}</span>
+      <span class="pb-hub-caret">▶</span>
+    </div>
+    <div class="pb-hub-activity-body">
+      ${recent.map(e=>`<div class="pb-hub-row">
+        <span class="s">${esc(e.section||'PrepBear')}</span>
+        <span class="b" title="${esc(e.by||'Unknown')}">by ${esc(e.by||'Unknown')}</span>
+        <span class="w">${pbAgo(e.at)}</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function openPaperworkItem(id) {
@@ -4401,7 +4529,7 @@ function getSafetyPlanData() {
 }
 
 function saveSafetyPlan() {
-  persistPreProData({ safety: getSafetyPlanData() });
+  persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
   toast('Safety plan saved.');
 }
 
@@ -4496,7 +4624,7 @@ function getProductionScheduleData() {
 }
 
 function saveProductionSchedule() {
-  persistPreProData({ productionSchedule: getProductionScheduleData() });
+  persistPreProData({ productionSchedule: getProductionScheduleData() }, 'Production Scheduler');
   toast('Production scheduler saved.');
 }
 
@@ -4581,7 +4709,7 @@ function collectPatchRows(kind, keepBlank=false) {
 }
 
 function savePatchRows(kind, rows) {
-  persistPreProData({ [`${kind}PatchRows`]: rows.length ? rows : defaultPatchRows(kind) });
+  persistPreProData({ [`${kind}PatchRows`]: rows.length ? rows : defaultPatchRows(kind) }, kind === 'video' ? 'Video Patch' : 'Audio & Comms Patch');
 }
 
 function openPatchSheetEditor(kind) {
@@ -4720,7 +4848,7 @@ function getPreProData() {
 }
 
 function saveCallSheet() {
-  persistPreProData(getPreProData());
+  persistPreProData(getPreProData(), 'Call Sheet');
   toast('Call sheet saved.');
 }
 
@@ -4824,8 +4952,8 @@ async function downloadCallSheetPDF() {
 
 async function exportPreProPackagePDF() {
   try {
-    if (document.getElementById('preProModal')?.classList.contains('on')) persistPreProData(getPreProData());
-    if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() });
+    if (document.getElementById('preProModal')?.classList.contains('on')) persistPreProData(getPreProData(), 'Call Sheet');
+    if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
     if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet();
     await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
