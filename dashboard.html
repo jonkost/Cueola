@@ -313,7 +313,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .merge-btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
 [data-theme="koala"] .merge-btn,[data-theme="panda"] .merge-btn{background:linear-gradient(135deg,var(--s4),var(--s5));color:#fff;border:1px solid color-mix(in srgb,var(--text) 22%,transparent)}
 .merge-tool-hint{font-size:10px;color:var(--text3);font-family:var(--mono);line-height:1.5}
-.prepbear-activity{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.plandabear-activity{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
 .pb-sec{border:1px solid var(--border);border-radius:9px;background:var(--s2);overflow:hidden}
 .pb-sec-head{display:flex;align-items:center;gap:9px;padding:11px 12px;cursor:pointer;user-select:none;transition:background .15s}
 .pb-sec-head:hover{background:color-mix(in srgb,var(--text) 4%,transparent)}
@@ -548,7 +548,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <div class="modal-wrap" id="modal-detail">
   <div class="modal detail-modal">
     <div class="modal-title" id="detail-title">Session Details</div>
-    <div class="modal-sub">Admin side of this session — people, roles, PrepBear activity, and cleanup.</div>
+    <div class="modal-sub">Admin side of this session — people, roles, Planda Bear activity, and cleanup.</div>
     <div class="detail-edit-grid">
       <div class="field">
         <label class="field-lbl">Show Title</label>
@@ -591,9 +591,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div style="font-size:12px;color:var(--text3);padding:8px 0">No learners available yet.</div>
     </div>
     <button class="btn-full btn-secondary" onclick="saveLearnerAssignments()" style="margin-top:4px">Save Learner Positions</button>
-    <div class="detail-section-title">PrepBear Paperwork</div>
-    <div class="prepbear-activity" id="detail-prepbear-activity">
-      <div style="font-size:12px;color:var(--text3);padding:8px 0">No PrepBear work recorded yet.</div>
+    <div class="detail-section-title">Planda Bear Paperwork</div>
+    <div class="plandabear-activity" id="detail-plandabear-activity">
+      <div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear work recorded yet.</div>
     </div>
     <div class="detail-actions">
       <button class="btn-full btn-primary" onclick="openDetailSession()" style="margin-top:4px">Open Rundown →</button>
@@ -628,7 +628,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         <button type="button" class="theme-swatch" data-dashboard-theme="white" onclick="applyDashboardTheme('white')" title="Polar Bear"><span class="ts-preview" style="background:#ffffff"></span><span class="ts-name">Polar Bear</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="green" onclick="applyDashboardTheme('green')" title="Eucalyptus"><span class="ts-preview" style="background:#040d05"></span><span class="ts-name">Eucalyptus</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="koala" onclick="applyDashboardTheme('koala')" title="Koala"><span class="ts-preview" style="background:#1f1f1e"></span><span class="ts-name">Koala</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="panda" onclick="applyDashboardTheme('panda')" title="Panda"><span class="ts-preview" style="background:#000000"></span><span class="ts-name">Panda</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="panda" onclick="applyDashboardTheme('panda')" title="Planda Bear"><span class="ts-preview" style="background:#000000"></span><span class="ts-name">Planda Bear</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="flamingo" onclick="applyDashboardTheme('flamingo')" title="Flamingo"><span class="ts-preview" style="background:#330512"></span><span class="ts-name">Flamingo</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="prepbear" onclick="applyDashboardTheme('prepbear')" title="PrepBear"><span class="ts-preview" style="background:#080912"></span><span class="ts-name">PrepBear</span></button>
       </div>
@@ -649,7 +649,7 @@ const DASHBOARD_THEMES = [
   { key:'white', label:'Polar Bear', bg:'#ffffff', border:'#bdbab4', dot:'#e50000' },
   { key:'green', label:'Eucalyptus', bg:'#040d05', border:'#264a26', dot:'#7ddb33' },
   { key:'koala', label:'Koala', bg:'#1f1f1e', border:'#494949', dot:'#ffffff' },
-  { key:'panda', label:'Panda', bg:'#000000', border:'#3a3a3a', dot:'#ffffff' },
+  { key:'panda', label:'Planda Bear', bg:'#000000', border:'#3a3a3a', dot:'#ffffff' },
   { key:'flamingo', label:'Flamingo', bg:'#330512', border:'#5e2c64', dot:'#de4b9a' },
   { key:'prepbear', label:'PrepBear', bg:'#080912', border:'#2f357c', dot:'#eeca57' },
 ];
@@ -955,8 +955,8 @@ function onLoggedIn() {
   document.querySelector('.hero-greeting').textContent = adminSession.level === 'super' ? 'Super Admin Dashboard' : 'Instructor Dashboard';
   document.getElementById('heroName').textContent = `${adminSession.level === 'super' ? 'Super Admin' : 'Instructor'}: ${adminSession.name}`;
   document.getElementById('heroSub').textContent = adminSession.level === 'super'
-    ? 'Super Admin view: manage every session, open PrepBear, and keep assignments moving.'
-    : 'Instructor view: manage sessions, open PrepBear, and return to active rundowns.';
+    ? 'Super Admin view: manage every session, open Planda Bear, and keep assignments moving.'
+    : 'Instructor view: manage sessions, open Planda Bear, and return to active rundowns.';
 
   loadSessions();
 }
@@ -1068,12 +1068,12 @@ function renderSessions() {
           ${s.createdBy ? `<div class="sc-m">Owner ${escapeHtml(s.createdBy)}</div>` : ''}
           <div class="sc-m">👥 ${learnerCount} learner${learnerCount===1?'':'s'}</div>
           <div class="sc-m">🎯 ${assignedCount} assigned</div>
-          ${pbContributors ? `<div class="sc-m">🐻 ${pbContributors} on PrepBear</div>` : ''}
+          ${pbContributors ? `<div class="sc-m">🐼 ${pbContributors} on Planda Bear</div>` : ''}
         </div>
       </div>
       <div class="sc-right">
         <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
-        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)">🐻 PrepBear</button>
+        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)">🐼 Planda Bear</button>
         <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
         <button class="sc-btn sc-btn-muted" onclick="showDetail('${s.code||s.id}',event)">Manage ⚙</button>
       </div>
@@ -1297,7 +1297,7 @@ async function showDetail(code, e) {
   }
 
   renderMergeTool(s, isSuper);
-  renderPrepBearPaperwork(s);
+  renderPlandaBearPaperwork(s);
   renderLearnerAssignments(s);
   showModal('modal-detail');
 }
@@ -1315,7 +1315,7 @@ function fmtAgo(ts) {
   return new Date(ts).toLocaleDateString([], { month:'short', day:'numeric' });
 }
 
-const PREPBEAR_SECTIONS = ['Call Sheet','Safety Plan','Production Scheduler','Video Patch','Audio & Comms Patch','Role Assignments'];
+const PLANDABEAR_SECTIONS = ['Call Sheet','Safety Plan','Production Scheduler','Video Patch','Audio & Comms Patch','Role Assignments'];
 const PB_LABELS = {
   production:'Production', date:'Date', call:'Call Time', showStart:'Show Start', doors:'Doors Open',
   location:'Location', address:'Address', parking:'Parking', entrance:'Entrance', late:'Late / Lost Contact',
@@ -1358,14 +1358,14 @@ function togglePbLog(btn){
   btn.textContent = on ? 'Hide full change log' : 'Show full change log';
 }
 
-function renderPrepBearPaperwork(s) {
-  const wrap = document.getElementById('detail-prepbear-activity');
+function renderPlandaBearPaperwork(s) {
+  const wrap = document.getElementById('detail-plandabear-activity');
   if (!wrap) return;
   const log = Array.isArray(s.preProActivity) ? s.preProActivity.slice() : [];
   const pre = (s.prePro && typeof s.prePro === 'object') ? s.prePro : {};
   const hasAny = log.length || Object.keys(pre).some(k => k !== 'updatedAt');
   if (!hasAny) {
-    wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No PrepBear paperwork has been started for this session yet.</div>';
+    wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear paperwork has been started for this session yet.</div>';
     return;
   }
   // newest activity entry per section → "who did what"
@@ -1422,7 +1422,7 @@ function renderPrepBearPaperwork(s) {
     <button class="pb-log-toggle" onclick="togglePbLog(this)">Show full change log</button>
     <div class="pb-log" id="pb-full-log">
       ${recent.map(e=>`<div class="pba-row">
-        <span class="pba-sec">${escapeHtml(e.section||'PrepBear')}</span>
+        <span class="pba-sec">${escapeHtml(e.section||'Planda Bear')}</span>
         <span class="pba-by" title="${escapeHtml(e.by||'Unknown')}">by ${escapeHtml(e.by||'Unknown')}</span>
         <span class="pba-when" title="${e.at?new Date(e.at).toLocaleString():''}">${fmtAgo(e.at)}</span>
       </div>`).join('')}

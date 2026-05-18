@@ -64,16 +64,16 @@ const CUEOLA_THEME_LABELS = {
   white:    'Polar Bear',
   green:    'Eucalyptus',
   koala:    'Koala',
-  panda:    'Panda',
+  panda:    'Planda Bear',
   flamingo: 'Flamingo',
   prepbear: 'PrepBear',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
-const PREPBEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];
-function normalizePrepBearTheme(t) { return PREPBEAR_THEMES.includes(t) ? t : 'default'; }
+const PLANDABEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];
+function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'default'; }
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
-let prepBearTheme = normalizePrepBearTheme(localStorage.getItem('cueola_prepbear_theme'));
+let plandaBearTheme = normalizePlandaBearTheme(localStorage.getItem('cueola_plandabear_theme'));
 let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
@@ -481,7 +481,7 @@ function renderAdminBody() {
         <button class="admin-act-btn" onclick="copySessionCode()">Copy Session Code</button>
         <button class="admin-act-btn" onclick="copySessionLink()">Copy Session Link</button>
         <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
-        <button class="admin-act-btn" onclick="openPaperworkHub()">Open PrepBear</button>
+        <button class="admin-act-btn" onclick="openPaperworkHub()">Open Planda Bear</button>
       </div>` : ''}
       <div class="admin-list">`;
     admins.forEach(a => {
@@ -553,7 +553,7 @@ function renderAdminBody() {
   }
   if (session.code || session.isExpert) {
     html += `<div class="admin-section">
-      <div class="admin-section-label">Role and PrepBear Assignments</div>
+      <div class="admin-section-label">Role and Planda Bear Assignments</div>
       <div id="adminRoleAssignments">${renderRoleAssignmentRows()}</div>
       <button class="admin-add-btn" style="margin-top:8px" onclick="saveRoleAssignmentsFromAdmin()">Save Assignments</button>
     </div>`;
@@ -582,7 +582,7 @@ function renderRoleAssignmentRows() {
     <div class="admin-src-row" style="align-items:flex-end;margin-bottom:8px">
       <div class="field" style="flex:1;min-width:92px"><label class="admin-add-label">Role</label><input class="admin-in" data-role-assignment="${i}" data-role-field="role" value="${esc(row.role||'')}"></div>
       <div class="field" style="flex:1;min-width:110px"><label class="admin-add-label">Person</label><input class="admin-in" data-role-assignment="${i}" data-role-field="person" value="${esc(row.person||'')}" placeholder="Name"></div>
-      <div class="field" style="flex:1.3;min-width:150px"><label class="admin-add-label">PrepBear File</label><input class="admin-in" data-role-assignment="${i}" data-role-field="paperwork" value="${esc(row.paperwork||'')}" placeholder="Call Sheet, Scheduler, Patch"></div>
+      <div class="field" style="flex:1.3;min-width:150px"><label class="admin-add-label">Planda Bear File</label><input class="admin-in" data-role-assignment="${i}" data-role-field="paperwork" value="${esc(row.paperwork||'')}" placeholder="Call Sheet, Scheduler, Patch"></div>
     </div>`).join('');
 }
 
@@ -877,7 +877,7 @@ function joinPreProSession() {
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:d.startTime || '' };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
-    // Seed local PrepBear cache with any shared work already saved to the session.
+    // Seed local Planda Bear cache with any shared work already saved to the session.
     if (d.prePro && typeof d.prePro === 'object') {
       try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
     }
@@ -4117,22 +4117,22 @@ function stopTimer() {
 // ─────────────────────────────────────────────────────────────
 function applyTheme(t) { document.documentElement.setAttribute('data-theme', normalizeCueolaTheme(t)); }
 
-function applyPrepBearTheme(t) {
-  prepBearTheme = normalizePrepBearTheme(t);
-  document.documentElement.setAttribute('data-prepbear-theme', prepBearTheme);
-  document.querySelectorAll('[data-prepbear-theme-choice]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.prepbearThemeChoice === prepBearTheme);
+function applyPlandaBearTheme(t) {
+  plandaBearTheme = normalizePlandaBearTheme(t);
+  document.documentElement.setAttribute('data-plandabear-theme', plandaBearTheme);
+  document.querySelectorAll('[data-plandabear-theme-choice]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.plandabearThemeChoice === plandaBearTheme);
   });
 }
 
-function setPrepBearTheme(t) {
-  applyPrepBearTheme(t);
-  try { localStorage.setItem('cueola_prepbear_theme', prepBearTheme); } catch {}
+function setPlandaBearTheme(t) {
+  applyPlandaBearTheme(t);
+  try { localStorage.setItem('cueola_plandabear_theme', plandaBearTheme); } catch {}
 }
 
-function togglePrepBearThemes() {
-  const bar = document.querySelector('#paperworkHubModal .prepbear-theme-bar');
-  const btn = document.getElementById('prepbearThemeToggle');
+function togglePlandaBearThemes() {
+  const bar = document.querySelector('#paperworkHubModal .plandabear-theme-bar');
+  const btn = document.getElementById('plandabearThemeToggle');
   const open = !bar?.classList.contains('on');
   bar?.classList.toggle('on', open);
   btn?.classList.toggle('active', open);
@@ -4251,7 +4251,7 @@ function syncPreProToFirestore(data=loadPreProData(), section) {
   }
 }
 
-// Pull shared PrepBear work saved by others (cloud → local) so every
+// Pull shared Planda Bear work saved by others (cloud → local) so every
 // device in the session sees the latest package.
 async function hydratePreProFromFirestore() {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
@@ -4272,7 +4272,7 @@ function openPaperworkHub() {
     showModal('modal-prepro-join');
     return;
   }
-  applyPrepBearTheme(prepBearTheme);
+  applyPlandaBearTheme(plandaBearTheme);
   hydratePreProFromFirestore();
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
@@ -4284,7 +4284,7 @@ function openPaperworkHub() {
     </button>`).join('');
   }
   showModal('paperworkHubModal');
-  renderPrepBearHubActivity();
+  renderPlandaBearHubActivity();
 }
 
 const PB_SECTION_FOR_ITEM = {
@@ -4312,10 +4312,10 @@ function togglePbHub(head) {
   head.parentElement.classList.toggle('open');
 }
 
-// Show "who worked on what" inside PrepBear, pulled from the session's
+// Show "who worked on what" inside Planda Bear, pulled from the session's
 // shared activity log in Firestore.
-async function renderPrepBearHubActivity() {
-  const panel = document.getElementById('prepbearHubActivity');
+async function renderPlandaBearHubActivity() {
+  const panel = document.getElementById('plandabearHubActivity');
   const cards = document.querySelectorAll('#paperworkGrid [data-pb-section]');
   const clearCards = () => cards.forEach(c => {
     const by = c.querySelector('[data-pb-by]');
@@ -4368,7 +4368,7 @@ async function renderPrepBearHubActivity() {
     </div>
     <div class="pb-hub-activity-body">
       ${recent.map(e=>`<div class="pb-hub-row">
-        <span class="s">${esc(e.section||'PrepBear')}</span>
+        <span class="s">${esc(e.section||'Planda Bear')}</span>
         <span class="b" title="${esc(e.by||'Unknown')}">by ${esc(e.by||'Unknown')}</span>
         <span class="w">${pbAgo(e.at)}</span>
       </div>`).join('')}
@@ -4406,7 +4406,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
 
 function showRundownPaperPreview() {
   let offsetSecs = 0;
-  showPaperPreview('Rundown PrepBear Preview', `
+  showPaperPreview('Rundown Planda Bear Preview', `
     <h1>${esc(show.name || 'Cueola Rundown')}</h1>
     <div>Item 3 · Full rendered rundown</div>
     <h2>Rundown</h2>
@@ -4642,8 +4642,8 @@ function productionScheduleHTML(schedule) {
       <tr><th>Estimated Wrap</th><td>${esc(s.wrap || '')}</td></tr>
       <tr><th>Owner</th><td>${esc(s.owner || '')}</td></tr>
     </tbody></table>
-    <h2>Role and PrepBear Assignments</h2>
-    <table><thead><tr><th>Role</th><th>Person</th><th>PrepBear File</th></tr></thead><tbody>${assignments}</tbody></table>
+    <h2>Role and Planda Bear Assignments</h2>
+    <table><thead><tr><th>Role</th><th>Person</th><th>Planda Bear File</th></tr></thead><tbody>${assignments}</tbody></table>
     <h2>Readiness Checklist</h2>
     <table><thead><tr><th>Done</th><th>Task</th><th>Owner</th><th>Due</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No checklist items.</td></tr>'}</tbody></table>`;
 }
@@ -4965,7 +4965,7 @@ async function exportPreProPackagePDF() {
     const data = loadPreProData();
     const safety = data.safety || {};
     const schedule = data.productionSchedule || defaultProductionSchedule();
-    const cleanFileName = (data.production || show.name || 'cueola-prepbear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-prepbear-package';
+    const cleanFileName = (data.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
     const newPage = () => { doc.addPage(); y = margin; };
     const line = (txt, size=9, bold=false, color=[25,25,25]) => {
       doc.setFont('helvetica', bold ? 'bold' : 'normal');
@@ -5017,7 +5017,7 @@ async function exportPreProPackagePDF() {
     field('Show Start', schedule.show || '');
     field('Estimated Wrap', schedule.wrap || '');
     field('Owner', schedule.owner || '');
-    tableRows(['Role','Person','PrepBear File'], getRoleAssignments().map(row => [row.role, row.person, row.paperwork]));
+    tableRows(['Role','Person','Planda Bear File'], getRoleAssignments().map(row => [row.role, row.person, row.paperwork]));
     tableRows(['Done','Task','Owner','Due'], (schedule.checklist || []).map(row => [row.done ? 'Yes' : 'No', row.item, row.owner, row.due]));
 
     section('3. Safety Plan');
@@ -5054,10 +5054,10 @@ async function exportPreProPackagePDF() {
     line('Comms Patch Sheet', 12, true);
     tableRows(['Position','Out','Gear','Notes'], getPatchRows('comms').filter(r => Object.values(r).some(Boolean)).map(r => [r.position, r.out, r.gear, r.notes]));
 
-    doc.save(`${cleanFileName}-prepbear-package.pdf`);
-    toast('PrepBear package PDF downloaded.');
+    doc.save(`${cleanFileName}-plandabear-package.pdf`);
+    toast('Planda Bear package PDF downloaded.');
   } catch {
-    toast('Could not export the PrepBear package.');
+    toast('Could not export the Planda Bear package.');
   }
 }
 
@@ -5194,7 +5194,7 @@ _adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))
 restoreAdminSession();
 updateAdminUI();
 applyTheme(currentTheme);
-applyPrepBearTheme(prepBearTheme);
+applyPlandaBearTheme(plandaBearTheme);
 
 window.addEventListener('popstate', () => {
   const inSession =
