@@ -228,6 +228,17 @@ function hideOverlay(id){ const el=document.getElementById(id); if(!el)return; e
 
 function showOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
 
+function toggleCueolaFullscreen(screenId) {
+  const el = document.getElementById(screenId);
+  if (!el) return;
+  const isFull = document.fullscreenElement === el || document.webkitFullscreenElement === el;
+  if (isFull) {
+    (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+  } else {
+    (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // ADMIN SYSTEM (Firestore-backed, localStorage fallback cache)
 // ─────────────────────────────────────────────────────────────
@@ -1211,15 +1222,65 @@ function renderPresence(map) {
 
 window.addEventListener('beforeunload', leavePresence);
 
+function isTextEditingTarget(target) {
+  return target?.tagName === 'INPUT' ||
+    target?.tagName === 'TEXTAREA' ||
+    target?.isContentEditable ||
+    Boolean(target?.closest?.('[contenteditable="true"]'));
+}
+
+function isLiveScriptPanelTarget(target) {
+  return Boolean(target?.closest?.('#lsSidebar'));
+}
+
+function handleLiveRemoteKeydown(e) {
+  const inPromptOp = promptOpMode && document.getElementById('liveshow')?.classList.contains('on');
+  const inScriptPanel = isLiveScriptPanelTarget(e.target);
+  if (!inPromptOp && !inScriptPanel) return false;
+
+  if (inScriptPanel) {
+    if (e.key === 'ArrowUp')   { e.preventDefault(); if (!e.repeat) sendPrompterControl('boost_start'); return true; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!e.repeat) sendPrompterControl('brake_start'); return true; }
+    return false;
+  }
+
+  if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); if (!e.repeat) sendPrompterControl('direction_reverse'); return true; }
+  if (e.key === 'ArrowUp' && e.altKey)   { e.preventDefault(); if (!e.repeat) sendPrompterControl('direction_forward'); return true; }
+  if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) return true;
+  switch (e.key) {
+    case ' ':          e.preventDefault(); sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true;
+    case 'ArrowUp':    e.preventDefault(); if (!e.repeat) sendPrompterControl('boost_start'); return true;
+    case 'ArrowDown':  e.preventDefault(); if (!e.repeat) sendPrompterControl('brake_start'); return true;
+    case 'ArrowLeft':  e.preventDefault(); if (!e.repeat) sendPrompterControl('size_down'); return true;
+    case 'ArrowRight': e.preventDefault(); if (!e.repeat) sendPrompterControl('size_up'); return true;
+    case 'f': case 'F': e.preventDefault(); if (!e.repeat) sendPrompterControl('fullscreen'); return true;
+    case 'e': case 'E': e.preventDefault(); if (!e.repeat) openLiveScript(Math.max(lsIdx,0)); return true;
+    case 'r': case 'R': e.preventDefault(); if (!e.repeat) sendPrompterControl('reset'); return true;
+    case 'h': case 'H': e.preventDefault(); if (!e.repeat) toggleLivePrompterPanel(); return true;
+    case 'm': case 'M': e.preventDefault(); if (!e.repeat) sendPrompterControl('mirror'); return true;
+    default: return false;
+  }
+}
+
+function handleLiveRemoteKeyup(e) {
+  const liveOn = document.getElementById('liveshow')?.classList.contains('on');
+  if (!liveOn) return;
+  if (promptOpMode || isLiveScriptPanelTarget(e.target)) {
+    if (e.key === 'ArrowUp')   { e.preventDefault(); sendPrompterControl('boost_stop'); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); sendPrompterControl('brake_stop'); }
+  }
+}
+
 // Arrow key navigation in live screen
 document.addEventListener('keydown', e => {
   const liveOn = document.getElementById('liveshow')?.classList.contains('on');
   if (!liveOn) return;
-  // Don't intercept when typing in an input/textarea
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (handleLiveRemoteKeydown(e)) return;
+  if (isTextEditingTarget(e.target)) return;
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); lsNext(); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); lsPrev(); }
 });
+document.addEventListener('keyup', handleLiveRemoteKeyup);
 
 // ─────────────────────────────────────────────────────────────
 // RUNDOWN RENDERING
@@ -2059,6 +2120,11 @@ function buildCueConfigFields(type, d) {
         <div class="field">
           <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds Flowmingo</span></label>
           <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
+          <div class="marker-chip-row">
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
+          </div>
         </div>
         <div class="field">
           <label class="field-lbl">Upload script <span style="color:var(--text3);font-weight:400">(.txt or .pdf)</span></label>
@@ -2595,6 +2661,7 @@ function goLive() {
   pushSessionHistoryState('live');
   buildPromptFromRundown();
   initPrompter();
+  sendToPrompter(true);
   renderLive();
   syncLiveIdx();
   startTimer();
@@ -2669,6 +2736,35 @@ function cleanPrompterText(text) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function scriptSpeakerLabel(d) {
+  const explicit = d?.customSrc || d?.speaker || d?.who || '';
+  if (explicit) return explicit;
+  const cue = getCueOff(d) || getCueOn(d);
+  return String(cue || '').replace(/\s+—\s*Begin\s*$/i, '').trim();
+}
+
+function assemblePrompterScriptFromBeats(list=beats) {
+  const scripts = (Array.isArray(list) ? list : []).filter(b => b?.cues?.script?.text);
+  return cleanPrompterText(scripts.map((b, idx) => {
+    const d = b.cues.script;
+    const header = b.info ? `\n[${idx + 1}] ${b.info}\n` : `\n[${idx + 1}]\n`;
+    const speaker = scriptSpeakerLabel(d);
+    return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + (d.text || '');
+  }).join('\n\n'));
+}
+
+function markLivePrompterStatus(text, tone='ok') {
+  const el = document.getElementById('lsPrompterUpdateStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `ls-prompter-update ${tone}`;
+  clearTimeout(livePrompterStatusTimer);
+  livePrompterStatusTimer = setTimeout(() => {
+    if (el.textContent === text) el.textContent = 'Ready';
+    el.className = 'ls-prompter-update ok';
+  }, 2200);
 }
 
 function updateLiveOverview() {
@@ -2927,14 +3023,41 @@ function insertScriptMarker(text) {
   ta.setSelectionRange(pos, pos);
 }
 
+function insertLivePanelMarker(text) {
+  const el = document.getElementById('lsPrompterText');
+  if (!el) return;
+  el.focus();
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    el.textContent += text;
+  }
+  queueLivePrompterDraftPush();
+}
+
+function insertCueScriptMarker(text) {
+  const ta = document.getElementById('cc-s-text');
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const pos = start + text.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+}
+
 function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
   if (!b.cues.script) b.cues.script={ready:'',take:''};
   b.cues.script.text = document.getElementById('lsScriptEditText').value;
-  const d = b.cues.script;
-  const speaker = getCueOff(d);
-  prompterText = (speaker?`${speaker.toUpperCase()}:\n`:'') + (d.text||'');
+  prompterText = assemblePrompterScriptFromBeats();
   sendToPrompter();
   hideOverlay('lsScriptEditOv');
   renderLive(); syncToFirestore(); toast('Script saved & pushed.');
@@ -3027,19 +3150,7 @@ function adminForceLive(followName) {
 // PROMPTER
 // ─────────────────────────────────────────────────────────────
 function buildPromptFromRundown() {
-  const scripts = beats.filter(b=>b.cues?.script?.text);
-  if (!scripts.length) {
-    prompterText = '';
-    const emptyEl = document.getElementById('lsPrompterText');
-    if (emptyEl) emptyEl.textContent = '';
-    return;
-  }
-  prompterText = scripts.map(b=>{
-    const d = b.cues.script;
-    const hdr = b.info ? `\n── ${b.info} ──\n` : '\n──────────────\n';
-    return hdr + (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + (d.text||'');
-  }).join('\n\n');
-  prompterText = cleanPrompterText(prompterText);
+  prompterText = assemblePrompterScriptFromBeats();
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
 }
@@ -3150,12 +3261,7 @@ function _setPrompterStatus(connected, unavailable=false) {
 }
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
-  prompterText = '';
-  if (newBeat?.cues?.script?.text) {
-    const d = newBeat.cues.script;
-    prompterText = (d.ready ? `${d.ready.toUpperCase()}:\n` : '') + d.text;
-  }
-  prompterText = cleanPrompterText(prompterText);
+  if (!prompterText.trim()) buildPromptFromRundown();
   sendToPrompter();
 }
 
@@ -3163,6 +3269,7 @@ function sendToPrompter(isInit=false) {
   prompterText = cleanPrompterText(prompterText);
   const el = document.getElementById('lsPrompterText');
   if (el) el.textContent = prompterText;
+  markLivePrompterStatus('Updating...', 'busy');
   _postPrompterMessage(getPrompterPayload(isInit));
   // Also update the native built-in Flowmingo screen
   if (isInit) {
@@ -3183,6 +3290,7 @@ function sendToPrompter(isInit=false) {
     }).catch(()=>{});
   }
   renderLivePrompterControls();
+  markLivePrompterStatus('Updated', 'ok');
 }
 
 function updateLsPrompter() {
@@ -3201,6 +3309,14 @@ function pushToPrompter() {
   sendToPrompter();
   if (promptOpMode) renderLivePromptOp();
   toast('Pushed to Flowmingo');
+}
+
+function queueLivePrompterDraftPush() {
+  markLivePrompterStatus('Draft changes...', 'busy');
+  clearTimeout(livePrompterDraftTimer);
+  livePrompterDraftTimer = setTimeout(() => {
+    pushToPrompter();
+  }, 900);
 }
 
 function clearPrompter() {
@@ -3230,7 +3346,9 @@ function sendPrompterControl(action) {
     align_left:'Left aligned', align_center:'Centered', align_right:'Right aligned',
     mirror:'Mirror toggled', fullscreen:'Fullscreen requested',
     theme_warm:'Warm theme', theme_cool:'Cool theme', theme_white:'White theme',
-    theme_green:'Green theme', theme_black:'Black theme',
+    theme_green:'Green theme', theme_koala:'Koala theme', theme_panda:'Planda Bear theme',
+    theme_flamingo:'Flowmingo theme', theme_prepbear:'PrepBear theme',
+    direction_reverse:'Reverse direction', direction_forward:'Forward direction',
     brake_start:'Braking', boost_start:'Boosting'
   };
   if (!action.endsWith('_stop') && !action.includes('_set_')) toast(`Flowmingo: ${labels[action] || action}`);
@@ -3261,6 +3379,11 @@ let ptKeyupHandler = null;
 let ptReceiverChannels = [];
 let ptReceiverStorageHandler = null;
 let ptLastRemoteMsgTs = 0;
+let ptLinkedCueolaCode = '';
+let ptSeenPauseMarkers = new Set();
+let livePrompterDraftTimer = null;
+let livePrompterStatusTimer = null;
+const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD)(?:[^\]]*)\]/i;
 
 const PT_THEMES = {
   warm:     { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
@@ -3362,6 +3485,32 @@ function ptUpdateProgress() {
   if (prog) prog.style.width = pct + '%';
 }
 
+function ptResetAutoPauseMarkers() {
+  ptSeenPauseMarkers = new Set();
+}
+
+function ptCheckAutoPauseMarkers() {
+  if (!ptPlaying) return false;
+  const text = ptEl('pt-text');
+  if (!text) return false;
+  const readY = window.innerHeight / 2 + 24;
+  const lines = Array.from(text.querySelectorAll('p'));
+  for (let i = 0; i < lines.length; i++) {
+    const lineText = lines[i].innerText || lines[i].textContent || '';
+    if (!FLOWMINGO_AUTO_PAUSE_RE.test(lineText)) continue;
+    const key = `${i}:${lineText}`;
+    if (ptSeenPauseMarkers.has(key)) continue;
+    const rect = lines[i].getBoundingClientRect();
+    if (rect.top <= readY && rect.bottom >= readY) {
+      ptSeenPauseMarkers.add(key);
+      ptStopPlay();
+      toast('Flowmingo auto-paused at break.');
+      return true;
+    }
+  }
+  return false;
+}
+
 function ptScrollLoop(ts) {
   if (!ptPlaying) return;
   if (ptLastTime === null) ptLastTime = ts;
@@ -3388,6 +3537,7 @@ function ptScrollLoop(ts) {
     const track = ptEl('pt-track');
     if (track) track.style.transform = `translateY(-${ptOffset}px)`;
     ptUpdateProgress();
+    if (ptCheckAutoPauseMarkers()) return;
     ptAnimFrame = requestAnimationFrame(ptScrollLoop);
   }
 }
@@ -3434,6 +3584,8 @@ function promptOpControlsHTML() {
     <div class="pt-ctrl-group">
       <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
       <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')">Boost</button>
+      <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
+      <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>
@@ -3500,6 +3652,7 @@ function ptSetAlign(a) {
 function ptResetScroll() {
   ptStopPlay();
   ptOffset = 0;
+  ptResetAutoPauseMarkers();
   const track = ptEl('pt-track');
   if (track) track.style.transform = 'translateY(0)';
   ptUpdateProgress();
@@ -3509,6 +3662,8 @@ function ptToggleMirror() {
   ptMirrored = !ptMirrored;
   const stage = ptEl('pt-stage');
   if (stage) stage.classList.toggle('mirrored', ptMirrored);
+  const screen = ptEl('promptypus');
+  if (screen) screen.classList.toggle('mirrored', ptMirrored);
   const btn = ptEl('pt-mirror-btn');
   if (btn) btn.classList.toggle('active', ptMirrored);
 }
@@ -3588,6 +3743,7 @@ function ptSetScriptHTML(html) {
   el.innerHTML = ptSanitizeHTML(html);
   prompterText = el.innerText || '';
   try { localStorage.setItem('promptypus_script_html', el.innerHTML); } catch {}
+  ptResetAutoPauseMarkers();
   ptResetScroll();
   ptUpdateSyncLabel();
 }
@@ -3754,6 +3910,7 @@ function ptUpdateFromCueola(text) {
   const track = ptEl('pt-track');
   const prevHeight = track ? track.scrollHeight : 0;
   el.innerHTML = ptPlainTextToHTML(text || '');
+  ptResetAutoPauseMarkers();
   ptUpdateSyncLabel();
   requestAnimationFrame(() => {
     if (!track) return;
@@ -3769,8 +3926,9 @@ function ptUpdateFromCueola(text) {
 function ptUpdateSyncLabel() {
   const lbl = ptEl('pt-sync-label');
   if (!lbl) return;
-  if (session && session.code && !session.isDemo) {
-    lbl.textContent = `● Live · ${session.code}`;
+  const code = ptLinkedCueolaCode || (session && session.code && !session.isDemo ? session.code : '');
+  if (code) {
+    lbl.textContent = `● Live · ${code}`;
   } else {
     const hasText = (prompterText && prompterText.trim()) ||
                     (ptEl('pt-text') && ptEl('pt-text').textContent.trim());
@@ -3801,11 +3959,15 @@ function ptHandleRemoteControl(action) {
     case 'theme_flamingo': ptSetTheme('flamingo'); break;
     case 'theme_prepbear': ptSetTheme('prepbear'); break;
     case 'mirror':     ptToggleMirror(); break;
-    case 'fullscreen': ptToggleFullscreen(); break;
+    case 'fullscreen':
+      if (ptEl('promptypus')?.classList.contains('on')) ptToggleFullscreen();
+      break;
     case 'brake_start': ptBraking = true; break;
     case 'brake_stop':  ptBraking = false; break;
     case 'boost_start': ptBoosting = true; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); break;
     case 'boost_stop':  ptBoosting = false; break;
+    case 'direction_reverse': ptReversing = true; break;
+    case 'direction_forward': ptReversing = false; break;
     case 'reset':
     case 'rewind':     ptResetScroll(); break;
   }
@@ -3817,7 +3979,7 @@ function ptOpenEdit() {
   const textEl = ptEl('pt-text');
   if (ta && textEl) ta.value = textEl.innerText.trim();
   const codeIn = ptEl('pt-cueola-code-input');
-  if (codeIn && session?.code) codeIn.value = session.code;
+  if (codeIn && (ptLinkedCueolaCode || session?.code)) codeIn.value = ptLinkedCueolaCode || session.code;
   const ov = ptEl('pt-edit-overlay');
   if (ov) ov.classList.add('open');
   setTimeout(() => { if (ta) ta.focus(); }, 50);
@@ -3856,12 +4018,7 @@ function ptSetCueolaStatus(text, isError=false) {
 
 function ptAssembleCueolaScript(data) {
   if (data?.prompter?.text && data.prompter.text.trim()) return data.prompter.text;
-  const lines = [];
-  (data?.beats || []).forEach(beat => {
-    const text = beat?.cues?.script?.text || beat?.cueData?.text || beat?.script || '';
-    if (text) lines.push(text);
-  });
-  return lines.join('\n\n');
+  return assemblePrompterScriptFromBeats((data?.beats || []).map(migrateBeat));
 }
 
 function ptLoadFromCueolaCode() {
@@ -3870,6 +4027,7 @@ function ptLoadFromCueolaCode() {
   if (!code) return;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   ptSetCueolaStatus('Loading...');
+  let loadedOnce = false;
   const load = () => {
     try {
       if (ptCueolaSub) { ptCueolaSub(); ptCueolaSub = null; }
@@ -3879,16 +4037,38 @@ function ptLoadFromCueolaCode() {
           if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
           return;
         }
-        const text = ptAssembleCueolaScript(snap.data());
+        const data = snap.data() || {};
+        ptLinkedCueolaCode = code;
+        session.code = code;
+        session.isDemo = false;
+        session.isExpert = false;
+        const text = ptAssembleCueolaScript(data);
         if (text.trim()) {
           prompterText = text;
-          ptSetScriptText(text);
+          if (cleanPrompterText(ptEl('pt-text')?.innerText || '') !== cleanPrompterText(text)) {
+            ptSetScriptText(text);
+          }
           const ta = ptEl('pt-script-input');
           if (ta) ta.value = text.trim();
-          ptSetCueolaStatus(`Live · ${code}`);
+          ptSetCueolaStatus(`READY · ${code}`);
           ptUpdateSyncLabel();
+          if (!loadedOnce) {
+            loadedOnce = true;
+            setTimeout(ptCloseEdit, 550);
+            toast(`Flowmingo ready for ${code}`);
+          }
         } else {
-          ptSetCueolaStatus('No script yet', true);
+          ptSetCueolaStatus(`READY · ${code} · no script yet`);
+          if (!loadedOnce) {
+            loadedOnce = true;
+            setTimeout(ptCloseEdit, 700);
+            toast(`Flowmingo linked to ${code}`);
+          }
+        }
+        const control = data.prompter?.control;
+        if (control?.ts && control.ts > _lastPrompterControlTs && control.sender !== CLIENT_ID) {
+          _lastPrompterControlTs = control.ts;
+          ptHandleRemoteControl(control.action);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       }, () => {
@@ -4200,23 +4380,18 @@ const PAPERWORK_ITEMS = [
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
 ];
-const PRODUCTION_CHECKLIST_DEFAULTS = [
-  'Recorder cards are formatted',
-  'Records test record',
-  'Cameras are setup correctly',
-  'Cameras Balanced',
-  'Audio line check',
-  'Audio sound check',
-  'Mics checked',
-  'Zoom A/V is set',
-  'Recorder is getting audio',
-  'Switcher is setup',
-  'Lights are focused',
-  'Cameras shaded',
-  'GFX are loaded',
-  'Stream has A/V signal',
-  'Stage computer is set',
-  'Video team meeting to understand shots and cues',
+const PRODUCTION_CHECKLIST_GUIDES = [
+  { area:'Record path', hint:'What proves the recorder is ready for the whole show?' },
+  { area:'Camera chain', hint:'What camera, lens, white balance, shade, and shot checks matter today?' },
+  { area:'Audio chain', hint:'What line, mic, program, and monitor checks must happen before talent arrives?' },
+  { area:'Playback and GFX', hint:'What media, graphics, keys, and roll tests need to be confirmed?' },
+  { area:'Switcher and routing', hint:'What sources, destinations, multiview, stream, and record routes must be verified?' },
+  { area:'Lighting look', hint:'What focus, color, cue, and safety checks are needed for the set?' },
+  { area:'Stage and talent', hint:'What marks, chairs, props, IFB, scripts, and water need attention?' },
+  { area:'Crew comms', hint:'What headsets, channels, hand signals, and caller expectations need a check?' },
+  { area:'Safety and access', hint:'What exits, cables, weather, security, first aid, and trip hazards need review?' },
+  { area:'Flowmingo', hint:'What session code, script, theme, mirror, and auto-pause checks should be done?' },
+  { area:'Final go/no-go', hint:'What last confirmation tells the team the show can begin?' },
 ];
 let activePatchKind = '';
 
@@ -4386,8 +4561,16 @@ function openPaperworkItem(id) {
 }
 
 function returnToPaperworkHub() {
+  saveOpenPaperworkSection(false);
   ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal'].forEach(hideModal);
   openPaperworkHub();
+}
+
+function saveOpenPaperworkSection(showToastOnSave=true) {
+  if (document.getElementById('preProModal')?.classList.contains('on')) saveCallSheet(showToastOnSave);
+  if (document.getElementById('productionScheduleModal')?.classList.contains('on')) saveProductionSchedule(showToastOnSave);
+  if (document.getElementById('safetyPlanModal')?.classList.contains('on')) saveSafetyPlan(showToastOnSave);
+  if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(showToastOnSave);
 }
 
 function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')") {
@@ -4444,6 +4627,7 @@ function rundownPreviewTableHTML() {
 
 function showCallSheetPreview() {
   const data = getPreProData();
+  saveCallSheet(false);
   showPaperPreview('Call Sheet Preview', `
     ${callSheetPreviewHTML(data)}
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPrePro()");
@@ -4528,9 +4712,9 @@ function getSafetyPlanData() {
   };
 }
 
-function saveSafetyPlan() {
+function saveSafetyPlan(showToastOnSave=true) {
   persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
-  toast('Safety plan saved.');
+  if (showToastOnSave) toast('Safety plan saved.');
 }
 
 function safetyPlanHTML(safety) {
@@ -4554,6 +4738,7 @@ function safetyPlanHTML(safety) {
 
 function showSafetyPlanPreview() {
   const safety = getSafetyPlanData();
+  saveSafetyPlan(false);
   showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()");
 }
 
@@ -4565,7 +4750,21 @@ function defaultProductionSchedule() {
     show:'',
     wrap:'',
     owner:'',
-    checklist: PRODUCTION_CHECKLIST_DEFAULTS.map(item => ({ item, owner:'', due:'', done:false })),
+    checklist: PRODUCTION_CHECKLIST_GUIDES.map(row => ({ area:row.area, item:'', hint:row.hint, owner:'', due:'', notes:'', done:false })),
+  };
+}
+
+function normalizeProductionChecklistRow(row, i=0) {
+  if (typeof row === 'string') return { area:'Crew-defined check', item:row, hint:'Rewrite this as a show-day check your crew can verify.', owner:'', due:'', notes:'', done:false };
+  const guide = PRODUCTION_CHECKLIST_GUIDES[i] || {};
+  return {
+    area: row?.area || guide.area || '',
+    item: row?.item || '',
+    hint: row?.hint || guide.hint || '',
+    owner: row?.owner || '',
+    due: row?.due || '',
+    notes: row?.notes || '',
+    done: Boolean(row?.done),
   };
 }
 
@@ -4573,6 +4772,7 @@ function openProductionSchedule() {
   hideModal('paperworkHubModal');
   const schedule = { ...defaultProductionSchedule(), ...(loadPreProData().productionSchedule || {}) };
   schedule.checklist = Array.isArray(schedule.checklist) && schedule.checklist.length ? schedule.checklist : defaultProductionSchedule().checklist;
+  schedule.checklist = schedule.checklist.map(normalizeProductionChecklistRow);
   document.getElementById('ps-date').value = schedule.date || '';
   document.getElementById('ps-setup').value = schedule.setup || '';
   document.getElementById('ps-call').value = schedule.call || '';
@@ -4586,12 +4786,17 @@ function openProductionSchedule() {
 function renderProductionChecklist(items) {
   const el = document.getElementById('ps-checklist');
   if (!el) return;
-  const rows = Array.isArray(items) && items.length ? items : [{ item:'', owner:'', due:'', done:false }];
-  el.innerHTML = `<div class="patch-table comms" style="grid-template-columns:32px 1.4fr .8fr .6fr">
-    <div class="patch-head"></div><div class="patch-head">Task</div><div class="patch-head">Owner</div><div class="patch-head">Due</div>
+  const rows = (Array.isArray(items) && items.length ? items : defaultProductionSchedule().checklist).map(normalizeProductionChecklistRow);
+  el.innerHTML = `<div class="readiness-guide">
+    <div class="readiness-head"></div><div class="readiness-head">Area</div><div class="readiness-head">Crew Check</div><div class="readiness-head">Owner</div><div class="readiness-head">Due</div>
     ${rows.map((row,i)=>`
       <input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''} style="align-self:center;justify-self:center">
-      <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="Task">
+      <input class="field-in" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}" placeholder="Area">
+      <div class="readiness-check-cell">
+        <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="${esc(row.hint||'Write the check your crew must verify.')}">
+        <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
+        <textarea class="field-in readiness-notes" data-ps-row="${i}" data-ps-field="notes" rows="2" placeholder="Crew notes, evidence, or where to verify it...">${esc(row.notes||'')}</textarea>
+      </div>
       <input class="field-in" data-ps-row="${i}" data-ps-field="owner" value="${esc(row.owner||'')}" placeholder="PM / ENG">
       <input class="field-in" data-ps-row="${i}" data-ps-field="due" type="time" value="${esc(row.due||'')}">
     `).join('')}
@@ -4600,7 +4805,7 @@ function renderProductionChecklist(items) {
 
 function addProductionChecklistRow() {
   const current = getProductionScheduleData();
-  current.checklist.push({ item:'', owner:current.owner || '', due:'', done:false });
+  current.checklist.push({ area:'', item:'', hint:'What needs to be checked before the show can start?', owner:current.owner || '', due:'', notes:'', done:false });
   renderProductionChecklist(current.checklist);
 }
 
@@ -4619,18 +4824,18 @@ function getProductionScheduleData() {
     show: document.getElementById('ps-show')?.value || '',
     wrap: document.getElementById('ps-wrap')?.value || '',
     owner: document.getElementById('ps-owner')?.value?.trim() || '',
-    checklist: rows.filter(row => row && row.item),
+    checklist: rows.map(normalizeProductionChecklistRow).filter(row => row && (row.area || row.item || row.owner || row.due || row.notes || row.done)),
   };
 }
 
-function saveProductionSchedule() {
+function saveProductionSchedule(showToastOnSave=true) {
   persistPreProData({ productionSchedule: getProductionScheduleData() }, 'Production Scheduler');
-  toast('Production scheduler saved.');
+  if (showToastOnSave) toast('Production scheduler saved.');
 }
 
 function productionScheduleHTML(schedule) {
   const s = { ...defaultProductionSchedule(), ...(schedule || {}) };
-  const rows = (s.checklist || []).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${esc(row.owner || '')}</td><td>${esc(row.due || '')}</td></tr>`).join('');
+  const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.area || '')}</td><td>${esc(row.item || '')}${row.notes ? `<br><span class="cue-muted">${esc(row.notes)}</span>` : ''}</td><td>${esc(row.owner || '')}</td><td>${esc(row.due || '')}</td></tr>`).join('');
   const assignments = getRoleAssignments().map(row => `<tr><td>${esc(row.role || '')}</td><td>${esc(row.person || '')}</td><td>${esc(row.paperwork || '')}</td></tr>`).join('');
   return `
     <h1>2. Production Scheduler</h1>
@@ -4644,12 +4849,13 @@ function productionScheduleHTML(schedule) {
     </tbody></table>
     <h2>Role and Planda Bear Assignments</h2>
     <table><thead><tr><th>Role</th><th>Person</th><th>Planda Bear File</th></tr></thead><tbody>${assignments}</tbody></table>
-    <h2>Readiness Checklist</h2>
-    <table><thead><tr><th>Done</th><th>Task</th><th>Owner</th><th>Due</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No checklist items.</td></tr>'}</tbody></table>`;
+    <h2>Show-Day Readiness Checklist</h2>
+    <table><thead><tr><th>Done</th><th>Area</th><th>Crew Check</th><th>Owner</th><th>Due</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No checklist rows.</td></tr>'}</tbody></table>`;
 }
 
 function showProductionSchedulePreview() {
   const schedule = getProductionScheduleData();
+  saveProductionSchedule(false);
   showPaperPreview('Production Scheduler Preview', productionScheduleHTML(schedule), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()");
 }
 
@@ -4737,14 +4943,14 @@ function removePatchRow(kind, idx) {
   openPatchSheetEditor(activePatchKind || kind);
 }
 
-function savePatchSheet() {
+function savePatchSheet(showToastOnSave=true) {
   if (activePatchKind === 'video') {
     savePatchRows('video', collectPatchRows('video'));
-    toast('Video patch sheet saved.');
+    if (showToastOnSave) toast('Video patch sheet saved.');
   } else {
     savePatchRows('audio', collectPatchRows('audio'));
     savePatchRows('comms', collectPatchRows('comms'));
-    toast('Audio and comms patch sheets saved.');
+    if (showToastOnSave) toast('Audio and comms patch sheets saved.');
   }
 }
 
@@ -4777,10 +4983,14 @@ function patchTableHTML(kind, title) {
 }
 
 function showPreProPackagePreview() {
+  showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()');
+}
+
+function preProPackageHTML() {
   const data = loadPreProData();
   const safety = data.safety || {};
   const schedule = data.productionSchedule || defaultProductionSchedule();
-  const html = `
+  return `
     ${callSheetPreviewHTML(data)}
     <div class="paper-page-break"></div>
     ${productionScheduleHTML(schedule)}
@@ -4798,7 +5008,54 @@ function showPreProPackagePreview() {
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
   `;
-  showPaperPreview('PDF Package Preview', html, 'Export One PDF Package', 'exportPreProPackagePDF()');
+}
+
+async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  const { jsPDF } = window.jspdf;
+  if (!window.html2canvas) throw new Error('html2canvas unavailable');
+  const orientation = opts.orientation || (html.includes('paper-landscape') ? 'landscape' : 'portrait');
+  const doc = new jsPDF({ unit:'pt', format:'letter', orientation });
+  const margin = opts.margin ?? 24;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const pageInnerW = pageW - margin * 2;
+  const pageInnerH = pageH - margin * 2;
+  const root = document.createElement('div');
+  root.className = 'paper-preview';
+  root.style.position = 'fixed';
+  root.style.left = '-10000px';
+  root.style.top = '0';
+  root.style.width = orientation === 'landscape' ? '1120px' : '820px';
+  root.style.maxHeight = 'none';
+  root.style.overflow = 'visible';
+  root.innerHTML = html;
+  document.body.appendChild(root);
+  try {
+    const canvas = await window.html2canvas(root, { scale:2, backgroundColor:'#ffffff', useCORS:true });
+    const pageCanvas = document.createElement('canvas');
+    const pageCtx = pageCanvas.getContext('2d');
+    const sliceH = Math.floor(canvas.width * (pageInnerH / pageInnerW));
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceH;
+    let sourceY = 0;
+    let page = 0;
+    while (sourceY < canvas.height) {
+      pageCtx.clearRect(0, 0, pageCanvas.width, pageCanvas.height);
+      pageCtx.fillStyle = '#fff';
+      pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      pageCtx.drawImage(canvas, 0, sourceY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const imgData = pageCanvas.toDataURL('image/png');
+      if (page > 0) doc.addPage('letter', orientation);
+      doc.addImage(imgData, 'PNG', margin, margin, pageInnerW, pageInnerH);
+      sourceY += sliceH;
+      page++;
+    }
+    doc.save(fileName);
+  } finally {
+    root.remove();
+  }
 }
 
 function openPrePro() {
@@ -4847,9 +5104,9 @@ function getPreProData() {
   };
 }
 
-function saveCallSheet() {
+function saveCallSheet(showToastOnSave=true) {
   persistPreProData(getPreProData(), 'Call Sheet');
-  toast('Call sheet saved.');
+  if (showToastOnSave) toast('Call sheet saved.');
 }
 
 function savePrePro() {
@@ -4954,7 +5211,17 @@ async function exportPreProPackagePDF() {
   try {
     if (document.getElementById('preProModal')?.classList.contains('on')) persistPreProData(getPreProData(), 'Call Sheet');
     if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
-    if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet();
+    if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(false);
+    if (document.getElementById('productionScheduleModal')?.classList.contains('on')) persistPreProData({ productionSchedule: getProductionScheduleData() }, 'Production Scheduler');
+    const dataForName = loadPreProData();
+    const cleanPreviewName = (dataForName.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
+    try {
+      await exportPaperHTMLAsPDF(preProPackageHTML(), `${cleanPreviewName}-plandabear-package.pdf`);
+      toast('Planda Bear package PDF downloaded.');
+      return;
+    } catch (htmlErr) {
+      console.warn('Preview-matched PDF export failed; falling back to text PDF:', htmlErr);
+    }
     await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'pt', format:'letter' });
@@ -5018,7 +5285,7 @@ async function exportPreProPackagePDF() {
     field('Estimated Wrap', schedule.wrap || '');
     field('Owner', schedule.owner || '');
     tableRows(['Role','Person','Planda Bear File'], getRoleAssignments().map(row => [row.role, row.person, row.paperwork]));
-    tableRows(['Done','Task','Owner','Due'], (schedule.checklist || []).map(row => [row.done ? 'Yes' : 'No', row.item, row.owner, row.due]));
+    tableRows(['Done','Area','Crew Check','Owner','Due'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.area, row.item || row.notes, row.owner, row.due]));
 
     section('3. Safety Plan');
     ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
@@ -5066,6 +5333,19 @@ async function exportPreProPackagePDF() {
 // ─────────────────────────────────────────────────────────────
 async function exportPDF() {
   try {
+    const cleanFileName = `${(show.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
+    try {
+      await exportPaperHTMLAsPDF(`
+        <h1>${esc(show.name || 'Cueola Rundown')}</h1>
+        <div>Full rendered rundown${session.code ? ` · Session ${esc(session.code)}` : ''}</div>
+        <h2>Rundown</h2>
+        ${rundownPreviewTableHTML()}
+      `, cleanFileName, { orientation:'landscape', margin:18 });
+      toast('PDF downloaded.');
+      return;
+    } catch (htmlErr) {
+      console.warn('Preview-matched PDF export failed; falling back to table PDF:', htmlErr);
+    }
     await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'pt', format:'letter', orientation:'landscape' });

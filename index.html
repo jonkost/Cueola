@@ -402,9 +402,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-prompter-status{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
 .ls-prompter-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .ls-prompter-dot.off{background:var(--text3)}
+.ls-prompter-update{margin-left:auto;font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid rgba(34,211,160,.25);border-radius:999px;padding:2px 7px;background:rgba(34,211,160,.06)}
+.ls-prompter-update.busy{color:var(--yellow);border-color:rgba(245,183,49,.28);background:rgba(245,183,49,.07)}
 .ls-prompter-text{flex:1;overflow-y:auto;padding:12px 14px;font-size:13px;color:var(--text);line-height:1.8;white-space:pre-wrap;word-break:break-word;outline:none;min-height:0}
 .ls-prompter-text:focus{background:color-mix(in srgb,var(--accent) 5%,transparent)}
 .ls-prompter-actions{padding:8px 14px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0}
+.ls-script-quickbar{display:flex;gap:5px;flex-wrap:wrap}
 .ls-pact-btn{padding:7px 12px;border-radius:7px;font-size:11px;font-weight:600;font-family:var(--mono);cursor:pointer;border:none;transition:all .15s}
 .ls-push-btn{background:var(--accent);color:#fff;flex:1}.ls-push-btn:hover{filter:brightness(1.1)}
 .ls-clear-btn{background:var(--s3);border:1px solid var(--bord2);color:var(--text2)}.ls-clear-btn:hover{color:var(--text)}
@@ -744,6 +747,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .patch-table .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .patch-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .patch-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
+.readiness-guide{display:grid;grid-template-columns:34px minmax(120px,.8fr) minmax(260px,1.7fr) minmax(100px,.7fr) minmax(92px,.55fr);gap:0;margin-top:8px;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2)}
+.readiness-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
+.readiness-guide .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
+.readiness-check-cell{display:flex;flex-direction:column;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.readiness-check-cell .field-in{border-right:0}
+.readiness-notes{min-height:42px;resize:vertical;color:var(--text2)}
 .paperwork-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
 .prepro-files{display:flex;flex-direction:column;gap:6px}
 .prepro-file{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text2)}
@@ -854,6 +863,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .call-grid{grid-template-columns:1fr}
   .call-grid .field-in{border-right:0}
   .patch-table.video,.patch-table.audio,.patch-table.comms{grid-template-columns:1fr}
+  .readiness-guide{grid-template-columns:1fr}
+  .readiness-head{display:none}
+  .readiness-check-cell{border-right:0}
   .patch-head{display:none}
   .patch-table .field-in{border-right:0}
   .paperwork-actions{grid-template-columns:1fr}
@@ -894,7 +906,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #promptypus[data-pt-theme="flamingo"] .pt-hint{box-shadow:0 18px 54px rgba(255,126,182,.12),inset 0 1px 0 rgba(255,255,255,.06)}
 
 /* Top nav bar */
-#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
+#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
 #pt-bar.hidden{opacity:0;pointer-events:none}
 .pt-back-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-accent,#c8a97e);border-radius:7px;padding:5px 11px;cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
@@ -906,6 +918,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:48px;left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s}
 #pt-stage.mirrored{transform:scaleX(-1)}
+#promptypus.mirrored::before,#promptypus.mirrored::after{transform:scaleX(-1)}
 #pt-stage::before,#pt-stage::after{content:'';position:absolute;left:0;right:0;height:28vh;pointer-events:none;z-index:10}
 #pt-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
 #pt-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
@@ -964,6 +977,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 .pt-cueola-input:focus{border-color:var(--pt-accent,#c8a97e)}
 .pt-cueola-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;white-space:nowrap}
 .pt-cueola-status.on{opacity:1}
+.pt-cueola-help{font-family:var(--mono);font-size:10px;line-height:1.55;color:var(--pt-text,#f0ead6);opacity:.58;background:rgba(0,0,0,.18);border:1px solid var(--pt-ui-border,rgba(200,169,126,.18));border-radius:9px;padding:9px 11px}
 .pt-edit-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .pt-edit-actions .pt-btn{padding:7px 18px}
 .pt-save-btn{background:rgba(200,169,126,.15);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
@@ -1043,6 +1057,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
       <button class="tbtn tbtn-ghost" onclick="openPaperworkHub()">🐼 Planda Bear</button>
       <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
+      <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <div class="tb-divider"></div>
       <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
@@ -1103,6 +1118,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
       <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the script panel">📄 Script Panel</button>
       <button class="ls-exit-btn" onclick="enterPrompter()" title="Open Flowmingo" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
+      <button class="ls-exit-btn" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen">⛶ Full</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
   </div>
@@ -1129,8 +1145,18 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-resizer" id="lsResizer" onpointerdown="startLivePanelResize(event)"></div>
     <div class="ls-sidebar" id="lsSidebar">
-      <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live Flowmingo script"></div>
+      <div class="ls-sidebar-head">
+        <div class="ls-sidebar-title">Flowmingo Script Panel</div>
+        <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
+      </div>
+      <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live Flowmingo script" oninput="queueLivePrompterDraftPush()"></div>
       <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
+        <div class="ls-script-quickbar" aria-label="Quick script inserts">
+          <button class="marker-chip" onclick="insertLivePanelMarker('[UPDATE] ')">Update</button>
+          <button class="marker-chip" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')">Break</button>
+          <button class="marker-chip" onclick="insertLivePanelMarker('[STOP HERE] ')">Stop</button>
+          <button class="marker-chip" onclick="insertLivePanelMarker('\n\n')">Line</button>
+        </div>
         <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO FLOWMINGO</button>
         <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))" style="font-size:11px">Edit current cue script</button>
         <div id="lsPrompterRemote"></div>
@@ -1159,6 +1185,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <button class="pt-back-btn" onclick="exitPrompter()">← Cueola</button>
     <div class="pt-bar-title">🦩 Flowmingo</div>
     <div class="pt-bar-sync" id="pt-sync-label">Not synced</div>
+    <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Load Session</button>
     <button class="pt-bar-controls-btn" onclick="ptTogglePanel()">Controls</button>
   </div>
 
@@ -1253,6 +1280,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load →</button>
         <span class="pt-cueola-status" id="pt-cueola-status"></span>
       </div>
+      <div class="pt-cueola-help">Load a Cueola session code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
       <hr class="pt-modal-sep">
       <h2>Or Paste / Type</h2>
       <textarea id="pt-script-input" rows="12" placeholder="Paste or type your script here..."></textarea>
@@ -1379,6 +1407,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="marker-chip-row">
       <button class="marker-chip" onclick="insertScriptMarker('[UPDATE] ')">Update</button>
       <button class="marker-chip" onclick="insertScriptMarker('[EDIT] ')">Edit</button>
+      <button class="marker-chip" onclick="insertScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
       <button class="marker-chip" onclick="insertScriptMarker('\n\n')">Line break</button>
       <button class="marker-chip" onclick="insertScriptMarker('\n────────────\n')">Divider</button>
       <button class="marker-chip" onclick="insertScriptMarker('[STOP HERE] ')">Stop here</button>
@@ -1547,7 +1576,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Production Scheduler</div>
-        <div class="modal-sub">Setup timing and readiness checklist.</div>
+        <div class="modal-sub">Setup timing and a crew-built readiness list. Use the prompts to decide what must be checked before show start.</div>
       </div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
     </div>
@@ -1563,9 +1592,9 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Pre-Production Checklist</div>
+      <div class="prepro-section-title">Show-Day Readiness List</div>
       <div id="ps-checklist"></div>
-      <button class="call-add-btn" onclick="addProductionChecklistRow()" style="margin-top:10px">+ Add checklist row</button>
+      <button class="call-add-btn" onclick="addProductionChecklistRow()" style="margin-top:10px">+ Add readiness row</button>
     </div>
     <button class="btn-primary" onclick="saveProductionSchedule()">Save Production Scheduler</button>
     <button class="btn-secondary" onclick="showProductionSchedulePreview()">Preview Scheduler</button>

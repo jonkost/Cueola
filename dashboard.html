@@ -260,6 +260,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .system-setting-title{font-size:13px;font-weight:700}
 .system-setting-sub{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4}
 .setting-pill{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);border:1px solid var(--bord2);border-radius:999px;padding:4px 8px;white-space:nowrap}
+.accounts-page{display:none;animation:fadeUp .35s ease both}
+.accounts-page.on{display:block}
+.accounts-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin:4px 0 16px}
+.accounts-sub{font-size:13px;color:var(--text2);line-height:1.5;margin-top:4px}
+.accounts-form{grid-template-columns:1fr 1fr .7fr auto}
 
 /* Code display */
 .code-box{background:var(--s3);border:1px solid var(--bord2);border-radius:var(--r);padding:20px;text-align:center}
@@ -286,6 +291,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .participant{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--s2);border-radius:7px}
 .p-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:var(--mono);flex-shrink:0}
 .p-name{font-size:13px;font-weight:500;flex:1}
+.participant-role-select,.participant-role-custom{background:var(--s3);border:1px solid var(--bord2);border-radius:7px;color:var(--text);font-size:12px;padding:7px 9px;outline:none;min-width:132px}
+.participant-role-custom{max-width:130px}
+.participant-role-select:focus,.participant-role-custom:focus{border-color:var(--accent)}
 .p-role{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:10px;letter-spacing:.06em}
 .p-role.inst{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .p-role.stud{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
@@ -382,11 +390,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .hero-stats{width:100%;justify-content:space-between}
   .overview-grid{grid-template-columns:1fr}
   .admin-control-form{grid-template-columns:1fr}
+  .accounts-form{grid-template-columns:1fr}
+  .accounts-head{flex-direction:column}
   .admin-row-actions{grid-template-columns:1fr}
   .session-work-row{grid-template-columns:1fr}
   .session-card{grid-template-columns:1fr}
   .sc-right{grid-template-columns:1fr}
   .detail-edit-grid{grid-template-columns:1fr}
+  .participant{flex-wrap:wrap}
+  .participant-role-select,.participant-role-custom{flex:1;min-width:160px;max-width:none}
   .assignment-row{grid-template-columns:1fr}
   .topbar{padding:0 14px}
   .page{padding:20px 12px 60px}
@@ -441,19 +453,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
   <div class="super-overview" id="superOverview">
     <div class="overview-panel">
-      <div class="overview-title">Instructor Control <span class="overview-sub" id="adminOverviewCount">—</span></div>
-      <div class="admin-control-form">
-        <div class="admin-control-form-title">Create Instructor</div>
-        <input class="admin-mini-in" id="newAdminName" placeholder="Name">
-        <input class="admin-mini-in" id="newAdminCode" type="password" placeholder="Code">
-        <select class="admin-mini-in" id="newAdminLevel">
-          <option value="standard">Standard</option>
-          <option value="full">Full</option>
-          <option value="super">Super</option>
-        </select>
-        <button class="admin-mini-btn primary" onclick="addDashboardAdmin()">Add</button>
+      <div class="overview-title">Account Management <span class="overview-sub" id="adminOverviewCount">—</span></div>
+      <div class="system-setting-row">
+        <div>
+          <div class="system-setting-title">Instructor accounts</div>
+          <div class="system-setting-sub">Add, remove, rename, reset codes, and set access levels on a dedicated page.</div>
+        </div>
+        <button class="admin-mini-btn primary" onclick="openAccountsPage()">Manage Accounts</button>
       </div>
-      <div class="overview-list" id="adminOverviewList"></div>
     </div>
   </div>
 
@@ -474,6 +481,30 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
   <!-- Session list -->
   <div id="sessionArea"></div>
+
+  <div class="accounts-page" id="accountsPage" hidden>
+    <div class="accounts-head">
+      <div>
+        <div class="sec-title">Manage <span>Accounts</span></div>
+        <div class="accounts-sub">Simple account setup for instructor/admin access.</div>
+      </div>
+      <button class="btn-sm btn-ghost" onclick="closeAccountsPage()">← Dashboard</button>
+    </div>
+    <div class="overview-panel">
+      <div class="admin-control-form accounts-form">
+        <div class="admin-control-form-title">Create Instructor</div>
+        <input class="admin-mini-in" id="newAdminName" placeholder="Name">
+        <input class="admin-mini-in" id="newAdminCode" type="password" placeholder="Code">
+        <select class="admin-mini-in" id="newAdminLevel">
+          <option value="standard">Standard</option>
+          <option value="full">Full</option>
+          <option value="super">Super</option>
+        </select>
+        <button class="admin-mini-btn primary" onclick="addDashboardAdmin()">Add Account</button>
+      </div>
+      <div class="overview-list" id="adminOverviewList"></div>
+    </div>
+  </div>
 
 </div>
 
@@ -569,7 +600,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
           <option value="active">Active</option>
         </select>
       </div>
-      <button class="detail-save-btn" onclick="saveDetailMetadata()">Save</button>
+      <button class="detail-save-btn" onclick="saveSessionManagement()">Save Session</button>
     </div>
     <div class="detail-section-title">Session Info</div>
     <div class="session-detail">
@@ -586,17 +617,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     </div>
     <div id="detail-add-student"></div>
     <div id="detail-merge-tool"></div>
-    <div class="detail-section-title">Learner Positions</div>
+    <div class="detail-section-title">Production Roles</div>
     <div class="assignment-list" id="detail-assignments">
       <div style="font-size:12px;color:var(--text3);padding:8px 0">No learners available yet.</div>
     </div>
-    <button class="btn-full btn-secondary" onclick="saveLearnerAssignments()" style="margin-top:4px">Save Learner Positions</button>
     <div class="detail-section-title">Planda Bear Paperwork</div>
     <div class="plandabear-activity" id="detail-plandabear-activity">
       <div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear work recorded yet.</div>
     </div>
     <div class="detail-actions">
       <button class="btn-full btn-primary" onclick="openDetailSession()" style="margin-top:4px">Open Rundown →</button>
+      <button class="btn-full btn-secondary" onclick="saveSessionManagement()" style="margin-top:4px">Save Session</button>
       <button class="btn-full btn-secondary" onclick="hideModal('modal-detail')" style="margin-top:4px">Close</button>
     </div>
     <button class="btn-full btn-danger" onclick="confirmDelete()" style="margin-top:4px" id="detail-delete-btn">Delete Session</button>
@@ -959,6 +990,7 @@ function onLoggedIn() {
     : 'Instructor view: manage sessions, open Planda Bear, and return to active rundowns.';
 
   loadSessions();
+  if (location.hash === '#accounts' && adminSession.level === 'super') setTimeout(openAccountsPage, 0);
 }
 
 // ── LOAD SESSIONS ─────────────────────────────────────────────
@@ -1100,10 +1132,42 @@ function renderSuperOverview() {
   renderAdminOverview();
 }
 
+function setDashboardMainVisible(visible) {
+  ['hero','superOverview','sessionsHead','newSessionCard','sessionArea'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? '' : 'none';
+  });
+}
+
+function openAccountsPage() {
+  if (!adminSession || adminSession.level !== 'super') { showToast('Only a super instructor can manage accounts.'); return; }
+  setDashboardMainVisible(false);
+  const page = document.getElementById('accountsPage');
+  if (page) {
+    page.hidden = false;
+    page.classList.add('on');
+  }
+  renderAdminOverview();
+  history.replaceState(null, '', location.pathname + location.search + '#accounts');
+}
+
+function closeAccountsPage() {
+  const page = document.getElementById('accountsPage');
+  if (page) {
+    page.classList.remove('on');
+    page.hidden = true;
+  }
+  setDashboardMainVisible(true);
+  history.replaceState(null, '', location.pathname + location.search);
+  renderSuperOverview();
+}
+
 function renderAdminOverview() {
   const admins = getAdmins();
   document.getElementById('adminOverviewCount').textContent = `${admins.length} instructor${admins.length===1?'':'s'}`;
-  document.getElementById('adminOverviewList').innerHTML = admins.length ? admins.map(a => `
+  const listEl = document.getElementById('adminOverviewList');
+  if (!listEl) return;
+  listEl.innerHTML = admins.length ? admins.map(a => `
     <div class="overview-row admin-row">
       <div class="overview-row-main admin-row-name">
         <div class="admin-field-pack">
@@ -1267,15 +1331,25 @@ async function showDetail(code, e) {
     pList.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No participants have joined yet.</div>';
   } else {
     pList.innerHTML = '';
+    const assignments = s.assignments || {};
     parts.forEach(p => {
       const colors = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316'];
       const col = colors[Math.abs(hashStr(p.name||'')>>1) % colors.length];
       const isAdmin = p.role==='instructor' || p.role==='admin';
+      const assignedRole = assignments[p.name] || p.position || '';
+      const customRole = assignedRole && !LEARNER_POSITIONS.includes(assignedRole);
+      const roleOptions = LEARNER_POSITIONS.map(pos => `<option value="${escapeHtml(pos)}" ${pos===assignedRole?'selected':''}>${escapeHtml(pos)}</option>`).join('');
       const div = document.createElement('div');
       div.className = 'participant';
       div.innerHTML = `
         <div class="p-avatar" style="background:${col}22;color:${col}" title="${escapeHtml(p.name||'Unknown')}">${initialsOf(p.name)}</div>
         <div class="p-name" title="${escapeHtml(p.name||'Unknown')}">${escapeHtml(p.name||'Unknown')}</div>
+        <select class="participant-role-select" data-learner-name="${escapeHtml(p.name||'')}" onchange="toggleParticipantCustomRole(this)">
+          <option value="">Assign role</option>
+          ${roleOptions}
+          <option value="__custom" ${customRole?'selected':''}>Custom...</option>
+        </select>
+        <input class="participant-role-custom" data-role-custom-for="${escapeHtml(p.name||'')}" value="${customRole?escapeHtml(assignedRole):''}" placeholder="Custom role" ${customRole?'':'hidden'}>
         <span class="p-role ${isAdmin?'inst':'stud'}">${isAdmin?'ADMIN':'STU'}</span>
         ${p.joinedAt?`<div class="p-joined">${new Date(p.joinedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`:''}
         ${isSuper?`<button class="p-rename" title="Rename ${escapeHtml(p.name||'')}" aria-label="Rename ${escapeHtml(p.name||'')}" data-pname="${escapeHtml(p.name||'')}" onclick="renameParticipant(this.dataset.pname)">✎</button>`:''}
@@ -1510,29 +1584,18 @@ function getLearners(sessionDoc) {
 
 function renderLearnerAssignments(sessionDoc) {
   const wrap = document.getElementById('detail-assignments');
-  const learners = getLearners(sessionDoc);
-  const assignments = sessionDoc.assignments || {};
-  if (!learners.length) {
-    wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No learners have joined yet. Once they join, assign positions here.</div>';
-    return;
-  }
-  wrap.innerHTML = learners.map((p, i) => {
-    const name = p.name || `Learner ${i+1}`;
-    const current = assignments[name] || p.position || '';
-    const options = LEARNER_POSITIONS.map(pos => `<option value="${escapeHtml(pos)}" ${pos===current?'selected':''}>${escapeHtml(pos)}</option>`).join('');
-    const initial = initialsOf(name);
-    return `<div class="assignment-row">
-      <div class="assignment-person">
-        <div class="p-avatar" style="background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)" title="${escapeHtml(name)}">${initial}</div>
-        <div class="assignment-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-      </div>
-      <input class="assignment-position" list="position-options-${i}" data-learner-name="${escapeHtml(name)}" value="${escapeHtml(current)}" placeholder="Assign position">
-      <datalist id="position-options-${i}">${options}</datalist>
-    </div>`;
-  }).join('');
+  if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Assign each production role from the dropdown beside the person above. Choose Custom to type a new role.</div>';
 }
 
-async function saveDetailMetadata() {
+function toggleParticipantCustomRole(select) {
+  const name = select?.dataset?.learnerName || '';
+  const input = document.querySelector(`[data-role-custom-for="${CSS.escape(name)}"]`);
+  if (!input) return;
+  input.hidden = select.value !== '__custom';
+  if (!input.hidden) input.focus();
+}
+
+async function saveDetailMetadata(showToastOnSave=true) {
   if (!activeCode) return;
   const nextTitle = document.getElementById('detail-show-input').value.trim() || 'Untitled Show';
   const nextStart = document.getElementById('detail-start-input').value || '';
@@ -1551,7 +1614,7 @@ async function saveDetailMetadata() {
     renderSessions();
     updateStats();
     renderSuperOverview();
-    showToast('Session details updated');
+    if (showToastOnSave) showToast('Session details updated');
   } catch(e) {
     showToast('Update failed: ' + e.message);
   }
@@ -1559,12 +1622,13 @@ async function saveDetailMetadata() {
 
 function saveDetailTitle() { return saveDetailMetadata(); }
 
-async function saveLearnerAssignments() {
+async function saveLearnerAssignments(showToastOnSave=true) {
   if (!activeCode) return;
   const assignments = {};
-  document.querySelectorAll('[data-learner-name]').forEach(input => {
+  document.querySelectorAll('.participant-role-select[data-learner-name]').forEach(input => {
     const name = input.dataset.learnerName;
-    const position = input.value.trim();
+    const custom = document.querySelector(`[data-role-custom-for="${CSS.escape(name)}"]`)?.value?.trim() || '';
+    const position = input.value === '__custom' ? custom : input.value.trim();
     if (name && position) assignments[name] = position;
   });
   try {
@@ -1572,10 +1636,16 @@ async function saveLearnerAssignments() {
     const s = sessions.find(x=>(x.code||x.id)===activeCode);
     if (s) s.assignments = assignments;
     renderSuperOverview();
-    showToast('Learner positions saved');
+    if (showToastOnSave) showToast('Session roles saved');
   } catch(e) {
     showToast('Assignments failed: ' + e.message);
   }
+}
+
+async function saveSessionManagement() {
+  await saveDetailMetadata(false);
+  await saveLearnerAssignments(false);
+  showToast('Session saved');
 }
 
 function initialsOf(name) {
