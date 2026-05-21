@@ -565,6 +565,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .field-in:hover{border-color:color-mix(in srgb,var(--bord2) 60%,var(--text2))}
 .field-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--s2) 92%,var(--bg))}
 .field-in::placeholder{color:var(--text3);font-weight:400}
+.field-with-action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.field-with-action .field-in{min-width:0}
+.field-action-btn{height:100%;min-height:45px;border:1.5px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:11px;padding:0 13px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
+.field-action-btn:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--s2))}
+.field-action-btn.on{border-color:color-mix(in srgb,var(--accent) 65%,transparent);background:color-mix(in srgb,var(--accent) 18%,var(--s2));color:var(--text);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+.field-in:disabled{opacity:.72;color:var(--text2);cursor:not-allowed;background:color-mix(in srgb,var(--s2) 70%,var(--bg))}
 .field-hint{font-size:11px;color:var(--text3);line-height:1.5}
 .field-err{font-size:12px;color:var(--red);background:rgba(240,82,82,.08);border:1px solid rgba(240,82,82,.2);border-radius:7px;padding:9px 12px;display:none}
 .field-err.on{display:block}
@@ -1663,7 +1669,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date"></div>
         <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time"></div>
         <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="pp-show-start" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="pp-doors" type="time"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100"></div>
         <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160"></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120"></div>
@@ -1945,7 +1951,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260513a"></script>
+<script src="cueola-app.js?v=20260521a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

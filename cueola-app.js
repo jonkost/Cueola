@@ -5883,7 +5883,8 @@ function openPrePro() {
   document.getElementById('pp-date').value = data.date || '';
   document.getElementById('pp-call').value = data.call || show.start || '';
   document.getElementById('pp-show-start').value = data.showStart || show.start || '';
-  document.getElementById('pp-doors').value = data.doors || '';
+  setDoorsNotApplicable(data.doors === 'N/A');
+  document.getElementById('pp-doors').value = data.doors === 'N/A' ? '' : (data.doors || '');
   document.getElementById('pp-location').value = data.location || '';
   document.getElementById('pp-address').value = data.address || '';
   document.getElementById('pp-late').value = data.late || '';
@@ -5901,6 +5902,30 @@ function openPrePro() {
   showModal('preProModal');
 }
 
+function setDoorsNotApplicable(isNotApplicable) {
+  const input = document.getElementById('pp-doors');
+  const btn = document.getElementById('pp-doors-na');
+  if (!input || !btn) return;
+  input.disabled = Boolean(isNotApplicable);
+  if (isNotApplicable) input.value = '';
+  btn.classList.toggle('on', Boolean(isNotApplicable));
+  btn.setAttribute('aria-pressed', isNotApplicable ? 'true' : 'false');
+}
+
+function toggleDoorsNotApplicable() {
+  const btn = document.getElementById('pp-doors-na');
+  setDoorsNotApplicable(!(btn?.classList.contains('on')));
+}
+
+function getDoorsOpenValue() {
+  if (document.getElementById('pp-doors-na')?.classList.contains('on')) return 'N/A';
+  return document.getElementById('pp-doors')?.value || '';
+}
+
+window.setDoorsNotApplicable = setDoorsNotApplicable;
+window.toggleDoorsNotApplicable = toggleDoorsNotApplicable;
+window.getDoorsOpenValue = getDoorsOpenValue;
+
 function getPreProData() {
   syncCallSheetPeopleFromDOM();
   return {
@@ -5908,7 +5933,7 @@ function getPreProData() {
     date: document.getElementById('pp-date')?.value || '',
     call: document.getElementById('pp-call')?.value || '',
     showStart: document.getElementById('pp-show-start')?.value || '',
-    doors: document.getElementById('pp-doors')?.value || '',
+    doors: getDoorsOpenValue(),
     location: document.getElementById('pp-location')?.value?.trim() || '',
     address: document.getElementById('pp-address')?.value?.trim() || '',
     parking: document.getElementById('pp-parking')?.value?.trim() || '',
