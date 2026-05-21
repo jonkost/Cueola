@@ -166,6 +166,7 @@ function leaveSessionForFrontPage() {
   document.getElementById('liveshow')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('prompt-op-active');
   document.getElementById('promptypus')?.classList.remove('on');
+  document.getElementById('flowOp')?.classList.remove('on');
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
 }
@@ -1233,31 +1234,42 @@ function isLiveScriptPanelTarget(target) {
   return Boolean(target?.closest?.('#lsSidebar'));
 }
 
+function consumeRemoteKey(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
 function handleLiveRemoteKeydown(e) {
   const inPromptOp = promptOpMode && document.getElementById('liveshow')?.classList.contains('on');
   const inScriptPanel = isLiveScriptPanelTarget(e.target);
   if (!inPromptOp && !inScriptPanel) return false;
 
   if (inScriptPanel) {
-    if (e.key === 'ArrowUp')   { e.preventDefault(); if (!e.repeat) sendPrompterControl('boost_start'); return true; }
-    if (e.key === 'ArrowDown') { e.preventDefault(); if (!e.repeat) sendPrompterControl('brake_start'); return true; }
+    if (e.key === 'ArrowUp')    { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('boost_start'); return true; }
+    if (e.key === 'ArrowDown')  { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('brake_start'); return true; }
+    if (e.key === 'ArrowLeft')  { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_down'); return true; }
+    if (e.key === 'ArrowRight') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_up'); return true; }
     return false;
   }
 
-  if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); if (!e.repeat) sendPrompterControl('direction_reverse'); return true; }
-  if (e.key === 'ArrowUp' && e.altKey)   { e.preventDefault(); if (!e.repeat) sendPrompterControl('direction_forward'); return true; }
-  if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) return true;
+  if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('direction_reverse'); return true; }
+  if (e.key === 'ArrowUp' && e.altKey)   { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('direction_forward'); return true; }
+  if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
+    if (['ArrowLeft','ArrowRight',' ','Space','f','F','e','E','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
+    return true;
+  }
   switch (e.key) {
-    case ' ':          e.preventDefault(); sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true;
-    case 'ArrowUp':    e.preventDefault(); if (!e.repeat) sendPrompterControl('boost_start'); return true;
-    case 'ArrowDown':  e.preventDefault(); if (!e.repeat) sendPrompterControl('brake_start'); return true;
-    case 'ArrowLeft':  e.preventDefault(); if (!e.repeat) sendPrompterControl('size_down'); return true;
-    case 'ArrowRight': e.preventDefault(); if (!e.repeat) sendPrompterControl('size_up'); return true;
-    case 'f': case 'F': e.preventDefault(); if (!e.repeat) sendPrompterControl('fullscreen'); return true;
-    case 'e': case 'E': e.preventDefault(); if (!e.repeat) openLiveScript(Math.max(lsIdx,0)); return true;
-    case 'r': case 'R': e.preventDefault(); if (!e.repeat) sendPrompterControl('reset'); return true;
-    case 'h': case 'H': e.preventDefault(); if (!e.repeat) toggleLivePrompterPanel(); return true;
-    case 'm': case 'M': e.preventDefault(); if (!e.repeat) sendPrompterControl('mirror'); return true;
+    case ' ':
+    case 'Space':      consumeRemoteKey(e); sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true;
+    case 'ArrowUp':    consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('boost_start'); return true;
+    case 'ArrowDown':  consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('brake_start'); return true;
+    case 'ArrowLeft':  consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_down'); return true;
+    case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_up'); return true;
+    case 'f': case 'F': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('fullscreen'); return true;
+    case 'e': case 'E': consumeRemoteKey(e); if (!e.repeat) openLiveScript(Math.max(lsIdx,0)); return true;
+    case 'r': case 'R': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('reset'); return true;
+    case 'h': case 'H': consumeRemoteKey(e); if (!e.repeat) toggleLivePrompterPanel(); return true;
+    case 'm': case 'M': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('mirror'); return true;
     default: return false;
   }
 }
@@ -1266,8 +1278,9 @@ function handleLiveRemoteKeyup(e) {
   const liveOn = document.getElementById('liveshow')?.classList.contains('on');
   if (!liveOn) return;
   if (promptOpMode || isLiveScriptPanelTarget(e.target)) {
-    if (e.key === 'ArrowUp')   { e.preventDefault(); sendPrompterControl('boost_stop'); }
-    if (e.key === 'ArrowDown') { e.preventDefault(); sendPrompterControl('brake_stop'); }
+    if (e.key === 'ArrowUp')   { consumeRemoteKey(e); sendPrompterControl('boost_stop'); }
+    if (e.key === 'ArrowDown') { consumeRemoteKey(e); sendPrompterControl('brake_stop'); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') consumeRemoteKey(e);
   }
 }
 
@@ -3383,6 +3396,14 @@ let ptLinkedCueolaCode = '';
 let ptSeenPauseMarkers = new Set();
 let livePrompterDraftTimer = null;
 let livePrompterStatusTimer = null;
+let flowOpCode = '';
+let flowOpSub = null;
+let flowOpData = null;
+let flowOpPlaying = false;
+let flowOpReturnScreen = 'entry';
+let flowOpKeydownHandler = null;
+let flowOpKeyupHandler = null;
+let flowOpLastRemoteControlTs = 0;
 const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD)(?:[^\]]*)\]/i;
 
 const PT_THEMES = {
@@ -3543,12 +3564,14 @@ function ptScrollLoop(ts) {
 }
 
 function ptSyncPlayIcons(isPlaying) {
-  const btn = ptEl('pt-play-btn');
   const icon = ptEl('pt-play-icon');
-  if (btn) {
+  ['pt-play-btn', 'po-play-btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
     btn.innerHTML = `${isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
     btn.classList.toggle('active', isPlaying);
-  }
+  });
+  if (icon) icon.innerHTML = isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
 }
 
 function promptOpControlsHTML() {
@@ -3973,6 +3996,391 @@ function ptHandleRemoteControl(action) {
   }
 }
 
+function flowOpEl(id) {
+  return document.getElementById(id);
+}
+
+function flowOpSetStatus(text, isError=false) {
+  const el = flowOpEl('flowOpStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isError ? '#f05252' : '';
+}
+
+function flowOpSetSpeed(val) {
+  ptTargetSpeed = Math.max(5, Math.min(200, parseFloat(val) || 60));
+  ptLiveSpeed = ptTargetSpeed;
+}
+
+function flowOpSetSize(val) {
+  ptFontSize = Math.max(24, Math.min(120, parseInt(val) || 52));
+  flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
+}
+
+function flowOpSetAlign(a) {
+  ptAlign = ['left','center','right'].includes(a) ? a : 'center';
+  flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
+}
+
+function flowOpSetTheme(name) {
+  name = normalizeCueolaTheme(name);
+  const t = PT_THEMES[name];
+  const screen = flowOpEl('flowOp');
+  if (!screen || !t) return;
+  ptThemeName = name;
+  screen.dataset.ptTheme = name;
+  screen.style.setProperty('--pt-bg', t.bg);
+  screen.style.setProperty('--pt-text', t.text);
+  screen.style.setProperty('--pt-accent', t.accent);
+  screen.style.setProperty('--pt-ui-bg', t.uiBg);
+  screen.style.setProperty('--pt-ui-border', t.uiBorder);
+  screen.style.background = name === 'flamingo'
+    ? 'linear-gradient(135deg,#330512 0%,#411b48 50%,#3b1429 100%)'
+    : name === 'koala'
+      ? 'linear-gradient(135deg,#1f1f1e 0%,#262626 50%,#404040 100%)'
+      : name === 'panda'
+        ? 'linear-gradient(135deg,#000000 0%,#1e1e1e 50%,#000000 100%)'
+        : name === 'prepbear'
+          ? 'linear-gradient(135deg,#080912 0%,#14172a 50%,#2f357c 100%)'
+          : t.bg;
+  try { localStorage.setItem('promptypus_theme', name); } catch {}
+}
+
+function flowOpControlLabel(action) {
+  const labels = {
+    pause:'Pause', resume:'Play', speed_up:'Faster', speed_down:'Slower',
+    size_up:'Bigger text', size_down:'Smaller text', reset:'Reset',
+    align_left:'Left', align_center:'Center', align_right:'Right',
+    mirror:'Mirror talent', fullscreen:'Talent fullscreen',
+    direction_reverse:'Reverse', direction_forward:'Forward',
+    brake_start:'Brake', brake_stop:'Brake release',
+    boost_start:'Boost', boost_stop:'Boost release'
+  };
+  if (action?.startsWith('theme_')) return `${CUEOLA_THEME_LABELS[action.replace('theme_', '')] || 'Theme'} theme`;
+  if (action?.startsWith('speed_set_')) return `Speed ${action.replace('speed_set_', '')}`;
+  if (action?.startsWith('size_set_')) return `Size ${action.replace('size_set_', '')}`;
+  return labels[action] || action || 'Control';
+}
+
+function flowOpApplyControlPreview(action, quiet=false) {
+  if (!action) return;
+  if (action.startsWith('speed_set_')) {
+    flowOpSetSpeed(action.replace('speed_set_', ''));
+  } else if (action.startsWith('size_set_')) {
+    flowOpSetSize(action.replace('size_set_', ''));
+  } else if (action.startsWith('theme_')) {
+    flowOpSetTheme(action.replace('theme_', ''));
+  } else {
+    switch (action) {
+      case 'pause': flowOpPlaying = false; break;
+      case 'resume': flowOpPlaying = true; break;
+      case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
+      case 'speed_down': flowOpSetSpeed(ptTargetSpeed - 10); break;
+      case 'size_up': flowOpSetSize(ptFontSize + 4); break;
+      case 'size_down': flowOpSetSize(ptFontSize - 4); break;
+      case 'align_left': flowOpSetAlign('left'); break;
+      case 'align_center': flowOpSetAlign('center'); break;
+      case 'align_right': flowOpSetAlign('right'); break;
+      case 'direction_reverse': ptReversing = true; break;
+      case 'direction_forward': ptReversing = false; break;
+      case 'brake_start': ptBraking = true; break;
+      case 'brake_stop': ptBraking = false; break;
+      case 'boost_start': ptBoosting = true; break;
+      case 'boost_stop': ptBoosting = false; break;
+      default: break;
+    }
+  }
+  flowOpSyncControls();
+  if (!quiet && !action.endsWith('_stop') && !action.includes('_set_')) {
+    flowOpSetStatus(`${flowOpControlLabel(action)} sent`);
+  }
+}
+
+function flowOpControlsHTML(disabled=false) {
+  const dis = disabled ? ' disabled' : '';
+  const playAction = flowOpPlaying ? 'pause' : 'resume';
+  const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
+  const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
+  return `<div class="flowop-controls">
+    <div class="pt-ctrl-group">
+      <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')"${dis}>${playIcon} ${playLabel}</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Speed</span>
+      <button class="pt-btn" onclick="flowOpSendControl('speed_down')"${dis}>−</button>
+      <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true)"${dis}>
+      <button class="pt-btn" onclick="flowOpSendControl('speed_up')"${dis}>+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Size</span>
+      <button class="pt-btn" onclick="flowOpSendControl('size_down')"${dis}>−</button>
+      <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true)"${dis}>
+      <button class="pt-btn" onclick="flowOpSendControl('size_up')"${dis}>+</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Align</span>
+      <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+    </div>
+    <div class="pt-ctrl-group">
+      <span class="pt-ctrl-label">Theme</span>
+      ${CUEOLA_THEMES.map(name => `<button type="button" class="flowop-theme-dot${ptThemeName===name?' active':''}" data-flowop-theme="${name}" style="background:${PT_THEMES[name].bg}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"${dis}></button>`).join('')}
+    </div>
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')"${dis}>Brake</button>
+      <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')"${dis}>Boost</button>
+      <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
+      <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
+    </div>
+    <div class="pt-ctrl-group">
+      <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
+      <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
+      <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
+      <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
+    </div>
+  </div>`;
+}
+
+function flowOpRenderControls(disabled=false) {
+  const el = flowOpEl('flowOpControls');
+  if (el) el.innerHTML = flowOpControlsHTML(disabled);
+  flowOpSyncControls();
+}
+
+function flowOpSyncControls() {
+  const playBtn = flowOpEl('flowOpPlayBtn');
+  if (playBtn) {
+    playBtn.innerHTML = `${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${flowOpPlaying ? 'PAUSE' : 'PLAY'}`;
+    playBtn.classList.toggle('active', flowOpPlaying);
+    playBtn.setAttribute('onclick', `flowOpSendControl('${flowOpPlaying ? 'pause' : 'resume'}')`);
+  }
+  const speed = flowOpEl('flowOpSpeedRange');
+  if (speed) speed.value = ptTargetSpeed;
+  const size = flowOpEl('flowOpSizeRange');
+  if (size) size.value = ptFontSize;
+  document.querySelectorAll('[data-flowop-align]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
+  });
+  document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
+  });
+}
+
+function flowOpRenderSession(data=null) {
+  const titleEl = flowOpEl('flowOpTitle');
+  const meta = flowOpEl('flowOpSessionMeta');
+  const preview = flowOpEl('flowOpScriptPreview');
+  if (!data) {
+    if (titleEl) titleEl.textContent = 'Flowmingo Op';
+    if (meta) meta.innerHTML = `<div class="flowop-session-title">No session loaded</div><div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>`;
+    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a session code to control Flowmingo remotely.</div>`;
+    return;
+  }
+  const showName = data.show?.name || data.showName || data.name || 'Untitled Show';
+  const beatsInSession = Array.isArray(data.beats) ? data.beats.map(migrateBeat) : [];
+  const activeIdx = Number.isFinite(data.prompter?.activeIdx) ? data.prompter.activeIdx : 0;
+  const cur = data.prompter?.currentRow || beatsInSession[activeIdx] || null;
+  const next = data.prompter?.nextRow || beatsInSession[activeIdx + 1] || null;
+  const text = ptAssembleCueolaScript(data);
+  if (titleEl) titleEl.textContent = showName;
+  if (preview) {
+    preview.innerHTML = text.trim()
+      ? ptSanitizeHTML(ptPlainTextToHTML(text))
+      : `<div class="flowop-empty">This session has no Flowmingo script yet.</div>`;
+  }
+  if (meta) {
+    meta.innerHTML = `
+      <div class="flowop-session-title">${esc(showName)}</div>
+      <div class="flowop-meta" style="margin-top:10px">
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Code</div><div class="flowop-meta-value">${esc(flowOpCode || '—')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Rows</div><div class="flowop-meta-value">${beatsInSession.length || '—'}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Now</div><div class="flowop-meta-value">${esc(cur?.name || cur?.info || '—')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Next</div><div class="flowop-meta-value">${esc(next?.name || next?.info || '—')}</div></div>
+      </div>`;
+  }
+}
+
+function flowOpLoadSession(codeOverride='') {
+  const input = flowOpEl('flowOpCodeInput');
+  const code = (codeOverride || input?.value || '').trim().toUpperCase();
+  const btn = flowOpEl('flowOpLoadBtn');
+  if (!code) {
+    flowOpSetStatus('Enter a code', true);
+    input?.focus();
+    return;
+  }
+  if (input) input.value = code;
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  flowOpCode = '';
+  flowOpRenderControls(true);
+  flowOpSetStatus('Loading...');
+  const load = () => {
+    try {
+      if (flowOpSub) { flowOpSub(); flowOpSub = null; }
+      flowOpSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
+        if (!snap.exists()) {
+          flowOpCode = '';
+          flowOpData = null;
+          flowOpRenderSession(null);
+          flowOpRenderControls(true);
+          flowOpSetStatus('Not found', true);
+          if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+          return;
+        }
+        flowOpCode = code;
+        ptLinkedCueolaCode = code;
+        flowOpData = snap.data() || {};
+        flowOpRenderSession(flowOpData);
+        flowOpRenderControls(false);
+        flowOpSetStatus(`READY · ${code}`);
+        const control = flowOpData.prompter?.control;
+        if (control?.ts && control.ts > flowOpLastRemoteControlTs && control.sender !== CLIENT_ID) {
+          flowOpLastRemoteControlTs = control.ts;
+          flowOpApplyControlPreview(control.action, true);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+      }, () => {
+        flowOpCode = '';
+        flowOpSetStatus('Error', true);
+        flowOpRenderControls(true);
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+      });
+    } catch {
+      flowOpCode = '';
+      flowOpSetStatus('Error', true);
+      flowOpRenderControls(true);
+      if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+    }
+  };
+  if (window._firebaseReady) load();
+  else window.addEventListener('firebaseReady', load, { once:true });
+}
+
+function flowOpStopListening() {
+  if (flowOpSub) {
+    try { flowOpSub(); } catch {}
+    flowOpSub = null;
+  }
+}
+
+function flowOpSendControl(action, quiet=false) {
+  if (!flowOpCode) {
+    flowOpSetStatus('Load a session first', true);
+    flowOpEl('flowOpCodeInput')?.focus();
+    return;
+  }
+  const ts = Date.now();
+  _postPrompterMessage({ type:'prompter_control', action, ts });
+  flowOpApplyControlPreview(action, quiet);
+  if (!window._firebaseReady) {
+    flowOpSetStatus('Local only · not connected', true);
+    return;
+  }
+  window._updateDoc(window._doc(window._db, 'sessions', flowOpCode), {
+    'prompter.control': { action, ts, sender:CLIENT_ID, source:'flowmingo-op' },
+    'prompter.updatedAt': ts
+  }).catch(() => flowOpSetStatus('Send failed', true));
+}
+
+function flowOpReleaseHoldKeys() {
+  if (!flowOpCode) return;
+  if (ptBraking) flowOpSendControl('brake_stop', true);
+  if (ptBoosting) flowOpSendControl('boost_stop', true);
+  ptBraking = false;
+  ptBoosting = false;
+}
+
+function flowOpBindKeys() {
+  if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
+  if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
+  flowOpKeydownHandler = e => {
+    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
+    if (isTextEditingTarget(e.target)) return;
+    if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
+    if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
+    if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
+      if (['ArrowLeft','ArrowRight',' ','Space','f','F','r','R','m','M'].includes(e.key)) consumeRemoteKey(e);
+      return;
+    }
+    switch (e.key) {
+      case ' ':
+      case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
+      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('boost_start'); break;
+      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('brake_start'); break;
+      case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
+      case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
+      case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
+      case 'r': case 'R': consumeRemoteKey(e); flowOpSendControl('reset'); break;
+      case 'm': case 'M': consumeRemoteKey(e); flowOpSendControl('mirror'); break;
+      case 'Escape': exitFlowmingoOperator(); break;
+    }
+  };
+  flowOpKeyupHandler = e => {
+    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
+    if (e.key === 'ArrowUp') { consumeRemoteKey(e); flowOpSendControl('boost_stop', true); }
+    if (e.key === 'ArrowDown') { consumeRemoteKey(e); flowOpSendControl('brake_stop', true); }
+  };
+  document.addEventListener('keydown', flowOpKeydownHandler);
+  document.addEventListener('keyup', flowOpKeyupHandler);
+}
+
+function openFlowmingoOperator(codeOverride='') {
+  flowOpReturnScreen = document.getElementById('promptypus')?.classList.contains('on') ? 'promptypus'
+    : document.getElementById('rundown')?.classList.contains('on') ? 'rundown'
+      : document.getElementById('liveshow')?.classList.contains('on') ? 'live'
+        : 'entry';
+  ptStopPlay();
+  ptCloseEdit();
+  ['entry','rundown','liveshow','promptypus'].forEach(id => document.getElementById(id)?.classList.remove('on'));
+  flowOpEl('flowOp')?.classList.add('on');
+  sessionStorage.setItem('cueola_screen', 'flowop');
+  pushSessionHistoryState('flowop');
+  flowOpSetTheme(ptThemeName);
+  flowOpSetAlign(ptAlign);
+  flowOpSetSize(ptFontSize);
+  flowOpRenderSession(flowOpData);
+  flowOpRenderControls(!flowOpCode);
+  flowOpBindKeys();
+  const code = (codeOverride || flowOpCode || ptLinkedCueolaCode || '').trim().toUpperCase();
+  const input = flowOpEl('flowOpCodeInput');
+  if (input) input.value = code;
+  if (code) flowOpLoadSession(code);
+  else setTimeout(() => input?.focus(), 50);
+}
+
+function exitFlowmingoOperator() {
+  flowOpReleaseHoldKeys();
+  flowOpStopListening();
+  flowOpEl('flowOp')?.classList.remove('on');
+  if (flowOpReturnScreen === 'promptypus') {
+    enterPrompter();
+  } else if (flowOpReturnScreen === 'live') {
+    document.getElementById('liveshow')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'live');
+  } else if (flowOpReturnScreen === 'rundown') {
+    document.getElementById('rundown')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'build');
+  } else {
+    document.getElementById('entry')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'entry');
+  }
+}
+
+function openPrompterFromFlowOp() {
+  const code = (flowOpCode || flowOpEl('flowOpCodeInput')?.value || '').trim().toUpperCase();
+  flowOpReleaseHoldKeys();
+  flowOpStopListening();
+  flowOpEl('flowOp')?.classList.remove('on');
+  sessionStorage.setItem('cueola_screen', 'entry');
+  enterPrompter();
+  if (code) {
+    const input = ptEl('pt-cueola-code-input');
+    if (input) input.value = code;
+    ptLoadFromCueolaCode(code);
+  }
+}
+
 function ptOpenEdit() {
   ptStopPlay();
   const ta = ptEl('pt-script-input');
@@ -4021,10 +4429,12 @@ function ptAssembleCueolaScript(data) {
   return assemblePrompterScriptFromBeats((data?.beats || []).map(migrateBeat));
 }
 
-function ptLoadFromCueolaCode() {
-  const code = ptEl('pt-cueola-code-input')?.value.trim().toUpperCase();
+function ptLoadFromCueolaCode(codeOverride='') {
+  const codeIn = ptEl('pt-cueola-code-input');
+  const code = (codeOverride || codeIn?.value || '').trim().toUpperCase();
   const btn = ptEl('pt-cueola-load-btn');
   if (!code) return;
+  if (codeIn) codeIn.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   ptSetCueolaStatus('Loading...');
   let loadedOnce = false;
@@ -4244,7 +4654,7 @@ function renderLivePromptOp() {
   const next = beats[lsIdx + 1] || null;
   const sd   = cur?.cues?.script;
   const script = cleanPrompterText((prompterText && prompterText.trim()) || sd?.text || '');
-  body.innerHTML = `<div class="prompt-op-stage">
+  body.innerHTML = `<div class="prompt-op-stage" tabindex="0" aria-label="Flowmingo operator controls">
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
     <div class="prompt-op-track">
@@ -4252,6 +4662,7 @@ function renderLivePromptOp() {
     </div>
     ${promptOpControlsHTML()}
   </div>`;
+  requestAnimationFrame(() => body.querySelector('.prompt-op-stage')?.focus({ preventScroll:true }));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -4374,7 +4785,7 @@ window.showModal = function(id) {
 // ─────────────────────────────────────────────────────────────
 const PAPERWORK_ITEMS = [
   { order:1, id:'call-sheet', title:'Call Sheet', sub:'Production details, crew, talent, location, and schedule.' },
-  { order:2, id:'production-scheduler', title:'Production Scheduler', sub:'PM and ENG setup timing, readiness checklist, and expectations.' },
+  { order:2, id:'production-scheduler', title:'Production Scheduler', sub:'PM and ENG setup timing, and a crew-authored readiness checklist.' },
   { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safety locations, weather, and equipment.' },
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
@@ -4394,6 +4805,8 @@ const PRODUCTION_CHECKLIST_GUIDES = [
   { area:'Final go/no-go', hint:'What last confirmation tells the team the show can begin?' },
 ];
 let activePatchKind = '';
+let activePaperworkItemId = '';
+let plandaBearComments = [];
 
 function preProKey() {
   return `cueola_prepro_${session.code || session.userName || 'local'}`;
@@ -4442,6 +4855,79 @@ async function hydratePreProFromFirestore() {
   } catch {}
 }
 
+function paperworkItemIndex(id) {
+  return PAPERWORK_ITEMS.findIndex(item => item.id === id);
+}
+
+function currentPaperworkItemId() {
+  if (document.getElementById('preProModal')?.classList.contains('on')) return 'call-sheet';
+  if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
+  if (document.getElementById('safetyPlanModal')?.classList.contains('on')) return 'safety-plan';
+  if (document.getElementById('patchSheetModal')?.classList.contains('on')) return activePatchKind === 'video' ? 'video-patch' : 'audio-comms-patch';
+  return activePaperworkItemId || 'call-sheet';
+}
+
+function hidePaperworkEditors() {
+  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal'].forEach(hideModal);
+}
+
+function previewPaperworkItem(id=currentPaperworkItemId()) {
+  if (id === 'call-sheet') return showCallSheetPreview();
+  if (id === 'production-scheduler') return showProductionSchedulePreview();
+  if (id === 'safety-plan') return showSafetyPlanPreview();
+  if (id === 'rundown') return showRundownPaperPreview();
+  if (id === 'video-patch') return showPatchSheetPaperPreview('video');
+  if (id === 'audio-comms-patch') return showPatchSheetPaperPreview('audio-comms');
+}
+
+function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
+  if (id === 'call-sheet') return saveCallSheet(showToastOnSave);
+  if (id === 'production-scheduler') return saveProductionSchedule(showToastOnSave);
+  if (id === 'safety-plan') return saveSafetyPlan(showToastOnSave);
+  if (id === 'video-patch' || id === 'audio-comms-patch') return savePatchSheet(showToastOnSave);
+  if (showToastOnSave) toast('Rundown is already part of the package.');
+}
+
+function renderPaperworkNav(id, slotId='') {
+  const idx = paperworkItemIndex(id);
+  const item = PAPERWORK_ITEMS[idx] || PAPERWORK_ITEMS[0];
+  const slotMap = {
+    'call-sheet':'pbNavCallSheet',
+    'production-scheduler':'pbNavProduction',
+    'safety-plan':'pbNavSafety',
+    'video-patch':'pbNavPatch',
+    'audio-comms-patch':'pbNavPatch',
+  };
+  const slot = document.getElementById(slotId || slotMap[id]);
+  if (!slot || !item) return;
+  slot.hidden = false;
+  const isFirst = idx <= 0;
+  const isLast = idx >= PAPERWORK_ITEMS.length - 1;
+  const saveButton = id === 'rundown' ? '' : `<button type="button" class="save" onclick="savePaperworkItem('${item.id}',true)">Save Progress</button>`;
+  const previewButton = slotId === 'pbNavPreview' ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
+  slot.innerHTML = `
+    <div class="paperwork-flow-left">
+      <button type="button" onclick="returnToPaperworkHub()">Back to Planda Bear</button>
+      <button type="button" onclick="openPaperworkRelative(-1)" ${isFirst ? 'disabled' : ''}>Previous</button>
+    </div>
+    <div class="pb-step-pill">Step ${item.order} of ${PAPERWORK_ITEMS.length}</div>
+    <div class="paperwork-flow-right">
+      ${saveButton}
+      ${previewButton}
+      <button type="button" class="primary" onclick="openPaperworkRelative(1)">${isLast ? 'Finish' : 'Next'}</button>
+    </div>`;
+}
+
+function openPaperworkRelative(delta) {
+  const current = currentPaperworkItemId();
+  savePaperworkItem(current, false);
+  const idx = paperworkItemIndex(current);
+  const nextIdx = idx + delta;
+  if (nextIdx < 0 || nextIdx >= PAPERWORK_ITEMS.length) return returnToPaperworkHub();
+  hidePaperworkEditors();
+  openPaperworkItem(PAPERWORK_ITEMS[nextIdx].id);
+}
+
 function openPaperworkHub() {
   if (!session.code && !session.isDemo && !session.isExpert) {
     showModal('modal-prepro-join');
@@ -4452,13 +4938,16 @@ function openPaperworkHub() {
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
     grid.innerHTML = PAPERWORK_ITEMS.map(item => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
-      <div class="paperwork-card-num">Item ${item.order}</div>
-      <div class="paperwork-card-title">${esc(item.title)}</div>
-      <div class="paperwork-card-sub">${esc(item.sub)}</div>
+      <div class="paperwork-card-num">${item.order}</div>
+      <div>
+        <div class="paperwork-card-title">${esc(item.title)}</div>
+        <div class="paperwork-card-sub">${esc(item.sub)}</div>
+      </div>
       <div class="paperwork-card-by" data-pb-by hidden></div>
     </button>`).join('');
   }
   showModal('paperworkHubModal');
+  renderPlandaBearComments('All', 'pbCommentsHub');
   renderPlandaBearHubActivity();
 }
 
@@ -4466,6 +4955,7 @@ const PB_SECTION_FOR_ITEM = {
   'call-sheet':'Call Sheet',
   'production-scheduler':'Production Scheduler',
   'safety-plan':'Safety Plan',
+  'rundown':'Full Rendered Rundown',
   'video-patch':'Video Patch',
   'audio-comms-patch':'Audio & Comms Patch',
 };
@@ -4481,6 +4971,237 @@ function pbAgo(ts) {
   const d = Math.floor(h/24);
   if (d < 7) return d + 'd ago';
   return new Date(ts).toLocaleDateString([], { month:'short', day:'numeric' });
+}
+
+function pbCommentsKey() {
+  return `cueola_pb_comments_${session.code || session.userName || 'local'}`;
+}
+
+function pbIsInstructor() {
+  return session.role === 'instructor' || Boolean(adminSession);
+}
+
+function pbReviewerId() {
+  return CLIENT_ID;
+}
+
+function pbSectionLabel(idOrSection='Overall') {
+  return PB_SECTION_FOR_ITEM[idOrSection] || idOrSection || 'Overall';
+}
+
+function normalizePlandaBearComment(c) {
+  return {
+    id: c?.id || `pbc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    section: pbSectionLabel(c?.section || 'Overall'),
+    text: String(c?.text || '').trim(),
+    by: c?.by || 'Instructor',
+    at: c?.at || Date.now(),
+    clientId: c?.clientId || '',
+    reviewedBy: Array.isArray(c?.reviewedBy) ? c.reviewedBy : [],
+  };
+}
+
+function localPlandaBearComments() {
+  try {
+    return JSON.parse(localStorage.getItem(pbCommentsKey()) || '[]').map(normalizePlandaBearComment).filter(c => c.text);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalPlandaBearComments(comments=plandaBearComments) {
+  try { localStorage.setItem(pbCommentsKey(), JSON.stringify(comments)); } catch {}
+}
+
+async function loadPlandaBearComments() {
+  if (!session.code || session.isDemo || session.isExpert || !window._firebaseReady) {
+    plandaBearComments = localPlandaBearComments();
+    return plandaBearComments;
+  }
+  try {
+    const snap = await window._getDoc(window._doc(window._db, 'sessions', session.code));
+    const raw = snap.exists() && Array.isArray(snap.data().preProComments) ? snap.data().preProComments : [];
+    plandaBearComments = raw.map(normalizePlandaBearComment).filter(c => c.text);
+    saveLocalPlandaBearComments(plandaBearComments);
+  } catch {
+    plandaBearComments = localPlandaBearComments();
+  }
+  return plandaBearComments;
+}
+
+async function writePlandaBearComments(comments, activitySection='Instructor Comment') {
+  plandaBearComments = comments.map(normalizePlandaBearComment).filter(c => c.text);
+  saveLocalPlandaBearComments(plandaBearComments);
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  const ref = window._doc(window._db, 'sessions', session.code);
+  window._updateDoc(ref, { preProComments: plandaBearComments }).catch(()=>{});
+  if (activitySection && window._arrayUnion) {
+    const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+  }
+}
+
+function plandaBearCommentApplies(comment, section) {
+  if (section === 'All') return true;
+  return comment.section === section || comment.section === 'Overall';
+}
+
+function plandaBearCommentReviewed(comment) {
+  const reviewer = pbReviewerId();
+  const actor = preProActor();
+  return (comment.reviewedBy || []).some(r => r?.clientId === reviewer || (r?.name && r.name === actor));
+}
+
+function visiblePlandaBearCommentSlots() {
+  return [
+    ['All', 'pbCommentsHub'],
+    [pbSectionLabel(activePaperworkItemId), 'pbCommentsPreview'],
+    ['Call Sheet', 'pbCommentsCallSheet'],
+    ['Production Scheduler', 'pbCommentsProduction'],
+    ['Safety Plan', 'pbCommentsSafety'],
+    [activePatchKind === 'video' ? 'Video Patch' : 'Audio & Comms Patch', 'pbCommentsPatch'],
+  ].filter(([,slot]) => document.getElementById(slot));
+}
+
+function rerenderVisiblePlandaBearComments() {
+  visiblePlandaBearCommentSlots().forEach(([section, slot]) => renderPlandaBearComments(section, slot, false));
+  annotatePlandaBearCommentCards();
+}
+
+function plandaBearCommentSectionOptions(selected='Overall') {
+  const sections = ['Overall', ...PAPERWORK_ITEMS.map(item => pbSectionLabel(item.id))];
+  return sections.map(section => `<option value="${esc(section)}" ${section === selected ? 'selected' : ''}>${esc(section)}</option>`).join('');
+}
+
+async function addPlandaBearComment(section, slotId) {
+  if (!pbIsInstructor()) {
+    toast('Only instructors can add Planda Bear comments.');
+    return;
+  }
+  const scope = slotId || 'pbCommentsHub';
+  const input = document.getElementById(`${scope}-input`);
+  const select = document.getElementById(`${scope}-section`);
+  const text = input?.value.trim() || '';
+  const commentSection = pbSectionLabel(select?.value || section || 'Overall');
+  if (!text) {
+    input?.focus();
+    return;
+  }
+  await loadPlandaBearComments();
+  const comment = normalizePlandaBearComment({
+    id:`pbc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    section:commentSection,
+    text,
+    by:preProActor(),
+    at:Date.now(),
+    clientId:CLIENT_ID,
+    reviewedBy:[],
+  });
+  await writePlandaBearComments([comment, ...plandaBearComments], `Comment: ${commentSection}`);
+  if (input) input.value = '';
+  toast('Instructor comment added.');
+  rerenderVisiblePlandaBearComments();
+  renderPlandaBearHubActivity();
+}
+
+async function markPlandaBearCommentReviewed(id) {
+  await loadPlandaBearComments();
+  const next = plandaBearComments.map(comment => {
+    if (comment.id !== id || plandaBearCommentReviewed(comment)) return comment;
+    return {
+      ...comment,
+      reviewedBy:[...(comment.reviewedBy || []), { name:preProActor(), clientId:CLIENT_ID, at:Date.now() }],
+    };
+  });
+  await writePlandaBearComments(next, 'Reviewed Instructor Comment');
+  toast('Comment marked reviewed.');
+  rerenderVisiblePlandaBearComments();
+}
+
+async function deletePlandaBearComment(id) {
+  if (!pbIsInstructor()) return;
+  await loadPlandaBearComments();
+  const comment = plandaBearComments.find(c => c.id === id);
+  await writePlandaBearComments(plandaBearComments.filter(c => c.id !== id), comment ? `Removed Comment: ${comment.section}` : 'Removed Comment');
+  toast('Instructor comment removed.');
+  rerenderVisiblePlandaBearComments();
+  renderPlandaBearHubActivity();
+}
+
+function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldLoad=true) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const doRender = () => {
+    const targetSection = pbSectionLabel(section);
+    const comments = plandaBearComments
+      .filter(comment => plandaBearCommentApplies(comment, targetSection))
+      .sort((a,b)=>(b.at||0)-(a.at||0));
+    const canComment = pbIsInstructor();
+    const addSection = targetSection === 'All' ? 'Overall' : targetSection;
+    const sectionSelect = targetSection === 'All'
+      ? `<select class="field-in" id="${slotId}-section" aria-label="Comment section">${plandaBearCommentSectionOptions('Overall')}</select>`
+      : `<input type="hidden" id="${slotId}-section" value="${esc(addSection)}">`;
+    const studentCopy = comments.length
+      ? 'Review instructor feedback and mark comments reviewed after you have made changes or talked through the note.'
+      : 'No instructor comments yet.';
+    const instructorCopy = 'Leave feedback for students without changing their paperwork.';
+    slot.innerHTML = `<div class="pb-comments" data-pb-comments-for="${esc(targetSection)}">
+      <div class="pb-comments-head">
+        <div>
+          <div class="pb-comments-title">Instructor Comments</div>
+          <div class="pb-comments-sub">${canComment ? instructorCopy : studentCopy}</div>
+        </div>
+        <div class="pb-comments-count">${comments.length} note${comments.length===1?'':'s'}</div>
+      </div>
+      <div class="pb-comment-list">
+        ${comments.length ? comments.map(comment => {
+          const reviewed = plandaBearCommentReviewed(comment);
+          const reviewedCount = (comment.reviewedBy || []).length;
+          return `<div class="pb-comment-card">
+            <div class="pb-comment-meta">
+              <span class="pb-comment-section">${esc(comment.section)}</span>
+              <span>by ${esc(comment.by || 'Instructor')}</span>
+              <span>${pbAgo(comment.at)}</span>
+              ${reviewedCount ? `<span>${reviewedCount} reviewed</span>` : ''}
+            </div>
+            <div class="pb-comment-text">${esc(comment.text)}</div>
+            <div class="pb-comment-actions">
+              ${!canComment ? (reviewed
+                ? '<span class="pb-comment-reviewed">Reviewed by you</span>'
+                : `<button type="button" class="pb-comment-review" onclick="markPlandaBearCommentReviewed('${esc(comment.id)}')">Mark reviewed</button>`) : ''}
+              ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Remove</button>` : ''}
+            </div>
+          </div>`;
+        }).join('') : `<div class="pb-comment-empty">${canComment ? 'No comments yet. Add one for students when you review this work.' : 'No instructor comments have been added for this section.'}</div>`}
+      </div>
+      ${canComment ? `<div class="pb-comment-form">
+        ${sectionSelect}
+        <textarea class="field-in" id="${slotId}-input" rows="2" placeholder="Add a comment for students to review..."></textarea>
+        <button type="button" class="pb-comment-add" onclick="addPlandaBearComment('${esc(addSection)}','${esc(slotId)}')">Add Comment</button>
+      </div>` : ''}
+    </div>`;
+    annotatePlandaBearCommentCards();
+  };
+  if (shouldLoad) loadPlandaBearComments().then(doRender);
+  else doRender();
+}
+
+function annotatePlandaBearCommentCards() {
+  const cards = document.querySelectorAll('#paperworkGrid [data-pb-section]');
+  if (!cards.length) return;
+  cards.forEach(card => {
+    const section = card.getAttribute('data-pb-section');
+    let badge = card.querySelector('[data-pb-comments]');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.dataset.pbComments = '';
+      badge.className = 'paperwork-card-comments';
+      card.appendChild(badge);
+    }
+    const count = plandaBearComments.filter(comment => comment.section === section).length;
+    badge.classList.toggle('on', count > 0);
+    badge.textContent = count ? `${count} instructor note${count===1?'':'s'}` : '';
+  });
 }
 
 function togglePbHub(head) {
@@ -4552,6 +5273,7 @@ async function renderPlandaBearHubActivity() {
 }
 
 function openPaperworkItem(id) {
+  activePaperworkItemId = id;
   if (id === 'call-sheet') return openPrePro();
   if (id === 'production-scheduler') return openProductionSchedule();
   if (id === 'safety-plan') return openSafetyPlan();
@@ -4562,7 +5284,7 @@ function openPaperworkItem(id) {
 
 function returnToPaperworkHub() {
   saveOpenPaperworkSection(false);
-  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal'].forEach(hideModal);
+  hidePaperworkEditors();
   openPaperworkHub();
 }
 
@@ -4573,28 +5295,36 @@ function saveOpenPaperworkSection(showToastOnSave=true) {
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(showToastOnSave);
 }
 
-function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')") {
+function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')", flowId=null) {
   document.getElementById('paperPreviewTitle').textContent = title;
   document.getElementById('paperPreviewBody').innerHTML = html;
   const primary = document.getElementById('paperPreviewPrimary');
   primary.textContent = primaryLabel;
   primary.setAttribute('onclick', primaryAction);
+  const previewNav = document.getElementById('pbNavPreview');
+  if (previewNav) {
+    previewNav.hidden = !flowId;
+    if (flowId) renderPaperworkNav(flowId, 'pbNavPreview');
+    else previewNav.innerHTML = '';
+  }
   hideModal('paperworkHubModal');
   hideModal('preProModal');
   hideModal('productionScheduleModal');
   hideModal('safetyPlanModal');
   hideModal('patchSheetModal');
   showModal('paperPreviewModal');
+  renderPlandaBearComments(flowId ? pbSectionLabel(flowId) : 'All', 'pbCommentsPreview');
 }
 
 function showRundownPaperPreview() {
+  activePaperworkItemId = 'rundown';
   let offsetSecs = 0;
   showPaperPreview('Rundown Planda Bear Preview', `
     <h1>${esc(show.name || 'Cueola Rundown')}</h1>
-    <div>Item 3 · Full rendered rundown</div>
+    <div>Item 4 · Full rendered rundown</div>
     <h2>Rundown</h2>
     ${rundownPreviewTableHTML()}
-  `, 'Download Rundown PDF', 'exportPDF()');
+  `, 'Download Rundown PDF', 'exportPDF()', 'rundown');
 }
 
 function rundownPreviewTableHTML() {
@@ -4630,7 +5360,7 @@ function showCallSheetPreview() {
   saveCallSheet(false);
   showPaperPreview('Call Sheet Preview', `
     ${callSheetPreviewHTML(data)}
-  `, 'Back to Editor', "hideModal('paperPreviewModal');openPrePro()");
+  `, 'Back to Editor', "hideModal('paperPreviewModal');openPrePro()", 'call-sheet');
 }
 
 function showPatchSheetPreview(kind) {
@@ -4676,10 +5406,11 @@ function showCuePartPreview(type) {
     <h1>${titleMap[type]}</h1>
     <div>Rendered from the rundown editor.</div>
     <table><thead><tr><th>#</th><th>Row</th><th>On Cue</th><th>Off Cue</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
-  `);
+  `, 'Done', "hideModal('paperPreviewModal')", null);
 }
 
 function openSafetyPlan() {
+  activePaperworkItemId = 'safety-plan';
   hideModal('paperworkHubModal');
   const data = loadPreProData();
   const safety = data.safety || {};
@@ -4693,6 +5424,8 @@ function openSafetyPlan() {
   document.getElementById('sp-late').value = safety.late || data.late || '';
   document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
   document.getElementById('sp-notes').value = safety.notes || '';
+  renderPaperworkNav('safety-plan');
+  renderPlandaBearComments('Safety Plan', 'pbCommentsSafety');
   showModal('safetyPlanModal');
 }
 
@@ -4739,7 +5472,7 @@ function safetyPlanHTML(safety) {
 function showSafetyPlanPreview() {
   const safety = getSafetyPlanData();
   saveSafetyPlan(false);
-  showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()");
+  showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
 }
 
 function defaultProductionSchedule() {
@@ -4759,7 +5492,7 @@ function normalizeProductionChecklistRow(row, i=0) {
   const guide = PRODUCTION_CHECKLIST_GUIDES[i] || {};
   return {
     area: row?.area || guide.area || '',
-    item: row?.item || '',
+    item: row?.item || row?.task || '',
     hint: row?.hint || guide.hint || '',
     owner: row?.owner || '',
     due: row?.due || '',
@@ -4768,7 +5501,30 @@ function normalizeProductionChecklistRow(row, i=0) {
   };
 }
 
+function productionChecklistGuideOptions() {
+  return PRODUCTION_CHECKLIST_GUIDES
+    .map(row => `<option value="${esc(row.area)}">${esc(row.area)}</option>`)
+    .join('');
+}
+
+function guideForProductionArea(area) {
+  const needle = String(area || '').trim().toLowerCase();
+  return PRODUCTION_CHECKLIST_GUIDES.find(row => row.area.toLowerCase() === needle);
+}
+
+function syncProductionChecklistGuide(input) {
+  const idx = Number(input?.dataset?.psRow);
+  if (!Number.isFinite(idx)) return;
+  const guide = guideForProductionArea(input.value);
+  const hint = guide?.hint || 'What must the crew verify before the show can start?';
+  const hidden = document.querySelector(`[data-ps-row="${idx}"][data-ps-field="hint"]`);
+  const prompt = document.getElementById(`ps-prompt-${idx}`);
+  if (hidden) hidden.value = hint;
+  if (prompt) prompt.textContent = `Guide: ${hint}`;
+}
+
 function openProductionSchedule() {
+  activePaperworkItemId = 'production-scheduler';
   hideModal('paperworkHubModal');
   const schedule = { ...defaultProductionSchedule(), ...(loadPreProData().productionSchedule || {}) };
   schedule.checklist = Array.isArray(schedule.checklist) && schedule.checklist.length ? schedule.checklist : defaultProductionSchedule().checklist;
@@ -4780,6 +5536,8 @@ function openProductionSchedule() {
   document.getElementById('ps-wrap').value = schedule.wrap || '';
   document.getElementById('ps-owner').value = schedule.owner || '';
   renderProductionChecklist(schedule.checklist);
+  renderPaperworkNav('production-scheduler');
+  renderPlandaBearComments('Production Scheduler', 'pbCommentsProduction');
   showModal('productionScheduleModal');
 }
 
@@ -4787,18 +5545,40 @@ function renderProductionChecklist(items) {
   const el = document.getElementById('ps-checklist');
   if (!el) return;
   const rows = (Array.isArray(items) && items.length ? items : defaultProductionSchedule().checklist).map(normalizeProductionChecklistRow);
-  el.innerHTML = `<div class="readiness-guide">
-    <div class="readiness-head"></div><div class="readiness-head">Area</div><div class="readiness-head">Crew Check</div><div class="readiness-head">Owner</div><div class="readiness-head">Due</div>
-    ${rows.map((row,i)=>`
-      <input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''} style="align-self:center;justify-self:center">
-      <input class="field-in" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}" placeholder="Area">
-      <div class="readiness-check-cell">
-        <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="${esc(row.hint||'Write the check your crew must verify.')}">
-        <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
-        <textarea class="field-in readiness-notes" data-ps-row="${i}" data-ps-field="notes" rows="2" placeholder="Crew notes, evidence, or where to verify it...">${esc(row.notes||'')}</textarea>
+  const complete = rows.filter(row => row.item && row.item.trim()).length;
+  el.innerHTML = `<div class="readiness-builder">
+    <datalist id="readinessAreaOptions">${productionChecklistGuideOptions()}</datalist>
+    <div class="readiness-builder-head">
+      <div>
+        <div class="readiness-title">Student-built show-day checklist</div>
+        <div class="readiness-copy">Each row gives a production area and a thinking prompt. The crew writes the actual check, assigns an owner, and marks it done only when it has been verified.</div>
       </div>
-      <input class="field-in" data-ps-row="${i}" data-ps-field="owner" value="${esc(row.owner||'')}" placeholder="PM / ENG">
-      <input class="field-in" data-ps-row="${i}" data-ps-field="due" type="time" value="${esc(row.due||'')}">
+      <div class="readiness-progress">${complete} of ${rows.length} checks written</div>
+    </div>
+    <div class="readiness-toolbar">
+      <select class="field-in" id="ps-guide-select" aria-label="Guide prompt to add">
+        ${PRODUCTION_CHECKLIST_GUIDES.map(row => `<option value="${esc(row.area)}">${esc(row.area)}</option>`).join('')}
+      </select>
+      <button class="call-add-btn" onclick="addProductionChecklistGuidedRow()">+ Add guided prompt</button>
+      <button class="call-add-btn" onclick="addProductionChecklistRow()">+ Add blank row</button>
+    </div>
+    ${rows.map((row,i)=>`
+      <div class="readiness-row">
+        <div class="readiness-row-top">
+          <div class="readiness-num">${i+1}</div>
+          <input class="field-in" list="readinessAreaOptions" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}" placeholder="Area" onchange="syncProductionChecklistGuide(this)">
+          <textarea class="field-in readiness-check-text" data-ps-row="${i}" data-ps-field="item" rows="2" placeholder="Write the exact check your crew will perform before show start...">${esc(row.item||'')}</textarea>
+          <button class="readiness-remove" onclick="removeProductionChecklistRow(${i})" title="Remove row" aria-label="Remove readiness row">×</button>
+          <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
+          <div class="readiness-prompt" id="ps-prompt-${i}">Guide: ${esc(row.hint || 'What must the crew verify before the show can start?')}</div>
+        </div>
+        <div class="readiness-details">
+          <input class="field-in" data-ps-row="${i}" data-ps-field="owner" value="${esc(row.owner||'')}" placeholder="Owner">
+          <input class="field-in" data-ps-row="${i}" data-ps-field="due" type="time" value="${esc(row.due||'')}">
+          <textarea class="field-in readiness-notes" data-ps-row="${i}" data-ps-field="notes" rows="1" placeholder="Where will you verify it, or what evidence proves it is ready?">${esc(row.notes||'')}</textarea>
+          <label class="readiness-done"><input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''}> Done</label>
+        </div>
+      </div>
     `).join('')}
   </div>`;
 }
@@ -4807,6 +5587,23 @@ function addProductionChecklistRow() {
   const current = getProductionScheduleData();
   current.checklist.push({ area:'', item:'', hint:'What needs to be checked before the show can start?', owner:current.owner || '', due:'', notes:'', done:false });
   renderProductionChecklist(current.checklist);
+}
+
+function addProductionChecklistGuidedRow() {
+  const current = getProductionScheduleData();
+  const selected = document.getElementById('ps-guide-select')?.value || '';
+  const used = new Set((current.checklist || []).map(row => String(row.area || '').toLowerCase()));
+  const guide = guideForProductionArea(selected) ||
+    PRODUCTION_CHECKLIST_GUIDES.find(row => !used.has(row.area.toLowerCase())) ||
+    PRODUCTION_CHECKLIST_GUIDES[0];
+  current.checklist.push({ area:guide.area, item:'', hint:guide.hint, owner:current.owner || '', due:'', notes:'', done:false });
+  renderProductionChecklist(current.checklist);
+}
+
+function removeProductionChecklistRow(idx) {
+  const current = getProductionScheduleData();
+  current.checklist.splice(idx, 1);
+  renderProductionChecklist(current.checklist.length ? current.checklist : [{ area:'', item:'', hint:'What needs to be checked before the show can start?', owner:current.owner || '', due:'', notes:'', done:false }]);
 }
 
 function getProductionScheduleData() {
@@ -4856,7 +5653,7 @@ function productionScheduleHTML(schedule) {
 function showProductionSchedulePreview() {
   const schedule = getProductionScheduleData();
   saveProductionSchedule(false);
-  showPaperPreview('Production Scheduler Preview', productionScheduleHTML(schedule), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()");
+  showPaperPreview('Production Scheduler Preview', productionScheduleHTML(schedule), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
 }
 
 function defaultPatchRows(kind) {
@@ -4920,14 +5717,18 @@ function savePatchRows(kind, rows) {
 
 function openPatchSheetEditor(kind) {
   activePatchKind = kind;
+  activePaperworkItemId = kind === 'video' ? 'video-patch' : 'audio-comms-patch';
   hideModal('paperworkHubModal');
   const isVideo = kind === 'video';
   document.getElementById('patchSheetTitle').textContent = isVideo ? 'Video Patch Sheet' : 'Audio and Comms Patch Sheets';
   document.getElementById('patchSheetSub').textContent = 'Add rows manually or upload a CSV/TSV. Imported columns fill left to right.';
-  document.getElementById('patchSheetSaveBtn').textContent = isVideo ? 'Save Video Patch Sheet' : 'Save Audio and Comms Patch Sheets';
+  const saveBtn = document.getElementById('patchSheetSaveBtn');
+  if (saveBtn) saveBtn.textContent = isVideo ? 'Save Video Patch Sheet' : 'Save Audio and Comms Patch Sheets';
   document.getElementById('patchSheetBody').innerHTML = isVideo
     ? renderPatchTable('video', 'Video Patch Sheet')
     : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
+  renderPaperworkNav(activePaperworkItemId);
+  renderPlandaBearComments(isVideo ? 'Video Patch' : 'Audio & Comms Patch', 'pbCommentsPatch');
   showModal('patchSheetModal');
 }
 
@@ -4982,8 +5783,24 @@ function patchTableHTML(kind, title) {
   return `<h2>${title}</h2><table><thead><tr>${isComms ? '<th>Position</th><th>Out</th><th>Gear</th><th>Notes</th>' : '<th>Label</th><th>Destination</th><th>Source</th><th>Cabling</th><th>Notes</th>'}</tr></thead><tbody>${body || `<tr><td colspan="${isComms ? 4 : 5}">No rows saved yet.</td></tr>`}</tbody></table>`;
 }
 
+function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
+  savePatchSheet(false);
+  if (kind === 'video') {
+    showPaperPreview('Video Patch Sheet Preview', `
+      <h1>5. Video Patch Sheet</h1>
+      ${patchTableHTML('video', 'Video Patch Sheet')}
+    `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
+    return;
+  }
+  showPaperPreview('Audio and Comms Patch Sheet Preview', `
+    <h1>6. Audio and Comms Patch Sheets</h1>
+    ${patchTableHTML('audio', 'Audio Patch Sheet')}
+    ${patchTableHTML('comms', 'Comms Patch Sheet')}
+  `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
+}
+
 function showPreProPackagePreview() {
-  showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()');
+  showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()', null);
 }
 
 function preProPackageHTML() {
@@ -5059,6 +5876,7 @@ async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
 }
 
 function openPrePro() {
+  activePaperworkItemId = 'call-sheet';
   hideModal('paperworkHubModal');
   let data = loadPreProData();
   document.getElementById('pp-production').value = data.production || show.name || '';
@@ -5078,6 +5896,8 @@ function openPrePro() {
   document.getElementById('pp-safety').value = data.safetyPlan || '';
   callSheetPeople = Array.isArray(data.people) && data.people.length ? data.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
   renderCallSheetPeople();
+  renderPaperworkNav('call-sheet');
+  renderPlandaBearComments('Call Sheet', 'pbCommentsCallSheet');
   showModal('preProModal');
 }
 
@@ -5285,7 +6105,7 @@ async function exportPreProPackagePDF() {
     field('Estimated Wrap', schedule.wrap || '');
     field('Owner', schedule.owner || '');
     tableRows(['Role','Person','Planda Bear File'], getRoleAssignments().map(row => [row.role, row.person, row.paperwork]));
-    tableRows(['Done','Area','Crew Check','Owner','Due'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.area, row.item || row.notes, row.owner, row.due]));
+    tableRows(['Done','Area','Crew Check','Owner','Due'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.area, [row.item, row.notes].filter(Boolean).join('\n'), row.owner, row.due]));
 
     section('3. Safety Plan');
     ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
@@ -5480,7 +6300,8 @@ window.addEventListener('popstate', () => {
   const inSession =
     document.getElementById('rundown')?.classList.contains('on') ||
     document.getElementById('liveshow')?.classList.contains('on') ||
-    document.getElementById('promptypus')?.classList.contains('on');
+    document.getElementById('promptypus')?.classList.contains('on') ||
+    document.getElementById('flowOp')?.classList.contains('on');
   if (!browserBackGuardReady || !inSession) return;
   if (confirm('Leave this session and return to the front page?')) {
     leaveSessionForFrontPage();
@@ -5495,6 +6316,11 @@ else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: t
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
+  if (location.hash === '#flowmingo-op' || location.hash === '#flowop' || params.has('flowop') || params.has('operator')) {
+    sessionStorage.setItem('cueola_screen', 'entry');
+    setTimeout(() => openFlowmingoOperator(params.get('code') || ''), 0);
+    return;
+  }
   if (location.hash === '#flowmingo' || location.hash === '#promptypus' || params.has('flowmingo') || params.has('prompter') || params.has('promptypus')) {
     sessionStorage.setItem('cueola_screen', 'entry');
     setTimeout(enterPrompter, 0);

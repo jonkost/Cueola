@@ -90,11 +90,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn-icon{width:38px;height:38px;padding:0;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-size:17px}
 
 /* ── PAGE ── */
-.page{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+.page{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
 
 /* ── HERO ── */
 .hero{
-  border-radius:20px;padding:32px 28px;margin-bottom:28px;
+  border-radius:14px;padding:22px 24px;margin-bottom:20px;
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 9%,transparent) 0%,color-mix(in srgb,var(--acg) 6%,transparent) 50%,transparent 100%);
   border:1px solid color-mix(in srgb,var(--accent) 16%,transparent);
   display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
@@ -228,7 +228,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .modal-wrap{display:none;position:fixed;inset:0;background:rgba(7,9,15,.92);backdrop-filter:blur(10px);z-index:300;align-items:center;justify-content:center;padding:20px}
 .modal-wrap.on,.modal-wrap:target{display:flex}
 .modal{background:var(--s1);border:1px solid var(--bord2);border-radius:18px;padding:28px 24px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:16px;animation:fadeUp .25s ease both}
-.detail-modal{max-width:760px;max-height:90vh;overflow:auto}
+.detail-modal{max-width:min(1080px,96vw);max-height:92vh;overflow:hidden;padding:0;gap:0}
 .modal-title{font-family:var(--syne);font-size:22px;font-weight:700}
 .modal-sub{font-size:13px;color:var(--text2);line-height:1.6;margin-top:-8px}
 .field{display:flex;flex-direction:column;gap:6px}
@@ -349,6 +349,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pba-sec{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap}
 .pba-by{font-size:11px;color:var(--text2);font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pba-when{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
+.pb-comment-dash{border:1px solid color-mix(in srgb,var(--yellow) 28%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s2));border-radius:9px;padding:10px 11px;display:flex;flex-direction:column;gap:7px}
+.pb-comment-dash-title{font-size:11px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--yellow);font-weight:800}
+.pb-comment-dash-row{border-top:1px solid color-mix(in srgb,var(--yellow) 14%,var(--border));padding-top:7px}
+.pb-comment-dash-meta{font-size:10px;font-family:var(--mono);color:var(--text3);display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px}
+.pb-comment-dash-sec{color:var(--yellow);font-weight:800;text-transform:uppercase}
+.pb-comment-dash-text{font-size:12px;color:var(--text);line-height:1.45;white-space:pre-wrap}
 .assignment-list{display:flex;flex-direction:column;gap:7px;margin-top:8px}
 .assignment-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(130px,1fr);gap:8px;align-items:center;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
 .assignment-person{display:flex;align-items:center;gap:8px;min-width:0}
@@ -361,6 +367,31 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .level-tag.super{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
 .level-tag.full{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .level-tag.standard{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
+
+/* Session management app layout */
+.detail-shell{display:flex;flex-direction:column;min-height:0;width:100%}
+.detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--s1),color-mix(in srgb,var(--s2) 82%,transparent))}
+.detail-head-main{min-width:0}
+.detail-head .modal-sub{margin-top:2px}
+.detail-eyebrow{font-size:10px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.detail-code-pill{display:inline-flex;align-items:center;margin-top:8px;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:999px;padding:5px 10px;font-family:var(--mono);font-size:14px;color:var(--accent);letter-spacing:.12em;font-weight:800}
+.detail-head-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.detail-body{padding:18px 22px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.detail-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);gap:14px;align-items:start}
+.detail-panel{border:1px solid var(--border);background:var(--s1);border-radius:12px;padding:14px;min-width:0}
+.detail-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.detail-panel-title{font-family:var(--syne);font-size:15px;font-weight:800}
+.detail-panel-sub{font-size:12px;color:var(--text2);line-height:1.45;margin-top:2px}
+.detail-edit-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.detail-save-btn{height:auto;align-self:auto;grid-column:auto;padding:10px 14px}
+.detail-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.detail-actions .btn-full{width:auto;min-width:130px;padding:11px 14px}
+.detail-danger{border:1px solid color-mix(in srgb,var(--red) 25%,transparent);background:color-mix(in srgb,var(--red) 6%,var(--s1));border-radius:12px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.detail-danger-copy{font-size:12px;color:var(--text2);line-height:1.45}
+.detail-danger .btn-full{width:auto;padding:10px 14px;margin:0!important}
+.participant-list{max-height:260px}
+.participant{display:grid;grid-template-columns:auto minmax(120px,1fr) minmax(145px,.85fr) minmax(120px,.7fr) auto auto auto;align-items:center}
+.p-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Setup notice */
 .setup-notice{font-size:12px;color:var(--text2);background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;padding:12px 14px;line-height:1.7}
@@ -393,13 +424,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .accounts-form{grid-template-columns:1fr}
   .accounts-head{flex-direction:column}
   .admin-row-actions{grid-template-columns:1fr}
-  .session-work-row{grid-template-columns:1fr}
-  .session-card{grid-template-columns:1fr}
-  .sc-right{grid-template-columns:1fr}
-  .detail-edit-grid{grid-template-columns:1fr}
-  .participant{flex-wrap:wrap}
-  .participant-role-select,.participant-role-custom{flex:1;min-width:160px;max-width:none}
-  .assignment-row{grid-template-columns:1fr}
+	  .session-work-row{grid-template-columns:1fr}
+	  .session-card{grid-template-columns:1fr}
+	  .sc-right{grid-template-columns:1fr}
+	  .detail-head{flex-direction:column}
+	  .detail-head-actions{width:100%;justify-content:flex-start}
+	  .detail-grid{grid-template-columns:1fr}
+	  .detail-edit-grid{grid-template-columns:1fr}
+	  .participant{grid-template-columns:auto minmax(0,1fr);align-items:start}
+	  .participant > *:not(.p-avatar):not(.p-name){grid-column:1/-1}
+	  .participant-role-select,.participant-role-custom{flex:1;min-width:160px;max-width:none}
+	  .assignment-row{grid-template-columns:1fr}
   .topbar{padding:0 14px}
   .page{padding:20px 12px 60px}
 }
@@ -578,59 +613,96 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- ── MODAL: SESSION DETAIL ── -->
 <div class="modal-wrap" id="modal-detail">
   <div class="modal detail-modal">
-    <div class="modal-title" id="detail-title">Session Details</div>
-    <div class="modal-sub">Admin side of this session — people, roles, Planda Bear activity, and cleanup.</div>
-    <div class="detail-edit-grid">
-      <div class="field">
-        <label class="field-lbl">Show Title</label>
-        <input class="field-in" id="detail-show-input" maxlength="80" placeholder="Untitled Show">
+    <div class="detail-shell">
+      <div class="detail-head">
+        <div class="detail-head-main">
+          <div class="detail-eyebrow">Session Management</div>
+          <div class="modal-title" id="detail-title">Session Details</div>
+          <div class="modal-sub">Manage the show setup, assign production roles, and review Planda Bear progress from one place.</div>
+          <div class="detail-code-pill" id="detail-code">—</div>
+        </div>
+        <div class="detail-head-actions">
+          <button class="btn-sm btn-accent" onclick="saveSessionManagement()">Save Session</button>
+          <button class="btn-sm btn-ghost" onclick="openDetailSession()">Open Rundown</button>
+          <button class="btn-sm btn-ghost" onclick="hideModal('modal-detail')">Close</button>
+        </div>
       </div>
-      <div class="field">
-        <label class="field-lbl">Start Time</label>
-        <input class="field-in" id="detail-start-input" type="time">
+      <div class="detail-body">
+        <div class="detail-grid">
+          <section class="detail-panel">
+            <div class="detail-panel-head">
+              <div>
+                <div class="detail-panel-title">Session Setup</div>
+                <div class="detail-panel-sub">One save updates these fields and the assigned roles.</div>
+              </div>
+            </div>
+            <div class="detail-edit-grid">
+              <div class="field">
+                <label class="field-lbl">Show Title</label>
+                <input class="field-in" id="detail-show-input" maxlength="80" placeholder="Untitled Show">
+              </div>
+              <div class="field">
+                <label class="field-lbl">Start Time</label>
+                <input class="field-in" id="detail-start-input" type="time">
+              </div>
+              <div class="field">
+                <label class="field-lbl">Owner</label>
+                <input class="field-in" id="detail-owner-input" maxlength="60" placeholder="Created by">
+              </div>
+              <div class="field">
+                <label class="field-lbl">Status</label>
+                <select class="field-in" id="detail-status-input">
+                  <option value="idle">Idle</option>
+                  <option value="active">Active</option>
+                </select>
+              </div>
+            </div>
+            <div class="session-detail">
+              <div class="sd-row"><span class="sd-lbl">Show Name</span><span class="sd-val" id="detail-show">—</span></div>
+              <div class="sd-row"><span class="sd-lbl">Start Time</span><span class="sd-val" id="detail-start">—</span></div>
+              <div class="sd-row"><span class="sd-lbl">Cues</span><span class="sd-val" id="detail-cues">—</span></div>
+              <div class="sd-row"><span class="sd-lbl">Created By</span><span class="sd-val" id="detail-created-by">—</span></div>
+              <div class="sd-row"><span class="sd-lbl">Created</span><span class="sd-val" id="detail-created">—</span></div>
+            </div>
+          </section>
+          <section class="detail-panel">
+            <div class="detail-panel-head">
+              <div>
+                <div class="detail-panel-title">People and Roles</div>
+                <div class="detail-panel-sub">Assign the production role beside each session member.</div>
+              </div>
+            </div>
+            <div class="participant-list" id="detail-participants">
+              <div style="font-size:12px;color:var(--text3);padding:8px 0">No participants yet.</div>
+            </div>
+            <div id="detail-add-student"></div>
+            <div id="detail-merge-tool"></div>
+            <div class="detail-section-title">Production Roles</div>
+            <div class="assignment-list" id="detail-assignments">
+              <div style="font-size:12px;color:var(--text3);padding:8px 0">No learners available yet.</div>
+            </div>
+          </section>
+        </div>
+        <section class="detail-panel">
+          <div class="detail-panel-head">
+            <div>
+              <div class="detail-panel-title">Planda Bear Paperwork</div>
+              <div class="detail-panel-sub">Latest saved work for this session.</div>
+            </div>
+          </div>
+          <div class="plandabear-activity" id="detail-plandabear-activity">
+            <div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear work recorded yet.</div>
+          </div>
+        </section>
+        <div class="detail-danger">
+          <div>
+            <div class="detail-panel-title">Danger Zone</div>
+            <div class="detail-danger-copy">Delete removes this session for the class. Use only when the session is no longer needed.</div>
+          </div>
+          <button class="btn-full btn-danger" onclick="confirmDelete()" id="detail-delete-btn">Delete Session</button>
+        </div>
       </div>
-      <div class="field">
-        <label class="field-lbl">Owner</label>
-        <input class="field-in" id="detail-owner-input" maxlength="60" placeholder="Created by">
-      </div>
-      <div class="field">
-        <label class="field-lbl">Status</label>
-        <select class="field-in" id="detail-status-input">
-          <option value="idle">Idle</option>
-          <option value="active">Active</option>
-        </select>
-      </div>
-      <button class="detail-save-btn" onclick="saveSessionManagement()">Save Session</button>
     </div>
-    <div class="detail-section-title">Session Info</div>
-    <div class="session-detail">
-      <div class="sd-row"><span class="sd-lbl">Code</span><span class="sd-val" style="font-family:var(--mono);font-size:20px;color:var(--accent);letter-spacing:.1em" id="detail-code">—</span></div>
-      <div class="sd-row"><span class="sd-lbl">Show Name</span><span class="sd-val" id="detail-show">—</span></div>
-      <div class="sd-row"><span class="sd-lbl">Start Time</span><span class="sd-val" id="detail-start">—</span></div>
-      <div class="sd-row"><span class="sd-lbl">Cues</span><span class="sd-val" id="detail-cues">—</span></div>
-      <div class="sd-row"><span class="sd-lbl">Created By</span><span class="sd-val" id="detail-created-by">—</span></div>
-      <div class="sd-row"><span class="sd-lbl">Created</span><span class="sd-val" id="detail-created">—</span></div>
-    </div>
-    <div class="detail-section-title">Participants</div>
-    <div class="participant-list" id="detail-participants">
-      <div style="font-size:12px;color:var(--text3);padding:8px 0">No participants yet.</div>
-    </div>
-    <div id="detail-add-student"></div>
-    <div id="detail-merge-tool"></div>
-    <div class="detail-section-title">Production Roles</div>
-    <div class="assignment-list" id="detail-assignments">
-      <div style="font-size:12px;color:var(--text3);padding:8px 0">No learners available yet.</div>
-    </div>
-    <div class="detail-section-title">Planda Bear Paperwork</div>
-    <div class="plandabear-activity" id="detail-plandabear-activity">
-      <div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear work recorded yet.</div>
-    </div>
-    <div class="detail-actions">
-      <button class="btn-full btn-primary" onclick="openDetailSession()" style="margin-top:4px">Open Rundown →</button>
-      <button class="btn-full btn-secondary" onclick="saveSessionManagement()" style="margin-top:4px">Save Session</button>
-      <button class="btn-full btn-secondary" onclick="hideModal('modal-detail')" style="margin-top:4px">Close</button>
-    </div>
-    <button class="btn-full btn-danger" onclick="confirmDelete()" style="margin-top:4px" id="detail-delete-btn">Delete Session</button>
   </div>
 </div>
 
@@ -1399,7 +1471,7 @@ const PB_LABELS = {
   setup:'Setup Start', show:'Show Start', wrap:'Estimated Wrap', owner:'Owner',
   name:'Name', position:'Position', phone:'Phone', email:'Email', role:'Role', person:'Person',
   paperwork:'Paperwork', label:'Label', destination:'Destination', source:'Source', cabling:'Cabling',
-  item:'Task', due:'Due', done:'Done', out:'Out', gear:'Gear'
+  area:'Area', item:'Crew Check', due:'Due', done:'Done', out:'Out', gear:'Gear'
 };
 function pbVal(v){ return (v===undefined||v===null) ? '' : String(v).trim(); }
 function pbLabel(k){ return PB_LABELS[k] || k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()); }
@@ -1436,8 +1508,9 @@ function renderPlandaBearPaperwork(s) {
   const wrap = document.getElementById('detail-plandabear-activity');
   if (!wrap) return;
   const log = Array.isArray(s.preProActivity) ? s.preProActivity.slice() : [];
+  const comments = Array.isArray(s.preProComments) ? s.preProComments.filter(c => c && c.text).slice() : [];
   const pre = (s.prePro && typeof s.prePro === 'object') ? s.prePro : {};
-  const hasAny = log.length || Object.keys(pre).some(k => k !== 'updatedAt');
+  const hasAny = log.length || comments.length || Object.keys(pre).some(k => k !== 'updatedAt');
   if (!hasAny) {
     wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear paperwork has been started for this session yet.</div>';
     return;
@@ -1458,7 +1531,7 @@ function renderPlandaBearPaperwork(s) {
     { name:'Safety Plan', body:()=> pbKV(pre.safety, ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes']) },
     { name:'Production Scheduler', body:()=>{
         const ps = pre.productionSchedule || {};
-        return pbKV(ps, ['date','setup','call','show','wrap','owner']) + pbTable(ps.checklist, ['item','owner','due','done']);
+        return pbKV(ps, ['date','setup','call','show','wrap','owner']) + pbTable(ps.checklist, ['area','item','owner','due','done']);
       } },
     { name:'Video Patch', body:()=> pbTable(pre.videoPatchRows, pbPatchCols(pre.videoPatchRows)) },
     { name:'Audio & Comms Patch', body:()=>{
@@ -1467,6 +1540,19 @@ function renderPlandaBearPaperwork(s) {
       } },
     { name:'Role Assignments', body:()=> pbTable(pre.roleAssignments, ['role','person','paperwork']) },
   ];
+
+  const commentHtml = comments.length ? `<div class="pb-comment-dash">
+    <div class="pb-comment-dash-title">Instructor Comments</div>
+    ${comments.slice().sort((a,b)=>(b.at||0)-(a.at||0)).map(c => `<div class="pb-comment-dash-row">
+      <div class="pb-comment-dash-meta">
+        <span class="pb-comment-dash-sec">${escapeHtml(c.section || 'Overall')}</span>
+        <span>by ${escapeHtml(c.by || 'Instructor')}</span>
+        <span>${fmtAgo(c.at)}</span>
+        ${(c.reviewedBy || []).length ? `<span>${(c.reviewedBy || []).length} reviewed</span>` : ''}
+      </div>
+      <div class="pb-comment-dash-text">${escapeHtml(c.text || '')}</div>
+    </div>`).join('')}
+  </div>` : '';
 
   // open the most recently edited section by default
   let newest = null;
@@ -1502,7 +1588,7 @@ function renderPlandaBearPaperwork(s) {
       </div>`).join('')}
     </div>` : '';
 
-  wrap.innerHTML = secHtml + logHtml;
+  wrap.innerHTML = commentHtml + secHtml + logHtml;
 }
 
 function renderMergeTool(s, isSuper) {
