@@ -390,7 +390,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .detail-danger-copy{font-size:12px;color:var(--text2);line-height:1.45}
 .detail-danger .btn-full{width:auto;padding:10px 14px;margin:0!important}
 .participant-list{max-height:260px}
-.participant{display:grid;grid-template-columns:auto minmax(120px,1fr) minmax(145px,.85fr) minmax(120px,.7fr) auto auto auto;align-items:center}
+.participant{display:grid;grid-template-columns:minmax(120px,1fr) minmax(145px,.85fr) minmax(120px,.7fr) auto auto auto;align-items:center}
 .p-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Setup notice */
@@ -431,8 +431,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	  .detail-head-actions{width:100%;justify-content:flex-start}
 	  .detail-grid{grid-template-columns:1fr}
 	  .detail-edit-grid{grid-template-columns:1fr}
-	  .participant{grid-template-columns:auto minmax(0,1fr);align-items:start}
-	  .participant > *:not(.p-avatar):not(.p-name){grid-column:1/-1}
+	  .participant{grid-template-columns:minmax(0,1fr);align-items:start}
+	  .participant > *:not(.p-name){grid-column:1/-1}
 	  .participant-role-select,.participant-role-custom{flex:1;min-width:160px;max-width:none}
 	  .assignment-row{grid-template-columns:1fr}
   .topbar{padding:0 14px}
@@ -1179,7 +1179,7 @@ function renderSessions() {
         <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
         <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)">🐼 Planda Bear</button>
         <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
-        <button class="sc-btn sc-btn-muted" onclick="showDetail('${s.code||s.id}',event)">Manage ⚙</button>
+        <button class="sc-btn sc-btn-muted" onclick="showDetail('${s.code||s.id}',event)">Session Setup ⚙</button>
       </div>
     `;
     area.appendChild(card);
@@ -1334,7 +1334,7 @@ async function createNewSession() {
 
   btn.textContent = 'Creating…';
   const showName   = document.getElementById('new-showname').value.trim() || 'Untitled Show';
-  const startTime  = document.getElementById('new-start').value || '';
+  const startTime  = normalizeTimeValue(document.getElementById('new-start').value);
   const customCode = document.getElementById('new-code').value.trim().toUpperCase();
   const code       = customCode || genCode();
 
@@ -1386,7 +1386,7 @@ async function showDetail(code, e) {
   document.getElementById('detail-code').textContent       = code;
   document.getElementById('detail-show').textContent       = s.showName || 'Untitled Show';
   document.getElementById('detail-show-input').value       = s.showName || 'Untitled Show';
-  document.getElementById('detail-start-input').value      = s.startTime || '';
+  document.getElementById('detail-start-input').value      = normalizeTimeValue(s.startTime);
   document.getElementById('detail-owner-input').value      = s.createdBy || '';
   document.getElementById('detail-status-input').value     = s.status || 'idle';
   document.getElementById('detail-start').textContent      = s.startTime ? formatTime12(s.startTime) : 'Not set';
@@ -1414,7 +1414,6 @@ async function showDetail(code, e) {
       const div = document.createElement('div');
       div.className = 'participant';
       div.innerHTML = `
-        <div class="p-avatar" style="background:${col}22;color:${col}" title="${escapeHtml(p.name||'Unknown')}">${initialsOf(p.name)}</div>
         <div class="p-name" title="${escapeHtml(p.name||'Unknown')}">${escapeHtml(p.name||'Unknown')}</div>
         <select class="participant-role-select" data-learner-name="${escapeHtml(p.name||'')}" onchange="toggleParticipantCustomRole(this)">
           <option value="">Assign role</option>
@@ -1461,19 +1460,24 @@ function fmtAgo(ts) {
   return new Date(ts).toLocaleDateString([], { month:'short', day:'numeric' });
 }
 
-const PLANDABEAR_SECTIONS = ['Call Sheet','Safety Plan','Production Scheduler','Video Patch','Audio & Comms Patch','Role Assignments'];
+const PLANDABEAR_SECTIONS = ['Call Sheet','Production Schedule','Safety Plan','Video Patch','Audio & Comms Patch','Role Assignments'];
 const PB_LABELS = {
   production:'Production', date:'Date', call:'Call Time', showStart:'Show Start', doors:'Doors Open',
   location:'Location', address:'Address', parking:'Parking', entrance:'Entrance', late:'Late / Lost Contact',
   stream:'Stream Info', dress:'Dress Code', meals:'Meals', notes:'Notes', safetyPlan:'Safety Plan Notes',
   hospital:'Local Hospital', weather:'Weather', firstAid:'First Aid Kit', fire:'Fire Extinguisher',
   emergency:'Emergency #', nonemergency:'Non-Emergency #', security:'Security', equipment:'Equipment Needed',
-  setup:'Setup Start', show:'Show Start', wrap:'Estimated Wrap', owner:'Owner',
+  setup:'Setup Start', show:'Show Start', showDate:'Show Day', wrap:'Setup Wrap', setupNotes:'Setup Notes', showNotes:'Show Notes',
   name:'Name', position:'Position', phone:'Phone', email:'Email', role:'Role', person:'Person',
   paperwork:'Paperwork', label:'Label', destination:'Destination', source:'Source', cabling:'Cabling',
-  area:'Area', item:'Crew Check', due:'Due', done:'Done', out:'Out', gear:'Gear'
+  area:'Area', item:'Checklist Item', due:'Due', done:'Done', out:'Out', gear:'Gear'
 };
-function pbVal(v){ return (v===undefined||v===null) ? '' : String(v).trim(); }
+function pbVal(v){
+  if (v===undefined||v===null) return '';
+  if (Array.isArray(v)) return v.map(item => String(item || '').trim()).filter(Boolean).join(', ');
+  return String(v).trim();
+}
+function pbSectionName(section){ return section === 'Production Scheduler' ? 'Production Schedule' : section; }
 function pbLabel(k){ return PB_LABELS[k] || k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()); }
 function pbKV(obj, keys){
   if (!obj) return '';
@@ -1494,6 +1498,15 @@ function pbPatchCols(rows){
   (rows||[]).forEach(r => r && Object.keys(r).forEach(k => { if (pbVal(r[k])!=='') present.add(k); }));
   const cols = order.filter(k => present.has(k));
   return cols.length ? cols : ['label','destination','source','notes'];
+}
+
+function pbRoleAssignments(rows){
+  const normalized = Array.isArray(rows) ? rows.map(row => ({
+    person: row?.person || row?.name || '',
+    position: row?.position || row?.role || '',
+    paperwork: row?.paperwork || row?.paperworkItems || '',
+  })) : [];
+  return pbTable(normalized, ['person','position','paperwork']);
 }
 
 function togglePbSec(head){ head.parentElement.classList.toggle('open'); }
@@ -1519,33 +1532,38 @@ function renderPlandaBearPaperwork(s) {
   const lastBySection = {};
   log.forEach(e => {
     if (!e || !e.section) return;
-    if (!lastBySection[e.section] || (e.at||0) > (lastBySection[e.section].at||0)) lastBySection[e.section] = e;
+    const section = pbSectionName(e.section);
+    if (!lastBySection[section] || (e.at||0) > (lastBySection[section].at||0)) lastBySection[section] = { ...e, section };
   });
 
   const sections = [
     { name:'Call Sheet', body:()=>{
-        const kv = pbKV(pre, ['production','date','call','showStart','doors','location','address','parking','entrance','late','stream','dress','meals','notes','safetyPlan']);
-        const ppl = pbTable(pre.people, ['name','position','phone','email','call']);
-        return kv + ppl;
+        const sheets = Array.isArray(pre.callSheets) && pre.callSheets.length ? pre.callSheets : [pre];
+        return sheets.map((sheet, i) => {
+          const label = sheet.label || `Call Sheet ${i + 1}`;
+          const kv = pbKV(sheet, ['production','date','call','showStart','doors','location','address','parking','entrance','late','stream','dress','meals','notes','safetyPlan']);
+          const ppl = pbTable(sheet.people, ['name','position','phone','email','call']);
+          return `<div class="pb-empty" style="margin-bottom:8px;color:var(--text2);font-weight:800">${escapeHtml(label)}</div>${kv + ppl}`;
+        }).join('');
+      } },
+    { name:'Production Schedule', body:()=>{
+        const ps = pre.productionSchedule || {};
+        return pbKV(ps, ['date','setup','wrap','setupNotes','showDate','call','doors','show','location','address','showNotes']) + pbTable(ps.checklist, ['done','item']);
       } },
     { name:'Safety Plan', body:()=> pbKV(pre.safety, ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes']) },
-    { name:'Production Scheduler', body:()=>{
-        const ps = pre.productionSchedule || {};
-        return pbKV(ps, ['date','setup','call','show','wrap','owner']) + pbTable(ps.checklist, ['area','item','owner','due','done']);
-      } },
     { name:'Video Patch', body:()=> pbTable(pre.videoPatchRows, pbPatchCols(pre.videoPatchRows)) },
     { name:'Audio & Comms Patch', body:()=>{
         const rows = pre['audio-commsPatchRows'] || pre.commsPatchRows || pre.audioCommsPatchRows;
         return pbTable(rows, pbPatchCols(rows));
       } },
-    { name:'Role Assignments', body:()=> pbTable(pre.roleAssignments, ['role','person','paperwork']) },
+    { name:'Role Assignments', body:()=> pbRoleAssignments(pre.roleAssignments) },
   ];
 
   const commentHtml = comments.length ? `<div class="pb-comment-dash">
     <div class="pb-comment-dash-title">Instructor Comments</div>
     ${comments.slice().sort((a,b)=>(b.at||0)-(a.at||0)).map(c => `<div class="pb-comment-dash-row">
       <div class="pb-comment-dash-meta">
-        <span class="pb-comment-dash-sec">${escapeHtml(c.section || 'Overall')}</span>
+        <span class="pb-comment-dash-sec">${escapeHtml(pbSectionName(c.section || 'Overall'))}</span>
         <span>by ${escapeHtml(c.by || 'Instructor')}</span>
         <span>${fmtAgo(c.at)}</span>
         ${(c.reviewedBy || []).length ? `<span>${(c.reviewedBy || []).length} reviewed</span>` : ''}
@@ -1582,7 +1600,7 @@ function renderPlandaBearPaperwork(s) {
     <button class="pb-log-toggle" onclick="togglePbLog(this)">Show full change log</button>
     <div class="pb-log" id="pb-full-log">
       ${recent.map(e=>`<div class="pba-row">
-        <span class="pba-sec">${escapeHtml(e.section||'Planda Bear')}</span>
+        <span class="pba-sec">${escapeHtml(pbSectionName(e.section||'Planda Bear'))}</span>
         <span class="pba-by" title="${escapeHtml(e.by||'Unknown')}">by ${escapeHtml(e.by||'Unknown')}</span>
         <span class="pba-when" title="${e.at?new Date(e.at).toLocaleString():''}">${fmtAgo(e.at)}</span>
       </div>`).join('')}
@@ -1684,7 +1702,7 @@ function toggleParticipantCustomRole(select) {
 async function saveDetailMetadata(showToastOnSave=true) {
   if (!activeCode) return;
   const nextTitle = document.getElementById('detail-show-input').value.trim() || 'Untitled Show';
-  const nextStart = document.getElementById('detail-start-input').value || '';
+  const nextStart = normalizeTimeValue(document.getElementById('detail-start-input').value);
   const nextOwner = document.getElementById('detail-owner-input').value.trim();
   const nextStatus = document.getElementById('detail-status-input').value || 'idle';
   const patch = { showName: nextTitle, startTime: nextStart, status: nextStatus };
@@ -1889,9 +1907,33 @@ function genCode() {
 
 function pad(n) { return String(n).padStart(2,'0'); }
 
+function normalizeTimeValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '—') return '';
+  const clean = raw.replace(/\s+/g, ' ').replace(/\./g, '').toUpperCase();
+  const meridiem = clean.match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([AP]M)$/);
+  if (meridiem) {
+    let h = Number(meridiem[1]);
+    const m = Number(meridiem[2] || 0);
+    if (h < 1 || h > 12 || m < 0 || m > 59) return '';
+    if (meridiem[3] === 'AM' && h === 12) h = 0;
+    if (meridiem[3] === 'PM' && h !== 12) h += 12;
+    return `${pad(h)}:${pad(m)}`;
+  }
+  const time24 = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (time24) {
+    const h = Number(time24[1]);
+    const m = Number(time24[2]);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return '';
+    return `${pad(h)}:${pad(m)}`;
+  }
+  return '';
+}
+
 function formatTime12(t24) {
-  if (!t24) return '—';
-  const [h,m] = t24.split(':').map(Number);
+  const normalized = normalizeTimeValue(t24);
+  if (!normalized) return '—';
+  const [h,m] = normalized.split(':').map(Number);
   const ap = h>=12?'PM':'AM', h12 = h%12||12;
   return `${h12}:${pad(m)} ${ap}`;
 }
