@@ -772,9 +772,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prepro-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .call-sheet-switcher{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
 .call-sheet-switcher .field-in{font-size:14px;padding:10px 12px}
-.call-grid{display:grid;grid-template-columns:1.1fr 1fr 1.2fr .9fr .75fr 44px;gap:0;align-items:stretch;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2);margin-top:8px}
+.call-grid{display:grid;grid-template-columns:30px 1.1fr 1fr 1.2fr .9fr .75fr 44px;gap:0;align-items:stretch;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2);margin-top:8px}
 .call-grid-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
-.call-grid-head:nth-child(6){border-right:0}
+.call-grid-head:nth-child(7){border-right:0}
+.call-drag-handle{display:flex;align-items:center;justify-content:center;min-height:42px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:grab;user-select:none;font-size:13px;line-height:1;touch-action:none}
+.call-drag-handle:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--s3))}
+.call-drag-handle:active{cursor:grabbing}
+.call-person-row.dragging>*{opacity:.45}
+.call-person-row.drag-target>*{box-shadow:inset 0 2px 0 0 var(--accent)}
 .call-grid .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .call-row-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .call-row-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
@@ -1021,6 +1026,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #pt-track{width:min(900px,90vw);padding:100vh 0;will-change:transform}
 #pt-text{font-family:'Barlow',system-ui,sans-serif;font-size:var(--pt-size,52px);line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#f0ead6);white-space:pre-wrap;word-break:break-word;transition:font-size .2s,text-align .2s;letter-spacing:.01em}
 #pt-text p{margin:0;min-height:1.55em;white-space:pre-wrap}
+/* Script formatting shared by the talent screen, operator preview, and Flowmingo preview */
+#pt-text p,.prompt-op-text p{margin:0 0 .14em;min-height:1.62em}
+.scr-direction{opacity:.5;font-style:italic;font-weight:400}
+.scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
+.scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
+#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:800}
 
 /* Reading line */
 #pt-read-line{position:absolute;left:0;right:0;top:calc(48px + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
@@ -1258,9 +1269,9 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-brand">🐨 Cueola <span>● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
-      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
-      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the script panel">📄 Script Panel</button>
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
+      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel">📄 Script Op</button>
+      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
       <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
       <button class="ls-exit-btn" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen">⛶ Full</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
@@ -1290,12 +1301,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-resizer" id="lsResizer" onpointerdown="startLivePanelResize(event)"></div>
     <div class="ls-sidebar" id="lsSidebar">
       <div class="ls-sidebar-head">
-        <div class="ls-sidebar-title">Flowmingo Script Panel</div>
+        <div class="ls-sidebar-title">Script Op</div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
       <div class="ls-prompter-text" id="lsPrompterText" contenteditable="true" spellcheck="true" aria-label="Live Flowmingo script" oninput="queueLivePrompterDraftPush()"></div>
       <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
         <div class="ls-script-quickbar" aria-label="Quick script inserts">
+          <button class="marker-chip" onclick="wrapLivePanelSelection('**','**')"><strong>B</strong>old</button>
           <button class="marker-chip" onclick="insertLivePanelMarker('[UPDATE] ')">Update</button>
           <button class="marker-chip" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')">Break</button>
           <button class="marker-chip" onclick="insertLivePanelMarker('[STOP HERE] ')">Stop</button>
@@ -1596,6 +1608,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="warn-title" id="lsScriptEditTitle" style="font-size:16px">Script</div>
     <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px">Edit the full script here. Saving pushes this row to Flowmingo.</div>
     <div class="marker-chip-row">
+      <button class="marker-chip" onclick="wrapTextareaSelection('lsScriptEditText','**','**')"><strong>B</strong>old</button>
       <button class="marker-chip" onclick="insertScriptMarker('[UPDATE] ')">Update</button>
       <button class="marker-chip" onclick="insertScriptMarker('[EDIT] ')">Edit</button>
       <button class="marker-chip" onclick="insertScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
@@ -1713,7 +1726,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80"></div>
         <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date"></div>
         <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="pp-show-start" type="time"></div>
+        <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100"></div>
         <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160"></div>
@@ -2009,7 +2023,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260522e"></script>
+<script src="cueola-app.js?v=20260522m"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

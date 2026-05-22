@@ -244,6 +244,11 @@ function setTimeInputValue(id, value, fallback='') {
   el.value = normalizeTimeValue(value) || normalizeTimeValue(fallback) || '';
 }
 
+// Like normalizeTimeValue, but preserves the literal "N/A" (e.g. a setup day with no show).
+function normalizeTimeOrNA(value) {
+  return String(value || '').trim().toUpperCase() === 'N/A' ? 'N/A' : normalizeTimeValue(value);
+}
+
 function clock(time24, offsetSecs) {
   const normalized = normalizeTimeValue(time24);
   if (!normalized) return '—';
@@ -1386,12 +1391,10 @@ function setupFirestore() {
         _postPrompterMessage(getPrompterPayload(false));
         ptUpdateFromCueola(prompterText);
       }
-      if (d.prompter?.control?.ts && d.prompter.control.ts > _lastPrompterControlTs) {
+      if (d.prompter?.control?.action && d.prompter.control.sender !== CLIENT_ID) {
         const control = d.prompter.control;
-        _lastPrompterControlTs = control.ts;
-        if (control.source === 'flowmingo-op') flowmingoRemoteOverrideUntil = Date.now() + 30000;
-        if (control.sender !== CLIENT_ID && Date.now() - control.ts < 30000) {
-          ptHandleRemoteControl(control.action);
+        if (applyRemoteControlOnce(control.action, control.ts, control.sender) && control.source === 'flowmingo-op') {
+          flowmingoRemoteOverrideUntil = Date.now() + 30000;
         }
       }
       // Handle force commands
@@ -2459,6 +2462,7 @@ function buildCueConfigFields(type, d) {
           <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds Flowmingo</span></label>
           <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
           <div class="marker-chip-row">
+            <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
             <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
             <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
             <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
@@ -3092,10 +3096,12 @@ function getPrompterPayload(isInit=false) {
 }
 
 function cleanPrompterText(text) {
+  // Keep the spacing the user typed: normalize line endings and strip stray
+  // trailing whitespace, but never collapse intentional blank lines.
   return String(text || '')
+    .replace(/\r\n?/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -3154,7 +3160,7 @@ function applyLivePrompterPanelState() {
   }
   if (resizer) resizer.classList.toggle('on', livePrompterOpen);
   if (btn) {
-    btn.textContent = livePrompterOpen ? '📄 Hide Script' : '📄 Script Panel';
+    btn.textContent = livePrompterOpen ? '📄 Hide Script Op' : '📄 Script Op';
     btn.style.color = livePrompterOpen ? 'var(--cyan)' : '';
     btn.style.borderColor = livePrompterOpen ? 'rgba(34,211,211,.35)' : '';
   }
@@ -3371,6 +3377,39 @@ function openLiveScript(beatIdx) {
   setTimeout(()=>document.getElementById('lsScriptEditText')?.focus(),80);
 }
 
+// Wrap the current selection (in a textarea) with markers, e.g. **bold**.
+function wrapTextareaSelection(taId, pre, post) {
+  const ta = document.getElementById(taId);
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  const sel = ta.value.slice(start, end) || 'text';
+  ta.value = ta.value.slice(0, start) + pre + sel + post + ta.value.slice(end);
+  ta.focus();
+  ta.setSelectionRange(start + pre.length, start + pre.length + sel.length);
+}
+
+// Wrap the current selection (in the live contenteditable panel) with markers.
+function wrapLivePanelSelection(pre, post) {
+  const el = document.getElementById('lsPrompterText');
+  if (!el) return;
+  el.focus();
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && !sel.isCollapsed) {
+    const range = sel.getRangeAt(0);
+    const txt = range.toString();
+    range.deleteContents();
+    range.insertNode(document.createTextNode(pre + txt + post));
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    insertLivePanelMarker(pre + 'text' + post);
+    return;
+  }
+  queueLivePrompterDraftPush();
+}
+
 function insertScriptMarker(text) {
   const ta = document.getElementById('lsScriptEditText');
   if (!ta) return;
@@ -3518,7 +3557,6 @@ function buildPromptFromRundown() {
 
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
-let _lastPrompterControlTs = 0;
 const PROMPTYPUS_CHANNEL = 'promptypus';
 const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
 const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
@@ -3527,7 +3565,9 @@ const PROMPTYPUS_LEGACY_STORAGE_MSG = 'prompt_up_the_jam_msg';
 const PROMPTYPUS_LEGACY_STORAGE_PING = 'prompt_up_the_jam_ping';
 
 function _postPrompterMessage(payload) {
-  payload = { sender:CLIENT_ID, ...payload };
+  // Stable id so the receiver can dedup the copy that arrives via BroadcastChannel
+  // against the copy that arrives via the localStorage fallback.
+  payload = { sender:CLIENT_ID, mid:`${CLIENT_ID}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...payload };
   [prompterChannel, prompterLegacyChannel].forEach(ch => {
     if (ch) {
       try { ch.postMessage(payload); } catch {}
@@ -3692,6 +3732,7 @@ function openPrompterApp() {
 }
 
 function openFlowmingoTalentWindow() {
+  initPrompter(); // make sure this window answers the new tab's pings with the current script
   const url = new URL(location.href);
   url.searchParams.set('prompter', '1');
   if (session.code) url.searchParams.set('code', session.code);
@@ -3756,7 +3797,8 @@ let ptKeydownHandler = null;
 let ptKeyupHandler = null;
 let ptReceiverChannels = [];
 let ptReceiverStorageHandler = null;
-let ptLastRemoteMsgTs = 0;
+let _seenPrompterMsgIds = [];   // dedup messages delivered via both BroadcastChannel and localStorage
+let _lastAppliedControlSig = ''; // dedup the same control across every transport (BC, storage, Firestore)
 let ptLinkedCueolaCode = '';
 let ptSeenPauseMarkers = new Set();
 let livePrompterDraftTimer = null;
@@ -3799,11 +3841,21 @@ function ptPostPing() {
   } catch {}
 }
 
+// Ping a few times right after connecting so the operator answers fast, instead
+// of waiting up to 5s for the next hello cycle.
+function ptPingBurst() {
+  [0, 250, 750, 1500, 3000].forEach(d => setTimeout(ptPostPing, d));
+}
+
 function ptHandleCueolaMessage(msg) {
   if (!msg || msg.sender === CLIENT_ID) return;
-  const msgTs = msg.ts || 0;
-  if (msgTs && msgTs < ptLastRemoteMsgTs) return;
-  if (msgTs) ptLastRemoteMsgTs = msgTs;
+  // Dedup: each message is sent over BroadcastChannel AND localStorage, so it
+  // arrives twice. Skip repeats by id instead of dropping by timestamp (which
+  // broke across devices with skewed clocks and re-applied relative controls).
+  const mid = msg.mid || `${msg.sender || ''}-${msg.ts || 0}-${msg.type || ''}`;
+  if (_seenPrompterMsgIds.includes(mid)) return;
+  _seenPrompterMsgIds.push(mid);
+  if (_seenPrompterMsgIds.length > 120) _seenPrompterMsgIds = _seenPrompterMsgIds.slice(-60);
   if (msg.type === 'cueola_hello') {
     ptPostPing();
     ptUpdateSyncLabel();
@@ -3818,7 +3870,7 @@ function ptHandleCueolaMessage(msg) {
     ptUpdateFromCueola(prompterText);
   }
   if (msg.type === 'prompter_control' && msg.action) {
-    ptHandleRemoteControl(msg.action);
+    applyRemoteControlOnce(msg.action, msg.ts, msg.sender);
   }
 }
 
@@ -3841,7 +3893,7 @@ function ptLoadSavedOrDefault() {
 
 function ptInitReceiver() {
   if (ptReceiverChannels.length || ptReceiverStorageHandler) {
-    ptPostPing();
+    ptPingBurst();
     return;
   }
   try {
@@ -3856,7 +3908,7 @@ function ptInitReceiver() {
     try { ptHandleCueolaMessage(JSON.parse(e.newValue)); } catch {}
   };
   window.addEventListener('storage', ptReceiverStorageHandler);
-  ptPostPing();
+  ptPingBurst();
 }
 
 function ptGetMaxScroll() {
@@ -4111,10 +4163,33 @@ function ptSetTheme(name) {
   if (dot) dot.classList.add('active');
 }
 
-function ptPlainTextToHTML(text) {
-  return (text || '').split('\n').map(line => `<p>${line || ' '}</p>`).join('');
+// Display-only formatting for the talent + operator screens. The stored script
+// stays plain text (with [bracket] directions and **bold** markers); this turns
+// it into clean HTML for reading. The editable Script Panel is left plain so the
+// plain text remains the single source of truth.
+function formatScriptLine(line) {
+  const trimmed = line.trim();
+  // Row/section header, e.g. "[1] Anchor Cold Open"
+  if (/^\[\d+\]/.test(trimmed)) return `<span class="scr-header">${esc(line)}</span>`;
+  // Speaker label on its own line, e.g. "HOST:" (all caps, ends with colon)
+  if (/[A-Z]/.test(trimmed) && /^[A-Z0-9][A-Z0-9 .,'&/-]*:$/.test(trimmed)) {
+    return `<span class="scr-speaker">${esc(line)}</span>`;
+  }
+  let html = esc(line);
+  // Stage directions / cues in [brackets] — dimmed so talent doesn't read them
+  html = html.replace(/\[[^\]]*\]/g, m => `<span class="scr-direction">${m}</span>`);
+  // **emphasis** — words the talent should stress
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, (_, inner) => `<strong>${inner}</strong>`);
+  return html;
 }
 
+function scriptToFormattedHTML(text) {
+  return String(text || '').split('\n').map(line => `<p>${formatScriptLine(line) || '&nbsp;'}</p>`).join('');
+}
+
+function ptPlainTextToHTML(text) {
+  return scriptToFormattedHTML(text);
+}
 function ptSanitizeHTML(html) {
   const doc = new DOMParser().parseFromString(html || '', 'text/html');
   doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(el => el.remove());
@@ -4126,11 +4201,31 @@ function ptSanitizeHTML(html) {
   return doc.body.innerHTML;
 }
 
-function ptSetScriptHTML(html) {
+// Reconstruct plain text (with line breaks) from the prompter DOM. Unlike
+// el.innerText, this does NOT depend on the element being visible — innerText
+// collapses to a single line when #pt-text is hidden, which would flatten the
+// shared prompterText and bunch up every script view.
+function ptExtractText(el) {
+  const parts = [];
+  el.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) parts.push(node.nodeValue);
+    else if (node.nodeName === 'BR') parts.push('\n');
+    else { parts.push(node.textContent); parts.push('\n'); }
+  });
+  return parts.join('')
+    .replace(/ /g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n$/, '');
+}
+
+function ptSetScriptHTML(html, sourceText) {
   const el = ptEl('pt-text');
   if (!el) return;
   el.innerHTML = ptSanitizeHTML(html);
-  prompterText = el.innerText || '';
+  // When we have the original plain text (the script feed), keep it verbatim so
+  // [bracket] and **bold** markers survive. Only fall back to reading the DOM for
+  // rich imports (DOCX/Pages) that have no plain source.
+  prompterText = (sourceText != null) ? sourceText : ptExtractText(el);
   try { localStorage.setItem('promptypus_script_html', el.innerHTML); } catch {}
   ptResetAutoPauseMarkers();
   ptResetScroll();
@@ -4138,7 +4233,7 @@ function ptSetScriptHTML(html) {
 }
 
 function ptSetScriptText(text) {
-  ptSetScriptHTML(ptPlainTextToHTML(text));
+  ptSetScriptHTML(scriptToFormattedHTML(text), text || '');
 }
 
 function ptLoadLibrary(src) {
@@ -4326,6 +4421,18 @@ function ptUpdateSyncLabel() {
 }
 
 // Called by sendPrompterControl to mirror controls into the native prompter
+// Apply a remote control exactly once, no matter how many transports deliver it
+// or how often a Firestore snapshot re-fires. Dedup by a signature instead of a
+// monotonic timestamp so clock skew between devices can't permanently wedge it.
+function applyRemoteControlOnce(action, ts, sender) {
+  if (!action) return false;
+  const sig = `${sender || ''}:${ts || 0}:${action}`;
+  if (sig === _lastAppliedControlSig) return false;
+  _lastAppliedControlSig = sig;
+  ptHandleRemoteControl(action);
+  return true;
+}
+
 function ptHandleRemoteControl(action) {
   if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
@@ -4845,9 +4952,8 @@ function ptLoadFromCueolaCode(codeOverride='') {
           }
         }
         const control = data.prompter?.control;
-        if (control?.ts && control.ts > _lastPrompterControlTs && control.sender !== CLIENT_ID) {
-          _lastPrompterControlTs = control.ts;
-          ptHandleRemoteControl(control.action);
+        if (control?.action && control.sender !== CLIENT_ID) {
+          applyRemoteControlOnce(control.action, control.ts, control.sender);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       }, () => {
@@ -5029,7 +5135,7 @@ function renderLivePromptOp() {
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
     <div class="prompt-op-track">
-      <div class="prompt-op-text">${script ? esc(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live Flowmingo text.'}</div>
+      <div class="prompt-op-text">${script ? scriptToFormattedHTML(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live Flowmingo text.'}</div>
     </div>
     ${promptOpControlsHTML()}
   </div>`;
@@ -5761,7 +5867,8 @@ function legacyCallSheetFromData(data={}) {
     production: data.production || show.name || '',
     date: data.date || '',
     call: normalizeTimeValue(data.call),
-    showStart: normalizeTimeValue(data.showStart),
+    showStart: normalizeTimeOrNA(data.showStart),
+    wrap: normalizeTimeOrNA(data.wrap),
     doors: data.doors || '',
     location: data.location || '',
     address: data.address || '',
@@ -5782,7 +5889,8 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     production: sheet.production || fallback.production || show.name || '',
     date: sheet.date || fallback.date || '',
     call: normalizeTimeValue(sheet.call) || normalizeTimeValue(fallback.call),
-    showStart: normalizeTimeValue(sheet.showStart) || normalizeTimeValue(fallback.showStart),
+    showStart: normalizeTimeOrNA(sheet.showStart) || normalizeTimeOrNA(fallback.showStart),
+    wrap: normalizeTimeOrNA(sheet.wrap) || normalizeTimeOrNA(fallback.wrap),
     doors: sheet.doors || fallback.doors || '',
     location: sheet.location || fallback.location || '',
     address: sheet.address || fallback.address || '',
@@ -5800,7 +5908,9 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
 function getCallSheets(data=loadPreProData()) {
   const legacy = legacyCallSheetFromData(data);
   const rawSheets = Array.isArray(data.callSheets) && data.callSheets.length ? data.callSheets : [legacy];
-  const sheets = rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i, legacy));
+  // Each sheet is self-contained — do NOT inherit empty fields from another sheet
+  // (the shared top-level "legacy" values), which used to bleed times across days.
+  const sheets = rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i));
   return sheets.length ? sheets : [normalizeCallSheet(legacy, 0)];
 }
 
@@ -5821,7 +5931,12 @@ function hydrateCallSheetForm(sheet) {
   document.getElementById('pp-production').value = data.production || show.name || '';
   document.getElementById('pp-date').value = data.date || '';
   setTimeInputValue('pp-call', data.call, show.start);
-  setTimeInputValue('pp-show-start', data.showStart, show.start);
+  const showNA = data.showStart === 'N/A';
+  setShowNotApplicable(showNA);
+  if (!showNA) setTimeInputValue('pp-show-start', data.showStart, show.start);
+  const wrapNA = data.wrap === 'N/A';
+  setWrapNotApplicable(wrapNA);
+  if (!wrapNA) setTimeInputValue('pp-wrap', data.wrap);
   setDoorsNotApplicable(data.doors === 'N/A');
   setTimeInputValue('pp-doors', data.doors === 'N/A' ? '' : data.doors);
   document.getElementById('pp-location').value = data.location || '';
@@ -5844,7 +5959,8 @@ function currentCallSheetFromForm() {
     production: document.getElementById('pp-production')?.value?.trim() || show.name || '',
     date: document.getElementById('pp-date')?.value || '',
     call: timeInputValue('pp-call'),
-    showStart: timeInputValue('pp-show-start'),
+    showStart: getShowStartValue(),
+    wrap: getWrapValue(),
     doors: getDoorsOpenValue(),
     location: document.getElementById('pp-location')?.value?.trim() || '',
     address: document.getElementById('pp-address')?.value?.trim() || '',
@@ -5888,10 +6004,17 @@ function addAnotherCallSheet() {
   const data = saveCallSheetStateLocally(false);
   const sheets = getCallSheets(data);
   const source = sheets[activeCallSheetIndex] || sheets[0] || legacyCallSheetFromData(data);
-  const nextSheet = normalizeCallSheet({ ...source, label:`Call Sheet ${sheets.length + 1}` }, sheets.length, source);
+  // Copy the venue + crew roster, but start the schedule fresh so the new day's
+  // sheet doesn't inherit the previous day's call/show/wrap times.
+  const nextSheet = normalizeCallSheet({
+    ...source,
+    label: `Call Sheet ${sheets.length + 1}`,
+    date: '', call: '', showStart: '', wrap: '', doors: '',
+    people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
+  }, sheets.length);
   sheets.push(nextSheet);
   activeCallSheetIndex = sheets.length - 1;
-  const next = { ...data, ...nextSheet, callSheets:sheets, activeCallSheetIndex, updatedAt:Date.now() };
+  const next = { ...data, callSheets:sheets, activeCallSheetIndex, updatedAt:Date.now() };
   persistPreProData(next, 'Call Sheet');
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(nextSheet);
@@ -5923,7 +6046,7 @@ function getCallSheetExportData() {
   const data = loadPreProData();
   const sheets = getCallSheets(data);
   const idx = Math.max(0, Math.min(Number(data.activeCallSheetIndex ?? activeCallSheetIndex) || 0, sheets.length - 1));
-  return normalizeCallSheet(sheets[idx], idx, legacyCallSheetFromData(data));
+  return normalizeCallSheet(sheets[idx], idx);
 }
 
 function showPatchSheetPreview(kind) {
@@ -5933,7 +6056,7 @@ function showPatchSheetPreview(kind) {
 function callSheetPreviewHTML(data) {
   const title = callSheetTitle(data);
   const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
-  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(p.call || '')}</td></tr>`).join('');
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(p.call || data.call || '')}</td></tr>`).join('');
   return `
     <h1>${esc(title)}</h1>
     <table><tbody>
@@ -5942,6 +6065,7 @@ function callSheetPreviewHTML(data) {
       <tr><th>Call Time</th><td>${esc(data.call || show.start || '')}</td></tr>
       <tr><th>Doors Open</th><td>${esc(data.doors || '')}</td></tr>
       <tr><th>Show Start</th><td>${esc(data.showStart || '')}</td></tr>
+      <tr><th>Estimated Wrap</th><td>${esc(data.wrap || '')}</td></tr>
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
       <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
@@ -6526,6 +6650,47 @@ window.setDoorsNotApplicable = setDoorsNotApplicable;
 window.toggleDoorsNotApplicable = toggleDoorsNotApplicable;
 window.getDoorsOpenValue = getDoorsOpenValue;
 
+// Show Start "N/A" (e.g. a setup day with no show) — mirrors the Doors pattern.
+function setShowNotApplicable(isNA) {
+  const input = document.getElementById('pp-show-start');
+  const btn = document.getElementById('pp-show-na');
+  if (!input || !btn) return;
+  input.disabled = Boolean(isNA);
+  if (isNA) input.value = '';
+  btn.classList.toggle('on', Boolean(isNA));
+  btn.setAttribute('aria-pressed', isNA ? 'true' : 'false');
+}
+function toggleShowNotApplicable() {
+  setShowNotApplicable(!document.getElementById('pp-show-na')?.classList.contains('on'));
+}
+function getShowStartValue() {
+  if (document.getElementById('pp-show-na')?.classList.contains('on')) return 'N/A';
+  return timeInputValue('pp-show-start');
+}
+
+// Estimated Wrap, also with an "N/A" option.
+function setWrapNotApplicable(isNA) {
+  const input = document.getElementById('pp-wrap');
+  const btn = document.getElementById('pp-wrap-na');
+  if (!input || !btn) return;
+  input.disabled = Boolean(isNA);
+  if (isNA) input.value = '';
+  btn.classList.toggle('on', Boolean(isNA));
+  btn.setAttribute('aria-pressed', isNA ? 'true' : 'false');
+}
+function toggleWrapNotApplicable() {
+  setWrapNotApplicable(!document.getElementById('pp-wrap-na')?.classList.contains('on'));
+}
+function getWrapValue() {
+  if (document.getElementById('pp-wrap-na')?.classList.contains('on')) return 'N/A';
+  return timeInputValue('pp-wrap');
+}
+
+window.setShowNotApplicable = setShowNotApplicable;
+window.toggleShowNotApplicable = toggleShowNotApplicable;
+window.setWrapNotApplicable = setWrapNotApplicable;
+window.toggleWrapNotApplicable = toggleWrapNotApplicable;
+
 function getPreProData() {
   const existing = loadPreProData();
   const sheets = getCallSheets(existing);
@@ -6560,11 +6725,82 @@ function syncCallSheetPeopleFromDOM() {
   if (!callSheetPeople.length) callSheetPeople = [{ name:'', position:'', email:'', phone:'', call:'' }];
 }
 
+// ── Reorder crew/talent by dragging the grip handle ──────────────────────────
+let _callDragFrom = -1;
+
+// Read the rows straight from the DOM in render order (no filtering) so a reorder
+// keeps every row, including any the user is mid-typing.
+function readCallPeopleRows() {
+  return Array.from(document.querySelectorAll('#pp-crew-grid .call-person-row')).map(row => ({
+    name: row.querySelector('[data-call-field="name"]')?.value || '',
+    position: row.querySelector('[data-call-field="position"]')?.value || '',
+    email: row.querySelector('[data-call-field="email"]')?.value || '',
+    phone: row.querySelector('[data-call-field="phone"]')?.value || '',
+    call: normalizeTimeValue(row.querySelector('[data-call-field="call"]')?.value || ''),
+  }));
+}
+
+function moveCallSheetPerson(from, to) {
+  const people = readCallPeopleRows();
+  if (from < 0 || from >= people.length || to < 0 || to >= people.length || from === to) return;
+  const [moved] = people.splice(from, 1);
+  people.splice(to, 0, moved);
+  callSheetPeople = people;
+  renderCallSheetPeople();
+}
+
+// Which row index the pointer is currently over (the drop position).
+function callDropIndex(clientY) {
+  const handles = Array.from(document.querySelectorAll('#pp-crew-grid .call-drag-handle'));
+  for (let i = 0; i < handles.length; i++) {
+    const r = handles[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) return i;
+  }
+  return handles.length - 1;
+}
+
+// Pointer-based drag so reordering works with a mouse, a trackpad, AND touch
+// (iPad/phone) — HTML5 drag-and-drop does not fire on touchscreens.
+function callPointerMove(e) {
+  if (_callDragFrom < 0) return;
+  e.preventDefault();
+  const target = callDropIndex(e.clientY);
+  document.querySelectorAll('#pp-crew-grid .call-person-row').forEach((row, i) => {
+    row.classList.toggle('drag-target', i === target && i !== _callDragFrom);
+  });
+}
+
+function callPointerUp(e) {
+  const handle = e.currentTarget;
+  handle.removeEventListener('pointermove', callPointerMove);
+  handle.removeEventListener('pointerup', callPointerUp);
+  handle.removeEventListener('pointercancel', callPointerUp);
+  if (_callDragFrom < 0) return;
+  const from = _callDragFrom;
+  const to = callDropIndex(e.clientY);
+  _callDragFrom = -1;
+  document.querySelectorAll('#pp-crew-grid .call-person-row').forEach(row => row.classList.remove('dragging', 'drag-target'));
+  moveCallSheetPerson(from, to);
+}
+
+function callPointerDown(e, idx) {
+  if (e.button != null && e.button > 0) return; // primary button / touch only
+  e.preventDefault();
+  _callDragFrom = idx;
+  const handle = e.currentTarget;
+  try { handle.setPointerCapture(e.pointerId); } catch {}
+  handle.closest('.call-person-row')?.classList.add('dragging');
+  handle.addEventListener('pointermove', callPointerMove);
+  handle.addEventListener('pointerup', callPointerUp);
+  handle.addEventListener('pointercancel', callPointerUp);
+}
+
 function renderCallSheetPeople() {
   const grid = document.getElementById('pp-crew-grid');
   if (!grid) return;
   const rows = callSheetPeople.length ? callSheetPeople : [{ name:'', position:'', email:'', phone:'', call:'' }];
   grid.innerHTML = `
+    <div class="call-grid-head call-grid-head-grip"></div>
     <div class="call-grid-head">Name</div>
     <div class="call-grid-head">Position</div>
     <div class="call-grid-head">Email</div>
@@ -6572,7 +6808,8 @@ function renderCallSheetPeople() {
     <div class="call-grid-head">Call</div>
     <div class="call-grid-head"></div>
     ${rows.map((p,i)=>`
-      <div class="call-person-row" style="display:contents">
+      <div class="call-person-row" data-idx="${i}" style="display:contents">
+        <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" title="Drag to reorder" aria-label="Drag to reorder">⠿</div>
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="position" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="email" value="${esc(p.email||'')}" placeholder="Email" oninput="syncCallSheetPeopleFromDOM()">
@@ -6584,7 +6821,8 @@ function renderCallSheetPeople() {
 
 function addCallSheetPerson() {
   syncCallSheetPeopleFromDOM();
-  callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:'' });
+  // New crew/talent default to the sheet's overall call time (editable per person).
+  callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:timeInputValue('pp-call') });
   renderCallSheetPeople();
 }
 
