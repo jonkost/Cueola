@@ -57,6 +57,32 @@ const CLIENT_ID = (() => {
     return 'cl_' + Math.random().toString(36).slice(2, 10);
   }
 })();
+const FLOWMINGO_ENDPOINT_ID = (() => {
+  try {
+    const raw = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    return 'fm_' + String(raw).replace(/[^a-zA-Z0-9_-]/g, '');
+  } catch {
+    return 'fm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+})();
+let _prompterMsgSeq = 0;
+function nextPrompterMsgId(kind='msg') {
+  _prompterMsgSeq += 1;
+  return `${FLOWMINGO_ENDPOINT_ID}_${kind}_${Date.now().toString(36)}_${_prompterMsgSeq}`;
+}
+function isPrompterSelfSender(sender) {
+  return !!sender && sender === FLOWMINGO_ENDPOINT_ID;
+}
+function withPrompterEnvelope(payload={}) {
+  const ts = payload.ts || Date.now();
+  return {
+    ...payload,
+    ts,
+    sender: FLOWMINGO_ENDPOINT_ID,
+    senderClient: CLIENT_ID,
+    mid: payload.mid || nextPrompterMsgId(payload.type || 'msg')
+  };
+}
 const CUEOLA_THEMES = ['warm','cool','white','green','koala','panda','flamingo','prepbear'];
 const CUEOLA_THEME_LABELS = {
   warm:     'Honey',
@@ -1391,17 +1417,17 @@ function setupFirestore() {
         _postPrompterMessage(getPrompterPayload(false));
         ptUpdateFromCueola(prompterText);
       }
-      if (d.prompter?.control?.action && d.prompter.control.sender !== CLIENT_ID) {
+      if (d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
         const control = d.prompter.control;
-        if (applyRemoteControlOnce(control.action, control.ts, control.sender) && control.source === 'flowmingo-op') {
+        if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId) && control.source === 'flowmingo-op') {
           flowmingoRemoteOverrideUntil = Date.now() + 30000;
         }
       }
+      if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
-      if (d.prompter?.talentHeartbeat?.ts && d.prompter.talentHeartbeat.sender !== CLIENT_ID) {
-        lastTalentPingTs = Date.now();
-        _setPrompterStatus(true);
+      if (d.prompter?.talentHeartbeat?.ts && !isPrompterSelfSender(d.prompter.talentHeartbeat.sender)) {
+        _notePrompterTalentSeen(d.prompter.talentHeartbeat);
       }
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
@@ -3620,6 +3646,9 @@ let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
 let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
 let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
+let _lastTalentInitSendBySender = {};
+let _pendingPrompterControls = {};
+let _lastPrompterAckId = '';
 const PROMPTYPUS_CHANNEL = 'promptypus';
 const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
 const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
@@ -3628,9 +3657,9 @@ const PROMPTYPUS_LEGACY_STORAGE_MSG = 'prompt_up_the_jam_msg';
 const PROMPTYPUS_LEGACY_STORAGE_PING = 'prompt_up_the_jam_ping';
 
 function _postPrompterMessage(payload) {
-  // Stable id so the receiver can dedup the copy that arrives via BroadcastChannel
-  // against the copy that arrives via the localStorage fallback.
-  payload = { sender:CLIENT_ID, mid:`${CLIENT_ID}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...payload };
+  // Per-window sender id matters: operator and talent windows often share one
+  // localStorage CLIENT_ID, so remote commands must identify the actual tab/window.
+  payload = withPrompterEnvelope(payload);
   [prompterChannel, prompterLegacyChannel].forEach(ch => {
     if (ch) {
       try { ch.postMessage(payload); } catch {}
@@ -3644,17 +3673,85 @@ function _postPrompterMessage(payload) {
 }
 
 function _postPrompterHello() {
-  const hello = { type:'cueola_hello', sender:CLIENT_ID, sessionCode:session.code, showName:show.name||'Untitled Show', ts:Date.now() };
-  [prompterChannel, prompterLegacyChannel].forEach(ch => {
-    if (ch) {
-      try { ch.postMessage(hello); } catch {}
-    }
-  });
-  try {
-    const msg = JSON.stringify({...hello, storageNonce:Date.now()+Math.random()});
-    localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
-    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
-  } catch {}
+  _postPrompterMessage({ type:'cueola_hello', sessionCode:session.code, showName:show.name||'Untitled Show', reason:'hello' });
+}
+
+function _prompterHasRecentTalent() {
+  return !!lastTalentPingTs && (Date.now() - lastTalentPingTs) < 14000;
+}
+
+function _notePrompterTalentSeen(msg={}) {
+  if (isPrompterSelfSender(msg.sender)) return false;
+  const wasSilent = !_prompterHasRecentTalent();
+  lastTalentPingTs = Date.now();
+  _setPrompterStatus(true);
+  return wasSilent;
+}
+
+function _shouldSendInitForTalent(msg={}, wasSilent=false) {
+  if (!document.getElementById('liveshow')?.classList.contains('on')) return false;
+  const sender = msg.sender || 'unknown';
+  const reason = msg.reason || '';
+  const explicitReady = reason === 'ready' || reason === 'connect' || reason === 'hello';
+  if (!wasSilent && !explicitReady) return false;
+  const lastSent = _lastTalentInitSendBySender[sender] || 0;
+  if (Date.now() - lastSent < 4000) return false;
+  _lastTalentInitSendBySender[sender] = Date.now();
+  return true;
+}
+
+function _handlePrompterControlAck(msg) {
+  if (!msg || msg.type !== 'control_ack') return;
+  if (isPrompterSelfSender(msg.sender)) return;
+  if (msg.target && msg.target !== FLOWMINGO_ENDPOINT_ID) return;
+  const ackId = msg.controlId || msg.mid || `${msg.sender || ''}:${msg.controlTs || msg.ts || ''}:${msg.action || ''}`;
+  if (!ackId || ackId === _lastPrompterAckId) return;
+  _lastPrompterAckId = ackId;
+  _notePrompterTalentSeen(msg);
+  const pending = _pendingPrompterControls[msg.controlId];
+  if (pending) {
+    clearTimeout(pending.waitTimer);
+    clearTimeout(pending.failTimer);
+    delete _pendingPrompterControls[msg.controlId];
+    const label = flowOpControlLabel(pending.action);
+    if (pending.origin === 'flowop') flowOpSetStatus(`${label} applied`);
+    else markLivePrompterStatus(`${label} applied`, 'ok');
+  }
+}
+
+function _handlePrompterOperatorMessage(msg) {
+  if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (msg.type === 'ping') {
+    const wasSilent = _notePrompterTalentSeen(msg);
+    if (_shouldSendInitForTalent(msg, wasSilent)) sendToPrompter(true);
+    return;
+  }
+  if (msg.type === 'control_ack') {
+    _handlePrompterControlAck(msg);
+  }
+}
+
+function _ensurePrompterOperatorBridge(startHello=false) {
+  if (!prompterChannel) {
+    try {
+      prompterChannel = new BroadcastChannel(PROMPTYPUS_CHANNEL);
+      prompterChannel.onmessage = e => _handlePrompterOperatorMessage(e.data);
+      prompterLegacyChannel = new BroadcastChannel(PROMPTYPUS_LEGACY_CHANNEL);
+      prompterLegacyChannel.onmessage = e => _handlePrompterOperatorMessage(e.data);
+    } catch {}
+  }
+  if (!_prompterStorageHandler) {
+    _prompterStorageHandler = (e) => {
+      if (![PROMPTYPUS_STORAGE_PING, PROMPTYPUS_LEGACY_STORAGE_PING, PROMPTYPUS_STORAGE_MSG, PROMPTYPUS_LEGACY_STORAGE_MSG].includes(e.key) || !e.newValue) return;
+      try { _handlePrompterOperatorMessage(JSON.parse(e.newValue)); } catch {}
+    };
+    window.addEventListener('storage', _prompterStorageHandler);
+  }
+  if (startHello) {
+    clearInterval(_prompterPingInterval);
+    _prompterPingInterval = setInterval(_postPrompterHello, 5000);
+    _postPrompterHello();
+  }
 }
 
 // Watch the talent's heartbeat — if it goes silent for too long, flip the
@@ -3677,51 +3774,8 @@ function startTalentWatchdog() {
 
 function initPrompter() {
   startTalentWatchdog();
-  // Don't tear down an existing live channel — just re-send current text.
-  if (prompterChannel) {
-    sendToPrompter(false);
-    return;
-  }
-  const handlePrompterMessage = (e) => {
-    if (e.data?.type === 'ping') {
-      lastTalentPingTs = Date.now();
-      _setPrompterStatus(true);
-      sendToPrompter(true); // reconnected — full send with scroll reset
-    }
-  };
-  const handleStoragePing = (e) => {
-    if (![PROMPTYPUS_STORAGE_PING, PROMPTYPUS_LEGACY_STORAGE_PING].includes(e.key) || !e.newValue) return;
-    try {
-      const msg = JSON.parse(e.newValue);
-      if (msg?.type === 'ping') {
-        lastTalentPingTs = Date.now();
-        _setPrompterStatus(true);
-        sendToPrompter(true);
-      }
-    } catch {}
-  };
-  try {
-    prompterChannel = new BroadcastChannel(PROMPTYPUS_CHANNEL);
-    prompterChannel.onmessage = handlePrompterMessage;
-    prompterLegacyChannel = new BroadcastChannel(PROMPTYPUS_LEGACY_CHANNEL);
-    prompterLegacyChannel.onmessage = handlePrompterMessage;
-    if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
-    _prompterStorageHandler = handleStoragePing;
-    window.addEventListener('storage', _prompterStorageHandler);
-    // Periodic hello so Flowmingo reconnects automatically if it was closed and reopened.
-    clearInterval(_prompterPingInterval);
-    _prompterPingInterval = setInterval(_postPrompterHello, 5000);
-    _postPrompterHello();
-    _setPrompterStatus(false); // unknown until ping reply
-  } catch {
-    if (_prompterStorageHandler) window.removeEventListener('storage', _prompterStorageHandler);
-    _prompterStorageHandler = handleStoragePing;
-    window.addEventListener('storage', _prompterStorageHandler);
-    clearInterval(_prompterPingInterval);
-    _prompterPingInterval = setInterval(_postPrompterHello, 5000);
-    _postPrompterHello();
-    _setPrompterStatus(false);
-  }
+  _ensurePrompterOperatorBridge(true);
+  _setPrompterStatus(_prompterHasRecentTalent());
 }
 
 function _setPrompterStatus(connected, unavailable=false) {
@@ -3810,6 +3864,40 @@ function clearPrompter() {
   sendToPrompter(true); // reset scroll on clear
 }
 
+function buildPrompterControl(action, source='script-op') {
+  const ts = Date.now();
+  return {
+    type:'prompter_control',
+    action,
+    ts,
+    source,
+    controlId: nextPrompterMsgId('control')
+  };
+}
+
+function isQuietPrompterControl(action) {
+  return !action || action.endsWith('_stop') || action.includes('_set_');
+}
+
+function trackPrompterControl(control, origin='live', quiet=false) {
+  if (!control?.controlId || quiet || isQuietPrompterControl(control.action)) return;
+  const label = flowOpControlLabel(control.action);
+  clearTimeout(_pendingPrompterControls[control.controlId]?.waitTimer);
+  clearTimeout(_pendingPrompterControls[control.controlId]?.failTimer);
+  const waitTimer = setTimeout(() => {
+    if (!_pendingPrompterControls[control.controlId]) return;
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · waiting for talent`);
+    else markLivePrompterStatus(`${label} sent`, 'busy');
+  }, _prompterHasRecentTalent() ? 900 : 0);
+  const failTimer = setTimeout(() => {
+    if (!_pendingPrompterControls[control.controlId]) return;
+    delete _pendingPrompterControls[control.controlId];
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
+    else markLivePrompterStatus('No talent ack', 'busy');
+  }, 5000);
+  _pendingPrompterControls[control.controlId] = { action:control.action, origin, waitTimer, failTimer };
+}
+
 function openPrompterApp() {
   sessionStorage.setItem('cueola_screen', 'entry');
   enterPrompter();
@@ -3833,17 +3921,16 @@ function sendPrompterControl(action) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return;
   }
-  // ONE timestamp for both transports — the talent dedups by sender:ts:action, so
-  // BroadcastChannel and Firestore copies must share the same ts or the same
-  // control gets applied twice (speed jumps in doubles, toggles cancel themselves).
-  const ts = Date.now();
-  _postPrompterMessage({ type:'prompter_control', action, ts });
+  _ensurePrompterOperatorBridge();
+  const control = buildPrompterControl(action, 'script-op');
+  _postPrompterMessage(control);
+  trackPrompterControl(control, 'live');
   ptHandleRemoteControl(action);
   if (promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePromptOp();
   if (!promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePrompterControls();
   if (window._firebaseReady && session.code && !session.isDemo) {
     window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.control': { action, ts, sender:CLIENT_ID }
+      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID }
     }).catch(()=>{});
   }
 }
@@ -3904,8 +3991,21 @@ const PT_SVG_PAUSE = `<svg width="10" height="12" viewBox="0 0 10 12" fill="curr
 
 function ptEl(id) { return document.getElementById(id); }
 
-function ptPostPing() {
-  const ping = { type:'ping', ts:Date.now(), sender:CLIENT_ID };
+function ptPostOperatorMessage(payload) {
+  const msgObj = withPrompterEnvelope(payload);
+  ptReceiverChannels.forEach(ch => {
+    try { ch.postMessage(msgObj); } catch {}
+  });
+  try {
+    const msg = JSON.stringify({...msgObj, storageNonce:Date.now()+Math.random()});
+    localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
+    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
+  } catch {}
+  return msgObj;
+}
+
+function ptPostPing(reason='heartbeat') {
+  const ping = withPrompterEnvelope({ type:'ping', reason, sessionCode:ptLinkedCueolaCode || session.code || '' });
   ptReceiverChannels.forEach(ch => {
     try { ch.postMessage(ping); } catch {}
   });
@@ -3919,11 +4019,11 @@ function ptPostPing() {
 // Ping a few times right after connecting so the operator answers fast, instead
 // of waiting up to 5s for the next hello cycle.
 function ptPingBurst() {
-  [0, 250, 750, 1500, 3000].forEach(d => setTimeout(ptPostPing, d));
+  [0, 250, 750, 1500, 3000].forEach(d => setTimeout(() => ptPostPing('ready'), d));
 }
 
 function ptHandleCueolaMessage(msg) {
-  if (!msg || msg.sender === CLIENT_ID) return;
+  if (!msg || isPrompterSelfSender(msg.sender)) return;
   // Dedup: each message is sent over BroadcastChannel AND localStorage, so it
   // arrives twice. Skip repeats by id instead of dropping by timestamp (which
   // broke across devices with skewed clocks and re-applied relative controls).
@@ -3932,7 +4032,7 @@ function ptHandleCueolaMessage(msg) {
   _seenPrompterMsgIds.push(mid);
   if (_seenPrompterMsgIds.length > 120) _seenPrompterMsgIds = _seenPrompterMsgIds.slice(-60);
   if (msg.type === 'cueola_hello') {
-    ptPostPing();
+    ptPostPing('ready');
     ptUpdateSyncLabel();
   }
   if (msg.type === 'script_init' && msg.text != null) {
@@ -3945,7 +4045,7 @@ function ptHandleCueolaMessage(msg) {
     ptUpdateFromCueola(prompterText);
   }
   if (msg.type === 'prompter_control' && msg.action) {
-    applyRemoteControlOnce(msg.action, msg.ts, msg.sender);
+    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.controlId);
   }
 }
 
@@ -3973,11 +4073,11 @@ function ptLoadSavedOrDefault() {
 // Firestore prompter.talentHeartbeat for cross-device).
 let ptHeartbeatInterval = null;
 function ptTalentHeartbeat() {
-  ptPostPing();
+  ptPostPing('heartbeat');
   if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
     try {
       window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
-        'prompter.talentHeartbeat': { ts: Date.now(), sender: CLIENT_ID }
+        'prompter.talentHeartbeat': { ts: Date.now(), sender: FLOWMINGO_ENDPOINT_ID, senderClient: CLIENT_ID }
       }).catch(() => {});
     } catch {}
   }
@@ -4557,16 +4657,57 @@ function ptSetupConnect() {
   ptLoadFromCueolaCode(code);
 }
 
+function isFlowmingoTalentActive() {
+  return document.getElementById('promptypus')?.classList.contains('on');
+}
+
+function ptStateSnapshot() {
+  return {
+    playing: ptPlaying,
+    speed: ptTargetSpeed,
+    size: ptFontSize,
+    align: ptAlign,
+    theme: ptThemeName,
+    mirrored: ptMirrored,
+    panelVisible: ptPanelVisible,
+    offset: Math.round(ptOffset),
+    ts: Date.now()
+  };
+}
+
+function ptPostControlAck(controlId, action, controlTs, target) {
+  if (!controlId || !target || !isFlowmingoTalentActive()) return;
+  const ack = ptPostOperatorMessage({
+    type:'control_ack',
+    controlId,
+    action,
+    controlTs,
+    target,
+    state: ptStateSnapshot()
+  });
+  if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
+    try {
+      window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
+        'prompter.controlAck': ack,
+        'prompter.talentState': ack.state,
+        'prompter.updatedAt': Date.now()
+      }).catch(() => {});
+    } catch {}
+  }
+}
+
 // Called by sendPrompterControl to mirror controls into the native prompter
 // Apply a remote control exactly once, no matter how many transports deliver it
 // or how often a Firestore snapshot re-fires. Dedup by a signature instead of a
 // monotonic timestamp so clock skew between devices can't permanently wedge it.
-function applyRemoteControlOnce(action, ts, sender) {
+function applyRemoteControlOnce(action, ts, sender, controlId='') {
   if (!action) return false;
-  const sig = `${sender || ''}:${ts || 0}:${action}`;
+  if (isPrompterSelfSender(sender)) return false;
+  const sig = controlId || `${sender || ''}:${ts || 0}:${action}`;
   if (sig === _lastAppliedControlSig) return false;
   _lastAppliedControlSig = sig;
   ptHandleRemoteControl(action);
+  ptPostControlAck(controlId, action, ts, sender);
   return true;
 }
 
@@ -4827,6 +4968,7 @@ function flowOpLoadSession(codeOverride='') {
   flowOpCode = '';
   flowOpRenderControls(true);
   flowOpSetStatus('Loading...');
+  _ensurePrompterOperatorBridge(true);
   const load = () => {
     try {
       if (flowOpSub) { flowOpSub(); flowOpSub = null; }
@@ -4845,12 +4987,20 @@ function flowOpLoadSession(codeOverride='') {
         flowOpData = snap.data() || {};
         flowOpRenderSession(flowOpData);
         flowOpRenderControls(false);
-        flowOpSetStatus(`READY · ${code}`);
+        const heartbeat = flowOpData.prompter?.talentHeartbeat;
+        const talentOnline = heartbeat?.ts && !isPrompterSelfSender(heartbeat.sender) && (Date.now() - heartbeat.ts) < 20000;
+        if (talentOnline) {
+          _notePrompterTalentSeen(heartbeat);
+          flowOpSetStatus(`READY · ${code} · talent online`);
+        } else {
+          flowOpSetStatus(`READY · ${code}`);
+        }
         const control = flowOpData.prompter?.control;
-        if (control?.ts && control.ts > flowOpLastRemoteControlTs && control.sender !== CLIENT_ID) {
+        if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
           flowOpLastRemoteControlTs = control.ts;
           flowOpApplyControlPreview(control.action, true);
         }
+        if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       }, () => {
         flowOpCode = '';
@@ -4882,16 +5032,18 @@ function flowOpSendControl(action, quiet=false) {
     flowOpEl('flowOpCodeInput')?.focus();
     return;
   }
-  const ts = Date.now();
-  _postPrompterMessage({ type:'prompter_control', action, ts });
+  _ensurePrompterOperatorBridge(true);
+  const control = buildPrompterControl(action, 'flowmingo-op');
+  _postPrompterMessage(control);
+  trackPrompterControl(control, 'flowop', quiet);
   flowOpApplyControlPreview(action, quiet);
   if (!window._firebaseReady) {
     flowOpSetStatus('Local only · not connected', true);
     return;
   }
   window._updateDoc(window._doc(window._db, 'sessions', flowOpCode), {
-    'prompter.control': { action, ts, sender:CLIENT_ID, source:'flowmingo-op' },
-    'prompter.updatedAt': ts
+    'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
+    'prompter.updatedAt': control.ts
   }).catch(() => flowOpSetStatus('Send failed', true));
 }
 
@@ -5029,6 +5181,11 @@ function ptLoadFromCueola() {
 
 let ptCueolaSub = null;
 
+function ptCurrentPlainText() {
+  const textEl = ptEl('pt-text');
+  return textEl ? ptExtractText(textEl) : '';
+}
+
 function ptSetCueolaStatus(text, isError=false) {
   const status = ptEl('pt-cueola-status');
   if (!status) return;
@@ -5074,7 +5231,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         const text = ptAssembleCueolaScript(data);
         if (text.trim()) {
           prompterText = text;
-          if (cleanPrompterText(ptEl('pt-text')?.innerText || '') !== cleanPrompterText(text)) {
+          if (cleanPrompterText(ptCurrentPlainText()) !== cleanPrompterText(text)) {
             ptSetScriptText(text);
           }
           const ta = ptEl('pt-script-input');
@@ -5096,8 +5253,8 @@ function ptLoadFromCueolaCode(codeOverride='') {
         }
         ptUpdateReady();
         const control = data.prompter?.control;
-        if (control?.action && control.sender !== CLIENT_ID) {
-          applyRemoteControlOnce(control.action, control.ts, control.sender);
+        if (control?.action && !isPrompterSelfSender(control.sender)) {
+          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       }, () => {
