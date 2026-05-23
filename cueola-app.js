@@ -2903,22 +2903,6 @@ function chipCustom(id, el) {
 
 // loadScriptFile defined above (async, supports PDF)
 
-function arCommit() {
-  if (!arStyle) return;
-  const newBeat = insertAddRowBeat();
-  if (arCueType) {
-    const d = {
-      ready: document.getElementById('ar-cue-ready')?.value?.trim()||'',
-      take:  document.getElementById('ar-cue-take')?.value?.trim()||'',
-    };
-    if (arCueType === 'script') d.text = document.getElementById('ar-cue-text')?.value?.trim()||'';
-    newBeat.cues[arCueType] = d;
-  }
-  hideOverlay('addRowOv');
-  renderRundown(); syncToFirestore();
-  toast('Row added.');
-}
-
 // ─────────────────────────────────────────────────────────────
 // EDIT
 // ─────────────────────────────────────────────────────────────
@@ -3889,6 +3873,8 @@ function ptLoadSavedOrDefault() {
     'Press PLAY, or tap the stage, to begin scrolling.\n\n' +
     'Use the controls to adjust speed, text size, alignment, theme, mirror, and fullscreen.'
   );
+  ptScriptIsPlaceholder = true; // mark the welcome default so the setup card still shows
+  ptUpdateReady();
 }
 
 function ptInitReceiver() {
@@ -4226,6 +4212,7 @@ function ptSetScriptHTML(html, sourceText) {
   // [bracket] and **bold** markers survive. Only fall back to reading the DOM for
   // rich imports (DOCX/Pages) that have no plain source.
   prompterText = (sourceText != null) ? sourceText : ptExtractText(el);
+  ptScriptIsPlaceholder = false; // a real script was loaded (welcome default overrides this after)
   try { localStorage.setItem('promptypus_script_html', el.innerHTML); } catch {}
   ptResetAutoPauseMarkers();
   ptResetScroll();
@@ -4394,6 +4381,7 @@ function ptUpdateFromCueola(text) {
   const track = ptEl('pt-track');
   const prevHeight = track ? track.scrollHeight : 0;
   el.innerHTML = ptPlainTextToHTML(text || '');
+  if (text && text.trim()) ptScriptIsPlaceholder = false;
   ptResetAutoPauseMarkers();
   ptUpdateSyncLabel();
   requestAnimationFrame(() => {
@@ -4407,17 +4395,59 @@ function ptUpdateFromCueola(text) {
   });
 }
 
-function ptUpdateSyncLabel() {
-  const lbl = ptEl('pt-sync-label');
-  if (!lbl) return;
+// Connection state for the talent setup/ready indicator.
+let ptConnState = 'idle'; // idle | connecting | connected | notfound | error
+let ptScriptIsPlaceholder = false; // true when only the default "Welcome to Flowmingo" text is loaded
+
+function ptHasScript() {
+  if (ptScriptIsPlaceholder) return false; // the welcome placeholder doesn't count as a real script
+  if (prompterText && prompterText.trim()) return true;
+  const el = ptEl('pt-text');
+  return !!(el && el.textContent && el.textContent.trim());
+}
+
+// Single source of truth for the talent screen's "are we set up & ready?" UI:
+// the status pill, the two checks, the step dots, and the setup card.
+function ptUpdateReady() {
   const code = ptLinkedCueolaCode || (session && session.code && !session.isDemo ? session.code : '');
-  if (code) {
-    lbl.textContent = `● Live · ${code}`;
-  } else {
-    const hasText = (prompterText && prompterText.trim()) ||
-                    (ptEl('pt-text') && ptEl('pt-text').textContent.trim());
-    lbl.textContent = hasText ? '● Script loaded' : 'No script — use Script button';
+  const hasScript = ptHasScript();
+  let state, text;
+  if (ptConnState === 'connecting')      { state = 'connecting'; text = 'Connecting…'; }
+  else if (ptConnState === 'notfound')   { state = 'bad';        text = 'Show not found — check the code'; }
+  else if (ptConnState === 'error')      { state = 'warn';       text = code ? 'Reconnecting…' : 'Connection issue'; }
+  else if (code && hasScript)            { state = 'ready';      text = 'READY · ' + code; }
+  else if (code)                         { state = 'warn';       text = 'Connected · ' + code + ' · waiting for script'; }
+  else if (hasScript)                    { state = 'ready';      text = 'Script loaded'; }
+  else                                   { state = 'bad';        text = 'Not connected'; }
+
+  const pill = ptEl('pt-sync-label');
+  if (pill) { pill.textContent = text; pill.className = 'pt-bar-sync pt-state-' + state; }
+  const showCheck = ptEl('pt-check-show');   if (showCheck)   showCheck.classList.toggle('ok', !!code);
+  const scriptCheck = ptEl('pt-check-script'); if (scriptCheck) scriptCheck.classList.toggle('ok', hasScript);
+  const s1 = ptEl('pt-step-1'); if (s1) s1.classList.toggle('ok', !!code);
+  const s2 = ptEl('pt-step-2'); if (s2) s2.classList.toggle('ok', hasScript);
+  const s3 = ptEl('pt-step-3'); if (s3) s3.classList.toggle('ok', !!code && hasScript);
+  // Setup card guides connection until we're joined to a show OR have a script.
+  const setup = ptEl('pt-setup');
+  if (setup) setup.classList.toggle('on', !code && !hasScript);
+}
+
+// Back-compat: existing callers use ptUpdateSyncLabel().
+function ptUpdateSyncLabel() { ptUpdateReady(); }
+
+// Connect from the big setup card.
+function ptSetupConnect() {
+  const input = ptEl('pt-setup-code');
+  const status = ptEl('pt-setup-status');
+  const code = (input?.value || '').trim().toUpperCase();
+  if (!code) {
+    if (status) { status.textContent = 'Enter the show code first.'; status.className = 'pt-setup-status warn'; }
+    input?.focus();
+    return;
   }
+  if (status) { status.textContent = 'Connecting to ' + code + '…'; status.className = 'pt-setup-status'; }
+  const ci = ptEl('pt-cueola-code-input'); if (ci) ci.value = code;
+  ptLoadFromCueolaCode(code);
 }
 
 // Called by sendPrompterControl to mirror controls into the native prompter
@@ -4913,6 +4943,8 @@ function ptLoadFromCueolaCode(codeOverride='') {
   if (codeIn) codeIn.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   ptSetCueolaStatus('Loading...');
+  ptConnState = 'connecting';
+  ptUpdateReady();
   let loadedOnce = false;
   const load = () => {
     try {
@@ -4920,6 +4952,9 @@ function ptLoadFromCueolaCode(codeOverride='') {
       ptCueolaSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
         if (!snap.exists()) {
           ptSetCueolaStatus('Not found', true);
+          ptConnState = 'notfound';
+          ptUpdateReady();
+          const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show found for "${code}". Double-check the code.`; ss.className = 'pt-setup-status warn'; }
           if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
           return;
         }
@@ -4928,6 +4963,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         session.code = code;
         session.isDemo = false;
         session.isExpert = false;
+        ptConnState = 'connected';
         const text = ptAssembleCueolaScript(data);
         if (text.trim()) {
           prompterText = text;
@@ -4951,6 +4987,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
             toast(`Flowmingo linked to ${code}`);
           }
         }
+        ptUpdateReady();
         const control = data.prompter?.control;
         if (control?.action && control.sender !== CLIENT_ID) {
           applyRemoteControlOnce(control.action, control.ts, control.sender);
@@ -4958,10 +4995,14 @@ function ptLoadFromCueolaCode(codeOverride='') {
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       }, () => {
         ptSetCueolaStatus('Error', true);
+        ptConnState = 'error';
+        ptUpdateReady();
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       });
     } catch (err) {
       ptSetCueolaStatus('Error', true);
+      ptConnState = 'error';
+      ptUpdateReady();
       if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
     }
   };

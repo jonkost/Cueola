@@ -1011,7 +1011,39 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pt-back-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-accent,#c8a97e);border-radius:7px;padding:5px 11px;cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
 .pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);text-align:center;opacity:.85;letter-spacing:.04em;position:absolute;left:50%;transform:translateX(-50%);pointer-events:none}
-.pt-bar-sync{font-size:10px;color:var(--pt-accent,#c8a97e);opacity:.55;letter-spacing:.08em;white-space:nowrap}
+.pt-status{display:flex;align-items:center;gap:7px;min-width:0}
+.pt-bar-sync{font-size:11px;font-weight:700;letter-spacing:.03em;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
+.pt-bar-sync::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 8px currentColor}
+.pt-state-bad{color:#f87171;background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.4)}
+.pt-state-warn,.pt-state-connecting{color:#fbbf24;background:rgba(251,191,36,.14);border-color:rgba(251,191,36,.4)}
+.pt-state-connecting::before{animation:pt-pulse 1s infinite}
+.pt-state-ready{color:#34d399;background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45)}
+@keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.pt-check{font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--pt-text,#d6e8f0);opacity:.4;border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:999px;padding:3px 9px 3px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pt-check::before{content:"○";font-size:11px;line-height:1}
+.pt-check.ok{opacity:1;color:#34d399;border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.12)}
+.pt-check.ok::before{content:"✓"}
+@media (max-width:700px){.pt-check{display:none}}
+.pt-setup{position:absolute;inset:0;z-index:150;display:none;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--pt-bg,#08090f) 86%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.pt-setup.on{display:flex}
+.pt-setup-card{width:min(440px,94vw);background:var(--pt-ui-bg,rgba(15,15,25,.96));border:1px solid var(--pt-ui-border,rgba(126,184,200,.3));border-radius:20px;padding:30px 28px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.pt-setup-logo{font-size:38px;line-height:1;margin-bottom:10px}
+.pt-setup-title{font-family:var(--syne);font-size:21px;font-weight:800;color:var(--pt-text,#eef);margin:0 0 6px}
+.pt-setup-sub{font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.72;margin:0 0 18px;line-height:1.5}
+.pt-setup-row{display:flex;gap:8px;margin-bottom:8px}
+.pt-setup-input{flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--pt-ui-border,rgba(126,184,200,.3));color:var(--pt-text,#eef);border-radius:12px;padding:13px 14px;font-family:var(--mono);font-size:17px;letter-spacing:.18em;text-transform:uppercase;text-align:center;outline:none}
+.pt-setup-input:focus{border-color:var(--pt-accent,#7eb8c8);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#7eb8c8) 25%,transparent)}
+.pt-setup-btn{flex:none;background:var(--pt-accent,#7eb8c8);color:#04121a;border:0;border-radius:12px;padding:0 22px;font-family:var(--syne);font-weight:800;font-size:14px;cursor:pointer;letter-spacing:.03em}
+.pt-setup-btn:hover{filter:brightness(1.08)}
+.pt-setup-status{min-height:17px;font-size:12px;color:var(--pt-accent,#7eb8c8);margin-bottom:14px;font-family:var(--mono)}
+.pt-setup-status.warn{color:#fbbf24}
+.pt-setup-steps{list-style:none;margin:0 0 16px;padding:0;text-align:left;display:flex;flex-direction:column;gap:9px}
+.pt-setup-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.85;line-height:1.35}
+.pt-step-dot{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--pt-ui-border,rgba(126,184,200,.5));display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:transparent}
+.pt-step-dot.ok{background:#34d399;border-color:#34d399;color:#04121a}
+.pt-step-dot.ok::before{content:"✓"}
+.pt-setup-alt{background:none;border:0;color:var(--pt-text,#d6e8f0);opacity:.55;font-size:12px;cursor:pointer;text-decoration:underline;font-family:var(--sans)}
+.pt-setup-alt:hover{opacity:.85}
 .pt-bar-controls-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;transition:background .15s;opacity:.7}
 .pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
 
@@ -1340,7 +1372,11 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div id="pt-bar">
     <button class="pt-back-btn" onclick="exitPrompter()">← Cueola</button>
     <div class="pt-bar-title">🦩 Flowmingo</div>
-    <div class="pt-bar-sync" id="pt-sync-label">Not synced</div>
+    <div class="pt-status">
+      <span class="pt-bar-sync pt-state-bad" id="pt-sync-label">Not connected</span>
+      <span class="pt-check" id="pt-check-show" title="Connected to your show">Show</span>
+      <span class="pt-check" id="pt-check-script" title="Script loaded">Script</span>
+    </div>
     <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Load Session</button>
     <button class="pt-bar-controls-btn" onclick="ptTogglePanel()">Controls</button>
   </div>
@@ -1364,6 +1400,26 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div id="pt-stage">
     <div id="pt-track">
       <div id="pt-text"></div>
+    </div>
+  </div>
+
+  <!-- Connect & Ready setup card (shown until joined to a show or a script is loaded) -->
+  <div id="pt-setup" class="pt-setup">
+    <div class="pt-setup-card">
+      <div class="pt-setup-logo">🦩</div>
+      <h2 class="pt-setup-title">Connect Flowmingo to your show</h2>
+      <p class="pt-setup-sub">Enter the show code from your Script Op or Flowmingo Op.</p>
+      <div class="pt-setup-row">
+        <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" onkeydown="if(event.key==='Enter')ptSetupConnect()">
+        <button class="pt-setup-btn" onclick="ptSetupConnect()">Connect</button>
+      </div>
+      <div class="pt-setup-status" id="pt-setup-status"></div>
+      <ol class="pt-setup-steps">
+        <li><span class="pt-step-dot" id="pt-step-1"></span>Connect to your show</li>
+        <li><span class="pt-step-dot" id="pt-step-2"></span>Script loads automatically from the Script Op</li>
+        <li><span class="pt-step-dot" id="pt-step-3"></span>When it turns green <strong>READY</strong>, you're set</li>
+      </ol>
+      <button class="pt-setup-alt" onclick="ptOpenEdit()">No code? Load a file or paste a script instead</button>
     </div>
   </div>
 
@@ -2023,7 +2079,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260522m"></script>
+<script src="cueola-app.js?v=20260522o"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
