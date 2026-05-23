@@ -1397,6 +1397,12 @@ function setupFirestore() {
           flowmingoRemoteOverrideUntil = Date.now() + 30000;
         }
       }
+      // Cross-device talent heartbeat — proves a talent screen is alive even when
+      // it's on a different machine (BroadcastChannel can't cross devices).
+      if (d.prompter?.talentHeartbeat?.ts && d.prompter.talentHeartbeat.sender !== CLIENT_ID) {
+        lastTalentPingTs = Date.now();
+        _setPrompterStatus(true);
+      }
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
         const cmd = d.forceCmd;
@@ -2976,6 +2982,77 @@ function _removedLoadEditScriptFile(input) {
 // ─────────────────────────────────────────────────────────────
 // LIVE SHOW
 // ─────────────────────────────────────────────────────────────
+// Pre-Live Check — derives a snapshot of show readiness so the Go Live
+// confirmation can tell the user exactly what's set and what isn't.
+function preLiveCheck() {
+  const cuesWithScript = beats.filter(b => b?.cues?.script?.text?.trim()).length;
+  const totalRows = beats.length;
+  const scriptOk = totalRows > 0 && cuesWithScript > 0;
+  const scriptLabel = !totalRows
+    ? 'No rows in the rundown'
+    : !cuesWithScript
+      ? `${totalRows} row${totalRows===1?'':'s'} but no script cues yet`
+      : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script`;
+
+  const talentSeenMs = lastTalentPingTs ? Date.now() - lastTalentPingTs : Infinity;
+  const talentOk = talentSeenMs < 14000;
+  const talentLabel = !lastTalentPingTs
+    ? 'Talent prompter hasn’t opened yet'
+    : talentOk
+      ? `Connected · last seen ${Math.max(0, Math.floor(talentSeenMs/1000))}s ago`
+      : `Hasn’t responded for ${Math.floor(talentSeenMs/1000)}s`;
+
+  const isDemo = !!session.isDemo;
+  const cloudReady = !!(window._firebaseReady && session.code && !isDemo);
+  const cloudOk = isDemo || cloudReady;
+  const cloudLabel = isDemo
+    ? 'Demo mode · same-browser sync only'
+    : !session.code
+      ? 'No session code — cross-device sync off'
+      : cloudReady
+        ? `Syncing · ${session.code}`
+        : 'Cloud not connected';
+
+  return {
+    script: { ok: scriptOk, label: scriptLabel },
+    talent: { ok: talentOk, label: talentLabel },
+    cloud:  { ok: cloudOk,  label: cloudLabel  },
+    allGreen: scriptOk && talentOk && cloudOk,
+  };
+}
+
+function confirmGoLive() {
+  const c = preLiveCheck();
+  const rows = [
+    { key:'Script',           ok:c.script.ok, detail:c.script.label },
+    { key:'Talent prompter',  ok:c.talent.ok, detail:c.talent.label },
+    { key:'Cloud sync',       ok:c.cloud.ok,  detail:c.cloud.label  },
+  ];
+  const container = document.getElementById('goLiveCheckRows');
+  if (container) {
+    container.innerHTML = rows.map(r => `
+      <div class="precheck-row ${r.ok?'ok':'warn'}">
+        <div class="precheck-icon">${r.ok?'✓':'!'}</div>
+        <div class="precheck-body">
+          <div class="precheck-label">${esc(r.key)}</div>
+          <div class="precheck-detail">${esc(r.detail)}</div>
+        </div>
+      </div>`).join('');
+  }
+  const goBtn = document.getElementById('goLiveCheckGo');
+  if (goBtn) goBtn.textContent = c.allGreen ? 'Go Live →' : 'Continue anyway →';
+  const note = document.getElementById('goLiveCheckNote');
+  if (note) note.textContent = c.allGreen
+    ? 'Everything looks set. You\'re clear to go live.'
+    : 'A couple of things aren\'t set yet — review before going live.';
+  showOverlay('goLiveCheckOv');
+}
+
+function confirmedGoLive() {
+  hideOverlay('goLiveCheckOv');
+  goLive();
+}
+
 function goLive() {
   if (lsIdx<0) lsIdx=0;
   document.getElementById('rundown').classList.remove('on');
@@ -3541,6 +3618,8 @@ function buildPromptFromRundown() {
 
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
+let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
+let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
 const PROMPTYPUS_CHANNEL = 'promptypus';
 const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
 const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
@@ -3578,7 +3657,26 @@ function _postPrompterHello() {
   } catch {}
 }
 
+// Watch the talent's heartbeat — if it goes silent for too long, flip the
+// FLOWMINGO indicator to "Talent disconnected" so a dropout is loud, not silent.
+function startTalentWatchdog() {
+  if (_talentWatchdog) return;
+  _talentWatchdog = setInterval(() => {
+    if (!lastTalentPingTs) return; // never seen one yet — keep "Waiting"
+    const age = Date.now() - lastTalentPingTs;
+    if (age > 14000) {
+      _setPrompterStatus(false);
+      const txt = document.getElementById('prompterStatusTxt');
+      const stat = document.getElementById('ls-stat-prompter');
+      const secs = Math.floor(age / 1000);
+      if (txt)  txt.textContent  = `Talent disconnected · last seen ${secs}s ago`;
+      if (stat) { stat.textContent = 'TALENT DROPPED'; stat.title = `Last heartbeat ${secs}s ago`; stat.classList.remove('connected'); }
+    }
+  }, 3000);
+}
+
 function initPrompter() {
+  startTalentWatchdog();
   // Don't tear down an existing live channel — just re-send current text.
   if (prompterChannel) {
     sendToPrompter(false);
@@ -3586,6 +3684,7 @@ function initPrompter() {
   }
   const handlePrompterMessage = (e) => {
     if (e.data?.type === 'ping') {
+      lastTalentPingTs = Date.now();
       _setPrompterStatus(true);
       sendToPrompter(true); // reconnected — full send with scroll reset
     }
@@ -3595,6 +3694,7 @@ function initPrompter() {
     try {
       const msg = JSON.parse(e.newValue);
       if (msg?.type === 'ping') {
+        lastTalentPingTs = Date.now();
         _setPrompterStatus(true);
         sendToPrompter(true);
       }
@@ -3733,28 +3833,19 @@ function sendPrompterControl(action) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return;
   }
-  _postPrompterMessage({ type:'prompter_control', action, ts:Date.now() });
+  // ONE timestamp for both transports — the talent dedups by sender:ts:action, so
+  // BroadcastChannel and Firestore copies must share the same ts or the same
+  // control gets applied twice (speed jumps in doubles, toggles cancel themselves).
+  const ts = Date.now();
+  _postPrompterMessage({ type:'prompter_control', action, ts });
   ptHandleRemoteControl(action);
   if (promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePromptOp();
   if (!promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePrompterControls();
   if (window._firebaseReady && session.code && !session.isDemo) {
     window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.control': { action, ts:Date.now(), sender:CLIENT_ID }
+      'prompter.control': { action, ts, sender:CLIENT_ID }
     }).catch(()=>{});
   }
-  const labels = {
-    pause:'Paused', resume:'Resumed', speed_up:'Faster', speed_down:'Slower',
-    size_up:'Bigger text', size_down:'Smaller text', rewind:'Rewound', reset:'Reset',
-    align_left:'Left aligned', align_center:'Centered', align_right:'Right aligned',
-    mirror:'Mirror toggled', fullscreen:'Fullscreen requested',
-    hide_interface:'Talent controls toggled',
-    theme_warm:'Warm theme', theme_cool:'Cool theme', theme_white:'White theme',
-    theme_green:'Green theme', theme_koala:'Koala theme', theme_panda:'Planda Bear theme',
-    theme_flamingo:'Flowmingo theme', theme_prepbear:'PrepBear theme',
-    direction_reverse:'Reverse direction', direction_forward:'Forward direction',
-    brake_start:'Braking', boost_start:'Boosting'
-  };
-  if (!action.endsWith('_stop') && !action.includes('_set_')) toast(`Flowmingo: ${labels[action] || action}`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3877,6 +3968,21 @@ function ptLoadSavedOrDefault() {
   ptUpdateReady();
 }
 
+// Talent heartbeat: a ping every ~6s so the operator can tell at a glance
+// whether the talent screen is alive (BroadcastChannel for same browser,
+// Firestore prompter.talentHeartbeat for cross-device).
+let ptHeartbeatInterval = null;
+function ptTalentHeartbeat() {
+  ptPostPing();
+  if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
+    try {
+      window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
+        'prompter.talentHeartbeat': { ts: Date.now(), sender: CLIENT_ID }
+      }).catch(() => {});
+    } catch {}
+  }
+}
+
 function ptInitReceiver() {
   if (ptReceiverChannels.length || ptReceiverStorageHandler) {
     ptPingBurst();
@@ -3895,6 +4001,7 @@ function ptInitReceiver() {
   };
   window.addEventListener('storage', ptReceiverStorageHandler);
   ptPingBurst();
+  if (!ptHeartbeatInterval) ptHeartbeatInterval = setInterval(ptTalentHeartbeat, 6000);
 }
 
 function ptGetMaxScroll() {

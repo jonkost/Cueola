@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -908,6 +909,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .warn-card{background:var(--s1);border:1px solid rgba(240,82,82,.4);border-radius:16px;padding:28px 24px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:16px;animation:rise .2s ease both}
 .warn-title{font-family:var(--syne);font-size:22px;font-weight:700}
 .warn-body{font-size:13px;color:var(--text2);line-height:1.7}
+.precheck-card{max-width:460px;border-color:var(--bord2);gap:14px}
+.precheck-note{font-size:13px;color:var(--text2);line-height:1.5;margin:-4px 0 4px}
+.precheck-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;background:var(--s2);border:1px solid var(--bord2)}
+.precheck-row.ok{border-color:rgba(52,211,153,.32)}
+.precheck-row.warn{border-color:rgba(251,191,36,.45);background:color-mix(in srgb,#fbbf24 6%,var(--s2))}
+.precheck-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none;font-size:13px}
+.precheck-row.ok .precheck-icon{background:rgba(52,211,153,.18);color:#34d399;border:1px solid rgba(52,211,153,.45)}
+.precheck-row.warn .precheck-icon{background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.5)}
+.precheck-body{min-width:0}
+.precheck-label{font-size:13px;color:var(--text);font-weight:600}
+.precheck-detail{font-size:11px;color:var(--text2);font-family:var(--mono);margin-top:2px}
+.precheck-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+.precheck-actions .btn-primary,.precheck-actions .btn-secondary{width:auto;flex:0 0 auto;padding:11px 18px}
 
 /* ── PRINT ── */
 @media print {
@@ -1246,7 +1260,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <div class="tb-divider"></div>
-      <button class="tbtn tbtn-live" onclick="goLive()"><span class="live-dot"></span>Go Live</button>
+      <button class="tbtn tbtn-live" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
     </div>
   </div>
   <div class="show-strip">
@@ -1986,6 +2000,21 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 </div>
 
 <!-- ══════════════════════════════════════════
+     PRE-LIVE CHECK / GO LIVE CONFIRMATION
+══════════════════════════════════════════ -->
+<div class="overlay" id="goLiveCheckOv" style="align-items:center;justify-content:center;padding:24px">
+  <div class="warn-card precheck-card">
+    <div class="warn-title">Ready to go live?</div>
+    <div class="precheck-note" id="goLiveCheckNote"></div>
+    <div id="goLiveCheckRows"></div>
+    <div class="precheck-actions">
+      <button class="btn-secondary" onclick="hideOverlay('goLiveCheckOv')">Cancel</button>
+      <button class="btn-primary" id="goLiveCheckGo" onclick="confirmedGoLive()">Go Live →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
      MODALS
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="modal-inst">
@@ -2079,7 +2108,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260522o"></script>
+<script src="cueola-app.js?v=20260522r"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
