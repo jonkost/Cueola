@@ -1,0 +1,14 @@
+{
+  "voice": "af_heart",
+  "format": "mp3",
+  "files": [
+    "LH-cueola-build.lesson",
+    "LH-cueola-live.lesson",
+    "LH-flowmingo-remote.lesson",
+    "LH-flowmingo-talent.lesson",
+    "LH-plandabear.lesson",
+    "LH-start.lesson",
+    "LH-support.lesson",
+    "UI-vo-preview.prompt"
+  ]
+}

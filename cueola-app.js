@@ -299,6 +299,550 @@ function hideOverlay(id){ const el=document.getElementById(id); if(!el)return; e
 
 function showOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
 
+const LEARNING_PROGRESS_KEY = 'cueola_learning_progress_v1';
+let activeLearningLesson = 0;
+
+const LEARNING_LESSONS = [
+  {
+    id:'start',
+    area:'Start',
+    title:'What The Three Tools Do',
+    time:'3 min',
+    intro:'Cueola is the show brain. Planda Bear is the prep package. Flowmingo is the script display and remote prompter.',
+    steps:[
+      'Use Cueola to create or join a show, build rows, add cues, and run the live view.',
+      'Use Planda Bear before show day for call sheets, schedules, safety plans, patch sheets, comments, and PDF exports.',
+      'Use Flowmingo when talent needs a clean script screen that can be controlled from another window or device.',
+      'Keep one shared session code. That code is the bridge between the rundown, paperwork, and prompter.'
+    ],
+    callouts:[
+      ['Session code','The same code connects collaborators, Planda Bear, Flowmingo Talent Display, and Flowmingo Remote Op.'],
+      ['Best first move','Load Demo, open this guide beside it, and walk through the lessons once before using a real show.']
+    ],
+    checks:['I know what Cueola, Planda Bear, and Flowmingo each do.','I know the session code is the shared connection point.'],
+    actions:[['Load Demo','demo'],['Open Blank Slate','blank']]
+  },
+  {
+    id:'cueola-build',
+    area:'Cueola',
+    title:'Build A Rundown',
+    time:'5 min',
+    intro:'A Cueola rundown is built from rows. Each row is one beat in the production, and each cue cell holds the instructions for one department.',
+    steps:[
+      'Join a session or create a Blank Slate code.',
+      'Add a row for each show beat: open, intro, segment, package, conversation, outro, or any custom label.',
+      'Choose Timed when the row has a known duration. Choose Flex when it can breathe.',
+      'Click any cue cell to add Video, Audio, Playback, GFX, Lighting, or Script instructions.',
+      'Use Edit when you need to reorder rows, clean labels, or remove old beats.'
+    ],
+    callouts:[
+      ['Rows are beats','Think in production moments, not spreadsheet lines. One row should tell the room what happens next.'],
+      ['Script feeds Flowmingo','Anything typed into a Script cue can be assembled and pushed to the talent display.']
+    ],
+    checks:['I can add a row.','I can add at least one cue cell.','I can tell Timed and Flex rows apart.'],
+    actions:[['Open Blank Slate','blank'],['Load Demo','demo']]
+  },
+  {
+    id:'cueola-live',
+    area:'Cueola',
+    title:'Run Live Without Panic',
+    time:'4 min',
+    intro:'Live mode turns the rundown into a show-caller surface. It highlights now, next, remaining time, and Flowmingo connection state.',
+    steps:[
+      'Press Go Live after your rows and script cues are ready.',
+      'Review the pre-live checks for script, Flowmingo talent, and cloud sync.',
+      'Use Prev and Next to move the show one row at a time.',
+      'Use the Script Op panel to edit the live script and push updates to Flowmingo.',
+      'Watch the Flowmingo status badge. Connected means talent is sending heartbeats; applied controls confirm the remote worked.'
+    ],
+    callouts:[
+      ['Operator view','Flowmingo Op mode focuses the live screen on prompter controls and script preview.'],
+      ['Remote confidence','A sent command is not enough. The app now waits for the talent display to acknowledge applied controls.']
+    ],
+    checks:['I know where Now and Next are.','I know how to push script updates.','I know what Flowmingo connected/applied status means.'],
+    actions:[['Load Demo','demo']]
+  },
+  {
+    id:'plandabear',
+    area:'Planda Bear',
+    title:'Prep The Show Package',
+    time:'6 min',
+    intro:'Planda Bear keeps the production paperwork in the same workspace as the rundown so the team is not chasing separate files.',
+    steps:[
+      'Open Planda Bear from the home screen or the topbar.',
+      'Start with the Call Sheet: production name, date, call time, location, contacts, access, crew, and talent.',
+      'Fill the Production Schedule and readiness checklist so setup, rehearsal, show, and wrap are clear.',
+      'Add Safety Plan details before the room gets busy.',
+      'Use Video Patch, Audio Patch, and Comms Patch sheets to document routing.',
+      'Preview or export the PDF package when the paperwork is ready to share.'
+    ],
+    callouts:[
+      ['Comments','Instructors can leave Planda Bear comments without overwriting student work.'],
+      ['One package','Export One PDF Package gathers the paperwork and rendered rundown into a shareable file.']
+    ],
+    checks:['I can open Planda Bear.','I know which paperwork page to fill first.','I know where PDF export lives.'],
+    actions:[['Open Planda Bear','plandabear']]
+  },
+  {
+    id:'flowmingo-talent',
+    area:'Flowmingo',
+    title:'Set Up The Talent Display',
+    time:'4 min',
+    intro:'The Talent Display is the screen talent reads. It should be opened in its own browser window or device and controlled remotely.',
+    steps:[
+      'Open Flowmingo Talent Display from the home screen or live screen.',
+      'Enter the same session code used by the show.',
+      'Wait for the READY state and confirm the Script check is on.',
+      'Use Controls only for local setup: speed, size, alignment, theme, mirror, and fullscreen.',
+      'Once live, leave the talent display alone. Run it from Script Op or Flowmingo Remote Op.'
+    ],
+    callouts:[
+      ['Do not touch the talent window','The remote path is built so the operator can control play, pause, speed, size, theme, mirror, and reset without focusing the talent screen.'],
+      ['Break markers','Markers like [BREAK - AUTO PAUSE] and [STOP HERE] can help the prompter stop at planned moments.']
+    ],
+    checks:['I can open the Talent Display.','I can connect it with a session code.','I know the talent window should stay untouched during operation.'],
+    actions:[['Open Talent Display','talent']]
+  },
+  {
+    id:'flowmingo-remote',
+    area:'Flowmingo',
+    title:'Run The Remote Prompter',
+    time:'5 min',
+    intro:'Flowmingo Remote Op is the dedicated control surface for the talent display. It is meant to work from another tab, window, or device.',
+    steps:[
+      'Open Remote Op and load the same session code as the talent screen.',
+      'Confirm the status says ready, then use Play to start talent scrolling.',
+      'Use Space for play/pause, hold Down to brake, hold Up to boost, Left/Right for text size, and Option plus Down or Up for direction.',
+      'Use Reset if the talent needs to return to the top.',
+      'Watch for applied acknowledgements. If a command does not ack, check that the talent display is still connected.'
+    ],
+    callouts:[
+      ['Control ownership','If Flowmingo Remote Op is active, Script Op pauses its own remote control briefly so operators do not fight each other.'],
+      ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its session code.']
+    ],
+    checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
+    actions:[['Open Remote Op','remote']]
+  },
+  {
+    id:'support',
+    area:'Support',
+    title:'First Fixes When Something Feels Off',
+    time:'4 min',
+    intro:'Most show-day problems come from code mismatch, a missing script, or a talent screen that was closed, reloaded, or asleep.',
+    steps:[
+      'If collaborators cannot see the show, confirm everyone has the same session code.',
+      'If Flowmingo is blank, confirm there is Script cue text and push to Flowmingo from live Script Op.',
+      'If the remote says sent but not applied, reload the Talent Display and enter the same code again.',
+      'If the wrong row is live, use Prev or Next until Now matches the room.',
+      'If paperwork looks stale, reopen Planda Bear and check the activity and comments area.'
+    ],
+    callouts:[
+      ['Fast rehearsal check','Before doors open: open Talent Display, open Remote Op, press Play, Reset, Mirror, then Reset again.'],
+      ['When in doubt','A clean reload plus the same session code should reconnect the show, paperwork, and prompter surfaces.']
+    ],
+    checks:['I know the first three things to check: code, script, talent connection.','I know how to recover Flowmingo without touching the live talent window.'],
+    actions:[['Open Guide Start','start']]
+  }
+];
+
+const CUEOLA_TTS_MUTED_KEY = 'cueola_tts_muted';
+const CUEOLA_TTS_RATE_KEY = 'cueola_tts_rate';
+const LOCAL_NARRATION_VOICE = 'af_heart';
+const LOCAL_NARRATION_BASE = `assets/narration/${LOCAL_NARRATION_VOICE}`;
+const LOCAL_NARRATION_MANIFEST = `${LOCAL_NARRATION_BASE}/manifest.json`;
+const VO_PREVIEW_REF_ID = 'UI-vo-preview.prompt';
+const TTS_SVG_ON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+const TTS_SVG_OFF = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+
+function normalizeTTSRate(value) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0.5, Math.min(1.5, n));
+}
+
+const cueolaTTS = {
+  muted: localStorage.getItem(CUEOLA_TTS_MUTED_KEY) !== 'false',
+  rate: normalizeTTSRate(localStorage.getItem(CUEOLA_TTS_RATE_KEY) || '1'),
+  voice: LOCAL_NARRATION_VOICE,
+  _audio: null,
+  localManifestLoaded: false,
+  localManifestPromise: null,
+  localAssetRefs: new Set(),
+  localMissingRefs: new Set(),
+};
+
+function ttsExpand(text) {
+  return String(text || '')
+    .replace(/\bCueola\b/g, 'Cue oh la')
+    .replace(/\bPlanda Bear\b/g, 'Planda Bear')
+    .replace(/\bFlowmingo\b/g, 'Flow mingo')
+    .replace(/\bGFX\b/g, 'graphics')
+    .replace(/\bPDF\b/g, 'P D F')
+    .replace(/\bVO\b/g, 'voice over')
+    .replace(/\bOp\b/g, 'operator')
+    .replace(/\bMP3\b/g, 'M P 3')
+    .replace(/\bUI\b/g, 'user interface')
+    .replace(/\b[A-Z]{2,}\b/g, word => word.toLowerCase());
+}
+
+function ttsClean(text) {
+  return ttsExpand(text)
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[✓✗↺•·→←↑↓]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function ttsStop() {
+  if (cueolaTTS._audio) {
+    try {
+      cueolaTTS._audio.pause();
+      cueolaTTS._audio.currentTime = 0;
+    } catch {}
+    cueolaTTS._audio = null;
+  }
+}
+
+function browserCanPlayMp3() {
+  const probe = document.createElement('audio');
+  return !!probe.canPlayType && probe.canPlayType('audio/mpeg') !== '';
+}
+
+function getLocalNarrationUrl(refId) {
+  return refId ? `${LOCAL_NARRATION_BASE}/${encodeURIComponent(refId)}.mp3` : '';
+}
+
+function setTTSAssetStatus(text) {
+  document.querySelectorAll('[data-tts-status],#ttsAssetStatus').forEach(el => {
+    el.textContent = text;
+  });
+}
+
+function setTTSDot(state) {
+  document.querySelectorAll('.tts-toggle-btn').forEach(btn => {
+    btn.querySelectorAll('.tts-dot').forEach(dot => dot.remove());
+    if (!state) return;
+    const dot = document.createElement('span');
+    dot.className = `tts-dot ${state}`;
+    btn.appendChild(dot);
+  });
+}
+
+async function loadLocalNarrationManifest() {
+  if (cueolaTTS.localManifestLoaded) return cueolaTTS.localAssetRefs;
+  if (cueolaTTS.localManifestPromise) return cueolaTTS.localManifestPromise;
+  cueolaTTS.localManifestPromise = (async () => {
+    cueolaTTS.localManifestLoaded = true;
+    setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Checking Heart voice files...');
+    setTTSDot(cueolaTTS.muted ? null : 'tts-system-loading');
+    try {
+      const response = await fetch(LOCAL_NARRATION_MANIFEST, { cache:'no-store' });
+      if (!response.ok) throw new Error('Narration manifest unavailable.');
+      const manifest = await response.json();
+      if (!browserCanPlayMp3()) {
+        cueolaTTS.localAssetRefs = new Set();
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro MP3 playback unavailable in this browser.');
+        setTTSDot(null);
+        return cueolaTTS.localAssetRefs;
+      }
+      const files = Array.isArray(manifest.files) ? manifest.files : [];
+      cueolaTTS.localAssetRefs = new Set(files.map(item => String(item).replace(/\.mp3$/i, '')));
+      if (cueolaTTS.localAssetRefs.size) {
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Heart voice ready.');
+        setTTSDot(cueolaTTS.muted ? null : 'tts-system-ready');
+      } else {
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro files pending.');
+        setTTSDot(null);
+      }
+    } catch {
+      cueolaTTS.localAssetRefs = new Set();
+      setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : (window.location.protocol === 'file:'
+        ? 'Use the preview URL for Kokoro voice over.'
+        : 'Kokoro files pending.'));
+      setTTSDot(null);
+    }
+    return cueolaTTS.localAssetRefs;
+  })();
+  return cueolaTTS.localManifestPromise;
+}
+
+function playLocalNarration(refId) {
+  if (!refId) return Promise.resolve(false);
+  if (cueolaTTS.localMissingRefs.has(refId) || !cueolaTTS.localAssetRefs.has(refId)) {
+    setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+    return Promise.resolve(false);
+  }
+  const url = getLocalNarrationUrl(refId);
+  if (!url) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const audio = new Audio(url);
+    let settled = false;
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    audio.playsInline = true;
+    audio.preload = 'auto';
+    audio.playbackRate = cueolaTTS.rate;
+    audio.onended = () => {
+      if (cueolaTTS._audio === audio) cueolaTTS._audio = null;
+      setTTSAssetStatus('Heart voice ready.');
+    };
+    audio.onerror = () => {
+      cueolaTTS.localMissingRefs.add(refId);
+      setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+      finish(false);
+    };
+    audio.play()
+      .then(() => {
+        cueolaTTS._audio = audio;
+        setTTSAssetStatus('Playing Heart voice.');
+        finish(true);
+      })
+      .catch(() => {
+        setTTSAssetStatus('Tap once, then try voice over again.');
+        finish(false);
+      });
+  });
+}
+
+function initTTS() {
+  updateTTSButtons();
+  return loadLocalNarrationManifest();
+}
+
+async function ttsSpeak(text, priority=true, refId='') {
+  if (cueolaTTS.muted) return false;
+  if (priority) ttsStop();
+  await initTTS();
+  if (refId && await playLocalNarration(refId)) return true;
+  setTTSAssetStatus(refId ? `Kokoro file pending: ${refId}` : 'Kokoro narration file pending.');
+  return false;
+}
+
+function ttsCancelAndSpeak(text, refId='') {
+  return ttsSpeak(text, true, refId);
+}
+
+function learningNarrationRefId(lesson) {
+  return lesson?.id ? `LH-${lesson.id}.lesson` : '';
+}
+
+function learningNarrationText(lesson) {
+  if (!lesson) return '';
+  const steps = (lesson.steps || []).map((step, i) => `Step ${i + 1}. ${step}`).join(' ');
+  const callouts = (lesson.callouts || []).map(([title, text]) => `${title}. ${text}`).join(' ');
+  return `${lesson.title}. ${lesson.intro} ${steps} ${callouts}`;
+}
+
+function speakActiveLearningLesson(priority=true) {
+  const lesson = LEARNING_LESSONS[activeLearningLesson] || LEARNING_LESSONS[0];
+  if (!lesson) return Promise.resolve(false);
+  setTTSAssetStatus('Reading lesson...');
+  return ttsSpeak(learningNarrationText(lesson), priority, learningNarrationRefId(lesson));
+}
+
+async function replayCurrentLearningVO() {
+  if (cueolaTTS.muted) {
+    cueolaTTS.muted = false;
+    localStorage.setItem(CUEOLA_TTS_MUTED_KEY, 'false');
+    updateTTSButtons();
+  }
+  await initTTS();
+  return speakActiveLearningLesson(true);
+}
+
+function toggleTTS() {
+  cueolaTTS.muted = !cueolaTTS.muted;
+  localStorage.setItem(CUEOLA_TTS_MUTED_KEY, String(cueolaTTS.muted));
+  if (cueolaTTS.muted) {
+    ttsStop();
+    setTTSAssetStatus('Voice over off.');
+    updateTTSButtons();
+    return;
+  }
+  updateTTSButtons();
+  initTTS().then(() => {
+    const guideOpen = document.getElementById('learningHubModal')?.classList.contains('on');
+    if (guideOpen) speakActiveLearningLesson(true);
+    else ttsCancelAndSpeak('', VO_PREVIEW_REF_ID);
+  });
+}
+
+function setTTSRate(value) {
+  cueolaTTS.rate = normalizeTTSRate(value);
+  localStorage.setItem(CUEOLA_TTS_RATE_KEY, String(cueolaTTS.rate));
+  if (cueolaTTS._audio) {
+    try { cueolaTTS._audio.playbackRate = cueolaTTS.rate; } catch {}
+  }
+  updateTTSButtons();
+}
+
+function updateTTSButtons() {
+  const icon = cueolaTTS.muted ? TTS_SVG_OFF : TTS_SVG_ON;
+  document.querySelectorAll('.tts-toggle-btn').forEach(btn => {
+    const short = btn.dataset.ttsShort === '1';
+    const label = cueolaTTS.muted ? (short ? 'VO Off' : 'Voice Over Off') : (short ? 'VO On' : 'Voice Over On');
+    btn.innerHTML = `${icon}<span>${label}</span>`;
+    btn.setAttribute('aria-label', cueolaTTS.muted ? 'Turn on voice over' : 'Turn off voice over');
+    btn.setAttribute('aria-pressed', String(!cueolaTTS.muted));
+    btn.classList.toggle('tts-active', !cueolaTTS.muted);
+  });
+  const rate = cueolaTTS.rate.toFixed(2) + 'x';
+  const range = document.getElementById('ttsRateRange');
+  const label = document.getElementById('ttsRateLabel');
+  if (range) range.value = String(cueolaTTS.rate);
+  if (label) label.textContent = rate;
+  if (cueolaTTS.muted) setTTSDot(null);
+  else setTTSDot(cueolaTTS.localAssetRefs.size ? 'tts-system-ready' : null);
+}
+
+function readLearningProgress() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_KEY) || '{}');
+    return {
+      complete: Array.isArray(raw.complete) ? raw.complete : [],
+      checks: raw.checks && typeof raw.checks === 'object' ? raw.checks : {}
+    };
+  } catch {
+    return { complete:[], checks:{} };
+  }
+}
+
+function writeLearningProgress(progress) {
+  try { localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify(progress)); } catch {}
+}
+
+function openLearningHub(lessonId='') {
+  const idx = LEARNING_LESSONS.findIndex(l => l.id === lessonId);
+  if (idx >= 0) activeLearningLesson = idx;
+  renderLearningHub();
+  showModal('learningHubModal');
+  if (!cueolaTTS.muted) setTimeout(() => speakActiveLearningLesson(true), 120);
+}
+
+function renderLearningHub() {
+  const progress = readLearningProgress();
+  const done = new Set(progress.complete || []);
+  const list = document.getElementById('guideLessonList');
+  const count = document.getElementById('guideProgressCount');
+  const fill = document.getElementById('guideProgressFill');
+  if (count) count.textContent = `${done.size}/${LEARNING_LESSONS.length}`;
+  if (fill) fill.style.width = `${LEARNING_LESSONS.length ? (done.size / LEARNING_LESSONS.length) * 100 : 0}%`;
+  if (list) {
+    list.innerHTML = LEARNING_LESSONS.map((lesson, i) => `
+      <button type="button" class="guide-lesson-btn ${i===activeLearningLesson?'active':''} ${done.has(lesson.id)?'done':''}" onclick="selectLearningLesson(${i})">
+        <span class="guide-num">${done.has(lesson.id) ? '✓' : i + 1}</span>
+        <span>
+          <span class="guide-nav-title">${esc(lesson.title)}</span>
+          <span class="guide-nav-meta">${esc(lesson.area)} · ${esc(lesson.time)}</span>
+        </span>
+        <span class="guide-done-dot"></span>
+      </button>
+    `).join('');
+  }
+  renderLearningLesson();
+}
+
+function renderLearningLesson() {
+  const lesson = LEARNING_LESSONS[activeLearningLesson] || LEARNING_LESSONS[0];
+  const body = document.getElementById('guideLessonBody');
+  if (!lesson || !body) return;
+  const progress = readLearningProgress();
+  const done = progress.complete.includes(lesson.id);
+  const checks = progress.checks?.[lesson.id] || [];
+  body.innerHTML = `
+    <div class="guide-lesson-head">
+      <div>
+        <div class="guide-kicker">${esc(lesson.area)}</div>
+        <div class="guide-lesson-title">${esc(lesson.title)}</div>
+      </div>
+      <div class="guide-lesson-time">${esc(lesson.time)}</div>
+    </div>
+    <div class="guide-lesson-copy">${esc(lesson.intro)}</div>
+    <section class="guide-section">
+      <div class="guide-section-title">Do This</div>
+      <div class="guide-steps">
+        ${lesson.steps.map((step, i) => `
+          <div class="guide-step">
+            <div class="guide-step-num">${i + 1}</div>
+            <div class="guide-step-text">${esc(step)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+    <section class="guide-section">
+      <div class="guide-section-title">Know This</div>
+      <div class="guide-callouts">
+        ${lesson.callouts.map(([title, text]) => `<div class="guide-callout"><strong>${esc(title)}</strong><span>${esc(text)}</span></div>`).join('')}
+      </div>
+    </section>
+    <section class="guide-section">
+      <div class="guide-section-title">Check Yourself</div>
+      <div class="guide-checklist">
+        ${lesson.checks.map((check, i) => `
+          <label class="guide-check">
+            <input type="checkbox" ${checks[i] ? 'checked' : ''} onchange="setLearningCheck('${lesson.id}',${i},this.checked)">
+            <span>${esc(check)}</span>
+          </label>
+        `).join('')}
+      </div>
+    </section>
+    <div class="guide-actions">
+      <div class="guide-action-left">
+        ${(lesson.actions || []).map(([label, action]) => `<button type="button" class="guide-mini-btn" onclick="openGuideAction('${action}')">${esc(label)}</button>`).join('')}
+      </div>
+      <div class="guide-action-right">
+        <button type="button" class="guide-mini-btn" onclick="selectLearningLesson(${activeLearningLesson - 1})" ${activeLearningLesson <= 0 ? 'disabled' : ''}>Previous</button>
+        <button type="button" class="guide-mini-btn primary" onclick="toggleLearningComplete('${lesson.id}')">${done ? 'Mark Incomplete' : 'Mark Complete'}</button>
+        <button type="button" class="guide-mini-btn" onclick="selectLearningLesson(${activeLearningLesson + 1})" ${activeLearningLesson >= LEARNING_LESSONS.length - 1 ? 'disabled' : ''}>Next</button>
+      </div>
+    </div>
+  `;
+}
+
+function selectLearningLesson(index) {
+  activeLearningLesson = Math.max(0, Math.min(LEARNING_LESSONS.length - 1, index));
+  renderLearningHub();
+  if (!cueolaTTS.muted) speakActiveLearningLesson(true);
+}
+
+function setLearningCheck(lessonId, index, checked) {
+  const progress = readLearningProgress();
+  const lesson = LEARNING_LESSONS.find(l => l.id === lessonId);
+  if (!progress.checks[lessonId]) progress.checks[lessonId] = [];
+  progress.checks[lessonId][index] = !!checked;
+  const allChecked = lesson?.checks?.length && lesson.checks.every((_, i) => progress.checks[lessonId][i]);
+  progress.complete = progress.complete.filter(id => id !== lessonId);
+  if (allChecked) progress.complete.push(lessonId);
+  writeLearningProgress(progress);
+  renderLearningHub();
+}
+
+function toggleLearningComplete(lessonId) {
+  const progress = readLearningProgress();
+  const isDone = progress.complete.includes(lessonId);
+  progress.complete = progress.complete.filter(id => id !== lessonId);
+  if (!isDone) {
+    progress.complete.push(lessonId);
+    const lesson = LEARNING_LESSONS.find(l => l.id === lessonId);
+    progress.checks[lessonId] = (lesson?.checks || []).map(() => true);
+  }
+  writeLearningProgress(progress);
+  renderLearningHub();
+}
+
+function openGuideAction(action) {
+  if (action === 'start') { openLearningHub('start'); return; }
+  hideModal('learningHubModal');
+  if (action === 'demo') loadDemo();
+  else if (action === 'blank') openBlankSlateSetup();
+  else if (action === 'plandabear') openPaperworkHub();
+  else if (action === 'talent') openPrompterApp();
+  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
+}
+
 function markPaperworkDirty() {
   if (typeof currentPaperworkItemId === 'function' && currentPaperworkItemId()) paperworkDirty = true;
 }
@@ -7475,6 +8019,8 @@ restoreAdminSession();
 updateAdminUI();
 applyTheme(currentTheme);
 applyPlandaBearTheme(plandaBearTheme);
+updateTTSButtons();
+initTTS();
 
 window.addEventListener('popstate', () => {
   const inSession =
