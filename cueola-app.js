@@ -309,6 +309,11 @@ const LEARNING_LESSONS = [
     title:'What The Three Tools Do',
     time:'3 min',
     intro:'Cueola is the show brain. Planda Bear is the prep package. Flowmingo is the script display and remote prompter.',
+    navigation:[
+      'Start inside this guide. Use the lesson list to jump between Cueola, Planda Bear, and Flowmingo.',
+      'Use Voice Over, Replay Lesson, and the speed control at the top of the guide while you learn.',
+      'Use Previous, Mark Complete, and Next at the bottom of each lesson to move through the training.'
+    ],
     steps:[
       'Use Cueola to create or join a show, build rows, add cues, and run the live view.',
       'Use Planda Bear before show day for call sheets, schedules, safety plans, patch sheets, comments, and PDF exports.',
@@ -328,6 +333,11 @@ const LEARNING_LESSONS = [
     title:'Build A Rundown',
     time:'5 min',
     intro:'A Cueola rundown is built from rows. Each row is one beat in the production, and each cue cell holds the instructions for one department.',
+    navigation:[
+      'From the home screen, choose Join Session, Blank Slate, or Load Demo.',
+      'Inside the rundown, use Add Row to create the next beat, then click cue cells across that row.',
+      'Use Edit in the topbar when you need to reorder rows, rename labels, or remove old beats.'
+    ],
     steps:[
       'Join a session or create a Blank Slate code.',
       'Add a row for each show beat: open, intro, segment, package, conversation, outro, or any custom label.',
@@ -348,6 +358,11 @@ const LEARNING_LESSONS = [
     title:'Run Live Without Panic',
     time:'4 min',
     intro:'Live mode turns the rundown into a show-caller surface. It highlights now, next, remaining time, and Flowmingo connection state.',
+    navigation:[
+      'From the rundown topbar, press Go Live when the rows and script cues are ready.',
+      'Use the live bar for Start Show, Script Op, Flowmingo Op, Guide, fullscreen, and Exit.',
+      'Use Prev and Next in the live controls to move the Now row without touching the talent display.'
+    ],
     steps:[
       'Press Go Live after your rows and script cues are ready.',
       'Review the pre-live checks for script, Flowmingo talent, and cloud sync.',
@@ -368,6 +383,11 @@ const LEARNING_LESSONS = [
     title:'Prep The Show Package',
     time:'6 min',
     intro:'Planda Bear keeps the production paperwork in the same workspace as the rundown so the team is not chasing separate files.',
+    navigation:[
+      'Open Planda Bear from the home screen card or the topbar button.',
+      'Move through Call Sheet, Schedule, Safety Plan, patch sheets, comments, and export from the paperwork hub.',
+      'Return to Cueola when the paperwork is set so the rundown and package stay tied to the same session code.'
+    ],
     steps:[
       'Open Planda Bear from the home screen or the topbar.',
       'Start with the Call Sheet: production name, date, call time, location, contacts, access, crew, and talent.',
@@ -389,6 +409,11 @@ const LEARNING_LESSONS = [
     title:'Set Up The Talent Display',
     time:'4 min',
     intro:'The Talent Display is the screen talent reads. It should be opened in its own browser window or device and controlled remotely.',
+    navigation:[
+      'Open Flowmingo Talent Display from the home screen or the live bar Flowmingo button.',
+      'Put the talent display in its own window or device, enter the same session code, then go fullscreen.',
+      'After it shows ready, leave that window alone and control it from Script Op or Flowmingo Remote Op.'
+    ],
     steps:[
       'Open Flowmingo Talent Display from the home screen or live screen.',
       'Enter the same session code used by the show.',
@@ -409,6 +434,11 @@ const LEARNING_LESSONS = [
     title:'Run The Remote Prompter',
     time:'5 min',
     intro:'Flowmingo Remote Op is the dedicated control surface for the talent display. It is meant to work from another tab, window, or device.',
+    navigation:[
+      'Open Flowmingo Remote Op on the operator window or device and enter the same session code as talent.',
+      'Keep Remote Op focused. The talent display does not need to be clicked or touched.',
+      'Use the on-screen controls or hotkeys, then watch sent and applied status to confirm the talent display obeyed.'
+    ],
     steps:[
       'Open Remote Op and load the same session code as the talent screen.',
       'Confirm the status says ready, then use Play to start talent scrolling.',
@@ -429,6 +459,11 @@ const LEARNING_LESSONS = [
     title:'First Fixes When Something Feels Off',
     time:'4 min',
     intro:'Most show-day problems come from code mismatch, a missing script, or a talent screen that was closed, reloaded, or asleep.',
+    navigation:[
+      'Start with the session code: every Cueola, Planda Bear, Talent Display, and Remote Op window must match.',
+      'Use live Script Op to push missing or changed script text to Flowmingo.',
+      'Use Talent Display and Remote Op together to test Play, Reset, Mirror, then Reset again before the room depends on it.'
+    ],
     steps:[
       'If collaborators cannot see the show, confirm everyone has the same session code.',
       'If Flowmingo is blank, confirm there is Script cue text and push to Flowmingo from live Script Op.',
@@ -450,7 +485,6 @@ const CUEOLA_TTS_RATE_KEY = 'cueola_tts_rate';
 const LOCAL_NARRATION_VOICE = 'af_heart';
 const LOCAL_NARRATION_BASE = `assets/narration/${LOCAL_NARRATION_VOICE}`;
 const LOCAL_NARRATION_MANIFEST = `${LOCAL_NARRATION_BASE}/manifest.json`;
-const VO_PREVIEW_REF_ID = 'UI-vo-preview.prompt';
 const TTS_SVG_ON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
 const TTS_SVG_OFF = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
 
@@ -631,9 +665,10 @@ function learningNarrationRefId(lesson) {
 
 function learningNarrationText(lesson) {
   if (!lesson) return '';
+  const navigation = (lesson.navigation || []).map((item, i) => `Where to go ${i + 1}. ${item}`).join(' ');
   const steps = (lesson.steps || []).map((step, i) => `Step ${i + 1}. ${step}`).join(' ');
   const callouts = (lesson.callouts || []).map(([title, text]) => `${title}. ${text}`).join(' ');
-  return `${lesson.title}. ${lesson.intro} ${steps} ${callouts}`;
+  return `${lesson.title}. ${lesson.intro} ${navigation} ${steps} ${callouts}`;
 }
 
 function speakActiveLearningLesson(priority=true) {
@@ -666,7 +701,7 @@ function toggleTTS() {
   initTTS().then(() => {
     const guideOpen = document.getElementById('learningHubModal')?.classList.contains('on');
     if (guideOpen) speakActiveLearningLesson(true);
-    else ttsCancelAndSpeak('', VO_PREVIEW_REF_ID);
+    else openLearningHub('start');
   });
 }
 
@@ -734,7 +769,7 @@ function renderLearningHub() {
     list.innerHTML = LEARNING_LESSONS.map((lesson, i) => `
       <button type="button" class="guide-lesson-btn ${i===activeLearningLesson?'active':''} ${done.has(lesson.id)?'done':''}" onclick="selectLearningLesson(${i})">
         <span class="guide-num">${done.has(lesson.id) ? '✓' : i + 1}</span>
-        <span>
+        <span class="guide-nav-copy">
           <span class="guide-nav-title">${esc(lesson.title)}</span>
           <span class="guide-nav-meta">${esc(lesson.area)} · ${esc(lesson.time)}</span>
         </span>
@@ -761,6 +796,19 @@ function renderLearningLesson() {
       <div class="guide-lesson-time">${esc(lesson.time)}</div>
     </div>
     <div class="guide-lesson-copy">${esc(lesson.intro)}</div>
+    ${(lesson.navigation || []).length ? `
+    <section class="guide-section guide-nav-section">
+      <div class="guide-section-title">Where To Go</div>
+      <div class="guide-routes">
+        ${lesson.navigation.map((item, i) => `
+          <div class="guide-route">
+            <div class="guide-route-index">${i + 1}</div>
+            <div class="guide-route-text">${esc(item)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+    ` : ''}
     <section class="guide-section">
       <div class="guide-section-title">Do This</div>
       <div class="guide-steps">

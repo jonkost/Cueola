@@ -625,14 +625,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	.guide-progress-track{height:6px;background:var(--s3);border-radius:999px;overflow:hidden}
 	.guide-progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .22s ease}
 	.guide-list{display:flex;flex-direction:column;gap:7px}
-	.guide-lesson-btn{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;width:100%;text-align:left;border:1px solid var(--border);background:var(--s2);color:var(--text);border-radius:10px;padding:10px;cursor:pointer;transition:border-color .15s,background .15s,transform .12s}
+	.guide-lesson-btn{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;width:100%;min-height:58px;text-align:left;border:1px solid var(--border);background:var(--s2);color:var(--text);border-radius:8px;padding:11px 30px 11px 11px;cursor:pointer;transition:border-color .15s,background .15s,transform .12s}
 	.guide-lesson-btn:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--s2));transform:translateY(-1px)}
 	.guide-lesson-btn.active{border-color:color-mix(in srgb,var(--accent) 70%,transparent);background:color-mix(in srgb,var(--accent) 12%,var(--s2))}
-	.guide-num{width:28px;height:28px;border-radius:8px;background:var(--s3);border:1px solid var(--bord2);display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--mono);font-weight:800;color:var(--text2)}
+	.guide-num{width:30px;height:30px;border-radius:8px;background:var(--s3);border:1px solid var(--bord2);display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--mono);font-weight:800;color:var(--text2)}
 	.guide-lesson-btn.done .guide-num{color:var(--green);border-color:color-mix(in srgb,var(--green) 36%,transparent);background:color-mix(in srgb,var(--green) 10%,var(--s3))}
-	.guide-nav-title{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-	.guide-nav-meta{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
-	.guide-done-dot{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+	.guide-nav-copy{min-width:0;display:flex;flex-direction:column;gap:3px;padding-right:4px}
+	.guide-nav-title{display:block;font-size:13px;font-weight:800;line-height:1.25;white-space:normal;overflow:visible;text-overflow:clip}
+	.guide-nav-meta{display:block;font-size:10px;line-height:1.25;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+	.guide-done-dot{position:absolute;right:11px;top:13px;width:8px;height:8px;border-radius:50%;background:var(--text3)}
 	.guide-lesson-btn.done .guide-done-dot{background:var(--green);box-shadow:0 0 10px color-mix(in srgb,var(--green) 55%,transparent)}
 	.guide-main{padding:20px 22px 22px;overflow:auto;display:flex;flex-direction:column;gap:14px}
 	.guide-lesson-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding-bottom:14px}
@@ -645,6 +646,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	.guide-step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
 	.guide-step-num{width:24px;height:24px;border-radius:7px;background:var(--s3);border:1px solid var(--bord2);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);color:var(--accent);font-weight:800}
 	.guide-step-text{font-size:13px;color:var(--text);line-height:1.55}
+	.guide-routes{display:grid;gap:9px}
+	.guide-route{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
+	.guide-route-index{width:24px;height:24px;border-radius:7px;background:color-mix(in srgb,var(--accent) 12%,var(--s3));border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);color:var(--accent);font-weight:800}
+	.guide-route-text{font-size:13px;color:var(--text);line-height:1.55}
 	.guide-callouts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 	.guide-callout{border:1px solid var(--bord2);background:color-mix(in srgb,var(--s3) 76%,transparent);border-radius:10px;padding:12px}
 	.guide-callout strong{display:block;font-size:12px;color:var(--text);margin-bottom:4px}
@@ -663,7 +668,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	.tts-toggle-btn.tts-active{border-color:color-mix(in srgb,var(--yellow) 44%,transparent)!important;background:color-mix(in srgb,var(--yellow) 10%,transparent)!important;color:var(--yellow)!important}
 	.tts-dot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:999px;background:var(--green);box-shadow:0 0 10px color-mix(in srgb,var(--green) 55%,transparent);pointer-events:none}
 	.tts-dot.tts-system-loading{background:var(--yellow);animation:ttsPulse 1.4s ease-in-out infinite}
-	.tts-dot.tts-system-fallback{background:var(--cyan);box-shadow:0 0 10px color-mix(in srgb,var(--cyan) 55%,transparent)}
 	@keyframes ttsPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
 	.guide-voice-panel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
 	.guide-voice-btn,.guide-voice-replay{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:800;cursor:pointer}
@@ -672,7 +676,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	.guide-voice-rate span{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
 	.guide-voice-rate input{width:104px;accent-color:var(--yellow)}
 	.guide-voice-status{font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:.02em;min-height:16px}
-	.tbtn.tts-toggle-btn,.ls-exit-btn.tts-toggle-btn{gap:6px}
+	.guide-voice-help{flex-basis:100%;font-size:12px;color:var(--text2);line-height:1.45}
 
 	/* ── ADMIN PANEL ── */
 #adminPanel{align-items:stretch;justify-content:flex-end}
@@ -1266,7 +1270,6 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	    <div class="e-title">Cueola</div>
 	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, and sync <em>Flowmingo.</em></div>
 	    <div class="entry-actions">
-	      <button class="entry-admin-link tts-toggle-btn" id="entryTtsBtn" data-tts-short="1" onclick="toggleTTS()" aria-label="Turn on voice over" aria-pressed="false">VO Off</button>
 	      <button class="entry-admin-link" onclick="openLearningHub()">Start Guide</button>
 	    </div>
 	    <div class="e-cards">
@@ -1336,7 +1339,6 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
 	      <button class="tbtn tbtn-ghost" onclick="openPaperworkHub()">🐼 Planda Bear</button>
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()">Guide</button>
-	      <button class="tbtn tbtn-ghost tts-toggle-btn" id="topTtsBtn" data-tts-short="1" onclick="toggleTTS()" title="Toggle voice over" aria-label="Turn on voice over" aria-pressed="false">VO Off</button>
 	      <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
       <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -1401,7 +1403,6 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
 	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
-	      <button class="ls-exit-btn tts-toggle-btn" id="liveTtsBtn" data-tts-short="1" onclick="toggleTTS()" title="Toggle voice over" aria-label="Turn on voice over" aria-pressed="false">VO Off</button>
 	      <button class="ls-exit-btn" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen">⛶ Full</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
@@ -1771,6 +1772,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
             <input id="ttsRateRange" type="range" min="0.5" max="1.5" step="0.05" value="1" oninput="setTTSRate(this.value)">
           </label>
           <span class="guide-voice-status" id="ttsAssetStatus" data-tts-status>Voice over off.</span>
+          <span class="guide-voice-help">Listen once, then follow the Where To Go and Do This sections while the lesson talks.</span>
         </div>
       </div>
       <button class="guide-close" onclick="hideModal('learningHubModal')" title="Close guide" aria-label="Close guide">×</button>
