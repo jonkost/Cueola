@@ -4010,12 +4010,18 @@ function focusCuesForBeat(b) {
   return `<div class="lf-cues">` + filled.map(type => {
     const d = b.cues[type], tc = CT[type];
     const on = getCueOn(d), off = getCueOff(d);
-    const detail = type === 'script'
-      ? `Script · ${scriptLineCount(d.text)} lines`
-      : [on ? `▶ ${esc(on)}` : '', off ? `■ ${esc(off)}` : ''].filter(Boolean).join('  ');
+    let lines = '';
+    if (type === 'script') {
+      lines = `<div class="lf-cue-take">📄 Script ready · ${scriptLineCount(d.text)} lines</div>`;
+    } else {
+      // The "take" (on) cue is the action to call now — make it the big line.
+      // If there's no take, the "ready"/off cue becomes the prominent one.
+      if (on)  lines += `<div class="lf-cue-take">▶ ${esc(on)}</div>`;
+      if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
+    }
     return `<div class="lf-cue" style="--cue-clr:${tc.color}">
-      <span class="lf-cue-dept">${tc.icon} ${COL_META[type].label}</span>
-      <span class="lf-cue-detail">${detail}</span>
+      <div class="lf-cue-dept">${COL_META[type].label}</div>
+      <div class="lf-cue-lines">${lines}</div>
     </div>`;
   }).join('') + `</div>`;
 }
@@ -4037,8 +4043,11 @@ function renderLiveFocus() {
         <span class="lf-now-badge"><span class="lf-dot"></span> NOW</span>
         <span class="lf-now-meta">Row ${curIdx + 1} of ${total} · ${fmtSecs(remainSecs)} left</span>
       </div>
-      <div class="lf-now-name">${esc(cur.info || '—')}</div>
-      <div class="lf-now-sub"><span class="lf-now-dur">${fmtDur(cur)}</span>${startStr ? `<span class="lf-now-clock">starts ${startStr}</span>` : ''}</div>
+      <div class="lf-now-title">
+        <span class="lf-now-name">${esc(cur.info || '—')}</span>
+        <span class="lf-now-dur">${fmtDur(cur)}</span>
+        ${startStr ? `<span class="lf-now-clock">starts ${startStr}</span>` : ''}
+      </div>
       ${cur.notes ? `<div class="lf-now-note">${esc(cur.notes)}</div>` : ''}
       ${focusCuesForBeat(cur)}
     </div>`;
