@@ -178,6 +178,8 @@ let liveSidebarWidth = 360;
 let previewRowIdx = 0;
 let callSheetPeople = [];
 let activeCallSheetIndex = 0;
+let callSheetVenue = '';      // '' | 'indoors' | 'outdoors' | 'both'
+let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise, sunset, emoji, source, forecastDate, place, updatedAt }
 let liveClockRunning = false;
 let paperworkDirty = false;
 let flowmingoRemoteOverrideUntil = 0;
@@ -6820,6 +6822,8 @@ function legacyCallSheetFromData(data={}) {
     doors: data.doors || '',
     location: data.location || '',
     address: data.address || '',
+    venue: normalizeCallSheetVenue(data.venue),
+    weather: normalizeCallSheetWeather(data.weather),
     parking: data.parking || '',
     entrance: data.entrance || '',
     late: data.late || '',
@@ -6842,6 +6846,8 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     doors: sheet.doors || fallback.doors || '',
     location: sheet.location || fallback.location || '',
     address: sheet.address || fallback.address || '',
+    venue: normalizeCallSheetVenue(sheet.venue || fallback.venue),
+    weather: normalizeCallSheetWeather(sheet.weather) || normalizeCallSheetWeather(fallback.weather),
     parking: sheet.parking || fallback.parking || '',
     entrance: sheet.entrance || fallback.entrance || '',
     late: sheet.late || fallback.late || '',
@@ -6889,6 +6895,10 @@ function hydrateCallSheetForm(sheet) {
   setTimeInputValue('pp-doors', data.doors === 'N/A' ? '' : data.doors);
   document.getElementById('pp-location').value = data.location || '';
   document.getElementById('pp-address').value = data.address || '';
+  callSheetVenue = normalizeCallSheetVenue(data.venue);
+  renderCallSheetVenue();
+  callSheetWeather = normalizeCallSheetWeather(data.weather);
+  renderCallSheetWeatherCard();
   document.getElementById('pp-late').value = data.late || '';
   document.getElementById('pp-parking').value = data.parking || '';
   document.getElementById('pp-entrance').value = data.entrance || '';
@@ -6912,6 +6922,8 @@ function currentCallSheetFromForm() {
     doors: getDoorsOpenValue(),
     location: document.getElementById('pp-location')?.value?.trim() || '',
     address: document.getElementById('pp-address')?.value?.trim() || '',
+    venue: callSheetVenue,
+    weather: normalizeCallSheetWeather(callSheetWeather),
     parking: document.getElementById('pp-parking')?.value?.trim() || '',
     entrance: document.getElementById('pp-entrance')?.value?.trim() || '',
     late: document.getElementById('pp-late')?.value?.trim() || '',
@@ -6921,6 +6933,181 @@ function currentCallSheetFromForm() {
     people: callSheetPeople,
     notes: document.getElementById('pp-notes')?.value || '',
   }, activeCallSheetIndex);
+}
+
+// ── Call sheet venue + weather ───────────────────────────────
+// Venue is a simple indoors/outdoors/both tag. Weather auto-fills from
+// Open-Meteo (free, no API key) for the location + shoot date, and every
+// field stays editable as a manual override.
+function normalizeCallSheetVenue(v) {
+  return ['indoors','outdoors','both'].includes(v) ? v : '';
+}
+
+function venueLabel(v) {
+  return v === 'indoors' ? 'Indoors' : v === 'outdoors' ? 'Outdoors' : v === 'both' ? 'Indoors & Outdoors' : '';
+}
+
+function normalizeCallSheetWeather(w) {
+  if (!w || typeof w !== 'object') return null;
+  const s = v => (v == null ? '' : String(v)).slice(0, 60);
+  const out = {
+    conditions: s(w.conditions), high: s(w.high), low: s(w.low),
+    precip: s(w.precip), wind: s(w.wind), sunrise: s(w.sunrise), sunset: s(w.sunset),
+    emoji: s(w.emoji),
+    source: w.source === 'auto' ? 'auto' : (w.source === 'manual' ? 'manual' : ''),
+    forecastDate: s(w.forecastDate), place: s(w.place), updatedAt: Number(w.updatedAt) || 0,
+  };
+  const hasAny = out.conditions || out.high || out.low || out.precip || out.wind || out.sunrise || out.sunset;
+  return hasAny ? out : null;
+}
+
+const WMO_WEATHER = {
+  0:['Clear sky','☀️'], 1:['Mainly clear','🌤️'], 2:['Partly cloudy','⛅'], 3:['Overcast','☁️'],
+  45:['Fog','🌫️'], 48:['Rime fog','🌫️'],
+  51:['Light drizzle','🌦️'], 53:['Drizzle','🌦️'], 55:['Heavy drizzle','🌧️'],
+  56:['Freezing drizzle','🌧️'], 57:['Freezing drizzle','🌧️'],
+  61:['Light rain','🌦️'], 63:['Rain','🌧️'], 65:['Heavy rain','🌧️'],
+  66:['Freezing rain','🌧️'], 67:['Freezing rain','🌧️'],
+  71:['Light snow','🌨️'], 73:['Snow','❄️'], 75:['Heavy snow','❄️'], 77:['Snow grains','❄️'],
+  80:['Rain showers','🌦️'], 81:['Rain showers','🌧️'], 82:['Violent showers','⛈️'],
+  85:['Snow showers','🌨️'], 86:['Snow showers','🌨️'],
+  95:['Thunderstorm','⛈️'], 96:['Thunderstorm, hail','⛈️'], 99:['Thunderstorm, hail','⛈️'],
+};
+function wmoWeather(code) {
+  const hit = WMO_WEATHER[code];
+  return hit ? { label:hit[0], emoji:hit[1] } : { label:'', emoji:'🌤️' };
+}
+
+function fmtClockFromISO(iso) {
+  if (!iso) return '';
+  const t = String(iso).split('T')[1] || '';
+  const parts = t.split(':');
+  if (parts.length < 2) return '';
+  let hr = parseInt(parts[0], 10);
+  if (!Number.isFinite(hr)) return '';
+  const ap = hr >= 12 ? 'PM' : 'AM';
+  hr = hr % 12 || 12;
+  return `${hr}:${parts[1]} ${ap}`;
+}
+
+function callSheetDayLabel(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+  if (!m) return '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d) ? '' : d.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
+}
+
+function weatherSummaryLine(w) {
+  w = normalizeCallSheetWeather(w);
+  if (!w) return '';
+  const parts = [];
+  if (w.conditions) parts.push(w.conditions);
+  if (w.high || w.low) parts.push(`High ${w.high || '—'} / Low ${w.low || '—'}`);
+  if (w.precip) parts.push(`Precip ${w.precip}`);
+  if (w.wind) parts.push(`Wind ${w.wind}`);
+  if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+  return parts.join(' · ');
+}
+
+function setCallSheetVenue(v) {
+  const nv = normalizeCallSheetVenue(v);
+  callSheetVenue = (callSheetVenue === nv) ? '' : nv; // click active to clear
+  renderCallSheetVenue();
+  paperworkDirty = true;
+}
+
+function renderCallSheetVenue() {
+  document.querySelectorAll('#pp-venue-group [data-venue]').forEach(btn => {
+    const on = btn.getAttribute('data-venue') === callSheetVenue;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function setWeatherStatus(text, isError=false) {
+  const el = document.getElementById('pp-weather-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.toggle('warn', !!isError);
+}
+
+function renderCallSheetWeatherCard() {
+  const date = document.getElementById('pp-date')?.value || '';
+  const setTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  const setV = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+  setTxt('pp-weather-day', callSheetDayLabel(date) || 'Add a shoot date');
+  setTxt('pp-weather-call', document.getElementById('pp-call')?.value || '—');
+  setTxt('pp-weather-loc', document.getElementById('pp-location')?.value?.trim() || 'Add a location');
+  const w = callSheetWeather || {};
+  setV('pp-wx-conditions', w.conditions || '');
+  setV('pp-wx-high', w.high || '');
+  setV('pp-wx-low', w.low || '');
+  setV('pp-wx-precip', w.precip || '');
+  setV('pp-wx-wind', w.wind || '');
+  setV('pp-wx-sunrise', w.sunrise || '');
+  setV('pp-wx-sunset', w.sunset || '');
+  setTxt('pp-weather-ico', w.emoji || '🌤️');
+  if (w.updatedAt) {
+    setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
+  } else {
+    setWeatherStatus('Auto-fills from your location and shoot date. You can edit anything below.');
+  }
+}
+
+function onCallSheetWeatherInput(field, value) {
+  if (!callSheetWeather) {
+    callSheetWeather = { conditions:'', high:'', low:'', precip:'', wind:'', sunrise:'', sunset:'', emoji:'', source:'manual', forecastDate:'', place:'', updatedAt:0 };
+  }
+  callSheetWeather[field] = value;
+  callSheetWeather.source = callSheetWeather.source || 'manual';
+  callSheetWeather.updatedAt = Date.now();
+  paperworkDirty = true;
+}
+
+async function fetchCallSheetWeather() {
+  const btn = document.getElementById('pp-weather-fetch-btn');
+  const location = document.getElementById('pp-location')?.value?.trim() || '';
+  const date = document.getElementById('pp-date')?.value || '';
+  if (!location) { setWeatherStatus('Add a location first, then get the forecast.', true); document.getElementById('pp-location')?.focus(); return; }
+  if (!date) { setWeatherStatus('Add a shoot date first, then get the forecast.', true); document.getElementById('pp-date')?.focus(); return; }
+  if (btn) btn.disabled = true;
+  setWeatherStatus('Finding location…');
+  try {
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
+    if (!geoRes.ok) throw new Error('geo');
+    const place = (await geoRes.json())?.results?.[0];
+    if (!place) { setWeatherStatus(`Couldn't find "${location}". Check the spelling or enter weather manually below.`, true); return; }
+    setWeatherStatus('Loading forecast…');
+    const q = `latitude=${place.latitude}&longitude=${place.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&start_date=${date}&end_date=${date}`;
+    const fRes = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`);
+    if (!fRes.ok) throw new Error('forecast');
+    const d = (await fRes.json())?.daily;
+    if (!d?.time?.length || d.temperature_2m_max?.[0] == null) {
+      setWeatherStatus('That date is outside the 16-day forecast window — enter weather manually below.', true);
+      return;
+    }
+    const wx = wmoWeather(d.weather_code?.[0]);
+    const round = n => (n == null ? '' : Math.round(n));
+    callSheetWeather = {
+      conditions: wx.label, emoji: wx.emoji,
+      high: d.temperature_2m_max?.[0] != null ? round(d.temperature_2m_max[0]) + '°' : '',
+      low:  d.temperature_2m_min?.[0] != null ? round(d.temperature_2m_min[0]) + '°' : '',
+      precip: d.precipitation_probability_max?.[0] != null ? d.precipitation_probability_max[0] + '%' : '',
+      wind: d.wind_speed_10m_max?.[0] != null ? round(d.wind_speed_10m_max[0]) + ' mph' : '',
+      sunrise: fmtClockFromISO(d.sunrise?.[0]),
+      sunset: fmtClockFromISO(d.sunset?.[0]),
+      source: 'auto', forecastDate: date,
+      place: [place.name, place.admin1, place.country_code].filter(Boolean).join(', '),
+      updatedAt: Date.now(),
+    };
+    renderCallSheetWeatherCard();
+    paperworkDirty = true;
+    saveCallSheetStateLocally(false);
+  } catch (e) {
+    setWeatherStatus('Could not reach the weather service. Check your connection or enter weather manually below.', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function saveCallSheetStateLocally(showToastOnSave=false) {
@@ -6958,6 +7145,7 @@ function addAnotherCallSheet() {
     ...source,
     label: `Call Sheet ${sheets.length + 1}`,
     date: '', call: '', showStart: '', wrap: '', doors: '',
+    weather: null, // new day → fetch fresh forecast; venue carries over from source
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
   }, sheets.length);
   sheets.push(nextSheet);
@@ -7016,6 +7204,8 @@ function callSheetPreviewHTML(data) {
       <tr><th>Estimated Wrap</th><td>${esc(data.wrap || '')}</td></tr>
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
+      <tr><th>Venue</th><td>${esc(venueLabel(data.venue))}</td></tr>
+      <tr><th>Weather</th><td>${esc(weatherSummaryLine(data.weather))}</td></tr>
       <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
       <tr><th>Entrance</th><td>${esc(data.entrance || '')}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>

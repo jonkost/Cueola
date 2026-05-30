@@ -28,7 +28,7 @@ LANG_CODE = "a"
 def normalize_narration_text(text: str) -> str:
     """Improve pronunciation while leaving the on-screen copy unchanged."""
     replacements = [
-        (r"\bCueola\b", "Cue oh la"),
+        (r"\bCueola\b", "Cue ah la"),
         (r"\bFlowmingo\b", "Flow mingo"),
         (r"\bGFX\b", "graphics"),
         (r"\bPDF\b", "P D F"),
