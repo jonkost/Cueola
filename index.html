@@ -293,59 +293,49 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Live rundown grid */
 .live-grid-wrap{overflow:auto;min-height:0;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.012)}
-.live-grid{width:100%;min-width:1180px;border-collapse:collapse;table-layout:fixed}
-.live-grid th,.live-grid td{border-bottom:1px solid var(--border);vertical-align:top}
-.live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:8px 7px;font-size:8px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);text-align:left}
-.live-grid td{padding:6px 7px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
-.live-row-current td{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 20%,transparent),color-mix(in srgb,var(--accent) 11%,transparent));padding-top:20px;padding-bottom:20px;box-shadow:inset 0 2px color-mix(in srgb,var(--accent) 46%,transparent),inset 0 -2px color-mix(in srgb,var(--accent) 34%,transparent)}
-.live-row-current td:first-child{box-shadow:inset 4px 0 var(--red),inset 0 2px color-mix(in srgb,var(--accent) 46%,transparent),inset 0 -2px color-mix(in srgb,var(--accent) 34%,transparent)}
-.live-row-next td{background:rgba(34,211,160,.075);padding-top:15px;padding-bottom:15px}
-.live-row-next .live-name{font-size:18px;font-weight:800}
-.live-row-next .live-num{font-size:24px;color:var(--green)}
-.live-row-next .live-cue-cell{min-height:56px}
-.live-row-done{opacity:.42}
-.live-col-num{width:42px}.live-col-status{width:76px}.live-col-name{width:19%}.live-col-time{width:92px}.live-col-cue{width:11%}.live-col-script{width:15%}
-/* Freeze #, State, and Row so you always know which row you're on while the
-   department cue columns scroll. Opaque backgrounds keep cues from bleeding through. */
+.live-grid{width:100%;min-width:900px;border-collapse:collapse;table-layout:fixed}
+.live-grid th,.live-grid td{border-bottom:1px solid var(--border);vertical-align:middle}
+.live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:10px;font-size:9px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);text-align:left;font-weight:800}
+.live-grid td{padding:12px 10px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
+/* Every row is the same comfortable size. The live row stands out by colour, a
+   bold left bar and an ON AIR badge — never by a jarring size jump. */
+.live-row-current td{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+.live-row-next td{background:color-mix(in srgb,var(--green) 7%,transparent)}
+.live-row-done{opacity:.4}
+.live-col-num{width:50px}.live-col-status{width:90px}.live-col-name{width:21%}.live-col-time{width:88px}.live-col-cue{width:13%}.live-col-script{width:15%}
+/* Freeze #, State and Row so you never lose your place while the cue columns scroll. */
 .live-grid td:nth-child(-n+3),.live-grid th:nth-child(-n+3){position:sticky;background:var(--s1)}
 .live-grid th:nth-child(1),.live-grid td:nth-child(1){left:0;z-index:4}
-.live-grid th:nth-child(2),.live-grid td:nth-child(2){left:42px;z-index:4}
-.live-grid th:nth-child(3),.live-grid td:nth-child(3){left:118px;z-index:4;box-shadow:6px 0 12px -6px rgba(0,0,0,.5)}
+.live-grid th:nth-child(2),.live-grid td:nth-child(2){left:50px;z-index:4}
+.live-grid th:nth-child(3),.live-grid td:nth-child(3){left:140px;z-index:4;box-shadow:7px 0 14px -7px rgba(0,0,0,.55)}
 .live-grid th:nth-child(-n+3){z-index:7}
-.live-row-current td:nth-child(-n+3){background:color-mix(in srgb,var(--accent) 20%,var(--s1))}
-.live-row-next td:nth-child(-n+3){background:color-mix(in srgb,var(--green) 9%,var(--s1))}
-.live-num{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text2)}
-.live-row-current .live-num{font-size:34px;color:var(--text);padding-top:2px}
-.live-status{display:inline-flex;align-items:center;justify-content:center;min-width:50px;border-radius:999px;padding:3px 7px;font-size:8px;font-family:var(--mono);letter-spacing:.08em;font-weight:800;text-transform:uppercase}
-.live-status.now{background:var(--red);color:#fff;border:1px solid rgba(255,255,255,.2);box-shadow:0 0 18px rgba(240,82,82,.28)}
-.live-status.now::before{content:'';width:6px;height:6px;background:#fff;border-radius:50%;margin-right:5px;box-shadow:0 0 10px rgba(255,255,255,.75)}
-.live-status.next{background:rgba(34,211,160,.12);color:var(--green);border:1px solid rgba(34,211,160,.32)}
-.live-status.done{background:rgba(70,82,122,.18);color:var(--text3);border:1px solid var(--border)}
-.live-status.later{background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent)}
-.live-name{font-family:var(--sans);font-size:13px;font-weight:700;line-height:1.22;color:var(--text)}
-.live-row-current .live-name{font-family:var(--sans);font-size:25px;font-weight:800;line-height:1.15;color:#fff}
-.live-note{font-size:10px;color:var(--text2);line-height:1.3;margin-top:3px}
-.live-row-current .live-note{font-size:12px;color:var(--text);margin-top:5px}
-.live-time{font-family:var(--mono);font-size:10px;color:var(--text2);line-height:1.4}
-.live-time strong{display:block;color:var(--text);font-size:11px}
-.live-row-current .live-time{font-size:12px;color:var(--text)}
-.live-row-current .live-time strong{font-size:17px;color:#fff}
-.live-cue-cell{min-height:34px;border-left:3px solid var(--bord2);border-radius:0 7px 7px 0;background:rgba(255,255,255,.025);padding:5px 7px}
-.live-row-current .live-cue-cell{min-height:74px;background:rgba(8,11,18,.38);padding:10px 11px;border-left-width:4px}
-.live-cue-label{font-size:7px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px;font-weight:800}
-.live-row-current .live-cue-label{font-size:9px;margin-bottom:5px}
-.live-cue-on,.live-cue-off{font-family:var(--mono);font-size:9px;line-height:1.3;white-space:normal;overflow:hidden;text-overflow:ellipsis}
-.live-row-current .live-cue-on,.live-row-current .live-cue-off{font-size:12px;line-height:1.38;overflow:visible}
-.live-cue-on{color:var(--text)}.live-cue-off{color:var(--text2)}
-.live-cue-empty{font-family:var(--mono);font-size:9px;color:var(--text3);opacity:.55}
-.live-row-current .live-cue-empty{font-size:12px;padding-top:8px}
-.live-script-copy{font-size:12px;line-height:1.45;color:var(--text2);max-height:54px;overflow:hidden;white-space:pre-wrap}
-.live-row-current .live-script-copy{font-size:17px;line-height:1.5;color:var(--text);max-height:170px}
+.live-row-current td:nth-child(-n+3){background:color-mix(in srgb,var(--accent) 16%,var(--s1))}
+.live-row-current td:first-child{box-shadow:inset 5px 0 var(--red)}
+.live-row-next td:nth-child(-n+3){background:color-mix(in srgb,var(--green) 8%,var(--s1))}
+.live-row-next td:first-child{box-shadow:inset 5px 0 var(--green)}
+.live-num{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text3)}
+.live-row-current .live-num,.live-row-next .live-num{color:var(--text)}
+.live-status{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:66px;border-radius:999px;padding:5px 10px;font-size:9px;font-family:var(--mono);letter-spacing:.08em;font-weight:800;text-transform:uppercase}
+.live-status.now{background:var(--red);color:#fff;box-shadow:0 0 16px rgba(240,82,82,.4)}
+.live-status.now::before{content:'';width:6px;height:6px;background:#fff;border-radius:50%;animation:glowPulse 1.5s ease-in-out infinite}
+.live-status.next{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green);border:1px solid color-mix(in srgb,var(--green) 36%,transparent)}
+.live-status.done{background:color-mix(in srgb,var(--text3) 16%,transparent);color:var(--text3)}
+.live-status.later{background:color-mix(in srgb,var(--text2) 9%,transparent);color:var(--text2)}
+.live-name{font-family:var(--sans);font-size:16px;font-weight:700;line-height:1.2;color:var(--text)}
+.live-row-current .live-name{font-weight:800}
+.live-note{font-size:11px;color:var(--text3);line-height:1.3;margin-top:2px}
+.live-time{font-family:var(--mono);font-size:11px;color:var(--text3);line-height:1.35}
+.live-time strong{display:block;color:var(--text);font-size:15px;font-weight:800}
+/* Cue cell — Ready (standby) over Take (go), same size on every row. */
+.live-cue-cell{border-left:3px solid var(--bord2);border-radius:0 7px 7px 0;background:rgba(255,255,255,.022);padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+.live-cue-rdy{font-family:var(--mono);font-size:12px;line-height:1.3;color:var(--text2)}
+.live-cue-go{font-family:var(--mono);font-size:13.5px;font-weight:700;line-height:1.3}
+.live-cue-empty{font-family:var(--mono);font-size:14px;color:var(--text3);opacity:.32;text-align:center}
 .live-script-cell{cursor:pointer}
 .live-script-cell:hover{border-color:var(--cyan);background:rgba(34,211,211,.08)}
-.live-script-open{cursor:pointer;border:1px dashed var(--bord2);border-radius:7px;padding:8px;color:var(--cyan);opacity:.85}
-.live-script-open:hover{border-color:var(--cyan);background:rgba(34,211,211,.06)}
-.live-script-action{margin-top:6px;font-size:8px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);opacity:.75}
+.live-script-open{cursor:pointer;color:var(--text3);opacity:.32;font-size:15px;font-family:var(--mono);text-align:center}
+.live-script-open:hover{opacity:1;color:var(--cyan)}
+.live-script-action{margin-top:3px;font-size:9px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cyan);opacity:.7}
 
 /* ── LIVE SHOW ── */
 #liveshow{background:var(--bg)}
@@ -2341,7 +2331,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530g"></script>
+<script src="cueola-app.js?v=20260530j"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

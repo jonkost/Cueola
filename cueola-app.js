@@ -2696,11 +2696,11 @@ function buildFreeTextCueFields(type, d={}) {
   const isScript = type === 'script';
   return `
     <div class="field">
-      <label class="field-lbl">${isScript ? 'Script Cue' : 'On Cue'}</label>
+      <label class="field-lbl">${isScript ? 'Script Cue' : 'Ready (standby)'}</label>
       <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
     </div>
     ${isScript ? '' : `<div class="field">
-      <label class="field-lbl">Off Cue</label>
+      <label class="field-lbl">Take (go)</label>
       <input class="field-in" id="cc-off-text" value="${esc(getCueOff(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
     </div>`}
     ${isScript ? `<div class="field">
@@ -2787,7 +2787,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 — Wide" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2812,7 +2812,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Dissolve to Black" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2839,7 +2839,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic — Host" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2862,7 +2862,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic — Host" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2901,7 +2901,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 — 0:45 TRT" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2922,7 +2922,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK — Take CAM 1" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2964,7 +2964,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On — Lower 3rd GFX" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -2985,7 +2985,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It — Lower 3rd" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -3040,7 +3040,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ ON CUE</label>
+        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key — Cue On" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -3071,7 +3071,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">■ OFF CUE</label>
+        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key — Fade Out" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -3137,8 +3137,8 @@ function buildCueConfigFields(type, d) {
   const isScript = type === 'script';
   const tabHtml = isScript ? '' : `
     <div class="cc-tabs">
-      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">▶&nbsp; On Cue</button>
-      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">■&nbsp; Off Cue</button>
+      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">○&nbsp; Ready</button>
+      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">▶&nbsp; Take</button>
     </div>`;
   return `
     ${tabHtml}
@@ -3982,21 +3982,20 @@ function liveCellForBeat(b, type, beatIdx) {
   const tc = CT[type];
   const d = b.cues?.[type];
   if (!d && type === 'script') {
-    return `<div class="live-cue-empty live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})">Open script</div>`;
+    return `<div class="live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Add script">+</div>`;
   }
-  if (!d) return `<div class="live-cue-empty">—</div>`;
+  if (!d) return `<div class="live-cue-empty">·</div>`;
   const on = getCueOn(d);
   const off = getCueOff(d);
   const isScript = type === 'script';
-  const script = '';
-  const scriptMeta = isScript && d.text ? `<div class="live-script-action">Script · ${scriptLineCount(d.text)} lines</div>` : '';
-  if (!on && !off && !script && !scriptMeta) return `<div class="live-cue-empty">—</div>`;
+  const scriptMeta = isScript && d.text ? `<div class="live-script-action">${scriptLineCount(d.text)} lines · tap to open</div>` : '';
+  if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
+  // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
+  // bold, department-coloured action line. "Ready one… take one."
   return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="border-left-color:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
-    <div class="live-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
-    ${on ? `<div class="live-cue-on">▶ ${esc(on)}</div>` : ''}
-    ${off ? `<div class="live-cue-off">■ ${esc(off)}</div>` : ''}
-    ${script}
-    ${isScript ? (scriptMeta || '<div class="live-script-action">View / edit / push</div>') : ''}
+    ${on  ? `<div class="live-cue-rdy">○ ${esc(on)}</div>` : ''}
+    ${off ? `<div class="live-cue-go" style="color:${tc.color}">▶ ${esc(off)}</div>` : ''}
+    ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
   </div>`;
 }
 
@@ -4098,6 +4097,9 @@ function renderLive() {
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
+  // Only show department columns actually used in this show — no empty lanes.
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&d.text)); }));
+  const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">
     <thead><tr>
@@ -4105,7 +4107,7 @@ function renderLive() {
       <th class="live-col-status">State</th>
       <th class="live-col-name">Row</th>
       <th class="live-col-time">Time</th>
-      ${colOrder.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${COL_META[type].label}</th>`).join('')}
+      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
@@ -4117,7 +4119,7 @@ function renderLive() {
     const durSecs = (b.min||0)*60+(b.sec||0);
     offsetSecs += durSecs;
     const statusClass = isCur ? 'now' : isNext ? 'next' : isDone ? 'done' : 'later';
-    const statusText = isCur ? 'Now' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
+    const statusText = isCur ? 'On Air' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
     const rowClass = isCur ? 'live-row-current' : isNext ? 'live-row-next' : isDone ? 'live-row-done' : '';
     html += `<tr class="${rowClass}" onclick="${handler}">
       <td><div class="live-num">${i+1}</div></td>
@@ -4127,7 +4129,7 @@ function renderLive() {
         ${b.notes?`<div class="live-note">${esc(b.notes)}</div>`:''}
       </td>
       <td><div class="live-time"><strong>${fmtDur(b)}</strong>${startStr}</div></td>
-      ${colOrder.map(type=>`<td>${liveCellForBeat(b,type,i)}</td>`).join('')}
+      ${showCols.map(type=>`<td>${liveCellForBeat(b,type,i)}</td>`).join('')}
     </tr>`;
   });
   html += `</tbody></table></div>`;
@@ -7324,7 +7326,7 @@ function showCuePartPreview(type) {
   showPaperPreview(titleMap[type], `
     <h1>${titleMap[type]}</h1>
     <div>Rendered from the rundown editor.</div>
-    <table><thead><tr><th>#</th><th>Row</th><th>On Cue</th><th>Off Cue</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
+    <table><thead><tr><th>#</th><th>Row</th><th>Ready</th><th>Take</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
   `, 'Done', "hideModal('paperPreviewModal')", null);
 }
 
@@ -8380,53 +8382,54 @@ function esc(s) {
 // DEMO DATA
 // ─────────────────────────────────────────────────────────────
 // Demo rundown — modern multi-cue format. Most rows fire several departments at
-// once (that's how the app is used). Terminology: a hard cut is "Ready → Take",
-// a soft mix is "Set → Dissolve". Audio is "Ready → Open/Play", playback "Roll".
+// once (that's how the app is used). Each cue reads as Ready (the standby — the
+// "on" field) then Take (the go — the "off" field): "Ready one… take one." A hard
+// cut is Ready → Take, a soft mix is Set → Dissolve.
 const DEMO_BEATS = [
   { id:1, style:'timed', info:'Countdown Slate', notes:'Roll to air', min:0, sec:30, done:false, cues:{
-    gfx:   { ready:'Ready Countdown',  take:'Take Countdown' },
-    audio: { ready:'Ready Theme Bed',  take:'Play Theme Bed' },
+    gfx:   { on:'Ready Countdown',  off:'Take Countdown' },
+    audio: { on:'Ready Theme Bed',  off:'Play Theme Bed' },
   }},
   { id:2, style:'timed', info:'Show Open', notes:'Theme up full, under at open', min:0, sec:15, done:false, cues:{
-    video: { ready:'Set OPEN',        take:'Dissolve OPEN' },
-    audio: { ready:'Ready Theme Full',take:'Play Theme Full' },
-    gfx:   { ready:'Ready Title',     take:'Take Title' },
+    video: { on:'Set OPEN',        off:'Dissolve OPEN' },
+    audio: { on:'Ready Theme Full',off:'Play Theme Full' },
+    gfx:   { on:'Ready Title',     off:'Take Title' },
   }},
   { id:3, style:'timed', info:'Anchor Wide — Welcome', notes:'', min:0, sec:20, done:false, cues:{
-    video:  { ready:'Ready CAM 1',     take:'Take CAM 1' },
-    audio:  { ready:'Ready Anchor Mics', take:'Open Mics 1+2' },
-    script: { ready:'Host', take:'Begin', text:"Good evening and welcome to Campus News. I'm your anchor — tonight, three big stories from around campus." },
+    video:  { on:'Ready CAM 1',     off:'Take CAM 1' },
+    audio:  { on:'Ready Anchor Mics', off:'Open Mics 1+2' },
+    script: { on:'Standby Host', off:'Cue Host', text:"Good evening and welcome to Campus News. I'm your anchor — tonight, three big stories from around campus." },
   }},
   { id:4, style:'timed', info:'Anchor Lower Third', notes:'Name / Title', min:0, sec:5, done:false, cues:{
-    gfx: { ready:'Set Lower Third', take:'Dissolve L3' },
+    gfx: { on:'Set Lower Third', off:'Dissolve L3' },
   }},
   { id:5, style:'timed', info:'PKG — Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
-    video:    { ready:'Set FULL SCREEN', take:'Dissolve to PKG' },
-    playback: { ready:'Ready SC_042',    take:'Roll SC_042' },
-    audio:    { ready:'Ready PKG Audio', take:'Take PKG SOT' },
+    video:    { on:'Set FULL SCREEN', off:'Dissolve to PKG' },
+    playback: { on:'Ready SC_042',    off:'Roll SC_042' },
+    audio:    { on:'Ready PKG Audio', off:'Take PKG SOT' },
   }},
   { id:6, style:'timed', info:'Back to Anchor', notes:'', min:0, sec:10, done:false, cues:{
-    video: { ready:'Ready CAM 2',      take:'Take CAM 2' },
-    audio: { ready:'Ready Anchor Mics',take:'Open Mic Host' },
+    video: { on:'Ready CAM 2',      off:'Take CAM 2' },
+    audio: { on:'Ready Anchor Mics',off:'Open Mic Host' },
   }},
   { id:7, style:'flex', info:'Guest Conversation', notes:'"What surprised you most?"', min:5, sec:0, done:false, cues:{
-    video:  { ready:'Set 2-SHOT',    take:'Dissolve 2-SHOT' },
-    audio:  { ready:'Ready Guest Mic', take:'Open Guest Mic' },
-    script: { ready:'Host', take:'Begin', text:'Guest conversation — ad-lib topic: the student budget vote and what it means for clubs.' },
+    video:  { on:'Set 2-SHOT',    off:'Dissolve 2-SHOT' },
+    audio:  { on:'Ready Guest Mic', off:'Open Guest Mic' },
+    script: { on:'Standby Host', off:'Cue Host', text:'Guest conversation — ad-lib topic: the student budget vote and what it means for clubs.' },
   }},
   { id:8, style:'timed', info:'Sports Highlight', notes:'', min:1, sec:30, done:false, cues:{
-    playback: { ready:'Ready SPT_HL', take:'Roll SPT_HL' },
-    gfx:      { ready:'Ready Scorebug', take:'Take Scorebug' },
+    playback: { on:'Ready SPT_HL', off:'Roll SPT_HL' },
+    gfx:      { on:'Ready Scorebug', off:'Take Scorebug' },
   }},
   { id:9, style:'timed', info:'Weather Look-Live', notes:'Chroma key', min:1, sec:0, done:false, cues:{
-    video: { ready:'Ready CHROMA',    take:'Take CHROMA' },
-    gfx:   { ready:'Set Weather Map', take:'Dissolve Weather Map' },
-    audio: { ready:'Ready Talent Mic',take:'Open Talent Mic' },
+    video: { on:'Ready CHROMA',    off:'Take CHROMA' },
+    gfx:   { on:'Set Weather Map', off:'Dissolve Weather Map' },
+    audio: { on:'Ready Talent Mic',off:'Open Talent Mic' },
   }},
   { id:10, style:'timed', info:'Outro & Signoff', notes:'', min:0, sec:45, done:false, cues:{
-    video: { ready:'Set WIDE',      take:'Dissolve WIDE' },
-    gfx:   { ready:'Ready Credits', take:'Take Credits' },
-    audio: { ready:'Ready Theme Out', take:'Play Theme Out' },
+    video: { on:'Set WIDE',      off:'Dissolve WIDE' },
+    gfx:   { on:'Ready Credits', off:'Take Credits' },
+    audio: { on:'Ready Theme Out', off:'Play Theme Out' },
   }},
 ];
 
