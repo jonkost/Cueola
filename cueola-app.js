@@ -1723,6 +1723,21 @@ function waitForFirebaseReady(timeoutMs=FIREBASE_WAIT_MS) {
   });
 }
 
+function firebaseConnectionLabel(err, fallback='Connection error') {
+  const code = err?.code || '';
+  if (code === 'permission-denied') return 'Cloud access denied';
+  if (code === 'unavailable') return 'Cloud unavailable';
+  if (code === 'not-found') return 'Not found';
+  return fallback;
+}
+
+function firebaseConnectionHint(err) {
+  const code = err?.code || '';
+  if (code === 'permission-denied') return 'Firebase denied access. Check Firestore rules for shared sessions.';
+  if (code === 'unavailable') return 'Could not reach Firebase. Check the network and try again.';
+  return 'Connection error. Try again, or use a local script if this is just one browser.';
+}
+
 function openLocalSession(code='', name='You', role='instructor', showName='Untitled Show') {
   session = { code:(code || '').trim().toUpperCase(), role, userName:name || 'You', isDemo:false, isExpert:false };
   show = { name:showName || 'Untitled Show', start:'' };
@@ -4614,6 +4629,26 @@ function ptPingBurst() {
   [0, 250, 750, 1500, 3000].forEach(d => setTimeout(() => ptPostPing('ready'), d));
 }
 
+function ptAdoptCueolaBridgeMessage(msg={}) {
+  const code = String(msg.sessionCode || '').trim().toUpperCase();
+  if (code) {
+    ptLinkedCueolaCode = code;
+    if (!session.code || session.isDemo) {
+      session.code = code;
+      session.isDemo = false;
+      session.isExpert = false;
+    }
+    const ci = ptEl('pt-cueola-code-input');
+    if (ci && !ci.value) ci.value = code;
+    const setup = ptEl('pt-setup-code');
+    if (setup && !setup.value) setup.value = code;
+  }
+  if (code || msg.showName) {
+    ptConnState = 'connected';
+    ptConnMessage = '';
+  }
+}
+
 function ptHandleCueolaMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
   // Dedup: each message is sent over BroadcastChannel AND localStorage, so it
@@ -4624,15 +4659,18 @@ function ptHandleCueolaMessage(msg) {
   _seenPrompterMsgIds.push(mid);
   if (_seenPrompterMsgIds.length > 120) _seenPrompterMsgIds = _seenPrompterMsgIds.slice(-60);
   if (msg.type === 'cueola_hello') {
+    ptAdoptCueolaBridgeMessage(msg);
     ptPostPing('ready');
     ptUpdateSyncLabel();
   }
   if (msg.type === 'script_init' && msg.text != null) {
+    ptAdoptCueolaBridgeMessage(msg);
     prompterText = msg.text || '';
     ptInitScriptFromCueola(prompterText);
     ptPostPing();
   }
   if (msg.type === 'script_update' && msg.text != null) {
+    ptAdoptCueolaBridgeMessage(msg);
     prompterText = msg.text || '';
     ptUpdateFromCueola(prompterText);
   }
@@ -5196,6 +5234,7 @@ function ptUpdateFromCueola(text) {
 
 // Connection state for the talent setup/ready indicator.
 let ptConnState = 'idle'; // idle | connecting | connected | notfound | error
+let ptConnMessage = '';
 let ptScriptIsPlaceholder = false; // true when only the default "Welcome to Flowmingo" text is loaded
 
 function ptHasScript() {
@@ -5213,7 +5252,7 @@ function ptUpdateReady() {
   let state, text;
   if (ptConnState === 'connecting')      { state = 'connecting'; text = 'Connecting…'; }
   else if (ptConnState === 'notfound')   { state = 'bad';        text = 'Show not found — check the code'; }
-  else if (ptConnState === 'error')      { state = 'warn';       text = code ? 'Reconnecting…' : 'Connection issue'; }
+  else if (ptConnState === 'error')      { state = 'warn';       text = ptConnMessage || (code ? 'Reconnecting…' : 'Connection issue'); }
   else if (code && hasScript)            { state = 'ready';      text = 'READY · ' + code; }
   else if (code)                         { state = 'warn';       text = 'Connected · ' + code + ' · waiting for script'; }
   else if (hasScript)                    { state = 'ready';      text = 'Script loaded'; }
@@ -5245,6 +5284,7 @@ function ptSetupConnect() {
     return;
   }
   if (status) { status.textContent = 'Connecting to ' + code + '…'; status.className = 'pt-setup-status'; }
+  ptConnMessage = '';
   const ci = ptEl('pt-cueola-code-input'); if (ci) ci.value = code;
   ptLoadFromCueolaCode(code);
 }
@@ -5594,9 +5634,9 @@ function flowOpLoadSession(codeOverride='') {
         }
         if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-      }, () => {
+      }, err => {
         flowOpCode = '';
-        flowOpSetStatus('Error', true);
+        flowOpSetStatus(firebaseConnectionLabel(err, 'Error'), true);
         flowOpRenderControls(true);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       });
@@ -5636,7 +5676,7 @@ function flowOpSendControl(action, quiet=false) {
   window._updateDoc(window._doc(window._db, 'sessions', flowOpCode), {
     'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
     'prompter.updatedAt': control.ts
-  }).catch(() => flowOpSetStatus('Send failed', true));
+  }).catch(err => flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true));
 }
 
 function flowOpReleaseHoldKeys() {
@@ -5800,6 +5840,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   ptSetCueolaStatus('Loading...');
   ptConnState = 'connecting';
+  ptConnMessage = '';
   ptUpdateReady();
   let loadedOnce = false;
   const load = () => {
@@ -5809,6 +5850,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         if (!snap.exists()) {
           ptSetCueolaStatus('Not found', true);
           ptConnState = 'notfound';
+          ptConnMessage = '';
           ptUpdateReady();
           const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show found for "${code}". Double-check the code.`; ss.className = 'pt-setup-status warn'; }
           if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
@@ -5820,6 +5862,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         session.isDemo = false;
         session.isExpert = false;
         ptConnState = 'connected';
+        ptConnMessage = '';
         const text = ptAssembleCueolaScript(data);
         if (text.trim()) {
           prompterText = text;
@@ -5849,16 +5892,24 @@ function ptLoadFromCueolaCode(codeOverride='') {
           applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
-      }, () => {
-        ptSetCueolaStatus('Error', true);
+      }, err => {
+        const label = firebaseConnectionLabel(err, 'Error');
+        ptSetCueolaStatus(label, true);
         ptConnState = 'error';
+        ptConnMessage = label;
         ptUpdateReady();
+        const ss = ptEl('pt-setup-status');
+        if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
         if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
       });
     } catch (err) {
-      ptSetCueolaStatus('Error', true);
+      const label = firebaseConnectionLabel(err, 'Error');
+      ptSetCueolaStatus(label, true);
       ptConnState = 'error';
+      ptConnMessage = label;
       ptUpdateReady();
+      const ss = ptEl('pt-setup-status');
+      if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
       if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
     }
   };
