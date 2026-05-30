@@ -385,9 +385,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── Live Focus: the grid with the redundant summary cards hidden and the
    later rows calmed, so the NOW row owns the screen. Toggle off = full view. ── */
 .lf-on .ls-overview{display:none}
-.lf-on .live-grid tbody tr:not(.live-row-current):not(.live-row-next) .live-cue-cell{opacity:.45;transition:opacity .15s var(--ease)}
+.lf-on .live-grid tbody tr:not(.live-row-current):not(.live-row-next) .live-cue-cell{opacity:.66;transition:opacity .15s var(--ease)}
 .lf-on .live-grid tbody tr:not(.live-row-current):not(.live-row-next):hover .live-cue-cell{opacity:1}
-.lf-on .live-row-done{opacity:.3}
+.lf-on .live-row-done{opacity:.34}
 .lf-wrap{max-width:780px;margin:0 auto;padding:20px 16px 10px;display:flex;flex-direction:column;gap:14px}
 .lf-now{position:relative;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-left:5px solid var(--accent);border-radius:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 11%,var(--s1)),var(--s1));padding:20px 22px;cursor:pointer;box-shadow:var(--shadow-lg)}
 .lf-now-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
@@ -487,7 +487,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Live bottom bar */
 .ls-bot{position:sticky;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:60;flex-shrink:0}
-.ls-timer{font-family:var(--mono);font-size:28px;font-weight:700;letter-spacing:-.02em}.ls-timer.warn{color:var(--yellow)}
+.ls-timer{font-family:var(--mono);font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1}.ls-timer.warn{color:var(--yellow)}
+.ls-bot-clocks{display:flex;align-items:center;gap:18px;min-width:0}
+.ls-bot-clk{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ls-bot-lbl{font-size:9px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);font-weight:800}
+.ls-remain{font-family:var(--mono);font-size:23px;font-weight:700;letter-spacing:-.02em;color:var(--text2);line-height:1;font-variant-numeric:tabular-nums}
+.ls-remain.warn{color:var(--yellow)}
+.ls-bot-sep{width:1px;height:36px;background:var(--border)}
+@media(max-width:560px){.ls-timer{font-size:22px}.ls-remain{font-size:18px}.ls-bot-clocks{gap:11px}}
 .ls-nav{display:flex;gap:7px}
 .ls-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;border:none;transition:all .15s}
 .ls-prev{background:var(--green);color:#03130e;border:1px solid rgba(34,211,160,.55)}
@@ -1475,7 +1482,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
 	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
-	      <button class="ls-exit-btn" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen">⛶ Full</button>
+	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
     </div>
   </div>
@@ -1523,7 +1530,11 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
   </div>
   <div class="ls-bot">
-    <div class="ls-timer" id="ls-timer">00:00:00:00</div>
+    <div class="ls-bot-clocks">
+      <div class="ls-bot-clk"><span class="ls-bot-lbl">Elapsed</span><span class="ls-timer" id="ls-timer">00:00:00:00</span></div>
+      <div class="ls-bot-sep"></div>
+      <div class="ls-bot-clk"><span class="ls-bot-lbl">Remaining</span><span class="ls-remain" id="ls-remain">—</span></div>
+    </div>
     <div class="ls-nav">
       <button class="ls-btn ls-prev" onclick="lsPrev()">← Prev</button>
       <button class="ls-btn ls-next-btn" onclick="lsNext()">Next →</button>
@@ -2331,7 +2342,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530j"></script>
+<script src="cueola-app.js?v=20260530k"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

@@ -3848,6 +3848,17 @@ function updateLiveOverview() {
   setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   const fill = document.getElementById('ls-progress-fill');
   if (fill) fill.style.width = `${progress}%`;
+  updateLiveRemain();
+}
+
+// Show time remaining, in the live transport bar. Turns amber under 10% left.
+function updateLiveRemain() {
+  const el = document.getElementById('ls-remain');
+  if (!el) return;
+  const ms = liveRemainingMs();
+  el.textContent = fmtProductionClock(ms);
+  const totalMs = totalSecs() * 1000;
+  el.classList.toggle('warn', totalMs > 0 && ms <= totalMs * 0.1);
 }
 
 function applyLivePrompterPanelState() {
