@@ -1264,6 +1264,13 @@ function renderAdminBody() {
     </div>`;
   }
   if (session.code || session.isExpert) {
+    html += `<div class="admin-section" style="margin-top:16px">
+      <div class="admin-section-label">Show Clock</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Reset the elapsed clock to 0:00 and jump back to the first row — take the show from the top.</div>
+      <button class="admin-act-btn danger" onclick="restartShowClock()">↺ Restart Show Clock</button>
+    </div>`;
+  }
+  if (session.code || session.isExpert) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Role and Planda Bear Assignments</div>
       <div id="adminRoleAssignments">${renderRoleAssignmentRows()}</div>
@@ -2261,6 +2268,15 @@ function handleLiveRemoteKeyup(e) {
 document.addEventListener('keydown', e => {
   const liveOn = document.getElementById('liveshow')?.classList.contains('on');
   if (!liveOn) return;
+  // Row preview pop-out open: arrows page through rows in the overlay (and Esc
+  // closes it) instead of moving the live position underneath it.
+  if (document.getElementById('lsRowPreviewOv')?.classList.contains('on')) {
+    if (isTextEditingTarget(e.target)) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); previewRelativeRow(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); previewRelativeRow(-1); }
+    else if (e.key === 'Escape') { e.preventDefault(); hideOverlay('lsRowPreviewOv'); }
+    return;
+  }
   if (handleLiveRemoteKeydown(e)) return;
   if (isTextEditingTarget(e.target)) return;
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); lsNext(); }
@@ -3780,6 +3796,27 @@ function toggleShowClock() {
   updateLiveOverview();
 }
 
+// Restart the show from the top: stop the clock, zero the elapsed time, and jump
+// back to the first row — so you can leave live, restart, and go live again to
+// take it from the top. Syncs the reset to any followers.
+function restartShowClock() {
+  if (!confirm('Restart the show? This stops the clock, resets it to 0:00, and jumps back to the first row.')) return;
+  stopTimer(false);
+  liveClockRunning = false;
+  elapsedSecs = 0;
+  liveTimerStartMs = null;
+  lsIdx = beats.length ? 0 : -1;
+  const t = document.getElementById('ls-timer');
+  if (t) { t.textContent = fmtProductionClock(0); t.classList.remove('warn'); }
+  updateBotBar();
+  updateLiveClockButton();
+  updateLiveRemain();
+  if (document.getElementById('liveshow')?.classList.contains('on')) { renderLive(); sendToPrompter(false); }
+  syncLiveIdx();
+  closeAdminPanel();
+  toast('Show restarted — clock at 0:00, back to the top.');
+}
+
 function getPrompterPayload(isInit=false) {
   const cur = beats[lsIdx] || null;
   const next = beats[lsIdx+1] || null;
@@ -3969,8 +4006,8 @@ function liveRowPreview(idx) {
     const off = getCueOff(d);
     html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${tc.icon} ${tc.label}</div>
-      ${on  ? `<div style="font-size:14px;font-weight:600;margin-bottom:2px">▶ ${esc(on)}</div>`  : ''}
-      ${off ? `<div style="font-size:13px;color:var(--text2)">■ ${esc(off)}</div>` : ''}
+      ${on  ? `<div style="font-size:14px;color:var(--text2);margin-bottom:2px">○ ${esc(on)}</div>`  : ''}
+      ${off ? `<div style="font-size:15px;font-weight:700;color:${tc.color}">▶ ${esc(off)}</div>` : ''}
       ${t==='script'&&d.text?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(d.text)}</div>`:''}
     </div>`;
   });
