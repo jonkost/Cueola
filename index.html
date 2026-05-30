@@ -305,6 +305,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-row-next .live-cue-cell{min-height:56px}
 .live-row-done{opacity:.42}
 .live-col-num{width:42px}.live-col-status{width:76px}.live-col-name{width:19%}.live-col-time{width:92px}.live-col-cue{width:11%}.live-col-script{width:15%}
+/* Freeze #, State, and Row so you always know which row you're on while the
+   department cue columns scroll. Opaque backgrounds keep cues from bleeding through. */
+.live-grid td:nth-child(-n+3),.live-grid th:nth-child(-n+3){position:sticky;background:var(--s1)}
+.live-grid th:nth-child(1),.live-grid td:nth-child(1){left:0;z-index:4}
+.live-grid th:nth-child(2),.live-grid td:nth-child(2){left:42px;z-index:4}
+.live-grid th:nth-child(3),.live-grid td:nth-child(3){left:118px;z-index:4;box-shadow:6px 0 12px -6px rgba(0,0,0,.5)}
+.live-grid th:nth-child(-n+3){z-index:7}
+.live-row-current td:nth-child(-n+3){background:color-mix(in srgb,var(--accent) 20%,var(--s1))}
+.live-row-next td:nth-child(-n+3){background:color-mix(in srgb,var(--green) 9%,var(--s1))}
 .live-num{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text2)}
 .live-row-current .live-num{font-size:34px;color:var(--text);padding-top:2px}
 .live-status{display:inline-flex;align-items:center;justify-content:center;min-width:50px;border-radius:999px;padding:3px 7px;font-size:8px;font-family:var(--mono);letter-spacing:.08em;font-weight:800;text-transform:uppercase}
@@ -383,8 +392,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-resizer.on{display:block}
 
 /* NOW card */
-/* ── Live Focus view: one dominant NOW, a clear NEXT, a dim coming-up list ── */
+/* ── Live Focus: the grid with the redundant summary cards hidden and the
+   later rows calmed, so the NOW row owns the screen. Toggle off = full view. ── */
 .lf-on .ls-overview{display:none}
+.lf-on .live-grid tbody tr:not(.live-row-current):not(.live-row-next) .live-cue-cell{opacity:.45;transition:opacity .15s var(--ease)}
+.lf-on .live-grid tbody tr:not(.live-row-current):not(.live-row-next):hover .live-cue-cell{opacity:1}
+.lf-on .live-row-done{opacity:.3}
 .lf-wrap{max-width:780px;margin:0 auto;padding:20px 16px 10px;display:flex;flex-direction:column;gap:14px}
 .lf-now{position:relative;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-left:5px solid var(--accent);border-radius:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 11%,var(--s1)),var(--s1));padding:20px 22px;cursor:pointer;box-shadow:var(--shadow-lg)}
 .lf-now-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
@@ -2328,7 +2341,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530f"></script>
+<script src="cueola-app.js?v=20260530g"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

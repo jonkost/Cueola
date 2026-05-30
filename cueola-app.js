@@ -1670,7 +1670,7 @@ function migrateOldCue(type, d) {
   ) return d; // already migrated
   switch(type) {
     case 'video':
-      return { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`Take ${d.source}`:'' };
+      return { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`${d.state==='Set'?'Dissolve':'Take'} ${d.source}`:'' };
     case 'audio':
       return { ready:[d.action,d.source].filter(Boolean).join(' '), take:d.action||'' };
     case 'playback':
@@ -4095,9 +4095,6 @@ function renderLive() {
 
   document.getElementById('liveshow')?.classList.toggle('lf-on', liveFocusMode);
   updateLiveFocusToggle();
-  if (liveFocusMode) {
-    renderLiveFocus();
-  } else {
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
@@ -4138,7 +4135,6 @@ function renderLive() {
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
   if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
-  }
   applyLivePrompterPanelState();
   renderFollowChips();
   updateLiveOverview();
@@ -8383,17 +8379,55 @@ function esc(s) {
 // ─────────────────────────────────────────────────────────────
 // DEMO DATA
 // ─────────────────────────────────────────────────────────────
+// Demo rundown — modern multi-cue format. Most rows fire several departments at
+// once (that's how the app is used). Terminology: a hard cut is "Ready → Take",
+// a soft mix is "Set → Dissolve". Audio is "Ready → Open/Play", playback "Roll".
 const DEMO_BEATS = [
-  { id:1, style:'timed', type:'video', info:'Countdown Slate', notes:'', min:0, sec:30, done:false, cueData:{ state:'Ready', source:'GFX' } },
-  { id:2, style:'timed', type:'audio', info:'Show Open BGM', notes:'Theme up full, under at open', min:0, sec:15, done:false, cueData:{ action:'Play', source:'Music' } },
-  { id:3, style:'timed', type:'gfx',   info:'Show Open Title Card', notes:'', min:0, sec:8, done:false, cueData:{ gfxType:'Full Screen', transition:'Auto On', source:'GFX', isFixed:false, isAnimated:true, contentNotes:'Show open animation' } },
-  { id:4, style:'timed', type:'video', info:'Anchor Wide — Show Open', notes:'', min:0, sec:10, done:false, cueData:{ state:'Set', source:'CAM 1' } },
-  { id:5, style:'timed', type:'audio', info:'Anchor Mics Hot', notes:'CH1+CH2 open', min:0, sec:5, done:false, cueData:{ action:'Open Mic', source:'Host' } },
-  { id:6, style:'timed', type:'script', info:'Anchor Cold Open', notes:'Read to camera', min:1, sec:0, done:false, cueData:{ scriptType:'Script', who:'Host', text:"Good evening and welcome to Campus News. I'm your anchor. Tonight we're covering three big stories..." } },
-  { id:7, style:'timed', type:'gfx',   info:'Anchor Lower Third', notes:'', min:0, sec:5, done:false, cueData:{ gfxType:'Lower 3rd', transition:'Cut', source:'GFX', isFixed:true, isAnimated:false, contentNotes:'Anchor Name / Title' } },
-  { id:8, style:'timed', type:'playback', info:'PKG — Student Council', notes:'Natural roll', min:2, sec:15, done:false, cueData:{ state:'Play', clipName:'SC_042', clipMin:2, clipSec:15 } },
-  { id:9, style:'flex',  type:'script', info:'Guest Conversation Block', notes:'"What surprised you most?"', min:5, sec:0, done:false, cueData:{ scriptType:'Dialogue', who:'Host', text:'Guest conversation — ad-lib topic: student budget vote' } },
-  { id:10, style:'timed', type:'video', info:'Outro & Signoff', notes:'', min:1, sec:30, done:false, cueData:{ state:'Set', source:'CAM 1' } },
+  { id:1, style:'timed', info:'Countdown Slate', notes:'Roll to air', min:0, sec:30, done:false, cues:{
+    gfx:   { ready:'Ready Countdown',  take:'Take Countdown' },
+    audio: { ready:'Ready Theme Bed',  take:'Play Theme Bed' },
+  }},
+  { id:2, style:'timed', info:'Show Open', notes:'Theme up full, under at open', min:0, sec:15, done:false, cues:{
+    video: { ready:'Set OPEN',        take:'Dissolve OPEN' },
+    audio: { ready:'Ready Theme Full',take:'Play Theme Full' },
+    gfx:   { ready:'Ready Title',     take:'Take Title' },
+  }},
+  { id:3, style:'timed', info:'Anchor Wide — Welcome', notes:'', min:0, sec:20, done:false, cues:{
+    video:  { ready:'Ready CAM 1',     take:'Take CAM 1' },
+    audio:  { ready:'Ready Anchor Mics', take:'Open Mics 1+2' },
+    script: { ready:'Host', take:'Begin', text:"Good evening and welcome to Campus News. I'm your anchor — tonight, three big stories from around campus." },
+  }},
+  { id:4, style:'timed', info:'Anchor Lower Third', notes:'Name / Title', min:0, sec:5, done:false, cues:{
+    gfx: { ready:'Set Lower Third', take:'Dissolve L3' },
+  }},
+  { id:5, style:'timed', info:'PKG — Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
+    video:    { ready:'Set FULL SCREEN', take:'Dissolve to PKG' },
+    playback: { ready:'Ready SC_042',    take:'Roll SC_042' },
+    audio:    { ready:'Ready PKG Audio', take:'Take PKG SOT' },
+  }},
+  { id:6, style:'timed', info:'Back to Anchor', notes:'', min:0, sec:10, done:false, cues:{
+    video: { ready:'Ready CAM 2',      take:'Take CAM 2' },
+    audio: { ready:'Ready Anchor Mics',take:'Open Mic Host' },
+  }},
+  { id:7, style:'flex', info:'Guest Conversation', notes:'"What surprised you most?"', min:5, sec:0, done:false, cues:{
+    video:  { ready:'Set 2-SHOT',    take:'Dissolve 2-SHOT' },
+    audio:  { ready:'Ready Guest Mic', take:'Open Guest Mic' },
+    script: { ready:'Host', take:'Begin', text:'Guest conversation — ad-lib topic: the student budget vote and what it means for clubs.' },
+  }},
+  { id:8, style:'timed', info:'Sports Highlight', notes:'', min:1, sec:30, done:false, cues:{
+    playback: { ready:'Ready SPT_HL', take:'Roll SPT_HL' },
+    gfx:      { ready:'Ready Scorebug', take:'Take Scorebug' },
+  }},
+  { id:9, style:'timed', info:'Weather Look-Live', notes:'Chroma key', min:1, sec:0, done:false, cues:{
+    video: { ready:'Ready CHROMA',    take:'Take CHROMA' },
+    gfx:   { ready:'Set Weather Map', take:'Dissolve Weather Map' },
+    audio: { ready:'Ready Talent Mic',take:'Open Talent Mic' },
+  }},
+  { id:10, style:'timed', info:'Outro & Signoff', notes:'', min:0, sec:45, done:false, cues:{
+    video: { ready:'Set WIDE',      take:'Dissolve WIDE' },
+    gfx:   { ready:'Ready Credits', take:'Take Credits' },
+    audio: { ready:'Ready Theme Out', take:'Play Theme Out' },
+  }},
 ];
 
 // ─────────────────────────────────────────────────────────────
