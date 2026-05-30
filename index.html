@@ -144,10 +144,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Cue type cells */
 .cd-cue-cell{padding:3px 4px;vertical-align:middle;background:rgba(255,255,255,.008);height:1px}
-.cue-add-btn{width:100%;height:100%;min-height:34px;border:1.5px dashed var(--cue-add-border);border-radius:8px;background:var(--cue-add-bg);color:var(--cue-add);font-size:11px;font-family:var(--sans);font-weight:600;letter-spacing:.02em;cursor:pointer;transition:all .12s var(--ease);display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase}
-.cue-add-btn:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
-.cue-cell-filled{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease);border:1px solid var(--bord2);background:linear-gradient(180deg,var(--s2),color-mix(in srgb,var(--s3) 82%,transparent));min-height:40px;height:100%;position:relative}
-.cue-cell-filled:hover{border-color:color-mix(in srgb,var(--accent) 60%,var(--bord2));background:color-mix(in srgb,var(--accent) 8%,var(--s2));box-shadow:var(--shadow-sm)}
+/* Empty cue cells recede to a faint "+" so programmed cues dominate the grid;
+   they reveal their department label + colour on hover. */
+.cue-add-btn{width:100%;height:100%;min-height:34px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text3);font-size:11px;font-family:var(--sans);font-weight:600;letter-spacing:.04em;cursor:pointer;transition:all .14s var(--ease);display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase;opacity:.28}
+.cue-add-btn span:first-child{font-size:16px;font-weight:400;line-height:1}
+.cue-add-btn span:last-child{display:none}
+.cue-add-btn:hover{border-color:color-mix(in srgb,var(--cue-add) 55%,transparent);color:var(--text);background:color-mix(in srgb,var(--cue-add) 15%,transparent);opacity:1}
+.cue-add-btn:hover span:last-child{display:inline}
+.rd-row:hover .cue-add-btn{opacity:.5}
+/* Filled cues carry a bold department-coloured edge, tint, and a coloured glow on hover. */
+.cue-cell-filled{display:flex;flex-direction:column;gap:4px;padding:8px 10px 8px 12px;border-radius:8px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease),transform .12s var(--ease);border:1px solid color-mix(in srgb,var(--cue-clr,var(--bord2)) 30%,var(--bord2));border-left:3px solid var(--cue-clr,var(--accent));background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 17%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 5%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 12%,transparent),0 1px 3px rgba(0,0,0,.22);min-height:40px;height:100%;position:relative}
+.cue-cell-filled:hover{border-color:color-mix(in srgb,var(--cue-clr,var(--accent)) 55%,var(--bord2));border-left-color:var(--cue-clr,var(--accent));background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--accent)) 24%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--accent)) 9%,var(--s3)));box-shadow:0 6px 20px color-mix(in srgb,var(--cue-clr,var(--accent)) 32%,transparent),0 0 0 1px color-mix(in srgb,var(--cue-clr) 38%,transparent);transform:translateY(-1px)}
 .cue-cell-filled::after{content:'EDIT';position:absolute;right:7px;top:6px;font-size:9px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;color:var(--text3);opacity:0;transition:opacity .15s var(--ease)}
 .cue-cell-filled:hover::after{opacity:.8}
 .cue-cell-icon{font-size:16px;line-height:1;display:inline-flex;align-items:center;flex-shrink:0}
@@ -664,6 +671,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 	.guide-mini-btn:hover:not(:disabled){border-color:var(--accent);color:var(--text)}
 	.guide-mini-btn:disabled{opacity:.35;cursor:not-allowed}
 	.guide-mini-btn.primary{background:linear-gradient(135deg,var(--accent),var(--acg));border-color:transparent;color:#fff}
+	.guide-try-label{display:inline-flex;align-items:center;font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);align-self:center;margin-right:2px}
+	.guide-try-btn{border-color:color-mix(in srgb,var(--accent) 45%,var(--bord2));background:color-mix(in srgb,var(--accent) 10%,var(--s2));color:var(--text)}
+	.guide-try-btn:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 18%,var(--s2));border-color:var(--accent)}
 	.tts-toggle-btn{position:relative}
 	.tts-toggle-btn svg{flex-shrink:0}
 	.tts-toggle-btn.tts-active{border-color:color-mix(in srgb,var(--yellow) 44%,transparent)!important;background:color-mix(in srgb,var(--yellow) 10%,transparent)!important;color:var(--yellow)!important}
@@ -774,7 +784,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="flamingo"] .brand::after{content:'flowmingo mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(222,75,154,.40);border-radius:999px;padding:3px 7px;background:rgba(222,75,154,.10);box-shadow:0 0 24px rgba(222,75,154,.16)}
 [data-theme="flamingo"] .rd-scroll{background:radial-gradient(circle at 72% 8%,rgba(222,75,154,.18),transparent 28%),linear-gradient(180deg,rgba(222,75,154,.06),transparent 180px)}
 [data-theme="flamingo"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(222,75,154,.18)}
-[data-theme="prepbear"] .brand::after{content:'prepbear mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(238,202,87,.40);border-radius:999px;padding:3px 7px;background:rgba(238,202,87,.10);box-shadow:0 0 24px rgba(238,202,87,.16)}
+[data-theme="prepbear"] .brand::after{content:'amber mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(238,202,87,.40);border-radius:999px;padding:3px 7px;background:rgba(238,202,87,.10);box-shadow:0 0 24px rgba(238,202,87,.16)}
 [data-theme="prepbear"] .rd-scroll{background:radial-gradient(circle at 82% 8%,rgba(238,202,87,.10),transparent 28%),repeating-linear-gradient(45deg,rgba(238,202,87,.025) 0 1px,transparent 1px 22px),linear-gradient(180deg,rgba(238,202,87,.05),transparent 160px)}
 [data-theme="prepbear"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(238,202,87,.14)}
 
@@ -1579,7 +1589,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="pt-theme-dot" id="pt-t-koala" style="background:#1c1c1b" onclick="ptSetTheme('koala')" title="Koala"></div>
       <div class="pt-theme-dot" id="pt-t-panda" style="background:#000000" onclick="ptSetTheme('panda')" title="Planda Bear"></div>
       <div class="pt-theme-dot" id="pt-t-flamingo" style="background:#0e0410" onclick="ptSetTheme('flamingo')" title="Flamingo"></div>
-      <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear"></div>
+      <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="Amber"></div>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="ptOpenEdit()">Script</button>
@@ -1881,7 +1891,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="theme-swatch" data-plandabear-theme-choice="koala" onclick="setPlandaBearTheme('koala')"><div class="ts-preview" style="background:#1f1f1e"></div><div class="ts-name">Koala</div></div>
         <div class="theme-swatch" data-plandabear-theme-choice="panda" onclick="setPlandaBearTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
         <div class="theme-swatch" data-plandabear-theme-choice="flamingo" onclick="setPlandaBearTheme('flamingo')"><div class="ts-preview" style="background:#330512"></div><div class="ts-name">Flamingo</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">PrepBear</div></div>
+        <div class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">Amber</div></div>
       </div>
     </div>
     <div class="paperwork-grid" id="paperworkGrid"></div>
@@ -2265,7 +2275,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></div>
         <div class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
         <div class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flamingo</div></div>
-        <div class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></div>
+        <div class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">Amber</div></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -2282,7 +2292,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530a"></script>
+<script src="cueola-app.js?v=20260530c"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

@@ -92,7 +92,7 @@ const CUEOLA_THEME_LABELS = {
   koala:    'Koala',
   panda:    'Planda Bear',
   flamingo: 'Flamingo',
-  prepbear: 'PrepBear',
+  prepbear: 'Amber',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];
@@ -841,7 +841,8 @@ function renderLearningLesson() {
     </section>
     <div class="guide-actions">
       <div class="guide-action-left">
-        ${(lesson.actions || []).map(([label, action]) => `<button type="button" class="guide-mini-btn" onclick="openGuideAction('${action}')">${esc(label)}</button>`).join('')}
+        ${(lesson.actions || []).length ? `<span class="guide-try-label">Try it now →</span>` : ''}
+        ${(lesson.actions || []).map(([label, action]) => `<button type="button" class="guide-mini-btn guide-try-btn" onclick="openGuideAction('${action}')">▶ ${esc(label)}</button>`).join('')}
       </div>
       <div class="guide-action-right">
         <button type="button" class="guide-mini-btn" onclick="selectLearningLesson(${activeLearningLesson - 1})" ${activeLearningLesson <= 0 ? 'disabled' : ''}>Previous</button>
@@ -2420,7 +2421,7 @@ function getCueCell(b, type) {
   const scriptMeta = type === 'script' && d?.text
     ? `<div class="script-present-line">Script · ${scriptLineCount(d.text)} lines</div>`
     : '';
-  return `<div class="cue-cell-filled" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
+  return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
     <div class="cue-cell-info">${lines}${scriptMeta}</div>
   </div>`;
