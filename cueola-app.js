@@ -38,6 +38,8 @@ let beats = [];
 let show  = { name:'Untitled Show', start:'' };
 let session = { code:'', role:'', userName:'', isDemo:false, isExpert:false };
 let lsIdx = -1;
+let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
+let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
 let editId = null;
 let timerInterval = null;
 let elapsedSecs = 0;
@@ -2025,9 +2027,16 @@ function setupFirestore() {
           }
         } catch {}
       }
-      if (d.activeIdx !== undefined && session.role==='student') {
-        lsIdx = d.activeIdx;
-        if (document.getElementById('liveshow').classList.contains('on')) renderLive();
+      // Following: mirror the position of whoever I follow (their broadcast
+      // presence.idx). Browsing self keeps my own position. A student who hasn't
+      // chosen mirrors the show caller (first instructor).
+      {
+        const followedIdx = resolveFollowedIdx(d.presence, { followTarget, browsingSelf, role: session.role, myName: session.userName });
+        const targetIdx = followedIdx != null ? followedIdx : (session.role === 'student' && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
+        if (targetIdx != null && targetIdx !== lsIdx) {
+          lsIdx = targetIdx;
+          if (document.getElementById('liveshow').classList.contains('on')) renderLive();
+        }
       }
       if (d.prompter && d.prompter.text !== undefined && session.role==='student') {
         prompterText = d.prompter.text || '';
@@ -2056,27 +2065,15 @@ function setupFirestore() {
         if (age < 30000 && cmd.ts > _lastHandledForceCmdTs) { // only act on new commands < 30 seconds old
           _lastHandledForceCmdTs = cmd.ts;
           if (cmd.type === 'followMe' && cmd.name !== session.userName) {
-            // Force follow this person
-            const liveOn = document.getElementById('liveshow').classList.contains('on');
-            if (liveOn) {
-              document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
-              const target = [...document.querySelectorAll('.follow-chip')].find(c=>c.textContent.trim().startsWith(cmd.name));
-              if (target) target.classList.add('active');
-              else toast(`Now following: ${cmd.name}`);
-            }
+            forceFollowPerson(cmd.name, d.presence);
+            toast(`Now following: ${cmd.name}`);
           }
           if (cmd.type === 'forceLive') {
             const liveOn = document.getElementById('liveshow').classList.contains('on');
-            if (!liveOn) { goLive(); setTimeout(()=>{ /* apply follow after live loads */ }, 400); }
+            if (!liveOn) goLive();
             setTimeout(() => {
-              if (cmd.name === session.userName) {
-                followSelf();
-              } else {
-                document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
-                const target = [...document.querySelectorAll('.follow-chip')].find(c=>c.textContent.trim().startsWith(cmd.name));
-                if (target) target.classList.add('active');
-                else toast(`Forced live: following ${cmd.name}`);
-              }
+              if (cmd.name === session.userName) { followSelf(); }
+              else { forceFollowPerson(cmd.name, d.presence); toast(`Forced live, following ${cmd.name}`); }
             }, 500);
           }
         }
@@ -2101,7 +2098,14 @@ function syncToFirestore() {
 
 function syncLiveIdx() {
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
-  window._updateDoc(window._doc(window._db,'sessions',session.code),{ activeIdx:lsIdx }).catch(()=>{});
+  // Broadcast my own position into my presence record so anyone following me
+  // mirrors it. (Your navigation only moves your followers, not the whole room.)
+  // Keep the legacy global activeIdx for back-compat with older clients/dashboard.
+  window._updateDoc(window._doc(window._db,'sessions',session.code), {
+    activeIdx: lsIdx,
+    [`presence.${presenceId}.idx`]: lsIdx,
+    [`presence.${presenceId}.lastSeen`]: Date.now(),
+  }).catch(()=>{});
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2112,7 +2116,7 @@ async function joinPresence() {
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName}
+      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName,idx:Math.max(lsIdx,0)}
     });
     clearInterval(presenceInterval);
     presenceInterval = setInterval(async()=>{
@@ -3742,7 +3746,9 @@ function showRundown() {
 }
 
 function isFollowingSelf() {
-  return document.querySelector('.follow-self')?.classList.contains('active') ?? true;
+  if (browsingSelf) return true;        // explicitly browsing on my own
+  if (followTarget) return false;       // mirroring someone else
+  return session.role !== 'student';    // instructors/experts drive their own position by default
 }
 
 // Admin Show Caller = following self AND has any admin session
@@ -4312,7 +4318,18 @@ function jumpToLsCue(i) {
   syncLiveIdx();
 }
 
+// If I'm mirroring someone (or auto-following the caller), navigating on my own
+// detaches me to browse — I can look ahead/back without snapping straight back.
+function detachIfFollowing() {
+  if (isFollowingSelf()) return;
+  browsingSelf = true;
+  followTarget = '';
+  renderFollowChips();
+  updateFollowInPresence(session.userName);
+}
+
 function lsNext() {
+  detachIfFollowing();
   const prev = beats[lsIdx];
   if (lsIdx < beats.length-1) {
     lsIdx++;
@@ -4323,20 +4340,48 @@ function lsNext() {
 }
 
 function lsPrev() {
+  detachIfFollowing();
   if (lsIdx > 0) { lsIdx--; renderLive(); sendToPrompter(false); syncLiveIdx(); }
+}
+
+// Per-person following: which position should I mirror? Browsing self → null (keep
+// my own). Otherwise mirror my explicit follow target, or — for a student who hasn't
+// chosen — the show caller (first instructor broadcasting a position).
+function resolveFollowedIdx(presence, opts) {
+  if (!opts || opts.browsingSelf) return null;
+  const people = Object.values(presence || {});
+  if (opts.followTarget && opts.followTarget !== opts.myName) {
+    const t = people.find(p => p && p.name === opts.followTarget);
+    if (t && Number.isFinite(t.idx)) return t.idx;
+  }
+  if (opts.role === 'student') {
+    const caller = people.find(p => p && p.role === 'instructor' && Number.isFinite(p.idx));
+    if (caller) return caller.idx;
+  }
+  return null;
+}
+
+// Who am I effectively following right now (for highlighting the right chip)?
+function effectiveFollowedName(presence) {
+  if (browsingSelf) return session.userName;
+  if (followTarget) return followTarget;
+  if (session.role === 'student') {
+    const caller = Object.values(presence || {}).find(p => p && p.role === 'instructor');
+    if (caller) return caller.name;
+  }
+  return session.userName;
 }
 
 function renderFollowChips() {
   const chips = document.getElementById('followChips');
   if (!chips) return;
   const now = Date.now();
-  const me = Object.values(currentPresence||{}).find(p => p.name === session.userName);
-  const following = me?.following || session.userName;
+  const activeName = effectiveFollowedName(currentPresence);
   const others = Object.values(currentPresence||{})
     .filter(p=>p.name!==session.userName&&(now-(p.lastSeen||0))<90000);
-  let html = `<div class="follow-chip follow-self ${following===session.userName?'active':''}" onclick="followSelf()">Myself</div>`;
+  let html = `<div class="follow-chip follow-self ${activeName===session.userName?'active':''}" onclick="followSelf()">Myself</div>`;
   others.forEach(p=>{
-    const isActive = following === p.name;
+    const isActive = activeName === p.name;
     html+=`<div class="follow-chip ${isActive?'active':''}" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
   });
   chips.innerHTML = html;
@@ -4347,16 +4392,35 @@ function renderFollowChips() {
 }
 
 function followSelf() {
-  document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
-  document.querySelector('.follow-self')?.classList.add('active');
+  browsingSelf = true;        // detach and browse the rundown on my own
+  followTarget = '';
+  renderFollowChips();
   updateFollowInPresence(session.userName);
 }
 
 function followPerson(el, name) {
-  document.querySelectorAll('.follow-chip').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
+  browsingSelf = false;
+  followTarget = name;
+  renderFollowChips();
   toast(`Following ${name}`);
   updateFollowInPresence(name);
+  // Snap to their position immediately if they're broadcasting one.
+  const target = Object.values(currentPresence||{}).find(p => p && p.name === name);
+  if (target && Number.isFinite(target.idx)) {
+    lsIdx = target.idx;
+    if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+  }
+}
+
+// Adopt a follow target without a click (used by the force-follow commands).
+function forceFollowPerson(name, presence) {
+  browsingSelf = false;
+  followTarget = name;
+  renderFollowChips();
+  updateFollowInPresence(name);
+  const target = Object.values(presence || currentPresence || {}).find(p => p && p.name === name);
+  if (target && Number.isFinite(target.idx)) lsIdx = target.idx;
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
 }
 
 function updateFollowInPresence(name) {
