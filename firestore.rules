@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Cueola Firestore security rules.
+//
+// This app has no user accounts: talent, operators, and collaborators all
+// share a short session code and there is no Firebase Auth loaded. These rules
+// therefore allow open read/write to the two collections the app actually uses,
+// and deny everything else. Anyone who knows the project and a session code can
+// read or write that session — acceptable for a code-keyed teleprompter, but
+// not private. If you later want this locked down, add Anonymous Auth and gate
+// these on `request.auth != null`.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shared show sessions, keyed by the short code (e.g. "2605K").
+    // Holds the rundown, prompter.text, prompter.control, prompter.talentHeartbeat,
+    // prompter.controlAck, presence, etc. Read covers both single-doc get and the
+    // dashboard's full-collection list query.
+    match /sessions/{code} {
+      allow read, write: if true;
+    }
+
+    // Admin roster — a single document at admins/global.
+    match /admins/{docId} {
+      allow read, write: if true;
+    }
+
+    // Lock down everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
