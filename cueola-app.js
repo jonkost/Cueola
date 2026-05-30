@@ -171,6 +171,9 @@ let editStyle = null;
 
 // Prompt Op Mode — teleprompter-operator focused live view
 let promptOpMode = false;
+// Live Focus view — the default live surface: one big NOW, a clear NEXT, and a
+// calm coming-up list. Toggling off shows the full department grid.
+let liveFocusMode = (() => { try { return localStorage.getItem('cueola_live_focus') !== '0'; } catch { return true; } })();
 let browserBackGuardReady = false;
 let _lastHandledForceCmdTs = 0;
 let livePrompterOpen = false;
@@ -3997,11 +4000,95 @@ function liveCellForBeat(b, type, beatIdx) {
   </div>`;
 }
 
+// Clean cue chips for the Focus view — only the row's programmed departments.
+function focusCuesForBeat(b) {
+  const filled = colOrder.filter(type => {
+    const d = b.cues?.[type];
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && d.text));
+  });
+  if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
+  return `<div class="lf-cues">` + filled.map(type => {
+    const d = b.cues[type], tc = CT[type];
+    const on = getCueOn(d), off = getCueOff(d);
+    const detail = type === 'script'
+      ? `Script · ${scriptLineCount(d.text)} lines`
+      : [on ? `▶ ${esc(on)}` : '', off ? `■ ${esc(off)}` : ''].filter(Boolean).join('  ');
+    return `<div class="lf-cue" style="--cue-clr:${tc.color}">
+      <span class="lf-cue-dept">${tc.icon} ${COL_META[type].label}</span>
+      <span class="lf-cue-detail">${detail}</span>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+// Focus view: one dominant NOW, a clear NEXT, and a dim coming-up list.
+function renderLiveFocus() {
+  const body = document.getElementById('lsBody');
+  const curIdx = Math.max(0, Math.min(lsIdx, beats.length - 1));
+  const cur = beats[curIdx];
+  const next = beats[curIdx + 1];
+  const total = beats.length;
+  const remainSecs = beats.slice(curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0);
+  const startStr = show.start ? clock(show.start, beats.slice(0, curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0)) : '';
+  const canJump = isFollowingSelf() && isAdminShowCaller();
+
+  let html = `<div class="lf-wrap">
+    <div class="lf-now" onclick="liveRowPreview(${curIdx})">
+      <div class="lf-now-head">
+        <span class="lf-now-badge"><span class="lf-dot"></span> NOW</span>
+        <span class="lf-now-meta">Row ${curIdx + 1} of ${total} · ${fmtSecs(remainSecs)} left</span>
+      </div>
+      <div class="lf-now-name">${esc(cur.info || '—')}</div>
+      <div class="lf-now-sub"><span class="lf-now-dur">${fmtDur(cur)}</span>${startStr ? `<span class="lf-now-clock">starts ${startStr}</span>` : ''}</div>
+      ${cur.notes ? `<div class="lf-now-note">${esc(cur.notes)}</div>` : ''}
+      ${focusCuesForBeat(cur)}
+    </div>`;
+
+  if (next) {
+    html += `<div class="lf-next" onclick="liveRowPreview(${curIdx + 1})">
+      <span class="lf-next-badge">NEXT</span>
+      <span class="lf-next-name">${esc(next.info || '—')}</span>
+      <span class="lf-next-time">${fmtDur(next)}</span>
+    </div>`;
+  } else {
+    html += `<div class="lf-next lf-next-last"><span class="lf-next-badge">END</span><span class="lf-next-name">Last row — show ends after this</span></div>`;
+  }
+
+  const rest = beats.slice(curIdx + 2);
+  if (rest.length) {
+    html += `<div class="lf-up-lbl">Coming up</div><div class="lf-up">` + rest.map((b, j) => {
+      const i = curIdx + 2 + j;
+      return `<div class="lf-up-row" onclick="${canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`}">
+        <span class="lf-up-num">${i + 1}</span>
+        <span class="lf-up-name">${esc(b.info || '—')}</span>
+        <span class="lf-up-time">${fmtDur(b)}</span>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  html += `</div>`;
+  body.innerHTML = html;
+}
+
+function updateLiveFocusToggle() {
+  const btn = document.getElementById('liveFocusBtn');
+  if (btn) btn.textContent = liveFocusMode ? '⊞ Full Grid' : '◉ Focus';
+}
+
+function toggleLiveFocus() {
+  liveFocusMode = !liveFocusMode;
+  try { localStorage.setItem('cueola_live_focus', liveFocusMode ? '1' : '0'); } catch {}
+  renderLive();
+}
+
 function renderLive() {
   if (promptOpMode) { renderLivePromptOp(); return; }
   const body = document.getElementById('lsBody');
   if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
 
+  document.getElementById('liveshow')?.classList.toggle('lf-on', liveFocusMode);
+  updateLiveFocusToggle();
+  if (liveFocusMode) {
+    renderLiveFocus();
+  } else {
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
@@ -4042,6 +4129,7 @@ function renderLive() {
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
   if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
+  }
   applyLivePrompterPanelState();
   renderFollowChips();
   updateLiveOverview();
