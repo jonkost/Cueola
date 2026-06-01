@@ -85,7 +85,7 @@ function withPrompterEnvelope(payload={}) {
     mid: payload.mid || nextPrompterMsgId(payload.type || 'msg')
   };
 }
-const CUEOLA_THEMES = ['warm','cool','white','green','koala','panda','flamingo','prepbear'];
+const CUEOLA_THEMES = ['cool','warm','white','green','koala','panda','flamingo','prepbear'];
 const CUEOLA_THEME_LABELS = {
   warm:     'Honey',
   cool:     'Glacier',
