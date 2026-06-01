@@ -7205,6 +7205,7 @@ function callSheetDayLabel(dateStr) {
   return isNaN(d) ? '' : d.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
 }
 
+// Plain text (no emoji) — safe for the jsPDF call-sheet export.
 function weatherSummaryLine(w) {
   w = normalizeCallSheetWeather(w);
   if (!w) return '';
@@ -7215,6 +7216,28 @@ function weatherSummaryLine(w) {
   if (w.wind) parts.push(`Wind ${w.wind}`);
   if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
   return parts.join(' · ');
+}
+
+// Cute one-liner with weather icons — for on-screen use (HTML preview, the
+// safety-plan field, the html2canvas package PDF where emoji render fine).
+function weatherCuteSummary(w, withSun=false) {
+  w = normalizeCallSheetWeather(w);
+  if (!w) return '';
+  const parts = [];
+  if (w.conditions) parts.push(`${w.emoji || '🌤️'} ${w.conditions}`);
+  else if (w.emoji) parts.push(w.emoji);
+  if (w.high || w.low) parts.push(`🌡️ ${w.high || '—'} / ${w.low || '—'}`);
+  if (w.precip) parts.push(`💧 ${w.precip}`);
+  if (w.wind) parts.push(`💨 ${w.wind}`);
+  if (withSun && (w.sunrise || w.sunset)) parts.push(`🌅 ${w.sunrise || '—'}  🌇 ${w.sunset || '—'}`);
+  return parts.join('  ·  ');
+}
+
+// The active call sheet's weather object (used to auto-fill the safety plan).
+function activeCallSheetWeather(data) {
+  const sheets = getCallSheets(data);
+  const idx = Math.max(0, Math.min(Number(data?.activeCallSheetIndex ?? activeCallSheetIndex) || 0, sheets.length - 1));
+  return sheets[idx]?.weather || null;
 }
 
 function setCallSheetVenue(v) {
@@ -7413,7 +7436,7 @@ function callSheetPreviewHTML(data) {
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
       <tr><th>Venue</th><td>${esc(venueLabel(data.venue))}</td></tr>
-      <tr><th>Weather</th><td>${esc(weatherSummaryLine(data.weather))}</td></tr>
+      <tr><th>Weather</th><td>${esc(weatherCuteSummary(data.weather, true))}</td></tr>
       <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
       <tr><th>Entrance</th><td>${esc(data.entrance || '')}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>
@@ -7448,7 +7471,9 @@ function openSafetyPlan() {
   const data = loadPreProData();
   const safety = data.safety || {};
   document.getElementById('sp-hospital').value = safety.hospital || data.hospital || '';
-  document.getElementById('sp-weather').value = safety.weather || data.weather || '';
+  // Auto-fill weather from the call sheet's fetched forecast (with icons) when the
+  // safety plan hasn't been given its own weather note yet.
+  document.getElementById('sp-weather').value = safety.weather || weatherCuteSummary(activeCallSheetWeather(data)) || data.weather || '';
   document.getElementById('sp-first-aid').value = safety.firstAid || '';
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
@@ -7463,10 +7488,15 @@ function openSafetyPlan() {
 }
 
 function getSafetyPlanData() {
-  const existing = loadPreProData().safety || {};
+  const data = loadPreProData();
+  const existing = data.safety || {};
+  // If the weather field still equals the call-sheet auto-fill, keep it "auto"
+  // (store empty) so it stays live with the call sheet; a real edit is kept.
+  const wxVal = document.getElementById('sp-weather')?.value?.trim() ?? existing.weather ?? '';
+  const wxAuto = weatherCuteSummary(activeCallSheetWeather(data));
   return {
     hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
-    weather: document.getElementById('sp-weather')?.value?.trim() ?? existing.weather ?? '',
+    weather: (wxAuto && wxVal === wxAuto) ? '' : wxVal,
     firstAid: document.getElementById('sp-first-aid')?.value?.trim() ?? existing.firstAid ?? '',
     fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
     emergency: document.getElementById('sp-emergency')?.value?.trim() ?? existing.emergency ?? '',
@@ -7489,7 +7519,7 @@ function safetyPlanHTML(safety) {
     <div>Item 3</div>
     <table><tbody>
       <tr><th>Local Hospital</th><td>${esc(safety.hospital || '')}</td></tr>
-      <tr><th>Weather</th><td>${esc(safety.weather || '')}</td></tr>
+      <tr><th>Weather</th><td>${esc(safety.weather || weatherCuteSummary(activeCallSheetWeather(loadPreProData())))}</td></tr>
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
@@ -8220,6 +8250,8 @@ async function downloadCallSheetPDF() {
     add('Show Start', data.showStart, 10);
     add('Location', data.location, 10);
     add('Address', data.address, 10);
+    add('Venue', venueLabel(data.venue), 10);
+    add('Weather', weatherSummaryLine(data.weather), 10);
     add('Parking', data.parking, 10);
     add('Entrance', data.entrance, 10);
     add('Late / Lost Contact', data.late, 10);
