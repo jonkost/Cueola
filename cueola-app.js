@@ -93,7 +93,7 @@ const CUEOLA_THEME_LABELS = {
   green:    'Eucalyptus',
   koala:    'Koala',
   panda:    'Planda Bear',
-  flamingo: 'Flamingo',
+  flamingo: 'Flowmingo',
   prepbear: 'PrepBear',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
