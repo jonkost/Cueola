@@ -94,7 +94,7 @@ const CUEOLA_THEME_LABELS = {
   koala:    'Koala',
   panda:    'Planda Bear',
   flamingo: 'Flamingo',
-  prepbear: 'Amber',
+  prepbear: 'PrepBear',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];

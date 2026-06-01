@@ -339,15 +339,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ── LIVE SHOW ── */
 #liveshow{background:var(--bg)}
-.ls-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(180deg,var(--s2),var(--s1));border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
-.ls-brand{font-family:var(--syne);font-size:15px;font-weight:700}
+.ls-bar{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:linear-gradient(180deg,var(--s2),var(--s1));border-bottom:1px solid var(--border);flex-shrink:0;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);flex-wrap:wrap}
+.ls-brand{font-family:var(--syne);font-size:15px;font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:7px}
 .ls-brand span{color:var(--red)}
-.ls-info{display:flex;align-items:center;gap:10px}
-.ls-clock{font-family:var(--mono);font-size:13px;color:var(--text2)}
+.ls-info{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.ls-clock{font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;margin-right:2px}
+/* Uniform, single-line tool buttons that wrap as whole units (never mid-word). */
+.ls-exit-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;font-size:12.5px;color:var(--text2);cursor:pointer;font-family:var(--sans);font-weight:600;border:1px solid var(--bord2);padding:0 13px;border-radius:8px;background:transparent;transition:border-color .15s,color .15s,background .15s;white-space:nowrap;letter-spacing:-.005em}
+.ls-exit-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--text) 4%,transparent)}
+.ls-exit-btn.icon-only{width:34px;padding:0;font-size:15px}
 .ls-start-btn{background:var(--green)!important;color:#06130c!important;border-color:color-mix(in srgb,var(--green) 55%,transparent)!important;font-weight:800}
 .ls-start-btn.running{background:color-mix(in srgb,var(--yellow) 14%,transparent)!important;color:var(--yellow)!important;border-color:color-mix(in srgb,var(--yellow) 38%,transparent)!important}
-.ls-exit-btn{font-size:12px;color:var(--text3);cursor:pointer;font-family:var(--mono);border:1px solid var(--bord2);padding:5px 12px;border-radius:6px;background:transparent;transition:all .15s}
-.ls-exit-btn:hover{color:var(--text);border-color:var(--text2)}
 .follow-bar{background:var(--s2);border-bottom:1px solid var(--border);padding:8px 18px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
 .follow-lbl{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
 .follow-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
@@ -829,7 +831,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="flamingo"] .brand::after{content:'flowmingo mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(222,75,154,.40);border-radius:999px;padding:3px 7px;background:rgba(222,75,154,.10);box-shadow:0 0 24px rgba(222,75,154,.16)}
 [data-theme="flamingo"] .rd-scroll{background:radial-gradient(circle at 72% 8%,rgba(222,75,154,.18),transparent 28%),linear-gradient(180deg,rgba(222,75,154,.06),transparent 180px)}
 [data-theme="flamingo"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(222,75,154,.18)}
-[data-theme="prepbear"] .brand::after{content:'amber mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(238,202,87,.40);border-radius:999px;padding:3px 7px;background:rgba(238,202,87,.10);box-shadow:0 0 24px rgba(238,202,87,.16)}
+[data-theme="prepbear"] .brand::after{content:'prepbear mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(238,202,87,.40);border-radius:999px;padding:3px 7px;background:rgba(238,202,87,.10);box-shadow:0 0 24px rgba(238,202,87,.16)}
 [data-theme="prepbear"] .rd-scroll{background:radial-gradient(circle at 82% 8%,rgba(238,202,87,.10),transparent 28%),repeating-linear-gradient(45deg,rgba(238,202,87,.025) 0 1px,transparent 1px 22px),linear-gradient(180deg,rgba(238,202,87,.05),transparent 160px)}
 [data-theme="prepbear"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(238,202,87,.14)}
 
@@ -1639,7 +1641,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="pt-theme-dot" id="pt-t-koala" style="background:#1c1c1b" onclick="ptSetTheme('koala')" title="Koala"></div>
       <div class="pt-theme-dot" id="pt-t-panda" style="background:#000000" onclick="ptSetTheme('panda')" title="Planda Bear"></div>
       <div class="pt-theme-dot" id="pt-t-flamingo" style="background:#0e0410" onclick="ptSetTheme('flamingo')" title="Flamingo"></div>
-      <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="Amber"></div>
+      <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear"></div>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="ptOpenEdit()">Script</button>
@@ -1941,7 +1943,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="theme-swatch" data-plandabear-theme-choice="koala" onclick="setPlandaBearTheme('koala')"><div class="ts-preview" style="background:#1f1f1e"></div><div class="ts-name">Koala</div></div>
         <div class="theme-swatch" data-plandabear-theme-choice="panda" onclick="setPlandaBearTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
         <div class="theme-swatch" data-plandabear-theme-choice="flamingo" onclick="setPlandaBearTheme('flamingo')"><div class="ts-preview" style="background:#330512"></div><div class="ts-name">Flamingo</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">Amber</div></div>
+        <div class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">PrepBear</div></div>
       </div>
     </div>
     <div class="paperwork-grid" id="paperworkGrid"></div>
@@ -2325,7 +2327,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></div>
         <div class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
         <div class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flamingo</div></div>
-        <div class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">Amber</div></div>
+        <div class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -2342,7 +2344,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530m"></script>
+<script src="cueola-app.js?v=20260530n"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

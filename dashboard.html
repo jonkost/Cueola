@@ -734,7 +734,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         <button type="button" class="theme-swatch" data-dashboard-theme="koala" onclick="applyDashboardTheme('koala')" title="Koala"><span class="ts-preview" style="background:#1f1f1e"></span><span class="ts-name">Koala</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="panda" onclick="applyDashboardTheme('panda')" title="Planda Bear"><span class="ts-preview" style="background:#000000"></span><span class="ts-name">Planda Bear</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="flamingo" onclick="applyDashboardTheme('flamingo')" title="Flamingo"><span class="ts-preview" style="background:#330512"></span><span class="ts-name">Flamingo</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="prepbear" onclick="applyDashboardTheme('prepbear')" title="Amber"><span class="ts-preview" style="background:#080912"></span><span class="ts-name">Amber</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="prepbear" onclick="applyDashboardTheme('prepbear')" title="PrepBear"><span class="ts-preview" style="background:#080912"></span><span class="ts-name">PrepBear</span></button>
       </div>
     </div>
     <button class="btn-full btn-primary" onclick="saveSystemSettings()">Save Settings</button>
@@ -755,7 +755,7 @@ const DASHBOARD_THEMES = [
   { key:'koala', label:'Koala', bg:'#1f1f1e', border:'#494949', dot:'#ffffff' },
   { key:'panda', label:'Planda Bear', bg:'#000000', border:'#3a3a3a', dot:'#ffffff' },
   { key:'flamingo', label:'Flamingo', bg:'#330512', border:'#5e2c64', dot:'#de4b9a' },
-  { key:'prepbear', label:'Amber', bg:'#080912', border:'#2f357c', dot:'#eeca57' },
+  { key:'prepbear', label:'PrepBear', bg:'#080912', border:'#2f357c', dot:'#eeca57' },
 ];
 function normalizeDashboardTheme(t) {
   return DASHBOARD_THEMES.some(theme => theme.key === t) ? t : 'cool';
