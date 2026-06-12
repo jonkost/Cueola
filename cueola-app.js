@@ -2055,8 +2055,14 @@ function setupFirestore() {
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
-      if (d.prompter?.talentHeartbeat?.ts && !isPrompterSelfSender(d.prompter.talentHeartbeat.sender)) {
-        _notePrompterTalentSeen(d.prompter.talentHeartbeat);
+      // Only count a heartbeat we haven't seen before AND that is recent — any
+      // other doc write (presence, clock) re-fires this snapshot, and a stale
+      // heartbeat must not keep a dead talent screen looking "Connected".
+      const _hb = d.prompter?.talentHeartbeat;
+      if (_hb?.ts && !isPrompterSelfSender(_hb.sender)
+          && _hb.ts !== _lastSeenTalentHeartbeatTs && (Date.now() - _hb.ts) < 20000) {
+        _lastSeenTalentHeartbeatTs = _hb.ts;
+        _notePrompterTalentSeen(_hb);
       }
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
@@ -2442,7 +2448,7 @@ function getCueCell(b, type) {
     off ? `<div class="cue-off-line"><span class="cue-off-dot">■</span>${esc(off)}</div>` : '',
   ].filter(Boolean).join('');
   const scriptMeta = type === 'script' && d?.text
-    ? `<div class="script-present-line">Script · ${scriptLineCount(d.text)} lines</div>`
+    ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
     : '';
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
@@ -2461,6 +2467,11 @@ function scriptLineCount(text) {
   const clean = String(text || '').trim();
   if (!clean) return 0;
   return clean.split(/\n+/).filter(line => line.trim()).length;
+}
+
+function scriptLineLabel(text) {
+  const n = scriptLineCount(text);
+  return `${n} ${n === 1 ? 'line' : 'lines'}`;
 }
 
 function updateBotBar() {
@@ -2712,7 +2723,8 @@ function openCueConfig(beatId, type) {
   showModal('cueConfigModal');
 }
 
-function buildFreeTextCueFields(type, d={}) {
+function buildFreeTextCueFields(type, d) {
+  d = d || {};
   const isScript = type === 'script';
   return `
     <div class="field">
@@ -4042,7 +4054,7 @@ function liveCellForBeat(b, type, beatIdx) {
   const on = getCueOn(d);
   const off = getCueOff(d);
   const isScript = type === 'script';
-  const scriptMeta = isScript && d.text ? `<div class="live-script-action">${scriptLineCount(d.text)} lines · tap to open</div>` : '';
+  const scriptMeta = isScript && d.text ? `<div class="live-script-action">${scriptLineLabel(d.text)} · tap to open</div>` : '';
   if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
@@ -4065,7 +4077,7 @@ function focusCuesForBeat(b) {
     const on = getCueOn(d), off = getCueOff(d);
     let lines = '';
     if (type === 'script') {
-      lines = `<div class="lf-cue-take">📄 Script ready · ${scriptLineCount(d.text)} lines</div>`;
+      lines = `<div class="lf-cue-take">📄 Script ready · ${scriptLineLabel(d.text)}</div>`;
     } else {
       // The "take" (on) cue is the action to call now — make it the big line.
       // If there's no take, the "ready"/off cue becomes the prominent one.
@@ -4462,6 +4474,7 @@ function buildPromptFromRundown() {
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
 let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
+let _lastSeenTalentHeartbeatTs = 0; // dedup: last Firestore heartbeat ts we counted
 let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
 let _lastTalentInitSendBySender = {};
 let _pendingPrompterControls = {};
@@ -4502,6 +4515,7 @@ function _notePrompterTalentSeen(msg={}) {
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
   _setPrompterStatus(true);
+  startTalentWatchdog(); // operator side: flip the badge loudly if this talent goes silent
   return wasSilent;
 }
 
@@ -6988,7 +7002,7 @@ function rundownPreviewTableHTML() {
   const cellFor = (b, type) => {
     const d = b.cues?.[type];
     const on = getCueOn(d), off = getCueOff(d);
-    const script = type === 'script' && d?.text ? `Script ${scriptLineCount(d.text)} lines` : '';
+    const script = type === 'script' && d?.text ? `Script ${scriptLineLabel(d.text)}` : '';
     const parts = [on && `<span class="cue-type">ON</span> ${esc(on)}`, off && `<span class="cue-type">OFF</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
@@ -7304,9 +7318,18 @@ async function fetchCallSheetWeather() {
   if (btn) btn.disabled = true;
   setWeatherStatus('Finding location…');
   try {
-    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
-    if (!geoRes.ok) throw new Error('geo');
-    const place = (await geoRes.json())?.results?.[0];
+    // The geocoder matches plain place names only — "Austin, TX" finds nothing.
+    // Try the full string first, then fall back to the part before the comma.
+    const geoQueries = [location];
+    const beforeComma = location.split(',')[0].trim();
+    if (beforeComma && beforeComma !== location) geoQueries.push(beforeComma);
+    let place = null;
+    for (const q of geoQueries) {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
+      if (!geoRes.ok) throw new Error('geo');
+      place = (await geoRes.json())?.results?.[0];
+      if (place) break;
+    }
     if (!place) { setWeatherStatus(`Couldn't find "${location}". Check the spelling or enter weather manually below.`, true); return; }
     setWeatherStatus('Loading forecast…');
     const q = `latitude=${place.latitude}&longitude=${place.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&start_date=${date}&end_date=${date}`;
