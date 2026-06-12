@@ -401,11 +401,13 @@ const LEARNING_LESSONS = [
       'Fill the Production Schedule and readiness checklist so setup, rehearsal, show, and wrap are clear.',
       'Add Safety Plan details before the room gets busy.',
       'Use Video Patch, Audio Patch, and Comms Patch sheets to document routing.',
+      'Open Production Notes so everyone on the session can post notes, replay the log, and export a single note or the whole thread.',
       'Preview or export the PDF package when the paperwork is ready to share.'
     ],
     callouts:[
       ['Comments','Instructors can leave Planda Bear comments without overwriting student work.'],
-      ['One package','Export One PDF Package gathers the paperwork and rendered rundown into a shareable file.']
+      ['Production Notes','A shared, living notes log: everyone posts, instructors can add To-Dos, and the whole thread joins the PDF package.'],
+      ['One package','Export One PDF Package gathers the paperwork, production notes, and rendered rundown into a shareable file.']
     ],
     checks:['I can open Planda Bear.','I know which paperwork page to fill first.','I know where PDF export lives.'],
     actions:[['Open Planda Bear','plandabear']]
@@ -2027,6 +2029,7 @@ function setupFirestore() {
           }
         } catch {}
       }
+      if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
       // Following: mirror the position of whoever I follow (their broadcast
       // presence.idx). Browsing self keeps my own position. A student who hasn't
       // chosen mirrors the show caller (first instructor).
@@ -6433,6 +6436,7 @@ const PAPERWORK_ITEMS = [
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
+  { order:7, id:'production-notes', title:'Production Notes', sub:'Shared notes log — everyone posts, replay the thread, export a note or the whole log.' },
 ];
 const PRODUCTION_CHECKLIST_GUIDES = [
   { area:'Record path', hint:'Confirm record destination, inputs, media space, format, and expected runtime.' },
@@ -6460,6 +6464,8 @@ const DEFAULT_PRODUCTION_CHECKS = [
 let activePatchKind = '';
 let activePaperworkItemId = '';
 let plandaBearComments = [];
+let plandaBearNotes = [];
+let productionNotesReplayTimer = null;
 
 function preProKey() {
   return `cueola_prepro_${session.code || session.userName || 'local'}`;
@@ -6517,11 +6523,12 @@ function currentPaperworkItemId() {
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
   if (document.getElementById('safetyPlanModal')?.classList.contains('on')) return 'safety-plan';
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) return activePatchKind === 'video' ? 'video-patch' : 'audio-comms-patch';
+  if (document.getElementById('productionNotesModal')?.classList.contains('on')) return 'production-notes';
   return activePaperworkItemId || 'call-sheet';
 }
 
 function hidePaperworkEditors() {
-  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal'].forEach(hideModal);
+  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal'].forEach(hideModal);
 }
 
 function previewPaperworkItem(id=currentPaperworkItemId()) {
@@ -6531,6 +6538,7 @@ function previewPaperworkItem(id=currentPaperworkItemId()) {
   if (id === 'rundown') return showRundownPaperPreview();
   if (id === 'video-patch') return showPatchSheetPaperPreview('video');
   if (id === 'audio-comms-patch') return showPatchSheetPaperPreview('audio-comms');
+  if (id === 'production-notes') return showProductionNotesPreview();
 }
 
 function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
@@ -6538,6 +6546,7 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
   if (id === 'production-scheduler') { saveProductionSchedule(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'safety-plan') { saveSafetyPlan(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'video-patch' || id === 'audio-comms-patch') { savePatchSheet(showToastOnSave); paperworkDirty = false; return; }
+  if (id === 'production-notes') { saveProductionNoteDraft(); paperworkDirty = false; if (showToastOnSave) toast('Published notes save automatically. Draft kept.'); return; }
   if (showToastOnSave) toast('Rundown is already part of the package.');
 }
 
@@ -6550,6 +6559,7 @@ function renderPaperworkNav(id, slotId='') {
     'safety-plan':'pbNavSafety',
     'video-patch':'pbNavPatch',
     'audio-comms-patch':'pbNavPatch',
+    'production-notes':'pbNavNotes',
   };
   const slot = document.getElementById(slotId || slotMap[id]);
   if (!slot || !item) return;
@@ -6603,6 +6613,7 @@ function openPaperworkHub() {
   showModal('paperworkHubModal');
   paperworkDirty = false;
   renderPlandaBearComments('All', 'pbCommentsHub');
+  loadPlandaBearNotes().then(annotatePlandaBearNoteCards);
   renderPlandaBearHubActivity();
 }
 
@@ -6614,6 +6625,7 @@ const PB_SECTION_FOR_ITEM = {
   'rundown':'Full Rendered Rundown',
   'video-patch':'Video Patch',
   'audio-comms-patch':'Audio & Comms Patch',
+  'production-notes':'Production Notes',
 };
 
 function pbAgo(ts) {
@@ -6860,6 +6872,345 @@ function annotatePlandaBearCommentCards() {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PRODUCTION NOTES — a shared, chat-style notes log inside Planda Bear.
+   Unlike the instructor-only comments, ANYONE on the session code can post a
+   note. Notes are stored on the session doc (preProNotes) so the whole team
+   sees the same living thread, can replay it in order, export a single note
+   for submission, and roll the full log into the One PDF Package.
+   ══════════════════════════════════════════════════════════════════════ */
+
+function pbNotesKey() {
+  return `cueola_pb_notes_${session.code || session.userName || 'local'}`;
+}
+
+function productionNoteDraftKey() {
+  return `cueola_pb_note_draft_${session.code || session.userName || 'local'}`;
+}
+
+function normalizePlandaBearNote(n) {
+  return {
+    id: n?.id || `pbn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    text: String(n?.text || '').trim(),
+    by: n?.by || 'Someone',
+    role: n?.role === 'instructor' ? 'instructor' : 'student',
+    kind: n?.kind === 'todo' ? 'todo' : 'note',
+    done: Boolean(n?.done),
+    at: n?.at || Date.now(),
+    clientId: n?.clientId || '',
+  };
+}
+
+function localPlandaBearNotes() {
+  try {
+    return JSON.parse(localStorage.getItem(pbNotesKey()) || '[]').map(normalizePlandaBearNote).filter(n => n.text);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalPlandaBearNotes(notes=plandaBearNotes) {
+  try { localStorage.setItem(pbNotesKey(), JSON.stringify(notes)); } catch {}
+}
+
+async function loadPlandaBearNotes() {
+  if (!session.code || session.isDemo || session.isExpert || !window._firebaseReady) {
+    plandaBearNotes = localPlandaBearNotes();
+    return plandaBearNotes;
+  }
+  try {
+    const snap = await window._getDoc(window._doc(window._db, 'sessions', session.code));
+    const raw = snap.exists() && Array.isArray(snap.data().preProNotes) ? snap.data().preProNotes : [];
+    plandaBearNotes = raw.map(normalizePlandaBearNote).filter(n => n.text);
+    saveLocalPlandaBearNotes(plandaBearNotes);
+  } catch {
+    plandaBearNotes = localPlandaBearNotes();
+  }
+  return plandaBearNotes;
+}
+
+async function writePlandaBearNotes(notes, activitySection='Production Note') {
+  plandaBearNotes = notes.map(normalizePlandaBearNote).filter(n => n.text);
+  saveLocalPlandaBearNotes(plandaBearNotes);
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  const ref = window._doc(window._db, 'sessions', session.code);
+  window._updateDoc(ref, { preProNotes: plandaBearNotes }).catch(()=>{});
+  if (activitySection && window._arrayUnion) {
+    const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+  }
+}
+
+function pbNoteActorRole() {
+  return pbIsInstructor() ? 'instructor' : 'student';
+}
+
+function pbCanManageNote(note) {
+  return pbIsInstructor() || (note?.clientId && note.clientId === CLIENT_ID);
+}
+
+function pbNoteTime(ts) {
+  if (!ts) return '';
+  try { return new Date(ts).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }); }
+  catch { return ''; }
+}
+
+function saveProductionNoteDraft() {
+  const input = document.getElementById('pbNoteInput');
+  if (!input) return;
+  try { localStorage.setItem(productionNoteDraftKey(), input.value); } catch {}
+}
+
+function restoreProductionNoteDraft() {
+  const input = document.getElementById('pbNoteInput');
+  if (!input) return;
+  try { input.value = localStorage.getItem(productionNoteDraftKey()) || ''; } catch {}
+}
+
+function openProductionNotes() {
+  activePaperworkItemId = 'production-notes';
+  hideModal('paperworkHubModal');
+  const guideToggle = document.getElementById('pbNoteTodoRow');
+  if (guideToggle) guideToggle.hidden = !pbIsInstructor();
+  const todoCheck = document.getElementById('pbNoteTodoCheck');
+  if (todoCheck) todoCheck.checked = false;
+  renderProductionNotesGuide();
+  renderPaperworkNav('production-notes');
+  showModal('productionNotesModal');
+  restoreProductionNoteDraft();
+  loadPlandaBearNotes().then(() => renderPlandaBearNotes('pbNotesThread'));
+}
+
+async function publishPlandaBearNote() {
+  const input = document.getElementById('pbNoteInput');
+  const text = input?.value.trim() || '';
+  if (!text) { input?.focus(); toast('Type a note before publishing.'); return; }
+  const wantTodo = pbIsInstructor() && document.getElementById('pbNoteTodoCheck')?.checked;
+  await loadPlandaBearNotes();
+  const note = normalizePlandaBearNote({
+    text,
+    by: preProActor(),
+    role: pbNoteActorRole(),
+    kind: wantTodo ? 'todo' : 'note',
+    at: Date.now(),
+    clientId: CLIENT_ID,
+  });
+  await writePlandaBearNotes([...plandaBearNotes, note], wantTodo ? 'To-Do Posted' : 'Production Note');
+  if (input) input.value = '';
+  try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
+  const todoCheck = document.getElementById('pbNoteTodoCheck');
+  if (todoCheck) todoCheck.checked = false;
+  toast(wantTodo ? 'To-Do published to the log.' : 'Note published to the log.');
+  renderPlandaBearNotes('pbNotesThread');
+}
+
+async function toggleProductionNotesTodo(id) {
+  if (!pbIsInstructor()) { toast('Only instructors can change a to-do.'); return; }
+  await loadPlandaBearNotes();
+  const next = plandaBearNotes.map(n => n.id === id ? { ...n, done: !n.done } : n);
+  await writePlandaBearNotes(next, 'To-Do Updated');
+  renderPlandaBearNotes('pbNotesThread');
+}
+
+async function deletePlandaBearNote(id) {
+  await loadPlandaBearNotes();
+  const note = plandaBearNotes.find(n => n.id === id);
+  if (!note) return;
+  if (!pbCanManageNote(note)) { toast('You can only remove your own notes.'); return; }
+  await writePlandaBearNotes(plandaBearNotes.filter(n => n.id !== id), 'Production Note Removed');
+  toast('Note removed.');
+  renderPlandaBearNotes('pbNotesThread');
+}
+
+function plandaBearNoteCardHTML(note) {
+  const mine = note.clientId && note.clientId === CLIENT_ID;
+  const isTodo = note.kind === 'todo';
+  const canManage = pbCanManageNote(note);
+  const todoToggle = isTodo && pbIsInstructor()
+    ? `<button type="button" class="pb-note-todo-toggle ${note.done ? 'done' : ''}" onclick="toggleProductionNotesTodo('${esc(note.id)}')">${note.done ? '✓ Done' : 'Mark done'}</button>`
+    : '';
+  const todoTag = isTodo ? `<span class="pb-note-tag ${note.done ? 'done' : ''}">${note.done ? '✓ To-Do' : 'To-Do'}</span>` : '';
+  return `<div class="pb-note-card ${mine ? 'mine' : ''} ${isTodo ? 'todo' : ''} ${isTodo && note.done ? 'done' : ''}" data-note-id="${esc(note.id)}">
+    <div class="pb-note-meta">
+      <span class="pb-note-by ${note.role === 'instructor' ? 'instructor' : ''}">${esc(note.by)}${note.role === 'instructor' ? ' · Instructor' : ''}</span>
+      ${todoTag}
+      <span class="pb-note-time">${esc(pbNoteTime(note.at))}</span>
+    </div>
+    <div class="pb-note-text">${esc(note.text)}</div>
+    <div class="pb-note-actions">
+      ${todoToggle}
+      ${canManage ? `<button type="button" class="pb-note-delete" onclick="deletePlandaBearNote('${esc(note.id)}')">Remove</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderPlandaBearNotes(slotId='pbNotesThread') {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const notes = plandaBearNotes.slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const openTodos = notes.filter(n => n.kind === 'todo' && !n.done).length;
+  const count = document.getElementById('pbNotesCount');
+  if (count) count.textContent = `${notes.length} note${notes.length===1?'':'s'}${openTodos ? ` · ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}`;
+  slot.innerHTML = notes.length
+    ? notes.map(plandaBearNoteCardHTML).join('')
+    : `<div class="pb-note-empty">No production notes yet. Type the first note below and publish it so everyone on this session can see it.</div>`;
+  slot.scrollTop = slot.scrollHeight;
+  annotatePlandaBearNoteCards();
+}
+
+function annotatePlandaBearNoteCards() {
+  const cards = document.querySelectorAll('#paperworkGrid [data-pb-section="Production Notes"]');
+  if (!cards.length) return;
+  const total = plandaBearNotes.length;
+  const openTodos = plandaBearNotes.filter(n => n.kind === 'todo' && !n.done).length;
+  cards.forEach(card => {
+    let badge = card.querySelector('[data-pb-notes]');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.dataset.pbNotes = '';
+      badge.className = 'paperwork-card-comments';
+      card.appendChild(badge);
+    }
+    badge.classList.toggle('on', total > 0);
+    badge.textContent = total ? `${total} note${total===1?'':'s'}${openTodos ? ` · ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}` : '';
+  });
+}
+
+// Live group-chat feel: when the session doc pushes new notes and the log is
+// open, refresh the thread (skipped while a replay is animating).
+function onRemoteProductionNotes(raw) {
+  if (!Array.isArray(raw)) return;
+  plandaBearNotes = raw.map(normalizePlandaBearNote).filter(n => n.text);
+  saveLocalPlandaBearNotes(plandaBearNotes);
+  annotatePlandaBearNoteCards();
+  if (productionNotesReplayTimer) return;
+  if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes('pbNotesThread');
+}
+
+/* ── Replay: walk the log oldest → newest with a timed reveal ── */
+function replayProductionNotes() {
+  const slot = document.getElementById('pbNotesThread');
+  if (!slot) return;
+  const notes = plandaBearNotes.slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  if (!notes.length) { toast('No notes to replay yet.'); return; }
+  stopProductionNotesReplay(false);
+  const replayBtn = document.getElementById('pbNotesReplayBtn');
+  if (replayBtn) { replayBtn.textContent = '■ Stop replay'; replayBtn.setAttribute('onclick','stopProductionNotesReplay(true)'); }
+  slot.innerHTML = '';
+  let i = 0;
+  const reveal = () => {
+    if (i >= notes.length) { stopProductionNotesReplay(true); toast('Replay complete.'); return; }
+    const wrap = document.createElement('div');
+    wrap.innerHTML = plandaBearNoteCardHTML(notes[i]);
+    const card = wrap.firstElementChild;
+    card.classList.add('pb-note-replay-in');
+    slot.appendChild(card);
+    slot.scrollTop = slot.scrollHeight;
+    i++;
+    const status = document.getElementById('pbNotesCount');
+    if (status) status.textContent = `Replaying ${i} / ${notes.length}`;
+    productionNotesReplayTimer = setTimeout(reveal, 950);
+  };
+  reveal();
+}
+
+function stopProductionNotesReplay(rerender=true) {
+  if (productionNotesReplayTimer) { clearTimeout(productionNotesReplayTimer); productionNotesReplayTimer = null; }
+  const replayBtn = document.getElementById('pbNotesReplayBtn');
+  if (replayBtn) { replayBtn.textContent = '▶ Replay log'; replayBtn.setAttribute('onclick','replayProductionNotes()'); }
+  if (rerender) renderPlandaBearNotes('pbNotesThread');
+}
+
+/* ── Note-taking guide / suggestions ── */
+const PRODUCTION_NOTE_GUIDES = [
+  ['Lead with the moment', 'Start with the row, cue, or timecode the note is about so anyone scanning the log finds it fast.'],
+  ['One note, one idea', 'Keep each published note to a single change, problem, or decision. Publish separate notes instead of one long wall.'],
+  ['Say who and what next', 'Name the department or person and the action: "Audio — re-patch mic 3 before doors."'],
+  ['Use To-Do for actions', 'Instructors: post action items as a To-Do so they show as open until checked off.'],
+  ['Note decisions, not just problems', 'Record the call that was made and why, so the published log explains itself later.'],
+  ['Timestamps tell the story', 'The log keeps order and time for you — replay it after the show to walk the run beat by beat.'],
+];
+
+function renderProductionNotesGuide() {
+  const slot = document.getElementById('pbNotesGuideBody');
+  if (!slot) return;
+  slot.innerHTML = PRODUCTION_NOTE_GUIDES.map(([t,d]) =>
+    `<div class="pb-note-guide-row"><span class="pb-note-guide-t">${esc(t)}</span><span class="pb-note-guide-d">${esc(d)}</span></div>`
+  ).join('');
+}
+
+function toggleProductionNotesGuide(head) {
+  head.parentElement.classList.toggle('open');
+}
+
+/* ── PDF: single note for submission, and the full thread ── */
+function productionNoteDocHTML(text, by, at, kind='note', done=false) {
+  const label = kind === 'todo' ? (done ? 'To-Do (done)' : 'To-Do') : 'Production Note';
+  return `
+    <h1>Production Note</h1>
+    <div>${esc(show.name || 'Cueola')} · Production Notes</div>
+    <table><tbody>
+      <tr><th>Type</th><td>${esc(label)}</td></tr>
+      <tr><th>Author</th><td>${esc(by || preProActor())}</td></tr>
+      <tr><th>Time</th><td>${esc(at ? new Date(at).toLocaleString() : new Date().toLocaleString())}</td></tr>
+    </tbody></table>
+    <div class="paper-note-body">${esc(text).replace(/\n/g,'<br>')}</div>
+  `;
+}
+
+function productionNotesThreadHTML() {
+  const notes = plandaBearNotes.slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const rows = notes.map(n => `<tr>
+    <td>${esc(n.at ? new Date(n.at).toLocaleString() : '')}</td>
+    <td>${esc(n.by)}${n.role === 'instructor' ? '<br><span class="cue-muted">Instructor</span>' : ''}</td>
+    <td>${n.kind === 'todo' ? (n.done ? 'To-Do ✓' : 'To-Do') : 'Note'}</td>
+    <td>${esc(n.text).replace(/\n/g,'<br>')}</td>
+  </tr>`).join('');
+  return `
+    <h1>7. Production Notes</h1>
+    <div>${esc(show.name || 'Cueola')} · Shared production notes log</div>
+    <table><thead><tr><th>Time</th><th>By</th><th>Type</th><th>Note</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="4">No production notes yet.</td></tr>'}</tbody></table>
+  `;
+}
+
+async function exportCurrentProductionNote() {
+  const input = document.getElementById('pbNoteInput');
+  const text = input?.value.trim() || '';
+  if (!text) { input?.focus(); toast('Type a note before exporting it.'); return; }
+  const wantTodo = pbIsInstructor() && document.getElementById('pbNoteTodoCheck')?.checked;
+  try {
+    toast('Building note PDF...');
+    const stamp = new Date().toISOString().slice(0,10);
+    await exportPaperHTMLAsPDF(productionNoteDocHTML(text, preProActor(), Date.now(), wantTodo ? 'todo' : 'note'),
+      `cueola-production-note-${stamp}.pdf`);
+    toast('Note PDF downloaded.');
+  } catch (e) {
+    toast('PDF export needs an internet connection. Use the browser print dialog instead.');
+    window.print();
+  }
+}
+
+function showProductionNotesPreview() {
+  activePaperworkItemId = 'production-notes';
+  loadPlandaBearNotes().then(() => {
+    showPaperPreview('Production Notes Preview', productionNotesThreadHTML(), 'Export Notes Log PDF', 'exportProductionNotesPDF()', 'production-notes');
+  });
+}
+
+async function exportProductionNotesPDF() {
+  try {
+    toast('Building notes log PDF...');
+    await loadPlandaBearNotes();
+    const stamp = new Date().toISOString().slice(0,10);
+    await exportPaperHTMLAsPDF(productionNotesThreadHTML(), `cueola-production-notes-${stamp}.pdf`);
+    toast('Notes log PDF downloaded.');
+  } catch (e) {
+    toast('PDF export needs an internet connection. Use the browser print dialog instead.');
+    window.print();
+  }
+}
+
 function togglePbHub(head) {
   head.parentElement.classList.toggle('open');
 }
@@ -6936,6 +7287,7 @@ function openPaperworkItem(id) {
   if (id === 'rundown') return showRundownPaperPreview();
   if (id === 'video-patch') return showPatchSheetPreview('video');
   if (id === 'audio-comms-patch') return showPatchSheetPreview('audio-comms');
+  if (id === 'production-notes') return openProductionNotes();
 }
 
 function returnToPaperworkHub() {
@@ -7885,7 +8237,9 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
 }
 
 function showPreProPackagePreview() {
-  showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()', null);
+  loadPlandaBearNotes().then(() => {
+    showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()', null);
+  });
 }
 
 function preProPackageHTML() {
@@ -7920,6 +8274,8 @@ function preProPackageHTML() {
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
     </section>
+    <div class="paper-page-break"></div>
+    <section>${productionNotesThreadHTML()}</section>
   `;
 }
 
@@ -8278,6 +8634,7 @@ async function exportPreProPackagePDF() {
     if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
     if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(false);
     if (document.getElementById('productionScheduleModal')?.classList.contains('on')) persistPreProData({ productionSchedule: getProductionScheduleData() }, 'Production Schedule');
+    await loadPlandaBearNotes();
     const dataForName = loadPreProData();
     const cleanPreviewName = (dataForName.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
     try {
@@ -8393,6 +8750,19 @@ async function exportPreProPackagePDF() {
     tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('audio').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
     line('Comms Patch Sheet', 12, true);
     tableRows(['Position','Out','Gear','Notes'], getPatchRows('comms').filter(r => Object.values(r).some(Boolean)).map(r => [r.position, r.out, r.gear, r.notes]));
+
+    section('7. Production Notes');
+    const sortedNotes = plandaBearNotes.slice().sort((a,b)=>(a.at||0)-(b.at||0));
+    if (sortedNotes.length) {
+      sortedNotes.forEach(n => {
+        const type = n.kind === 'todo' ? (n.done ? 'To-Do (done)' : 'To-Do') : 'Note';
+        line(`${n.at ? new Date(n.at).toLocaleString() : ''} | ${n.by}${n.role === 'instructor' ? ' (Instructor)' : ''} | ${type}`, 8, true, [50,70,100]);
+        line(n.text, 9);
+        y += 4;
+      });
+    } else {
+      line('No production notes yet.', 9);
+    }
 
     doc.save(`${cleanFileName}-plandabear-package.pdf`);
     toast('Planda Bear package PDF downloaded.');

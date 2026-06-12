@@ -1028,6 +1028,51 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-hub-row .b{font-size:11px;color:var(--text2);font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pb-hub-row .w{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
 .pb-hub-empty{font-size:12px;color:var(--text3);padding:4px 0}
+/* Production Notes — shared chat-style log */
+.pb-note-guide{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent);overflow:hidden;margin-bottom:12px}
+.pb-note-guide-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.pb-note-guide-head:hover{color:var(--text)}
+.pb-note-guide-head .pb-hub-caret{margin-left:auto;font-size:9px;color:var(--text3);transition:transform .15s}
+.pb-note-guide.open .pb-hub-caret{transform:rotate(90deg)}
+.pb-note-guide-body{display:none;padding:2px 14px 14px;flex-direction:column;gap:8px}
+.pb-note-guide.open .pb-note-guide-body{display:flex}
+.pb-note-guide-row{display:flex;flex-direction:column;gap:2px;border-left:2px solid color-mix(in srgb,var(--accent) 50%,transparent);padding-left:10px}
+.pb-note-guide-t{font-size:12px;font-weight:800;color:var(--text)}
+.pb-note-guide-d{font-size:12px;color:var(--text2);line-height:1.45}
+.pb-note-thread-wrap{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s1) 60%,transparent);overflow:hidden;display:flex;flex-direction:column;min-height:0;flex:1}
+.pb-note-thread-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.pb-note-thread-title{font-size:12px;font-weight:800;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2)}
+.pb-note-count{font-size:10px;font-family:var(--mono);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);border-radius:999px;padding:4px 8px;white-space:nowrap}
+.pb-note-replay{margin-left:auto;border:1px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:8px;padding:7px 11px;font-size:11px;font-weight:800;cursor:pointer}
+.pb-note-replay:hover{border-color:var(--accent);color:var(--text)}
+.pb-note-thread{display:flex;flex-direction:column;gap:9px;padding:14px;max-height:40vh;overflow-y:auto}
+.pb-note-empty{font-size:12px;color:var(--text3);line-height:1.5;padding:8px 2px}
+.pb-note-card{border:1px solid var(--bord2);background:var(--s2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;align-self:flex-start;max-width:88%}
+.pb-note-card.mine{align-self:flex-end;background:color-mix(in srgb,var(--accent) 9%,var(--s2));border-color:color-mix(in srgb,var(--accent) 28%,var(--bord2))}
+.pb-note-card.todo{border-color:color-mix(in srgb,var(--yellow) 36%,var(--bord2));background:color-mix(in srgb,var(--yellow) 7%,var(--s2));align-self:stretch;max-width:100%}
+.pb-note-card.todo.done{opacity:.72}
+.pb-note-card.todo.done .pb-note-text{text-decoration:line-through;color:var(--text2)}
+.pb-note-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.pb-note-by{font-weight:800;color:var(--text2)}
+.pb-note-by.instructor{color:var(--accent)}
+.pb-note-tag{color:var(--yellow);font-weight:800;letter-spacing:.06em;text-transform:uppercase;border:1px solid color-mix(in srgb,var(--yellow) 32%,transparent);border-radius:999px;padding:2px 7px}
+.pb-note-tag.done{color:var(--green);border-color:color-mix(in srgb,var(--green) 32%,transparent)}
+.pb-note-time{margin-left:auto}
+.pb-note-text{font-size:13px;color:var(--text);line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.pb-note-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pb-note-actions:empty{display:none}
+.pb-note-todo-toggle{border:1px solid color-mix(in srgb,var(--green) 30%,transparent);background:color-mix(in srgb,var(--green) 10%,transparent);color:var(--green);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.pb-note-todo-toggle.done{border-color:var(--bord2);background:var(--s3);color:var(--text2)}
+.pb-note-delete{border:1px solid color-mix(in srgb,var(--red) 28%,transparent);background:color-mix(in srgb,var(--red) 8%,transparent);color:var(--red);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.pb-note-todo-toggle:hover,.pb-note-delete:hover{filter:brightness(1.08)}
+.pb-note-replay-in{animation:pbNoteIn .35s ease}
+@keyframes pbNoteIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.pb-note-composer{margin-top:12px;display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--border);padding-top:12px}
+.pb-note-composer textarea{font-size:14px;line-height:1.6;resize:vertical}
+.pb-note-todo-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);font-weight:700;cursor:pointer}
+.pb-note-todo-row input{width:16px;height:16px;cursor:pointer}
+.pb-note-composer-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.paper-preview .paper-note-body{font-size:13px;line-height:1.6;white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:6px;background:#fafafa}
 .paper-preview{background:#fff;color:#111;border-radius:8px;padding:28px;font-family:Helvetica,Arial,sans-serif;max-height:58vh;overflow:auto;letter-spacing:0;font-kerning:normal;text-rendering:geometricPrecision}
 .paper-preview *{letter-spacing:0;font-kerning:normal}
 .paper-preview h1{font-size:22px;margin:0 0 4px}
@@ -2157,6 +2202,51 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════
+     PRODUCTION NOTES — shared chat-style notes log
+══════════════════════════════════════════ -->
+<div class="modal-wrap" id="productionNotesModal">
+  <div class="modal pb-builder-modal" style="max-width:900px;max-height:92vh;overflow-y:auto;display:flex;flex-direction:column">
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">📝 Production Notes</div>
+        <div class="modal-sub">A shared, living notes log for everyone on this session. Type a note, export it for submission, then publish it so the whole team sees it.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+    </div>
+
+    <div class="pb-note-guide">
+      <div class="pb-note-guide-head" onclick="toggleProductionNotesGuide(this)">
+        <span>💡 How to take good production notes</span>
+        <span class="pb-hub-caret">▶</span>
+      </div>
+      <div class="pb-note-guide-body" id="pbNotesGuideBody"></div>
+    </div>
+
+    <div class="pb-note-thread-wrap">
+      <div class="pb-note-thread-bar">
+        <span class="pb-note-thread-title">Published log</span>
+        <span class="pb-note-count" id="pbNotesCount">0 notes</span>
+        <button type="button" class="pb-note-replay" id="pbNotesReplayBtn" onclick="replayProductionNotes()">▶ Replay log</button>
+      </div>
+      <div class="pb-note-thread" id="pbNotesThread"></div>
+    </div>
+
+    <div class="pb-note-composer">
+      <textarea class="field-in" id="pbNoteInput" rows="3" placeholder="Type a production note... (the row or cue it's about, what happened, what to do next)" oninput="saveProductionNoteDraft()"></textarea>
+      <label class="pb-note-todo-row" id="pbNoteTodoRow" hidden>
+        <input type="checkbox" id="pbNoteTodoCheck"> Post as a To-Do / action item
+      </label>
+      <div class="pb-note-composer-actions">
+        <button type="button" class="btn-secondary" onclick="exportCurrentProductionNote()">Export this note as PDF</button>
+        <button type="button" class="btn-primary" onclick="publishPlandaBearNote()">Publish to log</button>
+      </div>
+    </div>
+
+    <div class="paperwork-flow-actions" id="pbNavNotes"></div>
+  </div>
+</div>
+
 <div class="modal-wrap" id="modal-prepro-join">
   <div class="modal">
     <div class="modal-title">Open Planda Bear</div>
@@ -2344,7 +2434,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260530r"></script>
+<script src="cueola-app.js?v=20260612a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
