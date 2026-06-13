@@ -1,0 +1,28 @@
+{
+  "status": "reference-only",
+  "schemaVersion": 1,
+  "defaultTheme": "cool",
+  "compatibility": {
+    "keepExistingIds": true,
+    "storageKey": "cueola_theme",
+    "plandaBearStorageKey": "cueola_plandabear_theme",
+    "flowmingoUsesSameIds": true
+  },
+  "modifiers": [
+    "appearance-light",
+    "appearance-dark",
+    "increased-contrast",
+    "reduced-transparency",
+    "reduced-motion"
+  ],
+  "themes": {
+    "cool": {"label":"Glacier","preferredAppearance":"dark","accent":"#5b8df8","accentSecondary":"#7b6cf8","canvas":"#0a0d18","content":"#111528","contentSecondary":"#181e34","labelPrimary":"#e4ecf8","labelSecondary":"#94a8c8","separator":"rgba(148,168,200,.22)","glassFill":"rgba(24,30,52,.64)","glassEdge":"rgba(184,205,255,.18)"},
+    "warm": {"label":"Honey","preferredAppearance":"dark","accent":"#e89a4f","accentSecondary":"#c87030","canvas":"#140803","content":"#1c0c05","contentSecondary":"#28140a","labelPrimary":"#fbf0db","labelSecondary":"#c8a87c","separator":"rgba(200,168,124,.22)","glassFill":"rgba(45,23,11,.66)","glassEdge":"rgba(255,211,159,.18)"},
+    "white": {"label":"Polar Bear","preferredAppearance":"light","accent":"#e50000","accentSecondary":"#b50000","canvas":"#f5f5f2","content":"#ffffff","contentSecondary":"#efede9","labelPrimary":"#0f0f0f","labelSecondary":"#3a3a3a","separator":"rgba(15,15,15,.18)","glassFill":"rgba(255,255,255,.72)","glassEdge":"rgba(255,255,255,.94)"},
+    "green": {"label":"Eucalyptus","preferredAppearance":"dark","accent":"#6cd234","accentSecondary":"#4eb01c","canvas":"#041208","content":"#08180c","contentSecondary":"#0e2412","labelPrimary":"#e8f5d8","labelSecondary":"#9ac280","separator":"rgba(154,194,128,.22)","glassFill":"rgba(14,36,18,.66)","glassEdge":"rgba(178,236,145,.18)"},
+    "koala": {"label":"Koala","preferredAppearance":"dark","accent":"#f5f5f7","accentSecondary":"#c7c7cc","canvas":"#1c1c1b","content":"#252524","contentSecondary":"#30302f","labelPrimary":"#ffffff","labelSecondary":"#cccccc","separator":"rgba(255,255,255,.16)","glassFill":"rgba(48,48,47,.66)","glassEdge":"rgba(255,255,255,.20)"},
+    "panda": {"label":"Planda Bear","preferredAppearance":"dark","accent":"#ffffff","accentSecondary":"#c7c7cc","canvas":"#000000","content":"#0a0a0a","contentSecondary":"#161616","labelPrimary":"#ffffff","labelSecondary":"#bababa","separator":"rgba(255,255,255,.18)","glassFill":"rgba(26,26,26,.74)","glassEdge":"rgba(255,255,255,.24)"},
+    "flamingo": {"label":"Flowmingo","preferredAppearance":"dark","accent":"#de4b9a","accentSecondary":"#9d4ed8","canvas":"#0e0410","content":"#19091e","contentSecondary":"#25112f","labelPrimary":"#f9efff","labelSecondary":"#bd9dcb","separator":"rgba(222,75,154,.24)","glassFill":"rgba(48,19,58,.64)","glassEdge":"rgba(255,143,207,.20)"},
+    "prepbear": {"label":"PrepBear","preferredAppearance":"dark","accent":"#eeca57","accentSecondary":"#d4a830","canvas":"#080a14","content":"#0d1124","contentSecondary":"#171d38","labelPrimary":"#f5f0dc","labelSecondary":"#b8b89c","separator":"rgba(238,202,87,.22)","glassFill":"rgba(27,34,67,.66)","glassEdge":"rgba(255,223,111,.20)"}
+  }
+}

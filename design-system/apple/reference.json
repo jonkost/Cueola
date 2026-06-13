@@ -1,0 +1,85 @@
+{
+  "status": "reference-only",
+  "reviewedOn": "2026-06-13",
+  "typography": {
+    "strategy": "platform-system-font",
+    "webStack": [
+      "-apple-system",
+      "BlinkMacSystemFont",
+      "system-ui",
+      "Segoe UI",
+      "Roboto",
+      "Helvetica Neue",
+      "Arial",
+      "sans-serif"
+    ],
+    "preferredWeights": [400, 500, 600, 700],
+    "avoidForSmallText": [100, 200, 300],
+    "defaultPointSize": {
+      "ios": 17,
+      "ipados": 17,
+      "macos": 13,
+      "tvos": 29,
+      "visionos": 17,
+      "watchos": 16
+    },
+    "minimumPointSize": {
+      "ios": 11,
+      "ipados": 11,
+      "macos": 10,
+      "tvos": 23,
+      "visionos": 12,
+      "watchos": 12
+    },
+    "largeTextReviewScale": 2.0
+  },
+  "colorRoles": [
+    "label",
+    "secondary-label",
+    "tertiary-label",
+    "background",
+    "secondary-background",
+    "elevated-surface",
+    "separator",
+    "accent",
+    "success",
+    "warning",
+    "destructive"
+  ],
+  "requiredColorContexts": ["light", "dark", "increased-contrast"],
+  "contrast": {
+    "normalTextMinimum": "4.5:1",
+    "largeOrBoldTextMinimum": "3:1",
+    "neverColorAlone": true
+  },
+  "controls": {
+    "preferredTouchTargetPoints": [44, 44],
+    "minimumPoints": {
+      "ios": [28, 28],
+      "ipados": [28, 28],
+      "macos": [20, 20],
+      "tvos": [56, 56],
+      "visionos": [28, 28],
+      "watchos": [28, 28]
+    }
+  },
+  "materials": {
+    "liquidGlassLayer": "controls-and-navigation-only",
+    "contentLayer": "standard-material-or-semantic-surface",
+    "requiredAdaptations": ["reduce-transparency", "increased-contrast"]
+  },
+  "symbols": {
+    "defaultRendering": "monochrome",
+    "defaultRuntimeMaster": "Regular-S",
+    "matchAdjacentTextWeight": true,
+    "iconOnlyControlsNeedAccessibleName": true,
+    "decorativeIconsHiddenFromAccessibility": true,
+    "rightToLeftReview": true,
+    "availabilityFallbackRequired": true
+  },
+  "motion": {
+    "respectReduceMotion": true,
+    "reducedMotionFallback": "short-fade-or-no-animation",
+    "avoid": ["repetitive-motion", "peripheral-motion", "depth-zoom", "blur-animation"]
+  }
+}

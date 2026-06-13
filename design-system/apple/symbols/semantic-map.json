@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "status": "proposal",
+  "symbols": {
+    "department.audio": "microphone",
+    "department.lighting": "lightbulb",
+    "department.playback": "play.display",
+    "department.graphics": "photo.artframe",
+    "department.script": "text.page",
+    "action.back": "arrowshape.left",
+    "action.forward": "arrowshape.right",
+    "action.confirm": "checkmark",
+    "action.close": "xmark",
+    "action.home": "house",
+    "action.more": "ellipsis",
+    "action.share": "square.and.arrow.up",
+    "action.delete": "trash",
+    "action.edit": "pencil",
+    "action.attach": "paperclip",
+    "action.settings": "gearshape",
+    "action.power": "power",
+    "state.info": "info",
+    "state.warning": "exclamationmark.triangle",
+    "state.success": "checkmark",
+    "state.favorite": "heart",
+    "media.play": "play.display",
+    "media.pause": "pause",
+    "media.stop": "stop.circle",
+    "content.calendar": "calendar",
+    "content.checklist": "checklist",
+    "content.script": "text.page"
+  }
+}

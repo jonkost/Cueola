@@ -1,0 +1,23 @@
+{
+  "status": "audit-only",
+  "auditedOn": "2026-06-13",
+  "components": [
+    {"selector":".topbar","role":"primary navigation and actions","layer":"function","material":"glass-regular","wave":3,"risk":"high"},
+    {"selector":".bot-bar","role":"persistent rundown status","layer":"function","material":"glass-regular","wave":3,"risk":"medium"},
+    {"selector":".mode-tabs","role":"segmented navigation","layer":"function","material":"glass-contained-control","wave":3,"risk":"low"},
+    {"selector":".p-tooltip, .notif-panel","role":"popover","layer":"function","material":"glass-regular-strong","wave":4,"risk":"medium"},
+    {"selector":".paperwork-flow-actions","role":"floating action group","layer":"function","material":"glass-regular","wave":4,"risk":"medium"},
+    {"selector":".modal","role":"dialog shell","layer":"function-and-content","material":"glass-chrome-with-opaque-body","wave":4,"risk":"high"},
+    {"selector":".sheet","role":"bottom sheet","layer":"function-and-content","material":"glass-chrome-with-opaque-body","wave":4,"risk":"high"},
+    {"selector":"#pt-bar, #pt-panel, .pt-hint","role":"prompter controls","layer":"function","material":"glass-regular","wave":5,"risk":"high"},
+    {"selector":".prompt-op-panel","role":"floating operator controls","layer":"function","material":"glass-clear-or-regular-after-media-test","wave":5,"risk":"high"},
+    {"selector":".ls-bar, .ls-bot","role":"live navigation and transport","layer":"function","material":"glass-regular-strong","wave":5,"risk":"high"},
+    {"selector":".show-strip, .ls-overview","role":"show information","layer":"content","material":"standard-surface","wave":6,"risk":"medium"},
+    {"selector":".rd-scroll, .rd-table, .rd-head","role":"dense rundown content","layer":"content","material":"opaque-content","wave":6,"risk":"high"},
+    {"selector":".cue-cell-filled","role":"department cue data","layer":"content","material":"semantic-tinted-content","wave":6,"risk":"high"},
+    {"selector":".e-card","role":"entry choice content","layer":"content","material":"standard-raised-surface","wave":6,"risk":"low"},
+    {"selector":".field-in, textarea, select","role":"form content","layer":"content","material":"opaque-input","wave":6,"risk":"high"},
+    {"selector":".ls-main, .ls-sidebar","role":"live content and script","layer":"content","material":"opaque-content","wave":6,"risk":"high"},
+    {"selector":".pb-board, .prepro-section","role":"documents and collaboration","layer":"content","material":"standard-surface","wave":6,"risk":"high"}
+  ]
+}

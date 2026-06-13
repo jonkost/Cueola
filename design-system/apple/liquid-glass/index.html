@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-product-theme="cool">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cueola Liquid Glass Style Lab</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="themes.css">
+<style>
+*{box-sizing:border-box}html{background:var(--ui-background);color:var(--ui-label);font-family:var(--ui-font)}html[data-theme="light"]{color-scheme:light}html[data-theme="dark"]{color-scheme:dark}body{margin:0;min-height:100vh;background:radial-gradient(circle at 78% 8%,color-mix(in srgb,var(--ui-accent) 18%,transparent),transparent 28%),radial-gradient(circle at 12% 72%,rgba(48,209,88,.11),transparent 25%),var(--ui-background)}button,input{font:inherit}.lab{min-height:100vh;padding:24px}.shell{position:relative;max-width:1420px;min-height:calc(100vh - 48px);margin:auto;border:1px solid var(--ui-separator);border-radius:30px;overflow:hidden;background:color-mix(in srgb,var(--ui-background) 93%,transparent);box-shadow:0 30px 90px rgba(0,0,0,.2)}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;min-height:68px;margin:10px;padding:10px 12px 10px 18px;border-radius:22px}.brand{font-size:18px;font-weight:750;letter-spacing:-.03em;white-space:nowrap}.brand i{color:var(--ui-accent);font-style:normal}.session{display:flex;align-items:center;gap:8px;color:var(--ui-label-secondary);font-family:var(--ui-mono);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;background:var(--ui-success);box-shadow:0 0 0 4px color-mix(in srgb,var(--ui-success) 16%,transparent)}.grow{flex:1}.controls{display:flex;align-items:center;gap:7px}.control{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:var(--ui-control-height);padding:0 14px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--ui-label) 6%,transparent);color:var(--ui-label);font-weight:620;cursor:pointer;transition:background var(--ui-duration-fast) var(--ui-ease),transform var(--ui-duration-fast) var(--ui-ease)}.control:hover{background:color-mix(in srgb,var(--ui-label) 12%,transparent)}.control:active{transform:scale(.97)}.control:focus-visible{outline:none;box-shadow:var(--ui-focus-ring)}.control.icon-only{width:var(--ui-hit-target);height:var(--ui-hit-target);padding:0}.control.live{background:var(--ui-live);color:white;box-shadow:0 5px 14px color-mix(in srgb,var(--ui-live) 28%,transparent)}
+.symbol{display:inline-block;width:18px;height:18px;background:currentColor;-webkit-mask:var(--icon) center/contain no-repeat;mask:var(--icon) center/contain no-repeat}.icon-settings{--icon:url('../symbols/runtime/regular-small/objectsandtools/gearshape.svg')}.icon-more{--icon:url('../symbols/runtime/regular-small/objectsandtools/ellipsis.svg')}.icon-share{--icon:url('../symbols/runtime/regular-small/arrows/square.and.arrow.up.svg')}.icon-play{--icon:url('../symbols/runtime/regular-small/media/play.display.svg')}.icon-sliders{--icon:url('../symbols/runtime/regular-small/editing/slider.vertical.3.svg')}
+.show{display:grid;grid-template-columns:1fr repeat(4,minmax(96px,auto));gap:10px;padding:22px 26px 18px;border-bottom:1px solid var(--ui-separator)}.eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ui-label-tertiary)}.show h1{font-size:26px;letter-spacing:-.04em;margin:3px 0 0}.metric{padding:10px 13px;border:1px solid var(--ui-separator);border-radius:14px;background:var(--ui-content)}.metric strong{display:block;margin-top:3px;font-family:var(--ui-mono);font-size:16px}.metric.warning strong{color:var(--ui-warning)}.metric.success strong{color:var(--ui-success)}
+.content{display:grid;grid-template-columns:minmax(0,1fr) 290px;min-height:570px}.table-wrap{overflow:auto;padding:18px 18px 100px}.table-card{min-width:820px;overflow:hidden;border:1px solid var(--ui-separator);border-radius:20px;background:var(--ui-content)}.row{display:grid;grid-template-columns:46px minmax(220px,1.5fr) 120px repeat(3,minmax(135px,1fr));align-items:stretch;border-bottom:1px solid var(--ui-separator)}.row:last-child{border-bottom:0}.row.head{position:sticky;top:0;background:var(--ui-content-secondary);color:var(--ui-label-secondary);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.cell{padding:13px 12px;border-right:1px solid var(--ui-separator)}.cell:last-child{border-right:0}.row:not(.head) .cell{min-height:72px}.num{font-family:var(--ui-mono);color:var(--ui-label-tertiary)}.title{font-weight:700}.sub{margin-top:3px;font-size:12px;color:var(--ui-label-secondary)}.cue{margin:-4px;padding:9px 11px;border-radius:12px;border:1px solid color-mix(in srgb,var(--cue) 28%,var(--ui-separator));border-left:3px solid var(--cue);background:color-mix(in srgb,var(--cue) 9%,var(--ui-content));font-size:12px}.cue strong{display:block;color:var(--cue);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}.audio{--cue:var(--ui-success)}.playback{--cue:var(--ui-destructive)}.gfx{--cue:var(--ui-warning)}
+.inspector{margin:18px 18px 100px 0;padding:18px;border:1px solid var(--ui-separator);border-radius:20px;background:var(--ui-content);align-self:start}.inspector h2{font-size:17px;margin:0 0 5px}.inspector p{font-size:13px;line-height:1.5;color:var(--ui-label-secondary);margin:0 0 18px}.field{padding:13px 0;border-top:1px solid var(--ui-separator)}.field label{display:block;font-size:12px;font-weight:650;margin-bottom:8px}.field input{width:100%;height:42px;border:1px solid var(--ui-separator-strong);border-radius:12px;padding:0 12px;background:var(--ui-content-secondary);color:var(--ui-label)}
+.floating{position:absolute;left:50%;bottom:18px;z-index:4;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px;border-radius:18px}.floating .control{background:transparent}.floating .primary{background:var(--ui-accent);color:white}.review{position:fixed;right:22px;bottom:22px;z-index:10;width:min(360px,calc(100vw - 44px));padding:14px;border-radius:20px}.review-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}.review-head strong{font-size:13px}.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.review button,.review select{min-height:36px;border:1px solid var(--ui-separator);border-radius:10px;background:color-mix(in srgb,var(--ui-label) 6%,var(--ui-content));color:var(--ui-label);cursor:pointer;padding:0 9px}.review select{grid-column:1/-1;width:100%}.review button[aria-pressed="true"]{background:var(--ui-accent);border-color:var(--ui-accent);color:white}.note{font-size:11px;color:var(--ui-label-secondary);margin-top:9px;line-height:1.4}
+[data-reduce-motion="true"] *{transition:none!important;animation:none!important}.control-label{display:inline}@media(max-width:900px){.lab{padding:0}.shell{min-height:100vh;border:0;border-radius:0}.top{margin:8px}.session,.control-label{display:none}.show{grid-template-columns:1fr 1fr;padding:18px}.show>div:first-child{grid-column:1/-1}.content{grid-template-columns:1fr}.inspector{display:none}.review{right:10px;bottom:10px}.floating{bottom:14px}.row{grid-template-columns:42px minmax(180px,1.3fr) 110px repeat(3,130px)}}
+</style>
+</head>
+<body>
+<div class="lab">
+  <main class="shell" aria-label="Cueola Liquid Glass concept">
+    <header class="top material-glass-regular">
+      <div class="brand">Cue<i>ola</i></div>
+      <div class="session"><span class="dot"></span>LIVE SYNC / A7KQ</div>
+      <div class="grow"></div>
+      <div class="controls">
+        <button class="control"><span class="symbol icon-share" aria-hidden="true"></span><span class="control-label">Export</span></button>
+        <button class="control icon-only" aria-label="More actions"><span class="symbol icon-more" aria-hidden="true"></span></button>
+        <button class="control icon-only" aria-label="Settings"><span class="symbol icon-settings" aria-hidden="true"></span></button>
+        <button class="control live"><span class="symbol icon-play" aria-hidden="true"></span>Go Live</button>
+      </div>
+    </header>
+
+    <section class="show">
+      <div><div class="eyebrow">Current production</div><h1>Friday Studio Show</h1></div>
+      <div class="metric"><span class="eyebrow">Start</span><strong>14:00</strong></div>
+      <div class="metric warning"><span class="eyebrow">Duration</span><strong>42:30</strong></div>
+      <div class="metric success"><span class="eyebrow">Ready</span><strong>8 / 10</strong></div>
+      <div class="metric"><span class="eyebrow">Rows</span><strong>12</strong></div>
+    </section>
+
+    <section class="content">
+      <div class="table-wrap">
+        <div class="table-card">
+          <div class="row head"><div class="cell">#</div><div class="cell">Rundown</div><div class="cell">Start</div><div class="cell">Audio</div><div class="cell">Playback</div><div class="cell">Graphics</div></div>
+          <div class="row"><div class="cell num">01</div><div class="cell"><div class="title">Cold Open</div><div class="sub">Wide camera / Host at desk</div></div><div class="cell"><div class="title">14:00:00</div><div class="sub">00:45</div></div><div class="cell"><div class="cue audio"><strong>Audio</strong>Host mic live</div></div><div class="cell"><div class="cue playback"><strong>Playback</strong>Open sting</div></div><div class="cell"><div class="cue gfx"><strong>GFX</strong>Title animate</div></div></div>
+          <div class="row"><div class="cell num">02</div><div class="cell"><div class="title">Headlines</div><div class="sub">Camera 2 / Two shot</div></div><div class="cell"><div class="title">14:00:45</div><div class="sub">03:30</div></div><div class="cell"><div class="cue audio"><strong>Audio</strong>Mics 1 + 2</div></div><div class="cell"></div><div class="cell"><div class="cue gfx"><strong>GFX</strong>Lower thirds</div></div></div>
+          <div class="row"><div class="cell num">03</div><div class="cell"><div class="title">Package A</div><div class="sub">Roll from server</div></div><div class="cell"><div class="title">14:04:15</div><div class="sub">02:10</div></div><div class="cell"><div class="cue audio"><strong>Audio</strong>VT full</div></div><div class="cell"><div class="cue playback"><strong>Playback</strong>PKG_A_FINAL</div></div><div class="cell"></div></div>
+          <div class="row"><div class="cell num">04</div><div class="cell"><div class="title">Guest Interview</div><div class="sub">Studio B / Three cameras</div></div><div class="cell"><div class="title">14:06:25</div><div class="sub">08:00</div></div><div class="cell"><div class="cue audio"><strong>Audio</strong>Guest mic</div></div><div class="cell"></div><div class="cell"><div class="cue gfx"><strong>GFX</strong>Guest key</div></div></div>
+        </div>
+      </div>
+      <aside class="inspector">
+        <h2>Selected cue</h2><p>Content stays on an opaque, stable surface. The glass layer remains reserved for controls.</p>
+        <div class="field"><label for="cue-name">Cue name</label><input id="cue-name" value="Cold Open"></div>
+        <div class="field"><label for="cue-duration">Duration</label><input id="cue-duration" value="00:45"></div>
+      </aside>
+    </section>
+
+    <nav class="floating material-glass-regular" aria-label="Rundown actions">
+      <button class="control"><span class="symbol icon-sliders" aria-hidden="true"></span>View</button>
+      <button class="control primary">Add cue</button>
+    </nav>
+  </main>
+</div>
+
+<aside class="review material-glass-regular" aria-label="Preview settings">
+  <div class="review-head"><span class="symbol icon-settings" aria-hidden="true"></span><strong>Review states</strong></div>
+  <div class="review-grid">
+    <select id="product-theme" aria-label="Product theme">
+      <option value="cool">Glacier</option>
+      <option value="warm">Honey</option>
+      <option value="white">Polar Bear</option>
+      <option value="green">Eucalyptus</option>
+      <option value="koala">Koala</option>
+      <option value="panda">Planda Bear</option>
+      <option value="flamingo">Flowmingo</option>
+      <option value="prepbear">PrepBear</option>
+    </select>
+    <button id="theme" type="button">Light mode</button>
+    <button id="contrast" type="button" aria-pressed="false">High contrast</button>
+    <button id="transparency" type="button" aria-pressed="false">Reduce glass</button>
+    <button id="motion" type="button" aria-pressed="false">Reduce motion</button>
+  </div>
+  <div class="note">Standalone design lab. No Cueola app files or settings are changed.</div>
+</aside>
+
+<script>
+const root=document.documentElement;
+const preferredAppearance={cool:'dark',warm:'dark',white:'light',green:'dark',koala:'dark',panda:'dark',flamingo:'dark',prepbear:'dark'};
+const setAppearance=appearance=>{root.dataset.theme=appearance;document.querySelector('#theme').textContent=appearance==='light'?'Dark mode':'Light mode'};
+const toggle=(button,attribute)=>button.addEventListener('click',()=>{const on=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(on));root.setAttribute(attribute,String(on))});
+document.querySelector('#product-theme').addEventListener('change',event=>{const theme=event.currentTarget.value;root.dataset.productTheme=theme;setAppearance(preferredAppearance[theme]||'dark')});
+document.querySelector('#theme').addEventListener('click',()=>setAppearance(root.dataset.theme==='light'?'dark':'light'));
+toggle(document.querySelector('#contrast'),'data-increase-contrast');
+toggle(document.querySelector('#transparency'),'data-reduce-transparency');
+toggle(document.querySelector('#motion'),'data-reduce-motion');
+</script>
+</body>
+</html>
