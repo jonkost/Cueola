@@ -6,6 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260613a">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -30,6 +31,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
 button,input,select,textarea{font:inherit}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 78%,white);outline-offset:2px}
+:is(.btn-primary,.save-btn,.ls-pact-btn,.ls-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn,.ar-back,.ar-next,.paperwork-back){display:inline-flex;align-items:center;justify-content:center;gap:6px}
+:is(.pb-note-act,.pb-tag-chip,.ltr-edit-btn){display:inline-flex;align-items:center;gap:5px}
+.pb-reply-acts button{display:inline-flex;align-items:center;justify-content:center}
+:is(.modal-title,.warn-title){align-items:center;gap:8px}
+.modal-title:has(.sf-symbol),.warn-title:has(.sf-symbol){display:flex}
 
 /* ── ENTRY ── */
 #entry{align-items:center;justify-content:flex-start;padding:0 24px;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(91,141,248,.1),transparent 60%),var(--bg);overflow-y:auto;overflow-x:hidden}
@@ -1608,7 +1614,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	    <div class="e-title">Cueola</div>
 	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, and sync <em>Flowmingo.</em></div>
 	    <div class="entry-actions">
-	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico" aria-hidden="true">📘</span> New here? Start the guide</button>
+	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> New here? Start the guide</button>
 	    </div>
 	    <div class="e-cards">
       <div class="e-card stud e-card-full" onclick="showModal('modal-stud')">
@@ -1633,13 +1639,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         </div>
       </div>
       <div class="e-card demo" onclick="loadDemo()">
-        <div class="ec-icon">▶️</div>
+        <div class="ec-icon"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></div>
         <div class="ec-title">Demo</div>
         <div class="ec-desc">Load a pre-built example rundown. No login needed.</div>
         <span class="ec-pill">No login required</span>
       </div>
       <div class="e-card exp" onclick="openBlankSlateSetup()">
-        <div class="ec-icon">⚡</div>
+        <div class="ec-icon"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span></div>
         <div class="ec-title">Blank Slate</div>
         <div class="ec-desc">Make your own code and work in it together.</div>
         <span class="ec-pill">Free text setup</span>
@@ -1648,7 +1654,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="e-divider"></div>
     <div class="e-footer">
       <span class="e-footer-label">Are you an instructor?</span>
-      <button class="e-footer-link" onclick="location.href='dashboard.html'">Open Instructor Dashboard →</button>
+      <button class="e-footer-link" onclick="location.href='dashboard.html'">Open Instructor Dashboard</button>
     </div>
   </div>
 </div>
@@ -1673,12 +1679,12 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="presence-avatars" id="presenceAvatars"></div>
         <div class="p-tooltip" id="presenceTooltip"></div>
       </div>
-	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">🔑 Admin</button>
-	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()">✎ Edit</button>
+	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">Admin</button>
+	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()">🐼 Planda Bear</button>
-	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()">Guide</button>
-	      <button class="tbtn tbtn-ghost" onclick="exportPDF()">⬇ PDF</button>
-      <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
+	      <button class="tbtn tbtn-ghost" onclick="exportPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
+      <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <div class="tb-divider"></div>
       <button class="tbtn tbtn-live" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
@@ -1705,12 +1711,12 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <th class="col-num">#</th>
           <th class="col-info">Name</th>
           <th class="col-time">Start / Dur</th>
-          <th class="col-cue" style="color:var(--video)">📺 Video</th>
-          <th class="col-cue" style="color:var(--green)">🎙 Audio</th>
-          <th class="col-cue" style="color:var(--red)">▶ Playback</th>
-          <th class="col-cue" style="color:var(--yellow)">🖼 GFX</th>
-          <th class="col-cue" style="color:var(--purple)">💡 Lighting</th>
-          <th class="col-script-c" style="color:var(--cyan)">📄 Script</th>
+          <th class="col-cue" style="color:var(--video)"><span class="sf-symbol" data-symbol="department.video" aria-hidden="true"></span> Video</th>
+          <th class="col-cue" style="color:var(--green)"><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span> Audio</th>
+          <th class="col-cue" style="color:var(--red)"><span class="sf-symbol" data-symbol="department.playback" aria-hidden="true"></span> Playback</th>
+          <th class="col-cue" style="color:var(--yellow)"><span class="sf-symbol" data-symbol="department.graphics" aria-hidden="true"></span> GFX</th>
+          <th class="col-cue" style="color:var(--purple)"><span class="sf-symbol" data-symbol="department.lighting" aria-hidden="true"></span> Lighting</th>
+          <th class="col-script-c" style="color:var(--cyan)"><span class="sf-symbol" data-symbol="department.script" aria-hidden="true"></span> Script</th>
         </tr>
       </thead>
       <tbody id="rdBody"></tbody>
@@ -1737,13 +1743,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
-	      <button class="ls-exit-btn" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view">⊞ Full Grid</button>
-	      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel">📄 Script Op</button>
+	      <button class="ls-exit-btn" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><span>Full Grid</span></button>
+	      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
 	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
 	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
-	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Fullscreen" aria-label="Fullscreen">⛶</button>
-      <button class="ls-exit-btn" onclick="requestExitLive()">Exit ✕</button>
+	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
+      <button class="ls-exit-btn" onclick="requestExitLive()"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span><span>Exit</span></button>
     </div>
   </div>
   <div class="follow-bar">
@@ -1751,7 +1757,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="follow-chips" id="followChips">
       <div class="follow-chip follow-self active" onclick="followSelf()">Myself</div>
     </div>
-    <button id="forceFollowBtn" style="display:none;font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:rgba(240,82,82,.1);color:var(--red);cursor:pointer;white-space:nowrap" onclick="forceMeAsShowCaller()">📡 Force All to Follow Me</button>
+    <button id="forceFollowBtn" style="display:none;font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:rgba(240,82,82,.1);color:var(--red);cursor:pointer;white-space:nowrap" onclick="forceMeAsShowCaller()">Make Everyone Follow Me</button>
   </div>
   <div class="ls-overview">
     <div class="ls-show-card">
@@ -1782,7 +1788,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <button class="marker-chip" onclick="insertLivePanelMarker('[STOP HERE] ')">Stop</button>
           <button class="marker-chip" onclick="insertLivePanelMarker('\n\n')">Line</button>
         </div>
-        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em">⬆ PUSH TO FLOWMINGO</button>
+        <button class="ls-pact-btn ls-push-btn" onclick="pushToPrompter()" style="font-size:13px;padding:10px 12px;letter-spacing:.03em"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
         <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))" style="font-size:11px">Edit current cue script</button>
         <div id="lsPrompterRemote"></div>
         <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()" style="font-size:11px">Clear script</button>
@@ -1796,8 +1802,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="ls-bot-clk"><span class="ls-bot-lbl">Remaining</span><span class="ls-remain" id="ls-remain">—</span></div>
     </div>
     <div class="ls-nav">
-      <button class="ls-btn ls-prev" onclick="lsPrev()">← Prev</button>
-      <button class="ls-btn ls-next-btn" onclick="lsNext()">Next →</button>
+      <button class="ls-btn ls-prev" onclick="lsPrev()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Previous</span></button>
+      <button class="ls-btn ls-next-btn" onclick="lsNext()"><span>Next</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
     </div>
   </div>
 </div>
@@ -1811,7 +1817,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
   <!-- Navigation bar -->
   <div id="pt-bar">
-    <button class="pt-back-btn" onclick="exitPrompter()">← Cueola</button>
+    <button class="pt-back-btn" onclick="exitPrompter()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Cueola</span></button>
     <div class="pt-bar-title">🦩 Flowmingo</div>
     <div class="pt-status">
       <span class="pt-bar-sync pt-state-bad" id="pt-sync-label">Not connected</span>
@@ -1902,10 +1908,10 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear"></div>
     </div>
     <div class="pt-ctrl-group">
-      <button class="pt-btn" onclick="ptOpenEdit()">Script</button>
-      <button class="pt-btn" onclick="ptResetScroll()">Reset</button>
+      <button class="pt-btn" onclick="ptOpenEdit()"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script</span></button>
+      <button class="pt-btn" onclick="ptResetScroll()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Reset</span></button>
       <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()">Mirror</button>
-      <button class="pt-btn" onclick="ptToggleFullscreen()">Full</button>
+      <button class="pt-btn" onclick="ptToggleFullscreen()"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
     </div>
   </div>
 
@@ -1916,12 +1922,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <h2>Edit / Load Script</h2>
       <div class="pt-upload-bar">
         <button class="pt-btn pt-upload-btn" id="pt-upload-file-btn" onclick="ptChooseScriptFile()">
-          <svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="1" y="1" width="11" height="13" rx="1.5"/>
-            <line x1="3.5" y1="4.5" x2="9.5" y2="4.5"/>
-            <line x1="3.5" y1="7.5" x2="9.5" y2="7.5"/>
-            <line x1="3.5" y1="10.5" x2="7" y2="10.5"/>
-          </svg>
+          <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span>
           Upload PDF / DOCX / Pages
         </button>
         <span class="pt-upload-status" id="pt-upload-status"></span>
@@ -1930,7 +1931,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="pt-cueola-bar">
         <span class="pt-cueola-label">Cueola</span>
         <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Session code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
-        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load →</button>
+        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
         <span class="pt-cueola-status" id="pt-cueola-status"></span>
       </div>
       <div class="pt-cueola-help">Load a Cueola session code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
@@ -1941,8 +1942,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <h2>Or Paste / Type</h2>
       <textarea id="pt-script-input" rows="12" placeholder="Paste or type your script here..."></textarea>
       <div class="pt-edit-actions">
-        <button class="pt-btn" onclick="ptDownloadAsTxt()">↓ .txt</button>
-        <button class="pt-btn" onclick="ptDownloadAsPDF()">↓ PDF</button>
+        <button class="pt-btn" onclick="ptDownloadAsTxt()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Text</span></button>
+        <button class="pt-btn" onclick="ptDownloadAsPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>PDF</span></button>
         <button class="pt-btn" onclick="ptCloseEdit()">Cancel</button>
         <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Load Script</button>
       </div>
@@ -1955,7 +1956,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="screen" id="flowOp">
   <div class="flowop-top">
-    <button class="pt-back-btn" onclick="exitFlowmingoOperator()">← Cueola</button>
+    <button class="pt-back-btn" onclick="exitFlowmingoOperator()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Cueola</span></button>
     <div class="flowop-title-wrap">
       <div class="flowop-kicker">Standalone remote</div>
       <div class="flowop-title" id="flowOpTitle">Flowmingo Op</div>
@@ -2053,7 +2054,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         </div>
         <div class="ar-nav">
           <button class="ar-back" onclick="closeAddRowOv()">Cancel</button>
-          <button class="ar-next" id="ar-next-1" onclick="arGoStep2()" disabled>Choose Cue Type →</button>
+          <button class="ar-next" id="ar-next-1" onclick="arGoStep2()" disabled><span>Choose Cue Type</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
         </div>
       </div>
 
@@ -2063,8 +2064,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="ar-heading">What type of cue is this?</div>
         <div class="opt-grid-3" id="arTypeGrid"></div>
         <div class="ar-nav">
-          <button class="ar-back" onclick="arGoStep1()">← Back</button>
-          <button class="ar-next" id="ar-next-2" onclick="arCreateRowAndOpenCueBuilder()" disabled>Open Cue Builder →</button>
+          <button class="ar-back" onclick="arGoStep1()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Back</span></button>
+          <button class="ar-next" id="ar-next-2" onclick="arCreateRowAndOpenCueBuilder()" disabled><span>Open Cue Builder</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
         </div>
       </div>
     </div>
@@ -2079,7 +2080,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="sheet-handle"></div>
     <div class="sheet-title" id="editTitle">Edit Cue</div>
     <div class="edit-fields" id="editFields"></div>
-    <button class="save-btn" onclick="saveEdit()">Save Changes ✓</button>
+    <button class="save-btn" onclick="saveEdit()"><span class="sf-symbol" data-symbol="action.confirm" aria-hidden="true"></span><span>Save Changes</span></button>
     <button class="del-btn" onclick="deleteCue()">Remove this row</button>
   </div>
 </div>
@@ -2118,7 +2119,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <span class="guide-voice-help">Listen once, then follow the Where To Go and Do This sections while the lesson talks.</span>
         </div>
       </div>
-      <button class="guide-close" onclick="hideModal('learningHubModal')" title="Close guide" aria-label="Close guide">×</button>
+      <button class="guide-close" onclick="hideModal('learningHubModal')" title="Close guide" aria-label="Close guide"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
     </div>
     <div class="guide-body">
       <aside class="guide-side">
@@ -2154,7 +2155,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     </div>
     <div class="marker-divider"></div>
     <textarea class="field-in" id="lsScriptEditText" rows="14" style="resize:vertical;line-height:1.7;white-space:pre-wrap;font-size:14px"></textarea>
-    <button class="btn-primary" onclick="saveLiveScript()">⬆ Save &amp; Push to Flowmingo</button>
+    <button class="btn-primary" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save &amp; Push to Flowmingo</span></button>
     <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
   </div>
 </div>
@@ -2164,12 +2165,12 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="warn-card" style="max-width:480px;max-height:80vh;overflow-y:auto;border-color:var(--bord2);width:100%">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div class="warn-title" id="lrpTitle" style="font-size:18px;margin:0"></div>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px" onclick="hideOverlay('lsRowPreviewOv')">✕</button>
+      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px" onclick="hideOverlay('lsRowPreviewOv')" title="Close preview" aria-label="Close preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
     </div>
     <div id="lrpBody"></div>
     <div class="lrp-nav">
-      <button id="lrpPrevBtn" onclick="previewRelativeRow(-1)">← Previous row</button>
-      <button id="lrpNextBtn" onclick="previewRelativeRow(1)">Next row →</button>
+      <button id="lrpPrevBtn" onclick="previewRelativeRow(-1)"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Previous row</span></button>
+      <button id="lrpNextBtn" onclick="previewRelativeRow(1)"><span>Next row</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
     </div>
   </div>
 </div>
@@ -2205,13 +2206,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       </div>
     </div>
     <button class="paperwork-notes-bar" id="paperworkNotesBar" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')">
-      <span class="pnb-ico">📝</span>
+      <span class="pnb-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
       <span class="pnb-text">
         <span class="pnb-title">Production Notes</span>
         <span class="pnb-sub">Team discussion board — post notes, tag departments, reply in threads, export anything.</span>
       </span>
       <span class="pnb-count" id="paperworkNotesBarCount"></span>
-      <span class="pnb-arrow">→</span>
+      <span class="pnb-arrow sf-symbol" data-symbol="action.forward" aria-hidden="true"></span>
     </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbCommentsHub"></div>
@@ -2230,7 +2231,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
     <div class="paperwork-modal-head">
       <div class="modal-title" id="paperPreviewTitle">Preview</div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="paper-preview" id="paperPreviewBody"></div>
     <div id="pbCommentsPreview"></div>
@@ -2249,7 +2250,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="modal-title">Call Sheet</div>
         <div class="modal-sub">Times, contacts, access, and crew notes.</div>
       </div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title">Call Sheet</div>
@@ -2343,7 +2344,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="modal-title">Safety Plan</div>
         <div class="modal-sub">Emergency contacts, safety notes, and gear needs.</div>
       </div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="prepro-grid">
       <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120"></div>
@@ -2375,7 +2376,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="modal-title">Production Schedule</div>
         <div class="modal-sub">A simple two-day schedule: setup day, show day, and what must be ready before the show starts.</div>
       </div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title">Setup Day</div>
@@ -2416,7 +2417,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="modal-title" id="patchSheetTitle">Patch Sheet</div>
         <div class="modal-sub" id="patchSheetSub">Add rows or upload a CSV/TSV to format into the generator.</div>
       </div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div id="patchSheetBody"></div>
     <div id="pbCommentsPatch"></div>
@@ -2431,10 +2432,10 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div class="modal pb-builder-modal">
     <div class="paperwork-modal-head">
       <div>
-        <div class="modal-title">📝 Production Notes</div>
+        <div class="modal-title"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span> Production Notes</div>
         <div class="modal-sub">The team's living discussion board — post what changed, tag the department, and keep every reply threaded under its note. Everyone on this session sees it live.</div>
       </div>
-      <button class="paperwork-back" onclick="returnToPaperworkHub()">← Planda Bear</button>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
 
     <div class="pb-board" id="pbBoard">
@@ -2443,13 +2444,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <input type="search" class="pb-board-search" id="pbNotesSearch" placeholder="Search notes &amp; authors…" oninput="pbSetNotesSearch(this.value)">
         <div class="pb-board-tools">
           <div class="pb-filter-wrap">
-            <button type="button" class="pb-chat-tool" id="pbFilterBtn" onclick="pbToggleFilterMenu(event)">⛁ Filter</button>
+            <button type="button" class="pb-chat-tool" id="pbFilterBtn" onclick="pbToggleFilterMenu(event)"><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Filter</span></button>
             <div class="pb-filter-pop" id="pbNotesFilters" hidden></div>
           </div>
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()">🔕 Alerts</button>
-          <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()">💡 Tips</button>
-          <button type="button" class="pb-chat-tool" onclick="exportProductionNotesPDF()">⬇ PDF</button>
+          <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
+          <button type="button" class="pb-chat-tool" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
         </div>
       </div>
       <div class="pb-note-guide" id="pbNotesGuide">
@@ -2462,8 +2463,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <div class="pb-compose-sheet" id="pbComposeSheet">
         <div class="pb-compose-card" id="pbComposeCard" ondragover="pbComposerDrag(event,true)" ondragleave="pbComposerDrag(event,false)" ondrop="pbComposerDrop(event)">
           <div class="pb-compose-head">
-            <span class="pb-compose-title">✍️ New note</span>
-            <button type="button" class="pb-compose-close" onclick="pbCloseComposer()" title="Close">×</button>
+            <span class="pb-compose-title"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span> New note</span>
+            <button type="button" class="pb-compose-close" onclick="pbCloseComposer()" title="Close" aria-label="Close"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
           </div>
           <div class="pb-fmt-bar">
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtWrap('**','**')" title="Bold (⌘/Ctrl+B)"><b>B</b></button>
@@ -2481,11 +2482,11 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
             <div class="pb-tag-picker" id="pbTagPicker"></div>
           </div>
           <div class="pb-compose-actions">
-            <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images or documents">📎 Attach</button>
-            <button type="button" class="pb-attach-add" onclick="pbExportDraftPDF()" title="Export this note as a PDF">⬇ PDF</button>
+            <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
+            <button type="button" class="pb-attach-add" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
             <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
             <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
-            <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter">Post ➤</button>
+            <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
           </div>
         </div>
       </div>
@@ -2498,9 +2499,9 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 </div>
 <div class="pb-lightbox" id="pbLightbox" onclick="this.classList.remove('on')"><img id="pbLightboxImg" alt="Attachment preview"></div>
 <div class="pb-notify-toast" id="pbNotifyToast" hidden onclick="pbOpenFromNotify()" title="Open Production Notes">
-  <span class="pb-notify-ico">📝</span>
+  <span class="pb-notify-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
   <span class="pb-notify-text"></span>
-  <button type="button" class="pb-notify-x" onclick="event.stopPropagation();pbDismissNotifyToast()" title="Dismiss">×</button>
+  <button type="button" class="pb-notify-x" onclick="event.stopPropagation();pbDismissNotifyToast()" title="Dismiss" aria-label="Dismiss"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
 </div>
 
 <div class="modal-wrap" id="modal-prepro-join">
@@ -2510,7 +2511,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="pp-join-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="modal-err" id="pp-join-err">Please fill in both fields.</div>
-    <button class="btn-primary" onclick="joinPreProSession()">Open Planda Bear →</button>
+    <button class="btn-primary" onclick="joinPreProSession()">Open Planda Bear</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
   </div>
 </div>
@@ -2523,7 +2524,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="admin-head">
       <div class="admin-head-top">
         <div class="admin-title">Admin Panel</div>
-        <button class="admin-close-btn" onclick="closeAdminPanel()">✕</button>
+        <button class="admin-close-btn" onclick="closeAdminPanel()" title="Close admin panel" aria-label="Close admin panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
       </div>
       <div class="admin-who">
         Logged in as <strong id="adminWhoName">—</strong>
@@ -2546,7 +2547,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <input class="field-in" id="adminCodeIn" type="password" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')submitAdminLogin()">
     </div>
     <div class="modal-err" id="adminLoginErr">Incorrect code. Try again.</div>
-    <button class="btn-primary" onclick="submitAdminLogin()">Login →</button>
+    <button class="btn-primary" onclick="submitAdminLogin()">Log In</button>
     <button class="btn-secondary" onclick="hideModal('adminLoginModal')">Cancel</button>
     <div id="adminSetupHint" style="font-size:12px;color:var(--text3);text-align:center;display:none">No admin set up yet. <button onclick="openAdminSetup()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;text-decoration:underline">Set up now</button></div>
   </div>
@@ -2564,7 +2565,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="field"><label class="field-lbl">Admin Code</label><input class="field-in" id="setupAdminCode" type="password" placeholder="Choose a secure code" autocomplete="new-password"></div>
     <div class="field"><label class="field-lbl">Confirm Code</label><input class="field-in" id="setupAdminCode2" type="password" placeholder="Re-enter code" autocomplete="new-password"></div>
     <div class="modal-err" id="setupAdminErr"></div>
-    <button class="btn-primary" onclick="submitAdminSetup()">Create Super Admin →</button>
+    <button class="btn-primary" onclick="submitAdminSetup()">Create Super Admin</button>
     <button class="btn-secondary" onclick="hideModal('adminSetupModal')">Cancel</button>
   </div>
 </div>
@@ -2574,7 +2575,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="overlay" id="exitLiveOv" style="align-items:center;justify-content:center;padding:24px">
   <div class="warn-card">
-    <div class="warn-title">⚠ Leave Live Mode?</div>
+    <div class="warn-title"><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span> Leave Live Mode?</div>
     <div class="warn-body">You are currently live. Leaving returns only this device to the build view and clears your follow target.<br><br>You can make changes and return to live when you are ready.</div>
     <button class="btn-danger" onclick="confirmExitLive()">Leave Live</button>
     <button class="btn-primary" onclick="hideOverlay('exitLiveOv')">Stay Live</button>
@@ -2591,7 +2592,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div id="goLiveCheckRows"></div>
     <div class="precheck-actions">
       <button class="btn-secondary" onclick="hideOverlay('goLiveCheckOv')">Cancel</button>
-      <button class="btn-primary" id="goLiveCheckGo" onclick="confirmedGoLive()">Go Live →</button>
+      <button class="btn-primary" id="goLiveCheckGo" onclick="confirmedGoLive()">Go Live</button>
     </div>
   </div>
 </div>
@@ -2606,7 +2607,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="inst-name" type="text" placeholder='e.g. "Alex Director"' maxlength="40"></div>
     <div class="field"><label class="field-lbl">Show Name <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="inst-show" type="text" placeholder='e.g. "Campus News Week 12"' maxlength="60"></div>
     <div class="modal-err" id="inst-err">Please enter your name.</div>
-    <button class="btn-primary" onclick="createSession()">Create Session →</button>
+    <button class="btn-primary" onclick="createSession()">Create Session</button>
     <button class="btn-secondary" onclick="hideModal('modal-inst')">Cancel</button>
   </div>
 </div>
@@ -2616,8 +2617,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="modal-title">Session Created!</div>
     <div class="modal-sub">Share this code with your crew. They'll join using it.</div>
     <div class="code-display"><div class="code-val" id="code-display-val">—</div><div class="code-label">SESSION CODE</div></div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.6;background:var(--s2);border-radius:8px;padding:12px">💡 Crew members enter this code on the entry screen. You'll see them appear in real time.</div>
-    <button class="btn-primary" onclick="enterAsInstructor()">Enter Rundown →</button>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;background:var(--s2);border-radius:8px;padding:12px"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> Crew members enter this code on the entry screen. You'll see them appear in real time.</div>
+    <button class="btn-primary" onclick="enterAsInstructor()">Enter Rundown</button>
   </div>
 </div>
 
@@ -2628,7 +2629,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="stud-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="modal-err" id="stud-err">Please fill in both fields.</div>
-    <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join Session →</button>
+    <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join Session</button>
     <button class="btn-secondary" onclick="hideModal('modal-stud')">Cancel</button>
   </div>
 </div>
@@ -2641,7 +2642,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="field"><label class="field-lbl">Workspace Code</label><input class="field-in" id="blank-code" type="text" placeholder="e.g. SHOWA" maxlength="20" style="font-size:22px;font-family:var(--mono);letter-spacing:.16em;text-align:center;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"><div class="field-hint">Share this code with collaborators and Flowmingo. Leave blank to auto-generate.</div></div>
     <div class="field"><label class="field-lbl">Show Name <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="blank-show" type="text" placeholder="Untitled Show" maxlength="60"></div>
     <div class="modal-err" id="blank-err">Please enter your name.</div>
-    <button class="btn-primary" id="blank-create-btn" onclick="startBlankSlate()">Create Shared Blank Slate →</button>
+    <button class="btn-primary" id="blank-create-btn" onclick="startBlankSlate()">Create Shared Blank Slate</button>
     <button class="btn-secondary" onclick="hideModal('modal-blank');loadExpert()">Work Locally Only</button>
     <button class="btn-secondary" onclick="hideModal('modal-blank')">Cancel</button>
   </div>

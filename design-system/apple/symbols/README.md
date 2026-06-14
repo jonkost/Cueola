@@ -1,6 +1,8 @@
 # Cueola SF Symbols Staging Library
 
-This is an isolated design asset library. The Cueola app does not load it yet.
+This library is the source of truth for Cueola's semantic interface symbols.
+The app loads a reviewed subset through the generated `assets/sf-symbols.css`
+mask stylesheet; source templates remain isolated from application markup.
 
 ## Contents
 
@@ -32,11 +34,15 @@ The importer uses only the Python standard library. When the SF Symbols app is
 installed, it reads Apple's local category, search keyword, and availability
 metadata. Otherwise it falls back to conservative filename-based categories.
 
-## Future app integration
+## App integration
 
 Resolve application concepts through `semantic-map.json`, rather than scattering
-Apple filenames through markup. A future helper can return the `runtimePath` from
-`catalog.json` and render it as a CSS mask or an inline decorative SVG.
+Apple filenames through markup. Regenerate the application stylesheet after
+changing the map or importing symbols:
+
+```bash
+python3 scripts/build_sf_symbol_css.py
+```
 
 Example CSS pattern for a later implementation:
 

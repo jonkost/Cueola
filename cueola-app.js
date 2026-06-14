@@ -1,25 +1,35 @@
 'use strict';
 
+function sfIcon(symbol, className='') {
+  const classes = className ? `sf-symbol ${className}` : 'sf-symbol';
+  return `<span class="${classes}" data-symbol="${symbol}" aria-hidden="true"></span>`;
+}
+
+function setSymbolButtonLabel(button, symbol, label) {
+  if (!button) return;
+  button.innerHTML = `${sfIcon(symbol)}<span>${label}</span>`;
+}
+
 // ─────────────────────────────────────────────────────────────
 // CUE TYPE DEFINITIONS
 // ─────────────────────────────────────────────────────────────
 const CT = {
-  video:    { label:'VIDEO',    color:'var(--video)',  bg:'var(--video-bg)',                                       icon:'📺' },
-  audio:    { label:'AUDIO',    color:'var(--green)',  bg:'color-mix(in srgb,var(--green) 14%,transparent)',       icon:'🎙' },
-  lighting: { label:'LIGHTING', color:'var(--purple)', bg:'color-mix(in srgb,var(--purple) 14%,transparent)',      icon:'💡' },
-  playback: { label:'PLAYBACK', color:'var(--red)',    bg:'color-mix(in srgb,var(--red) 14%,transparent)',         icon:'▶'  },
-  gfx:      { label:'GFX',      color:'var(--yellow)', bg:'color-mix(in srgb,var(--yellow) 14%,transparent)',      icon:'🖼' },
-  script:   { label:'SCRIPT',   color:'var(--cyan)',   bg:'color-mix(in srgb,var(--cyan) 14%,transparent)',        icon:'📄' },
+  video:    { label:'VIDEO',    color:'var(--video)',  bg:'var(--video-bg)',                                  symbol:'department.video' },
+  audio:    { label:'AUDIO',    color:'var(--green)',  bg:'color-mix(in srgb,var(--green) 14%,transparent)',  symbol:'department.audio' },
+  lighting: { label:'LIGHTING', color:'var(--purple)', bg:'color-mix(in srgb,var(--purple) 14%,transparent)', symbol:'department.lighting' },
+  playback: { label:'PLAYBACK', color:'var(--red)',    bg:'color-mix(in srgb,var(--red) 14%,transparent)',    symbol:'department.playback' },
+  gfx:      { label:'GFX',      color:'var(--yellow)', bg:'color-mix(in srgb,var(--yellow) 14%,transparent)', symbol:'department.graphics' },
+  script:   { label:'SCRIPT',   color:'var(--cyan)',   bg:'color-mix(in srgb,var(--cyan) 14%,transparent)',   symbol:'department.script' },
 };
 
 // Column ordering — persisted per user in localStorage
 const COL_META = {
-  video:    { label:'📺 Video',    color:'var(--video)' },
-  audio:    { label:'🎙 Audio',    color:'var(--green)' },
-  playback: { label:'▶ Playback', color:'var(--red)' },
-  gfx:      { label:'🖼 GFX',     color:'var(--yellow)' },
-  lighting: { label:'💡 Lighting', color:'var(--purple)' },
-  script:   { label:'📄 Script',  color:'var(--cyan)' },
+  video:    { label:'Video',    color:'var(--video)',  symbol:'department.video' },
+  audio:    { label:'Audio',    color:'var(--green)',  symbol:'department.audio' },
+  playback: { label:'Playback', color:'var(--red)',    symbol:'department.playback' },
+  gfx:      { label:'GFX',      color:'var(--yellow)', symbol:'department.graphics' },
+  lighting: { label:'Lighting', color:'var(--purple)', symbol:'department.lighting' },
+  script:   { label:'Script',   color:'var(--cyan)',   symbol:'department.script' },
 };
 const COL_DEFAULTS = ['video','audio','playback','gfx','lighting','script'];
 let colOrder = (() => {
@@ -1099,10 +1109,10 @@ function updateAdminUI() {
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
   if (adminSession) {
-    btn.textContent = `🔑 ${adminSession.name.split(' ')[0]}`;
+    btn.textContent = adminSession.name.split(' ')[0];
     btn.className = 'tbtn tbtn-admin';
   } else {
-    btn.textContent = '🔑 Admin';
+    btn.textContent = 'Admin';
     btn.className = 'tbtn tbtn-ghost';
   }
 }
@@ -1263,7 +1273,7 @@ function renderAdminBody() {
         <select id="adminFollowSelect" class="field-in" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn" ${presenceNames.length?'':'disabled'} style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red);${presenceNames.length?'':'opacity:.45;cursor:not-allowed'}" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">🔴 Force Everyone Live + Follow</button>
+        <button class="admin-act-btn" ${presenceNames.length?'':'disabled'} style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red);${presenceNames.length?'':'opacity:.45;cursor:not-allowed'}" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
       </div>
     </div>`;
   }
@@ -1807,14 +1817,14 @@ async function joinSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking...'; }
   const ready = await waitForFirebaseReady();
   if (!ready) {
-    if (btn) { btn.disabled=false; btn.textContent='Join Session →'; }
+    if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
     hideModal('modal-stud');
     openLocalSession(code, name, 'instructor');
     return;
   }
   const verify = () => {
     window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
-      if (btn) { btn.disabled=false; btn.textContent='Join Session →'; }
+      if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
       if (!snap.exists()) {
         errEl.textContent = 'Session not found. Check the code and try again.';
         errEl.classList.add('on');
@@ -1825,7 +1835,7 @@ async function joinSession() {
       hideModal('modal-stud');
       enterRundown();
     }).catch(() => {
-      if (btn) { btn.disabled=false; btn.textContent='Join Session →'; }
+      if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
       hideModal('modal-stud');
       openLocalSession(code, name, 'instructor');
     });
@@ -1903,7 +1913,7 @@ async function startBlankSlate() {
   if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
   const ready = await waitForFirebaseReady();
   if (!ready) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate →'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate'; }
     hideModal('modal-blank');
     localStorage.setItem('cueola_last_name', name);
     openLocalSession(code, name, 'instructor', showName);
@@ -1940,7 +1950,7 @@ async function startBlankSlate() {
   } catch (e) {
     if (err) { err.textContent = 'Could not create the workspace. Try another code.'; err.classList.add('on'); }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate →'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate'; }
   }
 }
 
@@ -2304,7 +2314,7 @@ function toggleEditMode() {
   editMode = !editMode;
   const btn = document.getElementById('editModeBtn');
   if (btn) {
-    btn.textContent = editMode ? '✓ Done Editing' : '✎ Edit';
+    setSymbolButtonLabel(btn, editMode ? 'action.confirm' : 'action.edit', editMode ? 'Done Editing' : 'Edit');
     btn.style.background = editMode ? 'color-mix(in srgb,var(--accent) 16%,transparent)' : '';
     btn.style.borderColor = editMode ? 'var(--accent)' : '';
     btn.style.color = editMode ? 'var(--accent)' : '';
@@ -2326,9 +2336,9 @@ function renderTableHeaders() {
                 ondrop="colDrop(event,'${type}')"
                 ondragend="colDragEnd(event)"
                 data-col="${type}"
-                title="Drag to reorder">${m.label} <span style="font-size:7px;opacity:.35">⠿</span></th>`;
+                title="Drag to reorder">${sfIcon(m.symbol)} ${m.label} <span style="font-size:7px;opacity:.35">⠿</span></th>`;
     }
-    return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${m.label}</th>`;
+    return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${sfIcon(m.symbol)} ${m.label}</th>`;
   }).join('');
   const dragCol = editMode ? '<th class="col-drag" title="Drag rows to reorder">⠿</th>' : '<th class="col-drag"></th>';
   thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
@@ -2399,7 +2409,7 @@ function renderRundown() {
         <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
         <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
         <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" title="Add row before">+ Before</button>
-        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">✕ Remove</button>
+        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
       </div>` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
@@ -2454,7 +2464,7 @@ function getCueCell(b, type) {
     ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
     : '';
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
-    <div class="cue-cell-icon" style="color:${tc.color}">${tc.icon}</div>
+    <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
     <div class="cue-cell-info">${lines}${scriptMeta}</div>
   </div>`;
 }
@@ -2572,7 +2582,7 @@ function openAddRow() {
   const stepLabel = document.querySelector('#ar-step-1 .ar-step-label');
   if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row — Step 1 of 2';
   const nextBtn = document.getElementById('ar-next-1');
-  if (nextBtn) nextBtn.textContent = freeTextMode ? 'Add Row →' : 'Choose Cue Type →';
+  if (nextBtn) nextBtn.innerHTML = `<span>${freeTextMode ? 'Add Row' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
   document.getElementById('opt-timed')?.classList.add('sel');
   const durWrap = document.getElementById('ar-dur-wrap');
@@ -2602,7 +2612,7 @@ function arGoStep2() {
     return `<div class="opt-card" id="artype-${type}"
         style="--oc:${tc.color};--ob:${tc.bg}"
         onclick="arSelectCueType('${type}')">
-      <div class="opt-icon" style="font-size:24px">${tc.icon}</div>
+      <div class="opt-icon" style="font-size:24px">${sfIcon(tc.symbol)}</div>
       <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
       <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
     </div>`;
@@ -2672,7 +2682,7 @@ function buildArContext() {
   ctx.innerHTML = `<div class="ar-ctx-label">Last ${last4.length} row${last4.length>1?'s':''}</div>`+
     last4.map(b => {
       const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
-      const badges = types.map(t=>`<span class="type-badge tb-${t}" style="font-size:7px;color:${CT[t].color};background:${CT[t].bg}">${CT[t].icon}</span>`).join('');
+      const badges = types.map(t=>`<span class="type-badge tb-${t}" style="font-size:7px;color:${CT[t].color};background:${CT[t].bg}">${sfIcon(CT[t].symbol)}</span>`).join('');
       return `<div class="ar-ctx-row">
         <span class="ar-ctx-num">${beats.indexOf(b)+1}</span>
         <span style="display:flex;gap:2px;align-items:center">${badges||'<span style="color:var(--text3);font-size:10px">—</span>'}</span>
@@ -2720,7 +2730,7 @@ function openCueConfig(beatId, type) {
   const b = beats.find(x=>x.id===beatId); if (!b) return;
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
-  document.getElementById('cueConfigTitle').textContent = `${tc.icon} ${tc.label}`;
+  document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
   document.getElementById('cueConfigFields').innerHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
@@ -3714,7 +3724,7 @@ function confirmGoLive() {
       </div>`).join('');
   }
   const goBtn = document.getElementById('goLiveCheckGo');
-  if (goBtn) goBtn.textContent = c.allGreen ? 'Go Live →' : 'Continue anyway →';
+  if (goBtn) goBtn.textContent = c.allGreen ? 'Go Live' : 'Continue Anyway';
   const note = document.getElementById('goLiveCheckNote');
   if (note) note.textContent = c.allGreen
     ? 'Everything looks set. You\'re clear to go live.'
@@ -3929,7 +3939,7 @@ function applyLivePrompterPanelState() {
   }
   if (resizer) resizer.classList.toggle('on', livePrompterOpen);
   if (btn) {
-    btn.textContent = livePrompterOpen ? '📄 Hide Script Op' : '📄 Script Op';
+    setSymbolButtonLabel(btn, 'content.script', livePrompterOpen ? 'Hide Script Op' : 'Script Op');
     btn.style.color = livePrompterOpen ? 'var(--cyan)' : '';
     btn.style.borderColor = livePrompterOpen ? 'rgba(34,211,211,.35)' : '';
   }
@@ -3967,7 +3977,7 @@ function renderLiveCurrent(b, i) {
     const on  = getCueOn(d);
     const off = getCueOff(d);
     return `<div class="lv-cue-block" style="border-left-color:${tc.color}">
-      <div class="lv-cue-label" style="color:${tc.color}">${tc.icon} ${tc.label}</div>
+      <div class="lv-cue-label" style="color:${tc.color}">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${on  ? `<div class="lv-cue-ready">▶ ${esc(on)}</div>`  : ''}
       ${off ? `<div class="lv-cue-take">■ ${esc(off)}</div>` : ''}
     </div>`;
@@ -3984,7 +3994,7 @@ function renderLiveCurrent(b, i) {
     </div>
     ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
     ${sd?.text?`<div class="lv-cur-script">${esc(sd.text)}</div>`:''}
-    ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">✎ Edit &amp; Push</button>`:''}
+    ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">${sfIcon('action.edit')} Edit &amp; Push</button>`:''}
   </div>`;
 }
 
@@ -3995,7 +4005,7 @@ function renderLiveNext(b, i, isRunner) {
     const on  = getCueOn(d);
     const off = getCueOff(d);
     return `<span class="lv-next-cue" style="border-left-color:${tc.color}">
-      <span style="color:${tc.color}">${tc.icon}</span>
+      <span style="color:${tc.color}">${sfIcon(tc.symbol)}</span>
       ${on  ? `<span>▶ ${esc(on)}</span>`  : ''}
       ${off ? `<span style="opacity:.7">■ ${esc(off)}</span>` : ''}
     </span>`;
@@ -4026,7 +4036,7 @@ function liveRowPreview(idx) {
     const on  = getCueOn(d);
     const off = getCueOff(d);
     html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
-      <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${tc.icon} ${tc.label}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${on  ? `<div style="font-size:14px;color:var(--text2);margin-bottom:2px">○ ${esc(on)}</div>`  : ''}
       ${off ? `<div style="font-size:15px;font-weight:700;color:${tc.color}">▶ ${esc(off)}</div>` : ''}
       ${t==='script'&&d.text?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(d.text)}</div>`:''}
@@ -4080,7 +4090,7 @@ function focusCuesForBeat(b) {
     const on = getCueOn(d), off = getCueOff(d);
     let lines = '';
     if (type === 'script') {
-      lines = `<div class="lf-cue-take">📄 Script ready · ${scriptLineLabel(d.text)}</div>`;
+      lines = `<div class="lf-cue-take">${sfIcon('content.script')} Script ready · ${scriptLineLabel(d.text)}</div>`;
     } else {
       // The "take" (on) cue is the action to call now — make it the big line.
       // If there's no take, the "ready"/off cue becomes the prominent one.
@@ -4088,7 +4098,7 @@ function focusCuesForBeat(b) {
       if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
     }
     return `<div class="lf-cue" style="--cue-clr:${tc.color}">
-      <div class="lf-cue-dept">${COL_META[type].label}</div>
+      <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
       <div class="lf-cue-lines">${lines}</div>
     </div>`;
   }).join('') + `</div>`;
@@ -4147,7 +4157,7 @@ function renderLiveFocus() {
 
 function updateLiveFocusToggle() {
   const btn = document.getElementById('liveFocusBtn');
-  if (btn) btn.textContent = liveFocusMode ? '⊞ Full Grid' : '◉ Focus';
+  if (btn) setSymbolButtonLabel(btn, liveFocusMode ? 'action.grid' : 'content.display', liveFocusMode ? 'Full Grid' : 'Focus');
 }
 
 function toggleLiveFocus() {
@@ -4176,7 +4186,7 @@ function renderLive() {
       <th class="live-col-status">State</th>
       <th class="live-col-name">Row</th>
       <th class="live-col-time">Time</th>
-      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${COL_META[type].label}</th>`).join('')}
+      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
@@ -6080,7 +6090,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
           ptConnMessage = '';
           ptUpdateReady();
           const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show found for "${code}". Double-check the code.`; ss.className = 'pt-setup-status warn'; }
-          if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+          if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
           return;
         }
         const data = snap.data() || {};
@@ -6118,7 +6128,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         if (control?.action && !isPrompterSelfSender(control.sender)) {
           applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId);
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       }, err => {
         const label = firebaseConnectionLabel(err, 'Error');
         ptSetCueolaStatus(label, true);
@@ -6127,7 +6137,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         ptUpdateReady();
         const ss = ptEl('pt-setup-status');
         if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
-        if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       });
     } catch (err) {
       const label = firebaseConnectionLabel(err, 'Error');
@@ -6137,7 +6147,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
       ptUpdateReady();
       const ss = ptEl('pt-setup-status');
       if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
-      if (btn) { btn.disabled = false; btn.textContent = 'Load →'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
     }
   };
   if (window._firebaseReady) load();
@@ -6284,7 +6294,7 @@ function togglePromptOpMode() {
       btn.style.color = 'var(--cyan)';
       btn.style.borderColor = 'var(--cyan)';
       btn.style.background = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
-      btn.textContent = '▦ Rundown View';
+      setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
     } else {
       btn.style.color = '';
       btn.style.borderColor = '';
@@ -6909,11 +6919,11 @@ let pbComposerTag = 'general';   // tag selected in the composer
 const pbNoteFileCache = new Map(); // fileId -> dataURL
 
 const PB_NOTE_TAGS = {
-  general:  { label:'General',  icon:'💬' },
-  audio:    { label:'Audio',    icon:'🎙' },
-  video:    { label:'Video',    icon:'🎥' },
-  lighting: { label:'Lighting', icon:'💡' },
-  todo:     { label:'To-Do',    icon:'✅' },
+  general:  { label:'General',  symbol:'content.note' },
+  audio:    { label:'Audio',    symbol:'department.audio' },
+  video:    { label:'Video',    symbol:'department.video' },
+  lighting: { label:'Lighting', symbol:'department.lighting' },
+  todo:     { label:'To-Do',    symbol:'content.checklist' },
 };
 
 const PB_FILE_CHUNK_CHARS = 800000;          // dataURL chars per Firestore doc (~600 KB binary)
@@ -7338,7 +7348,7 @@ function pbComposerDrop(e) {
 function pbAttachChipsHTML(list, scope) {
   return list.map(a => `
     <div class="pb-attach-chip">
-      ${a.isImage ? `<img src="${a.dataUrl}" alt="">` : `<span class="pb-file-ico">${pbFileIcon(a)}</span>`}
+      ${a.isImage ? `<img src="${a.dataUrl}" alt="">` : `<span class="pb-file-ico">${sfIcon(pbFileSymbol(a))}</span>`}
       <span class="pb-attach-meta"><span class="pb-attach-name">${esc(a.name)}</span><span class="pb-attach-size">${esc(pbFileSize(a.size))}</span></span>
       <button type="button" class="pb-attach-x" onclick="pbRemovePendingAttachment('${a.fileId}','${scope}')" title="Remove attachment">×</button>
     </div>`).join('');
@@ -7413,15 +7423,12 @@ function pbDeleteNoteFiles(note) {
   });
 }
 
-function pbFileIcon(att) {
+function pbFileSymbol(att) {
   const n = String(att?.name || '').toLowerCase();
   const t = String(att?.type || '').toLowerCase();
-  if (att?.isImage || /^image\//.test(t)) return '🖼';
-  if (/\.pdf$/.test(n) || t.includes('pdf')) return '📕';
-  if (/\.(doc|docx|pages|rtf|txt|md)$/.test(n) || t.includes('word') || t.startsWith('text/')) return '📘';
-  if (/\.(xls|xlsx|csv|numbers)$/.test(n) || t.includes('sheet') || t.includes('csv')) return '📗';
-  if (/\.(ppt|pptx|key)$/.test(n) || t.includes('presentation')) return '📙';
-  return '📄';
+  if (att?.isImage || /^image\//.test(t)) return 'content.image';
+  if (/\.(xls|xlsx|csv|numbers)$/.test(n) || t.includes('sheet') || t.includes('csv')) return 'content.list';
+  return 'content.script';
 }
 
 function pbFileSize(bytes) {
@@ -7569,7 +7576,7 @@ function pbRenderNoteFilters(threads) {
         <span class="pb-filter-dot"></span>${label}${counts[key] ? ` <b>${counts[key]}</b>` : ''}
       </button>`;
     pop.innerHTML = row('all', 'All notes')
-      + Object.entries(PB_NOTE_TAGS).map(([k, v]) => row(k, `${v.icon} ${v.label}`)).join('');
+      + Object.entries(PB_NOTE_TAGS).map(([k, v]) => row(k, `${sfIcon(v.symbol)} ${v.label}`)).join('');
   }
 
   // Filter button reflects the active filter
@@ -7577,9 +7584,7 @@ function pbRenderNoteFilters(threads) {
   if (btn) {
     const active = pbNotesFilterTag !== 'all';
     btn.classList.toggle('active', active);
-    btn.innerHTML = active
-      ? `⛁ ${(PB_NOTE_TAGS[pbNotesFilterTag] || {}).label || 'Filter'}`
-      : '⛁ Filter';
+    btn.innerHTML = `${sfIcon('action.filter')}<span>${active ? (PB_NOTE_TAGS[pbNotesFilterTag] || {}).label || 'Filter' : 'Filter'}</span>`;
   }
 
   // Active-filter banner
@@ -7594,7 +7599,7 @@ function pbRenderNoteFilters(threads) {
       const tag = PB_NOTE_TAGS[pbNotesFilterTag];
       banner.className = `pb-active-filter t-${hasFilter ? pbNotesFilterTag : 'general'}`;
       const parts = [];
-      if (hasFilter) parts.push(`Showing <b>${tag ? tag.icon + ' ' + tag.label : 'tagged'}</b>`);
+      if (hasFilter) parts.push(`Showing <b>${tag ? sfIcon(tag.symbol) + ' ' + tag.label : 'tagged'}</b>`);
       if (hasSearch) parts.push(`matching <b>"${esc(pbNotesSearch.trim())}"</b>`);
       banner.innerHTML = `<span>${parts.join(' ')}</span><button type="button" class="pb-active-clear" onclick="pbClearNotesFilters()">Clear</button>`;
     }
@@ -7606,7 +7611,7 @@ function pbRenderComposerTags() {
   const slot = document.getElementById('pbTagPicker');
   if (!slot) return;
   slot.innerHTML = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
-    `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" title="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${v.icon} ${v.label}</button>`).join('');
+    `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" title="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
 }
 
 function pbSelectComposerTag(tag) {
@@ -7802,9 +7807,9 @@ function pbAttachmentHTML(att) {
     return `<div class="pb-msg-img" data-pb-img="${att.fileId}" onclick="pbOpenLightbox('${att.fileId}')" title="Click to enlarge"><div class="pb-img-loading">Loading image…</div></div>`;
   }
   return `<button type="button" class="pb-file-chip" onclick="pbDownloadNoteFile('${att.fileId}')" title="Download this file">
-    <span class="pb-file-ico">${pbFileIcon(att)}</span>
+    <span class="pb-file-ico">${sfIcon(pbFileSymbol(att))}</span>
     <span class="pb-file-meta"><span class="pb-file-name">${esc(att.name)}</span><span class="pb-file-size">${esc(pbFileSize(att.size))}</span></span>
-    <span class="pb-file-dl">⤓</span>
+    <span class="pb-file-dl">${sfIcon('action.download')}</span>
   </button>`;
 }
 
@@ -7829,7 +7834,7 @@ function pbEditBoxHTML(note) {
 function pbNoteHeadHTML(note) {
   const tag = PB_NOTE_TAGS[note.tag] || PB_NOTE_TAGS.general;
   const tagChip = note.tag !== 'general'
-    ? `<span class="pb-note-tag t-${note.tag}${note.tag === 'todo' && note.done ? ' done' : ''}">${tag.icon} ${tag.label}${note.tag === 'todo' && note.done ? ' · Done' : ''}</span>`
+    ? `<span class="pb-note-tag t-${note.tag}${note.tag === 'todo' && note.done ? ' done' : ''}">${sfIcon(tag.symbol)} ${tag.label}${note.tag === 'todo' && note.done ? ' · Done' : ''}</span>`
     : '';
   return `<header class="pb-note-head">
     <span class="pb-note-avatar" style="background:${pbAvatarColor(note)}">${esc(pbInitials(note.by))}</span>
@@ -7857,8 +7862,8 @@ function pbNoteBodyHTML(note) {
 function pbLikeButtonHTML(note) {
   const liked = pbHasLiked(note);
   const n = (note.likes || []).length;
-  return `<button type="button" class="pb-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${note.id}')" title="${liked ? 'Remove your like' : 'Like this note'}">
-    <span class="pb-like-ico">${liked ? '❤️' : '🤍'}</span>${n ? `<span class="pb-like-count">${n}</span>` : ''}
+  return `<button type="button" class="pb-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${note.id}')" title="${liked ? 'Remove your like' : 'Like this note'}" aria-pressed="${liked}">
+    <span class="pb-like-ico">${sfIcon('state.favorite')}</span>${n ? `<span class="pb-like-count">${n}</span>` : ''}
   </button>`;
 }
 
@@ -7866,11 +7871,11 @@ function pbNoteFootHTML(note, replyCount) {
   const mine = note.clientId && note.clientId === CLIENT_ID;
   return `<footer class="pb-note-foot">
     ${pbLikeButtonHTML(note)}
-    <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">💬 Reply${replyCount ? ` (${replyCount})` : ''}</button>
-    ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">✎ Edit</button>` : ''}
+    <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
+    ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${note.pinned ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
-    <button type="button" class="pb-note-act" onclick="exportProductionNoteById('${note.id}')">⤓ PDF</button>
-    ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">🗑 Delete</button>` : ''}
+    <button type="button" class="pb-note-act" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.download')} PDF</button>
+    ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
   </footer>`;
 }
 
@@ -7898,9 +7903,9 @@ function pbReplyHTML(reply) {
       <div class="pb-reply-body">${check}<div class="pb-note-main">${text}${atts}</div></div>
     </div>
     <div class="pb-reply-acts">
-      <button type="button" class="pb-reply-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${reply.id}')" title="${liked ? 'Remove your like' : 'Like'}">${liked ? '❤️' : '🤍'}${likeN ? ` ${likeN}` : ''}</button>
-      ${mine ? `<button type="button" onclick="pbStartEditNote('${reply.id}')" title="Edit your reply">✎</button>` : ''}
-      ${pbCanManageNote(reply) ? `<button type="button" class="danger" onclick="deletePlandaBearNote('${reply.id}')" title="Delete reply">🗑</button>` : ''}
+      <button type="button" class="pb-reply-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${reply.id}')" title="${liked ? 'Remove your like' : 'Like'}" aria-pressed="${liked}">${sfIcon('state.favorite')}${likeN ? ` ${likeN}` : ''}</button>
+      ${mine ? `<button type="button" onclick="pbStartEditNote('${reply.id}')" title="Edit your reply" aria-label="Edit your reply">${sfIcon('action.edit')}</button>` : ''}
+      ${pbCanManageNote(reply) ? `<button type="button" class="danger" onclick="deletePlandaBearNote('${reply.id}')" title="Delete reply" aria-label="Delete reply">${sfIcon('action.delete')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -7911,9 +7916,9 @@ function pbReplyComposerHTML(root) {
     <div class="pb-attach-tray" id="pbReplyAttachTray" hidden></div>
     <div class="pb-reply-compose-row">
       <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}…" oninput="pbAutosizeNoteInput(this)" onkeydown="pbReplyKeydown(event,'${root.id}')" onpaste="pbNotePaste(event,'reply')"></textarea>
-      <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" title="Attach to reply">📎</button>
+      <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" title="Attach to reply" aria-label="Attach to reply">${sfIcon('action.attach')}</button>
       <input type="file" id="pbReplyFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'reply')">
-      <button type="button" class="pb-post-btn small" onclick="pbPostReply('${root.id}')">Reply ➤</button>
+      <button type="button" class="pb-post-btn small" onclick="pbPostReply('${root.id}')"><span>Reply</span>${sfIcon('action.forward')}</button>
       <button type="button" class="pb-note-act" onclick="pbCancelReply()">Cancel</button>
     </div>
   </div>`;
@@ -7952,7 +7957,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   pbRenderNoteFilters(threads);
 
   if (!total) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">💬</span><b>No notes yet</b><span>Start the board — post the first note, share a photo, or drop in a document. Everyone on this session sees the same board, live.</span></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board — post the first note, share a photo, or drop in a document. Everyone on this session sees the same board, live.</span></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -7997,7 +8002,7 @@ function pbHydrateNoteImages(scope) {
     const fileId = el.getAttribute('data-pb-img');
     pbLoadNoteFile(fileId).then(dataUrl => {
       if (!el.isConnected) return;
-      if (!dataUrl) { el.innerHTML = '<div class="pb-img-missing">⚠ Image unavailable</div>'; return; }
+      if (!dataUrl) { el.innerHTML = `<div class="pb-img-missing">${sfIcon('state.warning')} Image unavailable</div>`; return; }
       const img = document.createElement('img');
       img.alt = 'Attached image';
       img.src = dataUrl;
@@ -8079,17 +8084,16 @@ function renderNotifCenter(unreadSince) {
   list.innerHTML = items.map(n => {
     const unread = (n.at || 0) > since;
     const repliesToMine = n.replyTo && plandaBearNotes.some(p => p.id === n.replyTo && pbIsMine(p));
-    const icon = n.replyTo ? '↩' : '💬';
     const tag = PB_NOTE_TAGS[n.tag];
     const action = repliesToMine ? 'replied to your note'
       : n.replyTo ? 'replied'
       : (tag && n.tag !== 'general' ? `posted a ${tag.label} note` : 'posted');
     const snippet = esc(pbStripMarkdown(n.text || '').replace(/\s+/g, ' ').trim().slice(0, 90))
-      || ((n.attachments || []).length ? '📎 attachment' : '');
+      || ((n.attachments || []).length ? 'Attachment' : '');
     return `<button type="button" class="notif-item${unread ? ' unread' : ''}" onclick="openNoteFromNotif('${n.id}')">
       <span class="notif-avatar" style="background:${pbAvatarColor(n)}">${esc(pbInitials(n.by))}</span>
       <span class="notif-body">
-        <span class="notif-line"><b>${esc(n.by)}</b> ${icon} ${action}</span>
+        <span class="notif-line"><b>${esc(n.by)}</b> ${action}</span>
         ${snippet ? `<span class="notif-snip">${snippet}</span>` : ''}
         <span class="notif-time">${pbAgo(n.at)}</span>
       </span>
@@ -8172,11 +8176,11 @@ function pbNoteNotifyText(note) {
   const snippet = pbStripMarkdown(note.text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const tail = snippet ? `: “${snippet}”` : '';
   const repliesToMine = note.replyTo && plandaBearNotes.some(p => p.id === note.replyTo && pbIsMine(p));
-  if (repliesToMine) return `↩ ${who} replied to your note${tail}`;
-  if (note.replyTo) return `↩ ${who} replied in Production Notes${tail}`;
+  if (repliesToMine) return `${who} replied to your note${tail}`;
+  if (note.replyTo) return `${who} replied in Production Notes${tail}`;
   const tag = PB_NOTE_TAGS[note.tag];
   const kind = tag && note.tag !== 'general' ? ` a ${tag.label} note` : '';
-  return `💬 ${who} posted${kind}${tail}`;
+  return `${who} posted${kind}${tail}`;
 }
 
 function pbFireNoteNotifications(fresh) {
@@ -8189,7 +8193,7 @@ function pbFireNoteNotifications(fresh) {
   if (pbBrowserNotifyEnabled() && document.hidden) {
     try {
       const note = new Notification('Planda Bear · Production Notes', {
-        body: msg.replace(/^[💬↩]\s*/, ''),
+        body: msg,
         tag: 'cueola-pb-notes',
       });
       note.onclick = () => { window.focus(); pbOpenFromNotify(); note.close(); };
@@ -8296,7 +8300,7 @@ const PRODUCTION_NOTE_GUIDES = [
   ['Use To-Do for actions', 'Tag action items as a To-Do — they get a checkbox and stay counted until someone checks them off.'],
   ['Reply under the note', 'Answers, fixes, and follow-ups belong as replies, so the whole story stays in one thread.'],
   ['Like to acknowledge', 'Tap the heart to say "got it" or "agreed" without adding a reply that clutters the thread.'],
-  ['Attach the evidence', 'Use 📎 Attach — or just paste/drop a screenshot — to share the patch photo or document you mean.'],
+  ['Attach the evidence', 'Use Attach — or just paste/drop a screenshot — to share the patch photo or document you mean.'],
   ['Pin what matters', 'Instructors can pin a note so it holds the top of the board until it is unpinned.'],
 ];
 
@@ -8326,7 +8330,7 @@ function pbAttachmentsPaperHTML(note) {
         ? `<div style="margin-top:10px"><img src="${dataUrl}" style="max-width:420px;max-height:320px;border:1px solid #ccc;border-radius:6px"><div style="font-size:10px;color:#777;margin-top:3px">${esc(a.name)}</div></div>`
         : `<div style="font-size:11px;color:#777;margin-top:6px">📷 Image attachment: ${esc(a.name)}</div>`;
     }
-    return `<div style="font-size:11px;color:#777;margin-top:6px">📎 Attached document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
+    return `<div style="font-size:11px;color:#777;margin-top:6px">Attached document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
   }).join('');
 }
 
@@ -8373,7 +8377,7 @@ function productionNotesThreadHTML() {
         ? `<div style="margin-top:6px"><img src="${dataUrl}" style="max-width:240px;max-height:180px;border:1px solid #ccc;border-radius:4px"></div>`
         : `<div class="cue-muted">📷 Image: ${esc(a.name)}</div>`;
     }
-    return `<div class="cue-muted">📎 Document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
+    return `<div class="cue-muted">Document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
   }).join('');
   const row = (n, isReply) => `<tr>
     <td>${esc(n.at ? new Date(n.at).toLocaleString() : '')}</td>
