@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260613a">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260614a">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -1280,7 +1280,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .notif-panel{position:fixed;top:60px;right:12px;z-index:600;width:340px;max-width:calc(100vw - 24px);max-height:min(440px,calc(100vh - 80px));display:flex;flex-direction:column;border:1px solid var(--bord2);border-radius:14px;background:color-mix(in srgb,var(--s2) 98%,transparent);box-shadow:0 20px 56px rgba(0,0,0,.5);overflow:hidden;animation:pbBadgePop .16s var(--ease)}
 .notif-panel[hidden]{display:none}
 .notif-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s3) 60%,transparent)}
-.notif-title{font-size:13px;font-weight:800;color:var(--text)}
+.notif-title{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--text)}
 .notif-readall{border:0;background:transparent;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:3px 6px;border-radius:6px}
 .notif-readall:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .notif-list{overflow-y:auto;display:flex;flex-direction:column;min-height:0}
@@ -1602,10 +1602,10 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
      ENTRY SCREEN
 ══════════════════════════════════════════ -->
 <div class="screen on" id="entry">
-  <div class="notif-center entry-notif" id="notifCenter" hidden>
-    <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Notifications" aria-label="Notifications">🔔<span class="tbtn-badge" id="notifUnread" hidden></span></button>
+  <div class="notif-center entry-notif" id="notifCenter">
+    <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Message center" aria-label="Message center"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
     <div class="notif-panel" id="notifPanel" hidden>
-      <div class="notif-head"><span class="notif-title">🔔 Notifications</span><button type="button" class="notif-readall" onclick="markAllNotifsRead()">Mark all read</button></div>
+      <div class="notif-head"><span class="notif-title"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span> Message Center</span><button type="button" class="notif-readall" onclick="markAllNotifsRead()">Mark all read</button></div>
       <div class="notif-list" id="notifList"></div>
     </div>
   </div>
@@ -2448,7 +2448,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
             <div class="pb-filter-pop" id="pbNotesFilters" hidden></div>
           </div>
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
-          <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()">🔕 Alerts</button>
+          <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
           <button type="button" class="pb-chat-tool" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
         </div>
@@ -2691,7 +2691,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260613j"></script>
+<script src="cueola-app.js?v=20260614a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

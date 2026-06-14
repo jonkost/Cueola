@@ -8047,15 +8047,23 @@ function pbUnreadNoteCount() {
   return plandaBearNotes.filter(n => (n.at || 0) > since && !pbIsMine(n)).length;
 }
 
+function pbNotificationSymbol(unread, muted=false) {
+  if (muted) return unread ? 'notification.unread-muted' : 'notification.muted';
+  return unread ? 'notification.unread' : 'notification.default';
+}
+
 function pbUpdatePlandaBearBadge() {
-  // The bell lives on the front page; show it only once the session has notes.
+  // Keep the message center available on the front page, including its empty state.
   const center = document.getElementById('notifCenter');
-  if (center) center.hidden = plandaBearNotes.length === 0;
+  if (center) center.hidden = false;
   const badge = document.getElementById('notifUnread');
   if (!badge) return;
   const n = pbNotesBoardOpen() ? 0 : pbUnreadNoteCount();
+  const symbol = document.querySelector('#notifBellBtn .sf-symbol');
+  if (symbol) symbol.dataset.symbol = pbNotificationSymbol(n > 0);
   if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.hidden = false; }
   else { badge.hidden = true; }
+  pbUpdateBellBtn();
 }
 
 function pbMarkNotesRead() {
@@ -8078,7 +8086,7 @@ function renderNotifCenter(unreadSince) {
   const since = unreadSince == null ? pbGetLastRead() : unreadSince;
   const items = notifItems();
   if (!items.length) {
-    list.innerHTML = `<div class="notif-empty">No notifications yet.<br>When a teammate posts or replies in Production Notes, it shows up here.</div>`;
+    list.innerHTML = `<div class="notif-empty">No messages yet.<br>When a teammate posts or replies in Production Notes, it shows up here.</div>`;
     return;
   }
   list.innerHTML = items.map(n => {
@@ -8237,8 +8245,10 @@ function pbUpdateBellBtn() {
   const btn = document.getElementById('pbBellBtn');
   if (!btn) return;
   const on = pbBrowserNotifyEnabled();
+  const unread = !pbNotesBoardOpen() && pbUnreadNoteCount() > 0;
   btn.classList.toggle('on', on);
-  btn.textContent = on ? '🔔 Alerts on' : '🔕 Alerts';
+  btn.setAttribute('aria-pressed', String(on));
+  setSymbolButtonLabel(btn, pbNotificationSymbol(unread, !on), on ? 'Alerts on' : 'Alerts off');
   btn.title = on
     ? 'Browser notifications are on — click to turn off'
     : 'Get a browser notification when teammates post (works while this tab is open in the background)';

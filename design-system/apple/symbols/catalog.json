@@ -5,6 +5,9 @@
     {
       "file": "Apple Symbol SVG.zip",
       "sha256": "7e925c62c974029a0543a1674982c8491a44b3f509be5ae052c8ea6e7d68cec1"
+    },
+    {
+      "file": "cueola-bell-symbols"
     }
   ],
   "metadataSource": {
@@ -47,7 +50,7 @@
     "weather": "Weather",
     "whatsnew": "What\u2019s New"
   },
-  "symbolCount": 110,
+  "symbolCount": 114,
   "aliasCount": 1,
   "symbols": [
     {
@@ -63,7 +66,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.reset"
+      ],
       "availability": "2019",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrow.counterclockwise.svg",
@@ -155,7 +160,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.download"
+      ],
       "availability": "2019",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrow.down.to.line.svg",
@@ -247,7 +254,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.upload"
+      ],
       "availability": "2019",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrow.up.to.line.svg",
@@ -379,7 +388,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.down"
+      ],
       "availability": "2023",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.down.svg",
@@ -564,7 +575,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.up"
+      ],
       "availability": "2023",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.up.svg",
@@ -730,6 +743,193 @@
         "master": "Regular-S",
         "viewBox": "6.784 -77.639 84.38 84.405",
         "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "bell",
+      "displayName": "Bell",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "multicolor",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "mail",
+        "notify"
+      ],
+      "cueolaTags": [],
+      "semanticNames": [
+        "notification.default"
+      ],
+      "availability": "2019",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/bell.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/bell.svg",
+      "sha256": "92b8b7cd237112af082a134f327785b4ef3c7941b21eca34682dea03c3eebd00",
+      "aliases": [],
+      "template": {
+        "glyph": "1002D9",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from bell",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "5.769 -77.141 76.841 83.774",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "bell.badge",
+      "displayName": "Bell Badge",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "multicolor",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "notifications"
+      ],
+      "cueolaTags": [],
+      "semanticNames": [
+        "notification.unread"
+      ],
+      "availability": "2020",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/bell.badge.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/bell.badge.svg",
+      "sha256": "60ab1a1473a033fdce25e138738c4bb5969f9c2ef90b7687a39db578ad9866ff",
+      "aliases": [],
+      "template": {
+        "glyph": "101CCB",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from bell.badge",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "5.616 -83.397 79.88 90.183",
+        "pathCount": 3,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "bell.badge.slash",
+      "displayName": "Bell Badge Slash",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "notification.unread-muted"
+      ],
+      "availability": "2023",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/bell.badge.slash.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/bell.badge.slash.svg",
+      "sha256": "e8109e70610b09197009bdc23db1021769b5a84d336f2278306a05ee04b5562e",
+      "aliases": [],
+      "template": {
+        "glyph": "102133",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from bell.badge.slash",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "0.819 -79.003 88.651 88.609",
+        "pathCount": 3,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "bell.slash",
+      "displayName": "Bell Slash",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "multicolor",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "mail",
+        "remove"
+      ],
+      "cueolaTags": [],
+      "semanticNames": [
+        "notification.muted"
+      ],
+      "availability": "2019",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/bell.slash.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/bell.slash.svg",
+      "sha256": "59350df76518ea4f11605afb893fa547c39431886c1ed383a915b83b92eca803",
+      "aliases": [],
+      "template": {
+        "glyph": "101A81",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from bell.slash",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "0.819 -79.003 88.651 88.609",
+        "pathCount": 3,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -1644,7 +1844,10 @@
       "cueolaTags": [
         "department:playback"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "content.display",
+        "department.video"
+      ],
       "availability": "2020",
       "directionalCandidate": false,
       "sourcePath": "source/media/display.svg",
@@ -2543,7 +2746,9 @@
       "cueolaTags": [
         "department:script"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "content.list"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/textformatting/list.bullet.svg",
@@ -2678,7 +2883,9 @@
       "cueolaTags": [
         "department:script"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.guide"
+      ],
       "availability": "2021",
       "directionalCandidate": false,
       "sourcePath": "source/textformatting/magazine.svg",
@@ -3267,6 +3474,7 @@
         "department:graphics"
       ],
       "semanticNames": [
+        "content.image",
         "department.graphics"
       ],
       "availability": "2021",
@@ -3681,7 +3889,9 @@
       "cueolaTags": [
         "department:script"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "content.note"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/textformatting/quote.bubble.svg",
@@ -3908,7 +4118,9 @@
       "cueolaTags": [
         "action:settings"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.filter"
+      ],
       "availability": "2020",
       "directionalCandidate": false,
       "sourcePath": "source/editing/slider.vertical.3.svg",
@@ -4100,7 +4312,9 @@
         "zoom"
       ],
       "cueolaTags": [],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.fullscreen"
+      ],
       "availability": "2023",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/square.arrowtriangle.4.outward.svg",
@@ -4144,7 +4358,9 @@
       "cueolaTags": [
         "department:graphics"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.grid"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/objectsandtools/square.grid.4x3.fill.svg",
@@ -4430,7 +4646,9 @@
       "cueolaTags": [
         "department:script"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.add"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/textformatting/text.badge.plus.svg",

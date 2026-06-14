@@ -596,7 +596,7 @@ def main() -> int:
     write_json(output / "aliases.json", dict(sorted(aliases.items())))
 
     with (output / "catalog.csv").open("w", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(
             [
                 "name",
