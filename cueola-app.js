@@ -116,6 +116,9 @@ let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
 let freeTextMode = false;
+let pnPanelOpen = false;
+let pnTargetBeatId = null;
+let pnFilterTag = 'all';
 
 const LOCAL_DRAFT_PREFIX = 'cueola_local_draft_';
 
@@ -8448,6 +8451,149 @@ async function exportProductionNotesPDF() {
     toast('PDF export needs an internet connection. Use the browser print dialog instead.');
     window.print();
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BUILD-SIDE PRODUCTION NOTES PANEL
+   Brings Planda Bear notes into the rundown build view as a reference
+   panel. Notes can be sent to a row's notes field, set as a script cue,
+   or used to create a new row — without leaving the build screen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+function togglePnPanel() {
+  pnPanelOpen = !pnPanelOpen;
+  const panel = document.getElementById('pnPanel');
+  const btn   = document.getElementById('pnPanelBtn');
+  if (panel) panel.classList.toggle('open', pnPanelOpen);
+  if (btn)   btn.classList.toggle('active', pnPanelOpen);
+  if (pnPanelOpen) loadPlandaBearNotes().then(renderPnPanel);
+}
+
+function renderPnPanel() {
+  const panel = document.getElementById('pnPanel');
+  if (!panel || !pnPanelOpen) return;
+
+  const topLevel = plandaBearNotes.filter(n => !n.replyTo);
+  const filtered = pnFilterTag === 'all' ? topLevel : topLevel.filter(n => n.tag === pnFilterTag);
+  const total    = topLevel.length;
+
+  const rowOpts = beats.map((b, i) =>
+    `<option value="${b.id}"${pnTargetBeatId === b.id ? ' selected' : ''}>${i + 1}. ${esc(b.info || 'Untitled')}</option>`
+  ).join('');
+  const targetControl = beats.length
+    ? `<select class="pn-target-select" onchange="pnSetTarget(this.value)" aria-label="Target row">
+        <option value=""${!pnTargetBeatId ? ' selected' : ''}>— Pick a row —</option>
+        ${rowOpts}
+       </select>`
+    : `<span class="pn-no-rows">Add a row first</span>`;
+
+  const TAG_KEYS = ['all', 'general', 'audio', 'video', 'lighting', 'todo'];
+  const chips = TAG_KEYS.map(t => {
+    const label = t === 'all' ? 'All' : (PB_NOTE_TAGS[t]?.label || t);
+    const sym   = t !== 'all' ? sfIcon(PB_NOTE_TAGS[t]?.symbol || 'content.note') : '';
+    return `<button type="button" class="pn-tag-chip${pnFilterTag === t ? ' active' : ''}" onclick="pnSetFilter('${t}')">${sym}${label}</button>`;
+  }).join('');
+
+  const cards = filtered.length
+    ? filtered.map(n => pnNoteCardHTML(n)).join('')
+    : `<div class="pn-empty">${sfIcon('content.note')}<span>No notes${pnFilterTag !== 'all' ? ' tagged ' + pnFilterTag : ''}</span></div>`;
+
+  panel.innerHTML = `
+    <div class="pn-head">
+      <div class="pn-head-row">
+        <span class="pn-head-title">${sfIcon('content.note')} Notes</span>
+        ${total ? `<span class="pn-count">${total}</span>` : ''}
+        <button type="button" class="pn-close" onclick="togglePnPanel()" aria-label="Close notes panel" title="Close">${sfIcon('action.close')}</button>
+      </div>
+      <div class="pn-target-row">
+        <span class="pn-target-label">Row</span>
+        ${targetControl}
+      </div>
+      <div class="pn-tag-chips">${chips}</div>
+    </div>
+    <div class="pn-scroll" id="pnScroll">${cards}</div>
+  `;
+}
+
+function pnNoteCardHTML(note) {
+  const tag     = PB_NOTE_TAGS[note.tag] || PB_NOTE_TAGS.general;
+  const preview = note.text ? note.text.slice(0, 180) + (note.text.length > 180 ? '…' : '') : '';
+  const hasText = Boolean(note.text);
+  const atts    = (note.attachments || []).length;
+  const canTarget = Boolean(pnTargetBeatId && beats.find(b => b.id === pnTargetBeatId));
+
+  return `<div class="pn-card" data-note-id="${note.id}">
+    <div class="pn-card-meta">
+      <span class="pn-card-tag t-${note.tag}">${sfIcon(tag.symbol)} ${tag.label}</span>
+      <span class="pn-card-by">${esc(note.by)}</span>
+      <span class="pn-card-time">${esc(pbNoteTime(note.at))}</span>
+    </div>
+    ${preview ? `<div class="pn-card-text">${esc(preview)}</div>` : ''}
+    ${atts ? `<div class="pn-card-atts">${sfIcon('action.attach')} ${atts} file${atts > 1 ? 's' : ''}</div>` : ''}
+    <div class="pn-card-acts">
+      ${canTarget && hasText ? `
+        <button type="button" class="pn-act-btn pn-act-notes" onclick="pnAddToRowNotes('${note.id}')" title="Copy note text to the target row's notes field">
+          ${sfIcon('content.note')} Row Notes
+        </button>
+        <button type="button" class="pn-act-btn pn-act-script" onclick="pnAddAsScript('${note.id}')" title="Set as script cue text on the target row">
+          ${sfIcon('content.script')} Script
+        </button>
+      ` : ''}
+      <button type="button" class="pn-act-btn pn-act-new" onclick="pnAddAsNewRow('${note.id}')" title="Create a new rundown row from this note">
+        ${sfIcon('action.add')} New Row
+      </button>
+    </div>
+  </div>`;
+}
+
+function pnSetTarget(val) {
+  pnTargetBeatId = val ? Number(val) : null;
+  renderPnPanel();
+}
+
+function pnSetFilter(tag) {
+  pnFilterTag = tag;
+  renderPnPanel();
+}
+
+function pnAddToRowNotes(noteId) {
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  const beat = beats.find(b => b.id === pnTargetBeatId);
+  if (!note || !beat) { toast('Pick a target row first.'); return; }
+  if (!note.text)     { toast('Note has no text to add.'); return; }
+  beat.notes = note.text.slice(0, 120);
+  renderRundown();
+  syncToFirestore();
+  toast(`Note added to row ${beats.indexOf(beat) + 1}.`);
+  renderPnPanel();
+}
+
+function pnAddAsScript(noteId) {
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  const beat = beats.find(b => b.id === pnTargetBeatId);
+  if (!note || !beat) { toast('Pick a target row first.'); return; }
+  if (!note.text)     { toast('Note has no text to use as script.'); return; }
+  if (!beat.cues) beat.cues = {};
+  beat.cues.script = { ...(beat.cues.script || {}), text: note.text };
+  renderRundown();
+  syncToFirestore();
+  toast(`Script set on row ${beats.indexOf(beat) + 1}.`);
+  renderPnPanel();
+}
+
+function pnAddAsNewRow(noteId) {
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  if (!note) return;
+  const firstLine = (note.text || '').split('\n')[0].trim().slice(0, 80) || 'From Production Notes';
+  const noteText  = (note.text || '').slice(0, 120);
+  const newId     = beats.length ? Math.max(...beats.map(b => b.id)) + 1 : 1;
+  const newBeat   = { id: newId, style: 'flex', info: firstLine, notes: noteText, min: 0, sec: 0, done: false, cues: {} };
+  beats.push(newBeat);
+  pnTargetBeatId = newId;
+  renderRundown();
+  syncToFirestore();
+  toast('New row added from note — now the target row.');
+  renderPnPanel();
 }
 
 function togglePbHub(head) {
