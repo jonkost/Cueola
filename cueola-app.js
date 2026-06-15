@@ -50,6 +50,7 @@ let session = { code:'', role:'', userName:'', isDemo:false, isExpert:false };
 let lsIdx = -1;
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
+let followTargetId = '';    // presence id keeps duplicate/stale display names from hijacking follow
 let editId = null;
 let timerInterval = null;
 let elapsedSecs = 0;
@@ -1733,6 +1734,14 @@ const presenceId = Math.random().toString(36).slice(2,10);
 let presenceInterval = null;
 let firestoreUnsub = null;
 const FIREBASE_WAIT_MS = 2500;
+let rundownCloudBeats = [];
+let rundownShadowBeats = [];
+let rundownShadowShow = { name:'Untitled Show', start:'', freeMode:false };
+let rundownAliases = {};
+let rundownPendingBatches = [];
+let rundownSyncRunning = false;
+let rundownSyncRetryTimer = null;
+let beatIdSequence = 0;
 
 function genCode() {
   const d = new Date();
@@ -1833,8 +1842,15 @@ async function joinSession() {
         errEl.classList.add('on');
         return;
       }
+      const d = snap.data() || {};
       session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
-      freeTextMode = false;
+      show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
+      beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
+      freeTextMode = Boolean(d.freeMode);
+      rundownCloudBeats = cloneRundownValue(beats);
+      rundownShadowBeats = cloneRundownValue(beats);
+      rundownShadowShow = { name:show.name, start:show.start, freeMode:freeTextMode };
+      rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
       hideModal('modal-stud');
       enterRundown();
     }).catch(() => {
@@ -2012,6 +2028,231 @@ function enterRundown() {
 // ─────────────────────────────────────────────────────────────
 // FIREBASE
 // ─────────────────────────────────────────────────────────────
+function cloneRundownValue(value) {
+  if (value === undefined || value === null) return value;
+  if (globalThis.structuredClone) return globalThis.structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function rundownValueEqual(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function nextBeatId() {
+  if (globalThis.crypto?.getRandomValues) {
+    const parts = new Uint32Array(2);
+    do {
+      globalThis.crypto.getRandomValues(parts);
+      beatIdSequence = (parts[0] & 0x1fffff) * 0x100000000 + parts[1];
+    } while (!beatIdSequence || beats.some(beat => beat.id === beatIdSequence));
+    return beatIdSequence;
+  }
+  beatIdSequence = (beatIdSequence + 1) % 1000;
+  return Date.now() * 1000 + beatIdSequence;
+}
+
+function resolveRundownBeatId(id, aliases=rundownAliases) {
+  let current = String(id);
+  const seen = new Set();
+  while (aliases?.[current] !== undefined && !seen.has(current)) {
+    seen.add(current);
+    current = String(aliases[current]);
+  }
+  return current;
+}
+
+function rundownBeatKey(beat) {
+  return [beat?.info, beat?.notes, beat?.style, beat?.min, beat?.sec]
+    .map(v => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase())
+    .join('|');
+}
+
+function buildBeatPatch(before, after) {
+  const patch = {};
+  ['style','info','notes','min','sec','done','_createdAt','_createdBy'].forEach(key => {
+    if (!rundownValueEqual(before?.[key], after?.[key])) patch[key] = cloneRundownValue(after?.[key]);
+  });
+  const cuePatch = {};
+  const cueTypes = new Set([...Object.keys(before?.cues || {}), ...Object.keys(after?.cues || {})]);
+  cueTypes.forEach(type => {
+    if (!rundownValueEqual(before?.cues?.[type], after?.cues?.[type])) {
+      cuePatch[type] = after?.cues?.[type] === undefined ? null : cloneRundownValue(after.cues[type]);
+    }
+  });
+  if (Object.keys(cuePatch).length) patch.cues = cuePatch;
+  return patch;
+}
+
+function buildRundownBatch(beforeBeats, afterBeats, beforeShow, afterShow) {
+  const beforeMap = new Map((beforeBeats || []).map(beat => [String(beat.id), beat]));
+  const afterMap = new Map((afterBeats || []).map(beat => [String(beat.id), beat]));
+  const additions = [];
+  const patches = [];
+  const removals = [];
+
+  afterMap.forEach((beat, id) => {
+    const before = beforeMap.get(id);
+    if (!before) additions.push(cloneRundownValue(beat));
+    else {
+      const patch = buildBeatPatch(before, beat);
+      if (Object.keys(patch).length) patches.push({ id:beat.id, patch });
+    }
+  });
+  beforeMap.forEach((beat, id) => {
+    if (!afterMap.has(id)) removals.push(beat.id);
+  });
+
+  const beforeOrder = (beforeBeats || []).map(beat => String(beat.id));
+  const afterOrder = (afterBeats || []).map(beat => String(beat.id));
+  const showPatch = {};
+  if (beforeShow?.name !== afterShow?.name) showPatch.showName = afterShow.name;
+  if (normalizeTimeValue(beforeShow?.start) !== normalizeTimeValue(afterShow?.start)) showPatch.startTime = normalizeTimeValue(afterShow.start);
+  if (Boolean(beforeShow?.freeMode) !== Boolean(afterShow?.freeMode)) showPatch.freeMode = Boolean(afterShow.freeMode);
+
+  return {
+    id: `${presenceId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    sessionCode: session.code,
+    additions,
+    patches,
+    removals,
+    order: rundownValueEqual(beforeOrder, afterOrder) ? null : afterBeats.map(beat => beat.id),
+    showPatch,
+    by: session.userName || 'Someone',
+    at: Date.now(),
+  };
+}
+
+function rundownBatchHasChanges(batch) {
+  return Boolean(batch.additions.length || batch.patches.length || batch.removals.length || batch.order || Object.keys(batch.showPatch).length);
+}
+
+function applyBeatPatch(beat, patch) {
+  const next = { ...beat };
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    if (key !== 'cues') next[key] = cloneRundownValue(value);
+  });
+  if (patch?.cues) {
+    next.cues = { ...(beat?.cues || {}) };
+    Object.entries(patch.cues).forEach(([type, value]) => {
+      if (value === null) delete next.cues[type];
+      else next.cues[type] = cloneRundownValue(value);
+    });
+  }
+  return migrateBeat(next);
+}
+
+function applyRundownBatch(remoteBeats, batch, knownAliases=rundownAliases, aliasSink=null) {
+  const ordered = (remoteBeats || []).map(migrateBeat);
+  const byId = new Map(ordered.map(beat => [String(beat.id), beat]));
+  const aliases = { ...(knownAliases || {}) };
+  const resolveId = id => resolveRundownBeatId(id, aliases);
+
+  (batch.removals || []).forEach(id => byId.delete(resolveId(id)));
+  (batch.additions || []).forEach(rawBeat => {
+    const beat = migrateBeat(rawBeat);
+    const id = String(beat.id);
+    const knownId = resolveId(id);
+    if (knownId !== id && byId.has(knownId)) return;
+    if (byId.has(id)) {
+      byId.set(id, beat);
+      return;
+    }
+    const createdAt = Number(beat._createdAt) || 0;
+    const duplicate = createdAt ? [...byId.values()].find(existing =>
+      rundownBeatKey(existing) === rundownBeatKey(beat) &&
+      existing._createdBy && existing._createdBy !== beat._createdBy &&
+      Math.abs((Number(existing._createdAt) || 0) - createdAt) < 15000
+    ) : null;
+    if (duplicate) aliases[id] = resolveId(duplicate.id);
+    else byId.set(id, beat);
+  });
+  (batch.patches || []).forEach(({ id, patch }) => {
+    const key = resolveId(id);
+    const current = byId.get(key);
+    if (current) byId.set(key, applyBeatPatch(current, patch));
+  });
+
+  if (aliasSink) Object.assign(aliasSink, aliases);
+
+  if (batch.order) {
+    const seen = new Set();
+    const result = [];
+    batch.order.forEach(rawId => {
+      const id = resolveId(rawId);
+      if (seen.has(id) || !byId.has(id)) return;
+      seen.add(id);
+      result.push(byId.get(id));
+    });
+    ordered.forEach(beat => {
+      const id = String(beat.id);
+      if (!seen.has(id) && byId.has(id)) {
+        seen.add(id);
+        result.push(byId.get(id));
+      }
+    });
+    byId.forEach((beat, id) => {
+      if (!seen.has(id)) result.push(beat);
+    });
+    return result;
+  }
+  return ordered.filter(beat => byId.has(String(beat.id))).map(beat => byId.get(String(beat.id)))
+    .concat([...byId.values()].filter(beat => !ordered.some(existing => String(existing.id) === String(beat.id))));
+}
+
+function projectPendingRundownBatches(remoteBeats) {
+  return rundownPendingBatches.reduce((current, batch) => applyRundownBatch(current, batch, rundownAliases), remoteBeats || []);
+}
+
+async function flushRundownSyncQueue() {
+  if (rundownSyncRunning || !rundownPendingBatches.length || !window._runTransaction) return;
+  rundownSyncRunning = true;
+  clearTimeout(rundownSyncRetryTimer);
+  rundownSyncRetryTimer = null;
+  const batch = rundownPendingBatches[0];
+  const targetSessionCode = batch.sessionCode || session.code;
+  const ref = window._doc(window._db, 'sessions', targetSessionCode);
+  try {
+    let committedBeats = null;
+    let committedAliases = null;
+    await window._runTransaction(window._db, async transaction => {
+      const snap = await transaction.get(ref);
+      const data = snap.exists() ? (snap.data() || {}) : {};
+      const mergedAliases = { ...(data.rundownAliases || {}) };
+      committedBeats = applyRundownBatch(Array.isArray(data.beats) ? data.beats : [], batch, mergedAliases, mergedAliases);
+      committedAliases = mergedAliases;
+      const update = {
+        beats: committedBeats,
+        rundownAliases: mergedAliases,
+        ...batch.showPatch,
+        rundownUpdatedAt: Date.now(),
+        rundownUpdatedBy: batch.by,
+      };
+      if (snap.exists()) transaction.update(ref, update);
+      else transaction.set(ref, { code:targetSessionCode, ...update }, { merge:true });
+    });
+    const batchIndex = rundownPendingBatches.findIndex(item => item.id === batch.id);
+    if (batchIndex >= 0) rundownPendingBatches.splice(batchIndex, 1);
+    if (session.code === targetSessionCode) {
+      rundownCloudBeats = committedBeats || rundownCloudBeats;
+      rundownAliases = committedAliases || rundownAliases;
+    }
+    if (session.code === targetSessionCode && !rundownPendingBatches.length) {
+      rundownShadowBeats = cloneRundownValue(beats);
+      rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+    }
+  } catch (err) {
+    console.warn('Rundown merge save failed; retrying.', err);
+    clearTimeout(rundownSyncRetryTimer);
+    rundownSyncRetryTimer = setTimeout(() => {
+      rundownSyncRetryTimer = null;
+      flushRundownSyncQueue();
+    }, 1500);
+  } finally {
+    rundownSyncRunning = false;
+    if (rundownPendingBatches.length && !rundownSyncRetryTimer) queueMicrotask(flushRundownSyncQueue);
+  }
+}
+
 function setupFirestore() {
   const init = () => {
     if (firestoreUnsub) firestoreUnsub();
@@ -2029,10 +2270,27 @@ function setupFirestore() {
     firestoreUnsub = window._onSnapshot(ref, snap => {
       if (!snap.exists()) return;
       const d = snap.data();
-      if (d.beats && Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
-      if (d.showName) show.name = d.showName;
-      if (d.startTime !== undefined) show.start = normalizeTimeValue(d.startTime);
-      freeTextMode = Boolean(d.freeMode);
+      rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
+      if (d.beats && Array.isArray(d.beats)) {
+        rundownCloudBeats = d.beats.map(migrateBeat);
+        beats = projectPendingRundownBatches(rundownCloudBeats);
+        if (!rundownPendingBatches.length) rundownShadowBeats = cloneRundownValue(beats);
+      }
+      const projectedShow = rundownPendingBatches.reduce((current, batch) => ({
+        name: batch.showPatch.showName ?? current.name,
+        start: batch.showPatch.startTime ?? current.start,
+        freeMode: batch.showPatch.freeMode ?? current.freeMode,
+      }), {
+        name:d.showName || show.name,
+        start:d.startTime !== undefined ? normalizeTimeValue(d.startTime) : show.start,
+        freeMode:Boolean(d.freeMode),
+      });
+      show.name = projectedShow.name;
+      show.start = normalizeTimeValue(projectedShow.start);
+      freeTextMode = Boolean(projectedShow.freeMode);
+      if (!rundownPendingBatches.length) {
+        rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+      }
       if (d.customSources) sessionCustomSources = d.customSources;
       if (d.prePro && typeof d.prePro === 'object') {
         try {
@@ -2047,7 +2305,7 @@ function setupFirestore() {
       // presence.idx). Browsing self keeps my own position. A student who hasn't
       // chosen mirrors the show caller (first instructor).
       {
-        const followedIdx = resolveFollowedIdx(d.presence, { followTarget, browsingSelf, role: session.role, myName: session.userName });
+        const followedIdx = resolveFollowedIdx(d.presence, { followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName });
         const targetIdx = followedIdx != null ? followedIdx : (session.role === 'student' && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
         if (targetIdx != null && targetIdx !== lsIdx) {
           lsIdx = targetIdx;
@@ -2057,7 +2315,12 @@ function setupFirestore() {
       if (d.prompter && d.prompter.text !== undefined && session.role==='student') {
         prompterText = d.prompter.text || '';
         const el = document.getElementById('lsPrompterText');
-        if (el) el.textContent = prompterText;
+        // Script operators are commonly joined as students. Presence and other
+        // session writes also trigger this snapshot, so never replace a draft
+        // while it is being edited or waiting for its debounced cloud push.
+        if (el && !livePrompterDraftDirty && document.activeElement !== el) {
+          el.textContent = prompterText;
+        }
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
         _postPrompterMessage(getPrompterPayload(false));
         ptUpdateFromCueola(prompterText);
@@ -2113,9 +2376,13 @@ function setupFirestore() {
 function syncToFirestore() {
   saveLocalDraft();
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
-  window._updateDoc(window._doc(window._db,'sessions',session.code),{
-    beats, showName:show.name, startTime:normalizeTimeValue(show.start), freeMode:freeTextMode
-  }).catch(()=>{});
+  const currentShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+  const batch = buildRundownBatch(rundownShadowBeats, beats, rundownShadowShow, currentShow);
+  if (!rundownBatchHasChanges(batch)) return;
+  rundownPendingBatches.push(batch);
+  rundownShadowBeats = cloneRundownValue(beats);
+  rundownShadowShow = currentShow;
+  flushRundownSyncQueue();
 }
 
 function syncLiveIdx() {
@@ -2138,7 +2405,7 @@ async function joinPresence() {
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName,idx:Math.max(lsIdx,0)}
+      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
     });
     clearInterval(presenceInterval);
     presenceInterval = setInterval(async()=>{
@@ -2638,8 +2905,8 @@ function buildAddRowBeat() {
   const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
   const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
   const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
-  const newId = beats.length ? Math.max(...beats.map(b=>b.id))+1 : 1;
-  return { id:newId, style:arStyle, info, notes, min, sec, done:false, cues:{} };
+  const now = Date.now();
+  return { id:nextBeatId(), style:arStyle, info, notes, min, sec, done:false, cues:{}, _createdAt:now, _createdBy:presenceId };
 }
 
 function insertAddRowBeat() {
@@ -3824,6 +4091,7 @@ function toggleShowClock() {
     stopTimer(false);
     liveClockRunning = false;
   } else {
+    returnToOwnLivePosition();
     startTimer();
   }
   updateLiveClockButton();
@@ -4176,6 +4444,15 @@ function renderLive() {
 
   document.getElementById('liveshow')?.classList.toggle('lf-on', liveFocusMode);
   updateLiveFocusToggle();
+  if (liveFocusMode) {
+    renderLiveFocus();
+    applyLivePrompterPanelState();
+    renderFollowChips();
+    updateLiveOverview();
+    updateLsPrompter();
+    renderLivePrompterControls();
+    return;
+  }
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
@@ -4352,6 +4629,7 @@ function detachIfFollowing() {
   if (isFollowingSelf()) return;
   browsingSelf = true;
   followTarget = '';
+  followTargetId = '';
   renderFollowChips();
   updateFollowInPresence(session.userName);
 }
@@ -4377,24 +4655,47 @@ function lsPrev() {
 // chosen — the show caller (first instructor broadcasting a position).
 function resolveFollowedIdx(presence, opts) {
   if (!opts || opts.browsingSelf) return null;
-  const people = Object.values(presence || {});
+  const people = activePresenceEntries(presence);
+  if (opts.followTargetId) {
+    const target = people.find(([id]) => id === opts.followTargetId)?.[1];
+    if (target && Number.isFinite(target.idx)) return target.idx;
+  }
   if (opts.followTarget && opts.followTarget !== opts.myName) {
-    const t = people.find(p => p && p.name === opts.followTarget);
+    const t = people.find(([, p]) => sameParticipantName(p?.name, opts.followTarget))?.[1];
     if (t && Number.isFinite(t.idx)) return t.idx;
   }
   if (opts.role === 'student') {
-    const caller = people.find(p => p && p.role === 'instructor' && Number.isFinite(p.idx));
+    const caller = people.find(([, p]) => p && p.role === 'instructor' && Number.isFinite(p.idx))?.[1];
     if (caller) return caller.idx;
   }
   return null;
 }
 
+function participantNameKey(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function sameParticipantName(a, b) {
+  return participantNameKey(a) === participantNameKey(b);
+}
+
+// Newest active connection first. A person can have an old tab or reconnect
+// under the same display name; following must use the live record, not whichever
+// object property Firestore happens to enumerate first.
+function activePresenceEntries(presence=currentPresence) {
+  const now = Date.now();
+  return Object.entries(presence || {})
+    .filter(([, p]) => p?.name && (now - (p.lastSeen || 0)) < 90000)
+    .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
+}
+
 // Who am I effectively following right now (for highlighting the right chip)?
 function effectiveFollowedName(presence) {
   if (browsingSelf) return session.userName;
+  if (followTargetId && presence?.[followTargetId]?.name) return presence[followTargetId].name;
   if (followTarget) return followTarget;
   if (session.role === 'student') {
-    const caller = Object.values(presence || {}).find(p => p && p.role === 'instructor');
+    const caller = activePresenceEntries(presence).find(([, p]) => p?.role === 'instructor')?.[1];
     if (caller) return caller.name;
   }
   return session.userName;
@@ -4403,14 +4704,20 @@ function effectiveFollowedName(presence) {
 function renderFollowChips() {
   const chips = document.getElementById('followChips');
   if (!chips) return;
-  const now = Date.now();
   const activeName = effectiveFollowedName(currentPresence);
-  const others = Object.values(currentPresence||{})
-    .filter(p=>p.name!==session.userName&&(now-(p.lastSeen||0))<90000);
+  const seenNames = new Set();
+  const others = activePresenceEntries(currentPresence)
+    .filter(([, p]) => !sameParticipantName(p.name, session.userName))
+    .filter(([, p]) => {
+      const key = participantNameKey(p.name);
+      if (seenNames.has(key)) return false;
+      seenNames.add(key);
+      return true;
+    });
   let html = `<div class="follow-chip follow-self ${activeName===session.userName?'active':''}" onclick="followSelf()">Myself</div>`;
-  others.forEach(p=>{
-    const isActive = activeName === p.name;
-    html+=`<div class="follow-chip ${isActive?'active':''}" onclick="followPerson(this,'${esc(p.name)}')">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+  others.forEach(([id, p])=>{
+    const isActive = followTargetId ? followTargetId === id : sameParticipantName(activeName, p.name);
+    html+=`<div class="follow-chip ${isActive?'active':''}" data-follow-id="${esc(id)}" data-follow-name="${esc(p.name)}" onclick="followPerson(this)">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
   });
   chips.innerHTML = html;
   const forceBtn = document.getElementById('forceFollowBtn');
@@ -4422,18 +4729,24 @@ function renderFollowChips() {
 function followSelf() {
   browsingSelf = true;        // detach and browse the rundown on my own
   followTarget = '';
+  followTargetId = '';
   renderFollowChips();
   updateFollowInPresence(session.userName);
 }
 
-function followPerson(el, name) {
+function followPerson(el, legacyName='', legacyId='') {
+  const name = el?.dataset?.followName || legacyName;
+  const id = el?.dataset?.followId || legacyId;
+  if (!name) return;
   browsingSelf = false;
   followTarget = name;
+  followTargetId = id;
   renderFollowChips();
   toast(`Following ${name}`);
-  updateFollowInPresence(name);
+  updateFollowInPresence(name, id);
   // Snap to their position immediately if they're broadcasting one.
-  const target = Object.values(currentPresence||{}).find(p => p && p.name === name);
+  const target = (id && currentPresence?.[id]) ||
+    activePresenceEntries(currentPresence).find(([, p]) => sameParticipantName(p?.name, name))?.[1];
   if (target && Number.isFinite(target.idx)) {
     lsIdx = target.idx;
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
@@ -4442,20 +4755,37 @@ function followPerson(el, name) {
 
 // Adopt a follow target without a click (used by the force-follow commands).
 function forceFollowPerson(name, presence) {
+  const targetEntry = activePresenceEntries(presence || currentPresence)
+    .find(([, p]) => sameParticipantName(p?.name, name));
   browsingSelf = false;
   followTarget = name;
+  followTargetId = targetEntry?.[0] || '';
   renderFollowChips();
-  updateFollowInPresence(name);
-  const target = Object.values(presence || currentPresence || {}).find(p => p && p.name === name);
+  updateFollowInPresence(name, followTargetId);
+  const target = targetEntry?.[1];
   if (target && Number.isFinite(target.idx)) lsIdx = target.idx;
   if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
 }
 
-function updateFollowInPresence(name) {
+function updateFollowInPresence(name, targetId='') {
   if (!session.code || session.isDemo || !window._firebaseReady) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code), {
-    [`presence.${presenceId}.following`]: name
+    [`presence.${presenceId}.following`]: name,
+    [`presence.${presenceId}.followingId`]: targetId,
   }).catch(()=>{});
+}
+
+function returnToOwnLivePosition() {
+  const ownIdx = currentPresence?.[presenceId]?.idx;
+  browsingSelf = true;
+  followTarget = '';
+  followTargetId = '';
+  if (Number.isFinite(ownIdx)) lsIdx = ownIdx;
+  renderFollowChips();
+  updateFollowInPresence(session.userName);
+  renderLive();
+  sendToPrompter(false);
+  syncLiveIdx();
 }
 
 // Show Caller: force all users to follow them
@@ -4651,9 +4981,13 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
   sendToPrompter();
 }
 
-function sendToPrompter(isInit=false) {
-  prompterText = cleanPrompterText(prompterText);
+async function sendToPrompter(isInit=false) {
   const el = document.getElementById('lsPrompterText');
+  if (el && livePrompterDraftDirty) {
+    prompterText = cleanPrompterText(el.innerText || el.textContent || '');
+  } else {
+    prompterText = cleanPrompterText(prompterText);
+  }
   if (el) el.textContent = prompterText;
   markLivePrompterStatus('Updating...', 'busy');
   _postPrompterMessage(getPrompterPayload(isInit));
@@ -4663,25 +4997,35 @@ function sendToPrompter(isInit=false) {
   } else {
     ptUpdateFromCueola(prompterText);
   }
-  if (window._firebaseReady && session.code && !session.isDemo) {
-    const cur = beats[lsIdx] || null;
-    const next = beats[lsIdx+1] || null;
-    window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.text':prompterText,
-      'prompter.updatedAt':Date.now(),
-      'prompter.showName':show.name||'Untitled Show',
-      'prompter.activeIdx':lsIdx,
-      'prompter.currentRow':cur ? { index:lsIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
-      'prompter.nextRow':next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null
-    }).catch(()=>{});
+  try {
+    if (window._firebaseReady && session.code && !session.isDemo) {
+      const cur = beats[lsIdx] || null;
+      const next = beats[lsIdx+1] || null;
+      await window._updateDoc(window._doc(window._db,'sessions',session.code),{
+        'prompter.text':prompterText,
+        'prompter.updatedAt':Date.now(),
+        'prompter.showName':show.name||'Untitled Show',
+        'prompter.activeIdx':lsIdx,
+        'prompter.currentRow':cur ? { index:lsIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
+        'prompter.nextRow':next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null
+      });
+    }
+    markLivePrompterStatus('Updated', 'ok');
+    return true;
+  } catch (err) {
+    markLivePrompterStatus('Update failed', 'error');
+    toast(firebaseConnectionLabel(err, 'Flowmingo update failed'));
+    return false;
+  } finally {
+    renderLivePrompterControls();
   }
-  renderLivePrompterControls();
-  markLivePrompterStatus('Updated', 'ok');
 }
 
 function updateLsPrompter() {
   const el = document.getElementById('lsPrompterText');
-  if (el) el.textContent = prompterText;
+  if (el && !livePrompterDraftDirty && document.activeElement !== el) {
+    el.textContent = prompterText;
+  }
 }
 
 function renderLivePrompterControls() {
@@ -4689,15 +5033,19 @@ function renderLivePrompterControls() {
   if (el) el.innerHTML = promptOpControlsHTML();
 }
 
-function pushToPrompter() {
+async function pushToPrompter() {
   const el = document.getElementById('lsPrompterText');
   if (el) prompterText = cleanPrompterText(el.innerText || el.textContent || '');
-  sendToPrompter();
+  const draftVersion = livePrompterDraftVersion;
+  const pushed = await sendToPrompter();
+  if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
   if (promptOpMode) renderLivePromptOp();
-  toast('Pushed to Flowmingo');
+  if (pushed) toast('Pushed to Flowmingo');
 }
 
 function queueLivePrompterDraftPush() {
+  livePrompterDraftDirty = true;
+  livePrompterDraftVersion += 1;
   markLivePrompterStatus('Draft changes...', 'busy');
   clearTimeout(livePrompterDraftTimer);
   livePrompterDraftTimer = setTimeout(() => {
@@ -4812,6 +5160,8 @@ let ptLinkedCueolaCode = '';
 let ptSeenPauseMarkers = new Set();
 let livePrompterDraftTimer = null;
 let livePrompterStatusTimer = null;
+let livePrompterDraftDirty = false;
+let livePrompterDraftVersion = 0;
 let flowOpCode = '';
 let flowOpSub = null;
 let flowOpData = null;
@@ -8586,8 +8936,8 @@ function pnAddAsNewRow(noteId) {
   if (!note) return;
   const firstLine = (note.text || '').split('\n')[0].trim().slice(0, 80) || 'From Production Notes';
   const noteText  = (note.text || '').slice(0, 120);
-  const newId     = beats.length ? Math.max(...beats.map(b => b.id)) + 1 : 1;
-  const newBeat   = { id: newId, style: 'flex', info: firstLine, notes: noteText, min: 0, sec: 0, done: false, cues: {} };
+  const newId     = nextBeatId();
+  const newBeat   = { id: newId, style: 'flex', info: firstLine, notes: noteText, min: 0, sec: 0, done: false, cues: {}, _createdAt:Date.now(), _createdBy:presenceId };
   beats.push(newBeat);
   pnTargetBeatId = newId;
   renderRundown();
