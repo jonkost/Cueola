@@ -2037,7 +2037,7 @@ function setupFirestore() {
       if (d.prePro && typeof d.prePro === 'object') {
         try {
           const local = loadPreProData();
-          if (!local.updatedAt || (d.prePro.updatedAt || 0) >= (local.updatedAt || 0)) {
+          if (!local.updatedAt || (d.prePro.updatedAt || 0) > (local.updatedAt || 0)) {
             localStorage.setItem(preProKey(), JSON.stringify(d.prePro));
           }
         } catch {}
@@ -6534,7 +6534,7 @@ async function hydratePreProFromFirestore() {
     const server = snap.data().prePro;
     if (!server || typeof server !== 'object') return;
     const local = loadPreProData();
-    if (!local.updatedAt || (server.updatedAt || 0) >= (local.updatedAt || 0)) {
+    if (!local.updatedAt || (server.updatedAt || 0) > (local.updatedAt || 0)) {
       localStorage.setItem(preProKey(), JSON.stringify(server));
     }
   } catch {}
@@ -8764,7 +8764,7 @@ function legacyCallSheetFromData(data={}) {
     call: normalizeTimeValue(data.call),
     showStart: normalizeTimeOrNA(data.showStart),
     wrap: normalizeTimeOrNA(data.wrap),
-    doors: data.doors || '',
+    doors: normalizeTimeOrNA(data.doors) || '',
     location: data.location || '',
     address: data.address || '',
     venue: normalizeCallSheetVenue(data.venue),
@@ -8788,7 +8788,7 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     call: normalizeTimeValue(sheet.call) || normalizeTimeValue(fallback.call),
     showStart: normalizeTimeOrNA(sheet.showStart) || normalizeTimeOrNA(fallback.showStart),
     wrap: normalizeTimeOrNA(sheet.wrap) || normalizeTimeOrNA(fallback.wrap),
-    doors: sheet.doors || fallback.doors || '',
+    doors: normalizeTimeOrNA(sheet.doors) || normalizeTimeOrNA(fallback.doors) || '',
     location: sheet.location || fallback.location || '',
     address: sheet.address || fallback.address || '',
     venue: normalizeCallSheetVenue(sheet.venue || fallback.venue),
