@@ -56,6 +56,9 @@ let timerInterval = null;
 let elapsedSecs = 0;
 let liveTimerStartMs = null;
 let prompterText = '';
+let prompterVersion = 0;
+let prompterUpdatedAt = 0;
+let prompterSource = 'assembled';
 let prompterChannel = null;
 let prompterLegacyChannel = null;
 const CLIENT_ID = (() => {
@@ -2312,18 +2315,15 @@ function setupFirestore() {
           if (document.getElementById('liveshow').classList.contains('on')) renderLive();
         }
       }
-      if (d.prompter && d.prompter.text !== undefined && session.role==='student') {
-        prompterText = d.prompter.text || '';
-        const el = document.getElementById('lsPrompterText');
-        // Script operators are commonly joined as students. Presence and other
-        // session writes also trigger this snapshot, so never replace a draft
-        // while it is being edited or waiting for its debounced cloud push.
-        if (el && !livePrompterDraftDirty && document.activeElement !== el) {
-          el.textContent = prompterText;
-        }
+      if (d.prompter && typeof d.prompter.text === 'string') {
+        const adopted = adoptPrompterSnapshot(d.prompter);
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
-        _postPrompterMessage(getPrompterPayload(false));
-        ptUpdateFromCueola(prompterText);
+        // Skip while this tab is holding an unsent draft so an older snapshot cannot
+        // interrupt the operator's edit.
+        if (adopted) {
+          _postPrompterMessage(getPrompterPayload(false));
+          ptUpdateFromCueola(prompterText);
+        }
       }
       if (d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
         const control = d.prompter.control;
@@ -4140,6 +4140,8 @@ function getPrompterPayload(isInit=false) {
   return {
     type: isInit ? 'script_init' : 'script_update',
     text: prompterText,
+    version: prompterVersion,
+    source: prompterSource,
     sessionCode: session.code,
     showName: show.name || 'Untitled Show',
     activeIdx: lsIdx,
@@ -4157,6 +4159,64 @@ function cleanPrompterText(text) {
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+\n/g, '\n')
     .trim();
+}
+
+function livePrompterEditor() {
+  return document.getElementById('lsPrompterText');
+}
+
+function livePrompterEditorText() {
+  const el = livePrompterEditor();
+  if (!el) return '';
+  return ('value' in el) ? el.value : (el.innerText || el.textContent || '');
+}
+
+function setLivePrompterEditorText(text, force=false) {
+  const el = livePrompterEditor();
+  if (!el) return;
+  if (!force && (livePrompterDraftDirty || document.activeElement === el)) return;
+  const next = text || '';
+  if ('value' in el) {
+    if (el.value !== next) el.value = next;
+  } else if (el.textContent !== next) {
+    el.textContent = next;
+  }
+}
+
+function nextPrompterVersion() {
+  prompterVersion = Math.max(prompterVersion + 1, Date.now());
+  prompterUpdatedAt = Date.now();
+  return prompterVersion;
+}
+
+function adoptPrompterText(text, opts={}) {
+  const clean = cleanPrompterText(text);
+  prompterText = clean;
+  if (Number.isFinite(opts.version) && opts.version > prompterVersion) prompterVersion = opts.version;
+  if (Number.isFinite(opts.updatedAt) && opts.updatedAt > prompterUpdatedAt) prompterUpdatedAt = opts.updatedAt;
+  if (opts.source) prompterSource = opts.source;
+  setLivePrompterEditorText(clean, !!opts.forceEditor);
+  return clean;
+}
+
+function adoptPrompterSnapshot(prompter={}, opts={}) {
+  if (!prompter || typeof prompter.text !== 'string') return false;
+  const remoteVersion = Number(prompter.version) || 0;
+  const remoteUpdatedAt = Number(prompter.updatedAt) || 0;
+  const isOlderVersion = remoteVersion && prompterVersion && remoteVersion < prompterVersion;
+  const isOlderTime = !remoteVersion && remoteUpdatedAt && prompterUpdatedAt && remoteUpdatedAt < prompterUpdatedAt;
+  if (isOlderVersion || isOlderTime) return false;
+  if (livePrompterDraftDirty && !opts.force) {
+    markLivePrompterStatus('Remote update held', 'busy');
+    return false;
+  }
+  adoptPrompterText(prompter.text, {
+    version: remoteVersion,
+    updatedAt: remoteUpdatedAt,
+    source: prompter.source || 'live',
+    forceEditor: !!opts.forceEditor
+  });
+  return true;
 }
 
 function scriptSpeakerLabel(d) {
@@ -4557,8 +4617,18 @@ function wrapTextareaSelection(taId, pre, post) {
 
 // Wrap the current selection (in the live contenteditable panel) with markers.
 function wrapLivePanelSelection(pre, post) {
-  const el = document.getElementById('lsPrompterText');
+  const el = livePrompterEditor();
   if (!el) return;
+  if ('value' in el) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const sel = el.value.slice(start, end) || 'text';
+    el.value = el.value.slice(0, start) + pre + sel + post + el.value.slice(end);
+    el.focus();
+    el.setSelectionRange(start + pre.length, start + pre.length + sel.length);
+    queueLivePrompterDraftPush();
+    return;
+  }
   el.focus();
   const sel = window.getSelection();
   if (sel && sel.rangeCount && !sel.isCollapsed) {
@@ -4590,8 +4660,18 @@ function insertScriptMarker(text) {
 }
 
 function insertLivePanelMarker(text) {
-  const el = document.getElementById('lsPrompterText');
+  const el = livePrompterEditor();
   if (!el) return;
+  if ('value' in el) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    const pos = start + text.length;
+    el.focus();
+    el.setSelectionRange(pos, pos);
+    queueLivePrompterDraftPush();
+    return;
+  }
   el.focus();
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -4622,8 +4702,9 @@ function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
   if (!b.cues.script) b.cues.script={ready:'',take:''};
-  b.cues.script.text = document.getElementById('lsScriptEditText').value;
-  prompterText = assemblePrompterScriptFromBeats();
+  b.cues.script.text = cleanPrompterText(document.getElementById('lsScriptEditText').value);
+  adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
+  livePrompterDraftDirty = false;
   sendToPrompter();
   hideOverlay('lsScriptEditOv');
   renderLive(); syncToFirestore(); toast('Script saved & pushed.');
@@ -4827,9 +4908,7 @@ function adminForceLive(followName) {
 // PROMPTER
 // ─────────────────────────────────────────────────────────────
 function buildPromptFromRundown() {
-  prompterText = assemblePrompterScriptFromBeats();
-  const el = document.getElementById('lsPrompterText');
-  if (el) el.textContent = prompterText;
+  adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
 }
 
 let _prompterPingInterval = null;
@@ -4892,6 +4971,39 @@ function _shouldSendInitForTalent(msg={}, wasSilent=false) {
   return true;
 }
 
+function adoptPrompterTalentState(state={}) {
+  if (!state || typeof state !== 'object') return;
+  if (typeof state.playing === 'boolean') {
+    ptPlaying = state.playing;
+    flowOpPlaying = state.playing;
+    ptSyncPlayIcons(ptPlaying);
+  }
+  if (Number.isFinite(Number(state.speed))) {
+    ptTargetSpeed = Math.max(5, Math.min(200, Number(state.speed)));
+    ptLiveSpeed = ptTargetSpeed;
+  }
+  if (Number.isFinite(Number(state.size))) {
+    ptFontSize = Math.max(24, Math.min(120, Number(state.size)));
+    document.documentElement.style.setProperty('--pt-size', `${ptFontSize}px`);
+    ptEl('promptypus')?.style.setProperty('--pt-size', `${ptFontSize}px`);
+    flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
+  }
+  if (['left','center','right'].includes(state.align)) {
+    ptAlign = state.align;
+    document.documentElement.style.setProperty('--pt-align', ptAlign);
+    ptEl('promptypus')?.style.setProperty('--pt-align', ptAlign);
+    flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
+  }
+  if (state.theme && PT_THEMES[state.theme]) {
+    ptThemeName = state.theme;
+    ptSetTheme(state.theme);
+    flowOpSetTheme(state.theme);
+  }
+  if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
+  flowOpSyncControls();
+  renderLivePrompterControls();
+}
+
 function _handlePrompterControlAck(msg) {
   if (!msg || msg.type !== 'control_ack') return;
   if (isPrompterSelfSender(msg.sender)) return;
@@ -4900,6 +5012,7 @@ function _handlePrompterControlAck(msg) {
   if (!ackId || ackId === _lastPrompterAckId) return;
   _lastPrompterAckId = ackId;
   _notePrompterTalentSeen(msg);
+  if (msg.state) adoptPrompterTalentState(msg.state);
   const pending = _pendingPrompterControls[msg.controlId];
   if (pending) {
     clearTimeout(pending.waitTimer);
@@ -4997,13 +5110,14 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
 }
 
 async function sendToPrompter(isInit=false) {
-  const el = document.getElementById('lsPrompterText');
-  if (el && livePrompterDraftDirty) {
-    prompterText = cleanPrompterText(el.innerText || el.textContent || '');
+  const el = livePrompterEditor();
+  if (el && (livePrompterDraftDirty || document.activeElement === el)) {
+    adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
   } else {
-    prompterText = cleanPrompterText(prompterText);
+    adoptPrompterText(prompterText, { forceEditor:true, source:prompterSource || 'live' });
   }
-  if (el) el.textContent = prompterText;
+  const version = nextPrompterVersion();
+  const updatedAt = prompterUpdatedAt || Date.now();
   markLivePrompterStatus('Updating...', 'busy');
   _postPrompterMessage(getPrompterPayload(isInit));
   // Also update the native built-in Flowmingo screen
@@ -5018,7 +5132,11 @@ async function sendToPrompter(isInit=false) {
       const next = beats[lsIdx+1] || null;
       await window._updateDoc(window._doc(window._db,'sessions',session.code),{
         'prompter.text':prompterText,
-        'prompter.updatedAt':Date.now(),
+        'prompter.version':version,
+        'prompter.updatedAt':updatedAt,
+        'prompter.source':prompterSource || 'live',
+        'prompter.sender':FLOWMINGO_ENDPOINT_ID,
+        'prompter.senderClient':CLIENT_ID,
         'prompter.showName':show.name||'Untitled Show',
         'prompter.activeIdx':lsIdx,
         'prompter.currentRow':cur ? { index:lsIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
@@ -5037,10 +5155,7 @@ async function sendToPrompter(isInit=false) {
 }
 
 function updateLsPrompter() {
-  const el = document.getElementById('lsPrompterText');
-  if (el && !livePrompterDraftDirty && document.activeElement !== el) {
-    el.textContent = prompterText;
-  }
+  setLivePrompterEditorText(prompterText);
 }
 
 function renderLivePrompterControls() {
@@ -5049,8 +5164,8 @@ function renderLivePrompterControls() {
 }
 
 async function pushToPrompter() {
-  const el = document.getElementById('lsPrompterText');
-  if (el) prompterText = cleanPrompterText(el.innerText || el.textContent || '');
+  const el = livePrompterEditor();
+  if (el) adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
   const draftVersion = livePrompterDraftVersion;
   const pushed = await sendToPrompter();
   if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
@@ -5061,16 +5176,18 @@ async function pushToPrompter() {
 function queueLivePrompterDraftPush() {
   livePrompterDraftDirty = true;
   livePrompterDraftVersion += 1;
-  markLivePrompterStatus('Draft changes...', 'busy');
+  adoptPrompterText(livePrompterEditorText(), { source:'live-edit' });
+  markLivePrompterStatus('Draft held', 'busy');
   clearTimeout(livePrompterDraftTimer);
   livePrompterDraftTimer = setTimeout(() => {
-    pushToPrompter();
-  }, 900);
+    if (livePrompterDraftDirty) markLivePrompterStatus('Ready to push', 'busy');
+  }, 700);
 }
 
 function clearPrompter() {
   if (!confirm('Clear Flowmingo text?')) return;
-  prompterText = '';
+  adoptPrompterText('', { forceEditor:true, source:'cleared' });
+  livePrompterDraftDirty = false;
   sendToPrompter(true); // reset scroll on clear
 }
 
@@ -5270,13 +5387,13 @@ function ptHandleCueolaMessage(msg) {
   }
   if (msg.type === 'script_init' && msg.text != null) {
     ptAdoptCueolaBridgeMessage(msg);
-    prompterText = msg.text || '';
+    adoptPrompterText(msg.text || '', { version:Number(msg.version)||0, updatedAt:Number(msg.ts)||0, source:msg.source || 'bridge' });
     ptInitScriptFromCueola(prompterText);
     ptPostPing();
   }
   if (msg.type === 'script_update' && msg.text != null) {
     ptAdoptCueolaBridgeMessage(msg);
-    prompterText = msg.text || '';
+    adoptPrompterText(msg.text || '', { version:Number(msg.version)||0, updatedAt:Number(msg.ts)||0, source:msg.source || 'bridge' });
     ptUpdateFromCueola(prompterText);
   }
   if (msg.type === 'prompter_control' && msg.action) {
@@ -6433,7 +6550,7 @@ function ptSetCueolaStatus(text, isError=false) {
 }
 
 function ptAssembleCueolaScript(data) {
-  if (data?.prompter?.text && data.prompter.text.trim()) return data.prompter.text;
+  if (data?.prompter && typeof data.prompter.text === 'string') return data.prompter.text;
   return assemblePrompterScriptFromBeats((data?.beats || []).map(migrateBeat));
 }
 
@@ -6471,8 +6588,13 @@ function ptLoadFromCueolaCode(codeOverride='') {
         ptConnState = 'connected';
         ptConnMessage = '';
         const text = ptAssembleCueolaScript(data);
-        if (text.trim()) {
-          prompterText = text;
+        const hasExplicitPrompterText = data?.prompter && typeof data.prompter.text === 'string';
+        if (text.trim() || hasExplicitPrompterText) {
+          adoptPrompterText(text, {
+            version:Number(data.prompter?.version)||0,
+            updatedAt:Number(data.prompter?.updatedAt)||0,
+            source:data.prompter?.source || 'cueola'
+          });
           // Only rebuild the talent script when the SOURCE actually changed. This
           // snapshot fires on EVERY session-doc write (talent heartbeats, presence,
           // clock, control acks), and ptSetScriptText() resets the scroll to the top.
@@ -6485,12 +6607,12 @@ function ptLoadFromCueolaCode(codeOverride='') {
           }
           const ta = ptEl('pt-script-input');
           if (ta) ta.value = text.trim();
-          ptSetCueolaStatus(`READY · ${code}`);
+          ptSetCueolaStatus(text.trim() ? `READY · ${code}` : `READY · ${code} · script cleared`);
           ptUpdateSyncLabel();
           if (!loadedOnce) {
             loadedOnce = true;
             setTimeout(ptCloseEdit, 550);
-            toast(`Flowmingo ready for ${code}`);
+            toast(text.trim() ? `Flowmingo ready for ${code}` : `Flowmingo linked to ${code}`);
           }
         } else {
           ptSetCueolaStatus(`READY · ${code} · no script yet`);
