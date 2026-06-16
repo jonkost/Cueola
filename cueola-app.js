@@ -2332,6 +2332,7 @@ function setupFirestore() {
         }
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
+      if (d.showClock) applyRemoteShowClock(d.showClock);  // shared start/pause clock
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
       // Only count a heartbeat we haven't seen before AND that is recent — any
@@ -2365,6 +2366,7 @@ function setupFirestore() {
       }
       sessionParticipantNames = collectSessionParticipantNames(d);
       renderPresence(d.presence||{});
+      pbApplyRemoteCollab();   // Planda Bear live presence + field sync
       renderRundown();
     }, ()=>{});
   };
@@ -4021,6 +4023,7 @@ function goLive() {
   sendToPrompter(true);
   renderLive();
   syncLiveIdx();
+  resumeRemoteClockIfRunning();  // late joiner picks up a clock already running
   updateLiveClockButton();
   const timerEl = document.getElementById('ls-timer');
   if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
@@ -4086,7 +4089,17 @@ function updateLiveClockButton() {
   btn.classList.toggle('running', liveClockRunning);
 }
 
+// Only the show caller (whoever is driving their own live position) controls the
+// shared clock; followers mirror it. Keeps two people from fighting over start/pause.
+function canDriveShowClock() {
+  return isFollowingSelf();
+}
+
 function toggleShowClock() {
+  if (!canDriveShowClock()) {
+    toast('The show caller controls the clock for everyone.');
+    return;
+  }
   if (liveClockRunning) {
     stopTimer(false);
     liveClockRunning = false;
@@ -4096,6 +4109,7 @@ function toggleShowClock() {
   }
   updateLiveClockButton();
   updateLiveOverview();
+  broadcastShowClock();  // start/pause the clock for everyone in the session
 }
 
 // Restart the show from the top: stop the clock, zero the elapsed time, and jump
@@ -4115,6 +4129,7 @@ function restartShowClock() {
   updateLiveRemain();
   if (document.getElementById('liveshow')?.classList.contains('on')) { renderLive(); sendToPrompter(false); }
   syncLiveIdx();
+  broadcastShowClock();  // reset everyone's clock to 0:00 / stopped
   closeAdminPanel();
   toast('Show restarted — clock at 0:00, back to the top.');
 }
@@ -6402,6 +6417,7 @@ function ptLoadFromCueola() {
 }
 
 let ptCueolaSub = null;
+let ptLastCueolaScript = null; // last script SOURCE applied from the cloud feed (loop guard)
 
 function ptCurrentPlainText() {
   const textEl = ptEl('pt-text');
@@ -6428,6 +6444,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
   if (!code) return;
   if (codeIn) codeIn.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  ptLastCueolaScript = null; // fresh load → allow the first snapshot to render from the top
   ptSetCueolaStatus('Loading...');
   ptConnState = 'connecting';
   ptConnMessage = '';
@@ -6456,7 +6473,14 @@ function ptLoadFromCueolaCode(codeOverride='') {
         const text = ptAssembleCueolaScript(data);
         if (text.trim()) {
           prompterText = text;
-          if (cleanPrompterText(ptCurrentPlainText()) !== cleanPrompterText(text)) {
+          // Only rebuild the talent script when the SOURCE actually changed. This
+          // snapshot fires on EVERY session-doc write (talent heartbeats, presence,
+          // clock, control acks), and ptSetScriptText() resets the scroll to the top.
+          // The old render→source round-trip comparison was lossy, so it rebuilt on
+          // nearly every write — the script appeared to load, then restart every
+          // couple of seconds. Compare the stable source string instead.
+          if (text !== ptLastCueolaScript) {
+            ptLastCueolaScript = text;
             ptSetScriptText(text);
           }
           const ta = ptEl('pt-script-input');
@@ -6683,10 +6707,82 @@ function renderLivePromptOp() {
 // ─────────────────────────────────────────────────────────────
 // TIMER
 // ─────────────────────────────────────────────────────────────
-function startTimer() {
+// Shared show clock: the person who starts/pauses/restarts broadcasts the clock
+// state to the session so everyone's clock runs and pauses together. Late joiners
+// (and anyone re-entering the live view) pick up a running clock from anchorMs.
+let _remoteClockState = null;   // last clock object seen from the session
+let _lastAppliedClockTs = 0;    // newest clock ts we've broadcast or applied
+let _applyingRemoteClock = false;
+
+function broadcastShowClock() {
+  if (_applyingRemoteClock) return;
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  const payload = {
+    running: !!liveClockRunning,
+    anchorMs: liveClockRunning ? (liveTimerStartMs || (Date.now() - elapsedSecs * 1000)) : 0,
+    elapsedSecs: Math.max(0, Math.floor(elapsedSecs)),
+    by: session.userName || '',
+    senderId: presenceId,
+    ts: Date.now(),
+  };
+  _remoteClockState = payload;
+  _lastAppliedClockTs = payload.ts;  // ignore my own echo when it bounces back
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { showClock: payload }).catch(() => {});
+}
+
+function applyRemoteShowClock(clock) {
+  if (!clock || typeof clock !== 'object') return;
+  _remoteClockState = clock;
+  if (clock.senderId === presenceId) return;        // my own write coming back
+  if (!(Number(clock.ts) > _lastAppliedClockTs)) return; // not newer than what we have
+  _lastAppliedClockTs = Number(clock.ts);
+  _applyingRemoteClock = true;
+  try {
+    if (clock.running) {
+      const anchor = Number(clock.anchorMs) || Date.now();
+      elapsedSecs = Math.max(0, Math.floor((Date.now() - anchor) / 1000));
+      startTimer(anchor);
+    } else {
+      stopTimer(false);
+      elapsedSecs = Math.max(0, Math.floor(Number(clock.elapsedSecs) || 0));
+      liveTimerStartMs = null;
+      liveClockRunning = false;
+    }
+    const el = document.getElementById('ls-timer');
+    if (el && !clock.running) el.textContent = fmtProductionClock(elapsedSecs * 1000);
+    updateLiveClockButton();
+    updateBotBar();
+    updateLiveRemain();
+    updateLiveOverview();
+  } finally {
+    _applyingRemoteClock = false;
+  }
+}
+
+// Re-sync a running clock when (re)entering the live view, e.g. a late joiner.
+function resumeRemoteClockIfRunning() {
+  if (!_remoteClockState || !_remoteClockState.running) return;
+  if (_remoteClockState.senderId === presenceId) return;
+  if (liveClockRunning) return;
+  _applyingRemoteClock = true;
+  try {
+    const anchor = Number(_remoteClockState.anchorMs) || Date.now();
+    elapsedSecs = Math.max(0, Math.floor((Date.now() - anchor) / 1000));
+    startTimer(anchor);
+    updateLiveClockButton();
+    updateBotBar();
+    updateLiveRemain();
+  } finally {
+    _applyingRemoteClock = false;
+  }
+}
+
+function startTimer(anchorMs) {
   stopTimer(false);
   liveClockRunning = true;
-  const start = Date.now() - elapsedSecs * 1000;
+  // anchorMs lets a synced (remote) clock line up to the exact origin the caller
+  // started from; locally we derive it from the elapsed time so far.
+  const start = (typeof anchorMs === 'number' && anchorMs > 0) ? anchorMs : (Date.now() - elapsedSecs * 1000);
   liveTimerStartMs = start;
   timerInterval = setInterval(()=>{
     const elapsedMs = Date.now() - start;
@@ -6864,11 +6960,12 @@ function persistPreProData(patch, section) {
   return next;
 }
 
+let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
 function syncPreProToFirestore(data=loadPreProData(), section) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db,'sessions',session.code);
   window._updateDoc(ref, { prePro:data }).catch(()=>{});
-  if (section && window._arrayUnion) {
+  if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
     window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
   }
@@ -6888,6 +6985,270 @@ async function hydratePreProFromFirestore() {
       localStorage.setItem(preProKey(), JSON.stringify(server));
     }
   } catch {}
+}
+
+// ═════════════════════════════════════════════════════════════════
+// PLANDA BEAR — LIVE COLLABORATION
+// See who else is in the workspace, which page they're on, and which field
+// they're editing in real time; refresh fields others change as they type.
+// ═════════════════════════════════════════════════════════════════
+const PB_PAGE_LABELS = {
+  'hub':'Planda Bear', 'call-sheet':'Call Sheet', 'production-scheduler':'Production Schedule',
+  'safety-plan':'Safety Plan', 'video-patch':'Video Patch', 'audio-comms-patch':'Audio / Comms Patch',
+  'production-notes':'Production Notes',
+};
+let _pbFieldSaveTimer = null;
+let _pbFieldBlurTimer = null;
+
+// Which Planda Bear page is open right now (null when the workspace is closed).
+function pbOpenPageId() {
+  if (document.getElementById('safetyPlanModal')?.classList.contains('on')) return 'safety-plan';
+  if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
+  if (document.getElementById('preProModal')?.classList.contains('on')) return 'call-sheet';
+  if (document.getElementById('patchSheetModal')?.classList.contains('on')) return (typeof activePatchKind !== 'undefined' && activePatchKind === 'video') ? 'video-patch' : 'audio-comms-patch';
+  if (document.getElementById('productionNotesModal')?.classList.contains('on')) return 'production-notes';
+  if (document.getElementById('paperworkHubModal')?.classList.contains('on')) return 'hub';
+  return null;
+}
+
+function pbWritePresence(patch) {
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  const updates = { [`presence.${presenceId}.lastSeen`]: Date.now() };
+  for (const k in patch) {
+    updates[`presence.${presenceId}.${k}`] = (patch[k] == null) ? window._deleteField() : patch[k];
+  }
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), updates).catch(() => {});
+}
+
+// Announce which page I'm on (and drop any stale "editing" marker).
+function pbSetPresencePage(pageId) {
+  pbWritePresence({ pbPage: pageId || null, pbField: null });
+  pbRenderPagePresence();
+}
+
+function pbSetPresenceField(fieldKey) {
+  pbWritePresence({ pbField: fieldKey || null });
+}
+
+function pbActiveCollabPeople() {
+  const now = Date.now();
+  return Object.entries(currentPresence || {})
+    .filter(([id, p]) => id !== presenceId && p && p.name && (now - (p.lastSeen || 0)) < 90000)
+    .map(([id, p]) => ({ id, ...p }));
+}
+
+// Render the "also here" strip in the open page's header. (pbInitials is the
+// shared helper defined with the production-notes code.)
+function pbRenderPagePresence() {
+  const pageId = pbOpenPageId();
+  document.querySelectorAll('[data-pb-collab]').forEach(box => {
+    const boxPage = box.getAttribute('data-pb-collab');
+    if (boxPage && boxPage !== pageId) { box.innerHTML = ''; return; }
+    const here = pbActiveCollabPeople();
+    const onThisPage = here.filter(p => p.pbPage === pageId);
+    const elsewhere = here.filter(p => p.pbPage && p.pbPage !== pageId);
+    if (!here.length) { box.innerHTML = ''; return; }
+    const avatar = p => `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" title="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' — ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' — on this page'}">${esc(pbInitials(p.name))}</span>`;
+    let html = '';
+    if (onThisPage.length) html += `<span class="pb-collab-label">On this page</span>${onThisPage.map(avatar).join('')}`;
+    if (elsewhere.length) html += `<span class="pb-collab-label dim">Elsewhere</span>${elsewhere.map(avatar).join('')}`;
+    box.innerHTML = html;
+  });
+}
+
+// Highlight the inputs other people are actively editing.
+function pbRenderFieldPresence() {
+  document.querySelectorAll('.pb-field-busy').forEach(el => el.classList.remove('pb-field-busy'));
+  document.querySelectorAll('.pb-field-editor-chip').forEach(el => el.remove());
+  const pageId = pbOpenPageId();
+  if (!pageId || pageId === 'hub') return;
+  const now = Date.now();
+  Object.entries(currentPresence || {}).forEach(([id, p]) => {
+    if (id === presenceId || !p || !p.pbField || p.pbPage !== pageId) return;
+    if (now - (p.lastSeen || 0) > 25000) return;   // "editing" is short-lived
+    const el = document.getElementById(p.pbField);
+    if (!el || el === document.activeElement) return;
+    el.classList.add('pb-field-busy');
+    const field = el.closest('.field') || el.parentElement;
+    if (field) {
+      field.style.position = 'relative';
+      const chip = document.createElement('div');
+      chip.className = 'pb-field-editor-chip';
+      chip.textContent = `✏️ ${p.name || 'Someone'}`;
+      field.appendChild(chip);
+    }
+  });
+}
+
+// Update a scalar field from the latest cloud data, unless the user is in it.
+function pbSetFieldIfIdle(id, val) {
+  const el = document.getElementById(id);
+  if (!el || el === document.activeElement) return;
+  if (el.value !== val) el.value = val;
+}
+
+function pbRefreshSafetyFields() {
+  const data = loadPreProData();
+  const safety = data.safety || {};
+  const wxNote = typeof safety.weather === 'string' ? safety.weather : '';
+  pbSetFieldIfIdle('sp-hospital', safety.hospital || data.hospital || '');
+  pbSetFieldIfIdle('sp-weather', wxNote || weatherCuteSummary(activeCallSheetWeather(data)) || (typeof data.weather === 'string' ? data.weather : '') || '');
+  pbSetFieldIfIdle('sp-first-aid', safety.firstAid || '');
+  pbSetFieldIfIdle('sp-fire', safety.fire || '');
+  pbSetFieldIfIdle('sp-emergency', safety.emergency || '');
+  pbSetFieldIfIdle('sp-nonemergency', safety.nonemergency || '');
+  pbSetFieldIfIdle('sp-security', safety.security || '8822');
+  pbSetFieldIfIdle('sp-late', safety.late || data.late || '');
+  pbSetFieldIfIdle('sp-equipment', safety.equipment || data.equipment || '');
+  pbSetFieldIfIdle('sp-notes', safety.notes || '');
+}
+
+function pbRefreshScheduleFields() {
+  const callSheet = loadPreProData();
+  const schedule = productionScheduleWithCallSheet(callSheet.productionSchedule || {}, callSheet);
+  pbSetFieldIfIdle('ps-date', schedule.date || '');
+  pbSetFieldIfIdle('ps-setup', timeTo24(schedule.setup));
+  pbSetFieldIfIdle('ps-call', timeTo24(schedule.call));
+  pbSetFieldIfIdle('ps-show', timeTo24(schedule.show));
+  pbSetFieldIfIdle('ps-wrap', timeTo24(schedule.wrap));
+  pbSetFieldIfIdle('ps-show-date', schedule.showDate || '');
+  pbSetFieldIfIdle('ps-doors', schedule.doors || '');
+  pbSetFieldIfIdle('ps-location', schedule.location || '');
+  pbSetFieldIfIdle('ps-address', schedule.address || '');
+  pbSetFieldIfIdle('ps-setup-notes', schedule.setupNotes || '');
+  pbSetFieldIfIdle('ps-show-notes', schedule.showNotes || '');
+}
+
+// For type=time inputs, the value must be HH:MM (24h). setTimeInputValue handles
+// AM/PM strings; mirror just enough of it for the idle refresh.
+function timeTo24(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^\d{2}:\d{2}$/.test(s)) return s;
+  const m = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/.exec(s);
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  const ap = (m[3] || '').toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${m[2]}`;
+}
+
+// Live-refresh the Call Sheet's scalar fields + crew grid (for the call sheet the
+// local user is actually viewing — activeCallSheetIndex is per-device, so we only
+// touch that sheet). Skips focused inputs and the crew grid while it's being edited.
+function pbRefreshCallSheetFields() {
+  const data = loadPreProData();
+  const sheets = getCallSheets(data);
+  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const sheet = normalizeCallSheet(sheets[idx], idx);
+  pbSetFieldIfIdle('pp-sheet-label', sheet.label || '');
+  pbSetFieldIfIdle('pp-production', sheet.production || show.name || '');
+  pbSetFieldIfIdle('pp-date', sheet.date || '');
+  pbSetFieldIfIdle('pp-call', timeTo24(sheet.call));
+  pbSetFieldIfIdle('pp-location', sheet.location || '');
+  pbSetFieldIfIdle('pp-address', sheet.address || '');
+  pbSetFieldIfIdle('pp-late', sheet.late || '');
+  pbSetFieldIfIdle('pp-parking', sheet.parking || '');
+  pbSetFieldIfIdle('pp-entrance', sheet.entrance || '');
+  pbSetFieldIfIdle('pp-stream', sheet.stream || '');
+  pbSetFieldIfIdle('pp-dress', sheet.dress || '');
+  pbSetFieldIfIdle('pp-meals', sheet.meals || '');
+  pbSetFieldIfIdle('pp-notes', sheet.notes || '');
+  // Crew grid is an array — re-render it (so adds/removes sync) only when nobody
+  // is typing in it, then keep the local roster in step for the next save.
+  const people = Array.isArray(sheet.people) && sheet.people.length ? sheet.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
+  if (!document.activeElement?.closest?.('#pp-crew-grid') && JSON.stringify(people) !== JSON.stringify(callSheetPeople)) {
+    callSheetPeople = people;
+    renderCallSheetPeople();
+  }
+}
+
+// Live-refresh patch grids: update existing cells in place (skip focused); when the
+// user isn't typing in a grid, re-render so row adds/removes from others show up.
+function pbRenderPatchBody() {
+  const body = document.getElementById('patchSheetBody');
+  if (!body) return;
+  body.innerHTML = activePatchKind === 'video'
+    ? renderPatchTable('video', 'Video Patch Sheet')
+    : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
+}
+function pbRefreshPatchFields() {
+  const data = loadPreProData();
+  const kinds = activePatchKind === 'video' ? ['video'] : ['audio', 'comms'];
+  const editingInGrid = !!document.activeElement?.closest?.('.patch-table');
+  if (editingInGrid) {
+    kinds.forEach(kind => {
+      const rows = data[`${kind}PatchRows`];
+      if (!Array.isArray(rows)) return;
+      document.querySelectorAll(`[data-patch-kind="${kind}"]`).forEach(input => {
+        if (input === document.activeElement) return;
+        const r = rows[Number(input.dataset.patchRow)];
+        const val = r ? (r[input.dataset.patchField] || '') : input.value;
+        if (input.value !== val) input.value = val;
+      });
+    });
+    return;
+  }
+  const differs = kinds.some(kind => {
+    const rows = data[`${kind}PatchRows`];
+    if (!Array.isArray(rows)) return false;
+    return JSON.stringify(rows) !== JSON.stringify(collectPatchRows(kind, true));
+  });
+  if (differs) pbRenderPatchBody();
+}
+
+// Pull live edits from collaborators into the open forms.
+function pbRefreshOpenPaperworkFields() {
+  const pageId = pbOpenPageId();
+  if (pageId === 'safety-plan') pbRefreshSafetyFields();
+  else if (pageId === 'production-scheduler') pbRefreshScheduleFields();
+  else if (pageId === 'call-sheet') pbRefreshCallSheetFields();
+  else if (pageId === 'video-patch' || pageId === 'audio-comms-patch') pbRefreshPatchFields();
+}
+
+// Called from the session snapshot after presence is updated.
+function pbApplyRemoteCollab() {
+  if (!pbOpenPageId()) return;
+  pbRefreshOpenPaperworkFields();
+  pbRenderFieldPresence();
+  pbRenderPagePresence();
+}
+
+function pbIsCollabField(el) {
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') && el.id;
+}
+
+let _pbCollabListenersReady = false;
+function pbInitCollabListeners() {
+  if (_pbCollabListenersReady) return;
+  _pbCollabListenersReady = true;
+  ['preProModal', 'productionScheduleModal', 'safetyPlanModal', 'patchSheetModal'].forEach(id => {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.addEventListener('focusin', e => {
+      if (!pbIsCollabField(e.target)) return;
+      clearTimeout(_pbFieldBlurTimer);
+      pbSetPresenceField(e.target.id);
+    });
+    modal.addEventListener('focusout', e => {
+      if (!pbIsCollabField(e.target)) return;
+      clearTimeout(_pbFieldBlurTimer);
+      _pbFieldBlurTimer = setTimeout(() => pbSetPresenceField(null), 1500);
+    });
+    modal.addEventListener('input', e => {
+      if (!pbIsCollabField(e.target)) return;
+      paperworkDirty = true;
+      clearTimeout(_pbFieldSaveTimer);
+      _pbFieldSaveTimer = setTimeout(() => {
+        // Merge in collaborators' latest values before saving so two people on
+        // the same page editing different fields don't overwrite each other.
+        pbRefreshOpenPaperworkFields();
+        _pbSuppressActivity = true;
+        try { saveOpenPaperworkSection(false); } finally { _pbSuppressActivity = false; }
+      }, 650);
+    });
+  });
 }
 
 function paperworkItemIndex(id) {
@@ -6990,9 +7351,20 @@ function openPaperworkHub() {
   }
   showModal('paperworkHubModal');
   paperworkDirty = false;
+  pbInitCollabListeners();
+  pbSetPresencePage('hub');   // tell the room I'm in the Planda Bear workspace
   renderPlandaBearComments('All', 'pbCommentsHub');
   loadPlandaBearNotes().then(() => { annotatePlandaBearNoteCards(); pbUpdatePlandaBearBadge(); });
   renderPlandaBearHubActivity();
+}
+
+// Leave the Planda Bear workspace and clear my page presence so collaborators
+// stop seeing me "here".
+function closePlandaBear() {
+  saveOpenPaperworkSection(false);
+  hidePaperworkEditors();
+  hideModal('paperworkHubModal');
+  pbSetPresencePage(null);
 }
 
 const PB_SECTION_FOR_ITEM = {
@@ -7313,7 +7685,10 @@ function normalizePlandaBearNote(n) {
     by: n?.by || 'Someone',
     role: n?.role === 'instructor' ? 'instructor' : 'student',
     tag,
+    assignee: String(n?.assignee || '').slice(0, 60),  // To-Do owner
     done: Boolean(n?.done),
+    doneBy: String(n?.doneBy || '').slice(0, 60),       // who checked it off
+    doneAt: Number(n?.doneAt) || 0,
     at: n?.at || Date.now(),
     clientId: n?.clientId || '',
     replyTo: typeof n?.replyTo === 'string' ? n.replyTo : '',
@@ -7960,15 +8335,41 @@ function pbRenderNoteFilters(threads) {
 }
 
 /* ── Composer tag picker ── */
+let pbComposerAssignee = '';   // who a new To-Do is assigned to
+
+// Names we can assign a To-Do to: everyone present + everyone on the roster.
+function pbAssigneeOptions() {
+  const names = new Set();
+  try { getActivePresencePeople().forEach(p => p?.name && names.add(p.name.trim())); } catch {}
+  (sessionParticipantNames || []).forEach(n => n && names.add(String(n).trim()));
+  const me = (session.userName || '').trim();
+  if (me) names.add(me);
+  return Array.from(names).filter(Boolean);
+}
+
 function pbRenderComposerTags() {
   const slot = document.getElementById('pbTagPicker');
   if (!slot) return;
-  slot.innerHTML = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
+  const chips = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
     `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" title="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
+  const assign = pbComposerTag === 'todo'
+    ? `<label class="pb-assign-pick" title="Assign this to-do to someone in the session">Assign:
+        <select onchange="pbSetComposerAssignee(this.value)">
+          <option value="">Anyone</option>
+          ${pbAssigneeOptions().map(n => `<option value="${esc(n)}"${pbComposerAssignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+        </select>
+      </label>`
+    : '';
+  slot.innerHTML = chips + assign;
+}
+
+function pbSetComposerAssignee(v) {
+  pbComposerAssignee = v || '';
 }
 
 function pbSelectComposerTag(tag) {
   pbComposerTag = PB_NOTE_TAGS[tag] ? tag : 'general';
+  if (pbComposerTag !== 'todo') pbComposerAssignee = '';
   pbRenderComposerTags();
 }
 
@@ -8105,6 +8506,7 @@ async function publishPlandaBearNote() {
       by: preProActor(),
       role: pbNoteActorRole(),
       tag: pbComposerTag,
+      assignee: pbComposerTag === 'todo' ? pbComposerAssignee : '',
       at: Date.now(),
       clientId: CLIENT_ID,
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
@@ -8114,6 +8516,7 @@ async function publishPlandaBearNote() {
     pbPendingAttachments = [];
     pbRenderAttachTray('main');
     pbComposerTag = 'general';
+    pbComposerAssignee = '';
     pbRenderComposerTags();
     try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
     pbCloseComposer();
@@ -8128,7 +8531,12 @@ async function toggleProductionNotesTodo(id) {
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
   if (!pbCanManageNote(note)) { toast('Only instructors or the author can check off this to-do.'); return; }
-  const next = plandaBearNotes.map(n => n.id === id ? { ...n, done: !n.done } : n);
+  const next = plandaBearNotes.map(n => {
+    if (n.id !== id) return n;
+    const done = !n.done;
+    // Record who completed it and when (accountability), cleared if reopened.
+    return { ...n, done, doneBy: done ? preProActor() : '', doneAt: done ? Date.now() : 0 };
+  });
   await writePlandaBearNotes(next, 'To-Do Updated');
   renderPlandaBearNotes();
 }
@@ -8189,6 +8597,12 @@ function pbNoteHeadHTML(note) {
   const tagChip = note.tag !== 'general'
     ? `<span class="pb-note-tag t-${note.tag}${note.tag === 'todo' && note.done ? ' done' : ''}">${sfIcon(tag.symbol)} ${tag.label}${note.tag === 'todo' && note.done ? ' · Done' : ''}</span>`
     : '';
+  // To-Do ownership chip: who it's assigned to, or who completed it.
+  const assignChip = note.tag === 'todo'
+    ? (note.done
+        ? `<span class="pb-note-assign done" title="Completed">✓ ${esc(note.doneBy || 'Done')}${note.doneAt ? ` · ${esc(pbAgo(note.doneAt))}` : ''}</span>`
+        : (note.assignee ? `<span class="pb-note-assign" title="Assigned to">→ ${esc(note.assignee)}</span>` : ''))
+    : '';
   return `<header class="pb-note-head">
     <span class="pb-note-avatar" style="background:${pbAvatarColor(note)}">${esc(pbInitials(note.by))}</span>
     <div class="pb-note-who">
@@ -8196,6 +8610,7 @@ function pbNoteHeadHTML(note) {
         <span class="pb-note-author">${esc(note.by)}</span>
         ${note.role === 'instructor' ? '<span class="pb-note-role">Instructor</span>' : ''}
         ${tagChip}
+        ${assignChip}
       </div>
       <span class="pb-note-time">${esc(pbNoteTime(note.at))}${note.editedAt ? ' · edited' : ''}</span>
     </div>
@@ -9016,6 +9431,7 @@ async function renderPlandaBearHubActivity() {
 
 function openPaperworkItem(id) {
   activePaperworkItemId = id;
+  pbSetPresencePage(id);   // tell the room which page I'm on
   if (id === 'call-sheet') return openPrePro();
   if (id === 'production-scheduler') return openProductionSchedule();
   if (id === 'safety-plan') return openSafetyPlan();
@@ -9248,7 +9664,7 @@ function normalizeCallSheetWeather(w) {
   const out = {
     conditions: s(w.conditions), high: s(w.high), low: s(w.low),
     precip: s(w.precip), wind: s(w.wind), sunrise: s(w.sunrise), sunset: s(w.sunset),
-    emoji: s(w.emoji),
+    emoji: s(w.emoji), symbol: s(w.symbol),
     source: w.source === 'auto' ? 'auto' : (w.source === 'manual' ? 'manual' : ''),
     forecastDate: s(w.forecastDate), place: s(w.place), updatedAt: Number(w.updatedAt) || 0,
   };
@@ -9256,21 +9672,43 @@ function normalizeCallSheetWeather(w) {
   return hasAny ? out : null;
 }
 
+// [label, emoji (text/PDF), symbol (SVG icon from the design-system weather library)]
 const WMO_WEATHER = {
-  0:['Clear sky','☀️'], 1:['Mainly clear','🌤️'], 2:['Partly cloudy','⛅'], 3:['Overcast','☁️'],
-  45:['Fog','🌫️'], 48:['Rime fog','🌫️'],
-  51:['Light drizzle','🌦️'], 53:['Drizzle','🌦️'], 55:['Heavy drizzle','🌧️'],
-  56:['Freezing drizzle','🌧️'], 57:['Freezing drizzle','🌧️'],
-  61:['Light rain','🌦️'], 63:['Rain','🌧️'], 65:['Heavy rain','🌧️'],
-  66:['Freezing rain','🌧️'], 67:['Freezing rain','🌧️'],
-  71:['Light snow','🌨️'], 73:['Snow','❄️'], 75:['Heavy snow','❄️'], 77:['Snow grains','❄️'],
-  80:['Rain showers','🌦️'], 81:['Rain showers','🌧️'], 82:['Violent showers','⛈️'],
-  85:['Snow showers','🌨️'], 86:['Snow showers','🌨️'],
-  95:['Thunderstorm','⛈️'], 96:['Thunderstorm, hail','⛈️'], 99:['Thunderstorm, hail','⛈️'],
+  0:['Clear sky','☀️','weather.clear'], 1:['Mainly clear','🌤️','weather.mostly-clear'], 2:['Partly cloudy','⛅','weather.partly-cloudy'], 3:['Overcast','☁️','weather.overcast'],
+  45:['Fog','🌫️','weather.fog'], 48:['Rime fog','🌫️','weather.fog'],
+  51:['Light drizzle','🌦️','weather.drizzle'], 53:['Drizzle','🌦️','weather.drizzle'], 55:['Heavy drizzle','🌧️','weather.drizzle'],
+  56:['Freezing drizzle','🌧️','weather.sleet'], 57:['Freezing drizzle','🌧️','weather.sleet'],
+  61:['Light rain','🌦️','weather.showers'], 63:['Rain','🌧️','weather.rain'], 65:['Heavy rain','🌧️','weather.heavy-rain'],
+  66:['Freezing rain','🌧️','weather.sleet'], 67:['Freezing rain','🌧️','weather.sleet'],
+  71:['Light snow','🌨️','weather.snow'], 73:['Snow','❄️','weather.snow'], 75:['Heavy snow','❄️','weather.snow'], 77:['Snow grains','❄️','weather.snow'],
+  80:['Rain showers','🌦️','weather.showers'], 81:['Rain showers','🌧️','weather.rain'], 82:['Violent showers','⛈️','weather.heavy-rain'],
+  85:['Snow showers','🌨️','weather.snow'], 86:['Snow showers','🌨️','weather.snow'],
+  95:['Thunderstorm','⛈️','weather.thunderstorm'], 96:['Thunderstorm, hail','⛈️','weather.thunderstorm-rain'], 99:['Thunderstorm, hail','⛈️','weather.thunderstorm-rain'],
 };
 function wmoWeather(code) {
   const hit = WMO_WEATHER[code];
-  return hit ? { label:hit[0], emoji:hit[1] } : { label:'', emoji:'🌤️' };
+  return hit ? { label:hit[0], emoji:hit[1], symbol:hit[2] } : { label:'', emoji:'🌤️', symbol:'weather.default' };
+}
+
+// Best-effort weather SVG symbol for a stored weather object: use the saved
+// symbol, else infer one from the conditions text (manual entries), else default.
+function weatherSymbolFor(w) {
+  if (w && w.symbol) return w.symbol;
+  const text = String(w?.conditions || '').toLowerCase();
+  if (!text) return 'weather.default';
+  if (/thunder|storm|lightning/.test(text)) return 'weather.thunderstorm';
+  if (/hail|sleet|freezing/.test(text)) return 'weather.sleet';
+  if (/snow|flurr/.test(text)) return 'weather.snow';
+  if (/heavy rain|downpour|pouring/.test(text)) return 'weather.heavy-rain';
+  if (/shower/.test(text)) return 'weather.showers';
+  if (/drizzle/.test(text)) return 'weather.drizzle';
+  if (/rain|wet/.test(text)) return 'weather.rain';
+  if (/fog|mist|haze/.test(text)) return 'weather.fog';
+  if (/overcast|cloudy|clouds/.test(text)) return 'weather.overcast';
+  if (/partly|mostly clear|partial/.test(text)) return 'weather.partly-cloudy';
+  if (/clear|sunny|sun\b|fair/.test(text)) return 'weather.clear';
+  if (/wind|breez|gust/.test(text)) return 'weather.wind';
+  return 'weather.default';
 }
 
 function fmtClockFromISO(iso) {
@@ -9364,7 +9802,8 @@ function renderCallSheetWeatherCard() {
   setV('pp-wx-wind', w.wind || '');
   setV('pp-wx-sunrise', w.sunrise || '');
   setV('pp-wx-sunset', w.sunset || '');
-  setTxt('pp-weather-ico', w.emoji || '🌤️');
+  const icoEl = document.getElementById('pp-weather-ico');
+  if (icoEl) icoEl.innerHTML = sfIcon(weatherSymbolFor(w));
   if (w.updatedAt) {
     setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
   } else {
@@ -9416,7 +9855,7 @@ async function fetchCallSheetWeather() {
     const wx = wmoWeather(d.weather_code?.[0]);
     const round = n => (n == null ? '' : Math.round(n));
     callSheetWeather = {
-      conditions: wx.label, emoji: wx.emoji,
+      conditions: wx.label, emoji: wx.emoji, symbol: wx.symbol,
       high: d.temperature_2m_max?.[0] != null ? round(d.temperature_2m_max[0]) + '°' : '',
       low:  d.temperature_2m_min?.[0] != null ? round(d.temperature_2m_min[0]) + '°' : '',
       precip: d.precipitation_probability_max?.[0] != null ? d.precipitation_probability_max[0] + '%' : '',
@@ -9568,8 +10007,12 @@ function openSafetyPlan() {
   const safety = data.safety || {};
   document.getElementById('sp-hospital').value = safety.hospital || data.hospital || '';
   // Auto-fill weather from the call sheet's fetched forecast (with icons) when the
-  // safety plan hasn't been given its own weather note yet.
-  document.getElementById('sp-weather').value = safety.weather || weatherCuteSummary(activeCallSheetWeather(data)) || data.weather || '';
+  // safety plan hasn't been given its own weather note yet. Only a real STRING note
+  // counts — legacy saves sometimes stored the whole weather OBJECT here, which both
+  // rendered "[object Object]" and (being truthy) blocked the call-sheet auto-fill.
+  const safetyWeatherNote = typeof safety.weather === 'string' ? safety.weather : '';
+  const legacyTopWeather = typeof data.weather === 'string' ? data.weather : '';
+  document.getElementById('sp-weather').value = safetyWeatherNote || weatherCuteSummary(activeCallSheetWeather(data)) || legacyTopWeather || '';
   document.getElementById('sp-first-aid').value = safety.firstAid || '';
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
@@ -9588,7 +10031,8 @@ function getSafetyPlanData() {
   const existing = data.safety || {};
   // If the weather field still equals the call-sheet auto-fill, keep it "auto"
   // (store empty) so it stays live with the call sheet; a real edit is kept.
-  const wxVal = document.getElementById('sp-weather')?.value?.trim() ?? existing.weather ?? '';
+  const existingWeather = typeof existing.weather === 'string' ? existing.weather : '';
+  const wxVal = document.getElementById('sp-weather')?.value?.trim() ?? existingWeather ?? '';
   const wxAuto = weatherCuteSummary(activeCallSheetWeather(data));
   return {
     hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
@@ -9652,14 +10096,18 @@ function defaultProductionSchedule() {
 }
 
 function normalizeProductionChecklistRow(row, i=0) {
-  if (typeof row === 'string') return { area:'Crew-defined check', item:row, hint:'Rewrite this as a show-day check your crew can verify.', done:false };
+  if (typeof row === 'string') return { area:'Crew-defined check', item:row, hint:'Rewrite this as a show-day check your crew can verify.', done:false, doneBy:'', doneAt:0 };
   const guide = guideForProductionArea(row?.area) || PRODUCTION_CHECKLIST_GUIDES[i] || {};
   const fallback = DEFAULT_PRODUCTION_CHECKS[i]?.item || guide.hint || row?.hint || '';
+  const done = Boolean(row?.done);
   return {
     area: row?.area || guide.area || '',
     item: row?.item || row?.task || fallback,
     hint: row?.hint || guide.hint || fallback,
-    done: Boolean(row?.done),
+    done,
+    // Accountability: who signed the item off, and when. Cleared if reopened.
+    doneBy: done ? String(row?.doneBy || '') : '',
+    doneAt: done ? (Number(row?.doneAt) || 0) : 0,
   };
 }
 
@@ -9718,6 +10166,7 @@ function openProductionSchedule() {
   document.getElementById('ps-address').value = schedule.address || '';
   document.getElementById('ps-setup-notes').value = schedule.setupNotes || '';
   document.getElementById('ps-show-notes').value = schedule.showNotes || '';
+  setSetupNotApplicable(schedule.setupNA);
   renderProductionChecklist(schedule.checklist);
   renderPaperworkNav('production-scheduler');
   renderPlandaBearComments('Production Schedule', 'pbCommentsProduction');
@@ -9741,12 +10190,17 @@ function renderProductionChecklist(items) {
       <span>Ready</span><span>Checklist Item</span><span></span>
     </div>
     ${rows.map((row,i)=>`
-      <div class="readiness-simple-row">
-        <label class="readiness-done"><input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''}> Ready</label>
-        <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="Add a ready-before-show item">
+      <div class="readiness-simple-row${row.done?' signed':''}">
+        <label class="readiness-done"><input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''} onchange="onProductionChecklistToggle(this)"> Ready</label>
+        <div class="readiness-item-wrap">
+          <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="Add a ready-before-show item">
+          ${row.done && row.doneBy ? `<div class="readiness-signoff">✓ Signed off by ${esc(row.doneBy)}${row.doneAt ? ` · ${esc(pbAgo(row.doneAt))}` : ''}</div>` : ''}
+        </div>
         <button class="readiness-remove" onclick="removeProductionChecklistRow(${i})" title="Remove row" aria-label="Remove readiness row">×</button>
         <input type="hidden" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
+        <input type="hidden" data-ps-row="${i}" data-ps-field="doneBy" value="${esc(row.doneBy||'')}">
+        <input type="hidden" data-ps-row="${i}" data-ps-field="doneAt" value="${esc(String(row.doneAt||0))}">
       </div>
     `).join('')}
     <button class="call-add-btn" onclick="addProductionChecklistRow()">+ Add checklist item</button>
@@ -9757,6 +10211,24 @@ function addProductionChecklistRow() {
   const current = getProductionScheduleData();
   current.checklist.push({ area:'', item:'', hint:'', done:false });
   renderProductionChecklist(current.checklist);
+}
+
+// Checking a readiness item records WHO signed it off and WHEN, then syncs to the
+// whole session — so the checklist is accountable, not just a personal tick box.
+function onProductionChecklistToggle(cb) {
+  const idx = Number(cb?.dataset?.psRow);
+  if (!Number.isFinite(idx)) return;
+  const byEl = document.querySelector(`[data-ps-row="${idx}"][data-ps-field="doneBy"]`);
+  const atEl = document.querySelector(`[data-ps-row="${idx}"][data-ps-field="doneAt"]`);
+  if (cb.checked) {
+    if (byEl) byEl.value = preProActor();
+    if (atEl) atEl.value = String(Date.now());
+  } else {
+    if (byEl) byEl.value = '';
+    if (atEl) atEl.value = '0';
+  }
+  saveProductionSchedule(false);                                  // persist + broadcast to the session
+  renderProductionChecklist(getProductionScheduleData().checklist); // show the sign-off line
 }
 
 function addProductionChecklistGuidedRow() {
@@ -9785,6 +10257,7 @@ function getProductionScheduleData() {
     rows[idx][field] = field === 'done' ? input.checked : input.value.trim();
   });
   return {
+    setupNA: document.getElementById('ps-setup-na')?.classList.contains('on') || false,
     date: document.getElementById('ps-date')?.value || '',
     showDate: document.getElementById('ps-show-date')?.value || '',
     setup: timeInputValue('ps-setup'),
@@ -9807,15 +10280,18 @@ function saveProductionSchedule(showToastOnSave=true) {
 
 function productionScheduleHTML(schedule) {
   const s = productionScheduleWithCallSheet(schedule || {}, loadPreProData());
-  const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td></tr>`).join('');
-  return `
-    <h1>2. Production Schedule</h1>
-    <h2>Setup Day</h2>
-    <table><tbody>
-      <tr><th>Setup Date</th><td>${esc(s.date || '')}</td></tr>
+  const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
+  const setupBody = s.setupNA
+    ? `<tr><td>No separate setup day — setup happens on show day.</td></tr>`
+    : `<tr><th>Setup Date</th><td>${esc(s.date || '')}</td></tr>
       <tr><th>Setup Start</th><td>${esc(s.setup || '')}</td></tr>
       <tr><th>Setup Wrap</th><td>${esc(s.wrap || '')}</td></tr>
-      <tr><th>Setup Notes</th><td>${esc(s.setupNotes || '')}</td></tr>
+      <tr><th>Setup Notes</th><td>${esc(s.setupNotes || '')}</td></tr>`;
+  return `
+    <h1>2. Production Schedule</h1>
+    <h2>Setup Day${s.setupNA ? ' — N/A' : ''}</h2>
+    <table><tbody>
+      ${setupBody}
     </tbody></table>
     <h2>Show Day</h2>
     <table><tbody>
@@ -9828,7 +10304,7 @@ function productionScheduleHTML(schedule) {
       <tr><th>Show Notes</th><td>${esc(s.showNotes || '')}</td></tr>
     </tbody></table>
     <h2>Ready Before Show</h2>
-    <table><thead><tr><th>Ready</th><th>Checklist Item</th></tr></thead><tbody>${rows || '<tr><td colspan="2">No checklist rows.</td></tr>'}</tbody></table>`;
+    <table><thead><tr><th>Ready</th><th>Checklist Item</th><th>Signed Off By</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No checklist rows.</td></tr>'}</tbody></table>`;
 }
 
 function showProductionSchedulePreview() {
@@ -10167,6 +10643,26 @@ window.toggleShowNotApplicable = toggleShowNotApplicable;
 window.setWrapNotApplicable = setWrapNotApplicable;
 window.toggleWrapNotApplicable = toggleWrapNotApplicable;
 
+// Production Schedule — "N/A" for the whole Setup Day (setup happens on show day,
+// or on a different day tracked elsewhere). Disables and clears the setup fields.
+function setSetupNotApplicable(isNA) {
+  isNA = Boolean(isNA);
+  const btn = document.getElementById('ps-setup-na');
+  if (btn) { btn.classList.toggle('on', isNA); btn.setAttribute('aria-pressed', isNA ? 'true' : 'false'); }
+  ['ps-date','ps-setup','ps-wrap','ps-setup-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = isNA;
+    if (isNA) el.value = '';
+  });
+}
+function toggleSetupNotApplicable() {
+  setSetupNotApplicable(!document.getElementById('ps-setup-na')?.classList.contains('on'));
+  paperworkDirty = true;
+}
+window.setSetupNotApplicable = setSetupNotApplicable;
+window.toggleSetupNotApplicable = toggleSetupNotApplicable;
+
 function getPreProData() {
   const existing = loadPreProData();
   const sheets = getCallSheets(existing);
@@ -10445,11 +10941,15 @@ async function exportPreProPackagePDF() {
     });
 
     section('2. Production Schedule');
-    line('Setup Day', 12, true, [50,70,100]);
-    field('Setup Date', schedule.date || '');
-    field('Setup Start', schedule.setup || '');
-    field('Setup Wrap', schedule.wrap || '');
-    field('Setup Notes', schedule.setupNotes || '');
+    line(schedule.setupNA ? 'Setup Day — N/A' : 'Setup Day', 12, true, [50,70,100]);
+    if (schedule.setupNA) {
+      field('Setup', 'No separate setup day — setup happens on show day.');
+    } else {
+      field('Setup Date', schedule.date || '');
+      field('Setup Start', schedule.setup || '');
+      field('Setup Wrap', schedule.wrap || '');
+      field('Setup Notes', schedule.setupNotes || '');
+    }
     line('Show Day', 12, true, [50,70,100]);
     field('Show Day', schedule.showDate || schedule.date || '');
     field('Crew Call', schedule.call || '');
@@ -10459,7 +10959,7 @@ async function exportPreProPackagePDF() {
     field('Address', schedule.address || '');
     field('Show Notes', schedule.showNotes || '');
     line('Ready Before Show', 12, true, [50,70,100]);
-    tableRows(['Ready','Checklist Item'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.item]));
+    tableRows(['Ready','Checklist Item','Signed Off By'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.item, row.done && row.doneBy ? `${row.doneBy}${row.doneAt ? ` (${new Date(row.doneAt).toLocaleDateString()})` : ''}` : '—']));
 
     section('3. Safety Plan');
     ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {

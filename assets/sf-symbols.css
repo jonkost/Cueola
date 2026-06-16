@@ -60,6 +60,28 @@
 .sf-symbol[data-symbol="content.display"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/display.svg");}
 .sf-symbol[data-symbol="content.list"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/list.bullet.svg");}
 
+/* Weather — mapped from the design-system weather library (monochrome masks). */
+.sf-symbol[data-symbol="weather.clear"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sun.max.fill.svg");}
+.sf-symbol[data-symbol="weather.mostly-clear"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.svg");}
+.sf-symbol[data-symbol="weather.partly-cloudy"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.svg");}
+.sf-symbol[data-symbol="weather.overcast"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.svg");}
+.sf-symbol[data-symbol="weather.fog"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.fog.svg");}
+.sf-symbol[data-symbol="weather.drizzle"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.drizzle.svg");}
+.sf-symbol[data-symbol="weather.rain"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.rain.svg");}
+.sf-symbol[data-symbol="weather.heavy-rain"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.heavyrain.svg");}
+.sf-symbol[data-symbol="weather.showers"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.rain.svg");}
+.sf-symbol[data-symbol="weather.sleet"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sleet.svg");}
+.sf-symbol[data-symbol="weather.snow"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.snow.svg");}
+.sf-symbol[data-symbol="weather.hail"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.hail.svg");}
+.sf-symbol[data-symbol="weather.thunderstorm"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.bolt.svg");}
+.sf-symbol[data-symbol="weather.thunderstorm-rain"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.bolt.rain.svg");}
+.sf-symbol[data-symbol="weather.default"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.svg");}
+.sf-symbol[data-symbol="weather.temp"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/thermometer.sun.fill.svg");}
+.sf-symbol[data-symbol="weather.precip"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.rain.svg");}
+.sf-symbol[data-symbol="weather.wind"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/wind.svg");}
+.sf-symbol[data-symbol="weather.sunrise"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sun.max.fill.svg");}
+.sf-symbol[data-symbol="weather.sunset"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sunset.fill.svg");}
+
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }
 }
