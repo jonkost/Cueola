@@ -205,6 +205,10 @@ let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise,
 let liveClockRunning = false;
 let paperworkDirty = false;
 let flowmingoRemoteOverrideUntil = 0;
+let collapsedSegments = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem('cueola_collapsed_segs')||'[]')); }
+  catch { return new Set(); }
+})();
 
 function pushSessionHistoryState(screen) {
   if (!history.pushState) return;
@@ -1785,6 +1789,7 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
   show = { name:showName || 'Untitled Show', start:'' };
   beats = [];
   freeTextMode = true;
+  rememberLastSession(session.code, session.userName);
   restoreLocalDraft();
   enterRundown();
   toast('Opened local copy. Shared sync is unavailable while offline.');
@@ -1793,6 +1798,7 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
 function openLocalPlandaBear(code='', name='You') {
   session = { code:(code || 'LOCAL').trim().toUpperCase(), role:'instructor', userName:name || 'You', isDemo:false, isExpert:false };
   freeTextMode = true;
+  rememberLastSession(session.code, session.userName);
   restoreLocalDraft();
   const data = loadPreProData();
   show = {
@@ -1820,6 +1826,46 @@ function createSession() {
 function enterAsInstructor() {
   hideModal('modal-code');
   enterRundown();
+}
+
+// Remember the last session code + name so the user only enters them once,
+// whether they came in through Cueola (Join Session) or Planda Bear.
+function rememberLastSession(code, name) {
+  try {
+    if (code) localStorage.setItem('cueola_last_code', code);
+    if (name) localStorage.setItem('cueola_last_name', name);
+  } catch {}
+}
+
+function prefillJoinFields(codeId, nameId) {
+  let code = '';
+  let name = '';
+  try {
+    code = localStorage.getItem('cueola_last_code') || '';
+    name = localStorage.getItem('cueola_last_name') || '';
+  } catch {}
+  const codeEl = document.getElementById(codeId);
+  const nameEl = document.getElementById(nameId);
+  if (codeEl && !codeEl.value) codeEl.value = code;
+  if (nameEl && !nameEl.value) nameEl.value = name;
+}
+
+function openJoinSession() {
+  prefillJoinFields('stud-code', 'stud-name');
+  showModal('modal-stud');
+  setTimeout(() => {
+    const codeEl = document.getElementById('stud-code');
+    (codeEl?.value ? document.getElementById('stud-name') : codeEl)?.focus();
+  }, 60);
+}
+
+function openPlandaBearJoin() {
+  prefillJoinFields('pp-join-code', 'pp-join-name');
+  showModal('modal-prepro-join');
+  setTimeout(() => {
+    const codeEl = document.getElementById('pp-join-code');
+    (codeEl?.value ? document.getElementById('pp-join-name') : codeEl)?.focus();
+  }, 60);
 }
 
 async function joinSession() {
@@ -1854,6 +1900,7 @@ async function joinSession() {
       rundownShadowBeats = cloneRundownValue(beats);
       rundownShadowShow = { name:show.name, start:show.start, freeMode:freeTextMode };
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
+      rememberLastSession(code, name);
       hideModal('modal-stud');
       enterRundown();
     }).catch(() => {
@@ -1881,6 +1928,7 @@ async function joinPreProSession() {
     if (d.prePro && typeof d.prePro === 'object') {
       try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
     }
+    rememberLastSession(code, name);
     hideModal('modal-prepro-join');
     openPaperworkHub();
     joinPresence();
@@ -2475,8 +2523,8 @@ function renderPresence(map) {
     return String(n||'?').slice(0,2).toUpperCase();
   };
   document.getElementById('presenceAvatars').innerHTML =
-    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" title="${esc(p.name)} — ${p.role==='instructor'?'Instructor':'Student'}">${initials(p.name)}</div>`).join('')+
-    (extra>0?`<div class="p-avatar extra" title="${extra} more in session">+${extra}</div>`:'');
+    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" data-fullname="${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}">${initials(p.name)}</div>`).join('')+
+    (extra>0?`<div class="p-avatar extra" data-fullname="${extra} more in session">+${extra}</div>`:'');
   document.getElementById('presenceTooltip').innerHTML =
     `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
     active.map(p=>{
@@ -2643,6 +2691,13 @@ function colDragEnd(e) {
   colDragSrc = null;
 }
 
+function toggleSegmentCollapse(id) {
+  if (collapsedSegments.has(id)) collapsedSegments.delete(id);
+  else collapsedSegments.add(id);
+  try { localStorage.setItem('cueola_collapsed_segs', JSON.stringify([...collapsedSegments])); } catch {}
+  renderRundown();
+}
+
 function renderRundown() {
   renderTableHeaders();
   const name = show.name||'Untitled Show';
@@ -2669,13 +2724,49 @@ function renderRundown() {
     return;
   }
 
+  // Pre-compute child counts per segment
+  const segChildCounts = {};
+  let _csi = null;
+  beats.forEach(b => {
+    if (b.style === 'segment') { _csi = b.id; segChildCounts[b.id] = 0; }
+    else if (_csi !== null) segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
+  });
+
   let offsetSecs = 0;
+  let activeSegCollapsed = false;
+  let cueNum = 0; // number non-segment beats
   let html = '';
   beats.forEach((b, i) => {
     const dur = fmtDur(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
-    offsetSecs += (b.min||0)*60+(b.sec||0);
+    offsetSecs += (b.min||0)*60+(b.sec||0); // always advance even when collapsed
 
+    if (b.style === 'segment') {
+      activeSegCollapsed = collapsedSegments.has(b.id);
+      const cc = segChildCounts[b.id] || 0;
+      const editActions = editMode ? `
+        <div class="row-edit-actions">
+          <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
+          <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
+          <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
+        </div>` : '';
+      html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
+        <td class="seg-td" colspan="${colOrder.length + 4}">
+          <div class="seg-row-inner">
+            <span class="seg-collapse-icon">${activeSegCollapsed ? '▶' : '▼'}</span>
+            <span class="seg-label-text">${esc(b.info || 'Segment')}</span>
+            ${b.notes ? `<span class="seg-notes-text">${esc(b.notes)}</span>` : ''}
+            <span class="seg-count-badge">${cc} cue${cc===1?'':'s'}${activeSegCollapsed?' · collapsed':''}</span>
+          </div>
+          ${editActions}
+        </td>
+      </tr>`;
+      return;
+    }
+
+    if (activeSegCollapsed) return; // hide child rows; offsetSecs already incremented
+
+    cueNum++;
     const editActions = editMode ? `
       <div class="row-edit-actions">
         <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
@@ -2686,7 +2777,7 @@ function renderRundown() {
       </div>` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
       <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">⠿</td>
-      <td class="cd cd-num">${i+1}</td>
+      <td class="cd cd-num">${cueNum}</td>
       <td class="cd" style="padding:8px 6px">
         <div class="cd-name">${esc(b.info||'—')}</div>
         ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
@@ -2869,12 +2960,12 @@ function openAddRow() {
 
 function arGoStep2() {
   if (!arStyle) return;
-  if (freeTextMode) {
+  if (freeTextMode || arStyle === 'segment') {
     insertAddRowBeat();
     hideOverlay('addRowOv');
     renderRundown();
     syncToFirestore();
-    toast('Row added.');
+    toast(arStyle === 'segment' ? 'Segment marker added.' : 'Row added.');
     return;
   }
   arCueType = null;
@@ -2967,9 +3058,13 @@ function buildArContext() {
 function arSelectStyle(s) {
   arStyle = s;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
-  document.getElementById(`opt-${s}`).classList.add('sel');
+  document.getElementById(`opt-${s}`)?.classList.add('sel');
   const durWrap = document.getElementById('ar-dur-wrap');
   if (durWrap) durWrap.style.display = s==='timed' ? '' : 'none';
+  const nextBtn = document.getElementById('ar-next-1');
+  if (nextBtn && !freeTextMode) {
+    nextBtn.innerHTML = `<span>${s === 'segment' ? 'Add Segment Marker' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
+  }
   updateArNextEnabled();
 }
 
@@ -3872,21 +3967,28 @@ function openEdit(id) {
   const b = beats.find(x=>x.id===id); if (!b) return;
   editId = id;
   editStyle = b.style||'flex';
-  document.getElementById('editTitle').textContent = 'Edit Row';
-  let h = `
-    <div class="field"><label class="field-lbl">Name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80"></div>
-    <div class="field"><label class="field-lbl">Notes</label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
-    <div class="field"><label class="field-lbl">Duration</label>
-      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center">
-        <input class="field-in" id="ed-min" type="number" min="0" max="180" value="${b.min||0}" style="text-align:center;font-family:var(--mono)">
-        <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
-        <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
-      </div></div>
-    <div class="field"><label class="field-lbl">Style</label>
-      <div class="chip-grid">
-        <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">⏱ Timed</button>
-        <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">⇔ Flex</button>
-      </div></div>`;
+  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit Segment Marker' : 'Edit Row';
+  let h;
+  if (b.style === 'segment') {
+    h = `
+      <div class="field"><label class="field-lbl">Section Label</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
+      <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>`;
+  } else {
+    h = `
+      <div class="field"><label class="field-lbl">Name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80"></div>
+      <div class="field"><label class="field-lbl">Notes</label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
+      <div class="field"><label class="field-lbl">Duration</label>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center">
+          <input class="field-in" id="ed-min" type="number" min="0" max="180" value="${b.min||0}" style="text-align:center;font-family:var(--mono)">
+          <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
+          <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
+        </div></div>
+      <div class="field"><label class="field-lbl">Style</label>
+        <div class="chip-grid">
+          <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">⏱ Timed</button>
+          <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">⇔ Flex</button>
+        </div></div>`;
+  }
   document.getElementById('editFields').innerHTML = h;
   document.getElementById('editOv').classList.add('on');
 }
@@ -3912,9 +4014,11 @@ function saveEdit() {
   const b = beats.find(x=>x.id===editId); if (!b) return;
   b.info  = document.getElementById('ed-info').value.trim()||b.info;
   b.notes = document.getElementById('ed-notes').value.trim();
-  b.min   = parseInt(document.getElementById('ed-min').value)||0;
-  b.sec   = parseInt(document.getElementById('ed-sec').value)||0;
-  if (editStyle) b.style = editStyle;
+  if (b.style !== 'segment') {
+    b.min = parseInt(document.getElementById('ed-min')?.value)||0;
+    b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
+    if (editStyle && editStyle !== 'segment') b.style = editStyle;
+  }
   document.getElementById('editOv').classList.remove('on');
   renderRundown(); syncToFirestore(); toast('Saved.');
 }
@@ -4011,6 +4115,9 @@ function confirmedGoLive() {
 
 function goLive() {
   if (lsIdx<0) lsIdx=0;
+  // skip past any leading segment markers so lsIdx starts on a real cue
+  while (lsIdx < beats.length && beats[lsIdx]?.style === 'segment') lsIdx++;
+  if (lsIdx >= beats.length) lsIdx = Math.max(0, beats.length - 1);
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
@@ -4417,7 +4524,7 @@ function liveCellForBeat(b, type, beatIdx) {
   if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
-  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="border-left-color:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
+  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
     ${on  ? `<div class="live-cue-rdy">○ ${esc(on)}</div>` : ''}
     ${off ? `<div class="live-cue-go" style="color:${tc.color}">▶ ${esc(off)}</div>` : ''}
     ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
@@ -4455,7 +4562,10 @@ function renderLiveFocus() {
   const body = document.getElementById('lsBody');
   const curIdx = Math.max(0, Math.min(lsIdx, beats.length - 1));
   const cur = beats[curIdx];
-  const next = beats[curIdx + 1];
+  // find next non-segment beat
+  let nextBeatIdx = curIdx + 1;
+  while (nextBeatIdx < beats.length && beats[nextBeatIdx]?.style === 'segment') nextBeatIdx++;
+  const next = nextBeatIdx < beats.length ? beats[nextBeatIdx] : null;
   const total = beats.length;
   const remainSecs = beats.slice(curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0);
   const startStr = show.start ? clock(show.start, beats.slice(0, curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0)) : '';
@@ -4477,7 +4587,7 @@ function renderLiveFocus() {
     </div>`;
 
   if (next) {
-    html += `<div class="lf-next" onclick="liveRowPreview(${curIdx + 1})">
+    html += `<div class="lf-next" onclick="liveRowPreview(${nextBeatIdx})">
       <span class="lf-next-badge">NEXT</span>
       <span class="lf-next-name">${esc(next.info || '—')}</span>
       <span class="lf-next-time">${fmtDur(next)}</span>
@@ -4486,10 +4596,13 @@ function renderLiveFocus() {
     html += `<div class="lf-next lf-next-last"><span class="lf-next-badge">END</span><span class="lf-next-name">Last row — show ends after this</span></div>`;
   }
 
-  const rest = beats.slice(curIdx + 2);
+  const rest = beats.slice(nextBeatIdx + 1);
   if (rest.length) {
     html += `<div class="lf-up-lbl">Coming up</div><div class="lf-up">` + rest.map((b, j) => {
-      const i = curIdx + 2 + j;
+      const i = nextBeatIdx + 1 + j;
+      if (b.style === 'segment') {
+        return `<div class="lf-up-seg">${esc(b.info || 'Segment')}</div>`;
+      }
       return `<div class="lf-up-row" onclick="${canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`}">
         <span class="lf-up-num">${i + 1}</span>
         <span class="lf-up-name">${esc(b.info || '—')}</span>
@@ -4544,26 +4657,40 @@ function renderLive() {
       ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
 
+  let liveNum = 0;
   beats.forEach((b, i) => {
+    const durSecs = (b.min||0)*60+(b.sec||0);
+    const startStr = show.start ? clock(show.start, offsetSecs) : '—';
+    offsetSecs += durSecs;
+
+    if (b.style === 'segment') {
+      const colSpan = 4 + showCols.length;
+      html += `<tr class="live-segment-header">
+        <td colspan="${colSpan}" class="live-seg-cell">
+          <span class="live-seg-label">${esc(b.info || 'Segment')}</span>
+          ${b.notes ? `<span class="live-seg-note">${esc(b.notes)}</span>` : ''}
+        </td>
+      </tr>`;
+      return;
+    }
+
+    liveNum++;
     const isCur  = i === lsIdx;
-    const isNext = i === lsIdx + 1;
+    const isNext = i > lsIdx && beats.slice(lsIdx+1, i).every(x => x.style === 'segment');
     const isDone = i < lsIdx;
     const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-    const startStr = show.start ? clock(show.start, offsetSecs) : '—';
-    const durSecs = (b.min||0)*60+(b.sec||0);
-    offsetSecs += durSecs;
     const statusClass = isCur ? 'now' : isNext ? 'next' : isDone ? 'done' : 'later';
     const statusText = isCur ? 'On Air' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
     const rowClass = isCur ? 'live-row-current' : isNext ? 'live-row-next' : isDone ? 'live-row-done' : '';
     html += `<tr class="${rowClass}" onclick="${handler}">
-      <td><div class="live-num">${i+1}</div></td>
+      <td><div class="live-num">${liveNum}</div></td>
       <td><span class="live-status ${statusClass}">${statusText}</span></td>
       <td>
         <div class="live-name">${esc(b.info||'—')}</div>
         ${b.notes?`<div class="live-note">${esc(b.notes)}</div>`:''}
       </td>
       <td><div class="live-time"><strong>${fmtDur(b)}</strong>${startStr}</div></td>
-      ${showCols.map(type=>`<td>${liveCellForBeat(b,type,i)}</td>`).join('')}
+      ${showCols.map(type=>`<td class="live-cue-td">${liveCellForBeat(b,type,i)}</td>`).join('')}
     </tr>`;
   });
   html += `</tbody></table></div>`;
@@ -4733,8 +4860,10 @@ function detachIfFollowing() {
 function lsNext() {
   detachIfFollowing();
   const prev = beats[lsIdx];
-  if (lsIdx < beats.length-1) {
-    lsIdx++;
+  let ni = lsIdx;
+  do { ni++; } while (ni < beats.length && beats[ni]?.style === 'segment');
+  if (ni < beats.length) {
+    lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     renderLive();
     syncLiveIdx();
@@ -4743,7 +4872,9 @@ function lsNext() {
 
 function lsPrev() {
   detachIfFollowing();
-  if (lsIdx > 0) { lsIdx--; renderLive(); sendToPrompter(false); syncLiveIdx(); }
+  let ni = lsIdx;
+  do { ni--; } while (ni >= 0 && beats[ni]?.style === 'segment');
+  if (ni >= 0) { lsIdx = ni; renderLive(); sendToPrompter(false); syncLiveIdx(); }
 }
 
 // Per-person following: which position should I mirror? Browsing self → null (keep
@@ -9617,11 +9748,16 @@ function rundownPreviewTableHTML() {
     const parts = [on && `<span class="cue-type">ON</span> ${esc(on)}`, off && `<span class="cue-type">OFF</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
+  let pdfCueNum = 0;
   const rows = beats.map((b,i) => {
     const start = show.start ? clock(show.start, offsetSecs) : '-';
     offsetSecs += (b.min||0)*60+(b.sec||0);
+    if (b.style === 'segment') {
+      return `<tr><td colspan="10" style="background:rgba(200,200,200,.12);font-weight:800;padding:8px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;border-left:3px solid currentColor">§ ${esc(b.info||'Segment')}</td></tr>`;
+    }
+    pdfCueNum++;
     return `<tr>
-      <td>${i+1}</td>
+      <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
       <td>${fmtDur(b)}</td>

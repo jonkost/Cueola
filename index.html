@@ -42,13 +42,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .modal-title:has(.sf-symbol),.warn-title:has(.sf-symbol){display:flex}
 
 /* ── ENTRY ── */
-#entry{align-items:center;justify-content:flex-start;padding:0 24px;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(91,141,248,.1),transparent 60%),var(--bg);overflow-y:auto;overflow-x:hidden}
+#entry{align-items:center;justify-content:flex-start;padding:0 24px;background:var(--bg);overflow-y:auto;overflow-x:hidden}
 #entry::before,#entry::after{content:'';flex:1 0 28px;min-height:28px}
 .entry-wrap{width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;gap:0;animation:rise .5s ease both;flex:0 0 auto;padding-top:8px}
 @keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.e-logo{font-size:44px;margin-bottom:12px;filter:drop-shadow(0 0 24px rgba(91,141,248,.5));animation:bob 4s ease-in-out infinite;line-height:1}
+.e-logo{font-size:44px;margin-bottom:12px;animation:bob 4s ease-in-out infinite;line-height:1}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-.e-title{font-family:var(--syne);font-size:36px;font-weight:800;letter-spacing:0;margin-bottom:6px;line-height:1.1;background:linear-gradient(135deg,var(--text),var(--accent) 60%,var(--acg));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.e-title{font-family:var(--syne);font-size:36px;font-weight:800;letter-spacing:0;margin-bottom:6px;line-height:1.1;color:var(--text)}
 .e-sub{font-size:14px;color:var(--text2);text-align:center;line-height:1.5;margin-bottom:18px;max-width:420px;letter-spacing:0}
 .e-sub em{color:var(--text);font-style:normal;font-weight:600}
 .entry-actions{width:100%;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:20px}
@@ -72,7 +72,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ec-mini-btn:hover{background:color-mix(in srgb,var(--oc,var(--accent)) 18%,transparent);color:var(--text);transform:translateY(-1px);box-shadow:0 0 0 2px color-mix(in srgb,var(--oc,var(--accent)) 36%,transparent)}
 .inst .ec-pill{background:rgba(91,141,248,.15);color:var(--accent)}.stud .ec-pill{background:rgba(34,211,160,.15);color:var(--green)}
 .demo .ec-pill{background:rgba(245,183,49,.15);color:var(--yellow)}.exp .ec-pill{background:rgba(70,82,122,.2);color:var(--text3)}
-.e-divider{width:100%;max-width:280px;height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:8px auto 0}
+.e-divider{width:100%;max-width:280px;height:1px;background:var(--border);margin:8px auto 0}
 .e-footer{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center}
 .e-footer-label{font-size:13px;color:var(--text3);font-family:var(--sans);font-weight:500;letter-spacing:0}
 .e-footer-link{font-size:13px;color:var(--accent);font-family:var(--sans);font-weight:600;letter-spacing:0;cursor:pointer;background:none;border:none;text-decoration:none;padding:6px 4px;border-radius:6px;transition:color .15s var(--ease),background .15s var(--ease)}
@@ -84,6 +84,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand{font-family:var(--syne);font-size:17px;font-weight:700;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;letter-spacing:0;transition:opacity .15s var(--ease)}
 .brand:hover{opacity:.78}
 .brand .hi{color:var(--accent)}
+/* Two-tone wordmark highlight — accent half of Cueola / Planda Bear. Follows the active theme accent. */
+.brand-hi{color:var(--accent)}
 .session-badge{display:flex;align-items:center;gap:7px;padding:6px 13px;background:var(--s3);border:1px solid var(--bord2);border-radius:20px;font-family:var(--mono);font-size:12px;color:var(--text2);font-weight:500}
 .session-badge strong{color:var(--accent);letter-spacing:.08em}
 .role-badge{padding:5px 11px;border-radius:20px;font-size:11px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
@@ -110,14 +112,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── PRESENCE ── */
 .presence-wrap{position:relative;display:flex;align-items:center;cursor:default}
 .presence-avatars{display:flex;align-items:center}
-.p-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;font-family:var(--sans);border:2px solid var(--s1);margin-left:-8px;cursor:default;letter-spacing:.02em;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
+.p-avatar{position:relative;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;font-family:var(--sans);border:2px solid var(--s1);margin-left:-8px;cursor:default;letter-spacing:.02em;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
 .p-avatar:first-child{margin-left:0}
+.p-avatar:hover{z-index:20}
+.p-avatar[data-fullname]::after{content:attr(data-fullname);position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;letter-spacing:0;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.p-avatar[data-fullname]::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%) translateY(3px);border:5px solid transparent;border-bottom-color:var(--bord2);opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:501}
+.p-avatar[data-fullname]:hover::after,.p-avatar[data-fullname]:hover::before{opacity:1;transform:translateX(-50%) translateY(0)}
 .p-avatar.inst{background:var(--accent);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 80%,#000) inset,0 2px 6px rgba(0,0,0,.3)}
 .p-avatar.stud{background:var(--green);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 80%,#000) inset,0 2px 6px rgba(0,0,0,.3)}
 .p-avatar.extra{background:var(--s4);color:var(--text);font-size:11px;font-weight:700}
 .presence-wrap:hover .p-avatar{transform:translateY(-1px)}
 .p-tooltip{display:none;position:absolute;top:calc(100% + 8px);right:0;background:color-mix(in srgb,var(--s1) 96%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:12px;padding:10px 12px;min-width:180px;max-width:280px;z-index:400;flex-direction:column;gap:7px;box-shadow:0 12px 32px rgba(0,0,0,.55)}
-.presence-wrap:hover .p-tooltip{display:flex}
+/* Group dropdown retired in favour of per-avatar hover tooltips. */
 .p-tip-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden}
 .p-tip-row .p-tip-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .p-tip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;box-shadow:0 0 8px currentColor}
@@ -337,12 +343,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-time{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.3}
 .live-time strong{display:block;color:var(--text);font-size:14px;font-weight:800}
 /* Cue cell — Ready (standby) over Take (go), same size on every row. */
-.live-cue-cell{border-left:3px solid var(--bord2);border-radius:0 6px 6px 0;background:rgba(255,255,255,.028);padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+/* height:1px on the cell lets the box stretch to the full row height (the child resolves height:100% against the row). */
+.live-grid td.live-cue-td{height:1px;padding:5px 6px}
+.live-cue-cell{height:100%;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--cue-clr,var(--bord2)) 30%,var(--bord2));border-left:3px solid var(--cue-clr,var(--bord2));border-radius:8px;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 15%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 4%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 10%,transparent),0 1px 2px rgba(0,0,0,.22);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:3px;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease)}
+.live-grid td.live-cue-td .live-cue-empty{height:100%;display:flex;align-items:center;justify-content:center}
 .live-cue-rdy{font-family:var(--mono);font-size:11.5px;line-height:1.25;color:var(--text2)}
 .live-cue-go{font-family:var(--mono);font-size:13px;font-weight:700;line-height:1.22}
 .live-cue-empty{font-family:var(--mono);font-size:12px;color:var(--text3);opacity:.28;text-align:center}
 .live-script-cell{cursor:pointer}
-.live-script-cell:hover{border-color:var(--cyan);background:rgba(34,211,211,.08)}
+.live-script-cell:hover{border-color:color-mix(in srgb,var(--cyan) 55%,var(--bord2));background:linear-gradient(180deg,color-mix(in srgb,var(--cyan) 18%,var(--s2)),color-mix(in srgb,var(--cyan) 6%,var(--s3)))}
 .live-script-open{cursor:pointer;color:var(--text3);opacity:.32;font-size:15px;font-family:var(--mono);text-align:center}
 .live-script-open:hover{opacity:1;color:var(--cyan)}
 .live-script-action{margin-top:3px;font-size:9px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cyan);opacity:.7}
@@ -351,7 +360,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #liveshow{background:radial-gradient(circle at 12% 0%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 28%),var(--bg)}
 .ls-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--glass-bg-strong);border-bottom:1px solid var(--glass-border);flex-shrink:0;gap:8px;box-shadow:var(--glass-highlight);flex-wrap:wrap;backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%)}
 .ls-brand{font-family:var(--syne);font-size:14px;font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:6px}
-.ls-brand span{color:var(--red)}
+.ls-brand .ls-live{color:var(--red)}
 .ls-info{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .ls-clock{font-family:var(--mono);font-size:12px;color:var(--text2);white-space:nowrap;margin-right:2px}
 /* Uniform, single-line tool buttons that wrap as whole units (never mid-word). */
@@ -850,7 +859,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="prepbear"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(238,202,87,.14)}
 
 /* Planda Bear local themes */
-.plandabear-tools{display:flex;justify-content:flex-end;margin-top:-4px}
+.plandabear-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-4px}
 .plandabear-settings-btn{width:38px;height:38px;border-radius:9px;border:1.5px solid var(--bord2);background:transparent;color:var(--text2);font-size:17px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
 .plandabear-settings-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--text) 5%,transparent)}
 .plandabear-settings-btn:active{transform:scale(.96)}
@@ -1803,6 +1812,78 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 .pb-collab-avatar.stud{background:linear-gradient(135deg,var(--green),color-mix(in srgb,var(--green) 60%,#000))}
 .pb-field-busy{outline:2px solid color-mix(in srgb,var(--accent) 75%,transparent)!important;outline-offset:1px;background:color-mix(in srgb,var(--accent) 7%,transparent)!important}
 .pb-field-editor-chip{position:absolute;top:-9px;right:8px;z-index:6;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:.04em;color:#fff;background:linear-gradient(135deg,var(--accent),var(--acg));border-radius:999px;padding:2px 8px;box-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;white-space:nowrap}
+
+/* ── Back-to-Cueola button in Planda Bear header — mirrors the build "Planda Bear" tbtn-ghost ── */
+.pb-back-rundown-btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;font-size:13px;font-weight:600;font-family:var(--sans);letter-spacing:0;color:var(--text2);border:1.5px solid var(--bord2);border-radius:9px;background:transparent;cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;line-height:1}
+.pb-back-rundown-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.pb-back-rundown-btn:active{transform:scale(.96)}
+
+/* ── Rundown table clarity ── */
+.cue-row{border-bottom:1px solid var(--border)}
+.cue-row:nth-child(even){background:color-mix(in srgb,var(--text) 2.5%,transparent)}
+.cue-row td{border-right:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
+.cue-row td:last-child{border-right:0}
+#rdTable thead th{border-right:1px solid var(--border);border-bottom:2px solid var(--border);background:var(--s2);font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text2);padding:8px 6px}
+#rdTable thead th:last-child{border-right:0}
+
+/* ── Segment rows in build rundown ── */
+.segment-row{border-bottom:none!important;background:transparent!important}
+.segment-row:hover{background:transparent!important;box-shadow:none!important}
+.seg-td{padding:0!important;border:none!important;cursor:pointer}
+.seg-row-inner{display:flex;align-items:center;gap:10px;padding:9px 14px;background:linear-gradient(90deg,color-mix(in srgb,var(--yellow) 12%,var(--s2)),var(--s2));border-top:1px solid color-mix(in srgb,var(--yellow) 25%,var(--border));border-bottom:1px solid color-mix(in srgb,var(--yellow) 20%,var(--border));border-left:3px solid var(--yellow)}
+.seg-collapse-icon{font-size:10px;color:var(--yellow);width:12px;flex-shrink:0;transition:transform .18s}
+.seg-label-text{font-size:12px;font-weight:800;font-family:var(--syne);letter-spacing:.04em;text-transform:uppercase;color:var(--text)}
+.seg-notes-text{font-size:11px;color:var(--text2);font-family:var(--sans)}
+.seg-count-badge{margin-left:auto;font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--yellow);background:color-mix(in srgb,var(--yellow) 12%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 28%,transparent);border-radius:999px;padding:2px 8px;white-space:nowrap}
+
+/* ── Segment rows in live grid ── */
+.live-segment-header{background:transparent}
+.live-seg-cell{padding:7px 14px!important;background:color-mix(in srgb,var(--yellow) 8%,var(--s1));border-top:1px solid color-mix(in srgb,var(--yellow) 20%,var(--border));border-bottom:1px solid color-mix(in srgb,var(--yellow) 20%,var(--border));border-left:3px solid var(--yellow)!important}
+.live-seg-label{font-size:10px;font-weight:800;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--yellow)}
+.live-seg-note{font-size:10px;color:var(--text2);margin-left:10px;font-family:var(--sans)}
+/* Coming-up segment markers in Focus view */
+.lf-up-seg{padding:5px 14px;font-size:9px;font-weight:800;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--yellow);opacity:.75}
+
+/* ── Production clock — LED display style ── */
+.ls-bot{padding:0;background:#0a0b0d;border-top:2px solid #1a1c20}
+.ls-bot-clocks{background:#0a0b0d;padding:8px 14px;gap:18px;flex:1}
+.ls-bot-clk{gap:2px}
+.ls-bot-lbl{color:#3a4050;font-size:8px;letter-spacing:.18em}
+.ls-prod-clock-face,.prod-clock-face{display:inline-flex;align-items:baseline;gap:0;background:#060709;border:1px solid #1c2028;border-radius:2px;padding:6px 12px}
+/* Build bottom-bar LED clocks — same production face, sized for the compact bar */
+.prod-clock-face{padding:4px 10px}
+.bb-led{font-family:'Courier New',Courier,monospace;font-size:21px;font-weight:900;letter-spacing:.05em;line-height:1;font-variant-numeric:tabular-nums}
+.bb-led-el{color:#ff3030}
+.bb-led-rm{color:#3ad090}
+.bb-led-el.warn,.bb-led-rm.warn{color:#ffb030}
+.ls-timer{font-family:'Courier New',Courier,monospace;font-size:36px;font-weight:900;letter-spacing:.06em;color:#ff3030;line-height:1}
+.ls-timer.warn{color:#ffb030}
+.ls-remain{font-family:'Courier New',Courier,monospace;font-size:28px;font-weight:900;letter-spacing:.06em;color:#3ad090;line-height:1}
+.ls-remain.warn{color:#ffb030}
+.ls-nav{padding:0 12px;background:#0a0b0d;align-self:stretch;display:flex;align-items:center;gap:6px;border-left:1px solid #1a1c20}
+
+/* ── Live, scaled down: stack the bottom bar so the production clocks never clip,
+   and tighten the toolbar so it packs instead of sprawling. ── */
+@media(max-width:680px){
+  /* Bottom bar stacks: nav on top (full width), clocks below split 50/50. */
+  .ls-bot{flex-wrap:wrap;gap:7px;padding:7px 8px 8px}
+  .ls-nav{order:1;width:100%;padding:0;border-left:0;background:transparent;gap:7px}
+  .ls-nav .ls-btn{flex:1;justify-content:center;padding:9px 12px}
+  .ls-bot-clocks{order:2;width:100%;gap:7px;justify-content:stretch}
+  .ls-bot-clk{flex:1;min-width:0;align-items:center;gap:2px}
+  .ls-bot-sep{display:none}
+  .ls-bot .ls-prod-clock-face{width:100%;justify-content:center;padding:5px 4px}
+  .ls-timer,.ls-remain{font-size:clamp(15px,5.6vw,24px)}
+  /* Toolbar packs tighter and stays on as few rows as possible. */
+  .ls-bar{padding:6px 10px;gap:6px}
+  .ls-info{gap:5px}
+  .ls-exit-btn{height:30px;padding:0 9px;font-size:11.5px}
+  .ls-clock{width:100%;text-align:left;font-size:11px;margin:0 0 2px}
+}
+@media(max-width:420px){
+  .ls-timer,.ls-remain{font-size:clamp(13px,5.2vw,18px)}
+  .ls-bot-lbl{font-size:8px}
+}
 </style>
 </head>
 <body>
@@ -1820,21 +1901,21 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
   <div class="entry-wrap">
 	    <div class="e-logo">🐨</div>
-	    <div class="e-title">Cueola</div>
+	    <div class="e-title">Cue<span class="brand-hi">ola</span></div>
 	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, and sync <em>Flowmingo.</em></div>
 	    <div class="entry-actions">
 	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> New here? Start the guide</button>
 	    </div>
 	    <div class="e-cards">
-      <div class="e-card stud e-card-full" onclick="showModal('modal-stud')">
+      <div class="e-card stud e-card-full" onclick="openJoinSession()">
         <div class="ec-icon">🐨</div>
         <div class="ec-title">Join Session</div>
         <div class="ec-desc">Enter the session code your director gave you.</div>
         <span class="ec-pill">Enter session code</span>
       </div>
-      <div class="e-card e-card-full" onclick="showModal('modal-prepro-join')" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
+      <div class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
         <div class="ec-icon">🐼</div>
-        <div class="ec-title">Planda Bear</div>
+        <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
         <div class="ec-desc">Build the pre-production package with your session code.</div>
         <span class="ec-pill" style="background:rgba(245,183,49,.15);color:var(--yellow)">Session code required</span>
       </div>
@@ -1891,7 +1972,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">Admin</button>
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" title="Show production notes while building"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
-	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()">🐼 Planda Bear</button>
+	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()">🐼 Plan<span class="brand-hi">da Bear</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="exportPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
@@ -1937,8 +2018,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
   <div class="bot-bar">
     <div class="bb-stats">
-      <div class="bb-s"><span class="bb-l">Elapsed</span><span class="bb-v" id="bb-el">00:00:00:00</span></div>
-      <div class="bb-s"><span class="bb-l">Remaining</span><span class="bb-v warn" id="bb-rm">—</span></div>
+      <div class="bb-s"><span class="bb-l">Elapsed</span><div class="prod-clock-face"><span class="bb-led bb-led-el" id="bb-el">00:00:00:00</span></div></div>
+      <div class="bb-s"><span class="bb-l">Remaining</span><div class="prod-clock-face"><span class="bb-led bb-led-rm" id="bb-rm">—</span></div></div>
     </div>
     <div class="now-next">
       <div class="nn now" id="nn-now">NOW → —</div>
@@ -1952,7 +2033,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 ══════════════════════════════════════════ -->
 <div class="screen" id="liveshow">
   <div class="ls-bar">
-    <div class="ls-brand">🐨 Cueola <span>● LIVE</span></div>
+    <div class="ls-brand"><span>🐨 Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
@@ -2010,9 +2091,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   </div>
   <div class="ls-bot">
     <div class="ls-bot-clocks">
-      <div class="ls-bot-clk"><span class="ls-bot-lbl">Elapsed</span><span class="ls-timer" id="ls-timer">00:00:00:00</span></div>
-      <div class="ls-bot-sep"></div>
-      <div class="ls-bot-clk"><span class="ls-bot-lbl">Remaining</span><span class="ls-remain" id="ls-remain">—</span></div>
+      <div class="ls-bot-clk">
+        <span class="ls-bot-lbl">Elapsed</span>
+        <div class="ls-prod-clock-face"><span class="ls-timer" id="ls-timer">00:00:00:00</span></div>
+      </div>
+      <div class="ls-bot-sep" style="background:#1a1c20"></div>
+      <div class="ls-bot-clk">
+        <span class="ls-bot-lbl">Remaining</span>
+        <div class="ls-prod-clock-face"><span class="ls-remain" id="ls-remain">—</span></div>
+      </div>
     </div>
     <div class="ls-nav">
       <button class="ls-btn ls-prev" onclick="lsPrev()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Previous</span></button>
@@ -2239,7 +2326,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         </div>
         <div>
           <div class="field-lbl" style="margin-bottom:8px">Style</div>
-          <div class="opt-grid-2">
+          <div class="opt-grid-3">
             <div class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 9%,transparent)">
               <div class="opt-icon">⏱</div>
               <div class="opt-name">Timed</div>
@@ -2249,6 +2336,11 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
               <div class="opt-icon">⇔</div>
               <div class="opt-name">Flex</div>
               <div class="opt-desc">No fixed time. Expand as needed.</div>
+            </div>
+            <div class="opt-card" id="opt-segment" onclick="arSelectStyle('segment')" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
+              <div class="opt-icon">§</div>
+              <div class="opt-name">Segment</div>
+              <div class="opt-desc">Section divider. Collapses its cues in build.</div>
             </div>
           </div>
         </div>
@@ -2396,10 +2488,11 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="pb-modal-header">
       <div>
         <div class="pb-modal-kicker">Pre-production workspace</div>
-        <div class="modal-title">🐼 Planda Bear</div>
+        <div class="modal-title">🐼 Plan<span class="brand-hi">da Bear</span></div>
         <div class="pb-modal-sub">Build the package in order. Back and Next save the current page, and the export uses the same rendered pages shown in preview.</div>
       </div>
       <div class="plandabear-tools">
+      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown">🐨 Cue<span class="brand-hi">ola</span></button>
       <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" title="Planda Bear theme settings" aria-label="Planda Bear theme settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       </div>
     </div>
@@ -2912,7 +3005,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260616e"></script>
+<script src="cueola-app.js?v=20260617d"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
