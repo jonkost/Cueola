@@ -2656,11 +2656,11 @@ function renderTableHeaders() {
                 ondrop="colDrop(event,'${type}')"
                 ondragend="colDragEnd(event)"
                 data-col="${type}"
-                title="Drag to reorder">${sfIcon(m.symbol)} ${m.label} <span style="font-size:7px;opacity:.35">⠿</span></th>`;
+                title="Drag to reorder">${sfIcon(m.symbol)} ${m.label} ${sfIcon('action.drag','col-grip')}</th>`;
     }
     return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${sfIcon(m.symbol)} ${m.label}</th>`;
   }).join('');
-  const dragCol = editMode ? '<th class="col-drag" title="Drag rows to reorder">⠿</th>' : '<th class="col-drag"></th>';
+  const dragCol = editMode ? `<th class="col-drag" title="Drag rows to reorder">${sfIcon('action.drag')}</th>` : '<th class="col-drag"></th>';
   thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
 }
 
@@ -2674,16 +2674,20 @@ function colDragOver(e, el) {
   document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
   if (el && el.dataset.col !== colDragSrc) el.classList.add('col-drag-over');
 }
+function reRenderActiveGrid() {
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+  else renderRundown();
+}
 function colDrop(e, targetType) {
   e.preventDefault();
   document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
-  if (!editMode || !colDragSrc || colDragSrc === targetType) { colDragSrc=null; return; }
+  if (!colDragSrc || colDragSrc === targetType) { colDragSrc=null; return; }
   const fi = colOrder.indexOf(colDragSrc), ti = colOrder.indexOf(targetType);
   if (fi < 0 || ti < 0) { colDragSrc=null; return; }
   colOrder.splice(fi, 1); colOrder.splice(ti, 0, colDragSrc);
   localStorage.setItem('cueola_col_order', JSON.stringify(colOrder));
   colDragSrc = null;
-  renderRundown();
+  reRenderActiveGrid();
 }
 function colDragEnd(e) {
   e.currentTarget.style.opacity = '';
@@ -2753,7 +2757,7 @@ function renderRundown() {
       html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
         <td class="seg-td" colspan="${colOrder.length + 4}">
           <div class="seg-row-inner">
-            <span class="seg-collapse-icon">${activeSegCollapsed ? '▶' : '▼'}</span>
+            <span class="seg-collapse-icon">${sfIcon(activeSegCollapsed ? 'action.collapse' : 'action.expand')}</span>
             <span class="seg-label-text">${esc(b.info || 'Segment')}</span>
             ${b.notes ? `<span class="seg-notes-text">${esc(b.notes)}</span>` : ''}
             <span class="seg-count-badge">${cc} cue${cc===1?'':'s'}${activeSegCollapsed?' · collapsed':''}</span>
@@ -2776,12 +2780,12 @@ function renderRundown() {
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
       </div>` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
-      <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">⠿</td>
+      <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">${sfIcon('action.drag')}</td>
       <td class="cd cd-num">${cueNum}</td>
       <td class="cd" style="padding:8px 6px">
-        <div class="cd-name">${esc(b.info||'—')}</div>
+        <div class="cd-name">${esc(b.info||'—')}${rundownRowPresenceHTML(b.id)}</div>
         ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
-        <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-block">${b.style==='timed'?'⏱':'⇔'} ${(b.style||'flex').toUpperCase()}</span>
+        <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px">${sfIcon(b.style==='timed'?'state.timed':'state.flex')} ${(b.style||'flex').toUpperCase()}</span>
         ${editMode ? '' : '<div class="row-open-hint">Click row to edit</div>'}
         ${editActions}
       </td>
@@ -2820,8 +2824,8 @@ function getCueCell(b, type) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
   const lines = [
-    on  ? `<div class="cue-on-line"><span class="cue-on-dot">▶</span>${esc(on)}</div>`  : '',
-    off ? `<div class="cue-off-line"><span class="cue-off-dot">■</span>${esc(off)}</div>` : '',
+    on  ? `<div class="cue-on-line"><span class="cue-on-dot">${sfIcon('marker.go')}</span>${esc(on)}</div>`  : '',
+    off ? `<div class="cue-off-line"><span class="cue-off-dot">${sfIcon('marker.stop')}</span>${esc(off)}</div>` : '',
   ].filter(Boolean).join('');
   const scriptMeta = type === 'script' && d?.text
     ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
@@ -3101,6 +3105,7 @@ function openCueConfig(beatId, type) {
   document.getElementById('cueConfigFields').innerHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
+  setRundownPresence(beatId);
 }
 
 function buildFreeTextCueFields(type, d) {
@@ -3883,6 +3888,7 @@ function saveCueConfig() {
   }
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
+  setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Cue saved.');
 }
 
@@ -3891,6 +3897,7 @@ function removeCueCfg() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b||!b.cues) return;
   delete b.cues[cueConfigType];
   hideModal('cueConfigModal');
+  setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Cue removed.');
 }
 
@@ -3985,12 +3992,13 @@ function openEdit(id) {
         </div></div>
       <div class="field"><label class="field-lbl">Style</label>
         <div class="chip-grid">
-          <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">⏱ Timed</button>
-          <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">⇔ Flex</button>
+          <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
+          <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
         </div></div>`;
   }
   document.getElementById('editFields').innerHTML = h;
   document.getElementById('editOv').classList.add('on');
+  setRundownPresence(id);
 }
 
 function edSetStyle(s, el) {
@@ -4008,6 +4016,7 @@ function edChipField(id, label, options, current, allowCustom=false) {
 function closeEdit(e) {
   if (e && e.target!==document.getElementById('editOv')) return;
   document.getElementById('editOv').classList.remove('on');
+  setRundownPresence(null);
 }
 
 function saveEdit() {
@@ -4020,6 +4029,7 @@ function saveEdit() {
     if (editStyle && editStyle !== 'segment') b.style = editStyle;
   }
   document.getElementById('editOv').classList.remove('on');
+  setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Saved.');
 }
 
@@ -4029,6 +4039,7 @@ function deleteCue() {
   if (!confirm('Remove this row?')) return;
   beats = beats.filter(b=>b.id!==editId);
   document.getElementById('editOv').classList.remove('on');
+  setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Row removed.');
 }
 
@@ -4525,8 +4536,8 @@ function liveCellForBeat(b, type, beatIdx) {
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
   return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
-    ${on  ? `<div class="live-cue-rdy">○ ${esc(on)}</div>` : ''}
-    ${off ? `<div class="live-cue-go" style="color:${tc.color}">▶ ${esc(off)}</div>` : ''}
+    ${on  ? `<div class="live-cue-rdy">${sfIcon('marker.ready')} ${esc(on)}</div>` : ''}
+    ${off ? `<div class="live-cue-go" style="color:${tc.color}">${sfIcon('marker.go')} ${esc(off)}</div>` : ''}
     ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
   </div>`;
 }
@@ -4654,7 +4665,7 @@ function renderLive() {
       <th class="live-col-status">State</th>
       <th class="live-col-name">Row</th>
       <th class="live-col-time">Time</th>
-      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
+      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color};cursor:grab;user-select:none" draggable="true" data-col="${type}" ondragstart="colDragStart(event,'${type}')" ondragover="colDragOver(event,this)" ondrop="colDrop(event,'${type}')" ondragend="colDragEnd(event)" title="Drag to reorder">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label} ${sfIcon('action.drag','col-grip')}</th>`).join('')}
     </tr></thead><tbody>`;
 
   let liveNum = 0;
@@ -7107,6 +7118,27 @@ function selectTheme(t) {
   applyTheme(currentTheme); // live preview — reverted on Cancel, saved on Save
 }
 
+// Front-page theme picker — applies and persists immediately (no Save step).
+function toggleEntryThemes() {
+  const panel = document.getElementById('entryThemePanel');
+  const gear = document.getElementById('entryThemeGear');
+  if (!panel) return;
+  const open = panel.hasAttribute('hidden');
+  panel.toggleAttribute('hidden', !open);
+  gear?.classList.toggle('active', open);
+  if (open) syncEntryThemeSwatches();
+}
+function pickEntryTheme(t) {
+  currentTheme = normalizeCueolaTheme(t);
+  applyTheme(currentTheme);
+  try { localStorage.setItem('cueola_theme', currentTheme); } catch {}
+  syncEntryThemeSwatches();
+}
+function syncEntryThemeSwatches() {
+  document.querySelectorAll('#entryThemePanel .theme-swatch').forEach(s =>
+    s.classList.toggle('active', s.dataset.theme === currentTheme));
+}
+
 function saveSettings() {
   const nameIn = document.getElementById('set-showname');
   if (!nameIn.disabled) show.name = nameIn.value.trim()||show.name;
@@ -7283,6 +7315,22 @@ function pbSetPresenceField(fieldKey) {
   pbWritePresence({ pbField: fieldKey || null });
 }
 
+// Build rundown: announce which row I'm editing so collaborators see where I am.
+function setRundownPresence(beatId) {
+  pbWritePresence({ rdBeat: (beatId == null ? null : Number(beatId)) });
+}
+function rundownRowPresenceHTML(beatId) {
+  if (!currentPresence || !session.code || session.isDemo || session.isExpert) return '';
+  const now = Date.now();
+  const people = Object.entries(currentPresence)
+    .filter(([id, p]) => id !== presenceId && p && Number(p.rdBeat) === Number(beatId) && (now - (p.lastSeen || 0) < 25000))
+    .map(([, p]) => p);
+  if (!people.length) return '';
+  return `<span class="rd-row-presence" title="Editing now">` + people.slice(0, 3).map(p =>
+    `<span class="rd-pres-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" data-fullname="${esc(p.name)} · editing">${esc(pbInitials(p.name))}</span>`
+  ).join('') + `</span>`;
+}
+
 function pbActiveCollabPeople() {
   const now = Date.now();
   return Object.entries(currentPresence || {})
@@ -7301,7 +7349,7 @@ function pbRenderPagePresence() {
     const onThisPage = here.filter(p => p.pbPage === pageId);
     const elsewhere = here.filter(p => p.pbPage && p.pbPage !== pageId);
     if (!here.length) { box.innerHTML = ''; return; }
-    const avatar = p => `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" title="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' — ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' — on this page'}">${esc(pbInitials(p.name))}</span>`;
+    const avatar = p => `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" data-fullname="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' · ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' · on this page'}">${esc(pbInitials(p.name))}</span>`;
     let html = '';
     if (onThisPage.length) html += `<span class="pb-collab-label">On this page</span>${onThisPage.map(avatar).join('')}`;
     if (elsewhere.length) html += `<span class="pb-collab-label dim">Elsewhere</span>${elsewhere.map(avatar).join('')}`;
@@ -10937,7 +10985,22 @@ function getPreProData() {
 
 function saveCallSheet(showToastOnSave=true) {
   persistPreProData(getPreProData(), 'Call Sheet');
+  applyPlandaShowStartToRundown();
   if (showToastOnSave) toast('Call sheet saved.');
+}
+
+// Planda Bear's Call Sheet "Show Start" is the source of truth for the rundown
+// start time — keep the build/settings start in sync whenever it's set there.
+function applyPlandaShowStartToRundown() {
+  const raw = (typeof getShowStartValue === 'function') ? getShowStartValue() : '';
+  if (!raw || raw === 'N/A') return;
+  const norm = normalizeTimeValue(raw);
+  if (!norm || norm === show.start) return;
+  show.start = norm;
+  const setInput = document.getElementById('set-starttime');
+  if (setInput) setTimeInputValue('set-starttime', show.start);
+  if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
+  syncToFirestore();
 }
 
 function savePrePro() {

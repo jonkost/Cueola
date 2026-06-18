@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260616a">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260617e">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -16,7 +16,11 @@
   --video:#5b8df8;--video-bg:rgba(91,141,248,.12);--cue-add:#8fb0ff;--cue-add-bg:rgba(91,141,248,.045);--cue-add-border:rgba(91,141,248,.36);
   --syne:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;
   --display:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;
-  --mono:ui-monospace,'SF Mono','SFMono-Regular',Menlo,Consolas,monospace;
+  /* Small UI text (labels, badges, times, codes): modern system sans, not monospace.
+     Digit alignment is preserved with tabular-nums (see the .tnum rule below). The
+     production LED clocks use Courier directly, so they're unaffected. */
+  --mono:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;
+  --mono-num:ui-monospace,'SF Mono','SFMono-Regular',Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;
   --glass-bg:color-mix(in srgb,var(--s1) 78%,transparent);
   --glass-bg-strong:color-mix(in srgb,var(--s2) 88%,transparent);
@@ -29,7 +33,7 @@
   --ease:cubic-bezier(.4,0,.2,1);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;letter-spacing:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow:hidden;scroll-behavior:smooth}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;letter-spacing:0;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow:hidden;scroll-behavior:smooth}
 .screen{display:none;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 .screen.on{display:flex}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
@@ -43,6 +47,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ── ENTRY ── */
 #entry{align-items:center;justify-content:flex-start;padding:0 24px;background:var(--bg);overflow-y:auto;overflow-x:hidden}
+.entry-theme-center{position:absolute;top:16px;left:16px;z-index:6}
+.entry-theme-panel{position:absolute;top:calc(100% + 8px);left:0;width:min(320px,86vw);background:var(--s1);border:1px solid var(--bord2);border-radius:14px;padding:14px;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
+.entry-theme-panel[hidden]{display:none}
+.entry-theme-title{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.entry-theme-panel .theme-grid{grid-template-columns:repeat(4,1fr)}
 #entry::before,#entry::after{content:'';flex:1 0 28px;min-height:28px}
 .entry-wrap{width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;gap:0;animation:rise .5s ease both;flex:0 0 auto;padding-top:8px}
 @keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
@@ -115,9 +124,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .p-avatar{position:relative;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;font-family:var(--sans);border:2px solid var(--s1);margin-left:-8px;cursor:default;letter-spacing:.02em;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
 .p-avatar:first-child{margin-left:0}
 .p-avatar:hover{z-index:20}
-.p-avatar[data-fullname]::after{content:attr(data-fullname);position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;letter-spacing:0;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 10px 26px rgba(0,0,0,.5)}
-.p-avatar[data-fullname]::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%) translateY(3px);border:5px solid transparent;border-bottom-color:var(--bord2);opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:501}
-.p-avatar[data-fullname]:hover::after,.p-avatar[data-fullname]:hover::before{opacity:1;transform:translateX(-50%) translateY(0)}
+.pb-collab-avatar[data-fullname]{position:relative}
+:is(.p-avatar,.pb-collab-avatar)[data-fullname]::after{content:attr(data-fullname);position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;letter-spacing:0;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+:is(.p-avatar,.pb-collab-avatar)[data-fullname]::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%) translateY(3px);border:5px solid transparent;border-bottom-color:var(--bord2);opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:501}
+:is(.p-avatar,.pb-collab-avatar)[data-fullname]:hover::after,:is(.p-avatar,.pb-collab-avatar)[data-fullname]:hover::before{opacity:1;transform:translateX(-50%) translateY(0)}
+.pb-collab-avatar[data-fullname]:hover{z-index:20}
 .p-avatar.inst{background:var(--accent);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 80%,#000) inset,0 2px 6px rgba(0,0,0,.3)}
 .p-avatar.stud{background:var(--green);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 80%,#000) inset,0 2px 6px rgba(0,0,0,.3)}
 .p-avatar.extra{background:var(--s4);color:var(--text);font-size:11px;font-weight:700}
@@ -1884,6 +1895,25 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   .ls-timer,.ls-remain{font-size:clamp(13px,5.2vw,18px)}
   .ls-bot-lbl{font-size:8px}
 }
+
+/* ── SF Symbol affordances wired into the rundown ── */
+.col-grip{font-size:8px;opacity:.32;vertical-align:middle;margin-left:1px}
+/* Build rundown: who is editing which row, live. */
+.rd-row-presence{display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle}
+.rd-pres-avatar{position:relative;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:8px;font-weight:800;font-family:var(--mono);color:#fff;border:1.5px solid var(--bg);margin-left:-5px;box-shadow:0 1px 3px rgba(0,0,0,.4);animation:glowPulse 2s ease-in-out infinite}
+.rd-pres-avatar:first-child{margin-left:0}
+.rd-pres-avatar.inst{background:var(--accent)}
+.rd-pres-avatar.stud{background:var(--green)}
+.rd-pres-avatar:hover{z-index:20}
+.rd-pres-avatar[data-fullname]::after{content:attr(data-fullname);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);border:1px solid var(--bord2);border-radius:7px;padding:4px 8px;font-size:11px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 8px 22px rgba(0,0,0,.5)}
+.rd-pres-avatar[data-fullname]:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}
+.style-pill .sf-symbol{font-size:11px}
+.cd-drag .sf-symbol{font-size:12px}
+.col-drag .sf-symbol{font-size:12px;opacity:.7}
+.seg-collapse-icon .sf-symbol{font-size:10px}
+.cue-on-dot .sf-symbol,.cue-off-dot .sf-symbol{font-size:9px;vertical-align:0}
+.live-cue-rdy .sf-symbol,.live-cue-go .sf-symbol{font-size:9px;vertical-align:0}
+.live-col-cue .col-grip,.live-col-script .col-grip{font-size:7px}
 </style>
 </head>
 <body>
@@ -1892,6 +1922,22 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
      ENTRY SCREEN
 ══════════════════════════════════════════ -->
 <div class="screen on" id="entry">
+  <div class="entry-theme-center">
+    <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <div class="entry-theme-panel" id="entryThemePanel" hidden>
+      <div class="entry-theme-title">Theme</div>
+      <div class="theme-grid">
+        <div class="theme-swatch" data-theme="cool" onclick="pickEntryTheme('cool')"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></div>
+        <div class="theme-swatch" data-theme="warm" onclick="pickEntryTheme('warm')"><div class="ts-preview" style="background:#140803"></div><div class="ts-name">Honey</div></div>
+        <div class="theme-swatch" data-theme="white" onclick="pickEntryTheme('white')"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></div>
+        <div class="theme-swatch" data-theme="green" onclick="pickEntryTheme('green')"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></div>
+        <div class="theme-swatch" data-theme="koala" onclick="pickEntryTheme('koala')"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></div>
+        <div class="theme-swatch" data-theme="panda" onclick="pickEntryTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
+        <div class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></div>
+        <div class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></div>
+      </div>
+    </div>
+  </div>
   <div class="notif-center entry-notif" id="notifCenter">
     <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Message center" aria-label="Message center"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
     <div class="notif-panel" id="notifPanel" hidden>
@@ -1921,7 +1967,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       </div>
       <div class="e-card e-card-full flowmingo-card" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
         <div class="ec-icon">🦩</div>
-        <div class="ec-title">Flowmingo</div>
+        <div class="ec-title">Flow<span class="brand-hi">mingo</span></div>
         <div class="ec-desc">Open the script display for talent, or run a remote operator without going live in Cueola.</div>
         <div class="ec-actions">
           <button class="ec-mini-btn" onclick="event.stopPropagation();openPrompterApp()">Talent Display</button>
@@ -1972,7 +2018,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">Admin</button>
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" title="Show production notes while building"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
-	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()">🐼 Plan<span class="brand-hi">da Bear</span></button>
+	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()">🐼 <span>Plan<span class="brand-hi">da Bear</span></span></button>
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="exportPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
@@ -2039,8 +2085,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
 	      <button class="ls-exit-btn" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><span>Full Grid</span></button>
 	      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
-	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 Flowmingo Op</button>
-	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 Flowmingo</button>
+	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view">🦩 <span>Flow<span class="brand-hi">mingo</span></span> Op</button>
+	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)">🦩 <span>Flow<span class="brand-hi">mingo</span></span></button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
 	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
       <button class="ls-exit-btn" onclick="requestExitLive()"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span><span>Exit</span></button>
@@ -2328,17 +2374,17 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <div class="field-lbl" style="margin-bottom:8px">Style</div>
           <div class="opt-grid-3">
             <div class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 9%,transparent)">
-              <div class="opt-icon">⏱</div>
+              <div class="opt-icon"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></div>
               <div class="opt-name">Timed</div>
               <div class="opt-desc">Fixed duration. Clock counts down.</div>
             </div>
             <div class="opt-card" id="opt-flex" onclick="arSelectStyle('flex')" style="--oc:var(--text2);--ob:rgba(100,116,139,.07)">
-              <div class="opt-icon">⇔</div>
+              <div class="opt-icon"><span class="sf-symbol" data-symbol="state.flex" aria-hidden="true"></span></div>
               <div class="opt-name">Flex</div>
               <div class="opt-desc">No fixed time. Expand as needed.</div>
             </div>
             <div class="opt-card" id="opt-segment" onclick="arSelectStyle('segment')" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
-              <div class="opt-icon">§</div>
+              <div class="opt-icon"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span></div>
               <div class="opt-name">Segment</div>
               <div class="opt-desc">Section divider. Collapses its cues in build.</div>
             </div>
@@ -2492,7 +2538,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div class="pb-modal-sub">Build the package in order. Back and Next save the current page, and the export uses the same rendered pages shown in preview.</div>
       </div>
       <div class="plandabear-tools">
-      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown">🐨 Cue<span class="brand-hi">ola</span></button>
+      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown">🐨 <span>Cue<span class="brand-hi">ola</span></span></button>
       <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" title="Planda Bear theme settings" aria-label="Planda Bear theme settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       </div>
     </div>
@@ -3005,7 +3051,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260617d"></script>
+<script src="cueola-app.js?v=20260617f"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

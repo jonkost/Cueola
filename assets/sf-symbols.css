@@ -82,6 +82,18 @@
 .sf-symbol[data-symbol="weather.sunrise"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sun.max.fill.svg");}
 .sf-symbol[data-symbol="weather.sunset"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sunset.fill.svg");}
 
+/* Rundown row styles, collapse, drag, and cue markers (monochrome masks). */
+.sf-symbol[data-symbol="state.timed"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/time/timer.svg");}
+.sf-symbol[data-symbol="state.flex"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/human/figure.flexibility.svg");}
+.sf-symbol[data-symbol="content.segment"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/text.line.magnify.svg");}
+.sf-symbol[data-symbol="action.expand"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/chevron.down.svg");}
+.sf-symbol[data-symbol="action.collapse"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/chevron.right.svg");}
+.sf-symbol[data-symbol="action.drag"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/line.3.horizontal.svg");}
+.sf-symbol[data-symbol="marker.go"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/play.fill.svg");}
+.sf-symbol[data-symbol="marker.stop"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/stop.fill.svg");}
+.sf-symbol[data-symbol="marker.ready"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/circle.svg");}
+.sf-symbol[data-symbol="marker.active"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/circle.fill.svg");}
+
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }
 }
