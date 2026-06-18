@@ -1514,7 +1514,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 /* ─────────────────────────────────────────────────────────────
    PROMPTYPUS — native teleprompter screen
 ───────────────────────────────────────────────────────────── */
-#promptypus{position:relative;background:#0a0a0a;cursor:none}
+#promptypus{position:relative;background:#0a0a0a;cursor:none;--pt-bar-h:calc(48px + env(safe-area-inset-top))}
 #promptypus.show-cursor{cursor:default}
 /* Cueola (koala) prompter theme — sharp, deep, professional. No emoji, no line
    hatching: just a refined dark field, a quiet two-tone corner wordmark, and a
@@ -1541,11 +1541,11 @@ button.pb-todo-check:hover{border-color:var(--green)}
 #promptypus[data-pt-theme="white"] :is(.pt-btn,.pt-cueola-input,.pt-bar-controls-btn,.pt-back-btn){background:#f4f2ee;color:#000;border-color:#c9c5bd}
 
 /* Top nav bar */
-#pt-bar{position:absolute;top:0;left:0;right:0;height:48px;display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:center;gap:8px;padding:0 12px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
+#pt-bar{position:absolute;top:0;left:0;right:0;height:var(--pt-bar-h,48px);display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:center;gap:8px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom:1px solid var(--pt-ui-border,rgba(200,169,126,.25));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
 #pt-bar.hidden{opacity:0;pointer-events:none}
 .pt-back-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-accent,#c8a97e);border-radius:7px;padding:5px 11px;cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
-.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);text-align:center;opacity:.85;letter-spacing:.04em;position:absolute;left:50%;transform:translateX(-50%);pointer-events:none}
+.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);text-align:center;opacity:.85;letter-spacing:.04em;position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 24px);transform:translate(-50%,-50%);pointer-events:none}
 .pt-status{display:flex;align-items:center;gap:7px;min-width:0}
 .pt-bar-sync{font-size:11px;font-weight:700;letter-spacing:.03em;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
 .pt-bar-sync::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 8px currentColor}
@@ -1583,7 +1583,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
 
 /* Stage — scrolling area */
-#pt-stage{position:absolute;top:48px;left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s}
+#pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s}
 #pt-stage.mirrored{transform:scaleX(-1)}
 #promptypus.mirrored::before,#promptypus.mirrored::after{transform:scaleX(-1)}
 #pt-stage::before,#pt-stage::after{content:'';position:absolute;left:0;right:0;height:28vh;pointer-events:none;z-index:10}
@@ -1601,13 +1601,13 @@ button.pb-todo-check:hover{border-color:var(--green)}
 #pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:800}
 
 /* Reading line */
-#pt-read-line{position:absolute;left:0;right:0;top:calc(48px + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
+#pt-read-line{position:absolute;left:0;right:0;top:calc(var(--pt-bar-h,48px) + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
 #pt-read-line::before,#pt-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0;opacity:1}
 #pt-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#c8a97e)}
 #pt-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#c8a97e)}
 
 /* Progress bar */
-#pt-progress{position:absolute;top:0;left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none;box-shadow:0 0 8px var(--pt-accent,#c8a97e)}
+#pt-progress{position:absolute;top:env(safe-area-inset-top);left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none;box-shadow:0 0 8px var(--pt-accent,#c8a97e)}
 
 /* Floating control panel */
 #pt-panel{position:absolute;bottom:0;left:0;right:0;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-width:1px 0 0;border-radius:18px 18px 0 0;padding:14px 18px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:10px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:opacity .4s;font-family:var(--mono);font-size:11px;width:100%}
@@ -1630,6 +1630,34 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 .pt-theme-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(255,255,255,.22);transition:transform .15s var(--ease),box-shadow .2s var(--ease);flex-shrink:0;display:inline-block}
 .pt-theme-dot:hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
 .pt-theme-dot.active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg,#000),0 0 0 4px var(--pt-accent,#fff)}
+
+/* Live actions — Tech Difficulty toggle + cue scrubber (shared by Script Op, Flowmingo Op, op stage) */
+.pt-tech-btn{border-color:color-mix(in srgb,var(--red,#f05252) 55%,transparent);color:color-mix(in srgb,var(--red,#f05252) 90%,var(--pt-text,#f0ead6));white-space:nowrap}
+.pt-tech-btn:hover{background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);border-color:var(--red,#f05252)}
+.pt-tech-btn.active{background:var(--red,#f05252);border-color:var(--red,#f05252);color:#fff}
+
+/* Technical-difficulties stand-by cover on the talent screen */
+#pt-slate{position:absolute;inset:0;z-index:160;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(130% 120% at 50% 36%,color-mix(in srgb,var(--pt-bg,#0a0a0a) 60%,#000) 0%,var(--pt-bg,#0a0a0a) 64%);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+#pt-slate.on{display:flex}
+.pt-slate-inner{display:flex;flex-direction:column;align-items:center;gap:20px;max-width:min(680px,90vw)}
+.pt-slate-mark{font-size:54px;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f5b84a;background:color-mix(in srgb,#f5b84a 13%,transparent);border:2px solid color-mix(in srgb,#f5b84a 50%,transparent);box-shadow:0 0 44px color-mix(in srgb,#f5b84a 22%,transparent)}
+.pt-slate-title{font-family:var(--syne);font-size:clamp(30px,6vw,58px);font-weight:800;letter-spacing:-.01em;color:var(--pt-text,#f0ead6);line-height:1.05}
+.pt-slate-sub{font-family:var(--mono);font-size:clamp(12px,2.3vw,18px);letter-spacing:.2em;text-transform:uppercase;color:var(--pt-text,#f0ead6);opacity:.6}
+
+/* Script Op sidebar: prominent live actions + collapsible transport disclosure */
+.ls-live-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:14px;padding:10px 12px;font-family:var(--mono)}
+.ls-live-actions .pt-ctrl-group{display:flex;grid-template-columns:none;align-items:center;gap:8px}
+.ls-live-actions .pt-live-tech{flex:1 1 100%}
+.ls-live-actions .pt-tech-btn{width:100%;padding:9px;font-size:12px;border-radius:10px}
+.ls-live-actions .pt-live-cue{flex:1 1 100%}
+.ls-live-actions .pt-range{flex:1}
+.ls-disclosure{border:1px solid var(--bord2,rgba(255,255,255,.08));border-radius:12px;overflow:hidden;background:rgba(0,0,0,.12)}
+.ls-disclosure>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--text2,#9aa6b2);user-select:none}
+.ls-disclosure>summary::-webkit-details-marker{display:none}
+.ls-disclosure>summary::after{content:'';margin-left:auto;width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .2s;opacity:.7}
+.ls-disclosure[open]>summary::after{transform:rotate(-135deg)}
+.ls-disclosure>summary:hover{color:var(--cyan,#22d3d3)}
+.ls-disclosure #lsPrompterRemote{padding:0 6px 8px}
 
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -1657,7 +1685,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 
 /* Standalone Flowmingo Op */
 #flowOp{background:var(--pt-bg,#08090f);color:var(--pt-text,#d6e8f0);--pt-bg:#08090f;--pt-text:#d6e8f0;--pt-accent:#7eb8c8;--pt-ui-bg:rgba(15,15,25,.92);--pt-ui-border:rgba(126,184,200,.25);--pt-size:52px;--pt-align:center}
-.flowop-top{height:56px;display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(280px,440px) auto;gap:12px;align-items:center;padding:0 16px;border-bottom:1px solid var(--pt-ui-border);background:var(--pt-ui-bg);backdrop-filter:blur(18px);position:relative;z-index:10}
+.flowop-top{min-height:56px;display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(280px,440px) auto;gap:12px;align-items:center;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));border-bottom:1px solid var(--pt-ui-border);background:var(--pt-ui-bg);backdrop-filter:blur(18px);position:relative;z-index:10}
 .flowop-title-wrap{min-width:0}
 .flowop-kicker{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-accent);opacity:.72;line-height:1.2}
 .flowop-title{font-family:var(--syne);font-size:18px;font-weight:800;color:var(--pt-text);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2157,9 +2185,13 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
       </div>
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
-      <div class="ls-prompter-actions" style="flex-direction:column;gap:6px">
-        <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))">Edit current cue script</button>
+      <div class="ls-live-actions" id="lsLiveActions" aria-label="Live actions"></div>
+      <details class="ls-disclosure">
+        <summary><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Transport &amp; display</span></summary>
         <div id="lsPrompterRemote"></div>
+      </details>
+      <div class="ls-prompter-actions" style="gap:6px">
+        <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))">Edit cue script</button>
         <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()">Clear script</button>
       </div>
     </div>
@@ -2222,6 +2254,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
   <div id="pt-stage">
     <div id="pt-track">
       <div id="pt-text"></div>
+    </div>
+  </div>
+
+  <!-- Technical-difficulties stand-by cover (operator toggled) -->
+  <div id="pt-slate" role="status" aria-live="polite">
+    <div class="pt-slate-inner">
+      <div class="pt-slate-mark"><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span></div>
+      <div class="pt-slate-title">Technical Difficulties</div>
+      <div class="pt-slate-sub">Please stand by</div>
     </div>
   </div>
 
@@ -3080,7 +3121,7 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260618b"></script>
+<script src="cueola-app.js?v=20260618d"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

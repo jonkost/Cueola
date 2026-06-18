@@ -190,9 +190,9 @@ let editStyle = null;
 
 // Prompt Op Mode — teleprompter-operator focused live view
 let promptOpMode = false;
-// Live Focus view — the default live surface: one big NOW, a clear NEXT, and a
-// calm coming-up list. Toggling off shows the full department grid.
-let liveFocusMode = (() => { try { return localStorage.getItem('cueola_live_focus') !== '0'; } catch { return true; } })();
+// Live view — defaults to the full department grid. Focus view (one big NOW, a
+// clear NEXT, calm coming-up list) is opt-in and remembered once chosen.
+let liveFocusMode = (() => { try { return localStorage.getItem('cueola_live_focus') === '1'; } catch { return false; } })();
 let browserBackGuardReady = false;
 let _lastHandledForceCmdTs = 0;
 let livePrompterOpen = false;
@@ -5550,8 +5550,12 @@ function updateLsPrompter() {
 }
 
 function renderLivePrompterControls() {
+  // Live actions (Tech Difficulty + cue scrubber) stay visible in the sidebar;
+  // the full transport block lives in a collapsible disclosure below.
+  const live = document.getElementById('lsLiveActions');
+  if (live) live.innerHTML = liveActionsHTML('lsq');
   const el = document.getElementById('lsPrompterRemote');
-  if (el) el.innerHTML = promptOpControlsHTML();
+  if (el) el.innerHTML = promptOpControlsHTML(false);
 }
 
 async function pushToPrompter() {
@@ -5693,7 +5697,9 @@ let flowOpReturnScreen = 'entry';
 let flowOpKeydownHandler = null;
 let flowOpKeyupHandler = null;
 let flowOpLastRemoteControlTs = 0;
-const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD)(?:[^\]]*)\]/i;
+let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
+let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
+const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD|TECHNICAL DIFFICULTIES)(?:[^\]]*)\]/i;
 
 const PT_THEMES = {
   warm:     { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
@@ -5857,6 +5863,11 @@ function ptUpdateProgress() {
   const pct = max > 0 ? Math.min(100, (ptOffset / max) * 100) : 0;
   const prog = ptEl('pt-progress');
   if (prog) prog.style.width = pct + '%';
+  // Keep the operator cue scrubber tracking the live position (unless being dragged).
+  ['po-seek', 'lsq-seek'].forEach(id => {
+    const s = document.getElementById(id);
+    if (s && document.activeElement !== s) s.value = Math.round(pct);
+  });
 }
 
 function ptResetAutoPauseMarkers() {
@@ -5927,11 +5938,12 @@ function ptSyncPlayIcons(isPlaying) {
   if (icon) icon.innerHTML = isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
 }
 
-function promptOpControlsHTML() {
+function promptOpControlsHTML(includeLiveActions = true) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="prompt-op-panel">
+    ${includeLiveActions ? liveActionsHTML('po') : ''}
     <div class="pt-ctrl-group">
       <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')">${playIcon} ${playLabel}</button>
     </div>
@@ -6033,6 +6045,105 @@ function ptResetScroll() {
   const track = ptEl('pt-track');
   if (track) track.style.transform = 'translateY(0)';
   ptUpdateProgress();
+}
+
+// Current scroll position as a 0–100 percentage (for the operator cue scrubber).
+function ptProgressPct() {
+  const max = ptGetMaxScroll();
+  return max > 0 ? Math.round(Math.min(100, Math.max(0, (ptOffset / max) * 100))) : 0;
+}
+
+// Live "cue" scroll — operators drag the talent prompter to any spot on the fly.
+// Pure repositioning: never pauses, never writes a marker.
+function ptSeekToProgress(pct) {
+  const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
+  const max = ptGetMaxScroll();
+  ptOffset = max > 0 ? (p / 100) * max : 0;
+  const track = ptEl('pt-track');
+  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+  ptUpdateProgress();
+}
+
+// "Technical difficulties" stand-by cover. Instant full-screen hold + scroll pause.
+function ptShowTechSlate() {
+  ptTechSlateOn = true;
+  ptStopPlay();
+  ptEl('pt-slate')?.classList.add('on');
+  syncTechButtons();
+}
+function ptHideTechSlate() {
+  ptTechSlateOn = false;
+  ptEl('pt-slate')?.classList.remove('on');
+  syncTechButtons();
+}
+
+// Keep every visible "Tech Difficulty / Back on air" toggle in sync with the state.
+function syncTechButtons() {
+  const on = ptTechSlateOn || flowOpTechSlate;
+  ['lsq-tech-btn', 'po-tech-btn', 'flow-tech-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.textContent = on ? 'Back on air' : 'Tech Difficulty';
+    b.classList.toggle('active', on);
+  });
+}
+
+// Operator quick action (Script Op): throw up the stand-by slate AND record the
+// marker in the script, or clear it. "Both" behaviour from the plan.
+function toggleTechDifficulty() {
+  if (ptTechSlateOn) {
+    sendPrompterControl('slate_tech_off');
+  } else {
+    recordTechDifficultyMarker();
+    sendPrompterControl('slate_tech_on');
+  }
+  // sendPrompterControl applies locally too, so state is up to date now.
+  syncTechButtons();
+}
+
+function recordTechDifficultyMarker() {
+  const marker = '[TECHNICAL DIFFICULTIES] ';
+  const base = (prompterText || '').replace(/\s+$/, '');
+  const next = base ? `${base}\n\n${marker}` : marker;
+  adoptPrompterText(next, { forceEditor: true, source: 'tech-difficulty' });
+  livePrompterDraftDirty = false;
+  sendToPrompter();
+}
+
+// Fine nudge for the Script Op cue scrubber.
+function poNudgeSeek(delta) {
+  const sl = document.getElementById('po-seek') || document.getElementById('lsq-seek');
+  const cur = sl ? parseFloat(sl.value) || 0 : ptProgressPct();
+  const next = Math.max(0, Math.min(100, cur + delta));
+  ['po-seek', 'lsq-seek'].forEach(id => { const s = document.getElementById(id); if (s) s.value = next; });
+  sendPrompterControl('seek_set_' + next);
+}
+
+// Shared "Live actions" block: Tech Difficulty toggle + the live cue scrubber.
+// scope: 'po' (prompt-op stage), 'lsq' (Script Op sidebar), 'flow' (Flowmingo Op).
+function liveActionsHTML(scope = 'po') {
+  const isFlow = scope === 'flow';
+  const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
+  const techCall = isFlow ? 'flowOpToggleTechDifficulty()' : 'toggleTechDifficulty()';
+  const seekVal = isFlow ? 0 : ptProgressPct();
+  const seekInput = isFlow
+    ? `flowOpSendControl('seek_set_'+this.value,true)`
+    : `sendPrompterControl('seek_set_'+this.value)`;
+  const seekChange = isFlow ? ` onchange="flowOpSendControl('seek_set_'+this.value)"` : '';
+  const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
+  const chevL = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M9 0 L0 6 L9 12Z"/></svg>`;
+  const chevR = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M0 0 L9 6 L0 12Z"/></svg>`;
+  // Returns bare control groups so they nest inside the existing panel containers
+  // (prompt-op-panel / flowop-controls / #lsLiveActions) without overlapping them.
+  return `<div class="pt-ctrl-group pt-live-tech">
+      <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover">${techOn ? 'Back on air' : 'Tech Difficulty'}</button>
+    </div>
+    <div class="pt-ctrl-group pt-live-cue">
+      <span class="pt-ctrl-label">Cue</span>
+      <button class="pt-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back">${chevL}</button>
+      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}>
+      <button class="pt-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward">${chevR}</button>
+    </div>`;
 }
 
 function ptToggleMirror() {
@@ -6469,7 +6580,10 @@ function applyRemoteControlOnce(action, ts, sender, controlId='') {
 function ptHandleRemoteControl(action) {
   if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
+  if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
   switch (action) {
+    case 'slate_tech_on':  ptShowTechSlate(); break;
+    case 'slate_tech_off': ptHideTechSlate(); break;
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;
@@ -6561,11 +6675,13 @@ function flowOpControlLabel(action) {
     mirror:'Mirror talent', fullscreen:'Talent fullscreen', hide_interface:'Talent controls',
     direction_reverse:'Reverse', direction_forward:'Forward',
     brake_start:'Brake', brake_stop:'Brake release',
-    boost_start:'Boost', boost_stop:'Boost release'
+    boost_start:'Boost', boost_stop:'Boost release',
+    slate_tech_on:'Tech difficulties', slate_tech_off:'Back on air'
   };
   if (action?.startsWith('theme_')) return `${CUEOLA_THEME_LABELS[action.replace('theme_', '')] || 'Theme'} theme`;
   if (action?.startsWith('speed_set_')) return `Speed ${action.replace('speed_set_', '')}`;
   if (action?.startsWith('size_set_')) return `Size ${action.replace('size_set_', '')}`;
+  if (action?.startsWith('seek_set_')) return 'Cue';
   return labels[action] || action || 'Control';
 }
 
@@ -6577,8 +6693,12 @@ function flowOpApplyControlPreview(action, quiet=false) {
     flowOpSetSize(action.replace('size_set_', ''));
   } else if (action.startsWith('theme_')) {
     flowOpSetTheme(action.replace('theme_', ''));
+  } else if (action.startsWith('seek_set_')) {
+    // Pure live cue scroll — no local Flowmingo Op preview state to mirror.
   } else {
     switch (action) {
+      case 'slate_tech_on': flowOpTechSlate = true; syncTechButtons(); break;
+      case 'slate_tech_off': flowOpTechSlate = false; syncTechButtons(); break;
       case 'pause': flowOpPlaying = false; break;
       case 'resume': flowOpPlaying = true; break;
       case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
@@ -6609,6 +6729,7 @@ function flowOpControlsHTML(disabled=false) {
   const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="flowop-controls">
+    ${liveActionsHTML('flow')}
     <div class="pt-ctrl-group">
       <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')"${dis}>${playIcon} ${playLabel}</button>
     </div>
@@ -6800,6 +6921,20 @@ function flowOpSendControl(action, quiet=false) {
     'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
     'prompter.updatedAt': control.ts
   }).catch(err => flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true));
+}
+
+// Flowmingo Op: toggle the Technical Difficulties stand-by cover on the talent.
+function flowOpToggleTechDifficulty() {
+  flowOpSendControl(flowOpTechSlate ? 'slate_tech_off' : 'slate_tech_on');
+}
+
+// Flowmingo Op: fine nudge for the live cue scrubber.
+function flowOpNudgeSeek(delta) {
+  const sl = flowOpEl('flow-seek');
+  const cur = sl ? parseFloat(sl.value) || 0 : 0;
+  const next = Math.max(0, Math.min(100, cur + delta));
+  if (sl) sl.value = next;
+  flowOpSendControl('seek_set_' + next);
 }
 
 function flowOpReleaseHoldKeys() {
