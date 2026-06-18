@@ -321,11 +321,193 @@ function toast(msg, dur=2500) {
   el._t = setTimeout(() => el.style.display='none', dur);
 }
 
-function showModal(id)  { const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
-function hideModal(id)  { const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.remove('on'); }
-function hideOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.remove('on'); }
+const DIALOG_FOCUSABLE = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+const activeDialogStack = [];
 
-function showOverlay(id){ const el=document.getElementById(id); if(!el)return; el.style.display=''; el.classList.add('on'); }
+function dialogIsVisible(el) {
+  return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+}
+
+function dialogFocusableEls(dialog) {
+  return Array.from(dialog.querySelectorAll(DIALOG_FOCUSABLE)).filter(el => {
+    if (el.closest('[hidden]')) return false;
+    if (el.closest('[aria-hidden="true"]')) return false;
+    return dialogIsVisible(el);
+  });
+}
+
+function ensureDialogAttrs(el) {
+  if (!el) return;
+  if (!el.hasAttribute('role')) el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  const title = el.querySelector('.modal-title,.warn-title,.ar-heading,.sheet-title,.settings-title,.admin-title,.guide-title,.paperwork-title,.pb-title');
+  if (title) {
+    if (!title.id) title.id = `${el.id || 'cueola-dialog'}-title`;
+    el.setAttribute('aria-labelledby', title.id);
+  }
+}
+
+function topDialog() {
+  for (let i = activeDialogStack.length - 1; i >= 0; i--) {
+    const el = activeDialogStack[i];
+    if (el && el.classList.contains('on')) return el;
+  }
+  return null;
+}
+
+function setCueolaInert(el, on) {
+  if (!el || ['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE'].includes(el.tagName)) return;
+  if (on) {
+    if (el.dataset.cueolaInert === '1') return;
+    el.dataset.cueolaInert = '1';
+    el.dataset.cueolaPrevAriaHidden = el.hasAttribute('aria-hidden') ? el.getAttribute('aria-hidden') : '__missing';
+    el.setAttribute('aria-hidden', 'true');
+    if ('inert' in el) {
+      el.dataset.cueolaPrevInert = el.inert ? 'true' : 'false';
+      el.inert = true;
+    }
+    return;
+  }
+  if (el.dataset.cueolaInert !== '1') return;
+  if (el.dataset.cueolaPrevAriaHidden === '__missing') el.removeAttribute('aria-hidden');
+  else el.setAttribute('aria-hidden', el.dataset.cueolaPrevAriaHidden || 'true');
+  if ('inert' in el) el.inert = el.dataset.cueolaPrevInert === 'true';
+  delete el.dataset.cueolaInert;
+  delete el.dataset.cueolaPrevAriaHidden;
+  delete el.dataset.cueolaPrevInert;
+}
+
+function syncDialogInert() {
+  const top = topDialog();
+  Array.from(document.body.children).forEach(child => {
+    const keepActive = top && (child === top || child.contains(top));
+    setCueolaInert(child, !!top && !keepActive);
+  });
+}
+
+function focusDialog(el) {
+  const first = dialogFocusableEls(el)[0];
+  const panel = el.querySelector('.ar-panel,.modal,.warn-card,.admin-panel,.join-card,.setup-card,.paperwork-modal,.sheet') || el;
+  const target = first || panel;
+  if (target && typeof target.focus === 'function') target.focus({ preventScroll: true });
+}
+
+function openDialog(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && !el.contains(active)) el._cueolaReturnFocus = active;
+  ensureDialogAttrs(el);
+  el.style.display = '';
+  el.removeAttribute('aria-hidden');
+  el.classList.add('on');
+  const existing = activeDialogStack.indexOf(el);
+  if (existing !== -1) activeDialogStack.splice(existing, 1);
+  activeDialogStack.push(el);
+  requestAnimationFrame(() => {
+    focusDialog(el);
+    syncDialogInert();
+  });
+  return el;
+}
+
+function closeDialog(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  el.classList.remove('on');
+  el.setAttribute('aria-hidden', 'true');
+  const idx = activeDialogStack.indexOf(el);
+  if (idx !== -1) activeDialogStack.splice(idx, 1);
+  syncDialogInert();
+  const next = topDialog();
+  requestAnimationFrame(() => {
+    if (next) {
+      focusDialog(next);
+      return;
+    }
+    const returnTo = el._cueolaReturnFocus;
+    if (returnTo && document.contains(returnTo) && typeof returnTo.focus === 'function') returnTo.focus({ preventScroll: true });
+  });
+  return el;
+}
+
+function initDialogAttrs() {
+  document.querySelectorAll('.modal-wrap,.overlay').forEach(el => {
+    ensureDialogAttrs(el);
+    if (!el.classList.contains('on')) el.setAttribute('aria-hidden', 'true');
+  });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initDialogAttrs, { once: true });
+else initDialogAttrs();
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const dialog = topDialog();
+  if (!dialog) return;
+  const items = dialogFocusableEls(dialog);
+  if (!items.length) {
+    event.preventDefault();
+    focusDialog(dialog);
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !dialog.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+function showModal(id)  { return openDialog(id); }
+function hideModal(id)  { return closeDialog(id); }
+function hideOverlay(id){ return closeDialog(id); }
+function showOverlay(id){ return openDialog(id); }
+
+let _lastCloudErrorToastAt = 0;
+
+function dangerConfirm(message, detail='', opts={}) {
+  const body = [message, detail].filter(Boolean).join('\n\n');
+  if (!opts.requireText) return confirm(body);
+  const answer = prompt(`${body}\n\nType ${opts.requireText} to confirm.`);
+  return answer === opts.requireText;
+}
+
+function setCloudSyncState(state='synced', detail='') {
+  const dot = document.getElementById('syncDot');
+  const badge = document.getElementById('topSessionBadge');
+  if (!dot) return;
+  dot.classList.remove('saving', 'error', 'off', 'local');
+  if (state === 'saving') dot.classList.add('saving');
+  else if (state === 'error') dot.classList.add('error');
+  else if (state === 'local') dot.classList.add('local');
+  else if (state === 'off') dot.classList.add('off');
+  if (badge && detail) badge.title = detail;
+}
+
+function reportCloudWriteFailure(context='Cloud save', err=null) {
+  console.warn(`${context} failed.`, err);
+  setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
+  const now = Date.now();
+  if (now - _lastCloudErrorToastAt > 8000) {
+    _lastCloudErrorToastAt = now;
+    toast(`${context} failed. Local copy kept.`);
+  }
+}
 
 const LEARNING_PROGRESS_KEY = 'cueola_learning_progress_v1';
 let activeLearningLesson = 0;
@@ -1006,7 +1188,7 @@ function saveAdmins(list) {
   try { localStorage.setItem(ADMIN_KEY, JSON.stringify(list)); } catch {}
   if (window._firebaseReady) {
     window._setDoc(window._doc(window._db, 'admins', 'global'), { list })
-      .catch(() => {});
+      .catch(err => reportCloudWriteFailure('Admin cloud save', err));
   }
 }
 
@@ -1025,7 +1207,7 @@ function initAdminsFromFirestore() {
       const local = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
       _adminsCache = local;
       if (local.length) {
-        window._setDoc(ref, { list: local }).catch(() => {});
+        window._setDoc(ref, { list: local }).catch(err => reportCloudWriteFailure('Admin migration', err));
       }
     }
     _adminsCacheReady = true;
@@ -1172,6 +1354,7 @@ function submitAdminSetup() {
   err.classList.remove('on');
   if (!name || !owner || !code) { err.textContent='Name, owner bootstrap code, and admin code are required.'; err.classList.add('on'); return; }
   if (!isOwnerBootstrapCode(owner)) { err.textContent='Owner bootstrap code is required to create a super admin.'; err.classList.add('on'); return; }
+  if (code.trim().length < 4) { err.textContent='Use at least 4 characters for the admin code.'; err.classList.add('on'); return; }
   if (code !== code2) { err.textContent='Codes do not match.'; err.classList.add('on'); return; }
   if (hasSuperAdmin() && !_adminsCache.some(a=>a.id===OWNER_ADMIN_ID)) { err.textContent='Super admin already exists.'; err.classList.add('on'); return; }
   ensureOwnerSuperAdmin(owner);
@@ -1556,10 +1739,13 @@ function selectNewLevel(lvl) {
 
 function submitAddAdmin() {
   const name = document.getElementById('newAdminName').value.trim();
-  const code = document.getElementById('newAdminCode').value;
+  const code = document.getElementById('newAdminCode').value.trim();
   const err  = document.getElementById('newAdminErr');
   err.style.display='none';
   if (!name||!code) { err.textContent='Name and code required.'; err.style.display='block'; return; }
+  if (code.length < 4) { err.textContent='Use at least 4 characters for an admin code.'; err.style.display='block'; return; }
+  if (_adminsCache.some(a => a.name.trim().toLowerCase() === name.toLowerCase())) { err.textContent='An admin with that name already exists.'; err.style.display='block'; return; }
+  if (_adminsCache.some(a => a.codeHash === hashStr(code))) { err.textContent='That admin code is already in use.'; err.style.display='block'; return; }
   if (_newAdminLevel==='full' && countFullAccess()>=3) { err.textContent='Max 3 full-access admins.'; err.style.display='block'; return; }
   createAdmin(name, code, _newAdminLevel, adminSession.id);
   renderAdminBody();
@@ -1568,8 +1754,11 @@ function submitAddAdmin() {
 
 function promptEditCode(id, name) {
   const code = prompt(`New code for ${name}:`);
-  if (!code) return;
-  if (updateAdminCode(id, code)) toast('Code updated.');
+  const clean = (code || '').trim();
+  if (!clean) return;
+  if (clean.length < 4) { toast('Use at least 4 characters for an admin code.'); return; }
+  if (_adminsCache.some(a => a.id !== id && a.codeHash === hashStr(clean))) { toast('That admin code is already in use.'); return; }
+  if (updateAdminCode(id, clean)) toast('Code updated.');
 }
 
 function sessionInviteLink() {
@@ -1611,29 +1800,33 @@ function promoteToFull(id) {
   if (countFullAccess()>=3) { toast('Max 3 full-access admins reached.'); return; }
   const admins = getAdmins();
   const a = admins.find(x=>x.id===id);
+  if (a && !dangerConfirm(`Promote "${a.name}" to Full Access?`, 'Full Access admins can manage sessions and operate high-impact show controls.')) return;
   if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Full Access.`); }
 }
 
 function promoteToSuper(id) {
   const admins = getAdmins();
   const a = admins.find(x=>x.id===id);
+  if (a && !dangerConfirm(`Promote "${a.name}" to Super Admin?`, 'Super admins can add, remove, promote, and demote other admins across this app.', { requireText:'SUPER' })) return;
   if (a) { a.level='super'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Super Admin.`); }
 }
 
 function demoteToFull(id) {
   const admins = getAdmins();
   const a = admins.find(x=>x.id===id);
+  if (a && !dangerConfirm(`Demote "${a.name}" to Full Access?`, 'They will keep broad show access but lose Super Admin management powers.')) return;
   if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} set to Full Access.`); }
 }
 
 function demoteToStandard(id) {
   const admins = getAdmins();
   const a = admins.find(x=>x.id===id);
+  if (a && !dangerConfirm(`Demote "${a.name}" to Standard?`, 'They will lose full-access controls for shared show management.')) return;
   if (a) { a.level='standard'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} set to Standard.`); }
 }
 
 function confirmRemoveAdmin(id, name) {
-  if (!confirm(`Remove admin "${name}"?`)) return;
+  if (!dangerConfirm(`Remove admin "${name}"?`, 'Their saved admin session will stop working on the next admin sync. This does not delete show data.', { requireText:'REMOVE' })) return;
   removeAdmin(id);
   renderAdminBody();
   toast(`${name} removed.`);
@@ -1681,7 +1874,8 @@ function removeSessionSource(key, value) {
 
 function syncSessionSources() {
   if (window._firebaseReady && session.code && !session.isDemo) {
-    window._updateDoc(window._doc(window._db,'sessions',session.code),{ customSources: sessionCustomSources }).catch(()=>{});
+    window._updateDoc(window._doc(window._db,'sessions',session.code),{ customSources: sessionCustomSources })
+      .catch(err => reportCloudWriteFailure('Source list cloud save', err));
   }
   localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources));
 }
@@ -2066,8 +2260,11 @@ function enterRundown() {
     document.getElementById('topCode').textContent = session.code;
     document.getElementById('roleTag').textContent = session.role==='instructor'?'INST':'STU';
     document.getElementById('roleTag').className = `role-badge ${session.role==='instructor'?'role-inst':'role-stud'}`;
+    setCloudSyncState(session.isDemo ? 'local' : (window._firebaseReady ? 'synced' : 'saving'),
+      session.isDemo ? 'Demo mode: same-browser sync only.' : (window._firebaseReady ? `Cloud sync ready · ${session.code}` : 'Connecting to cloud sync...'));
   } else {
     badge.style.display='none';
+    setCloudSyncState('off', 'No shared session code.');
   }
 
   renderRundown();
@@ -2290,9 +2487,10 @@ async function flushRundownSyncQueue() {
     if (session.code === targetSessionCode && !rundownPendingBatches.length) {
       rundownShadowBeats = cloneRundownValue(beats);
       rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+      setCloudSyncState('synced', `Cloud sync saved · ${targetSessionCode}`);
     }
   } catch (err) {
-    console.warn('Rundown merge save failed; retrying.', err);
+    reportCloudWriteFailure('Rundown cloud save', err);
     clearTimeout(rundownSyncRetryTimer);
     rundownSyncRetryTimer = setTimeout(() => {
       rundownSyncRetryTimer = null;
@@ -2315,11 +2513,12 @@ function setupFirestore() {
         showName:show.name, startTime:normalizeTimeValue(show.start),
         freeMode:freeTextMode,
         createdAt:window._serverTimestamp()
-      },{merge:true}).catch(()=>{});
+      },{merge:true}).catch(err => reportCloudWriteFailure('Session cloud setup', err));
     }
 
     firestoreUnsub = window._onSnapshot(ref, snap => {
       if (!snap.exists()) return;
+      setCloudSyncState(rundownPendingBatches.length ? 'saving' : 'synced', rundownPendingBatches.length ? 'Cloud sync saving changes...' : `Cloud sync connected · ${session.code}`);
       const d = snap.data();
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
       if (d.beats && Array.isArray(d.beats)) {
@@ -2416,7 +2615,7 @@ function setupFirestore() {
       renderPresence(d.presence||{});
       pbApplyRemoteCollab();   // Planda Bear live presence + field sync
       renderRundown();
-    }, ()=>{});
+    }, err => reportCloudWriteFailure('Cloud listener', err));
   };
 
   if (window._firebaseReady) init();
@@ -2425,13 +2624,17 @@ function setupFirestore() {
 
 function syncToFirestore() {
   saveLocalDraft();
-  if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
+  if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) {
+    if (!session.isDemo) setCloudSyncState(session.isExpert ? 'local' : 'local', session.isExpert ? 'Local-only workspace. Saved in this browser.' : 'Saved locally. Cloud sync unavailable.');
+    return;
+  }
   const currentShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
   const batch = buildRundownBatch(rundownShadowBeats, beats, rundownShadowShow, currentShow);
   if (!rundownBatchHasChanges(batch)) return;
   rundownPendingBatches.push(batch);
   rundownShadowBeats = cloneRundownValue(beats);
   rundownShadowShow = currentShow;
+  setCloudSyncState('saving', 'Cloud sync saving changes...');
   flushRundownSyncQueue();
 }
 
@@ -2893,8 +3096,15 @@ function initDrag() {
   });
 }
 
+function rowConfirmLabel(id) {
+  const b = beats.find(x => x.id === id);
+  if (!b) return 'this row';
+  const label = (b.info || 'Untitled row').trim();
+  return `"${label}"${b.style === 'segment' ? ' segment' : ' row'}`;
+}
+
 function removeRow(id) {
-  if (!confirm('Remove this row?')) return;
+  if (!dangerConfirm(`Remove ${rowConfirmLabel(id)}?`, 'This removes the row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
   beats = beats.filter(b => b.id !== id);
   renderRundown(); syncToFirestore(); toast('Row removed.');
 }
@@ -2976,13 +3186,13 @@ function arGoStep2() {
   const grid = document.getElementById('arTypeGrid');
   grid.innerHTML = Object.keys(CT).map(type => {
     const tc = CT[type];
-    return `<div class="opt-card" id="artype-${type}"
+    return `<button type="button" class="opt-card" id="artype-${type}"
         style="--oc:${tc.color};--ob:${tc.bg}"
         onclick="arSelectCueType('${type}')">
       <div class="opt-icon" style="font-size:24px">${sfIcon(tc.symbol)}</div>
       <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
       <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
-    </div>`;
+    </button>`;
   }).join('');
   document.getElementById('ar-next-2').disabled = true;
   document.getElementById('ar-step-1').classList.remove('on');
@@ -3893,8 +4103,9 @@ function saveCueConfig() {
 }
 
 function removeCueCfg() {
-  if (!confirm('Remove this cue type from the row?')) return;
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b||!b.cues) return;
+  const cueName = CT[cueConfigType]?.label || cueConfigType || 'cue';
+  if (!dangerConfirm(`Remove ${cueName} from ${rowConfirmLabel(cueConfigBeatId)}?`, 'Only this cue cell is removed. Other cues on the row stay in place.')) return;
   delete b.cues[cueConfigType];
   hideModal('cueConfigModal');
   setRundownPresence(null);
@@ -3997,7 +4208,7 @@ function openEdit(id) {
         </div></div>`;
   }
   document.getElementById('editFields').innerHTML = h;
-  document.getElementById('editOv').classList.add('on');
+  showOverlay('editOv');
   setRundownPresence(id);
 }
 
@@ -4015,7 +4226,7 @@ function edChipField(id, label, options, current, allowCustom=false) {
 
 function closeEdit(e) {
   if (e && e.target!==document.getElementById('editOv')) return;
-  document.getElementById('editOv').classList.remove('on');
+  hideOverlay('editOv');
   setRundownPresence(null);
 }
 
@@ -4028,7 +4239,7 @@ function saveEdit() {
     b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
     if (editStyle && editStyle !== 'segment') b.style = editStyle;
   }
-  document.getElementById('editOv').classList.remove('on');
+  hideOverlay('editOv');
   setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Saved.');
 }
@@ -4036,9 +4247,9 @@ function saveEdit() {
 function v(id) { return document.getElementById(id)?.value?.trim()||''; }
 
 function deleteCue() {
-  if (!confirm('Remove this row?')) return;
+  if (!dangerConfirm(`Remove ${rowConfirmLabel(editId)}?`, 'This removes the entire row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
   beats = beats.filter(b=>b.id!==editId);
-  document.getElementById('editOv').classList.remove('on');
+  hideOverlay('editOv');
   setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Row removed.');
 }
@@ -4234,7 +4445,7 @@ function toggleShowClock() {
 // back to the first row — so you can leave live, restart, and go live again to
 // take it from the top. Syncs the reset to any followers.
 function restartShowClock() {
-  if (!confirm('Restart the show? This stops the clock, resets it to 0:00, and jumps back to the first row.')) return;
+  if (!dangerConfirm('Restart the show clock for this session?', 'This stops the clock, resets it to 0:00, jumps back to the first row, and broadcasts the reset to synced collaborators.', { requireText:'RESTART' })) return;
   stopTimer(false);
   liveClockRunning = false;
   elapsedSecs = 0;
@@ -5065,9 +5276,10 @@ function returnToOwnLivePosition() {
 // Show Caller: force all users to follow them
 function forceMeAsShowCaller() {
   if (!session.code || session.isDemo) return;
+  if (!dangerConfirm('Make everyone follow your live position?', 'This broadcasts a command to synced collaborators in this session.')) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code), {
     forceCmd: { type:'followMe', name:session.userName, role:session.role, ts:Date.now() }
-  }).catch(()=>{});
+  }).catch(err => reportCloudWriteFailure('Show caller command', err));
   toast('Forcing all users to follow you.');
 }
 
@@ -5075,9 +5287,10 @@ function forceMeAsShowCaller() {
 function adminForceLive(followName) {
   if (!adminSession || !session.code) return;
   if (!followName || followName === 'No users online') { toast('No live users to follow.'); return; }
+  if (!dangerConfirm(`Force everyone live following ${followName}?`, 'This can move other devices into Live view and change who they follow. Use it only when you are actively show-calling.', { requireText:'LIVE' })) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code), {
     forceCmd: { type:'forceLive', name:followName, ts:Date.now() }
-  }).catch(()=>{});
+  }).catch(err => reportCloudWriteFailure('Force live command', err));
   toast(`Forcing everyone live, following ${followName}.`);
   closeAdminPanel();
 }
@@ -5363,7 +5576,7 @@ function queueLivePrompterDraftPush() {
 }
 
 function clearPrompter() {
-  if (!confirm('Clear Flowmingo text?')) return;
+  if (!dangerConfirm('Clear Flowmingo text?', 'This pushes an empty script to the talent display for this session.', { requireText:'CLEAR' })) return;
   adoptPrompterText('', { forceEditor:true, source:'cleared' });
   livePrompterDraftDirty = false;
   sendToPrompter(true); // reset scroll on clear
@@ -7138,7 +7351,9 @@ function applyPlandaBearTheme(t) {
   plandaBearTheme = normalizePlandaBearTheme(t);
   document.documentElement.setAttribute('data-plandabear-theme', plandaBearTheme);
   document.querySelectorAll('[data-plandabear-theme-choice]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.plandabearThemeChoice === plandaBearTheme);
+    const active = btn.dataset.plandabearThemeChoice === plandaBearTheme;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 }
 
@@ -7157,7 +7372,11 @@ function togglePlandaBearThemes() {
 
 function selectTheme(t) {
   currentTheme = normalizeCueolaTheme(t);
-  document.querySelectorAll('#modal-settings .theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===t));
+  document.querySelectorAll('#modal-settings .theme-swatch').forEach(s => {
+    const active = s.dataset.theme === currentTheme;
+    s.classList.toggle('active', active);
+    s.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   applyTheme(currentTheme); // live preview — reverted on Cancel, saved on Save
 }
 
@@ -7178,8 +7397,11 @@ function pickEntryTheme(t) {
   syncEntryThemeSwatches();
 }
 function syncEntryThemeSwatches() {
-  document.querySelectorAll('#entryThemePanel .theme-swatch').forEach(s =>
-    s.classList.toggle('active', s.dataset.theme === currentTheme));
+  document.querySelectorAll('#entryThemePanel .theme-swatch').forEach(s => {
+    const active = s.dataset.theme === currentTheme;
+    s.classList.toggle('active', active);
+    s.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 
 function saveSettings() {
@@ -7222,9 +7444,14 @@ window.showModal = function(id) {
     const saved = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
     _settingsOpenTheme = saved; // remember so Cancel can revert
     currentTheme = saved;
-    document.querySelectorAll('#modal-settings .theme-swatch').forEach(s=>s.classList.toggle('active', s.dataset.theme===saved));
+    document.querySelectorAll('#modal-settings .theme-swatch').forEach(s => {
+      const active = s.dataset.theme === saved;
+      s.classList.toggle('active', active);
+      s.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
   }
-  document.getElementById(id).classList.add('on');
+  if (typeof _origShowModal === 'function') return _origShowModal(id);
+  return null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -7292,10 +7519,10 @@ let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log a
 function syncPreProToFirestore(data=loadPreProData(), section) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db,'sessions',session.code);
-  window._updateDoc(ref, { prePro:data }).catch(()=>{});
+  window._updateDoc(ref, { prePro:data }).catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -7796,10 +8023,10 @@ async function writePlandaBearComments(comments, activitySection='Instructor Com
   saveLocalPlandaBearComments(plandaBearComments);
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db, 'sessions', session.code);
-  window._updateDoc(ref, { preProComments: plandaBearComments }).catch(()=>{});
+  window._updateDoc(ref, { preProComments: plandaBearComments }).catch(err => reportCloudWriteFailure('Planda Bear comment save', err));
   if (activitySection && window._arrayUnion) {
     const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -8080,10 +8307,10 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
   saveLocalPlandaBearNotes(plandaBearNotes);
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db, 'sessions', session.code);
-  window._updateDoc(ref, { preProNotes: plandaBearNotes }).catch(()=>{});
+  window._updateDoc(ref, { preProNotes: plandaBearNotes }).catch(err => reportCloudWriteFailure('Production notes cloud save', err));
   if (activitySection && window._arrayUnion) {
     const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(()=>{});
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -8897,7 +9124,7 @@ async function deletePlandaBearNote(id) {
   const msg = extra
     ? `Delete this note and its ${extra} repl${extra === 1 ? 'y' : 'ies'} for everyone on the session?`
     : 'Delete this note for everyone on the session?';
-  if (!confirm(msg)) return;
+  if (!dangerConfirm(msg, 'Any attached note files tied to the deleted note are removed too. This syncs to collaborators.', { requireText:'DELETE' })) return;
   plandaBearNotes.filter(n => ids.has(n.id)).forEach(pbDeleteNoteFiles);
   if (pbReplyTargetId && ids.has(pbReplyTargetId)) pbReplyTargetId = null;
   if (pbEditingNoteId && ids.has(pbEditingNoteId)) pbEditingNoteId = null;
@@ -10674,7 +10901,9 @@ function getPatchRows(kind) {
 }
 
 function patchInput(value, kind, row, field) {
-  return `<input class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field === 'label' ? 'Label' : field}">`;
+  const id = `pb-patch-${kind}-${row}-${field}`;
+  const label = `${kind === 'comms' ? 'Comms' : kind === 'audio' ? 'Audio' : 'Video'} row ${Number(row) + 1} ${field}`;
+  return `<input id="${esc(id)}" class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field === 'label' ? 'Label' : field}" aria-label="${esc(label)}">`;
 }
 
 function renderPatchTable(kind, title) {
@@ -10717,8 +10946,35 @@ function collectPatchRows(kind, keepBlank=false) {
   return keepBlank ? rows.filter(Boolean) : rows.filter(row => Object.values(row).some(Boolean));
 }
 
+function patchSectionForKind(kind) {
+  return kind === 'video' ? 'Video Patch' : 'Audio & Comms Patch';
+}
+
+function savePatchRowsBatch(rowsByKind, section) {
+  const patch = {};
+  Object.entries(rowsByKind || {}).forEach(([kind, rows]) => {
+    patch[`${kind}PatchRows`] = Array.isArray(rows) && rows.length ? rows : defaultPatchRows(kind);
+  });
+  if (Object.keys(patch).length) persistPreProData(patch, section);
+}
+
 function savePatchRows(kind, rows) {
-  persistPreProData({ [`${kind}PatchRows`]: rows.length ? rows : defaultPatchRows(kind) }, kind === 'video' ? 'Video Patch' : 'Audio & Comms Patch');
+  savePatchRowsBatch({ [kind]: rows }, patchSectionForKind(kind));
+}
+
+function patchEditorKinds(fallbackKind='') {
+  const mode = activePatchKind || fallbackKind;
+  return mode === 'video' ? ['video'] : ['audio', 'comms'];
+}
+
+function saveVisiblePatchRows(overrides={}, fallbackKind='') {
+  const rowsByKind = {};
+  patchEditorKinds(fallbackKind).forEach(kind => {
+    rowsByKind[kind] = Object.prototype.hasOwnProperty.call(overrides, kind)
+      ? overrides[kind]
+      : collectPatchRows(kind, true);
+  });
+  savePatchRowsBatch(rowsByKind, patchSectionForKind((activePatchKind || fallbackKind) === 'video' ? 'video' : 'audio'));
 }
 
 function openPatchSheetEditor(kind) {
@@ -10739,14 +10995,14 @@ function openPatchSheetEditor(kind) {
 }
 
 function addPatchRow(kind) {
-  savePatchRows(kind, collectPatchRows(kind, true).concat(defaultPatchRows(kind)));
+  saveVisiblePatchRows({ [kind]: collectPatchRows(kind, true).concat(defaultPatchRows(kind)) }, kind);
   openPatchSheetEditor(activePatchKind || kind);
 }
 
 function removePatchRow(kind, idx) {
   const rows = collectPatchRows(kind, true);
   rows.splice(idx, 1);
-  savePatchRows(kind, rows);
+  saveVisiblePatchRows({ [kind]: rows }, kind);
   openPatchSheetEditor(activePatchKind || kind);
 }
 
@@ -10772,7 +11028,7 @@ function importPatchRows(kind, input) {
       if (kind === 'comms') return { position:cols[0]||'', out:cols[1]||'', gear:cols[2]||'', notes:cols.slice(3).join(', ')||'' };
       return { label:cols[0]||'', destination:cols[1]||'', source:cols[2]||'', cabling:cols[3]||'', notes:cols.slice(4).join(', ')||'' };
     });
-    savePatchRows(kind, rows);
+    saveVisiblePatchRows({ [kind]: rows }, kind);
     openPatchSheetEditor(activePatchKind || kind);
     toast('Patch rows imported.');
   };

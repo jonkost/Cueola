@@ -38,6 +38,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .screen.on{display:flex}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
 button,input,select,textarea{font:inherit}
+button{color:inherit}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 78%,white);outline-offset:2px}
 :is(.btn-primary,.save-btn,.ls-pact-btn,.ls-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn,.ar-back,.ar-next,.paperwork-back){display:inline-flex;align-items:center;justify-content:center;gap:6px}
 :is(.pb-note-act,.pb-tag-chip,.ltr-edit-btn){display:inline-flex;align-items:center;gap:5px}
@@ -47,14 +48,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ── ENTRY ── */
 #entry{align-items:center;justify-content:flex-start;padding:0 24px;background:var(--bg);overflow-y:auto;overflow-x:hidden}
-.entry-theme-center{position:absolute;top:18px;left:18px;z-index:6}
+.entry-theme-center{position:relative;display:inline-flex;flex-shrink:0;z-index:6}
 /* Front-page utility controls (theme gear + message center) — matched, frosted,
    circular icon buttons with a comfortable 40px target. */
 .entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:40px;height:40px;border-radius:50%;background:color-mix(in srgb,var(--s2) 64%,transparent);backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);border:1px solid var(--glass-border);color:var(--text2);box-shadow:0 2px 10px rgba(0,0,0,.22);font-size:16px;transition:transform .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease),background .15s var(--ease)}
 .entry-theme-center .tbtn.icon-only:hover,.entry-notif .tbtn.icon-only:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 28%,var(--glass-border));background:color-mix(in srgb,var(--s3) 72%,transparent);transform:translateY(-1px)}
 .entry-theme-center .tbtn.icon-only:active,.entry-notif .tbtn.icon-only:active{transform:translateY(0) scale(.96)}
 #entryThemeGear.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--glass-border));background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.entry-theme-panel{position:absolute;top:calc(100% + 8px);left:0;width:min(320px,86vw);background:var(--s1);border:1px solid var(--bord2);border-radius:14px;padding:14px;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
+.entry-theme-panel{position:absolute;top:calc(100% + 8px);right:0;width:min(320px,86vw);background:var(--s1);border:1px solid var(--bord2);border-radius:14px;padding:14px;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
 .entry-theme-panel[hidden]{display:none}
 .entry-theme-title{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
 .entry-theme-panel .theme-grid{grid-template-columns:repeat(4,1fr)}
@@ -66,13 +67,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-title{font-family:var(--syne);font-size:clamp(30px,8vw,38px);font-weight:800;letter-spacing:-.01em;margin-bottom:6px;line-height:1.08;color:var(--text)}
 .e-sub{font-size:clamp(13.5px,3.6vw,15px);color:var(--text2);text-align:center;line-height:1.5;margin-bottom:18px;max-width:420px;letter-spacing:0;text-wrap:balance}
 .e-sub em{color:var(--text);font-style:normal;font-weight:600}
-.entry-actions{width:100%;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.entry-actions{width:100%;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px}
 .entry-admin-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto;border:1.5px solid color-mix(in srgb,var(--accent) 38%,var(--bord2));background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--text);border-radius:999px;padding:11px 20px;font-size:13.5px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease),box-shadow .15s var(--ease);letter-spacing:0}
 .entry-admin-link .eal-ico{font-size:15px;line-height:1}
 .entry-admin-link:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 16%,transparent);transform:translateY(-1px);box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 22%,transparent)}
 .entry-admin-link:active{transform:translateY(0)}
 .e-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-bottom:16px}
-.e-card{background:var(--s1);border:1.5px solid var(--bord2);border-radius:16px;padding:22px 20px;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),box-shadow .25s var(--ease),background .2s var(--ease);display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-sm)}
+.e-card{appearance:none;background:var(--s1);border:1.5px solid var(--bord2);border-radius:16px;padding:22px 20px;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),box-shadow .25s var(--ease),background .2s var(--ease);display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-sm);width:100%;text-align:left;color:inherit}
 .e-card:hover{transform:translateY(-3px);border-color:var(--oc,var(--accent));box-shadow:var(--shadow-lg),0 0 0 2px color-mix(in srgb,var(--oc,var(--accent)) 60%,transparent);background:color-mix(in srgb,var(--s1) 90%,var(--text))}
 .e-card.flowmingo-card{cursor:default}
 .e-card.flowmingo-card:hover{transform:none;border-color:var(--bord2);box-shadow:var(--shadow-sm);background:var(--s1)}
@@ -564,7 +565,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Demo banner */
 .demo-banner{background:color-mix(in srgb,var(--yellow) 10%,transparent);border-bottom:1px solid color-mix(in srgb,var(--yellow) 22%,transparent);padding:9px 18px;text-align:center;font-size:13px;color:var(--yellow);font-family:var(--sans);font-weight:600;letter-spacing:0;flex-shrink:0}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 2s ease-in-out infinite;display:inline-block}
-.sync-dot.off{background:var(--text3);animation:none}
+.sync-dot.saving{background:var(--yellow);animation:blink 1s ease-in-out infinite}
+.sync-dot.error{background:var(--red);animation:none;box-shadow:0 0 8px color-mix(in srgb,var(--red) 55%,transparent)}
+.sync-dot.off,.sync-dot.local{background:var(--text3);animation:none}
 
 /* ── OVERLAYS ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(8,11,18,.88);backdrop-filter:blur(8px);z-index:200;align-items:flex-end;justify-content:center}
@@ -597,7 +600,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .opt-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .opt-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ar-panel .chip-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
-.opt-card{background:var(--s2);border:1.5px solid var(--bord2);border-radius:11px;padding:14px;cursor:pointer;transition:all .18s;display:flex;flex-direction:column;gap:6px}
+.opt-card{appearance:none;background:var(--s2);border:1.5px solid var(--bord2);border-radius:11px;padding:14px;cursor:pointer;transition:all .18s;display:flex;flex-direction:column;gap:6px;text-align:left;color:inherit}
 .opt-card:hover{border-color:var(--oc,var(--accent));background:var(--ob,color-mix(in srgb,var(--accent) 9%,transparent));transform:translateY(-1px)}
 .opt-card.sel{border-color:var(--oc,var(--accent));background:var(--ob,color-mix(in srgb,var(--accent) 9%,transparent))}
 .opt-icon{font-size:22px;line-height:1}
@@ -856,7 +859,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .settings-section{display:flex;flex-direction:column;gap:12px}
 .theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;justify-items:center}
-.theme-swatch{display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;padding:4px;border-radius:12px;transition:background .15s var(--ease)}
+.theme-swatch{appearance:none;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;padding:4px;border:0;background:transparent;color:inherit;border-radius:12px;transition:background .15s var(--ease)}
 .theme-swatch:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
 .ts-preview{width:44px;height:44px;border-radius:50%;border:2px solid var(--bord2);display:block;transition:transform .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
 .theme-swatch:hover .ts-preview{transform:scale(1.06);box-shadow:var(--shadow-md)}
@@ -1330,13 +1333,13 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .notif-center{position:relative;display:inline-flex;flex-shrink:0}
 .notif-center[hidden]{display:none}
 #entry{position:relative}
-.entry-notif{position:absolute;top:18px;right:18px;z-index:6}
+.entry-notif{position:relative;top:auto;right:auto;z-index:6}
 #notifBellBtn{position:relative;overflow:visible}
 .tbtn-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--red,#f05252);color:#fff;font-size:10px;font-weight:800;font-family:var(--mono);display:flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 0 0 2px var(--bg);animation:pbBadgePop .25s var(--ease)}
 .tbtn-badge[hidden]{display:none}
 @keyframes pbBadgePop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 #notifBellBtn.on{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.notif-panel{position:fixed;top:66px;right:18px;z-index:600;width:340px;max-width:calc(100vw - 36px);max-height:min(440px,calc(100vh - 88px));display:flex;flex-direction:column;border:1px solid var(--bord2);border-radius:16px;background:color-mix(in srgb,var(--s2) 98%,transparent);box-shadow:0 20px 56px rgba(0,0,0,.5);overflow:hidden;animation:pbBadgePop .16s var(--ease)}
+.notif-panel{position:absolute;top:calc(100% + 8px);right:0;z-index:600;width:340px;max-width:min(340px,calc(100vw - 36px));max-height:min(440px,calc(100vh - 220px));display:flex;flex-direction:column;border:1px solid var(--bord2);border-radius:16px;background:color-mix(in srgb,var(--s2) 98%,transparent);box-shadow:0 20px 56px rgba(0,0,0,.5);overflow:hidden;animation:pbBadgePop .16s var(--ease)}
 .notif-panel[hidden]{display:none}
 .notif-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s3) 60%,transparent)}
 .notif-title{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--text)}
@@ -1946,49 +1949,49 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
      ENTRY SCREEN
 ══════════════════════════════════════════ -->
 <div class="screen on" id="entry">
-  <div class="entry-theme-center">
-    <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-    <div class="entry-theme-panel" id="entryThemePanel" hidden>
-      <div class="entry-theme-title">Theme</div>
-      <div class="theme-grid">
-        <div class="theme-swatch" data-theme="cool" onclick="pickEntryTheme('cool')"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></div>
-        <div class="theme-swatch" data-theme="warm" onclick="pickEntryTheme('warm')"><div class="ts-preview" style="background:#140803"></div><div class="ts-name">Honey</div></div>
-        <div class="theme-swatch" data-theme="white" onclick="pickEntryTheme('white')"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></div>
-        <div class="theme-swatch" data-theme="green" onclick="pickEntryTheme('green')"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></div>
-        <div class="theme-swatch" data-theme="koala" onclick="pickEntryTheme('koala')"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></div>
-        <div class="theme-swatch" data-theme="panda" onclick="pickEntryTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
-        <div class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></div>
-        <div class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></div>
-      </div>
-    </div>
-  </div>
-  <div class="notif-center entry-notif" id="notifCenter">
-    <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Message center" aria-label="Message center"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
-    <div class="notif-panel" id="notifPanel" hidden>
-      <div class="notif-head"><span class="notif-title"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span> Message Center</span><button type="button" class="notif-readall" onclick="markAllNotifsRead()">Mark all read</button></div>
-      <div class="notif-list" id="notifList"></div>
-    </div>
-  </div>
   <div class="entry-wrap">
 	    <div class="e-logo">🐨</div>
 	    <div class="e-title">Cue<span class="brand-hi">ola</span></div>
 	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, and sync <em>Flowmingo.</em></div>
 	    <div class="entry-actions">
 	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> New here? Start the guide</button>
+      <div class="notif-center entry-notif" id="notifCenter">
+        <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Message center" aria-label="Message center"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
+        <div class="notif-panel" id="notifPanel" hidden>
+          <div class="notif-head"><span class="notif-title"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span> Message Center</span><button type="button" class="notif-readall" onclick="markAllNotifsRead()">Mark all read</button></div>
+          <div class="notif-list" id="notifList"></div>
+        </div>
+      </div>
+      <div class="entry-theme-center">
+        <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="entry-theme-panel" id="entryThemePanel" hidden>
+          <div class="entry-theme-title">Theme</div>
+          <div class="theme-grid">
+            <button type="button" class="theme-swatch" data-theme="cool" onclick="pickEntryTheme('cool')" aria-pressed="false"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></button>
+            <button type="button" class="theme-swatch" data-theme="warm" onclick="pickEntryTheme('warm')" aria-pressed="false"><div class="ts-preview" style="background:#140803"></div><div class="ts-name">Honey</div></button>
+            <button type="button" class="theme-swatch" data-theme="white" onclick="pickEntryTheme('white')" aria-pressed="false"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></button>
+            <button type="button" class="theme-swatch" data-theme="green" onclick="pickEntryTheme('green')" aria-pressed="false"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></button>
+            <button type="button" class="theme-swatch" data-theme="koala" onclick="pickEntryTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
+            <button type="button" class="theme-swatch" data-theme="panda" onclick="pickEntryTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
+            <button type="button" class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
+            <button type="button" class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
+          </div>
+        </div>
+      </div>
 	    </div>
 	    <div class="e-cards">
-      <div class="e-card stud e-card-full" onclick="openJoinSession()">
+      <button type="button" class="e-card stud e-card-full" onclick="openJoinSession()">
         <div class="ec-icon">🐨</div>
         <div class="ec-title">Join Session</div>
         <div class="ec-desc">Enter the session code your director gave you.</div>
         <span class="ec-pill">Enter session code</span>
-      </div>
-      <div class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
+      </button>
+      <button type="button" class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
         <div class="ec-icon">🐼</div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
         <div class="ec-desc">Build the pre-production package with your session code.</div>
         <span class="ec-pill" style="background:rgba(245,183,49,.15);color:var(--yellow)">Session code required</span>
-      </div>
+      </button>
       <div class="e-card e-card-full flowmingo-card" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
         <div class="ec-icon">🦩</div>
         <div class="ec-title">Flow<span class="brand-hi">mingo</span></div>
@@ -1998,18 +2001,18 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
           <button class="ec-mini-btn" onclick="event.stopPropagation();openFlowmingoOperator()">Remote Op</button>
         </div>
       </div>
-      <div class="e-card demo" onclick="loadDemo()">
+      <button type="button" class="e-card demo" onclick="loadDemo()">
         <div class="ec-icon"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></div>
         <div class="ec-title">Demo</div>
         <div class="ec-desc">Load a pre-built example rundown. No login needed.</div>
         <span class="ec-pill">No login required</span>
-      </div>
-      <div class="e-card exp" onclick="openBlankSlateSetup()">
+      </button>
+      <button type="button" class="e-card exp" onclick="openBlankSlateSetup()">
         <div class="ec-icon"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span></div>
         <div class="ec-title">Blank Slate</div>
         <div class="ec-desc">Make your own code and work in it together.</div>
         <span class="ec-pill">Free text setup</span>
-      </div>
+      </button>
     </div>
     <div class="e-divider"></div>
     <div class="e-footer">
@@ -2399,21 +2402,21 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
         <div>
           <div class="field-lbl" style="margin-bottom:8px">Style</div>
           <div class="opt-grid-3">
-            <div class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 9%,transparent)">
+            <button type="button" class="opt-card" id="opt-timed" onclick="arSelectStyle('timed')" style="--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 9%,transparent)">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></div>
               <div class="opt-name">Timed</div>
               <div class="opt-desc">Fixed duration. Clock counts down.</div>
-            </div>
-            <div class="opt-card" id="opt-flex" onclick="arSelectStyle('flex')" style="--oc:var(--text2);--ob:rgba(100,116,139,.07)">
+            </button>
+            <button type="button" class="opt-card" id="opt-flex" onclick="arSelectStyle('flex')" style="--oc:var(--text2);--ob:rgba(100,116,139,.07)">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.flex" aria-hidden="true"></span></div>
               <div class="opt-name">Flex</div>
               <div class="opt-desc">No fixed time. Expand as needed.</div>
-            </div>
-            <div class="opt-card" id="opt-segment" onclick="arSelectStyle('segment')" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
+            </button>
+            <button type="button" class="opt-card" id="opt-segment" onclick="arSelectStyle('segment')" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span></div>
               <div class="opt-name">Segment</div>
               <div class="opt-desc">Section divider. Collapses its cues in build.</div>
-            </div>
+            </button>
           </div>
         </div>
         <div id="ar-dur-wrap" style="display:none">
@@ -2573,15 +2576,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="plandabear-theme-bar" aria-label="Planda Bear themes">
       <div class="plandabear-theme-label">Planda Bear Theme</div>
       <div class="theme-grid">
-        <div class="theme-swatch" data-plandabear-theme-choice="default" onclick="setPlandaBearTheme('default')"><div class="ts-preview" style="background:var(--s2)"></div><div class="ts-name">Match App</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="glacier" onclick="setPlandaBearTheme('glacier')"><div class="ts-preview" style="background:#08090f"></div><div class="ts-name">Glacier</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="honey" onclick="setPlandaBearTheme('honey')"><div class="ts-preview" style="background:#130803"></div><div class="ts-name">Honey</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="polar-bear" onclick="setPlandaBearTheme('polar-bear')"><div class="ts-preview" style="background:#ffffff"></div><div class="ts-name">Polar Bear</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="eucalyptus" onclick="setPlandaBearTheme('eucalyptus')"><div class="ts-preview" style="background:#040d05"></div><div class="ts-name">Eucalyptus</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="koala" onclick="setPlandaBearTheme('koala')"><div class="ts-preview" style="background:#1f1f1e"></div><div class="ts-name">Koala</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="panda" onclick="setPlandaBearTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="flamingo" onclick="setPlandaBearTheme('flamingo')"><div class="ts-preview" style="background:#330512"></div><div class="ts-name">Flowmingo</div></div>
-        <div class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">PrepBear</div></div>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="default" onclick="setPlandaBearTheme('default')" aria-pressed="false"><div class="ts-preview" style="background:var(--s2)"></div><div class="ts-name">Match App</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="glacier" onclick="setPlandaBearTheme('glacier')" aria-pressed="false"><div class="ts-preview" style="background:#08090f"></div><div class="ts-name">Glacier</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="honey" onclick="setPlandaBearTheme('honey')" aria-pressed="false"><div class="ts-preview" style="background:#130803"></div><div class="ts-name">Honey</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="polar-bear" onclick="setPlandaBearTheme('polar-bear')" aria-pressed="false"><div class="ts-preview" style="background:#ffffff"></div><div class="ts-name">Polar Bear</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="eucalyptus" onclick="setPlandaBearTheme('eucalyptus')" aria-pressed="false"><div class="ts-preview" style="background:#040d05"></div><div class="ts-name">Eucalyptus</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="koala" onclick="setPlandaBearTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1f1f1e"></div><div class="ts-name">Koala</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="panda" onclick="setPlandaBearTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="flamingo" onclick="setPlandaBearTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#330512"></div><div class="ts-name">Flowmingo</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080912"></div><div class="ts-name">PrepBear</div></button>
       </div>
     </div>
     <button class="paperwork-notes-bar" id="paperworkNotesBar" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')">
@@ -3053,14 +3056,14 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
     <div class="settings-section" style="margin-top:12px">
       <div class="settings-sec-label">Appearance</div>
       <div class="theme-grid">
-        <div class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></div>
-        <div class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')"><div class="ts-preview" style="background:#140803"></div><div class="ts-name">Honey</div></div>
-        <div class="theme-swatch" data-theme="white" onclick="selectTheme('white')"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></div>
-        <div class="theme-swatch" data-theme="green" onclick="selectTheme('green')"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></div>
-        <div class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></div>
-        <div class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></div>
-        <div class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></div>
-        <div class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></div>
+        <button type="button" class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')" aria-pressed="false"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></button>
+        <button type="button" class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')" aria-pressed="false"><div class="ts-preview" style="background:#140803"></div><div class="ts-name">Honey</div></button>
+        <button type="button" class="theme-swatch" data-theme="white" onclick="selectTheme('white')" aria-pressed="false"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></button>
+        <button type="button" class="theme-swatch" data-theme="green" onclick="selectTheme('green')" aria-pressed="false"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></button>
+        <button type="button" class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
+        <button type="button" class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
+        <button type="button" class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
+        <button type="button" class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
       </div>
     </div>
     <div class="modal-actions">
@@ -3077,12 +3080,15 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260618a"></script>
+<script src="cueola-app.js?v=20260618b"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
+const APP_CHECK_DEBUG_LOCAL = false;
 const firebaseConfig = {
   apiKey: "AIzaSyCr5ZuIB1kjPRxdDd2X2-FnFef-r1ZUFIA",
   authDomain: "cueola.firebaseapp.com",
@@ -3092,6 +3098,32 @@ const firebaseConfig = {
   appId: "1:796559668931:web:69e54b49de99644ee79476"
 };
 const app = initializeApp(firebaseConfig);
+function initializeCueolaAppCheck(firebaseApp) {
+  const siteKey = APP_CHECK_RECAPTCHA_V3_SITE_KEY.trim();
+  window._appCheckConfigured = Boolean(siteKey);
+  window._appCheckReady = false;
+  if (!siteKey) {
+    console.warn('Firebase App Check is not configured. Add the reCAPTCHA v3 site key before enabling Firestore enforcement.');
+    return null;
+  }
+  if (APP_CHECK_DEBUG_LOCAL && ['localhost','127.0.0.1','::1'].includes(location.hostname)) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+  try {
+    const appCheck = initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    window._appCheck = appCheck;
+    window._appCheckReady = true;
+    return appCheck;
+  } catch (err) {
+    window._appCheckError = err;
+    console.warn('Firebase App Check initialization failed.', err);
+    return null;
+  }
+}
+initializeCueolaAppCheck(app);
 const db  = getFirestore(app);
 window._db=db; window._doc=doc; window._setDoc=setDoc; window._getDoc=getDoc;
 window._onSnapshot=onSnapshot; window._updateDoc=updateDoc; window._deleteDoc=deleteDoc;
