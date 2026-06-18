@@ -8,6 +8,9 @@
     },
     {
       "file": "cueola-bell-symbols"
+    },
+    {
+      "file": "cueola-symbol-import"
     }
   ],
   "metadataSource": {
@@ -50,7 +53,7 @@
     "weather": "Weather",
     "whatsnew": "What\u2019s New"
   },
-  "symbolCount": 114,
+  "symbolCount": 128,
   "aliasCount": 1,
   "symbols": [
     {
@@ -435,9 +438,7 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [
-        "action.back"
-      ],
+      "semanticNames": [],
       "availability": "2022",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.left.svg",
@@ -482,9 +483,7 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [
-        "action.forward"
-      ],
+      "semanticNames": [],
       "availability": "2022",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.right.svg",
@@ -518,6 +517,55 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "arrowshape.turn.up.left.fill",
+      "displayName": "Arrowshape Turn Up Left Fill",
+      "primaryCategory": "arrows",
+      "appleCategories": [
+        "arrows"
+      ],
+      "keywords": [
+        "mail",
+        "reply"
+      ],
+      "cueolaTags": [
+        "action:navigation"
+      ],
+      "semanticNames": [
+        "action.back"
+      ],
+      "availability": "2019",
+      "directionalCandidate": true,
+      "sourcePath": "source/arrows/arrowshape.turn.up.left.fill.svg",
+      "runtimePath": "runtime/regular-small/arrows/arrowshape.turn.up.left.fill.svg",
+      "sha256": "b86de7080faabaa5663c0ace910eb7ad5b4e77d11f3804903263385362a5942c",
+      "aliases": [],
+      "template": {
+        "glyph": "10024D",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from arrowshape.turn.up.left.fill",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "3.333 -72.888 87.671 75.269",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "arrowshape.turn.up.right",
       "displayName": "Arrowshape Turn Up Right",
       "primaryCategory": "arrows",
@@ -544,6 +592,55 @@
         "templateVersion": "7.0",
         "xcodeRequirement": "Requires Xcode 26 or greater",
         "descriptiveName": "Generated from arrowshape.turn.up.right",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.142 -72.887 87.62 75.266",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "arrowshape.turn.up.right.fill",
+      "displayName": "Arrowshape Turn Up Right Fill",
+      "primaryCategory": "arrows",
+      "appleCategories": [
+        "arrows"
+      ],
+      "keywords": [
+        "forward",
+        "mail"
+      ],
+      "cueolaTags": [
+        "action:navigation"
+      ],
+      "semanticNames": [
+        "action.forward"
+      ],
+      "availability": "2019",
+      "directionalCandidate": true,
+      "sourcePath": "source/arrows/arrowshape.turn.up.right.fill.svg",
+      "runtimePath": "runtime/regular-small/arrows/arrowshape.turn.up.right.fill.svg",
+      "sha256": "dd0f7da6391f69dd742cf34dd2141194f9800b8fbb69cf0b7e0b6b0f2944fc90",
+      "aliases": [],
+      "template": {
+        "glyph": "100251",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from arrowshape.turn.up.right.fill",
         "viewBox": "0 0 3300 2200",
         "masters": [
           "Black-S",
@@ -1127,6 +1224,158 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "chevron.down",
+      "displayName": "Chevron Down",
+      "primaryCategory": "arrows",
+      "appleCategories": [
+        "arrows"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.expand"
+      ],
+      "availability": null,
+      "directionalCandidate": true,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/arrows/chevron.down.svg",
+      "sha256": "415a10f944df16d69e40a29769a1fd9f2d3c588effcc8ebfceb8386c4ec9bebb",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Chevron Down",
+        "viewBox": "7.766 -54.441 72.115 42.281",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.766 -54.441 72.115 42.281",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "chevron.right",
+      "displayName": "Chevron Right",
+      "primaryCategory": "arrows",
+      "appleCategories": [
+        "arrows"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.collapse"
+      ],
+      "availability": null,
+      "directionalCandidate": true,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/arrows/chevron.right.svg",
+      "sha256": "6f802d3abb0cb459dc4553dc069362964cc638b2ea9fb3d804dc22ba01b04958",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Chevron Right",
+        "viewBox": "12.648 -71.287 42.281 72.066",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "12.648 -71.287 42.281 72.066",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "circle",
+      "displayName": "Circle",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "marker.ready"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/objectsandtools/circle.svg",
+      "sha256": "ba6a02a51b45318dc870eeaea6304be7b5a1708450b17185384ed9385383106a",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Circle",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "circle.fill",
+      "displayName": "Circle Fill",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "marker.active"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/objectsandtools/circle.fill.svg",
+      "sha256": "89fb9c71d6b219e3a2742d74848638ff4551cb001548e9b531347d6cba7f30ec",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Circle Fill",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "cloud",
       "displayName": "Cloud",
       "primaryCategory": "weather",
@@ -1140,7 +1389,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.overcast"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.svg",
@@ -1187,7 +1438,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.thunderstorm"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.bolt.svg",
@@ -1234,7 +1487,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.thunderstorm-rain"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.bolt.rain.svg",
@@ -1281,7 +1536,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.drizzle"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.drizzle.svg",
@@ -1328,7 +1585,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.fog"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.fog.svg",
@@ -1375,7 +1634,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.hail"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.hail.svg",
@@ -1422,7 +1683,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.heavy-rain"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.heavyrain.svg",
@@ -1469,7 +1732,10 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.precip",
+        "weather.rain"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.rain.svg",
@@ -1516,7 +1782,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.sleet"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.sleet.svg",
@@ -1563,7 +1831,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.snow"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.snow.svg",
@@ -1611,7 +1881,11 @@
         "department:lighting",
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.default",
+        "weather.mostly-clear",
+        "weather.partly-cloudy"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.sun.svg",
@@ -1707,7 +1981,9 @@
         "department:lighting",
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.showers"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/cloud.sun.rain.svg",
@@ -2071,6 +2347,56 @@
         "master": "Regular-S",
         "viewBox": "5.798 -73.791 84.595 76.929",
         "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "figure.flexibility",
+      "displayName": "Figure Flexibility",
+      "primaryCategory": "human",
+      "appleCategories": [
+        "fitness",
+        "human",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "human",
+        "person",
+        "sports"
+      ],
+      "cueolaTags": [],
+      "semanticNames": [
+        "state.flex"
+      ],
+      "availability": "2022",
+      "directionalCandidate": false,
+      "sourcePath": "source/human/figure.flexibility.svg",
+      "runtimePath": "runtime/regular-small/human/figure.flexibility.svg",
+      "sha256": "6af170d9f9e1a302821834a00bd28ef209e14fca64efea6157b0f5e00d6df031",
+      "aliases": [],
+      "template": {
+        "glyph": "101551",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from figure.flexibility",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.677 -76.988 87.614 82.737",
+        "pathCount": 1,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -2606,9 +2932,7 @@
       "cueolaTags": [
         "content:help"
       ],
-      "semanticNames": [
-        "state.info"
-      ],
+      "semanticNames": [],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/objectsandtools/info.svg",
@@ -2637,6 +2961,106 @@
         "master": "Regular-S",
         "viewBox": "8.886 -76.71 42.043 77.981",
         "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "info.circle",
+      "displayName": "Info Circle",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "multicolor",
+        "variable",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "info"
+      ],
+      "cueolaTags": [
+        "content:help"
+      ],
+      "semanticNames": [
+        "info.circle",
+        "info.square",
+        "state.info"
+      ],
+      "availability": "2019",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/info.circle.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/info.circle.svg",
+      "sha256": "a361ade5146e7b3fe0deddde97959eba1e408e7c1759ac38209046f7aaedb482",
+      "aliases": [],
+      "template": {
+        "glyph": "100174",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from info.circle",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.865 -76.63 82.8 82.751",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "info.square",
+      "displayName": "Info Square",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "automotive",
+        "multicolor",
+        "objectsandtools"
+      ],
+      "keywords": [
+        "info"
+      ],
+      "cueolaTags": [
+        "content:help"
+      ],
+      "semanticNames": [],
+      "availability": "2022",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/info.square.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/info.square.svg",
+      "sha256": "e5a82c619ff234be90bc7a23ee437c382bc293463ef8eeae1c7129b4a03990f5",
+      "aliases": [],
+      "template": {
+        "glyph": "101287",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from info.square",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.986 -72.581 74.702 74.751",
+        "pathCount": 2,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -2730,6 +3154,44 @@
         "master": "Regular-S",
         "viewBox": "7.52 -83.447 56.348 94.336",
         "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "line.3.horizontal",
+      "displayName": "Line 3 Horizontal",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.drag"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/objectsandtools/line.3.horizontal.svg",
+      "sha256": "99f5588a92b8c3e2fa56ef594a267df083d4f8eedf8a547a4113d4ad8cbbdd21",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Line 3 Horizontal",
+        "viewBox": "7.766 -56.785 81.93 43.16",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.766 -56.785 81.93 43.16",
+        "pathCount": 3,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -3599,6 +4061,44 @@
         "master": "Regular-S",
         "viewBox": "7.456 -75.308 97.001 82.939",
         "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "play.fill",
+      "displayName": "Play Fill",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "marker.go"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/media/play.fill.svg",
+      "sha256": "aa185b971aecd8337fb74b2c7a9b867ef1395942eefe9a20643747aa7823e8ab",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Play Fill",
+        "viewBox": "7.766 -69.822 62.252 69.137",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.766 -69.822 62.252 69.137",
+        "pathCount": 1,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -4484,6 +4984,44 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "stop.fill",
+      "displayName": "Stop Fill",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "marker.stop"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/media/stop.fill.svg",
+      "sha256": "e44ede07e28f1db13b636c0669e61a5b09d693ed94e251c5a2f6f7de9d03a425",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Stop Fill",
+        "viewBox": "7.766 -68.846 67.184 67.184",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.766 -68.846 67.184 67.184",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "sun.max.fill",
       "displayName": "Sun Max Fill",
       "primaryCategory": "weather",
@@ -4500,7 +5038,10 @@
         "department:lighting",
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.clear",
+        "weather.sunrise"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/sun.max.fill.svg",
@@ -4599,7 +5140,9 @@
         "department:lighting",
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.sunset"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/sunset.fill.svg",
@@ -4774,6 +5317,52 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "text.line.magnify",
+      "displayName": "Text Line Magnify",
+      "primaryCategory": "textformatting",
+      "appleCategories": [
+        "textformatting"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:script"
+      ],
+      "semanticNames": [
+        "content.segment"
+      ],
+      "availability": "2024",
+      "directionalCandidate": false,
+      "sourcePath": "source/textformatting/text.line.magnify.svg",
+      "runtimePath": "runtime/regular-small/textformatting/text.line.magnify.svg",
+      "sha256": "b501f4f8ab6a2f224e98851b7642f5ed45fcbfe8cf99dda6260dc2f37ba9a82f",
+      "aliases": [],
+      "template": {
+        "glyph": "102B01",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from text.line.magnify",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "2.775 -73.202 88.542 75.896",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "text.pad.header",
       "displayName": "Text Pad Header",
       "primaryCategory": "textformatting",
@@ -4884,7 +5473,9 @@
         "department:lighting",
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.temp"
+      ],
       "availability": "2020",
       "directionalCandidate": false,
       "sourcePath": "source/weather/thermometer.sun.fill.svg",
@@ -4913,6 +5504,44 @@
         "master": "Regular-S",
         "viewBox": "2.405 -93.494 88.403 108.179",
         "pathCount": 5,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "timer",
+      "displayName": "Timer",
+      "primaryCategory": "time",
+      "appleCategories": [
+        "time"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "state.timed"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "",
+      "runtimePath": "runtime/regular-small/time/timer.svg",
+      "sha256": "066f543ae48efdfe1bdf1581f7760c8bf2f77bebf41ec6510976528d40d9b657",
+      "aliases": [],
+      "template": {
+        "glyph": null,
+        "fontVersion": null,
+        "templateVersion": null,
+        "xcodeRequirement": null,
+        "descriptiveName": "Runtime-only Timer",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "masters": [],
+        "renderingModes": [
+          "monochrome"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.836 -76.658 82.857 82.809",
+        "pathCount": 2,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -5308,7 +5937,9 @@
       "cueolaTags": [
         "state:weather"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "weather.wind"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/weather/wind.svg",

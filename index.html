@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260618b">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260618c">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -610,7 +610,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .chip:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .chip.sel{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .chip.suggested-label{position:relative;display:inline-flex;align-items:center;gap:6px;padding-right:9px}
-.chip.suggested-label::before{content:'';order:2;width:14px;height:14px;flex:0 0 auto;background:currentColor;-webkit-mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg") center/contain no-repeat;mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg") center/contain no-repeat;opacity:.55;text-transform:none}
+.chip.suggested-label::before{content:'';order:2;width:14px;height:14px;flex:0 0 auto;background:currentColor;-webkit-mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg") center/contain no-repeat;mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg") center/contain no-repeat;opacity:.55;text-transform:none}
 .chip.suggested-label:hover::before,.chip.suggested-label:focus-visible::before{opacity:1}
 .chip.suggested-label::after{content:attr(data-tip);position:absolute;left:0;bottom:calc(100% + 8px);width:min(300px,78vw);padding:9px 10px;border-radius:8px;background:var(--s4);border:1px solid var(--bord2);box-shadow:0 10px 24px rgba(0,0,0,.35);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.45;white-space:normal;text-align:left;letter-spacing:0;opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity .12s,transform .12s;z-index:900}
 .chip.suggested-label:hover::after,.chip.suggested-label:focus-visible::after{opacity:1;transform:translateY(0)}

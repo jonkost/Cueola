@@ -19,8 +19,8 @@
 .sf-symbol[data-symbol="department.playback"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/play.display.svg");}
 .sf-symbol[data-symbol="department.graphics"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/cameraandphotos/photo.artframe.svg");}
 .sf-symbol[data-symbol="department.script"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/text.page.svg");}
-.sf-symbol[data-symbol="action.back"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.left.svg");}
-.sf-symbol[data-symbol="action.forward"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.right.svg");}
+.sf-symbol[data-symbol="action.back"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.turn.up.left.fill.svg");}
+.sf-symbol[data-symbol="action.forward"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.turn.up.right.fill.svg");}
 .sf-symbol[data-symbol="action.up"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.up.svg");}
 .sf-symbol[data-symbol="action.down"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/arrows/arrowshape.down.svg");}
 .sf-symbol[data-symbol="action.confirm"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/checkmark.svg");}
@@ -41,8 +41,9 @@
 .sf-symbol[data-symbol="action.guide"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/magazine.svg");}
 .sf-symbol[data-symbol="action.filter"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/editing/slider.vertical.3.svg");}
 .sf-symbol[data-symbol="action.grid"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/square.grid.4x3.fill.svg");}
-.sf-symbol[data-symbol="state.info"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg");}
-.sf-symbol[data-symbol="info.square"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg");}
+.sf-symbol[data-symbol="state.info"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg");}
+.sf-symbol[data-symbol="info.circle"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg");}
+.sf-symbol[data-symbol="info.square"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg");}
 .sf-symbol[data-symbol="state.warning"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/privacyandsecurity/exclamationmark.triangle.svg");}
 .sf-symbol[data-symbol="state.success"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/checkmark.svg");}
 .sf-symbol[data-symbol="state.favorite"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/health/heart.svg");}
@@ -60,8 +61,6 @@
 .sf-symbol[data-symbol="content.image"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/cameraandphotos/photo.artframe.svg");}
 .sf-symbol[data-symbol="content.display"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/display.svg");}
 .sf-symbol[data-symbol="content.list"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/list.bullet.svg");}
-
-/* Weather — mapped from the design-system weather library (monochrome masks). */
 .sf-symbol[data-symbol="weather.clear"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sun.max.fill.svg");}
 .sf-symbol[data-symbol="weather.mostly-clear"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.svg");}
 .sf-symbol[data-symbol="weather.partly-cloudy"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/cloud.sun.svg");}
@@ -82,8 +81,6 @@
 .sf-symbol[data-symbol="weather.wind"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/wind.svg");}
 .sf-symbol[data-symbol="weather.sunrise"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sun.max.fill.svg");}
 .sf-symbol[data-symbol="weather.sunset"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/weather/sunset.fill.svg");}
-
-/* Rundown row styles, collapse, drag, and cue markers (monochrome masks). */
 .sf-symbol[data-symbol="state.timed"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/time/timer.svg");}
 .sf-symbol[data-symbol="state.flex"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/human/figure.flexibility.svg");}
 .sf-symbol[data-symbol="content.segment"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/text.line.magnify.svg");}
