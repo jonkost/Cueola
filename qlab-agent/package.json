@@ -1,0 +1,17 @@
+{
+  "name": "cueola-qlab-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridges a Cueola session to QLab: listens to Firestore for cue-fire commands and sends OSC to QLab.",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "firebase": "^10.12.0"
+  }
+}

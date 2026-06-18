@@ -1308,6 +1308,7 @@ function updateAdminUI() {
     btn.textContent = 'Admin';
     btn.className = 'tbtn tbtn-ghost';
   }
+  updateLiveCueQButton();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2591,6 +2592,9 @@ function setupFirestore() {
         _lastSeenTalentHeartbeatTs = _hb.ts;
         _notePrompterTalentSeen(_hb);
       }
+      // QLab agent presence + cue-fire acks (Cueola → QLab integration).
+      if (d.qlab?.agentHeartbeat?.ts) noteQlabAgentBeat(d.qlab.agentHeartbeat);
+      if (d.qlab?.lastAck) handleQlabAck(d.qlab.lastAck);
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
         const cmd = d.forceCmd;
@@ -3312,7 +3316,9 @@ function openCueConfig(beatId, type) {
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
   document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
-  document.getElementById('cueConfigFields').innerHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
+  const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
+  document.getElementById('cueConfigFields').innerHTML = bodyHTML + qlabCueFields(type, existing);
+  updateQlabFireBtn();
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
   setRundownPresence(beatId);
@@ -4096,6 +4102,15 @@ function saveCueConfig() {
       d.scriptTags  = [..._sOnTags];
       break;
   }
+  // QLab trigger (shared across all cue types — appended to every config modal)
+  const qlabCue = document.getElementById('cc-qlab-cue')?.value?.trim() || '';
+  const qlabAction = document.getElementById('cc-qlab-action')?.value || 'start';
+  const qlabAuto = document.getElementById('cc-qlab-auto')?.checked || false;
+  if (qlabCue || qlabAction !== 'start' || qlabAuto) {
+    d.qlabCue = qlabCue;
+    d.qlabAction = qlabAction;
+    d.qlabAuto = qlabAuto;
+  }
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
   setRundownPresence(null);
@@ -4110,6 +4125,204 @@ function removeCueCfg() {
   hideModal('cueConfigModal');
   setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Cue removed.');
+}
+
+// ─────────────────────────────────────────────────────────────
+// QLAB INTEGRATION (Cueola → QLab)
+// Cueola is the master: firing a cue writes a command to Firestore
+// (sessions/<code>.qlab.command). A small local QLab Agent (see /qlab-agent)
+// listens to that doc and sends OSC to QLab. This mirrors the prompter-control
+// transport: a single command object, deduped by commandId on the agent side.
+// ─────────────────────────────────────────────────────────────
+let qlabAgentLastBeat = 0;   // ts of the most recent agent heartbeat we've seen
+let qlabAgentInfo = null;    // { host, port } reported by the agent
+let qlabLastAckTs = 0;       // dedup acks (every doc write re-fires the snapshot)
+let _qlabCmdSeq = 0;
+
+// Actions Cueola can ask QLab to perform. 'go' advances the QLab playhead and
+// needs no cue number; the rest are cue-scoped (/cue/<n>/<action>).
+const QLAB_ACTIONS = [
+  ['start',  'Start'],
+  ['stop',   'Stop'],
+  ['pause',  'Pause'],
+  ['resume', 'Resume'],
+  ['load',   'Load'],
+  ['panic',  'Panic'],
+  ['go',     'GO (playhead)'],
+];
+
+function nextQlabCommandId() {
+  _qlabCmdSeq += 1;
+  return `qlab_${CLIENT_ID}_${Date.now().toString(36)}_${_qlabCmdSeq}`;
+}
+
+// 'go' is the only action that doesn't require a cue number.
+function qlabCueRequiresNumber(action) { return action !== 'go'; }
+
+function qlabAgentOnline() {
+  return !!qlabAgentLastBeat && (Date.now() - qlabAgentLastBeat) < 15000;
+}
+
+function noteQlabAgentBeat(hb) {
+  qlabAgentLastBeat = hb.ts || Date.now();
+  qlabAgentInfo = { host: hb.host || '', port: hb.port || '' };
+  refreshQlabStatusBadges();
+}
+
+function handleQlabAck(ack) {
+  if (!ack || !ack.ts || ack.ts === qlabLastAckTs) return;
+  qlabLastAckTs = ack.ts;
+  // Only surface acks for commands we just sent, and only recent ones.
+  if (Date.now() - ack.ts > 8000) return;
+  if (ack.ok && ack.sentCount) {
+    toast(`QLab fired ${ack.sentCount} cue${ack.sentCount > 1 ? 's' : ''}.`);
+  } else if (ack.ok && !ack.sentCount && ack.cueCount) {
+    toast('QLab got the command but sent nothing — check cue numbers.');
+  }
+}
+
+function qlabAgentStatusHTML() {
+  const online = qlabAgentOnline();
+  const dot = `<span class="qlab-dot ${online ? 'on' : 'off'}"></span>`;
+  return `${dot}${online ? 'QLab Connected' : 'QLab Agent offline'}`;
+}
+
+function refreshQlabStatusBadges() {
+  document.querySelectorAll('[data-qlab-status]').forEach(n => { n.innerHTML = qlabAgentStatusHTML(); });
+}
+
+// Optional QLab trigger block, appended to every cue-config modal.
+function qlabCueFields(type, d) {
+  d = d || {};
+  const cueVal = esc(d.qlabCue || '');
+  const action = d.qlabAction || 'start';
+  const auto   = d.qlabAuto ? 'checked' : '';
+  const opts = QLAB_ACTIONS.map(([v, l]) => `<option value="${v}" ${v === action ? 'selected' : ''}>${l}</option>`).join('');
+  return `
+    <div class="field cc-qlab">
+      <div class="cc-section-lbl cc-qlab-head">
+        ${sfIcon('action.forward')} QLab trigger <span class="cc-qlab-optional">— optional</span>
+        <span class="cc-qlab-status" data-qlab-status>${qlabAgentStatusHTML()}</span>
+      </div>
+      <div class="cc-qlab-row">
+        <div class="cc-qlab-cue-field">
+          <label class="field-lbl">QLab cue number / ID</label>
+          <input class="field-in" id="cc-qlab-cue" value="${cueVal}" placeholder="e.g. 14.5" maxlength="60" autocomplete="off" oninput="updateQlabFireBtn()">
+        </div>
+        <div class="cc-qlab-action-field">
+          <label class="field-lbl">Action</label>
+          <select class="field-in" id="cc-qlab-action" onchange="updateQlabFireBtn()">${opts}</select>
+        </div>
+      </div>
+      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-qlab-auto" ${auto}> Auto-fire when this row advances live</label>
+      <div class="cc-qlab-actions">
+        <button type="button" class="cc-qlab-fire" id="cc-qlab-fire" onclick="fireQlabFromModal()">${sfIcon('action.forward')} Fire in QLab now</button>
+      </div>
+    </div>`;
+}
+
+// Keep the "Fire now" button disabled until there's a valid target.
+function updateQlabFireBtn() {
+  const btn = document.getElementById('cc-qlab-fire');
+  if (!btn) return;
+  const cue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
+  const action = document.getElementById('cc-qlab-action')?.value || 'start';
+  btn.disabled = qlabCueRequiresNumber(action) && !cue;
+}
+
+// Core writer: push a fire command to Firestore for the agent. cues is an array
+// of { cue, action } so a single row can batch several QLab actions in one write
+// (avoids a race where rapid overwrites drop commands).
+function fireQlabCommand(cues) {
+  const list = (cues || [])
+    .map(c => ({ cue: String(c.cue || '').trim(), action: c.action || 'start' }))
+    .filter(c => c.cue || !qlabCueRequiresNumber(c.action));
+  if (!list.length) return false;
+  if (!(window._firebaseReady && session.code && !session.isDemo)) {
+    toast('QLab needs a live (non-demo) session.');
+    return false;
+  }
+  const command = {
+    commandId: nextQlabCommandId(),
+    ts: Date.now(),
+    by: session.userName || '',
+    sender: FLOWMINGO_ENDPOINT_ID,
+    cues: list,
+  };
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), {
+    'qlab.command': command,
+  }).catch(err => toast(firebaseConnectionLabel(err, 'QLab command failed')));
+  return true;
+}
+
+// Manual GO from the cue-config modal — also doubles as a test trigger.
+function fireQlabFromModal() {
+  const cue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
+  const action = document.getElementById('cc-qlab-action')?.value || 'start';
+  if (qlabCueRequiresNumber(action) && !cue) { toast('Enter a QLab cue number first.'); return; }
+  if (fireQlabCommand([{ cue, action }])) {
+    if (!qlabAgentOnline()) toast('Sent — but the QLab Agent looks offline.');
+  }
+}
+
+// Collect every auto-fire QLab target programmed on a row.
+function collectAutoQlabCues(beat) {
+  if (!beat || !beat.cues) return [];
+  const out = [];
+  for (const type of COL_DEFAULTS) {
+    const d = beat.cues[type];
+    if (!d || !d.qlabAuto) continue;
+    const cue = String(d.qlabCue || '').trim();
+    const action = d.qlabAction || 'start';
+    if (cue || !qlabCueRequiresNumber(action)) out.push({ cue, action });
+  }
+  return out;
+}
+
+// Fire a row's auto-cues. Called only from lsNext (a deliberate forward advance);
+// scrubbing/jumping/going back never auto-fires, matching show-control norms.
+function fireQlabAutoForBeat(beat) {
+  const cues = collectAutoQlabCues(beat);
+  if (cues.length) fireQlabCommand(cues);
+}
+
+// Open the local Cue → Q console (the keypad served by the QLab bridge on this
+// machine). Opens in a new tab; only reachable when the bridge is running.
+function openCueQConsole() {
+  window.open('http://localhost:8765/', '_blank', 'noopener');
+}
+
+// The live-view Cue → Q button is admin-only. Toggled on admin login/logout and
+// when entering Live.
+function updateLiveCueQButton() {
+  const btn = document.getElementById('liveCueQBtn');
+  if (btn) btn.style.display = adminSession ? '' : 'none';
+}
+
+// Does this cue cell have a QLab target worth showing a GO button for?
+function qlabCellHasTarget(d) {
+  return !!d && (String(d.qlabCue || '').trim() || d.qlabAction === 'go');
+}
+
+// Manual GO straight from a live cue card — fire one cell's QLab action.
+function fireQlabCueCell(beatId, type) {
+  const d = beats.find(x => x.id === beatId)?.cues?.[type];
+  if (!qlabCellHasTarget(d)) { toast('No QLab cue on this cell.'); return; }
+  const cue = String(d.qlabCue || '').trim();
+  const action = d.qlabAction || 'start';
+  if (fireQlabCommand([{ cue, action }])) {
+    const what = action === 'start' ? `cue ${cue}` : (action === 'go' ? 'GO' : `${action} cue ${cue}`);
+    toast(qlabAgentOnline() ? `QLab: ${what} sent.` : `QLab Agent offline — ${what} not delivered.`);
+  }
+}
+
+// GO button markup for a live cue card (only when the cell has a QLab target).
+function qlabGoBtnHTML(beatId, type, d) {
+  if (!qlabCellHasTarget(d)) return '';
+  const action = d.qlabAction || 'start';
+  const label = (action === 'start' || action === 'go') ? 'GO' : action.toUpperCase();
+  const tip = action === 'go' ? 'Fire QLab GO (playhead)' : `Fire QLab ${action} · cue ${esc(d.qlabCue || '')}`;
+  return `<button type="button" class="lf-qlab-go" title="${tip}" onclick="event.stopPropagation();fireQlabCueCell('${beatId}','${type}')">${sfIcon('action.forward')} ${label}</button>`;
 }
 
 
@@ -4354,6 +4567,7 @@ function goLive() {
   syncLiveIdx();
   resumeRemoteClockIfRunning();  // late joiner picks up a clock already running
   updateLiveClockButton();
+  updateLiveCueQButton();        // admin-only QLab console button
   const timerEl = document.getElementById('ls-timer');
   if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
   updateWallClock();
@@ -4797,9 +5011,11 @@ function focusCuesForBeat(b) {
       if (on)  lines += `<div class="lf-cue-take">▶ ${esc(on)}</div>`;
       if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
     }
-    return `<div class="lf-cue" style="--cue-clr:${tc.color}">
+    const goBtn = qlabGoBtnHTML(b.id, type, d);
+    return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
       <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
       <div class="lf-cue-lines">${lines}</div>
+      ${goBtn}
     </div>`;
   }).join('') + `</div>`;
 }
@@ -5123,6 +5339,7 @@ function lsNext() {
   if (ni < beats.length) {
     lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
+    fireQlabAutoForBeat(beats[lsIdx]);  // auto-fire any QLab cues programmed on the new row
     renderLive();
     syncLiveIdx();
   }

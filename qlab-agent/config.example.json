@@ -1,0 +1,7 @@
+{
+  "sessionCode": "ABCDEF",
+  "qlabHost": "127.0.0.1",
+  "qlabPort": 53000,
+  "qlabPasscode": "",
+  "heartbeatSeconds": 5
+}
