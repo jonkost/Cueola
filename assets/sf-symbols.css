@@ -41,7 +41,8 @@
 .sf-symbol[data-symbol="action.guide"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/magazine.svg");}
 .sf-symbol[data-symbol="action.filter"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/editing/slider.vertical.3.svg");}
 .sf-symbol[data-symbol="action.grid"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/square.grid.4x3.fill.svg");}
-.sf-symbol[data-symbol="state.info"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.svg");}
+.sf-symbol[data-symbol="state.info"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg");}
+.sf-symbol[data-symbol="info.square"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/info.square.svg");}
 .sf-symbol[data-symbol="state.warning"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/privacyandsecurity/exclamationmark.triangle.svg");}
 .sf-symbol[data-symbol="state.success"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/checkmark.svg");}
 .sf-symbol[data-symbol="state.favorite"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/health/heart.svg");}

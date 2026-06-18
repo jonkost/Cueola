@@ -4409,8 +4409,33 @@ function applyLivePrompterPanelState() {
   }
 }
 
+const FLOWMINGO_OP_LABEL = '🦩 <span>Flow<span class="brand-hi">mingo</span></span> Op';
+
+function setFlowmingoOpButton(active) {
+  const btn = document.getElementById('promptOpBtn');
+  if (!btn) return;
+  if (active) {
+    btn.style.color = 'var(--cyan)';
+    btn.style.borderColor = 'var(--cyan)';
+    btn.style.background = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
+    setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
+  } else {
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    btn.style.background = '';
+    btn.innerHTML = FLOWMINGO_OP_LABEL;
+  }
+}
+
 function toggleLivePrompterPanel() {
   livePrompterOpen = !livePrompterOpen;
+  // A user is one OR the other — Script Op and Flowmingo Op are mutually exclusive.
+  if (livePrompterOpen && promptOpMode) {
+    promptOpMode = false;
+    document.getElementById('liveshow')?.classList.remove('prompt-op-active');
+    setFlowmingoOpButton(false);
+    renderLive();
+  }
   applyLivePrompterPanelState();
 }
 
@@ -4754,6 +4779,17 @@ function wrapTextareaSelection(taId, pre, post) {
 }
 
 // Wrap the current selection (in the live contenteditable panel) with markers.
+// Keyboard shortcuts inside the Script Op editor: ⌘/Ctrl+B bold, +I italic,
+// +Enter pushes to Flowmingo. Makes formatting and pushing fast without reaching
+// for the toolbar.
+function livePrompterKeydown(e) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = (e.key || '').toLowerCase();
+  if (k === 'b') { e.preventDefault(); e.stopPropagation(); wrapLivePanelSelection('**', '**'); }
+  else if (k === 'i') { e.preventDefault(); e.stopPropagation(); wrapLivePanelSelection('*', '*'); }
+  else if (k === 'enter') { e.preventDefault(); e.stopPropagation(); pushToPrompter(); }
+}
+
 function wrapLivePanelSelection(pre, post) {
   const el = livePrompterEditor();
   if (!el) return;
@@ -5924,6 +5960,16 @@ function ptSetScriptText(text) {
   ptSetScriptHTML(scriptToFormattedHTML(text), text || '');
 }
 
+// Apply a pushed Cueola update WITHOUT resetting scroll or playback. Used for
+// every update after the first load so live pushes are seamless on the talent
+// screen (ptSetScriptText/ptSetScriptHTML reset scroll to the top — fine for the
+// initial render, jarring for a mid-show edit).
+function ptApplyCueolaLiveUpdate(text) {
+  prompterText = text || '';
+  try { localStorage.setItem('promptypus_script_html', scriptToFormattedHTML(text || '')); } catch {}
+  ptUpdateFromCueola(text || '');   // preserves ptOffset + keeps scrolling if playing
+}
+
 function ptLoadLibrary(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
@@ -6744,8 +6790,13 @@ function ptLoadFromCueolaCode(codeOverride='') {
           // nearly every write — the script appeared to load, then restart every
           // couple of seconds. Compare the stable source string instead.
           if (text !== ptLastCueolaScript) {
+            const firstApply = ptLastCueolaScript === null;
             ptLastCueolaScript = text;
-            ptSetScriptText(text);
+            // First load starts from the top; every later pushed update applies
+            // LIVE in place — preserving scroll position and playback — so the
+            // talent screen never has to be reset to "play" the new copy.
+            if (firstApply) ptSetScriptText(text);
+            else ptApplyCueolaLiveUpdate(text);
           }
           const ta = ptEl('pt-script-input');
           if (ta) ta.value = text.trim();
@@ -6928,21 +6979,13 @@ function exitPrompter() {
 
 function togglePromptOpMode() {
   promptOpMode = !promptOpMode;
-  document.getElementById('liveshow')?.classList.toggle('prompt-op-active', promptOpMode);
-  const btn = document.getElementById('promptOpBtn');
-  if (btn) {
-    if (promptOpMode) {
-      btn.style.color = 'var(--cyan)';
-      btn.style.borderColor = 'var(--cyan)';
-      btn.style.background = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
-      setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
-    } else {
-      btn.style.color = '';
-      btn.style.borderColor = '';
-      btn.style.background = '';
-      btn.textContent = '🦩 Flowmingo Op';
-    }
+  // Mutually exclusive with the Script Op panel — close it when entering Flowmingo Op.
+  if (promptOpMode && livePrompterOpen) {
+    livePrompterOpen = false;
+    applyLivePrompterPanelState();
   }
+  document.getElementById('liveshow')?.classList.toggle('prompt-op-active', promptOpMode);
+  setFlowmingoOpButton(promptOpMode);
   renderLive();
 }
 
