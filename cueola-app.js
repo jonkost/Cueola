@@ -3337,6 +3337,10 @@ function buildFreeTextCueFields(type, d) {
       <input class="field-in" id="cc-off-text" value="${esc(getCueOff(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
     </div>`}
     ${isScript ? `<div class="field">
+      <label class="field-lbl">Speaker name</label>
+      <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="e.g. Host, Anchor, Narrator" maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
       <label class="field-lbl">Script Copy</label>
       <textarea class="field-in" id="cc-s-text" rows="8" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Type or paste the script for Flowmingo.">${esc(d.text||'')}</textarea>
     </div>` : ''}
@@ -3733,6 +3737,7 @@ function buildCueConfigFields(type, d) {
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-custom','_ccSOnBuild')">+ Custom</button>
         </div>
         ${ccCustomSrcField('cc-s-custom', d.customSrc)}
+        <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="Speaker name for Flowmingo headers…" maxlength="80" autocomplete="off" style="margin-top:8px">
       </div>
       ${step(2,'What will you do with it?')}
       <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
@@ -4097,6 +4102,7 @@ function saveCueConfig() {
     case 'script':
       d.scriptType  = _sOnType;
       d.customSrc   = document.getElementById('cc-s-custom')?.value?.trim()||'';
+      d.speaker     = document.getElementById('cc-s-speaker')?.value?.trim()||'';
       d.text        = document.getElementById('cc-s-text')?.value||'';
       d.dialogueNote= document.getElementById('cc-s-dialogue')?.value?.trim()||'';
       d.scriptTags  = [..._sOnTags];
@@ -4763,17 +4769,20 @@ function adoptPrompterSnapshot(prompter={}, opts={}) {
 }
 
 function scriptSpeakerLabel(d) {
-  const explicit = d?.customSrc || d?.speaker || d?.who || '';
+  const explicit = d?.speaker || d?.customSrc || d?.who || '';
   if (explicit) return explicit;
   const cue = getCueOff(d) || getCueOn(d);
   return String(cue || '').replace(/\s+—\s*Begin\s*$/i, '').trim();
 }
 
 function assemblePrompterScriptFromBeats(list=beats) {
-  const scripts = (Array.isArray(list) ? list : []).filter(b => b?.cues?.script?.text);
-  return cleanPrompterText(scripts.map((b, idx) => {
+  const scripts = (Array.isArray(list) ? list : [])
+    .map((b, rowIdx) => ({ b, rowIdx }))
+    .filter(({ b }) => b?.cues?.script?.text);
+  return cleanPrompterText(scripts.map(({ b, rowIdx }) => {
     const d = b.cues.script;
-    const header = b.info ? `\n[${idx + 1}] ${b.info}\n` : `\n[${idx + 1}]\n`;
+    const rowNum = rowIdx + 1;
+    const header = b.info ? `\n[${rowNum}] ${b.info}\n` : `\n[${rowNum}]\n`;
     const speaker = scriptSpeakerLabel(d);
     return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + (d.text || '');
   }).join('\n\n'));
@@ -5120,7 +5129,6 @@ function renderLive() {
       ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color};cursor:grab;user-select:none" draggable="true" data-col="${type}" ondragstart="colDragStart(event,'${type}')" ondragover="colDragOver(event,this)" ondrop="colDrop(event,'${type}')" ondragend="colDragEnd(event)" title="Drag to reorder">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label} ${sfIcon('action.drag','col-grip')}</th>`).join('')}
     </tr></thead><tbody>`;
 
-  let liveNum = 0;
   beats.forEach((b, i) => {
     const durSecs = (b.min||0)*60+(b.sec||0);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
@@ -5137,7 +5145,6 @@ function renderLive() {
       return;
     }
 
-    liveNum++;
     const isCur  = i === lsIdx;
     const isNext = i > lsIdx && beats.slice(lsIdx+1, i).every(x => x.style === 'segment');
     const isDone = i < lsIdx;
@@ -5146,7 +5153,7 @@ function renderLive() {
     const statusText = isCur ? 'On Air' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
     const rowClass = isCur ? 'live-row-current' : isNext ? 'live-row-next' : isDone ? 'live-row-done' : '';
     html += `<tr class="${rowClass}" onclick="${handler}">
-      <td><div class="live-num">${liveNum}</div></td>
+      <td><div class="live-num">${i + 1}</div></td>
       <td><span class="live-status ${statusClass}">${statusText}</span></td>
       <td>
         <div class="live-name">${esc(b.info||'—')}</div>
@@ -5714,7 +5721,11 @@ function _setPrompterStatus(connected, unavailable=false) {
 
 function updatePrompterOnAdvance(prevBeat, newBeat) {
   if (!prompterText.trim()) buildPromptFromRundown();
-  sendToPrompter();
+  const rowNum = (beats.indexOf(newBeat) >= 0) ? beats.indexOf(newBeat) + 1 : 0;
+  Promise.resolve(sendToPrompter(false)).then(pushed => {
+    if (!pushed || !rowNum) return;
+    setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 140);
+  });
 }
 
 async function sendToPrompter(isInit=false) {
@@ -5853,6 +5864,13 @@ function openFlowmingoTalentWindow() {
     toast('Allow pop-ups to open Flowmingo in a new window.');
     enterPrompter();
   }
+}
+
+function sendPrompterPreviewControl(action) {
+  _ensurePrompterOperatorBridge();
+  const control = buildPrompterControl(action, 'script-op-preview');
+  _postPrompterMessage(control);
+  ptHandleRemoteControl(action);
 }
 
 function sendPrompterControl(action) {
@@ -6167,13 +6185,13 @@ function promptOpControlsHTML(includeLiveActions = true) {
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Speed</span>
       <button class="pt-btn" onclick="sendPrompterControl('speed_down')">−</button>
-      <input type="range" class="pt-range" min="5" max="200" value="${ptTargetSpeed}" oninput="ptSetSpeed(this.value);sendPrompterControl('speed_set_'+this.value)">
+      <input type="range" class="pt-range" min="5" max="200" value="${ptTargetSpeed}" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value)">
       <button class="pt-btn" onclick="sendPrompterControl('speed_up')">+</button>
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Size</span>
       <button class="pt-btn" onclick="sendPrompterControl('size_down')">−</button>
-      <input type="range" class="pt-range" min="24" max="120" value="${ptFontSize}" oninput="ptSetSize(this.value);sendPrompterControl('size_set_'+this.value)">
+      <input type="range" class="pt-range" min="24" max="120" value="${ptFontSize}" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value)">
       <button class="pt-btn" onclick="sendPrompterControl('size_up')">+</button>
     </div>
     <div class="pt-ctrl-group">
@@ -6270,15 +6288,39 @@ function ptProgressPct() {
   return max > 0 ? Math.round(Math.min(100, Math.max(0, (ptOffset / max) * 100))) : 0;
 }
 
+function ptApplyScrollOffset(offset) {
+  const max = ptGetMaxScroll();
+  ptOffset = Math.max(0, Math.min(max, Number(offset) || 0));
+  const track = ptEl('pt-track');
+  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+  ptUpdateProgress();
+}
+
 // Live "cue" scroll — operators drag the talent prompter to any spot on the fly.
 // Pure repositioning: never pauses, never writes a marker.
 function ptSeekToProgress(pct) {
   const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
   const max = ptGetMaxScroll();
-  ptOffset = max > 0 ? (p / 100) * max : 0;
-  const track = ptEl('pt-track');
-  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-  ptUpdateProgress();
+  ptApplyScrollOffset(max > 0 ? (p / 100) * max : 0);
+}
+
+function ptSeekToRow(rowNum) {
+  const n = parseInt(rowNum, 10);
+  if (!Number.isFinite(n) || n < 1) return;
+  requestAnimationFrame(() => {
+    const text = ptEl('pt-text');
+    const track = ptEl('pt-track');
+    if (!text || !track) return;
+    const tag = `[${n}]`;
+    const headers = Array.from(text.querySelectorAll('.scr-header'));
+    const target = headers.find(h => String(h.textContent || '').trim().startsWith(tag));
+    if (!target) return;
+    const readY = window.innerHeight / 2 + 24;
+    const fontSize = parseFloat(getComputedStyle(target).fontSize) || 22;
+    const targetY = readY - Math.max(34, fontSize * 1.8);
+    const delta = target.getBoundingClientRect().top - targetY;
+    ptApplyScrollOffset(ptOffset + delta);
+  });
 }
 
 // "Technical difficulties" stand-by cover. Instant full-screen hold + scroll pause.
@@ -6344,10 +6386,21 @@ function liveActionsHTML(scope = 'po') {
   const techCall = isFlow ? 'flowOpToggleTechDifficulty()' : 'toggleTechDifficulty()';
   const seekVal = isFlow ? 0 : ptProgressPct();
   const seekInput = isFlow
-    ? `flowOpSendControl('seek_set_'+this.value,true)`
-    : `sendPrompterControl('seek_set_'+this.value)`;
-  const seekChange = isFlow ? ` onchange="flowOpSendControl('seek_set_'+this.value)"` : '';
+    ? `flowOpApplyControlPreview('seek_set_'+this.value,true)`
+    : `sendPrompterPreviewControl('seek_set_'+this.value)`;
+  const seekChange = isFlow
+    ? ` onchange="flowOpSendControl('seek_set_'+this.value)"`
+    : ` onchange="sendPrompterControl('seek_set_'+this.value)"`;
   const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
+  const nextRowIdx = (() => {
+    let i = lsIdx;
+    do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
+    return i < beats.length ? i : -1;
+  })();
+  const rowCue = isFlow ? '' : `<div class="pt-ctrl-group pt-live-rowcue">
+      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row">Cue Now</button>
+      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 ? ' disabled' : ''}>Cue Next</button>
+    </div>`;
   const chevL = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M9 0 L0 6 L9 12Z"/></svg>`;
   const chevR = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M0 0 L9 6 L0 12Z"/></svg>`;
   // Returns bare control groups so they nest inside the existing panel containers
@@ -6355,6 +6408,7 @@ function liveActionsHTML(scope = 'po') {
   return `<div class="pt-ctrl-group pt-live-tech">
       <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover">${techOn ? 'Back on air' : 'Tech Difficulty'}</button>
     </div>
+    ${rowCue}
     <div class="pt-ctrl-group pt-live-cue">
       <span class="pt-ctrl-label">Cue</span>
       <button class="pt-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back">${chevL}</button>
@@ -6798,6 +6852,7 @@ function ptHandleRemoteControl(action) {
   if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
+  if (action?.startsWith('seek_row_')) { ptSeekToRow(action.replace('seek_row_', '')); return; }
   switch (action) {
     case 'slate_tech_on':  ptShowTechSlate(); break;
     case 'slate_tech_off': ptHideTechSlate(); break;
@@ -6899,6 +6954,7 @@ function flowOpControlLabel(action) {
   if (action?.startsWith('speed_set_')) return `Speed ${action.replace('speed_set_', '')}`;
   if (action?.startsWith('size_set_')) return `Size ${action.replace('size_set_', '')}`;
   if (action?.startsWith('seek_set_')) return 'Cue';
+  if (action?.startsWith('seek_row_')) return `Cue row ${action.replace('seek_row_', '')}`;
   return labels[action] || action || 'Control';
 }
 
@@ -6912,6 +6968,8 @@ function flowOpApplyControlPreview(action, quiet=false) {
     flowOpSetTheme(action.replace('theme_', ''));
   } else if (action.startsWith('seek_set_')) {
     // Pure live cue scroll — no local Flowmingo Op preview state to mirror.
+  } else if (action.startsWith('seek_row_')) {
+    // Talent resolves row headers locally after the latest script update.
   } else {
     switch (action) {
       case 'slate_tech_on': flowOpTechSlate = true; syncTechButtons(); break;
@@ -7697,7 +7755,12 @@ function stopTimer(stopPrompter=true) {
 // ─────────────────────────────────────────────────────────────
 // SETTINGS & THEME
 // ─────────────────────────────────────────────────────────────
-function applyTheme(t) { document.documentElement.setAttribute('data-theme', normalizeCueolaTheme(t)); }
+function applyTheme(t) {
+  const root = document.documentElement;
+  root.classList.add('theme-switching');
+  root.setAttribute('data-theme', normalizeCueolaTheme(t));
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+}
 
 function applyPlandaBearTheme(t) {
   plandaBearTheme = normalizePlandaBearTheme(t);
@@ -12201,6 +12264,33 @@ window.addEventListener('popstate', () => {
 // Then load from Firestore (source of truth) — updates cache + restores session again
 if (window._firebaseReady) initAdminsFromFirestore();
 else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: true });
+
+// ── Entitlement layer (Phase 1) ─────────────────────────────────────────────
+// Server-authoritative, offline-tolerant account entitlement. Reads accounts/{id}
+// as the source of truth and caches it so live use survives a bad network. This
+// EXTENDS the existing identity — account id = signed-in admin id when present,
+// else a persistent device account id — rather than adding a parallel auth.
+// Phase 1 is read-only: it never gates a feature (capability resolution = Phase 2).
+function cueolaInitEntitlements() {
+  const E = window.CueolaEntitlements;
+  if (!E) return null;
+  const accountId = (adminSession && adminSession.id) || E.getDeviceAccountId();
+  if (window.cueolaEntitlements && window.cueolaEntitlements.accountId === accountId) {
+    return window.cueolaEntitlements; // already keyed to this identity
+  }
+  if (window.cueolaEntitlements) window.cueolaEntitlements.stop();
+  const firestore = (window._firebaseReady && window._db && window._doc && window._onSnapshot)
+    ? { db: window._db, doc: window._doc, onSnapshot: window._onSnapshot }
+    : null;
+  window.cueolaEntitlements = E.createStore({
+    accountId,
+    firestore,
+    log: function () { try { console.debug.apply(console, ['[entitlement]'].concat([].slice.call(arguments))); } catch {} },
+  }).start();
+  return window.cueolaEntitlements;
+}
+if (window._firebaseReady) cueolaInitEntitlements();
+else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: true });
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);

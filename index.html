@@ -889,6 +889,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .theme-swatch.active .ts-name{color:var(--text)}
 /* shared mini-swatch (used in PrepBear pills) */
 .theme-mini{display:inline-block;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);margin-right:7px;vertical-align:-3px;flex-shrink:0}
+.theme-switching *{transition:none!important}
 
 /* ── THEMES ── */
 [data-theme="warm"]{--bg:#140803;--s1:#1c0c05;--s2:#241108;--s3:#30180b;--s4:#3d210f;--border:#3a230f;--bord2:#5a361a;--text:#fbf0db;--text2:#c8a87c;--text3:#8a6940;--accent:#e89a4f;--acg:#c87030;--green:#9bc864;--cyan:#5ec0d1;--purple:#c970a8;--yellow:#f5c668;--red:#e85a3a;--orange:#f59538;--video:#e89a4f;--video-bg:rgba(232,154,79,.14);--cue-add:#e89a4f;--cue-add-bg:rgba(232,154,79,.07);--cue-add-border:rgba(232,154,79,.42)}
@@ -1618,7 +1619,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
 .scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
-#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:800}
+#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:950;color:var(--pt-text,#fff);text-shadow:0 0 1px currentColor}
 
 /* Reading line */
 #pt-read-line{position:absolute;left:0;right:0;top:calc(var(--pt-bar-h,48px) + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
@@ -1645,8 +1646,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pt-btn.active{background:rgba(200,169,126,.2);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
 #pt-play-btn{width:100%;padding:9px;font-size:13px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e);border-radius:10px}
 #pt-play-btn.active{background:rgba(200,169,126,.2)}
-input.pt-range{-webkit-appearance:none;flex:1;height:3px;background:rgba(200,169,126,.25);border-radius:2px;outline:none}
-input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--pt-accent,#c8a97e);cursor:pointer}
+input.pt-range{-webkit-appearance:none;appearance:none;flex:1;min-width:120px;height:18px;background:transparent;border-radius:2px;outline:none;cursor:pointer;touch-action:pan-y}
+input.pt-range::-webkit-slider-runnable-track{height:5px;background:rgba(200,169,126,.28);border-radius:999px}
+input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8.5px;border-radius:50%;background:var(--pt-accent,#c8a97e);border:2px solid var(--pt-bg,#0a0a0a);box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:grab}
+input.pt-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.08)}
+input.pt-range::-moz-range-track{height:5px;background:rgba(200,169,126,.28);border-radius:999px}
+input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--pt-accent,#c8a97e);border:2px solid var(--pt-bg,#0a0a0a);box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:grab}
 .pt-theme-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(255,255,255,.22);transition:transform .15s var(--ease),box-shadow .2s var(--ease);flex-shrink:0;display:inline-block}
 .pt-theme-dot:hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
 .pt-theme-dot.active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg,#000),0 0 0 4px var(--pt-accent,#fff)}
@@ -1669,6 +1674,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 .ls-live-actions .pt-ctrl-group{display:flex;grid-template-columns:none;align-items:center;gap:8px}
 .ls-live-actions .pt-live-tech{flex:1 1 100%}
 .ls-live-actions .pt-tech-btn{width:100%;padding:9px;font-size:12px;border-radius:10px}
+.ls-live-actions .pt-live-rowcue{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ls-live-actions .pt-live-rowcue .pt-btn{padding:9px;font-size:12px;border-radius:10px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
 .ls-live-actions .pt-live-cue{flex:1 1 100%}
 .ls-live-actions .pt-range{flex:1}
 .ls-disclosure{border:1px solid var(--bord2,rgba(255,255,255,.08));border-radius:12px;overflow:hidden;background:rgba(0,0,0,.12)}
@@ -3149,7 +3156,8 @@ input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:1
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-app.js?v=20260618h"></script>
+<script src="cueola-entitlements.js?v=20260621a"></script>
+<script src="cueola-app.js?v=20260621a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

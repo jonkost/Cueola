@@ -38,6 +38,18 @@ service cloud.firestore {
                      && request.resource.data.list.size() <= 200;
     }
 
+    // Account entitlement — one doc per account at accounts/{accountId}. The client
+    // READS this to learn its tier/limits (entitlement is SERVER-AUTHORITATIVE), but
+    // must NEVER write it: grants come only from the server (Cloud Functions / Admin
+    // SDK, which bypasses these rules) after a verified Apple IAP, web webhook, or edu
+    // grant. So: public read (no auth to gate on; entitlement holds no secrets — just
+    // tier/limits), writes fully denied to every client. Harden read later with App
+    // Check + Firebase Auth (gate on request.auth.uid == accountId).
+    match /accounts/{accountId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Lock down everything else.
     match /{document=**} {
       allow read, write: if false;
