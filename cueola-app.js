@@ -197,6 +197,7 @@ let browserBackGuardReady = false;
 let _lastHandledForceCmdTs = 0;
 let livePrompterOpen = false;
 let liveSidebarWidth = 360;
+let _lastLiveScrollIdx = null;
 let previewRowIdx = 0;
 let callSheetPeople = [];
 let activeCallSheetIndex = 0;
@@ -4562,6 +4563,7 @@ function goLive() {
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
+  _lastLiveScrollIdx = null;
   document.getElementById('tabLive').classList.add('on');
   document.getElementById('tabBuild').classList.remove('on');
   sessionStorage.setItem('cueola_screen','live');
@@ -4843,7 +4845,7 @@ function applyLivePrompterPanelState() {
   }
 }
 
-const FLOWMINGO_OP_LABEL = '🦩 <span>Flow<span class="brand-hi">mingo</span></span> Op';
+const FLOWMINGO_OP_LABEL = `${sfIcon('content.display')} <span>Flow<span class="brand-hi">mingo</span></span> Op`;
 
 function setFlowmingoOpButton(active) {
   const btn = document.getElementById('promptOpBtn');
@@ -5167,7 +5169,10 @@ function renderLive() {
 
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
-  if (cur) cur.scrollIntoView({behavior:'smooth', block:'center'});
+  if (cur && _lastLiveScrollIdx !== lsIdx) {
+    _lastLiveScrollIdx = lsIdx;
+    cur.scrollIntoView({behavior:'auto', block:'center'});
+  }
   applyLivePrompterPanelState();
   renderFollowChips();
   updateLiveOverview();
@@ -5295,6 +5300,22 @@ function insertLivePanelMarker(text) {
   queueLivePrompterDraftPush();
 }
 
+async function pasteClipboardToPrompter(pushNow=false) {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    text = prompt('Paste chat text to send to Flowmingo:', '') || '';
+  }
+  text = cleanPrompterText(text);
+  if (!text) {
+    markLivePrompterStatus('Clipboard empty', 'busy');
+    return;
+  }
+  insertLivePanelMarker(`${prompterText || livePrompterEditorText() ? '\n\n' : ''}[CHAT]\n${text}`);
+  if (pushNow) pushToPrompter();
+}
+
 function insertCueScriptMarker(text) {
   const ta = document.getElementById('cc-s-text');
   if (!ta) return;
@@ -5323,7 +5344,7 @@ function jumpToLsCue(i) {
   if (isStandardShowCaller()) return; // standard show callers may only advance sequentially
   lsIdx = i;
   renderLive();
-  sendToPrompter(false);
+  sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
   syncLiveIdx();
 }
 
@@ -5356,7 +5377,12 @@ function lsPrev() {
   detachIfFollowing();
   let ni = lsIdx;
   do { ni--; } while (ni >= 0 && beats[ni]?.style === 'segment');
-  if (ni >= 0) { lsIdx = ni; renderLive(); sendToPrompter(false); syncLiveIdx(); }
+  if (ni >= 0) {
+    lsIdx = ni;
+    renderLive();
+    sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
+    syncLiveIdx();
+  }
 }
 
 // Per-person following: which position should I mirror? Browsing self → null (keep
@@ -5728,6 +5754,11 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
   });
 }
 
+function cuePrompterToLiveRow() {
+  const rowNum = lsIdx + 1;
+  if (rowNum > 0) setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 120);
+}
+
 async function sendToPrompter(isInit=false) {
   const el = livePrompterEditor();
   if (el && (livePrompterDraftDirty || document.activeElement === el)) {
@@ -5778,12 +5809,16 @@ function updateLsPrompter() {
 }
 
 function renderLivePrompterControls() {
-  // Live actions (Tech Difficulty + cue scrubber) stay visible in the sidebar;
+  // Live actions stay visible in the sidebar;
   // the full transport block lives in a collapsible disclosure below.
   const live = document.getElementById('lsLiveActions');
   if (live) live.innerHTML = liveActionsHTML('lsq');
+  const clocks = document.getElementById('lsClockActions');
+  if (clocks) clocks.innerHTML = clockAndAlertControlsHTML('lsq');
+  else if (live) live.innerHTML += clockAndAlertControlsHTML('lsq');
   const el = document.getElementById('lsPrompterRemote');
   if (el) el.innerHTML = promptOpControlsHTML(false);
+  renderPromptOpClockPreview();
 }
 
 async function pushToPrompter() {
@@ -5887,7 +5922,8 @@ function sendPrompterControl(action) {
   if (!promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePrompterControls();
   if (window._firebaseReady && session.code && !session.isDemo) {
     window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID }
+      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
+      'prompter.updatedAt': control.ts
     }).catch(()=>{});
   }
 }
@@ -5934,6 +5970,13 @@ let flowOpKeyupHandler = null;
 let flowOpLastRemoteControlTs = 0;
 let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
 let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
+let ptColorBarsOn = false;    // generated NTSC bars on the talent display
+let flowOpColorBarsOn = false;
+let ptQuestionOn = false;
+let flowOpQuestionOn = false;
+let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
+let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
+let ptClockInterval = null;
 const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD|TECHNICAL DIFFICULTIES)(?:[^\]]*)\]/i;
 
 const PT_THEMES = {
@@ -6179,6 +6222,7 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="prompt-op-panel">
     ${includeLiveActions ? liveActionsHTML('po') : ''}
+    ${includeLiveActions ? clockAndAlertControlsHTML('po') : ''}
     <div class="pt-ctrl-group">
       <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')">${playIcon} ${playLabel}</button>
     </div>
@@ -6211,7 +6255,7 @@ function promptOpControlsHTML(includeLiveActions = true) {
       <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
     </div>
     <div class="pt-ctrl-group">
-      <button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>
+      ${includeLiveActions ? '' : `<button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>`}
       <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
       <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide UI</button>
       <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
@@ -6323,40 +6367,97 @@ function ptSeekToRow(rowNum) {
   });
 }
 
-// "Technical difficulties" stand-by cover. Instant full-screen hold + scroll pause.
+// Full-screen generated slates. Instant hold + scroll pause.
 function ptShowTechSlate() {
   ptTechSlateOn = true;
+  ptColorBarsOn = false;
   ptStopPlay();
-  ptEl('pt-slate')?.classList.add('on');
+  const slate = ptEl('pt-slate');
+  if (slate) {
+    slate.classList.add('on');
+    slate.classList.remove('bars');
+  }
+  syncTechButtons();
+}
+function ptShowColorBars() {
+  ptColorBarsOn = true;
+  ptTechSlateOn = false;
+  ptStopPlay();
+  const slate = ptEl('pt-slate');
+  if (slate) {
+    slate.classList.add('on', 'bars');
+  }
+  syncTechButtons();
+}
+function ptHideAllSlates() {
+  ptTechSlateOn = false;
+  ptColorBarsOn = false;
+  const slate = ptEl('pt-slate');
+  if (slate) slate.classList.remove('on', 'bars');
   syncTechButtons();
 }
 function ptHideTechSlate() {
-  ptTechSlateOn = false;
-  ptEl('pt-slate')?.classList.remove('on');
+  ptHideAllSlates();
+}
+function ptHideColorBars() {
+  ptHideAllSlates();
+}
+
+function anyTalentSlateOn() {
+  return ptTechSlateOn || ptColorBarsOn;
+}
+
+function anyFlowOpSlateOn() {
+  return flowOpTechSlate || flowOpColorBarsOn;
+}
+
+function setFlowOpSlateState(kind) {
+  flowOpTechSlate = kind === 'tech';
+  flowOpColorBarsOn = kind === 'bars';
   syncTechButtons();
 }
 
-// Keep every visible "Tech Difficulty / Back on air" toggle in sync with the state.
+// Keep every visible slate toggle in sync with the state.
 function syncTechButtons() {
-  const on = ptTechSlateOn || flowOpTechSlate;
+  const talentSlateOn = anyTalentSlateOn();
+  const flowSlateOn = anyFlowOpSlateOn();
   ['lsq-tech-btn', 'po-tech-btn', 'flow-tech-btn'].forEach(id => {
     const b = document.getElementById(id);
     if (!b) return;
-    b.textContent = on ? 'Back on air' : 'Tech Difficulty';
-    b.classList.toggle('active', on);
+    const isFlow = id.startsWith('flow');
+    const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
+    const anyOn = isFlow ? flowSlateOn : talentSlateOn;
+    setSymbolButtonLabel(b, 'state.warning', techOn ? 'Back on air' : 'Tech Difficulty');
+    b.classList.toggle('active', techOn);
+    b.classList.toggle('muted', anyOn && !techOn);
+  });
+  ['lsq-bars-btn', 'po-bars-btn', 'flow-bars-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    const isFlow = id.startsWith('flow');
+    const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
+    const anyOn = isFlow ? flowSlateOn : talentSlateOn;
+    setSymbolButtonLabel(b, 'content.display', barsOn ? 'Back on air' : 'NTSC Bars');
+    b.classList.toggle('active', barsOn);
+    b.classList.toggle('muted', anyOn && !barsOn);
   });
 }
 
 // Operator quick action (Script Op): throw up the stand-by slate AND record the
 // marker in the script, or clear it. "Both" behaviour from the plan.
 function toggleTechDifficulty() {
-  if (ptTechSlateOn) {
+  if (anyTalentSlateOn()) {
     sendPrompterControl('slate_tech_off');
   } else {
     recordTechDifficultyMarker();
     sendPrompterControl('slate_tech_on');
   }
   // sendPrompterControl applies locally too, so state is up to date now.
+  syncTechButtons();
+}
+
+function toggleColorBars() {
+  sendPrompterControl(ptColorBarsOn ? 'slate_bars_off' : 'slate_bars_on');
   syncTechButtons();
 }
 
@@ -6383,7 +6484,9 @@ function poNudgeSeek(delta) {
 function liveActionsHTML(scope = 'po') {
   const isFlow = scope === 'flow';
   const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
+  const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
   const techCall = isFlow ? 'flowOpToggleTechDifficulty()' : 'toggleTechDifficulty()';
+  const barsCall = isFlow ? 'flowOpToggleColorBars()' : 'toggleColorBars()';
   const seekVal = isFlow ? 0 : ptProgressPct();
   const seekInput = isFlow
     ? `flowOpApplyControlPreview('seek_set_'+this.value,true)`
@@ -6398,22 +6501,21 @@ function liveActionsHTML(scope = 'po') {
     return i < beats.length ? i : -1;
   })();
   const rowCue = isFlow ? '' : `<div class="pt-ctrl-group pt-live-rowcue">
-      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row">Cue Now</button>
-      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 ? ' disabled' : ''}>Cue Next</button>
+      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row">${sfIcon('marker.active')}<span>Cue Now</span></button>
+      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
     </div>`;
-  const chevL = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M9 0 L0 6 L9 12Z"/></svg>`;
-  const chevR = `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor" aria-hidden="true"><path d="M0 0 L9 6 L0 12Z"/></svg>`;
   // Returns bare control groups so they nest inside the existing panel containers
   // (prompt-op-panel / flowop-controls / #lsLiveActions) without overlapping them.
-  return `<div class="pt-ctrl-group pt-live-tech">
-      <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover">${techOn ? 'Back on air' : 'Tech Difficulty'}</button>
+  return `<div class="pt-ctrl-group pt-live-slate">
+      <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover">${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
+      <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" title="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars">${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
     </div>
     ${rowCue}
     <div class="pt-ctrl-group pt-live-cue">
       <span class="pt-ctrl-label">Cue</span>
-      <button class="pt-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back">${chevL}</button>
+      <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back">${sfIcon('action.back')}</button>
       <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}>
-      <button class="pt-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward">${chevR}</button>
+      <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward">${sfIcon('action.forward')}</button>
     </div>`;
 }
 
@@ -6833,6 +6935,160 @@ function ptPostControlAck(controlId, action, controlTs, target) {
   }
 }
 
+function encodePrompterActionText(text) {
+  try { return encodeURIComponent(String(text || '')).replace(/_/g, '%5F'); }
+  catch { return ''; }
+}
+
+function decodePrompterActionText(text) {
+  try { return decodeURIComponent(String(text || '').replace(/%5F/g, '_')); }
+  catch { return String(text || ''); }
+}
+
+function nextClockTargetFromHHMM(value) {
+  const m = String(value || '').match(/^(\d{1,2}):?(\d{2})$/);
+  if (!m) return 0;
+  const h = Math.max(0, Math.min(23, parseInt(m[1], 10)));
+  const min = Math.max(0, Math.min(59, parseInt(m[2], 10)));
+  const d = new Date();
+  d.setHours(h, min, 0, 0);
+  if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+function fmtClockOverlay(ms, showHours=true) {
+  const safe = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  return showHours || h ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function formatTimeOfDay() {
+  try {
+    return new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
+  } catch {
+    const d = new Date();
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+}
+
+function ptEnsureOverlayEls() {
+  const screen = ptEl('promptypus');
+  if (!screen) return {};
+  let clock = ptEl('pt-clock-overlay');
+  if (!clock) {
+    clock = document.createElement('div');
+    clock.id = 'pt-clock-overlay';
+    clock.setAttribute('aria-live', 'polite');
+    clock.innerHTML = '<div class="pt-clock-label"></div><div class="pt-clock-value"></div>';
+    screen.appendChild(clock);
+  }
+  let question = ptEl('pt-question-overlay');
+  if (!question) {
+    question = document.createElement('div');
+    question.id = 'pt-question-overlay';
+    question.setAttribute('aria-live', 'polite');
+    question.textContent = 'Question in chat';
+    screen.appendChild(question);
+  }
+  return { clock, question };
+}
+
+function ptRenderClockOverlay() {
+  const { clock, question } = ptEnsureOverlayEls();
+  if (!clock || !question) return;
+  const state = ptClockState || {};
+  const visible = state.mode && state.mode !== 'off';
+  clock.className = `pt-clock-overlay ${state.mode || 'off'} size-${state.size || 1}${visible ? ' on' : ''}`;
+  if (visible) {
+    const labelEl = clock.querySelector('.pt-clock-label');
+    const valueEl = clock.querySelector('.pt-clock-value');
+    const left = (Number(state.targetTs) || 0) - Date.now();
+    let label = state.label || 'Clock';
+    let value = '—';
+    if (state.mode === 'timeofday') {
+      label = state.label || 'Time';
+      value = formatTimeOfDay();
+    } else if (state.mode === 'wrap') {
+      label = state.label || 'Wrap up';
+      value = fmtClockOverlay(left, false);
+    } else {
+      value = fmtClockOverlay(left, true);
+    }
+    if (labelEl) labelEl.textContent = label;
+    if (valueEl) valueEl.textContent = value;
+    clock.classList.toggle('expired', state.mode !== 'timeofday' && left <= 0);
+  }
+  question.classList.toggle('on', ptQuestionOn);
+  if (visible && !ptClockInterval) ptClockInterval = setInterval(ptRenderClockOverlay, 500);
+  if (!visible && !ptQuestionOn && ptClockInterval) {
+    clearInterval(ptClockInterval);
+    ptClockInterval = null;
+  }
+  renderPromptOpClockPreview();
+}
+
+function renderPromptOpClockPreview() {
+  ['poClockPreview', 'lsqClockPreview'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const state = ptClockState || {};
+    const clockOn = state.mode && state.mode !== 'off';
+    const left = (Number(state.targetTs) || 0) - Date.now();
+    const value = !clockOn ? 'Off'
+      : state.mode === 'timeofday' ? formatTimeOfDay()
+        : fmtClockOverlay(left, state.mode !== 'wrap');
+    const label = !clockOn ? 'Clock' : (state.label || 'Clock');
+    el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
+      <span>${esc(label)}</span>
+      <strong>${esc(value)}</strong>
+      ${ptQuestionOn ? '<em>Question in chat</em>' : ''}
+    </div>`;
+  });
+}
+
+function applyClockActionToState(action, target='talent') {
+  const isFlow = target === 'flowop';
+  const current = isFlow ? flowOpClockState : ptClockState;
+  const update = patch => {
+    const next = { ...current, ...patch };
+    if (isFlow) flowOpClockState = next;
+    else ptClockState = next;
+  };
+  if (action === 'clock_off') update({ mode:'off', label:'', targetTs:0 });
+  else if (action === 'clock_timeofday') update({ mode:'timeofday', label:'Time', targetTs:0 });
+  else if (action.startsWith('clock_until_')) {
+    const [, rest=''] = action.split('clock_until_');
+    const parts = rest.split('_label_');
+    update({ mode:'countdown', label:decodePrompterActionText(parts[1] || 'Countdown'), targetTs:Number(parts[0]) || Date.now(), size:current.size || 1 });
+  } else if (action.startsWith('clock_duration_')) {
+    const sec = Math.max(1, parseInt(action.replace('clock_duration_', ''), 10) || 60);
+    update({ mode:'duration', label:'Duration', targetTs:Date.now() + sec * 1000, size:current.size || 1 });
+  } else if (action.startsWith('wrapup_')) {
+    const sec = Math.max(1, parseInt(action.replace('wrapup_', ''), 10) || 300);
+    update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, size:2 });
+  } else if (action === 'clock_size_up') update({ size:Math.min(2, (current.size || 1) + 1) });
+  else if (action === 'clock_size_down') update({ size:Math.max(0, (current.size || 1) - 1) });
+  if (isFlow) flowOpRenderClockPreview();
+  else {
+    ptRenderClockOverlay();
+    renderPromptOpClockPreview();
+  }
+}
+
+function applyQuestionAction(action, target='talent') {
+  const on = action === 'question_on';
+  if (target === 'flowop') {
+    flowOpQuestionOn = on;
+    flowOpRenderClockPreview();
+  } else {
+    ptQuestionOn = on;
+    ptRenderClockOverlay();
+    renderPromptOpClockPreview();
+  }
+}
+
 // Called by sendPrompterControl to mirror controls into the native prompter
 // Apply a remote control exactly once, no matter how many transports deliver it
 // or how often a Firestore snapshot re-fires. Dedup by a signature instead of a
@@ -6853,9 +7109,19 @@ function ptHandleRemoteControl(action) {
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
   if (action?.startsWith('seek_row_')) { ptSeekToRow(action.replace('seek_row_', '')); return; }
+  if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action?.startsWith('clock_until_') || action?.startsWith('clock_duration_') || action?.startsWith('wrapup_')) {
+    applyClockActionToState(action, 'talent');
+    return;
+  }
+  if (action === 'question_on' || action === 'question_off') {
+    applyQuestionAction(action, 'talent');
+    return;
+  }
   switch (action) {
     case 'slate_tech_on':  ptShowTechSlate(); break;
     case 'slate_tech_off': ptHideTechSlate(); break;
+    case 'slate_bars_on':  ptShowColorBars(); break;
+    case 'slate_bars_off': ptHideColorBars(); break;
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;
@@ -6948,14 +7214,43 @@ function flowOpControlLabel(action) {
     direction_reverse:'Reverse', direction_forward:'Forward',
     brake_start:'Brake', brake_stop:'Brake release',
     boost_start:'Boost', boost_stop:'Boost release',
-    slate_tech_on:'Tech difficulties', slate_tech_off:'Back on air'
+    slate_tech_on:'Tech difficulties', slate_tech_off:'Back on air',
+    slate_bars_on:'NTSC bars', slate_bars_off:'Bars off',
+    clock_timeofday:'Time clock', clock_off:'Clock off',
+    clock_size_up:'Clock bigger', clock_size_down:'Clock smaller',
+    question_on:'Question indicator', question_off:'Question cleared'
   };
   if (action?.startsWith('theme_')) return `${CUEOLA_THEME_LABELS[action.replace('theme_', '')] || 'Theme'} theme`;
   if (action?.startsWith('speed_set_')) return `Speed ${action.replace('speed_set_', '')}`;
   if (action?.startsWith('size_set_')) return `Size ${action.replace('size_set_', '')}`;
   if (action?.startsWith('seek_set_')) return 'Cue';
   if (action?.startsWith('seek_row_')) return `Cue row ${action.replace('seek_row_', '')}`;
+  if (action?.startsWith('clock_until_')) return 'Countdown clock';
+  if (action?.startsWith('clock_duration_')) return 'Duration clock';
+  if (action?.startsWith('wrapup_')) return 'Wrap up';
   return labels[action] || action || 'Control';
+}
+
+function flowOpRenderClockPreview() {
+  const el = flowOpEl('flowOpClockPreview');
+  if (!el) return;
+  const state = flowOpClockState || {};
+  const clockOn = state.mode && state.mode !== 'off';
+  const left = (Number(state.targetTs) || 0) - Date.now();
+  const value = !clockOn ? 'Off'
+    : state.mode === 'timeofday' ? formatTimeOfDay()
+      : fmtClockOverlay(left, state.mode !== 'wrap');
+  const label = !clockOn ? 'Clock' : (state.label || (state.mode === 'wrap' ? 'Wrap up' : 'Clock'));
+  el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
+    <span>${esc(label)}</span>
+    <strong>${esc(value)}</strong>
+    ${flowOpQuestionOn ? '<em>Question in chat</em>' : ''}
+  </div>`;
+  if (clockOn && !flowOpClockPreviewTimer) flowOpClockPreviewTimer = setInterval(flowOpRenderClockPreview, 500);
+  if (!clockOn && flowOpClockPreviewTimer) {
+    clearInterval(flowOpClockPreviewTimer);
+    flowOpClockPreviewTimer = null;
+  }
 }
 
 function flowOpApplyControlPreview(action, quiet=false) {
@@ -6970,10 +7265,16 @@ function flowOpApplyControlPreview(action, quiet=false) {
     // Pure live cue scroll — no local Flowmingo Op preview state to mirror.
   } else if (action.startsWith('seek_row_')) {
     // Talent resolves row headers locally after the latest script update.
+  } else if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action.startsWith('clock_until_') || action.startsWith('clock_duration_') || action.startsWith('wrapup_')) {
+    applyClockActionToState(action, 'flowop');
+  } else if (action === 'question_on' || action === 'question_off') {
+    applyQuestionAction(action, 'flowop');
   } else {
     switch (action) {
-      case 'slate_tech_on': flowOpTechSlate = true; syncTechButtons(); break;
-      case 'slate_tech_off': flowOpTechSlate = false; syncTechButtons(); break;
+      case 'slate_tech_on': setFlowOpSlateState('tech'); break;
+      case 'slate_tech_off': setFlowOpSlateState('off'); break;
+      case 'slate_bars_on': setFlowOpSlateState('bars'); break;
+      case 'slate_bars_off': setFlowOpSlateState('off'); break;
       case 'pause': flowOpPlaying = false; break;
       case 'resume': flowOpPlaying = true; break;
       case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
@@ -6998,6 +7299,83 @@ function flowOpApplyControlPreview(action, quiet=false) {
   }
 }
 
+let flowOpClockPreviewTimer = null;
+
+function buildCountdownActionFromInput(scope) {
+  const input = document.getElementById(`${scope}-clock-time`);
+  const target = nextClockTargetFromHHMM(input?.value || '');
+  if (!target) {
+    if (scope === 'flow') flowOpSetStatus('Set a countdown time first', true);
+    else markLivePrompterStatus('Set a countdown time', 'busy');
+    return '';
+  }
+  return `clock_until_${target}_label_${encodePrompterActionText('Countdown')}`;
+}
+
+function sendCountdownClock(scope='po') {
+  const action = buildCountdownActionFromInput(scope);
+  if (!action) return;
+  if (scope === 'flow') flowOpSendControl(action);
+  else sendPrompterControl(action);
+}
+
+function sendDurationClock(scope='po') {
+  const input = document.getElementById(`${scope}-duration-min`);
+  const mins = Math.max(1, Math.min(999, parseInt(input?.value || '5', 10) || 5));
+  const action = `clock_duration_${mins * 60}`;
+  if (scope === 'flow') flowOpSendControl(action);
+  else sendPrompterControl(action);
+}
+
+function sendWrapUp(scope='po', minsOverride=null) {
+  const input = document.getElementById(`${scope}-wrap-min`);
+  const mins = Math.max(1, Math.min(999, parseInt(minsOverride ?? input?.value ?? '5', 10) || 5));
+  const action = `wrapup_${mins * 60}`;
+  if (scope === 'flow') flowOpSendControl(action);
+  else sendPrompterControl(action);
+}
+
+function toggleQuestionIndicator(scope='po') {
+  const on = scope === 'flow' ? flowOpQuestionOn : ptQuestionOn;
+  if (scope === 'flow') flowOpSendControl(on ? 'question_off' : 'question_on');
+  else sendPrompterControl(on ? 'question_off' : 'question_on');
+}
+
+function clockAndAlertControlsHTML(scope='po', disabled=false) {
+  const dis = disabled ? ' disabled' : '';
+  const isFlow = scope === 'flow';
+  const state = isFlow ? flowOpClockState : ptClockState;
+  const mode = state?.mode || 'off';
+  const questionOn = isFlow ? flowOpQuestionOn : ptQuestionOn;
+  const send = action => isFlow ? `flowOpSendControl('${action}')` : `sendPrompterControl('${action}')`;
+  const btn = (symbol, label, onclick, active=false, className='') =>
+    `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
+  return `<div class="flow-clock-stack">
+    <div class="flow-clock-preview" id="${scope === 'flow' ? 'flowOpClockPreview' : `${scope}ClockPreview`}"></div>
+    <div class="flow-clock-grid flow-clock-modes">
+      ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday')}
+      ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration')}
+      ${btn('content.calendar', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
+      ${btn('media.stop', 'Hide', send('clock_off'), false)}
+    </div>
+    <div class="flow-clock-fields">
+      <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="5" aria-label="Duration minutes"${dis}></label>
+      <label class="flow-clock-field"><span>${sfIcon('content.calendar')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
+    </div>
+    <div class="flow-clock-grid flow-wrap-grid">
+      ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
+      ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
+      <label class="flow-wrap-custom"><span>${sfIcon('state.warning')}<b>Wrap</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
+      ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
+    </div>
+    <div class="flow-clock-grid flow-alert-grid">
+      ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn')}
+      ${btn('action.down', 'Smaller', send('clock_size_down'))}
+      ${btn('action.up', 'Bigger', send('clock_size_up'))}
+    </div>
+  </div>`;
+}
+
 function flowOpControlsHTML(disabled=false) {
   const dis = disabled ? ' disabled' : '';
   const playAction = flowOpPlaying ? 'pause' : 'resume';
@@ -7005,6 +7383,7 @@ function flowOpControlsHTML(disabled=false) {
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="flowop-controls">
     ${liveActionsHTML('flow')}
+    ${clockAndAlertControlsHTML('flow', disabled)}
     <div class="pt-ctrl-group">
       <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')"${dis}>${playIcon} ${playLabel}</button>
     </div>
@@ -7069,6 +7448,7 @@ function flowOpSyncControls() {
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
   });
+  flowOpRenderClockPreview();
 }
 
 function flowOpRenderSession(data=null) {
@@ -7200,7 +7580,12 @@ function flowOpSendControl(action, quiet=false) {
 
 // Flowmingo Op: toggle the Technical Difficulties stand-by cover on the talent.
 function flowOpToggleTechDifficulty() {
-  flowOpSendControl(flowOpTechSlate ? 'slate_tech_off' : 'slate_tech_on');
+  flowOpSendControl(anyFlowOpSlateOn() ? 'slate_tech_off' : 'slate_tech_on');
+}
+
+// Flowmingo Op: generate NTSC bars on the talent display.
+function flowOpToggleColorBars() {
+  flowOpSendControl(flowOpColorBarsOn ? 'slate_bars_off' : 'slate_bars_on');
 }
 
 // Flowmingo Op: fine nudge for the live cue scrubber.
@@ -7386,6 +7771,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
           ptSetCueolaStatus('Not found', true);
           ptConnState = 'notfound';
           ptConnMessage = '';
+          if (loadedOnce) ptShowTechSlate();
           ptUpdateReady();
           const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show found for "${code}". Double-check the code.`; ss.className = 'pt-setup-status warn'; }
           if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
@@ -7449,6 +7835,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         ptSetCueolaStatus(label, true);
         ptConnState = 'error';
         ptConnMessage = label;
+        if (loadedOnce) ptShowTechSlate();
         ptUpdateReady();
         const ss = ptEl('pt-setup-status');
         if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
@@ -7459,6 +7846,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
       ptSetCueolaStatus(label, true);
       ptConnState = 'error';
       ptConnMessage = label;
+      if (loadedOnce) ptShowTechSlate();
       ptUpdateReady();
       const ss = ptEl('pt-setup-status');
       if (ss) { ss.textContent = firebaseConnectionHint(err); ss.className = 'pt-setup-status warn'; }
@@ -7503,6 +7891,7 @@ function enterPrompter() {
   ptSetTheme(ptThemeName);
   ptSetAlign(ptAlign);
   ptSetSize(ptFontSize);
+  ptRenderClockOverlay();
   ptUpdateSyncLabel();
 
   // Keyboard handler (scoped to when this screen is active)
@@ -7627,10 +8016,11 @@ function renderLivePromptOp() {
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
     <div class="prompt-op-track">
-      <div class="prompt-op-text">${script ? scriptToFormattedHTML(script) : 'No script loaded.\n\nUse Script, add script in Build, or push from the live Flowmingo text.'}</div>
+      <div class="prompt-op-text">${script ? scriptToFormattedHTML(script) : 'No script loaded.\n\nWaiting for Script Op.'}</div>
     </div>
     ${promptOpControlsHTML()}
   </div>`;
+  renderPromptOpClockPreview();
   requestAnimationFrame(() => body.querySelector('.prompt-op-stage')?.focus({ preventScroll:true }));
 }
 
@@ -11410,15 +11800,20 @@ function openPatchSheetEditor(kind) {
 }
 
 function addPatchRow(kind) {
-  saveVisiblePatchRows({ [kind]: collectPatchRows(kind, true).concat(defaultPatchRows(kind)) }, kind);
-  openPatchSheetEditor(activePatchKind || kind);
+  const rows = collectPatchRows(kind, true).concat(defaultPatchRows(kind));
+  saveVisiblePatchRows({ [kind]: rows }, kind);
+  pbRenderPatchBody();
+  setTimeout(() => {
+    const firstField = kind === 'comms' ? 'position' : 'label';
+    document.querySelector(`[data-patch-kind="${kind}"][data-patch-row="${rows.length - 1}"][data-patch-field="${firstField}"]`)?.focus();
+  }, 0);
 }
 
 function removePatchRow(kind, idx) {
   const rows = collectPatchRows(kind, true);
   rows.splice(idx, 1);
   saveVisiblePatchRows({ [kind]: rows }, kind);
-  openPatchSheetEditor(activePatchKind || kind);
+  pbRenderPatchBody();
 }
 
 function savePatchSheet(showToastOnSave=true) {
@@ -12347,6 +12742,9 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
         const input = ptEl('pt-cueola-code-input');
         if (input) input.value = code;
         ptLoadFromCueolaCode(code);
+      }
+      if (params.has('bars') || location.hash === '#bars') {
+        setTimeout(ptShowColorBars, 80);
       }
     }, 0);
     return;

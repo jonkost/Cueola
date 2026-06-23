@@ -513,7 +513,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-prompter-text{flex:1 1 240px;overflow-y:auto;padding:13px 14px;font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;word-break:break-word;outline:none;min-height:180px;width:100%;border:0;border-radius:0;background:transparent;font-family:var(--sans);resize:none;caret-color:var(--cyan);tab-size:2}
 .ls-prompter-text::placeholder{color:color-mix(in srgb,var(--text2) 58%,transparent)}
 .ls-prompter-text:focus{background:color-mix(in srgb,var(--cyan) 5%,transparent)}
-.ls-prompter-actions{padding:10px 14px;border-top:1px solid var(--glass-border);display:flex;gap:7px;flex:0 1 auto;max-height:min(48vh,340px);overflow-y:auto;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--text) 3%,transparent))}
+.ls-prompter-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:0 0 auto}
 .ls-script-quickbar{display:flex;gap:5px;flex-wrap:wrap}
 /* Formatting toolbar above the editor — like a real text editor */
 .ls-script-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--glass-border);background:color-mix(in srgb,var(--text) 3%,transparent);flex:0 0 auto}
@@ -522,13 +522,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .fmt-btn:hover{color:var(--cyan);border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 10%,var(--s3))}
 .fmt-btn:active{transform:scale(.94)}
 .fmt-sep{width:1px;align-self:stretch;background:var(--glass-border);margin:2px 3px}
-.ls-pact-btn{padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s,color .15s,transform .12s;min-height:34px}
+.ls-pact-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s,color .15s,transform .12s;min-height:34px;white-space:nowrap}
+.ls-pact-btn .sf-symbol{font-size:12px}
 .ls-pact-btn:active{transform:scale(.98)}
 .ls-push-btn{background:color-mix(in srgb,var(--cyan) 88%,white);color:#031316;flex:1;border-color:color-mix(in srgb,var(--cyan) 55%,transparent);box-shadow:0 8px 22px color-mix(in srgb,var(--cyan) 16%,transparent)}
 .ls-push-btn:hover{filter:brightness(1.05)}
 /* Always-visible primary push button, docked right under the editor */
 .ls-push-primary{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:13px 14px;border-radius:0;font-size:13.5px;font-weight:800;font-family:var(--sans);cursor:pointer;border:0;border-top:1px solid color-mix(in srgb,var(--cyan) 30%,var(--glass-border));box-shadow:0 -6px 20px color-mix(in srgb,var(--cyan) 14%,transparent);letter-spacing:.01em}
 .ls-push-primary .sf-symbol{font-size:15px}
+.ls-operator-drawer{flex:0 1 auto;max-height:min(48vh,430px);overflow-y:auto;padding:10px 12px 12px;border-top:1px solid var(--glass-border);display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,color-mix(in srgb,var(--text) 4%,transparent),color-mix(in srgb,var(--text) 2%,transparent));overscroll-behavior:contain}
+.ls-control-card{border:1px solid var(--glass-border);background:color-mix(in srgb,var(--s2) 72%,transparent);border-radius:12px;padding:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.ls-control-head{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.075em;text-transform:uppercase;color:var(--text2)}
+.ls-control-head .sf-symbol{font-size:12px;color:var(--cyan)}
 .ls-clear-btn{background:color-mix(in srgb,var(--s3) 82%,transparent);border:1px solid var(--glass-border);color:var(--text2)}
 .ls-clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--text) 6%,transparent)}
 
@@ -1065,7 +1070,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prepro-order span{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:7px;padding:7px 9px}
 .marker-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
 .marker-divider{height:1px;background:var(--bord2);margin:2px 0 8px}
-.marker-chip{padding:6px 9px;border-radius:7px;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);font-size:10px;font-family:var(--mono);cursor:pointer}
+.marker-chip{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:6px 9px;border-radius:7px;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);font-size:10px;font-family:var(--mono);cursor:pointer;white-space:nowrap}
+.marker-chip .sf-symbol{font-size:11px}
 .marker-chip:hover{border-color:var(--cyan);color:var(--cyan)}
 .lrp-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .lrp-nav button{padding:9px;border-radius:8px;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);cursor:pointer;font-family:var(--mono);font-size:11px}
@@ -1620,7 +1626,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
 .scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
-#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:950;color:var(--pt-text,#fff);text-shadow:0 0 1px currentColor}
+#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:1000;color:#fff;text-shadow:0 0 2px currentColor,0 0 14px color-mix(in srgb,var(--pt-accent,#fff) 28%,transparent);background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
 
 /* Reading line */
 #pt-read-line{position:absolute;left:0;right:0;top:calc(var(--pt-bar-h,48px) + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
@@ -1643,8 +1649,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:9px;min-width:40px}
 .pt-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:var(--mono);font-size:11px;transition:background .15s,border-color .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.pt-btn .sf-symbol{font-size:1.05em}
+.pt-btn:disabled{opacity:.42;cursor:default}
 .pt-btn:hover{background:rgba(200,169,126,.12);border-color:var(--pt-accent,#c8a97e)}
+.pt-btn:disabled:hover{background:none;border-color:var(--pt-ui-border,rgba(200,169,126,.25))}
 .pt-btn.active{background:rgba(200,169,126,.2);border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
+.pt-icon-btn{width:34px;height:34px;padding:0;flex:0 0 auto}
 #pt-play-btn{width:100%;padding:9px;font-size:13px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e);border-radius:10px}
 #pt-play-btn.active{background:rgba(200,169,126,.2)}
 input.pt-range{-webkit-appearance:none;appearance:none;flex:1;min-width:120px;height:18px;background:transparent;border-radius:2px;outline:none;cursor:pointer;touch-action:pan-y}
@@ -1661,31 +1671,86 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-tech-btn{border-color:color-mix(in srgb,var(--red,#f05252) 55%,transparent);color:color-mix(in srgb,var(--red,#f05252) 90%,var(--pt-text,#f0ead6));white-space:nowrap}
 .pt-tech-btn:hover{background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);border-color:var(--red,#f05252)}
 .pt-tech-btn.active{background:var(--red,#f05252);border-color:var(--red,#f05252);color:#fff}
+.pt-bars-btn{border-color:rgba(255,255,255,.38);color:var(--pt-text,#f0ead6);white-space:nowrap}
+.pt-bars-btn:hover{background:rgba(255,255,255,.1);border-color:#fff}
+.pt-bars-btn.active{background:#fff;border-color:#fff;color:#111}
+.pt-btn.muted{opacity:.55}
 
 /* Technical-difficulties stand-by cover on the talent screen */
 #pt-slate{position:absolute;inset:0;z-index:160;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(130% 120% at 50% 36%,color-mix(in srgb,var(--pt-bg,#0a0a0a) 60%,#000) 0%,var(--pt-bg,#0a0a0a) 64%);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
 #pt-slate.on{display:flex}
-.pt-slate-inner{display:flex;flex-direction:column;align-items:center;gap:20px;max-width:min(680px,90vw)}
+#pt-slate.bars{padding:0;background:#050505;backdrop-filter:none;-webkit-backdrop-filter:none}
+.pt-slate-inner{display:flex;flex-direction:column;align-items:center;gap:18px;max-width:min(780px,92vw)}
+#pt-slate.bars .pt-slate-inner{display:none}
 .pt-slate-mark{font-size:54px;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f5b84a;background:color-mix(in srgb,#f5b84a 13%,transparent);border:2px solid color-mix(in srgb,#f5b84a 50%,transparent);box-shadow:0 0 44px color-mix(in srgb,#f5b84a 22%,transparent)}
-.pt-slate-title{font-family:var(--syne);font-size:clamp(30px,6vw,58px);font-weight:800;letter-spacing:-.01em;color:var(--pt-text,#f0ead6);line-height:1.05}
-.pt-slate-sub{font-family:var(--mono);font-size:clamp(12px,2.3vw,18px);letter-spacing:.2em;text-transform:uppercase;color:var(--pt-text,#f0ead6);opacity:.6}
+.pt-slate-title{font-family:var(--syne);font-size:clamp(38px,8.5vw,92px);font-weight:900;letter-spacing:0;color:var(--pt-text,#f0ead6);line-height:1.02;text-wrap:balance}
+.pt-slate-sub{font-family:var(--mono);font-size:clamp(16px,3vw,28px);letter-spacing:.14em;text-transform:uppercase;color:var(--pt-text,#f0ead6);opacity:.74}
+.pt-bars-pattern{display:none;position:absolute;inset:0;background:#000;color:#fff;font-family:var(--mono);overflow:hidden}
+#pt-slate.bars .pt-bars-pattern{display:grid;grid-template-rows:67fr 8fr 25fr}
+.pt-bars-top{display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
+.pt-bars-top span:nth-child(1){background:#c8c8c8}.pt-bars-top span:nth-child(2){background:#c8c800}.pt-bars-top span:nth-child(3){background:#00c8c8}.pt-bars-top span:nth-child(4){background:#00c800}.pt-bars-top span:nth-child(5){background:#c800c8}.pt-bars-top span:nth-child(6){background:#c80000}.pt-bars-top span:nth-child(7){background:#0000c8}
+.pt-bars-mid{display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
+.pt-bars-mid span:nth-child(1){background:#0000c8}.pt-bars-mid span:nth-child(2){background:#111}.pt-bars-mid span:nth-child(3){background:#c800c8}.pt-bars-mid span:nth-child(4){background:#111}.pt-bars-mid span:nth-child(5){background:#00c8c8}.pt-bars-mid span:nth-child(6){background:#111}.pt-bars-mid span:nth-child(7){background:#c8c8c8}
+.pt-bars-bottom{display:grid;grid-template-columns:15fr 15fr 15fr 15fr 14fr 7fr 7fr 7fr 5fr;min-height:0}
+.pt-bars-bottom span:nth-child(1){background:#00214c}.pt-bars-bottom span:nth-child(2){background:#fff}.pt-bars-bottom span:nth-child(3){background:#32006b}.pt-bars-bottom span:nth-child(4){background:#111}.pt-bars-bottom span:nth-child(5){background:#090909}.pt-bars-bottom span:nth-child(6){background:#030303}.pt-bars-bottom span:nth-child(7){background:#111}.pt-bars-bottom span:nth-child(8){background:#1d1d1d}.pt-bars-bottom span:nth-child(9){background:#000}
+.pt-bars-label{position:absolute;left:50%;bottom:clamp(18px,4vh,42px);transform:translateX(-50%);display:flex;gap:18px;align-items:center;padding:10px 18px;border:1px solid rgba(255,255,255,.34);background:rgba(0,0,0,.68);color:#fff;font-size:clamp(11px,1.8vw,20px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.38)}
+.pt-bars-label span:last-child{opacity:.62}
+.pt-clock-overlay{position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;min-width:min(680px,92vw);max-width:92vw;transform:translateX(-50%);padding:18px 26px;border-radius:18px;text-align:center;background:rgba(0,0,0,.82);color:#fff;border:2px solid rgba(255,255,255,.24);box-shadow:0 18px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.08) inset;font-family:var(--mono);pointer-events:none}
+.pt-clock-overlay.on{display:block}
+.pt-clock-label{font-size:clamp(13px,2vw,22px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.78);line-height:1.15}
+.pt-clock-value{font-size:clamp(42px,9vw,118px);font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 0 18px rgba(255,255,255,.18)}
+.pt-clock-overlay.size-0{min-width:min(480px,88vw);padding:14px 22px}.pt-clock-overlay.size-0 .pt-clock-value{font-size:clamp(34px,7vw,76px)}
+.pt-clock-overlay.size-2{min-width:min(860px,94vw);padding:22px 30px}.pt-clock-overlay.size-2 .pt-clock-value{font-size:clamp(58px,13vw,156px)}
+.pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:#b31322;border-color:#ffccd2;box-shadow:0 0 0 3px rgba(255,255,255,.12) inset,0 20px 70px rgba(179,19,34,.42)}
+.pt-clock-overlay.wrap .pt-clock-label{font-size:clamp(24px,5vw,54px);color:#fff;letter-spacing:.1em}
+.pt-clock-overlay.wrap .pt-clock-value{font-size:clamp(62px,14vw,170px)}
+.pt-clock-overlay.expired:not(.timeofday){background:#72101a;border-color:#fff}
+#pt-question-overlay{position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;padding:16px 22px;border-radius:16px;background:#ffd23c;color:#121212;border:2px solid #fff;font-family:var(--syne);font-size:clamp(24px,4.5vw,52px);font-weight:900;line-height:1;box-shadow:0 16px 48px rgba(0,0,0,.35);text-transform:uppercase;letter-spacing:0;pointer-events:none}
+#pt-question-overlay.on{display:block}
 
-/* Script Op sidebar: prominent live actions + collapsible transport disclosure */
-.ls-live-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:14px;padding:10px 12px;font-family:var(--mono)}
+/* Script Op sidebar: prominent live actions + cascading prompter controls */
+.ls-live-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:transparent;border:0;border-radius:0;padding:0;font-family:var(--mono)}
 .ls-live-actions .pt-ctrl-group{display:flex;grid-template-columns:none;align-items:center;gap:8px}
-.ls-live-actions .pt-live-tech{flex:1 1 100%}
-.ls-live-actions .pt-tech-btn{width:100%;padding:9px;font-size:12px;border-radius:10px}
+.ls-live-actions .pt-live-slate{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ls-live-actions :is(.pt-tech-btn,.pt-bars-btn){width:100%;min-height:38px;padding:9px;font-size:12px;border-radius:10px}
 .ls-live-actions .pt-live-rowcue{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ls-live-actions .pt-live-rowcue .pt-btn{padding:9px;font-size:12px;border-radius:10px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
+.ls-live-actions .pt-live-rowcue .pt-btn{min-height:36px;padding:9px;font-size:12px;border-radius:10px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
 .ls-live-actions .pt-live-cue{flex:1 1 100%}
 .ls-live-actions .pt-range{flex:1}
-.ls-disclosure{border:1px solid var(--bord2,rgba(255,255,255,.08));border-radius:12px;overflow:hidden;background:rgba(0,0,0,.12)}
-.ls-disclosure>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--text2,#9aa6b2);user-select:none}
+.ls-live-actions .flow-clock-stack{flex:1 1 100%;width:100%}
+.ls-disclosure{border:1px solid var(--glass-border,rgba(255,255,255,.08));border-radius:12px;overflow:hidden;background:color-mix(in srgb,var(--s2) 64%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+.ls-disclosure>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 12px;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.075em;text-transform:uppercase;color:var(--text2,#9aa6b2);user-select:none}
+.ls-disclosure>summary .sf-symbol{font-size:12px;color:var(--cyan)}
 .ls-disclosure>summary::-webkit-details-marker{display:none}
 .ls-disclosure>summary::after{content:'';margin-left:auto;width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .2s;opacity:.7}
 .ls-disclosure[open]>summary::after{transform:rotate(-135deg)}
 .ls-disclosure>summary:hover{color:var(--cyan,#22d3d3)}
-.ls-disclosure #lsPrompterRemote{padding:0 6px 8px}
+.ls-cascade-body{padding:0 10px 10px}
+.ls-cascade #lsPrompterRemote{padding:0}
+.ls-cascade .prompt-op-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}
+.flow-clock-stack{display:flex;flex-direction:column;gap:9px;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));background:rgba(0,0,0,.14);border-radius:12px;padding:10px}
+.ls-sidebar .flow-clock-stack{border:0;background:transparent;border-radius:0;padding:0}
+.flow-clock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.flow-clock-grid .pt-btn{min-width:0;min-height:34px;padding:8px 7px;font-size:10px}
+.flow-clock-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.flow-clock-fields label,.flow-wrap-custom{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:center;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:8px;padding:6px 8px;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.flow-clock-fields label>span,.flow-wrap-custom>span{display:inline-flex;align-items:center;gap:5px;min-width:0}
+.flow-clock-fields b,.flow-wrap-custom b{font:inherit}
+.flow-clock-fields input,.flow-wrap-custom input{min-width:0;width:100%;background:transparent;border:0;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:12px;outline:none}
+.flow-wrap-grid{grid-template-columns:1fr 1fr minmax(92px,1.1fr) .75fr}
+.pt-wrap-btn{border-color:color-mix(in srgb,var(--red,#f05252) 45%,var(--pt-ui-border,rgba(200,169,126,.25)));color:color-mix(in srgb,var(--red,#f05252) 80%,var(--pt-text,#f0ead6))}
+.pt-wrap-btn:hover{background:color-mix(in srgb,var(--red,#f05252) 13%,transparent);border-color:var(--red,#f05252)}
+.pt-question-btn{border-color:color-mix(in srgb,var(--yellow,#f5b731) 38%,var(--pt-ui-border,rgba(200,169,126,.25)));color:color-mix(in srgb,var(--yellow,#f5b731) 88%,var(--pt-text,#f0ead6))}
+.pt-question-btn.active{background:var(--yellow,#f5b731);border-color:var(--yellow,#f5b731);color:#171407}
+.flowop-clock-mini{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:9px;padding:7px 9px;background:rgba(0,0,0,.18);font-family:var(--mono)}
+.flowop-clock-mini span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--pt-accent,#c8a97e)}
+.flowop-clock-mini strong{font-size:16px;font-weight:900;color:var(--pt-text,#f0ead6);font-variant-numeric:tabular-nums}
+.flowop-clock-mini em{grid-column:1/-1;font-style:normal;font-size:10px;font-weight:900;color:#ffd23c;text-transform:uppercase;letter-spacing:.08em}
+.ls-sidebar .flow-clock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ls-sidebar .flow-clock-fields{grid-template-columns:1fr}
+.ls-sidebar .flow-wrap-grid{grid-template-columns:1fr 1fr}
+.ls-sidebar .flow-alert-grid{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:700px){.flow-clock-grid,.flow-clock-fields,.flow-wrap-grid{grid-template-columns:1fr 1fr}.pt-clock-overlay{top:calc(var(--pt-bar-h,48px) + 14px)}#pt-question-overlay{left:16px;right:16px;text-align:center}}
 
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -2177,7 +2242,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
 	      <button class="ls-exit-btn" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><span>Full Grid</span></button>
 	      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
-	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view"><span>Flow<span class="brand-hi">mingo</span></span> Op</button>
+	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Flow<span class="brand-hi">mingo</span></span> Op</button>
 	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)"><span>Flow<span class="brand-hi">mingo</span></span></button>
 	      <button class="ls-exit-btn" id="liveCueQBtn" onclick="openCueQConsole()" title="Open the QLab cue console (runs on this computer)" style="display:none;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)"><span>Cue<span class="brand-hi">ola</span> → <span class="brand-hi">Q</span></span></button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
@@ -2216,21 +2281,32 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
         <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" title="Bold (⌘B)" aria-label="Bold"><strong>B</strong></button>
         <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" title="Italic (⌘I)" aria-label="Italic"><em>I</em></button>
         <span class="fmt-sep"></span>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')">Update</button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')">Break</button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')">Stop</button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" title="New paragraph">¶</button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" title="New paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
       </div>
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
-      <div class="ls-live-actions" id="lsLiveActions" aria-label="Live actions"></div>
-      <details class="ls-disclosure">
-        <summary><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Transport &amp; display</span></summary>
-        <div id="lsPrompterRemote"></div>
-      </details>
-      <div class="ls-prompter-actions" style="gap:6px">
-        <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))">Edit cue script</button>
-        <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()">Clear script</button>
+      <div class="ls-operator-drawer">
+        <div class="ls-control-card">
+          <div class="ls-control-head"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Live Prompter</span></div>
+          <div class="ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div>
+        </div>
+        <details class="ls-disclosure ls-cascade" id="lsClockDisclosure" open>
+          <summary><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span>Clocks &amp; Alerts</span></summary>
+          <div class="ls-cascade-body" id="lsClockActions"></div>
+        </details>
+        <details class="ls-disclosure ls-cascade" id="lsTransportDisclosure">
+          <summary><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Transport &amp; Display</span></summary>
+          <div class="ls-cascade-body" id="lsPrompterRemote"></div>
+        </details>
+        <div class="ls-prompter-actions">
+          <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit cue script</span></button>
+          <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span><span>Clear script</span></button>
+        </div>
       </div>
     </div>
   </div>
@@ -2301,6 +2377,12 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       <div class="pt-slate-mark"><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span></div>
       <div class="pt-slate-title">Technical Difficulties</div>
       <div class="pt-slate-sub">Please stand by</div>
+    </div>
+    <div class="pt-bars-pattern" aria-label="Generated NTSC color bars">
+      <div class="pt-bars-top"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pt-bars-mid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pt-bars-bottom"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pt-bars-label"><span>NTSC Color Bars</span><span>Flowmingo</span></div>
     </div>
   </div>
 
@@ -3170,7 +3252,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=20260621c"></script>
+<script src="cueola-app.js?v=20260623c"></script>
 <script src="outangutan/outangutan.js?v=20260622d"></script>
 
 <script type="module">
