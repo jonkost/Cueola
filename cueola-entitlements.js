@@ -275,6 +275,100 @@
     };
   }
 
+  // ── CAPABILITY RESOLUTION (Phase 2) ───────────────────────────────────────
+  // resolveCapabilities(entitlement, platform) is the ONE gate every client calls.
+  // Nothing is hardcoded per app/surface — the mapping lives in CAPABILITY_MATRIX
+  // (edit the table, not the call sites).
+  //
+  // Pricing/gating is NOT live (owner's direction: the web app ships FULL function
+  // now, no store, no $). So GATING_ENABLED defaults to false → every account
+  // resolves to the platform's full capability set. When the paid era arrives, flip
+  // GATING_ENABLED on and the free/paid split in the table takes effect — no call
+  // site changes.
+  const GATING_ENABLED = false;
+
+  const PLATFORMS = ['web', 'mac', 'ipad', 'iphone'];
+
+  // Levels: cueola/flowmingo 'none'|'read'|'full'; plandaBear 'none'|'full';
+  // outangutan 'none'|'basic'|'full'; upload 'none'|'limited'|'full';
+  // playout 'none'|'simple'|'full'. `full` = entitled row, `base` = unentitled row.
+  const CAPABILITY_MATRIX = {
+    web: {
+      full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
+              outangutan: 'basic', outangutanUpload: 'limited', outangutanPlayout: 'simple' },
+      base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+    },
+    mac: {
+      full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
+              outangutan: 'full', outangutanUpload: 'full', outangutanPlayout: 'full' },
+      base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+    },
+    ipad: { // Full tailored trio + Flowmingo usable as the prompter itself. No Outangutan.
+      full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+      base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+    },
+    iphone: { // Rundown READING + simple op; full Planda; full Flowmingo (prompter). No Outangutan.
+      // Open decision #1 (iPhone-requires-paid) left as the default below: base == full,
+      // i.e. open to any account. Flip the `base` row when gating goes live to require paid.
+      full: { cueola: 'read', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+      base: { cueola: 'read', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
+              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+    },
+  };
+
+  function normalizePlatform(platform) {
+    return PLATFORMS.indexOf(platform) >= 0 ? platform : 'web';
+  }
+
+  // Authoritative platform = the native build flag (window.CUEOLA_PLATFORM), else a
+  // ?platform= dev override, else 'web'. A plain browser — even on an iPad/iPhone — IS
+  // the web app; the native iPad/iPhone shells inject their flag so the hosted web view
+  // reports ipad/iphone and Outangutan can never leak into it (the hard rule below).
+  function detectPlatform(nav, opts) {
+    opts = opts || {};
+    if (PLATFORMS.indexOf(opts.force) >= 0) return opts.force;
+    try { if (typeof window !== 'undefined' && PLATFORMS.indexOf(window.CUEOLA_PLATFORM) >= 0) return window.CUEOLA_PLATFORM; } catch {}
+    try {
+      if (typeof location !== 'undefined') {
+        const q = new URLSearchParams(location.search).get('platform');
+        if (PLATFORMS.indexOf(q) >= 0) return q;
+      }
+    } catch {}
+    return 'web';
+  }
+
+  function _isNone(v) { return v === 'none' || v === false || v == null; }
+
+  // The ONE gate. Pure: (entitlement, platform) → featureSet. No DOM, no globals.
+  function resolveCapabilities(entitlement, platform, opts) {
+    opts = opts || {};
+    const gatingEnabled = (opts.gatingEnabled != null) ? !!opts.gatingEnabled : GATING_ENABLED;
+    const plat = normalizePlatform(platform);
+    const rows = CAPABILITY_MATRIX[plat] || CAPABILITY_MATRIX.web;
+    const ent = entitlement || freeEntitlement();
+    // "Entitled" for gating = a PREMIUM tier (paid/edu/pro) that is currently active
+    // (or within the offline grace window). A free account is "active" but NOT entitled.
+    const isPremium = ent.tier === 'paid' || ent.tier === 'edu' || ent.tier === 'pro';
+    const entitled = isPremium && (isActive(ent, opts.now) || (!!opts.offline && isWithinGrace(ent, opts.now)));
+    // Gating off (no pricing yet) → everyone gets the full set. Gating on → free/paid split.
+    const useFull = !gatingEnabled || entitled;
+    const caps = Object.assign({}, useFull ? rows.full : rows.base);
+    // HARD device rule, applied last so no table edit can leak it: Outangutan is absent
+    // on iPad & iPhone at the device level, regardless of tier/gating.
+    if (plat === 'ipad' || plat === 'iphone') {
+      caps.outangutan = 'none'; caps.outangutanUpload = 'none'; caps.outangutanPlayout = 'none';
+    }
+    return Object.assign({ platform: plat, tier: ent.tier, entitled, gatingEnabled }, caps);
+  }
+
+  // Convenience: is a feature available in a resolved featureSet? (not none/false)
+  function can(featureSet, key) { return !!featureSet && !_isNone(featureSet[key]); }
+
   function safeLocalStorage() {
     try {
       if (typeof localStorage !== 'undefined') return localStorage;
@@ -304,6 +398,14 @@
     getDeviceAccountId,
     // store
     createStore,
+    // capability resolution (Phase 2)
+    GATING_ENABLED,
+    PLATFORMS,
+    CAPABILITY_MATRIX,
+    normalizePlatform,
+    detectPlatform,
+    resolveCapabilities,
+    can,
     // internals exposed for tests
     _toIsoOrNull: toIsoOrNull,
   };

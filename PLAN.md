@@ -101,14 +101,20 @@ multiplatform pattern). Two non-negotiables hold throughout:
   identity and `start()` the store on `firebaseReady`. **Additive only — no feature
   gating, no UI change in Phase 1.**
 
-### Phase 2 — Capability resolution (next)
-- One **pure** `resolveCapabilities(entitlement, platform) → featureSet`, driven by an
-  **editable config table**, called by all clients. Add platform detection
-  (web / Mac / iPad / iPhone). Hard rule encoded in the table: **iPad & iPhone return no
-  Outangutan at the device level**, and the hosted web view must not expose it either.
-- Replace the entry-screen cards / screen access (`entry`, `rundown`, `liveshow`,
-  `promptypus`, `flowOp`) so visibility derives from `resolveCapabilities`, never
-  hardcoded per surface.
+### Phase 2 — Capability resolution  ← built; gates nothing on web (no pricing yet)
+- **Owner scope:** no pricing now — build the capability layer purely as an addition and
+  ship the **full-function web app**. So the architecture is in place but **gating is off
+  by default** (`GATING_ENABLED = false`): every account resolves to its platform's full
+  feature set. Nothing hidden from current users.
+- One **pure** `resolveCapabilities(entitlement, platform) → featureSet`, driven by the
+  editable **`CAPABILITY_MATRIX`** table; platform detection via `detectPlatform()`
+  (native `window.CUEOLA_PLATFORM` flag → `?platform=` → `web`). Hard rule enforced **in
+  code after the table lookup**: iPad & iPhone always resolve Outangutan to `none`,
+  regardless of tier/gating, so the hosted web view can't leak it.
+- Wired into boot (`cueola-app.js`): `window.cueolaCapabilities` / `cueolaCan(key)` /
+  `applyCapabilityVisibility()` (declarative `data-cap-requires`, a no-op on web today).
+  Entry cards/screens are **left intact** per owner direction — the gate exists and is
+  verified, but resolves everything available on web.
 
 ### Phase 3 — Unlock paths (both converge on ONE account)
 - **Apple IAP** ($9 non-consumable, StoreKit 2): bind `appAccountToken` = Cueola
@@ -156,8 +162,8 @@ Phase 1 respects this boundary by design:
 ## Definition of done (per phase) — tracking
 
 - [x] Extends Cueola's existing auth/session system; no parallel auth. *(Phase 1)*
-- [ ] `resolveCapabilities()` is the single gate; clients hold no hardcoded entitlements. *(Phase 2)*
-- [ ] Both unlock paths land on one account; refunds/expiry reflected server-side. *(Phase 3)*
+- [x] `resolveCapabilities()` is the single gate; clients hold no hardcoded entitlements. *(Phase 2 — gating off; full-function web)*
+- [ ] Both unlock paths land on one account; refunds/expiry reflected server-side. *(Phase 3 — deferred: no pricing now)*
 - [ ] Quotas enforced server-side; usage visible to the user. *(Phase 4)*
 - [ ] Mac license validation works fully offline within the grace window. *(Phase 5)*
 - [x] `NOTES.md` records reduced-scope choices; pause and summarize before next phase.

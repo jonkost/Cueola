@@ -12287,8 +12287,47 @@ function cueolaInitEntitlements() {
     firestore,
     log: function () { try { console.debug.apply(console, ['[entitlement]'].concat([].slice.call(arguments))); } catch {} },
   }).start();
+  // Compute capabilities now and whenever the entitlement changes (grant/refund/expiry).
+  cueolaComputeCapabilities();
+  try { window.cueolaEntitlements.subscribe(cueolaComputeCapabilities); } catch {}
   return window.cueolaEntitlements;
 }
+
+// ── Capability resolution (Phase 2) ─────────────────────────────────────────
+// resolveCapabilities(entitlement, platform) is the single gate. Computed here and
+// exposed as window.cueolaCapabilities. Pricing is NOT live (GATING_ENABLED=false), so
+// the web app resolves to FULL function — this layer is additive and gates nothing
+// today; it's the declarative hook platform builds use later (data-cap-requires).
+function cueolaComputeCapabilities() {
+  const E = window.CueolaEntitlements;
+  if (!E || !window.cueolaEntitlements) return null;
+  const platform = E.detectPlatform(typeof navigator !== 'undefined' ? navigator : null);
+  const offline = (typeof navigator !== 'undefined') && navigator.onLine === false;
+  const caps = E.resolveCapabilities(window.cueolaEntitlements.get(), platform, { offline });
+  window.cueolaPlatform = platform;
+  window.cueolaCapabilities = caps;
+  applyCapabilityVisibility(caps);
+  return caps;
+}
+
+// Declarative, reversible UI gating. Mark an element data-cap-requires="<key>" (e.g.
+// "outangutan", "flowmingo") and it's hidden when that capability resolves unavailable.
+// On the web app today everything resolves available, so this is a no-op — it only
+// lights up on restricted platform builds or once gating is switched on.
+function applyCapabilityVisibility(caps) {
+  if (!caps || typeof document === 'undefined') return;
+  document.querySelectorAll('[data-cap-requires]').forEach(function (el) {
+    const available = window.CueolaEntitlements.can(caps, el.getAttribute('data-cap-requires'));
+    el.hidden = !available;
+    el.setAttribute('aria-hidden', available ? 'false' : 'true');
+  });
+}
+
+// Simple feature check for app code: cueolaCan('outangutan'), cueolaCan('flowmingo').
+function cueolaCan(key) {
+  return !!(window.CueolaEntitlements && window.CueolaEntitlements.can(window.cueolaCapabilities, key));
+}
+
 if (window._firebaseReady) cueolaInitEntitlements();
 else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: true });
 

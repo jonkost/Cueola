@@ -1,0 +1,193 @@
+/* ============================================================================
+ * Outangutan 🦧 — web playback & cue system. Phase 1 styles.
+ * Uses Cueola's global theme tokens (--bg/--s1..s4/--accent/--red/--mono/--r…)
+ * so it tracks the active [data-theme] like every other module.
+ * ==========================================================================*/
+
+#outangutan {
+  position: absolute; inset: 0; display: none;
+  flex-direction: column; background: var(--bg); color: var(--text);
+  font-family: var(--sans);
+}
+#outangutan.on { display: flex; }
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+.og-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: var(--s1); flex: 0 0 auto;
+}
+.og-bar .og-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--s3); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.og-bar .og-back:hover { background: var(--s4); }
+.og-title { font-family: var(--syne); font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+.og-title .og-glyph { margin-right: 6px; }
+.og-mode-badge {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  padding: 3px 8px; border-radius: 999px; background: var(--s3); color: var(--text2);
+  border: 1px solid var(--border);
+}
+.og-bar-spacer { flex: 1 1 auto; }
+.og-bar-btn {
+  background: var(--s3); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 7px 11px; font-size: 12.5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.og-bar-btn:hover { background: var(--s4); }
+.og-bar-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.og-bar-btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+
+/* show-mode lock dims edit affordances */
+#outangutan.locked .og-cue-add, #outangutan.locked .og-inspector input,
+#outangutan.locked .og-inspector select, #outangutan.locked .og-cue-del { opacity: .4; pointer-events: none; }
+
+/* ── main 3-pane layout ──────────────────────────────────────────────────── */
+.og-main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.6fr) minmax(240px, .9fr); min-height: 0; }
+.og-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.og-pane + .og-pane { border-left: 1px solid var(--border); }
+.og-pane-head { padding: 9px 12px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.og-pane-head .og-pane-actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* ── cue list ────────────────────────────────────────────────────────────── */
+.og-cuelist { overflow: auto; flex: 1 1 auto; }
+.og-cue {
+  display: grid; grid-template-columns: 34px 22px 1fr auto; align-items: center; gap: 8px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border); cursor: pointer; position: relative;
+}
+.og-cue:hover { background: var(--s2); }
+.og-cue.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.og-cue.playing { background: color-mix(in srgb, var(--red) 18%, transparent); box-shadow: inset 3px 0 0 var(--red); }
+.og-cue.armed-off { opacity: .45; }
+.og-cue-num { font-family: var(--mono); font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
+.og-cue-typeicon { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; color: #fff; }
+.og-type-video { background: var(--video); }
+.og-type-audio { background: var(--green); }
+.og-cue-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.og-cue-meta { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; }
+.og-cue-cont { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text2); }
+.og-cue-color-dot { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+.og-cue-empty { padding: 28px 16px; text-align: center; color: var(--text3); font-size: 13px; }
+.og-cue-add {
+  margin: 10px 12px; padding: 14px; border: 1.5px dashed var(--border); border-radius: var(--r);
+  text-align: center; color: var(--text2); font-size: 13px; cursor: pointer; background: transparent;
+}
+.og-cue-add:hover, .og-cue-add.drag { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+/* ── program / clock / transport (center) ────────────────────────────────── */
+.og-program-pane { background: var(--bg); }
+.og-program-wrap { position: relative; background: #000; aspect-ratio: 16/9; margin: 12px; border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); }
+.og-program-wrap video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.og-program-tag { position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 3px 7px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; }
+.og-program-status { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 7px; border-radius: 4px; }
+.og-status-idle { background: rgba(255,255,255,.12); color: var(--text2); }
+.og-status-pre { background: var(--yellow); color: #000; }
+.og-status-play { background: var(--red); color: #fff; animation: og-pulse 1.4s ease-in-out infinite; }
+.og-status-pause { background: var(--orange); color: #000; }
+@keyframes og-pulse { 50% { opacity: .55; } }
+
+/* count-out clock — the loudest thing on screen */
+.og-clock { text-align: center; padding: 4px 0 6px; cursor: pointer; user-select: none; }
+.og-clock-time { font-family: var(--mono); font-weight: 800; font-size: clamp(48px, 9vw, 96px); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text); }
+.og-clock.run .og-clock-time { color: var(--red); }
+.og-clock.warn .og-clock-time { color: var(--yellow); }
+.og-clock-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); margin-top: 2px; }
+.og-clock-cue { font-size: 12.5px; color: var(--text2); margin-top: 3px; min-height: 16px; }
+
+/* transport */
+.og-transport { display: flex; gap: 10px; justify-content: center; padding: 10px 12px 6px; flex-wrap: wrap; }
+.og-tbtn {
+  border: 1px solid var(--border); border-radius: var(--r); background: var(--s3); color: var(--text);
+  font-size: 14px; font-weight: 700; padding: 14px 22px; cursor: pointer; min-width: 96px;
+  display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.og-tbtn:hover { background: var(--s4); }
+.og-tbtn .og-tbtn-key { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--text3); }
+.og-tbtn-go { background: var(--green); color: #04130d; border-color: var(--green); font-size: 17px; min-width: 150px; }
+.og-tbtn-go:hover { filter: brightness(1.08); background: var(--green); }
+.og-tbtn-go .og-tbtn-key { color: rgba(4,19,13,.6); }
+.og-tbtn-panic { background: var(--red); color: #fff; border-color: var(--red); }
+.og-tbtn-panic:hover { filter: brightness(1.08); background: var(--red); }
+.og-tbtn-panic .og-tbtn-key { color: rgba(255,255,255,.7); }
+
+/* ── inspector (right) ───────────────────────────────────────────────────── */
+.og-inspector { overflow: auto; flex: 1 1 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.og-insp-empty { color: var(--text3); font-size: 13px; text-align: center; padding: 24px 8px; }
+.og-field { display: flex; flex-direction: column; gap: 4px; }
+.og-field label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.og-field input, .og-field select {
+  background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-size: 13px; padding: 8px 10px; font-family: var(--sans); width: 100%;
+}
+.og-field input[type="range"] { padding: 0; }
+.og-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.og-cue-del { margin-top: 4px; background: transparent; border: 1px solid color-mix(in srgb, var(--red) 40%, var(--border)); color: var(--red); border-radius: var(--r-sm); padding: 8px; font-size: 12.5px; cursor: pointer; }
+.og-cue-del:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+/* ── bottom status / shortcut hint ───────────────────────────────────────── */
+.og-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--border); background: var(--s1); font-size: 11.5px; color: var(--text2); }
+.og-foot .og-kbd { font-family: var(--mono); font-size: 10.5px; background: var(--s3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text); }
+.og-foot-spacer { flex: 1 1 auto; }
+
+/* ── recovery banner ─────────────────────────────────────────────────────── */
+.og-recovery { display: none; align-items: center; gap: 12px; padding: 9px 14px; background: color-mix(in srgb, var(--yellow) 18%, var(--s1)); border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text); }
+.og-recovery.on { display: flex; }
+.og-recovery button { border: 1px solid var(--border); background: var(--s3); color: var(--text); border-radius: var(--r-sm); padding: 5px 10px; font-size: 12px; cursor: pointer; }
+
+/* ── shortcut/help sheet (reuses modal-ish styling locally) ──────────────── */
+.og-help { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 30; }
+.og-help.on { display: flex; }
+.og-help-card { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px; width: min(520px, 92vw); max-height: 86vh; overflow: auto; }
+.og-help-card h3 { font-family: var(--syne); font-weight: 800; margin: 0 0 12px; }
+.og-help-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.og-help-row input { width: 110px; text-align: center; font-family: var(--mono); background: var(--s2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r-sm); padding: 6px; }
+.og-help-close { margin-top: 14px; width: 100%; padding: 10px; border-radius: var(--r-sm); background: var(--accent); color: #fff; border: none; font-weight: 700; cursor: pointer; }
+
+/* ── session join sheet ──────────────────────────────────────────────────── */
+.og-join { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 31; }
+.og-join.on { display: flex; }
+.og-join-card { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 26px 24px; width: min(420px, 92vw); text-align: center; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+.og-join-glyph { font-size: 40px; line-height: 1; }
+.og-join-card h3 { font-family: var(--syne); font-weight: 800; margin: 10px 0 6px; }
+.og-join-card p { color: var(--text2); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+.og-join-card input { width: 100%; box-sizing: border-box; text-align: center; font-family: var(--mono); font-size: 20px; letter-spacing: .14em; text-transform: uppercase; background: var(--s2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r-sm); padding: 13px; }
+.og-join-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.og-join-err { color: var(--red); font-size: 12px; min-height: 16px; margin: 7px 0 3px; }
+.og-join-go { width: 100%; padding: 13px; border: none; border-radius: var(--r-sm); background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.og-join-go:hover { filter: brightness(1.07); }
+.og-join-skip { width: 100%; margin-top: 12px; padding: 8px; background: transparent; border: none; color: var(--text2); font-size: 12.5px; cursor: pointer; }
+.og-join-skip:hover { color: var(--text); }
+
+/* ── Outangutan brand wordmark ───────────────────────────────────────────────
+   Two-tone like the other Cueola wordmarks (Cu·e/ola, Plan/da Bear): the base
+   ("Out") rides --text (white on dark, black on light — theme-aware + legible);
+   the highlight ("angutan") is the Outangutan signature blue. This blue is a
+   deliberate fixed brand constant (same role as the LED clock faces), so the
+   identity reads blue across every theme as requested. */
+.og-wm-hi { color: #5b8df8; }
+
+/* SF Symbols sit inside the colored type chip in white */
+.og-cue-typeicon .sf-symbol { font-size: 11px; color: #fff; }
+.og-bar-btn .sf-symbol { font-size: 14px; }
+.og-pane-head .sf-symbol { font-size: 13px; }
+
+/* transport buttons carry an icon above the label */
+.og-tbtn .sf-symbol { font-size: 19px; margin-bottom: 1px; }
+.og-tbtn-go .sf-symbol { font-size: 22px; }
+.og-cue-cont .sf-symbol { font-size: 10px; vertical-align: -1px; }
+
+/* wall clock — time of day, alongside the count-out clock (HIG: quiet, mono) */
+.og-wallclock { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text2); letter-spacing: .02em; }
+.og-wallclock .sf-symbol { font-size: 12px; opacity: .8; }
+
+/* cue color swatches in the inspector */
+.og-swatches { display: flex; gap: 8px; }
+.og-swatch { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.og-swatch.sel { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg) inset; }
+
+@media (max-width: 920px) {
+  .og-main { grid-template-columns: 1fr; grid-auto-rows: minmax(0, auto); }
+  .og-pane + .og-pane { border-left: none; border-top: 1px solid var(--border); }
+}

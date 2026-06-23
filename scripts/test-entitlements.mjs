@@ -129,4 +129,51 @@ ok('subscribe fires immediately and on change', () => {
   assert.deepEqual(seen, ['free', 'paid']); // immediate 'free', then 'paid'; unsub stops the rest
 });
 
+console.log('capability resolution');
+const paid = E.normalizeEntitlement({ tier: 'paid', source: 'web', status: 'active' });
+const free = E.freeEntitlement();
+
+ok('web (gating off) is full + Outangutan basic for any account', () => {
+  const c = E.resolveCapabilities(free, 'web');
+  assert.equal(c.cueola, 'full');
+  assert.equal(c.plandaBear, 'full');
+  assert.equal(c.flowmingo, 'full');
+  assert.equal(c.outangutan, 'basic');
+  assert.equal(c.outangutanUpload, 'limited');
+  assert.equal(c.outangutanPlayout, 'simple');
+});
+
+ok('mac (gating off) unlocks full Outangutan engine', () => {
+  assert.equal(E.resolveCapabilities(free, 'mac').outangutan, 'full');
+});
+
+ok('iPad/iPhone NEVER expose Outangutan (hard rule), even forced full + paid', () => {
+  for (const p of ['ipad', 'iphone']) {
+    const c = E.resolveCapabilities(paid, p, { gatingEnabled: true });
+    assert.equal(c.outangutan, 'none', p + ' outangutan');
+    assert.equal(c.outangutanUpload, 'none');
+    assert.equal(c.flowmingoAsPrompter, true, p + ' flowmingo-as-prompter');
+  }
+});
+
+ok('iPhone is rundown READ, not full edit', () => {
+  assert.equal(E.resolveCapabilities(paid, 'iphone').cueola, 'read');
+});
+
+ok('gating ON: free web loses Outangutan, paid web keeps it', () => {
+  assert.equal(E.resolveCapabilities(free, 'web', { gatingEnabled: true }).outangutan, 'none');
+  assert.equal(E.resolveCapabilities(paid, 'web', { gatingEnabled: true }).outangutan, 'basic');
+});
+
+ok('unknown platform falls back to web', () => {
+  assert.equal(E.resolveCapabilities(free, 'playstation').platform, 'web');
+});
+
+ok('can() reports availability (none/false → unavailable)', () => {
+  const c = E.resolveCapabilities(free, 'web');
+  assert.equal(E.can(c, 'cueola'), true);
+  assert.equal(E.can(c, 'outangutan'), true);
+  assert.equal(E.can(E.resolveCapabilities(free, 'ipad'), 'outangutan'), false);
+});
+
 console.log(`\nAll ${passed} entitlement tests passed.`);

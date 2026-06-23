@@ -6,6 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260618c">
+<link rel="stylesheet" href="outangutan/outangutan.css?v=20260622d">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -75,8 +76,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-bottom:16px}
 .e-card{appearance:none;background:var(--s1);border:1.5px solid var(--bord2);border-radius:16px;padding:22px 20px;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),box-shadow .25s var(--ease),background .2s var(--ease);display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-sm);width:100%;text-align:left;color:inherit}
 .e-card:hover{transform:translateY(-3px);border-color:var(--oc,var(--accent));box-shadow:var(--shadow-lg),0 0 0 2px color-mix(in srgb,var(--oc,var(--accent)) 60%,transparent);background:color-mix(in srgb,var(--s1) 90%,var(--text))}
-.e-card.flowmingo-card{cursor:default}
-.e-card.flowmingo-card:hover{transform:none;border-color:var(--bord2);box-shadow:var(--shadow-sm);background:var(--s1)}
+.e-card.flowmingo-card,.e-card.outangutan-card{cursor:default}
+.e-card.flowmingo-card:hover,.e-card.outangutan-card:hover{transform:none;border-color:var(--bord2);box-shadow:var(--shadow-sm);background:var(--s1)}
 .e-card:active{transform:translateY(-1px)}
 .e-card.inst{--oc:var(--accent)}.e-card.stud{--oc:var(--green)}.e-card.demo{--oc:var(--yellow)}.e-card.exp{--oc:var(--text2)}
 .e-card-full{grid-column:span 2}
@@ -2056,6 +2057,15 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
           <button class="ec-mini-btn" onclick="event.stopPropagation();openFlowmingoOperator()">Remote Op</button>
         </div>
       </div>
+      <div class="e-card e-card-full outangutan-card" style="--oc:#5b8df8;--ob:rgba(91,141,248,.07)">
+        <div class="ec-icon">🦧</div>
+        <div class="ec-title">Out<span class="og-wm-hi">angutan</span></div>
+        <div class="ec-desc">Cue and play video &amp; sound effects — a simple, web-native show-playback system. Best in Chrome or Edge.</div>
+        <div class="ec-actions">
+          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutangutan('session')">Session</button>
+          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutangutan('standalone')">Standalone</button>
+        </div>
+      </div>
       <button type="button" class="e-card demo" onclick="loadDemo()">
         <div class="ec-icon"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></div>
         <div class="ec-title">Demo</div>
@@ -3152,12 +3162,16 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 <!-- Print area -->
 <div id="printArea"></div>
 
+<!-- Outangutan 🦧 — web playback & cue system (module owns its own DOM) -->
+<div class="screen" id="outangutan"></div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-entitlements.js?v=20260621a"></script>
-<script src="cueola-app.js?v=20260621a"></script>
+<script src="cueola-entitlements.js?v=20260621c"></script>
+<script src="cueola-app.js?v=20260621c"></script>
+<script src="outangutan/outangutan.js?v=20260622d"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
