@@ -6,19 +6,21 @@
 <title>Outangutan Output</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
-  #v { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .deck { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: 0; }
+  .deck.front { z-index: 2; }
   /* identify pattern: SMPTE-ish bars + label, shown pre-show */
-  #identify { position: absolute; inset: 0; display: none; flex-direction: column; }
+  #identify { position: absolute; inset: 0; display: none; flex-direction: column; z-index: 5; }
   #identify.on { display: flex; }
   #bars { flex: 1; display: flex; }
   #bars > div { flex: 1; }
   #idlabel { position: absolute; inset: 0; display: grid; place-items: center; font: 800 8vw -apple-system, system-ui, sans-serif; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.8); letter-spacing: .04em; }
-  #waiting { position: absolute; inset: 0; display: grid; place-items: center; color: #2a2a2a; font: 700 3vw -apple-system, system-ui, sans-serif; }
+  #waiting { position: absolute; inset: 0; display: grid; place-items: center; color: #2a2a2a; font: 700 3vw -apple-system, system-ui, sans-serif; z-index: 1; }
 </style>
 </head>
 <body>
   <div id="waiting">OUTANGUTAN OUTPUT — waiting…</div>
-  <video id="v" playsinline></video>
+  <video id="va" class="deck front" playsinline></video>
+  <video id="vb" class="deck" playsinline></video>
   <div id="identify">
     <div id="bars">
       <div style="background:#c0c0c0"></div><div style="background:#c0c000"></div>
@@ -33,12 +35,30 @@
 (function () {
   'use strict';
   const DB_NAME = 'outangutan', DB_VER = 1, STORE = 'media';
-  const v = document.getElementById('v');
   const idEl = document.getElementById('identify');
   const idLabel = document.getElementById('idlabel');
   const waiting = document.getElementById('waiting');
   const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outangutan-output') : null;
-  let curUrl = null, curMediaId = null;
+
+  // two decks for crossfades
+  const decks = { a: deck('va'), b: deck('vb') };
+  let front = decks.a;
+  function deck(id) { return { el: document.getElementById(id), url: null, mediaId: null }; }
+  function other(d) { return d === decks.a ? decks.b : decks.a; }
+
+  const fades = {};
+  function curveK(k, c) { k = Math.max(0, Math.min(1, k)); if (c === 's') return k * k * (3 - 2 * k); if (c === 'log') return Math.pow(k, 2.2); return k; }
+  function runFade(token, apply, from, to, ms, curve, done) {
+    if (fades[token]) cancelAnimationFrame(fades[token]);
+    if (!(ms > 0)) { apply(to); if (done) done(); return; }
+    const t0 = performance.now();
+    const tick = (t) => {
+      const k = (t - t0) / ms;
+      if (k >= 1) { apply(to); delete fades[token]; if (done) done(); return; }
+      apply(from + (to - from) * curveK(k, curve)); fades[token] = requestAnimationFrame(tick);
+    };
+    fades[token] = requestAnimationFrame(tick);
+  }
 
   function openDB() {
     return new Promise((resolve, reject) => {
@@ -56,46 +76,61 @@
       tx.onerror = () => resolve(null);
     });
   }
-  function revoke() { if (curUrl) { try { URL.revokeObjectURL(curUrl); } catch (e) {} curUrl = null; } }
+  function revoke(d) { if (d.url) { try { URL.revokeObjectURL(d.url); } catch (e) {} d.url = null; } }
 
-  async function load(mediaId) {
-    if (mediaId === curMediaId) return;
+  async function loadInto(d, mediaId, at, loop, fit) {
     const blob = await getBlob(mediaId);
-    revoke();
-    curMediaId = mediaId;
-    if (!blob) { v.removeAttribute('src'); v.load(); return; }
-    curUrl = URL.createObjectURL(blob);
-    v.src = curUrl; v.load();
+    revoke(d); d.mediaId = mediaId;
+    if (!blob) { d.el.removeAttribute('src'); d.el.load(); return false; }
+    d.url = URL.createObjectURL(blob);
+    d.el.src = d.url; d.el.loop = !!loop; d.el.style.objectFit = fit || 'contain'; d.el.load();
+    if (typeof at === 'number') { try { d.el.currentTime = at; } catch (e) {} }
     waiting.style.display = 'none';
+    return true;
   }
+  function bringFront(d) { decks.a.el.classList.toggle('front', d === decks.a); decks.b.el.classList.toggle('front', d === decks.b); front = d; }
+  function stopDeck(d) { try { d.el.pause(); } catch (e) {} d.el.removeAttribute('src'); d.el.load(); revoke(d); d.mediaId = null; d.el.style.opacity = 0; }
 
-  function fadeVolume(to, ms) {
-    const from = v.volume, t0 = performance.now(), dur = Math.max(1, ms || 0);
-    (function step(t) {
-      const k = Math.min(1, (t - t0) / dur);
-      v.volume = Math.max(0, Math.min(1, from + (to - from) * k));
-      if (k < 1) requestAnimationFrame(step); else if (to === 0) { try { v.pause(); } catch (e) {} }
-    })(t0);
+  async function doPlay(m) {
+    const d = other(front);
+    const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
+    if (!ok) return;
+    if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+    d.el.volume = (m.fadeIn > 0) ? 0 : (typeof m.volume === 'number' ? m.volume : 1);
+    bringFront(d);
+    try { await d.el.play(); } catch (e) {}
+    const prev = other(d);
+    if (m.fadeIn > 0) { d.el.style.opacity = 0; runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * (m.volume == null ? 1 : m.volume); }, 0, 1, m.fadeIn, m.curve, () => stopDeck(prev)); }
+    else { d.el.style.opacity = 1; stopDeck(prev); }
+  }
+  async function doXfade(m) {
+    const d = other(front), prev = front;
+    const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
+    if (!ok) return doPlay(m);
+    if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+    d.el.volume = 0; d.el.style.opacity = 0;
+    bringFront(d);
+    try { await d.el.play(); } catch (e) {}
+    const vol = (m.volume == null ? 1 : m.volume);
+    runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * vol; }, 0, 1, m.ms, m.curve);
+    runFade('out', v => { prev.el.volume = v * (prev.el.volume || vol); }, 1, 0, m.ms, m.curve, () => stopDeck(prev));
   }
 
   async function handle(m) {
     switch (m && m.t) {
       case 'ping': reply({ t: 'pong' }); break;
-      case 'load': await load(m.mediaId); if (typeof m.volume === 'number') v.volume = m.volume; break;
-      case 'play':
-        if (m.mediaId) await load(m.mediaId);
-        if (typeof m.at === 'number') { try { v.currentTime = m.at; } catch (e) {} }
-        v.loop = !!m.loop; v.volume = (typeof m.volume === 'number') ? m.volume : v.volume;
-        try { await v.play(); } catch (e) {}
-        break;
-      case 'pause': try { v.pause(); } catch (e) {} break;
-      case 'resume': try { await v.play(); } catch (e) {} break;
-      case 'seek': try { v.currentTime = m.at; } catch (e) {} break;
-      case 'volume': v.volume = Math.max(0, Math.min(1, m.v)); break;
-      case 'fade': fadeVolume(m.to, m.ms); if (m.to > 0) { try { await v.play(); } catch (e) {} } break;
-      case 'stop': try { v.pause(); } catch (e) {} v.removeAttribute('src'); v.load(); revoke(); curMediaId = null; waiting.style.display = 'grid'; break;
+      case 'play': await doPlay(m); break;
+      case 'xfade': await doXfade(m); break;
+      case 'pause': try { front.el.pause(); } catch (e) {} break;
+      case 'resume': try { await front.el.play(); } catch (e) {} break;
+      case 'seek': try { front.el.currentTime = m.at; } catch (e) {} break;
+      case 'volume': front.el.volume = Math.max(0, Math.min(1, m.v)); break;
+      case 'fit': front.el.style.objectFit = m.fit || 'contain'; break;
+      case 'fade': { const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; } }); break; }
+      case 'black': { const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
+      case 'stop': stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; break;
+      case 'holdLast': try { front.el.pause(); } catch (e) {} break;
       case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || 'Output'; break;
-      case 'holdLast': /* leave last frame painted: just pause, keep src */ try { v.pause(); } catch (e) {} break;
     }
   }
   function reply(msg) { if (bc) bc.postMessage(Object.assign({ _from: 'output' }, msg)); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, msg), '*'); } catch (e) {} }
@@ -103,9 +138,8 @@
   if (bc) bc.onmessage = (e) => { if (e.data && e.data._from !== 'output') handle(e.data); };
   window.addEventListener('message', (e) => { if (e.data && e.data._og && e.data._from !== 'output') handle(e.data); });
 
-  // let the program element report ended/time back to the controller
-  v.addEventListener('ended', () => reply({ t: 'ended', mediaId: curMediaId }));
-  // announce readiness so the controller can (re)send the current cue
+  decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
+  decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });
   reply({ t: 'ready' });
   window.addEventListener('beforeunload', () => reply({ t: 'closed' }));
 })();

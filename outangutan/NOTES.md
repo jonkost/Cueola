@@ -5,6 +5,91 @@ Newest phase on top.
 
 ---
 
+## Phase 2 — SFX board + audio engine  (built; awaiting review)
+
+### What shipped
+- **Web Audio engine** (`outangutan.js`): one lazy `AudioContext` (created on first
+  GO / pad / SFX-tab, resumed on the user gesture). Master bus = `masterGain →
+  masterAnalyser → destination`. A reusable **channel** = `input → lowshelf →
+  peaking → highshelf → compressor → gain → analyser → master`. `makeChannel()`,
+  `applyChannel()`, `setComp()` (compressor bypass = transparent settings, not a
+  reconnect — simpler + glitch-free).
+- **Program cues now route through Web Audio.** The single `<audio>`/`<video>`
+  elements feed a `MediaElementAudioSourceNode → channel` (created once per element,
+  cached). Element volume stays 1; the **channel gain** carries level + fades, so
+  cues get EQ / compressor / metering while keeping element-based transport
+  (pause/resume/seek/clock) robust. **Design split, deliberate:** *cues* use the
+  element-source path (transport robustness); *pads* use **pre-decoded
+  `AudioBuffer`s** (the brief's mandatory instant low-latency trigger).
+- **SFX pad board** (new **SFX** tab): 12-slot grid (3×4). Drag a file onto a pad →
+  stored in IndexedDB + `decodeAudioData` cached → instant trigger. Each pad: name,
+  color, **hotkey** (auto-assigned 1–9/0/q/w on add, rebindable), per-pad
+  gain/3-band EQ/compressor + meter, fade-in, trim-in, loop, and **retrigger mode**
+  (Restart / Layer / Toggle). Pads fire **simultaneously with the program cue**
+  (verified). Hotkeys work on either tab. Pad buffers warm on show-load for instant
+  first hit.
+- **A/V fades with curves** (linear / S-curve / log, shared `curveK()` for gain +
+  opacity): per-cue **fade-in / fade-out**, per-cue **crossfade** between video
+  cues (A/B decks), **fade-to-black** (end action), and the master **Fade & Stop**
+  now ramps every deck + ringing pad with a curve.
+- **A/B program decks** (`og-program-a` / `og-program-b`, `.front` z-toggle): video
+  cues alternate decks so a crossfade can dissolve A↔B; `freeVideoDeck()` picks the
+  idle one. Audio cues use a single audio deck. Output window upgraded to the same
+  A/B model (`xfade` / `play` / `black` / `fade` messages).
+- **Meters**: master (peak-hold) in both the Program header and the SFX master strip;
+  per-active-cue meter in the inspector; per-pad meters on the board + pad inspector.
+  Lightweight div-bars driven by one `AnalyserNode` rAF loop (`getByteTimeDomainData`
+  → RMS), running only while the screen is open and the context exists.
+- **Small edits**: trim in/out (refined), per-cue level, loop, **on-end action**
+  (Stop/black · Hold last frame · Fade to black), and for video **fit**
+  (contain/cover/fill) + **scale** + **position X/Y** (CSS `object-fit` + `transform`,
+  mirrored to the output window).
+- **Tabs**: Playback / SFX (`Tab` key toggles), persisted in settings. Schema bumped
+  to 2; loader back-fills Phase-1 shows with the new fields, so old saves open clean.
+
+### Verified (browser preview, Chromium)
+- No console errors on enter / tab switch / GO / pad fire / panic.
+- Audio cue GO → channel path: **ON AIR**, element volume 1 (gain on the channel),
+  pause→**PAUSED**, resume→**ON AIR**, stop clears.
+- **SFX pad fires simultaneously with a running program cue** (the headline
+  requirement) — both live at once.
+- Inspector renders the audio chain + fades + edit; **video-only fields
+  (crossfade/fit/scale/pos) correctly hidden for audio cues**; EQ / compressor /
+  master-gain all persist. Pad inspector renders + binds.
+- **A/B deck alternation**: 1st video → deck A (front); 2nd video → deck B (front
+  switches, deck A torn down). Front-switch + hard-cut teardown correct.
+- PANIC clears program + all pad voices; clean recovery (schema-2 loader).
+
+### Reduced scope / environment limits (noted honestly)
+- **The live cross-dissolve and meter/clock animation can't be seen in the headless
+  preview** — that tab is `document.hidden`, so `requestAnimationFrame` is paused
+  (rAF-driven fades + meters don't advance) and HTML media won't actually play, so
+  the `crossing` guard (needs the outgoing deck mid-playback) stays false. The deck
+  selection, channel routing, transport, and audio playback are all verified; the
+  **dissolve + meters need a 10-second visual check in a real Chrome/Edge window.**
+- **Output-window audio** still plays at the cue volume via element volume (no EQ
+  chain on the output, no `setSinkId`) — per-output device + chain is **Phase 3**.
+- **Audio-cue crossfade** is a fade-swap on the single audio deck (no A/B overlap for
+  audio); true overlapping audio program layers aren't needed (that's the pad board).
+- **List audio cues remain single-program** (one count-out clock). Simultaneous
+  layered audio is the **pad board's** job, per the brief.
+- Waveform-based visual trim, scopes/vectorscope, keying, OBS, Dropbox, transcode,
+  Stream Deck, multi-window enumeration — **Phases 3 / 5** (unchanged).
+
+### How to test Phase 2 (in a visible Chrome/Edge window)
+1. Open **🦧 Outangutan → Standalone**. Drop a few audio + video files on the cue
+   list. Select one → GO: it plays, **MASTER meter** moves, clock counts down.
+2. **SFX tab**: drop sounds on pads; each gets a hotkey. With a program cue running,
+   hit a pad hotkey → the SFX layers **over** the program (toggle Multi-trigger off
+   to make pads choke each other). Open a pad's ⓘ → tweak gain/EQ/compressor/loop.
+3. **Fades**: set a cue's Fade-in / Fade-out + Curve; set a video cue's **Crossfade
+   in**, GO it over another playing video → watch the dissolve. **Fade·Stop (F)**
+   ramps everything down. **On end → Hold last frame / Fade to black**.
+4. **Output window** (Chromium): open it, GO video cues with crossfades → the output
+   dissolves A↔B in sync.
+
+---
+
 ## Phase 1.2 — Session entry fix (owner: "can't click Session to get anywhere")
 
 Two real problems, both fixed:

@@ -73,7 +73,7 @@ S=stop, P=pause; editable map shown on screen), **All-Stop/Panic + Fade&Stop-All
 **autosave + crash recovery** (everything in IndexedDB; offer restore on reload). Standalone
 mode works with no session — session join is wired in Phase 4.
 
-### Phase 2 — SFX board + audio engine
+### Phase 2 — SFX board + audio engine  ← BUILT (awaiting review); see NOTES.md
 Trigger-pad grid (drag file → pad, name/color/hotkey), **Web Audio pre-decoded `AudioBuffer`s**
 (low latency), per-cue/pad chain (gain / 3-band EQ / compressor / VU), A/V fades with curves
 (in/out/to-black/crossfade), master+per-cue meters, small edits (trim in/out, crop/scale,
@@ -112,8 +112,16 @@ first; degrade gracefully elsewhere.
 ---
 
 ## Definition of done (per phase) — tracking
-- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1)*
-- [x] Live-critical paths (GO / Stop / Panic) fully **keyboard-operable**. *(Phase 1)*
-- [x] Autosave/recovery protects anything that would hurt to lose mid-show. *(Phase 1)*
-- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1)*
-- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase.
+- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1 · 2)*
+- [x] Live-critical paths (GO / Stop / Panic) fully **keyboard-operable**. *(Phase 1 · 2: + pad hotkeys, Tab)*
+- [x] Autosave/recovery protects anything that would hurt to lose mid-show. *(Phase 1 · 2: schema-2 incl. pads/settings)*
+- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1 · 2)*
+- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase. *(Phase 1 · 2)*
+
+**Phase 2 status:** Web Audio engine, SFX pad board (pre-decoded buffers, instant
+trigger, per-pad EQ/comp/meter, hotkeys, retrigger), per-cue audio chain, A/V fades
++ curves, A/B-deck video crossfade, master/active/pad meters, small edits
+(fit/scale/pos, on-end hold/black), Playback/SFX tabs. Verified in the browser
+preview (audio path, simultaneity, transport, inspector, A/B alternation). The
+cross-dissolve + meter animation need a quick check in a **visible** Chrome/Edge
+window (the headless preview pauses rAF and won't play media). Cache-bust `?v=20260625a`.

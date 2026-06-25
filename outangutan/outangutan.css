@@ -187,7 +187,93 @@
 .og-swatch { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .og-swatch.sel { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg) inset; }
 
+/* ============================================================================
+ * PHASE 2 — tabs, A/B decks, meters, audio-chain inspector, SFX board.
+ * ==========================================================================*/
+
+/* ── tabs (in the top bar) ───────────────────────────────────────────────── */
+.og-tabs { display: inline-flex; gap: 2px; background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px; margin-left: 4px; }
+.og-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; color: var(--text2); font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: calc(var(--r-sm) - 2px); cursor: pointer; }
+.og-tab:hover { color: var(--text); }
+.og-tab.on { background: var(--s4); color: var(--text); }
+.og-tab .sf-symbol { font-size: 13px; }
+
+/* ── stage holds the two tab views ───────────────────────────────────────── */
+.og-stage { flex: 1 1 auto; min-height: 0; display: flex; }
+.og-main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.6fr) minmax(240px, .98fr); min-height: 0; }
+.og-sfx { flex: 1 1 auto; display: none; min-height: 0; }
+.og-stage.sfx .og-main { display: none; }
+.og-stage.sfx .og-sfx { display: flex; }
+
+/* ── A/B program decks (crossfade) ───────────────────────────────────────── */
+.og-deck { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; display: block; }
+.og-deck.front { z-index: 2; }
+.og-program-wrap video.og-deck:not(.front) { z-index: 1; }
+
+/* ── meters ──────────────────────────────────────────────────────────────── */
+.og-master { display: inline-flex; align-items: center; gap: 6px; }
+.og-master-lbl { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text3); }
+.og-meter { position: relative; width: 84px; height: 8px; background: var(--s3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; display: inline-block; }
+.og-meter-fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, var(--green) 0%, var(--green) 55%, var(--yellow) 80%, var(--red) 100%); }
+.og-meter-peak { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: 0; }
+.og-cue-meter { display: inline-block; vertical-align: middle; margin-left: 6px; position: relative; width: 56px; height: 6px; background: var(--s3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.og-cue-meter-fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, var(--green) 0%, var(--green) 55%, var(--yellow) 80%, var(--red) 100%); }
+
+/* ── inspector additions ─────────────────────────────────────────────────── */
+.og-insp-sub { font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--text3); margin: 4px 0 -4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.og-field-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.og-field-row3 .og-field label { font-size: 10px; }
+.og-check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text2); cursor: pointer; user-select: none; }
+.og-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+.og-check-inline { font-size: 12px; }
+
+/* ── SFX board ───────────────────────────────────────────────────────────── */
+.og-sfx-main { flex: 1 1 auto; }
+.og-sfx-side { flex: 0 0 300px; border-left: 1px solid var(--border); }
+.og-pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px; overflow: auto; align-content: start; }
+.og-pad {
+  position: relative; aspect-ratio: 1.5 / 1; border-radius: var(--r); cursor: pointer;
+  border: 1px solid var(--border); background: var(--s2); color: var(--text);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; text-align: left; overflow: hidden;
+}
+.og-pad[data-pad] { border-color: color-mix(in srgb, var(--pad) 55%, var(--border)); background: color-mix(in srgb, var(--pad) 12%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pad) 22%, transparent); }
+.og-pad[data-pad]:hover { background: color-mix(in srgb, var(--pad) 20%, var(--s2)); transform: translateY(-1px); }
+.og-pad[data-pad]:active { transform: translateY(0) scale(.985); }
+.og-pad.live { box-shadow: 0 0 0 2px var(--pad), 0 0 18px color-mix(in srgb, var(--pad) 60%, transparent); }
+.og-pad.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.og-pad.empty { border: 1.5px dashed var(--border); background: transparent; color: var(--text3); align-items: center; justify-content: center; gap: 4px; flex-direction: column; }
+.og-pad.empty:hover, .og-pad.drag { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.og-pad-empty-l .sf-symbol { font-size: 20px; }
+.og-pad-hint { font-size: 11px; }
+.og-pad-key { position: absolute; top: 8px; left: 8px; font-family: var(--mono-num, var(--mono)); font-size: 11px; font-weight: 700; color: color-mix(in srgb, var(--pad) 70%, var(--text)); background: rgba(0,0,0,.28); border-radius: 4px; padding: 1px 5px; min-width: 14px; text-align: center; }
+.og-pad-edit { position: absolute; top: 6px; right: 6px; opacity: 0; color: var(--text2); padding: 3px; border-radius: 4px; }
+.og-pad:hover .og-pad-edit { opacity: .85; }
+.og-pad-edit:hover { background: rgba(0,0,0,.3); color: var(--text); opacity: 1; }
+.og-pad-edit .sf-symbol { font-size: 14px; }
+.og-pad-name { font-size: 13px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.og-pad-meter { position: absolute; left: 10px; right: 10px; bottom: 6px; height: 3px; background: rgba(0,0,0,.35); border-radius: 2px; overflow: hidden; }
+.og-pad-meter-fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: var(--pad); }
+.og-pad[data-pad] .og-pad-name { padding-bottom: 6px; }
+
+.og-sfx-master { padding: 12px; border-bottom: 1px solid var(--border); }
+.og-sfx-master .og-field { gap: 6px; }
+.og-sfx-master .og-field span { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.og-pad-inspector { overflow: auto; flex: 1 1 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.og-pad-actions { display: flex; gap: 8px; margin-top: 4px; }
+.og-pad-actions .og-bar-btn { flex: 1; justify-content: center; }
+.og-p-clear { flex: 1; margin-top: 0; }
+.og-p-key { justify-content: center; font-family: var(--mono-num, var(--mono)); }
+
+/* lock also disables pad editing affordances + SFX file drops */
+#outangutan.locked .og-pad.empty, #outangutan.locked .og-pad-edit,
+#outangutan.locked .og-pad-inspector input, #outangutan.locked .og-pad-inspector select,
+#outangutan.locked .og-p-clear { opacity: .4; pointer-events: none; }
+
 @media (max-width: 920px) {
   .og-main { grid-template-columns: 1fr; grid-auto-rows: minmax(0, auto); }
   .og-pane + .og-pane { border-left: none; border-top: 1px solid var(--border); }
+  .og-sfx { flex-direction: column; }
+  .og-sfx-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); }
+  .og-pad-grid { grid-template-columns: repeat(3, 1fr); }
+  .og-tabs { order: 5; }
 }
