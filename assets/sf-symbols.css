@@ -91,6 +91,9 @@
 .sf-symbol[data-symbol="marker.stop"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/stop.fill.svg");}
 .sf-symbol[data-symbol="marker.ready"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/circle.svg");}
 .sf-symbol[data-symbol="marker.active"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/circle.fill.svg");}
+.sf-symbol[data-symbol="geo.location"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/maps/location.svg");}
+.sf-symbol[data-symbol="time.clock"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/clock.svg");}
+.sf-symbol[data-symbol="nature.tree"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/nature/tree.svg");}
 
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }

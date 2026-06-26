@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260618c">
-<link rel="stylesheet" href="outangutan/outangutan.css?v=20260625a">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260626a">
+<link rel="stylesheet" href="outangutan/outangutan.css?v=20260626a">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -2124,7 +2124,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       </div>
       <div class="e-card e-card-full outangutan-card" style="--oc:#5b8df8;--ob:rgba(91,141,248,.07)">
         <div class="ec-icon">🦧</div>
-        <div class="ec-title">Out<span class="og-wm-hi">angutan</span></div>
+        <div class="ec-title">Out<span class="og-wm-hi">rangutan</span></div>
         <div class="ec-desc">Cue and play video &amp; sound effects — a simple, web-native show-playback system. Best in Chrome or Edge.</div>
         <div class="ec-actions">
           <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutangutan('session')">Session</button>
@@ -2826,17 +2826,17 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       <div class="field">
         <label class="field-lbl">Venue Type</label>
         <div class="seg-group" id="pp-venue-group" role="group" aria-label="Venue type">
-          <button type="button" class="seg-btn" data-venue="indoors" aria-pressed="false" onclick="setCallSheetVenue('indoors')">🏠 Indoors</button>
-          <button type="button" class="seg-btn" data-venue="outdoors" aria-pressed="false" onclick="setCallSheetVenue('outdoors')">🌳 Outdoors</button>
-          <button type="button" class="seg-btn" data-venue="both" aria-pressed="false" onclick="setCallSheetVenue('both')">⛅ Both</button>
+          <button type="button" class="seg-btn" data-venue="indoors" aria-pressed="false" onclick="setCallSheetVenue('indoors')"><span class="sf-symbol" data-symbol="action.home" aria-hidden="true"></span> Indoors</button>
+          <button type="button" class="seg-btn" data-venue="outdoors" aria-pressed="false" onclick="setCallSheetVenue('outdoors')"><span class="sf-symbol" data-symbol="nature.tree" aria-hidden="true"></span> Outdoors</button>
+          <button type="button" class="seg-btn" data-venue="both" aria-pressed="false" onclick="setCallSheetVenue('both')"><span class="sf-symbol" data-symbol="weather.partly-cloudy" aria-hidden="true"></span> Both</button>
         </div>
       </div>
       <div class="wx-card">
         <div class="wx-head">
           <div class="wx-summary">
-            <span class="wx-chip"><span class="wx-chip-ico">📅</span><span id="pp-weather-day">Add a shoot date</span></span>
-            <span class="wx-chip"><span class="wx-chip-ico">⏰</span><span id="pp-weather-call">—</span></span>
-            <span class="wx-chip"><span class="wx-chip-ico">📍</span><span id="pp-weather-loc">Add a location</span></span>
+            <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="content.calendar" aria-hidden="true"></span></span><span id="pp-weather-day">Add a shoot date</span></span>
+            <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="time.clock" aria-hidden="true"></span></span><span id="pp-weather-call">—</span></span>
+            <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="geo.location" aria-hidden="true"></span></span><span id="pp-weather-loc">Add a location</span></span>
           </div>
           <button type="button" class="wx-fetch-btn" id="pp-weather-fetch-btn" onclick="fetchCallSheetWeather()"><span id="pp-weather-ico"><span class="sf-symbol" data-symbol="weather.default" aria-hidden="true"></span></span> Get forecast</button>
         </div>
@@ -3253,7 +3253,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
 <script src="cueola-app.js?v=20260623c"></script>
-<script src="outangutan/outangutan.js?v=20260625a"></script>
+<script src="outangutan/outangutan.js?v=20260626a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

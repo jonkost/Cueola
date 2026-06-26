@@ -53,7 +53,7 @@
     "weather": "Weather",
     "whatsnew": "What\u2019s New"
   },
-  "symbolCount": 128,
+  "symbolCount": 129,
   "aliasCount": 1,
   "symbols": [
     {
@@ -1371,6 +1371,55 @@
         "master": "Regular-S",
         "viewBox": "4.836 -76.658 82.857 82.809",
         "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "clock",
+      "displayName": "Clock",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "multicolor",
+        "objectsandtools",
+        "time"
+      ],
+      "keywords": [
+        "clock",
+        "time"
+      ],
+      "cueolaTags": [],
+      "semanticNames": [
+        "time.clock"
+      ],
+      "availability": "2019",
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/clock.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/clock.svg",
+      "sha256": "e865aa325c7966537a48603a059cd7238091ede2ba4948800b78fa0342a3e802",
+      "aliases": [],
+      "template": {
+        "glyph": "10042B",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from clock",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.865 -76.63 82.8 82.751",
+        "pathCount": 2,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -3300,7 +3349,9 @@
       ],
       "keywords": [],
       "cueolaTags": [],
-      "semanticNames": [],
+      "semanticNames": [
+        "geo.location"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/maps/location.svg",
@@ -5703,7 +5754,9 @@
         "camping"
       ],
       "cueolaTags": [],
-      "semanticNames": [],
+      "semanticNames": [
+        "nature.tree"
+      ],
       "availability": "2022.1",
       "directionalCandidate": false,
       "sourcePath": "source/nature/tree.svg",

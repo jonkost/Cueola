@@ -315,7 +315,7 @@
   function openOutput() {
     ensureChannel();
     outputWin = window.open('outangutan/output.html', 'outangutanOutput', 'width=1280,height=720');
-    if (!outputWin) { toast('Output window blocked — allow pop-ups for Outangutan.'); return; }
+    if (!outputWin) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return; }
     toast('Output window opened. Drag it to your second display, then fullscreen it.');
     setTimeout(() => sendOut({ t: 'ping' }), 600);
   }
@@ -843,7 +843,7 @@
     root.innerHTML =
       '<div class="og-bar">'
         + '<button class="og-back" id="og-back">' + sym('action.back') + '<span>Cueola</span></button>'
-        + '<div class="og-title"><span class="og-glyph">🦧</span>Out<span class="og-wm-hi">angutan</span></div>'
+        + '<div class="og-title"><span class="og-glyph">🦧</span>Out<span class="og-wm-hi">rangutan</span></div>'
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
@@ -901,7 +901,7 @@
         + '<button class="og-help-close" id="og-help-close">Done</button></div></div>'
       + '<div class="og-join" id="og-join"><div class="og-join-card">'
         + '<div class="og-join-glyph">🦧</div><h3>Join a session</h3>'
-        + '<p>Enter your show’s session code to tie Outangutan to it — the same code Cueola, Planda Bear, and Flowmingo use. Live cross-device cue sync arrives in Phase 4; for now your cue list is saved under this code on this device.</p>'
+        + '<p>Enter your show’s session code to tie Outrangutan to it — the same code Cueola, Planda Bear, and Flowmingo use. Live cross-device cue sync arrives in Phase 4; for now your cue list is saved under this code on this device.</p>'
         + '<input id="og-join-code" placeholder="SESSION CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">'
         + '<div class="og-join-err" id="og-join-err"></div>'
         + '<button class="og-join-go" id="og-join-go">Join Session</button>'

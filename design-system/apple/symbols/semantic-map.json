@@ -79,6 +79,9 @@
     "marker.go": "play.fill",
     "marker.stop": "stop.fill",
     "marker.ready": "circle",
-    "marker.active": "circle.fill"
+    "marker.active": "circle.fill",
+    "geo.location": "location",
+    "time.clock": "clock",
+    "nature.tree": "tree"
   }
 }
