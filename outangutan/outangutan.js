@@ -872,7 +872,7 @@
               + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
               + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'GO<span class="og-tbtn-key" id="og-k-go"></span></button>'
               + '<button class="og-tbtn" id="og-pause">' + sym('media.pause') + 'Pause<span class="og-tbtn-key" id="og-k-pause"></span></button>'
-              + '<button class="og-tbtn" id="og-fade">' + sym('action.down') + 'Fade·Stop<span class="og-tbtn-key" id="og-k-fade"></span></button>'
+              + '<button class="og-tbtn" id="og-fade">' + sym('action.down') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
               + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'PANIC<span class="og-tbtn-key" id="og-k-panic"></span></button>'
             + '</div>'
           + '</div>'

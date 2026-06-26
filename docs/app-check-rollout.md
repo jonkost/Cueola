@@ -16,7 +16,8 @@ is added.
 
 1. In Firebase Console, go to Security > App Check.
 2. Register the Cueola web app for App Check with reCAPTCHA v3.
-3. Add the production domains that should be allowed by the reCAPTCHA key.
+3. Add the production domains that should be allowed by the reCAPTCHA key:
+   `cueola.live` and, if enabled in Firebase Hosting, `www.cueola.live`.
 4. Copy the public reCAPTCHA v3 site key into both:
    - `index.html`
    - `dashboard.html`
@@ -50,4 +51,3 @@ session role model that can distinguish:
 - Planda Bear editor
 - Flowmingo operator
 - Instructor/admin
-

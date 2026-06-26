@@ -196,7 +196,7 @@ let liveFocusMode = (() => { try { return localStorage.getItem('cueola_live_focu
 let browserBackGuardReady = false;
 let _lastHandledForceCmdTs = 0;
 let livePrompterOpen = false;
-let liveSidebarWidth = 360;
+let liveSidebarWidth = 420;
 let _lastLiveScrollIdx = null;
 let previewRowIdx = 0;
 let callSheetPeople = [];
@@ -4880,7 +4880,7 @@ function startLivePanelResize(e) {
   const startX = e.clientX;
   const startW = liveSidebarWidth;
   const move = ev => {
-    liveSidebarWidth = Math.min(620, Math.max(260, startW + (startX - ev.clientX)));
+    liveSidebarWidth = Math.min(620, Math.max(340, startW + (startX - ev.clientX)));
     applyLivePrompterPanelState();
   };
   const up = () => {
@@ -6220,46 +6220,57 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
-  return `<div class="prompt-op-panel">
+  return `<div class="prompt-op-panel flow-control-panel">
     ${includeLiveActions ? liveActionsHTML('po') : ''}
     ${includeLiveActions ? clockAndAlertControlsHTML('po') : ''}
-    <div class="pt-ctrl-group">
-      <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')">${playIcon} ${playLabel}</button>
+    <div class="flow-control-section flow-control-transport">
+      <div class="flow-control-title">Transport</div>
+      <div class="flow-control-grid one">
+        <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}">${playIcon}<span>${playLabel}</span></button>
+      </div>
+      <div class="flow-control-grid four">
+        <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
+        <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')">Boost</button>
+        <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
+        <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Speed</span>
+    <div class="flow-control-section flow-control-display">
+      <div class="flow-control-title">Display</div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Speed</span>
       <button class="pt-btn" onclick="sendPrompterControl('speed_down')">−</button>
       <input type="range" class="pt-range" min="5" max="200" value="${ptTargetSpeed}" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value)">
       <button class="pt-btn" onclick="sendPrompterControl('speed_up')">+</button>
-    </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Size</span>
+      </div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Size</span>
       <button class="pt-btn" onclick="sendPrompterControl('size_down')">−</button>
       <input type="range" class="pt-range" min="24" max="120" value="${ptFontSize}" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value)">
       <button class="pt-btn" onclick="sendPrompterControl('size_up')">+</button>
+      </div>
+      <div class="pt-ctrl-group flow-control-segment">
+        <span class="pt-ctrl-label">Align</span>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" onclick="sendPrompterControl('align_left')" aria-label="Align left"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" onclick="sendPrompterControl('align_center')" aria-label="Align center"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" onclick="sendPrompterControl('align_right')" aria-label="Align right"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Align</span>
-      <button class="pt-btn${ptAlign==='left'?' active':''}" onclick="sendPrompterControl('align_left')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn${ptAlign==='center'?' active':''}" onclick="sendPrompterControl('align_center')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn${ptAlign==='right'?' active':''}" onclick="sendPrompterControl('align_right')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+    <div class="flow-control-section flow-theme-section">
+      <div class="flow-control-title">Theme</div>
+      <div class="pt-ctrl-group flow-theme-grid">
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].bg}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"></button>`).join('')}
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Theme</span>
-      ${CUEOLA_THEMES.map(name => `<div class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].bg}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"></div>`).join('')}
-    </div>
-    <div class="pt-ctrl-group">
-      <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
-      <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')">Boost</button>
-      <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
-      <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
-    </div>
-    <div class="pt-ctrl-group">
-      ${includeLiveActions ? '' : `<button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>`}
-      <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
-      <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide UI</button>
-      <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
-      <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
+    <div class="flow-control-section flow-control-screen">
+      <div class="flow-control-title">Screen</div>
+      <div class="flow-control-grid four">
+        ${includeLiveActions ? '' : `<button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>`}
+        <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
+        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide UI</button>
+        <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
+        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
+      </div>
     </div>
   </div>`;
 }
@@ -6481,7 +6492,8 @@ function poNudgeSeek(delta) {
 
 // Shared "Live actions" block: Tech Difficulty toggle + the live cue scrubber.
 // scope: 'po' (prompt-op stage), 'lsq' (Script Op sidebar), 'flow' (Flowmingo Op).
-function liveActionsHTML(scope = 'po') {
+function liveActionsHTML(scope = 'po', disabled = false) {
+  const dis = disabled ? ' disabled' : '';
   const isFlow = scope === 'flow';
   const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
   const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
@@ -6500,22 +6512,31 @@ function liveActionsHTML(scope = 'po') {
     do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
     return i < beats.length ? i : -1;
   })();
-  const rowCue = isFlow ? '' : `<div class="pt-ctrl-group pt-live-rowcue">
-      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row">${sfIcon('marker.active')}<span>Cue Now</span></button>
-      <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+  const rowCue = isFlow ? '' : `<div class="flow-control-section flow-control-rowcue">
+      <div class="flow-control-title">Rundown Cue</div>
+      <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
+        <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
+        <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+      </div>
     </div>`;
   // Returns bare control groups so they nest inside the existing panel containers
   // (prompt-op-panel / flowop-controls / #lsLiveActions) without overlapping them.
-  return `<div class="pt-ctrl-group pt-live-slate">
-      <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover">${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
-      <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" title="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars">${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
+  return `<div class="flow-control-section flow-control-onair">
+      <div class="flow-control-title">On Air</div>
+      <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
+        <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
+        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" title="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
+      </div>
     </div>
     ${rowCue}
-    <div class="pt-ctrl-group pt-live-cue">
+    <div class="flow-control-section flow-control-cue">
+      <div class="flow-control-title">Cue Position</div>
+      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
       <span class="pt-ctrl-label">Cue</span>
-      <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back">${sfIcon('action.back')}</button>
-      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}>
-      <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward">${sfIcon('action.forward')}</button>
+      <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('action.back')}</button>
+      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${dis}>
+      <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('action.forward')}</button>
+      </div>
     </div>`;
 }
 
@@ -7352,26 +7373,35 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
     `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
   return `<div class="flow-clock-stack">
     <div class="flow-clock-preview" id="${scope === 'flow' ? 'flowOpClockPreview' : `${scope}ClockPreview`}"></div>
-    <div class="flow-clock-grid flow-clock-modes">
-      ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday')}
-      ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration')}
-      ${btn('content.calendar', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
-      ${btn('media.stop', 'Hide', send('clock_off'), false)}
+    <div class="flow-control-section flow-clock-section">
+      <div class="flow-control-title">Clock</div>
+      <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
+        ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday')}
+        ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration')}
+        ${btn('content.calendar', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
+        ${btn('media.stop', 'Hide', send('clock_off'), false)}
+      </div>
+      <div class="flow-clock-fields">
+        <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="5" aria-label="Duration minutes"${dis}></label>
+        <label class="flow-clock-field"><span>${sfIcon('content.calendar')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
+      </div>
     </div>
-    <div class="flow-clock-fields">
-      <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="5" aria-label="Duration minutes"${dis}></label>
-      <label class="flow-clock-field"><span>${sfIcon('content.calendar')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
+    <div class="flow-control-section flow-wrap-section">
+      <div class="flow-control-title">Wrap Up</div>
+      <div class="flow-clock-grid flow-wrap-grid flow-control-grid four">
+        ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
+        ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
+        <label class="flow-wrap-custom"><span>${sfIcon('state.warning')}<b>Wrap</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
+        ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
+      </div>
     </div>
-    <div class="flow-clock-grid flow-wrap-grid">
-      ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
-      ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
-      <label class="flow-wrap-custom"><span>${sfIcon('state.warning')}<b>Wrap</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
-      ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
-    </div>
-    <div class="flow-clock-grid flow-alert-grid">
-      ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn')}
-      ${btn('action.down', 'Smaller', send('clock_size_down'))}
-      ${btn('action.up', 'Bigger', send('clock_size_up'))}
+    <div class="flow-control-section flow-alert-section">
+      <div class="flow-control-title">Alerts</div>
+      <div class="flow-clock-grid flow-alert-grid flow-control-grid three">
+        ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn')}
+        ${btn('action.down', 'Smaller', send('clock_size_down'))}
+        ${btn('action.up', 'Bigger', send('clock_size_up'))}
+      </div>
     </div>
   </div>`;
 }
@@ -7381,46 +7411,57 @@ function flowOpControlsHTML(disabled=false) {
   const playAction = flowOpPlaying ? 'pause' : 'resume';
   const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
-  return `<div class="flowop-controls">
-    ${liveActionsHTML('flow')}
+  return `<div class="flowop-controls flow-control-panel">
+    ${liveActionsHTML('flow', disabled)}
     ${clockAndAlertControlsHTML('flow', disabled)}
-    <div class="pt-ctrl-group">
-      <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')"${dis}>${playIcon} ${playLabel}</button>
+    <div class="flow-control-section flow-control-transport">
+      <div class="flow-control-title">Transport</div>
+      <div class="flow-control-grid one">
+        <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${playIcon}<span>${playLabel}</span></button>
+      </div>
+      <div class="flow-control-grid four">
+        <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')"${dis}>Brake</button>
+        <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')"${dis}>Boost</button>
+        <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
+        <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Speed</span>
-      <button class="pt-btn" onclick="flowOpSendControl('speed_down')"${dis}>−</button>
-      <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true)"${dis}>
-      <button class="pt-btn" onclick="flowOpSendControl('speed_up')"${dis}>+</button>
+    <div class="flow-control-section flow-control-display">
+      <div class="flow-control-title">Display</div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Speed</span>
+        <button class="pt-btn" onclick="flowOpSendControl('speed_down')"${dis}>−</button>
+        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true)"${dis}>
+        <button class="pt-btn" onclick="flowOpSendControl('speed_up')"${dis}>+</button>
+      </div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Size</span>
+        <button class="pt-btn" onclick="flowOpSendControl('size_down')"${dis}>−</button>
+        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true)"${dis}>
+        <button class="pt-btn" onclick="flowOpSendControl('size_up')"${dis}>+</button>
+      </div>
+      <div class="pt-ctrl-group flow-control-segment">
+        <span class="pt-ctrl-label">Align</span>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Size</span>
-      <button class="pt-btn" onclick="flowOpSendControl('size_down')"${dis}>−</button>
-      <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true)"${dis}>
-      <button class="pt-btn" onclick="flowOpSendControl('size_up')"${dis}>+</button>
+    <div class="flow-control-section flow-theme-section">
+      <div class="flow-control-title">Theme</div>
+      <div class="pt-ctrl-group flow-theme-grid">
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="flowop-theme-dot${ptThemeName===name?' active':''}" data-flowop-theme="${name}" style="background:${PT_THEMES[name].bg}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}></button>`).join('')}
+      </div>
     </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Align</span>
-      <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
-    </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Theme</span>
-      ${CUEOLA_THEMES.map(name => `<button type="button" class="flowop-theme-dot${ptThemeName===name?' active':''}" data-flowop-theme="${name}" style="background:${PT_THEMES[name].bg}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}"${dis}></button>`).join('')}
-    </div>
-    <div class="pt-ctrl-group">
-      <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')"${dis}>Brake</button>
-      <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')"${dis}>Boost</button>
-      <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
-      <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
-    </div>
-    <div class="pt-ctrl-group">
-      <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
-      <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide UI</button>
-      <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
-      <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
-      <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
+    <div class="flow-control-section flow-control-screen">
+      <div class="flow-control-title">Screen</div>
+      <div class="flow-control-grid five">
+        <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
+        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide UI</button>
+        <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
+        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
+        <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
+      </div>
     </div>
   </div>`;
 }
@@ -8468,7 +8509,7 @@ function pbRefreshSafetyFields() {
   const safety = data.safety || {};
   const wxNote = typeof safety.weather === 'string' ? safety.weather : '';
   pbSetFieldIfIdle('sp-hospital', safety.hospital || data.hospital || '');
-  pbSetFieldIfIdle('sp-weather', wxNote || weatherCuteSummary(activeCallSheetWeather(data)) || (typeof data.weather === 'string' ? data.weather : '') || '');
+  pbSetFieldIfIdle('sp-weather', wxNote || safetyPlanWeatherAutoText(data));
   pbSetFieldIfIdle('sp-first-aid', safety.firstAid || '');
   pbSetFieldIfIdle('sp-fire', safety.fire || '');
   pbSetFieldIfIdle('sp-emergency', safety.emergency || '');
@@ -11146,6 +11187,13 @@ function activeCallSheetWeather(data) {
   return sheets[idx]?.weather || null;
 }
 
+function safetyPlanWeatherAutoText(data) {
+  const sheetWeather = activeCallSheetWeather(data);
+  const sheetText = typeof sheetWeather === 'string' ? sheetWeather : '';
+  const topText = typeof data?.weather === 'string' ? data.weather : '';
+  return weatherCuteSummary(sheetWeather) || sheetText || weatherCuteSummary(data?.weather) || topText || '';
+}
+
 function setCallSheetVenue(v) {
   const nv = normalizeCallSheetVenue(v);
   callSheetVenue = (callSheetVenue === nv) ? '' : nv; // click active to clear
@@ -11392,8 +11440,7 @@ function openSafetyPlan() {
   // counts — legacy saves sometimes stored the whole weather OBJECT here, which both
   // rendered "[object Object]" and (being truthy) blocked the call-sheet auto-fill.
   const safetyWeatherNote = typeof safety.weather === 'string' ? safety.weather : '';
-  const legacyTopWeather = typeof data.weather === 'string' ? data.weather : '';
-  document.getElementById('sp-weather').value = safetyWeatherNote || weatherCuteSummary(activeCallSheetWeather(data)) || legacyTopWeather || '';
+  document.getElementById('sp-weather').value = safetyWeatherNote || safetyPlanWeatherAutoText(data);
   document.getElementById('sp-first-aid').value = safety.firstAid || '';
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
@@ -11413,8 +11460,8 @@ function getSafetyPlanData() {
   // If the weather field still equals the call-sheet auto-fill, keep it "auto"
   // (store empty) so it stays live with the call sheet; a real edit is kept.
   const existingWeather = typeof existing.weather === 'string' ? existing.weather : '';
-  const wxVal = document.getElementById('sp-weather')?.value?.trim() ?? existingWeather ?? '';
-  const wxAuto = weatherCuteSummary(activeCallSheetWeather(data));
+  const wxVal = document.getElementById('sp-weather')?.value?.trim() || existingWeather || '';
+  const wxAuto = safetyPlanWeatherAutoText(data);
   return {
     hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
     weather: (wxAuto && wxVal === wxAuto) ? '' : wxVal,
@@ -11435,12 +11482,14 @@ function saveSafetyPlan(showToastOnSave=true) {
 }
 
 function safetyPlanHTML(safety) {
+  const data = loadPreProData();
+  const safetyWeather = typeof safety.weather === 'string' ? safety.weather : '';
   return `
     <h1>3. Safety Plan</h1>
     <div>Item 3</div>
     <table><tbody>
       <tr><th>Local Hospital</th><td>${esc(safety.hospital || '')}</td></tr>
-      <tr><th>Weather</th><td>${esc(safety.weather || weatherCuteSummary(activeCallSheetWeather(loadPreProData())))}</td></tr>
+      <tr><th>Weather</th><td>${esc(safetyWeather || safetyPlanWeatherAutoText(data))}</td></tr>
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
