@@ -603,7 +603,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="code-big" id="created-code">—</div>
       <div class="code-lbl">Session Code</div>
       <div class="code-share">
-        <div class="code-url" id="created-url">cueola.app/?code=—</div>
+        <div class="code-url" id="created-url">https://cueola.live/?code=...</div>
         <button class="btn-sm btn-ghost" onclick="copyCreatedCode()">Copy</button>
       </div>
     </div>
@@ -1332,6 +1332,17 @@ function openNewSession() {
   showModal('modal-new');
 }
 
+function getCueolaShareOrigin() {
+  if (window.location.protocol === 'file:') return 'https://cueola.live';
+  return window.location.origin || 'https://cueola.live';
+}
+
+function buildSessionShareUrl(code) {
+  const url = new URL('/', getCueolaShareOrigin());
+  url.searchParams.set('code', code);
+  return url.toString();
+}
+
 async function createNewSession() {
   const btn = document.getElementById('new-btn');
   btn.textContent = 'Connecting…';
@@ -1366,7 +1377,7 @@ async function createNewSession() {
 
     createdCode = code;
     document.getElementById('created-code').textContent = code;
-    document.getElementById('created-url').textContent = `${window.location.origin}/index.html?code=${code}`;
+    document.getElementById('created-url').textContent = buildSessionShareUrl(code);
 
     hideModal('modal-new');
     showModal('modal-created');
@@ -1881,8 +1892,8 @@ function copySessionCode(code, e) {
 }
 
 function copyCreatedCode() {
-  const code = document.getElementById('created-code').textContent;
-  navigator.clipboard.writeText(code).then(()=>showToast('Code copied!'));
+  const url = document.getElementById('created-url').textContent;
+  navigator.clipboard.writeText(url).then(()=>showToast('Share link copied!'));
 }
 
 // ── MODAL / TOAST ─────────────────────────────────────────────

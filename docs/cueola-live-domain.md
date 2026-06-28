@@ -1,19 +1,49 @@
 # cueola.live Domain Rollout
 
-Cueola is ready to be served by Firebase Hosting on `cueola.live` after the
-domain is connected in Firebase Console and DNS is pointed at the Firebase
-records.
+Cueola is served as a static GitHub Pages site from the `jonkost/Cueola`
+repository. The custom domain should be `cueola.live`, with `www.cueola.live`
+redirecting to it.
 
-## Firebase Hosting
+## GitHub Pages
 
-1. In Firebase Console, open the `cueola` project.
-2. Go to Hosting > Add custom domain.
-3. Add `cueola.live`.
-4. Add `www.cueola.live` as a second custom domain if the registrar should also
-   support `www`.
-5. Copy the TXT verification record into the domain registrar.
-6. After verification, copy the Firebase A/AAAA/CNAME records into the registrar.
-7. Wait for Firebase to issue the managed SSL certificate before sending traffic.
+1. In GitHub, open `jonkost/Cueola`.
+2. Go to Settings > Pages.
+3. Confirm the publishing source is `main` from `/root`.
+4. Set Custom domain to `cueola.live`.
+5. Keep the root-level `CNAME` file containing `cueola.live`.
+6. Wait for GitHub to finish the DNS check.
+7. Enable Enforce HTTPS when GitHub makes it available.
+
+## Registrar DNS
+
+Remove the old Squarespace records first:
+
+- Any `A` records for `@` pointing at `198.49.23.144`, `198.49.23.145`,
+  `198.185.159.144`, or `198.185.159.145`.
+- Any `CNAME` record for `www` pointing at `ext-sq.squarespace.com`.
+
+Then add these GitHub Pages records:
+
+| Type | Host/Name | Value |
+| --- | --- | --- |
+| A | `@` | `185.199.108.153` |
+| A | `@` | `185.199.109.153` |
+| A | `@` | `185.199.110.153` |
+| A | `@` | `185.199.111.153` |
+| AAAA | `@` | `2606:50c0:8000::153` |
+| AAAA | `@` | `2606:50c0:8001::153` |
+| AAAA | `@` | `2606:50c0:8002::153` |
+| AAAA | `@` | `2606:50c0:8003::153` |
+| CNAME | `www` | `jonkost.github.io` |
+
+Registrar notes:
+
+- Some registrars use `@` for the apex/root domain; others want `cueola.live`.
+- Do not add a `CNAME` at `@` if the registrar already has `A`/`AAAA` records
+  there.
+- Do not include the repository name in the `www` target; use
+  `jonkost.github.io`, not `jonkost.github.io/Cueola`.
+- DNS can propagate quickly, but GitHub says changes can take up to 24 hours.
 
 ## App Check
 
@@ -26,15 +56,16 @@ Before enabling Firestore App Check enforcement:
 4. Deploy with enforcement still off.
 5. Confirm hosted requests show as verified, then enable Firestore enforcement.
 
-## Local Check
+## Verify
 
-Run this before deploy:
+Check these after DNS and SSL are connected:
 
-```bash
-firebase emulators:start --only hosting
-```
+- `https://cueola.live/`
+- `https://cueola.live/dashboard`
+- `https://cueola.live/?code=TEST`
+- `https://www.cueola.live/` redirects or serves as expected
 
-or, for a quick static check:
+For a local static preview:
 
 ```bash
 python3 -m http.server 8010
