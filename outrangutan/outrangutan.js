@@ -120,8 +120,8 @@
     if (!list) return;
     list.innerHTML = THEME_ORDER.map(name => {
       const active = name === current;
-      const previewClass = name === 'outrangutan' ? ' ts-preview theme-outrangutan-preview' : 'ts-preview';
-      const style = name === 'outrangutan' ? '' : ' style="background:' + esc(THEME_PREVIEWS[name] || '#222') + '"';
+      const previewClass = 'ts-preview';
+      const style = ' style="background:' + esc(THEME_PREVIEWS[name] || '#222') + '"';
       return '<button type="button" class="theme-swatch' + (active ? ' active' : '') + '" data-theme="' + name + '" aria-pressed="' + (active ? 'true' : 'false') + '">'
         + '<div class="' + previewClass + '"' + style + '></div>'
         + '<div class="ts-name">' + esc(THEME_LABELS[name] || name) + '</div>'

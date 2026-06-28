@@ -955,9 +955,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="outrangutan"] .brand::after{content:'outrangutan mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(255,106,0,.46);border-radius:999px;padding:3px 7px;background:rgba(255,106,0,.10);box-shadow:0 0 24px rgba(255,106,0,.18)}
 [data-theme="outrangutan"] .rd-scroll{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
 [data-theme="outrangutan"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 36%,transparent),0 18px 60px rgba(255,106,0,.16)}
-.ts-preview.theme-outrangutan-preview{background:linear-gradient(140deg,#ff7a1a 0 38%,#ffffff 38% 56%,#ff6300 56%);border-color:#52341c;box-shadow:var(--shadow-sm)}
-/* Honey — black-and-yellow bee identity */
-.ts-preview.theme-honey-preview{background:linear-gradient(140deg,#ffc400 0 30%,#0c0a03 30% 50%,#ffc400 50% 70%,#0c0a03 70%);border-color:#5a4a18;box-shadow:var(--shadow-sm)}
 [data-theme="warm"] #entry{background:var(--bg)}
 [data-theme="warm"] .topbar{background:color-mix(in srgb,var(--s1) 86%,transparent)}
 [data-theme="warm"] .brand::after{content:'honey mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(255,196,0,.46);border-radius:999px;padding:3px 7px;background:rgba(255,196,0,.10);box-shadow:0 0 24px rgba(255,196,0,.16)}
@@ -2778,13 +2775,13 @@ input.pt-range::-moz-range-thumb,
           <div class="entry-theme-title">Theme</div>
           <div class="theme-grid">
             <button type="button" class="theme-swatch" data-theme="cool" onclick="pickEntryTheme('cool')" aria-pressed="false"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></button>
-            <button type="button" class="theme-swatch" data-theme="warm" onclick="pickEntryTheme('warm')" aria-pressed="false"><div class="ts-preview theme-honey-preview"></div><div class="ts-name">Honey</div></button>
+            <button type="button" class="theme-swatch" data-theme="warm" onclick="pickEntryTheme('warm')" aria-pressed="false"><div class="ts-preview" style="background:#ffc400"></div><div class="ts-name">Honey</div></button>
             <button type="button" class="theme-swatch" data-theme="white" onclick="pickEntryTheme('white')" aria-pressed="false"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></button>
             <button type="button" class="theme-swatch" data-theme="green" onclick="pickEntryTheme('green')" aria-pressed="false"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></button>
             <button type="button" class="theme-swatch" data-theme="koala" onclick="pickEntryTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
             <button type="button" class="theme-swatch" data-theme="panda" onclick="pickEntryTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
             <button type="button" class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
-            <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="pickEntryTheme('outrangutan')" aria-pressed="false"><div class="ts-preview theme-outrangutan-preview"></div><div class="ts-name">Outrangutan</div></button>
+            <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="pickEntryTheme('outrangutan')" aria-pressed="false"><div class="ts-preview" style="background:#ff6a00"></div><div class="ts-name">Outrangutan</div></button>
             <button type="button" class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
           </div>
         </div>
@@ -3434,7 +3431,7 @@ input.pt-range::-moz-range-thumb,
       <div class="theme-grid">
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="default" onclick="setPlandaBearTheme('default')" aria-pressed="false"><div class="ts-preview" style="background:var(--s2)"></div><div class="ts-name">Match App</div></button>
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="glacier" onclick="setPlandaBearTheme('glacier')" aria-pressed="false"><div class="ts-preview" style="background:#08090f"></div><div class="ts-name">Glacier</div></button>
-        <button type="button" class="theme-swatch" data-plandabear-theme-choice="honey" onclick="setPlandaBearTheme('honey')" aria-pressed="false"><div class="ts-preview theme-honey-preview"></div><div class="ts-name">Honey</div></button>
+        <button type="button" class="theme-swatch" data-plandabear-theme-choice="honey" onclick="setPlandaBearTheme('honey')" aria-pressed="false"><div class="ts-preview" style="background:#ffc400"></div><div class="ts-name">Honey</div></button>
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="polar-bear" onclick="setPlandaBearTheme('polar-bear')" aria-pressed="false"><div class="ts-preview" style="background:#ffffff"></div><div class="ts-name">Polar Bear</div></button>
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="eucalyptus" onclick="setPlandaBearTheme('eucalyptus')" aria-pressed="false"><div class="ts-preview" style="background:#040d05"></div><div class="ts-name">Eucalyptus</div></button>
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="koala" onclick="setPlandaBearTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1f1f1e"></div><div class="ts-name">Koala</div></button>
@@ -3913,13 +3910,13 @@ input.pt-range::-moz-range-thumb,
       <div class="settings-sec-label">Appearance</div>
       <div class="theme-grid">
         <button type="button" class="theme-swatch" data-theme="cool" onclick="selectTheme('cool')" aria-pressed="false"><div class="ts-preview" style="background:#0a0d18"></div><div class="ts-name">Glacier</div></button>
-        <button type="button" class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')" aria-pressed="false"><div class="ts-preview theme-honey-preview"></div><div class="ts-name">Honey</div></button>
+        <button type="button" class="theme-swatch" data-theme="warm" onclick="selectTheme('warm')" aria-pressed="false"><div class="ts-preview" style="background:#ffc400"></div><div class="ts-name">Honey</div></button>
         <button type="button" class="theme-swatch" data-theme="white" onclick="selectTheme('white')" aria-pressed="false"><div class="ts-preview" style="background:#fafaf7"></div><div class="ts-name">Polar Bear</div></button>
         <button type="button" class="theme-swatch" data-theme="green" onclick="selectTheme('green')" aria-pressed="false"><div class="ts-preview" style="background:#041208"></div><div class="ts-name">Eucalyptus</div></button>
         <button type="button" class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
         <button type="button" class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
         <button type="button" class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
-        <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="selectTheme('outrangutan')" aria-pressed="false"><div class="ts-preview theme-outrangutan-preview"></div><div class="ts-name">Outrangutan</div></button>
+        <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="selectTheme('outrangutan')" aria-pressed="false"><div class="ts-preview" style="background:#ff6a00"></div><div class="ts-name">Outrangutan</div></button>
         <button type="button" class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
       </div>
     </div>
