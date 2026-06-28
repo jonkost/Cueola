@@ -45,7 +45,7 @@
   --shadow-lg: 0 12px 30px rgba(0,0,0,.32),0 4px 10px rgba(0,0,0,.18);
   --ease: cubic-bezier(.4,0,.2,1);
 }
-[data-theme="honey"],[data-theme="warm"]{--bg:#140803;--s1:#1c0c05;--s2:#241108;--s3:#30180b;--s4:#3d210f;--s5:#4a2914;--border:#3a230f;--bord2:#5a361a;--text:#fbf0db;--text2:#c8a87c;--text3:#8a6940;--accent:#e89a4f;--acg:#c87030;--green:#9bc864;--yellow:#f5c668;--red:#e85a3a;--orange:#f59538;--cyan:#5ec0d1;--purple:#c970a8}
+[data-theme="honey"],[data-theme="warm"]{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--s5:#4a3c1e;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;--cyan:#4ec9c0;--purple:#c878c0}
 [data-theme="glacier"],[data-theme="cool"]{--bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;--s5:#2b3354;--border:#1e253a;--bord2:#28304a;--text:#dde4f5;--text2:#8090b8;--text3:#46527a;--accent:#5b8df8;--acg:#7b6cf8;--green:#22d3a0;--yellow:#f5b731;--red:#f05252;--orange:#f97316;--cyan:#22d3d3;--purple:#b06ef8}
 [data-theme="snow"],[data-theme="white"]{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--s5:#c4c0b8;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--yellow:#b87000;--red:#e50000;--orange:#d65a18;--cyan:#0f8a96;--purple:#7a2f9c}
 [data-theme="eucalyptus"],[data-theme="green"]{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--s5:#244626;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;--cyan:#3dcfac;--purple:#c8d234}
@@ -733,7 +733,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <label class="field-lbl">Theme</label>
       <div class="theme-grid" id="dashboardThemeGrid">
         <button type="button" class="theme-swatch" data-dashboard-theme="cool" onclick="applyDashboardTheme('cool')" title="Glacier" aria-pressed="false"><span class="ts-preview" style="background:#08090f"></span><span class="ts-name">Glacier</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="warm" onclick="applyDashboardTheme('warm')" title="Honey" aria-pressed="false"><span class="ts-preview" style="background:#130803"></span><span class="ts-name">Honey</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="warm" onclick="applyDashboardTheme('warm')" title="Honey" aria-pressed="false"><span class="ts-preview" style="background:linear-gradient(140deg,#ffc400 0 30%,#0c0a03 30% 50%,#ffc400 50% 70%,#0c0a03 70%)"></span><span class="ts-name">Honey</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="white" onclick="applyDashboardTheme('white')" title="Polar Bear" aria-pressed="false"><span class="ts-preview" style="background:#ffffff"></span><span class="ts-name">Polar Bear</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="green" onclick="applyDashboardTheme('green')" title="Eucalyptus" aria-pressed="false"><span class="ts-preview" style="background:#040d05"></span><span class="ts-name">Eucalyptus</span></button>
         <button type="button" class="theme-swatch" data-dashboard-theme="koala" onclick="applyDashboardTheme('koala')" title="Koala" aria-pressed="false"><span class="ts-preview" style="background:#1f1f1e"></span><span class="ts-name">Koala</span></button>
@@ -754,7 +754,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
   { key:'cool', label:'Glacier', bg:'#08090f', border:'#2c3650', dot:'#7eb8c8' },
-  { key:'warm', label:'Honey', bg:'#130803', border:'#4a2b14', dot:'#c8843f' },
+  { key:'warm', label:'Honey', bg:'#0c0a03', border:'#5a4a18', dot:'#ffc400' },
   { key:'white', label:'Polar Bear', bg:'#ffffff', border:'#bdbab4', dot:'#e50000' },
   { key:'green', label:'Eucalyptus', bg:'#040d05', border:'#264a26', dot:'#7ddb33' },
   { key:'koala', label:'Koala', bg:'#1f1f1e', border:'#494949', dot:'#ffffff' },

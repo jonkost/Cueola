@@ -6086,7 +6086,7 @@ let ptClockInterval = null;
 const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD|TECHNICAL DIFFICULTIES)(?:[^\]]*)\]/i;
 
 const PT_THEMES = {
-  warm:     { bg:'#130803', text:'#f5ead8', accent:'#c8843f', uiBg:'rgba(24,11,4,.92)',     uiBorder:'rgba(200,132,63,.25)' },
+  warm:     { bg:'#0c0a03', text:'#fdf6e3', accent:'#ffc400', uiBg:'rgba(28,22,8,.92)',     uiBorder:'rgba(255,196,0,.30)' },
   cool:     { bg:'#08090f', text:'#d6e8f0', accent:'#7eb8c8', uiBg:'rgba(15,15,25,.92)',    uiBorder:'rgba(126,184,200,.25)' },
   white:    { bg:'#ffffff', text:'#000000', accent:'#e50000', uiBg:'rgba(255,255,255,.95)', uiBorder:'rgba(229,0,0,.20)' },
   green:    { bg:'#040d05', text:'#e8f5d5', accent:'#7ddb33', uiBg:'rgba(7,19,8,.92)',      uiBorder:'rgba(125,219,51,.25)' },
