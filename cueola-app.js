@@ -5927,6 +5927,64 @@ function renderLivePrompterControls() {
   renderPromptOpClockPreview();
 }
 
+// ── Script Op pop-out controls ─────────────────────────────────────────────
+// "Pop out" floats the whole Script Op panel into a movable, resizable window
+// so the operator keeps a lot of controls at the ready. We toggle a class on
+// the sidebar in place (no DOM moving), so every .ls-sidebar-scoped control
+// rule keeps applying and renderLivePrompterControls() still works unchanged.
+function toggleScriptOpPopout() {
+  const sidebar = document.getElementById('lsSidebar');
+  if (!sidebar) return;
+  sidebar.classList.contains('is-popped') ? dockScriptOpPopout() : openScriptOpPopout();
+}
+
+function openScriptOpPopout() {
+  const sidebar = document.getElementById('lsSidebar');
+  if (!sidebar) return;
+  sidebar.classList.add('is-popped');
+  const btn = document.getElementById('lsPopoutBtn');
+  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Dock'); btn.classList.add('active'); }
+}
+
+function dockScriptOpPopout() {
+  const sidebar = document.getElementById('lsSidebar');
+  if (!sidebar) return;
+  sidebar.classList.remove('is-popped');
+  // Clear any drag-applied inline position so it re-docks cleanly.
+  sidebar.style.left = sidebar.style.top = sidebar.style.right = '';
+  const btn = document.getElementById('lsPopoutBtn');
+  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Pop out'); btn.classList.remove('active'); }
+}
+
+let _soPopoutDrag = null;
+function startScriptOpPopoutDrag(e) {
+  const sidebar = document.getElementById('lsSidebar');
+  // Only drag when popped out, and never when starting on an interactive control.
+  if (!sidebar || !sidebar.classList.contains('is-popped')) return;
+  if (e.target.closest && e.target.closest('button,input,textarea,select,a')) return;
+  const r = sidebar.getBoundingClientRect();
+  _soPopoutDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+  sidebar.style.left = r.left + 'px';
+  sidebar.style.top  = r.top + 'px';
+  sidebar.style.right = 'auto';
+  window.addEventListener('pointermove', _soPopoutMove);
+  window.addEventListener('pointerup', _soPopoutEnd);
+  e.preventDefault();
+}
+function _soPopoutMove(e) {
+  const sidebar = document.getElementById('lsSidebar');
+  if (!sidebar || !_soPopoutDrag) return;
+  const x = Math.max(6, Math.min(window.innerWidth  - 80, e.clientX - _soPopoutDrag.dx));
+  const y = Math.max(6, Math.min(window.innerHeight - 56, e.clientY - _soPopoutDrag.dy));
+  sidebar.style.left = x + 'px';
+  sidebar.style.top  = y + 'px';
+}
+function _soPopoutEnd() {
+  _soPopoutDrag = null;
+  window.removeEventListener('pointermove', _soPopoutMove);
+  window.removeEventListener('pointerup', _soPopoutEnd);
+}
+
 async function pushToPrompter() {
   const el = livePrompterEditor();
   if (el) adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
@@ -7490,12 +7548,12 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
       <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
         ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday')}
         ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration')}
-        ${btn('content.calendar', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
+        ${btn('time.clock', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
         ${btn('media.stop', 'Hide', send('clock_off'), false)}
       </div>
       <div class="flow-clock-fields">
         <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="5" aria-label="Duration minutes"${dis}></label>
-        <label class="flow-clock-field"><span>${sfIcon('content.calendar')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
+        <label class="flow-clock-field"><span>${sfIcon('time.clock')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
       </div>
     </div>
     <div class="flow-control-section flow-wrap-section">

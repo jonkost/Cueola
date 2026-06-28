@@ -2241,21 +2241,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   color:var(--text3);
 }
 .ls-sidebar .flow-control-cue .pt-live-cue .pt-ctrl-label{display:none}
-.flow-control-cue input[type="range"]{
-  height:34px;
-  min-height:34px;
-}
-.flow-control-cue input[type="range"]::-webkit-slider-runnable-track{
-  height:11px;
-  border-radius:999px;
-  background:
-    repeating-linear-gradient(90deg,color-mix(in srgb,var(--pt-accent,var(--accent)) 30%,transparent) 0 1px,transparent 1px 12px),
-    color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.14));
-}
-.flow-control-cue input[type="range"]::-moz-range-track{
-  height:11px;
-  background:color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.14));
-}
+/* Cue scrubber uses the same clean slider styling as Speed/Size. */
 .flow-control-title{display:flex;align-items:center;min-height:16px}
 .flow-control-slider{
   grid-template-columns:minmax(46px,auto) 38px minmax(0,1fr) 38px!important;
@@ -2323,6 +2309,53 @@ input.pt-range::-moz-range-thumb,
 @media(max-width:760px){
   .ls-sidebar{width:100%;max-width:none}
   .ls-live-actions{grid-template-columns:1fr}
+}
+
+/* Script Op: reorganized controls + pop-out controls panel */
+.ls-sidebar-head-row{display:flex;align-items:center;gap:8px}
+.ls-popout-btn{
+  margin-left:auto;display:inline-flex;align-items:center;gap:6px;
+  min-height:30px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--liquid-edge);
+  background:color-mix(in srgb,var(--s2) 62%,transparent);
+  color:var(--text2);font-family:var(--sans);font-size:11px;font-weight:800;
+  letter-spacing:0;cursor:pointer;white-space:nowrap;
+}
+.ls-popout-btn .sf-symbol{font-size:12px}
+.ls-popout-btn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 42%,var(--liquid-edge));background:color-mix(in srgb,var(--accent) 10%,var(--s2))}
+/* Formatting moved into the drawer: wrapping chip row */
+.ls-format-cascade{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+/* Keep the drawer the single scroll region and reachable to the very bottom */
+.ls-sidebar-head,.ls-editor-actions{flex:0 0 auto}
+.ls-operator-drawer{flex:1 1 auto;min-height:0;overflow-y:auto;padding-bottom:26px}
+/* Pop out: float the whole Script Op panel into a movable/resizable window.
+   We restyle the sidebar in place (rather than moving its DOM) so every
+   .ls-sidebar-scoped control rule keeps applying and the layout stays intact. */
+.ls-sidebar.is-popped{
+  position:fixed;z-index:600;
+  top:80px;right:36px;left:auto;
+  width:min(820px,92vw);height:min(660px,82vh);
+  max-width:none;
+  border:1px solid var(--liquid-edge);border-radius:18px;
+  box-shadow:0 36px 90px rgba(0,0,0,.55),inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent);
+  resize:both;overflow:hidden;
+}
+.ls-sidebar.is-popped .ls-sidebar-head{cursor:move;touch-action:none}
+.ls-body:has(.ls-sidebar.is-popped) .ls-resizer{display:none}
+.ls-popout-btn.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,var(--liquid-edge));background:color-mix(in srgb,var(--accent) 12%,var(--s2))}
+/* With the extra width, flow the control groups into responsive columns.
+   align-items:start + min-content rows let each card take its natural height
+   (no equal-row clipping); the drawer itself scrolls if it overflows. */
+.ls-sidebar.is-popped .ls-operator-drawer{
+  display:grid;align-content:start;align-items:start;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  grid-auto-rows:min-content;
+  gap:10px;
+}
+.ls-sidebar.is-popped .ls-operator-drawer > .ls-disclosure{overflow:visible}
+.ls-sidebar.is-popped .ls-operator-drawer > .ls-prompter-actions{grid-column:1/-1}
+@media(max-width:600px){
+  .ls-sidebar.is-popped{top:10px;right:10px;left:10px;width:auto;height:88vh}
 }
 
 /* Script edit overlay */
@@ -2959,15 +2992,21 @@ input.pt-range::-moz-range-thumb,
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-resizer" id="lsResizer" onpointerdown="startLivePanelResize(event)"></div>
     <div class="ls-sidebar" id="lsSidebar">
-      <div class="ls-sidebar-head">
-        <div class="ls-sidebar-title">Script Op</div>
+      <div class="ls-sidebar-head" id="lsSidebarHead" onpointerdown="startScriptOpPopoutDrag(event)">
+        <div class="ls-sidebar-head-row">
+          <div class="ls-sidebar-title">Script Op</div>
+          <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Pop out</span></button>
+        </div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <div class="ls-editor-actions">
-        <details class="ls-script-toolbar ls-format-menu" aria-label="Formatting and markers">
-          <summary><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span><span>Formatting and markers</span><span class="sf-symbol ls-menu-chev" data-symbol="action.expand" aria-hidden="true"></span></summary>
-          <div class="ls-format-menu-body">
+        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
+      </div>
+      <div class="ls-operator-drawer" id="lsOperatorDrawer">
+        <details class="ls-disclosure ls-cascade" id="lsFormatDisclosure">
+          <summary><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span><span>Formatting &amp; Markers</span></summary>
+          <div class="ls-cascade-body ls-format-cascade" aria-label="Formatting and markers">
             <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" title="Bold (⌘B)" aria-label="Bold"><strong>B</strong></button>
             <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" title="Italic (⌘I)" aria-label="Italic"><em>I</em></button>
             <span class="fmt-sep"></span>
@@ -2979,9 +3018,6 @@ input.pt-range::-moz-range-thumb,
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
           </div>
         </details>
-        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
-      </div>
-      <div class="ls-operator-drawer">
         <details class="ls-disclosure ls-cascade" id="lsTransportDisclosure" open>
           <summary><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Prompter Transport</span></summary>
           <div class="ls-cascade-body" id="lsPrompterRemote"></div>
