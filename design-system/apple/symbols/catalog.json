@@ -11,6 +11,9 @@
     },
     {
       "file": "cueola-symbol-import"
+    },
+    {
+      "file": "cueola-user-symbols-20260628"
     }
   ],
   "metadataSource": {
@@ -53,7 +56,7 @@
     "weather": "Weather",
     "whatsnew": "What\u2019s New"
   },
-  "symbolCount": 129,
+  "symbolCount": 138,
   "aliasCount": 1,
   "symbols": [
     {
@@ -438,7 +441,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.nudge.back"
+      ],
       "availability": "2022",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.left.svg",
@@ -483,7 +488,9 @@
       "cueolaTags": [
         "action:navigation"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.nudge.forward"
+      ],
       "availability": "2022",
       "directionalCandidate": true,
       "sourcePath": "source/arrows/arrowshape.right.svg",
@@ -1027,6 +1034,50 @@
         "master": "Regular-S",
         "viewBox": "0.819 -79.003 88.651 88.609",
         "pathCount": 3,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "bookmark",
+      "displayName": "Bookmark",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.bookmark"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/bookmark.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/bookmark.svg",
+      "sha256": "04430fc245049d51dbd30d21ff475aae2ba7e8a25ef79ce22b1cb79f3853adf8",
+      "aliases": [],
+      "template": {
+        "glyph": "10025E",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from bookmark",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "12.083 -78.933 56.743 87.261",
+        "pathCount": 1,
         "rendering": "monochrome-mask"
       },
       "distributionStatus": "review-required"
@@ -2541,6 +2592,52 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "gear",
+      "displayName": "Gear",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "action:settings"
+      ],
+      "semanticNames": [
+        "action.settings"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/gear.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/gear.svg",
+      "sha256": "28f1c01a5fe5a784aa00f5fd98f38152faf1d7ddb1ddc1b48c1f3875fc0434f0",
+      "aliases": [],
+      "template": {
+        "glyph": "10035F",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from gear",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.614 -81.86 93.311 93.311",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "gearshape",
       "displayName": "Gearshape",
       "primaryCategory": "objectsandtools",
@@ -2554,9 +2651,7 @@
       "cueolaTags": [
         "action:settings"
       ],
-      "semanticNames": [
-        "action.settings"
-      ],
+      "semanticNames": [],
       "availability": "2020",
       "directionalCandidate": false,
       "sourcePath": "source/objectsandtools/gearshape.svg",
@@ -3727,7 +3822,6 @@
       "displayName": "Paperclip",
       "primaryCategory": "objectsandtools",
       "appleCategories": [
-        "multicolor",
         "objectsandtools"
       ],
       "keywords": [
@@ -4428,6 +4522,52 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "questionmark.folder",
+      "displayName": "Questionmark Folder",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "content:help"
+      ],
+      "semanticNames": [
+        "content.missing-folder"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/questionmark.folder.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/questionmark.folder.svg",
+      "sha256": "2c29dc6d09c07e05bbb89c895c2947dc27237b0cb3d28659ba5d3238c74a5f25",
+      "aliases": [],
+      "template": {
+        "glyph": "100B14",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from questionmark.folder",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.577 -73.087 91.926 75.178",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "quote.bubble",
       "displayName": "Quote Bubble",
       "primaryCategory": "textformatting",
@@ -4566,18 +4706,63 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "repeat",
+      "displayName": "Repeat",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.repeat"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/repeat.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/repeat.svg",
+      "sha256": "94574eb71a9dbc1bfe479e43b87df66c63943260b5cb2bf880948f070dec0f1b",
+      "aliases": [],
+      "template": {
+        "glyph": "10029E",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from repeat",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.67 -71.92 88.03 73.43",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "scissors",
       "displayName": "Scissors",
       "primaryCategory": "editing",
       "appleCategories": [
-        "editing",
-        "objectsandtools"
+        "editing"
       ],
       "keywords": [
         "cut"
       ],
       "cueolaTags": [],
-      "semanticNames": [],
+      "semanticNames": [
+        "action.scissors"
+      ],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/editing/scissors.svg",
@@ -4802,6 +4987,144 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "speaker.minus",
+      "displayName": "Speaker Minus",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:audio"
+      ],
+      "semanticNames": [
+        "action.volume.down"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/media/speaker.minus.svg",
+      "runtimePath": "runtime/regular-small/media/speaker.minus.svg",
+      "sha256": "f18060699ff725d6f7e6edc6c891e29b6d8c824bcae639b94b1b1aff065a4971",
+      "aliases": [],
+      "template": {
+        "glyph": "10170C",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from speaker.minus",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.383 -71.768 100.078 73.125",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "speaker.plus",
+      "displayName": "Speaker Plus",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:audio"
+      ],
+      "semanticNames": [
+        "action.volume.up"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/media/speaker.plus.svg",
+      "runtimePath": "runtime/regular-small/media/speaker.plus.svg",
+      "sha256": "dad71bc3a245c05f9fb439ea8b1061c6363214720e8589b2767c22ff1a399909",
+      "aliases": [],
+      "template": {
+        "glyph": "10170A",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from speaker.plus",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.4 -71.751 99.361 73.091",
+        "pathCount": 2,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "speaker.slash",
+      "displayName": "Speaker Slash",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:audio"
+      ],
+      "semanticNames": [
+        "action.volume.mute"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/media/speaker.slash.svg",
+      "runtimePath": "runtime/regular-small/media/speaker.slash.svg",
+      "sha256": "3e7bcd91ece3e1c36c03167fd2b724a72353a515e47e5795cc099c241e37d4b3",
+      "aliases": [],
+      "template": {
+        "glyph": "101B2B",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from speaker.slash",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "-2.513 -76.231 87.081 87.069",
+        "pathCount": 3,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "square.and.arrow.up",
       "displayName": "Square And Arrow Up",
       "primaryCategory": "arrows",
@@ -4899,8 +5222,8 @@
       "distributionStatus": "review-required"
     },
     {
-      "name": "square.grid.4x3.fill",
-      "displayName": "Square Grid 4x3 Fill",
+      "name": "square.grid.3x3",
+      "displayName": "Square Grid 3x3",
       "primaryCategory": "objectsandtools",
       "appleCategories": [
         "objectsandtools"
@@ -4912,6 +5235,50 @@
       "semanticNames": [
         "action.grid"
       ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/square.grid.3x3.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/square.grid.3x3.svg",
+      "sha256": "0a5f1b79170952baa02ee8f137b8fb38fe3167db02b558e73795d7664026c71c",
+      "aliases": [],
+      "template": {
+        "glyph": "1009B2",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from square.grid.3x3",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "7.888 -74.241 78.853 77.778",
+        "pathCount": 9,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
+      "name": "square.grid.4x3.fill",
+      "displayName": "Square Grid 4x3 Fill",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:graphics"
+      ],
+      "semanticNames": [],
       "availability": "2019",
       "directionalCandidate": false,
       "sourcePath": "source/objectsandtools/square.grid.4x3.fill.svg",
@@ -5883,13 +6250,56 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "waveform.circle",
+      "displayName": "Waveform Circle",
+      "primaryCategory": "media",
+      "appleCategories": [
+        "media"
+      ],
+      "keywords": [],
+      "cueolaTags": [
+        "department:audio"
+      ],
+      "semanticNames": [
+        "media.waveform"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/media/waveform.circle.svg",
+      "runtimePath": "runtime/regular-small/media/waveform.circle.svg",
+      "sha256": "a12d26f7e459e06976cdd2e9b8837bcc60337442a089bd5d3de00db46cc7a02d",
+      "aliases": [],
+      "template": {
+        "glyph": "100788",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from waveform.circle",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "4.865 -76.63 82.8 82.751",
+        "pathCount": 7,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "waveform.low",
       "displayName": "Waveform Low",
       "primaryCategory": "media",
       "appleCategories": [
-        "communication",
-        "maps",
-        "variable",
         "media"
       ],
       "keywords": [
@@ -5899,7 +6309,9 @@
       "cueolaTags": [
         "department:audio"
       ],
-      "semanticNames": [],
+      "semanticNames": [
+        "media.waveform.low"
+      ],
       "availability": "2025",
       "directionalCandidate": false,
       "sourcePath": "source/media/waveform.low.svg",

@@ -1,5 +1,5 @@
 /* ============================================================================
- * Outangutan 🦧 — web playback & cue system for Cueola.
+ * Outrangutan 🦧 — web playback & cue system for Cueola.
  *
  * PHASE 1 (MVP playback): ordered cue list (Video + Audio), media → IndexedDB
  * (local-first, no server), transport (GO/Stop/Pause) with pre-wait + continue
@@ -20,16 +20,16 @@
  *   • Playback / SFX tabs.
  *
  * Same stack as the rest of Cueola: vanilla JS global script, theme tokens, the
- * `enterX()` screen pattern. Self-contained in /outangutan.
+ * `enterX()` screen pattern. Self-contained in /outrangutan.
  * Build for Chromium (Chrome/Edge) first; degrade gracefully elsewhere.
  * ==========================================================================*/
 (function () {
   'use strict';
 
   // ── constants ──────────────────────────────────────────────────────────
-  const DB_NAME = 'outangutan', DB_VER = 1;
+  const DB_NAME = 'outrangutan', DB_VER = 1;
   const MEDIA_STORE = 'media', SHOW_STORE = 'show', SHOW_KEY = 'current';
-  const OUTPUT_CHANNEL = 'outangutan-output';
+  const OUTPUT_CHANNEL = 'outrangutan-output';
   const SCHEMA = 3;
   const PAD_COUNT = 12;          // SFX board slots (3 × 4)
   const PAD_KEYS = ['1','2','3','4','5','6','7','8','9','0','q','w'];
@@ -51,6 +51,17 @@
     fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
+  const THEME_ORDER = ['cool','warm','white','green','koala','panda','flamingo','outrangutan','prepbear'];
+  const THEME_LABELS = {
+    cool:'Glacier', warm:'Honey', white:'Polar Bear', green:'Eucalyptus',
+    koala:'Koala', panda:'Planda Bear', flamingo:'Flowmingo',
+    outrangutan:'Outrangutan', prepbear:'PrepBear',
+  };
+  const THEME_PREVIEWS = {
+    cool:'#0a0d18', warm:'#140803', white:'#fafaf7', green:'#041208',
+    koala:'#1c1c1b', panda:'#000000', flamingo:'#0e0410',
+    outrangutan:'#ff7a1a', prepbear:'#080a14',
+  };
 
   // ── state ──────────────────────────────────────────────────────────────
   let built = false;
@@ -61,6 +72,7 @@
   let selectedId = null;         // standby cue
   let selectedPadId = null;      // pad in the SFX inspector
   let settings = DEFAULT_SETTINGS();
+  let themeObserver = null;
 
   let active = null;             // { cue, kind, deck:'a'|'b'|'audio', el, ch } — running program cue
   let preTimer = null, preInfo = null;
@@ -92,11 +104,51 @@
   const $ = (id) => document.getElementById(id);
   const rid = (p) => p + Math.random().toString(36).slice(2, 9);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  function toast(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} console.log('[outangutan]', msg); }
+  function toast(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} console.log('[outrangutan]', msg); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function fmtClock(sec) { sec = Math.max(0, sec || 0); const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
+  function currentCueolaTheme() {
+    return document.documentElement.getAttribute('data-theme') || localStorage.getItem('cueola_theme') || 'cool';
+  }
+  function renderThemeControl() {
+    const current = THEME_ORDER.includes(currentCueolaTheme()) ? currentCueolaTheme() : 'cool';
+    const label = $('og-theme-label');
+    const list = $('og-theme-options');
+    if (label) label.textContent = THEME_LABELS[current] || 'Theme';
+    if (!list) return;
+    list.innerHTML = THEME_ORDER.map(name => {
+      const active = name === current;
+      const previewClass = name === 'outrangutan' ? ' ts-preview theme-outrangutan-preview' : 'ts-preview';
+      const style = name === 'outrangutan' ? '' : ' style="background:' + esc(THEME_PREVIEWS[name] || '#222') + '"';
+      return '<button type="button" class="theme-swatch' + (active ? ' active' : '') + '" data-theme="' + name + '" aria-pressed="' + (active ? 'true' : 'false') + '">'
+        + '<div class="' + previewClass + '"' + style + '></div>'
+        + '<div class="ts-name">' + esc(THEME_LABELS[name] || name) + '</div>'
+      + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.theme-swatch'), btn => {
+      btn.onclick = () => setCueolaThemeFromOutrangutan(btn.getAttribute('data-theme'));
+    });
+  }
+  function setCueolaThemeFromOutrangutan(name) {
+    if (!THEME_ORDER.includes(name)) return;
+    if (typeof window.selectTheme === 'function') window.selectTheme(name);
+    else {
+      document.documentElement.setAttribute('data-theme', name);
+      try { localStorage.setItem('cueola_theme', name); } catch (e) {}
+    }
+    renderThemeControl();
+    const menu = $('og-theme-menu');
+    if (menu) menu.open = false;
+  }
+  function watchCueolaTheme() {
+    if (themeObserver) return;
+    try {
+      themeObserver = new MutationObserver(renderThemeControl);
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    } catch (e) {}
+  }
 
   // curve shaping shared by audio + opacity fades
   function curveK(k, curve) { k = clamp(k, 0, 1); if (curve === 's') return k * k * (3 - 2 * k); if (curve === 'log') return Math.pow(k, 2.2); return k; }
@@ -357,8 +409,8 @@
     let feats = 'width=1280,height=720';
     const scr = (o.screenId != null && screensCache) ? screensCache.find(s => s.id === o.screenId) : null;
     if (scr) feats = 'left=' + scr.availLeft + ',top=' + scr.availTop + ',width=' + scr.availWidth + ',height=' + scr.availHeight;
-    const win = window.open('outangutan/output.html#out=' + o.id, 'outangutanOutput' + o.id, feats);
-    if (!win) { toast('Output window blocked — allow pop-ups for Outangutan.'); return; }
+    const win = window.open('outrangutan/output.html#out=' + o.id, 'outrangutanOutput' + o.id, feats);
+    if (!win) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return; }
     outputWins.set(o.id, { win, alive: false, identify: false });
     toast(scr ? ('Opened ' + o.label + ' on ' + scr.label + '.') : ('Opened ' + o.label + '. Drag it to a display, then fullscreen it.'));
     setTimeout(() => { sendOut({ t: 'ping' }, o.id); if (scr) tryFullscreen(win); }, 600);
@@ -546,6 +598,54 @@
   // ── Stream Deck panel ─────────────────────────────────────────────────────
   function openSdPanel() { $('og-sd').classList.add('on'); renderStreamDeck(); }
   function closeSdPanel() { $('og-sd').classList.remove('on'); }
+
+  // ── Integrations panel (OBS · Dropbox · Transcode) — Phase 5 ─────────────
+  function openIntegrations() { $('og-integrations').classList.add('on'); renderIntegrations(); }
+  function closeIntegrations() { $('og-integrations').classList.remove('on'); }
+  function renderIntegrations() {
+    const body = $('og-integrations-body'); if (!body) return;
+    // OBS
+    const obsConn = obs.connected;
+    const sceneBtns = obs.scenes.map(s => '<button class="og-bar-btn og-obs-scene' + (s === obs.current ? ' on' : '') + '" data-scene="' + esc(s) + '">' + esc(s) + '</button>').join('') || '<span class="og-out-note">No scenes — connect to load.</span>';
+    const obsHTML =
+      '<div class="og-intg-sect"><div class="og-intg-head">' + sym('content.display') + ' OBS Studio <span class="og-out-note">obs-websocket v5</span><span class="og-out-dot' + (obsConn ? ' live' : '') + '" style="margin-left:auto"></span></div>'
+      + (obsConn
+        ? '<div class="og-obs-scenes">' + sceneBtns + '</div>'
+          + '<div class="og-intg-row">'
+            + '<button class="og-bar-btn' + (obs.streaming ? ' on' : '') + '" id="og-obs-stream">' + (obs.streaming ? 'Stop Stream' : 'Start Stream') + '</button>'
+            + '<button class="og-bar-btn' + (obs.recording ? ' on' : '') + '" id="og-obs-record">' + (obs.recording ? 'Stop Record' : 'Start Record') + '</button>'
+            + '<button class="og-bar-btn danger" id="og-obs-disc">Disconnect</button>'
+          + '</div>'
+        : '<div class="og-intg-row"><input class="og-intg-in" id="og-obs-host" placeholder="host" value="' + esc(obs.cfg.host) + '"><input class="og-intg-in og-intg-port" id="og-obs-port" placeholder="4455" value="' + obs.cfg.port + '"><input class="og-intg-in" id="og-obs-pw" type="password" placeholder="password" value="' + esc(obs.cfg.password) + '"><button class="og-bar-btn" id="og-obs-conn"' + (('WebSocket' in window) ? '' : ' disabled') + '>Connect</button></div>')
+      + '<p class="og-sheet-note">Enable in OBS: <code>Tools ▸ WebSocket Server Settings</code>. Per-cue OBS actions (switch scene / start-stop record &amp; stream) are set in the cue Inspector; a cue can also fire when OBS switches to a named scene.</p></div>';
+    // Dropbox
+    const fileRows = dbx.files.map(f => '<div class="og-dbx-file"><span class="og-dbx-name">' + esc(f.name) + '</span><button class="og-bar-btn og-dbx-pull" data-path="' + esc(f.path_lower || f.path_display) + '" data-name="' + esc(f.name) + '">Pull</button></div>').join('');
+    const dbxHTML =
+      '<div class="og-intg-sect"><div class="og-intg-head">' + sym('action.down') + ' Dropbox</div>'
+      + '<div class="og-intg-row"><input class="og-intg-in" id="og-dbx-token" type="password" placeholder="access token" value="' + esc(dbx.token) + '"><input class="og-intg-in" id="og-dbx-folder" placeholder="/folder (blank = root)" value="' + esc(dbx.folder) + '"><button class="og-bar-btn" id="og-dbx-list">List media</button></div>'
+      + (fileRows ? '<div class="og-dbx-files">' + fileRows + '<button class="og-bar-btn og-dbx-pullall" id="og-dbx-pullall">Pull all ' + dbx.files.length + '</button></div>' : '')
+      + '<p class="og-sheet-note">Paste a Dropbox <em>access token</em> (from a Dropbox app). Full OAuth needs a registered redirect — deferred. Files download into local cues (IndexedDB).</p></div>';
+    // Transcode
+    const intgHTML =
+      '<div class="og-intg-sect"><div class="og-intg-head">' + sym('action.settings') + ' Transcode on upload</div>'
+      + '<label class="og-check"><input type="checkbox" id="og-transcode"' + (settings.transcode ? ' checked' : '') + '> Normalize non-web-playable uploads to H.264 MP4 (ffmpeg.wasm)</label>'
+      + '<p class="og-sheet-note">When on, dropping a .mov/.mkv/etc. transcodes it in-browser (ffmpeg.wasm, ~30&nbsp;MB, lazy-loaded) before it becomes a cue. ProRes/DNxHD &amp; large jobs belong to the future native engine; this always falls back to storing as-is.</p></div>';
+    body.innerHTML = obsHTML + dbxHTML + intgHTML;
+
+    const on = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
+    on('og-obs-conn', 'onclick', () => obsConnect($('og-obs-host').value.trim(), parseInt($('og-obs-port').value, 10) || 4455, $('og-obs-pw').value));
+    on('og-obs-disc', 'onclick', () => { obsDisconnect(); renderIntegrations(); });
+    on('og-obs-stream', 'onclick', () => obsReq(obs.streaming ? 'StopStream' : 'StartStream'));
+    on('og-obs-record', 'onclick', () => obsReq(obs.recording ? 'StopRecord' : 'StartRecord'));
+    Array.prototype.forEach.call(body.querySelectorAll('.og-obs-scene'), b => { b.onclick = () => obsReq('SetCurrentProgramScene', { sceneName: b.getAttribute('data-scene') }); });
+    on('og-dbx-token', 'onchange', e => { dbx.token = e.target.value.trim(); });
+    on('og-dbx-folder', 'onchange', e => { dbx.folder = e.target.value.trim(); });
+    on('og-dbx-list', 'onclick', () => { dbx.token = $('og-dbx-token').value.trim(); dbx.folder = $('og-dbx-folder').value.trim(); dropboxList(); });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-dbx-pull'), b => { b.onclick = () => dropboxPull(b.getAttribute('data-path'), b.getAttribute('data-name')); });
+    on('og-dbx-pullall', 'onclick', () => { dbx.files.forEach(f => dropboxPull(f.path_lower || f.path_display, f.name)); });
+    on('og-transcode', 'onchange', e => { settings.transcode = e.target.checked; scheduleSave(); if (e.target.checked) loadFFmpeg(); });
+  }
+
   function renderStreamDeck() {
     const body = $('og-sd-body'); if (!body) return;
     const connected = !!sd, keys = connected ? sd.model.keys : 15, cols = connected ? sd.model.cols : 5;
@@ -575,12 +675,12 @@
 
   // ── Cueola session sync (Phase 4) ────────────────────────────────────────
   // When joined to a session, ride the existing Firestore session doc as a bus:
-  //   • LISTEN for `outangutan.command` (the rundown's playback cue fires us);
-  //   • PUBLISH a lightweight cue-list summary (`outangutan.cues`, no media blobs)
-  //     and live transport (`outangutan.live`) so the rundown auto-populates.
+  //   • LISTEN for `outrangutan.command` (the rundown's playback cue fires us);
+  //   • PUBLISH a lightweight cue-list summary (`outrangutan.cues`, no media blobs)
+  //     and live transport (`outrangutan.live`) so the rundown auto-populates.
   // Strictly an overlay — every transport path fires LOCALLY first (live-critical
   // never blocks on the network); sync is best-effort and survives a drop.
-  const OG_SENDER = 'outangutan_' + Math.random().toString(36).slice(2, 9);
+  const OG_SENDER = 'outrangutan_' + Math.random().toString(36).slice(2, 9);
   let sessionSub = null;          // onSnapshot unsubscribe
   let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
   let pubTimer = null, lastLiveTs = 0;
@@ -597,7 +697,7 @@
   function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } lastCmdId = null; }
 
   function onSessionDoc(d) {
-    const cmd = d && d.outangutan && d.outangutan.command;
+    const cmd = d && d.outrangutan && d.outrangutan.command;
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
     if (cmd.ts && Date.now() - cmd.ts > 30000) return;          // ignore stale commands
@@ -613,7 +713,7 @@
       case 'cue': {
         const c = cueById(cmd.cueId) || cues.find(x => String(x.num) === String(cmd.cueId));
         if (c) { selectedId = c.id; go(); }
-        else toast('Rundown fired a cue Outangutan doesn’t have on this device (' + cmd.cueId + ').');
+        else toast('Rundown fired a cue Outrangutan doesn’t have on this device (' + cmd.cueId + ').');
         break;
       }
       default: return;
@@ -629,7 +729,7 @@
       pubTimer = null;
       const map = {};
       cues.forEach(c => { map[c.id] = { num: c.num, name: c.name, type: c.type, dur: Math.round(c.duration || 0) }; });
-      try { window._updateDoc(sessionRef(), { 'outangutan.cues': map, 'outangutan.cuesTs': Date.now(), 'outangutan.sender': OG_SENDER }); } catch (e) {}
+      try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }); } catch (e) {}
     }, 400);
   }
   // publish live transport (throttled) — feeds the rundown cell's name/dur/status/thumb
@@ -645,7 +745,7 @@
       const remaining = Math.max(0, (end || 0) - el.currentTime);
       live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
     }
-    try { window._updateDoc(sessionRef(), { 'outangutan.live': live }); } catch (e) {}
+    try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }); } catch (e) {}
   }
 
   // ── Phase 5: scopes (waveform monitor + vectorscope) ─────────────────────
@@ -726,7 +826,7 @@
   function makeKeyer(canvas) {
     const gl = canvas.getContext('webgl', { premultipliedAlpha: false }) || canvas.getContext('experimental-webgl');
     if (!gl) return null;
-    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) { console.warn('[outangutan] key shader', gl.getShaderInfoLog(o)); return null; } return o; };
+    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) { console.warn('[outrangutan] key shader', gl.getShaderInfoLog(o)); return null; } return o; };
     const vs = sh(gl.VERTEX_SHADER, KEY_VERT), fs = sh(gl.FRAGMENT_SHADER, KEY_FRAG);
     if (!vs || !fs) return null;
     const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
@@ -1180,6 +1280,28 @@
         '</div>' +
         field('Output', '<select id="og-i-output">' + outputs.map(o => opt(o.id, o.label, c.output || 1)).join('') + '</select>')
         : field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>')) +
+      // ── Key (video only)
+      (c.type === 'video' ? (function () { const k = c.key || (c.key = { mode: 'off', color: '#00b140', sim: 0.3, smooth: 0.1, bg: '#000000' });
+        return sub('Key') +
+          '<div class="og-field-row">' +
+            field('Mode', '<select id="og-i-keymode">' + opt('off', 'Off', k.mode) + opt('chroma', 'Chroma', k.mode) + opt('luma', 'Luma', k.mode) + opt('alpha', 'Alpha (WebM)', k.mode) + '</select>') +
+            field('Key colour', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
+          '</div>' +
+          '<div class="og-field-row">' +
+            field('Similarity', '<input id="og-i-keysim" type="range" min="0" max="1" step="0.01" value="' + (k.sim == null ? 0.3 : k.sim) + '">') +
+            field('Smoothness', '<input id="og-i-keysmooth" type="range" min="0" max="0.5" step="0.01" value="' + (k.smooth == null ? 0.1 : k.smooth) + '">') +
+          '</div>' +
+          field('Background', '<input id="og-i-keybg" type="color" value="' + (k.bg || '#000000') + '">');
+      })() : '') +
+      // ── OBS (any cue)
+      (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
+        return sub('OBS') +
+          '<div class="og-field-row">' +
+            field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
+            (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : field('Fire on scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">')) +
+          '</div>' +
+          (ob.action === 'scene' ? field('Fire on OBS scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">') : '');
+      })() +
       // ── meta
       sub('Cue') +
       field('Color', '<div class="og-swatches">' + ['var(--video)', 'var(--green)', 'var(--red)', 'var(--yellow)', 'var(--purple)', 'var(--cyan)'].map(col =>
@@ -1210,6 +1332,16 @@
     bind('og-i-posx', 'onchange', e => { c.posX = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
     bind('og-i-posy', 'onchange', e => { c.posY = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
     bind('og-i-output', 'onchange', e => { c.output = parseInt(e.target.value, 10) || 1; scheduleSave(); });
+    // keying (live: the key loop reads c.key each frame; mode change starts/stops it; output mirrors)
+    const keyOut = () => { if (active && active.cue.id === c.id && active.kind === 'video') sendOut({ t: 'key', key: c.key }, c.output || 1); };
+    bind('og-i-keymode', 'onchange', e => { c.key.mode = e.target.value; renderInspector(); if (active && active.cue.id === c.id) applyKeyForActive(); else keyOut(); scheduleSave(); });
+    bind('og-i-keycolor', 'oninput', e => { c.key.color = e.target.value; keyOut(); scheduleSave(); });
+    bind('og-i-keysim', 'oninput', e => { c.key.sim = parseFloat(e.target.value); keyOut(); scheduleSave(); });
+    bind('og-i-keysmooth', 'oninput', e => { c.key.smooth = parseFloat(e.target.value); keyOut(); scheduleSave(); });
+    bind('og-i-keybg', 'oninput', e => { c.key.bg = e.target.value; keyOut(); scheduleSave(); });
+    bind('og-i-obsaction', 'onchange', e => { c.obs.action = e.target.value; renderInspector(); scheduleSave(); });
+    bind('og-i-obsscene', 'onchange', e => { c.obs.scene = e.target.value; scheduleSave(); });
+    bind('og-i-obstrigger', 'onchange', e => { c.obsTriggerScene = e.target.value; scheduleSave(); });
     bind('og-i-armed', 'onchange', e => { c.armed = e.target.value === '1'; renderCueList(); scheduleSave(); });
     bind('og-i-notes', 'oninput', e => { c.notes = e.target.value; scheduleSave(); });
     bind('og-i-del', 'onclick', () => deleteCue(c.id));
@@ -1371,6 +1503,7 @@
     if ($('og-help').classList.contains('on')) { if (e.key === 'Escape') closeHelp(); return; }
     if ($('og-outputs').classList.contains('on')) { if (e.key === 'Escape') closeOutputsPanel(); return; }
     if ($('og-sd').classList.contains('on')) { if (e.key === 'Escape') closeSdPanel(); return; }
+    if ($('og-integrations').classList.contains('on')) { if (e.key === 'Escape') closeIntegrations(); return; }
     if ($('og-join') && $('og-join').classList.contains('on')) return;
     if (typingTarget(e)) return;
     const sc = settings.shortcuts, k = e.key;
@@ -1414,7 +1547,7 @@
   function closeHelp() { $('og-help').classList.remove('on'); }
 
   // ── lock / footer ─────────────────────────────────────────────────────────
-  function toggleLock() { settings.showLock = !settings.showLock; $('outangutan').classList.toggle('locked', settings.showLock); $('og-lock-btn').classList.toggle('on', settings.showLock); toast(settings.showLock ? 'Show mode locked — edits disabled.' : 'Show mode unlocked.'); scheduleSave(); }
+  function toggleLock() { settings.showLock = !settings.showLock; $('outrangutan').classList.toggle('locked', settings.showLock); $('og-lock-btn').classList.toggle('on', settings.showLock); toast(settings.showLock ? 'Show mode locked — edits disabled.' : 'Show mode unlocked.'); scheduleSave(); }
   function renderFoot() {
     const f = $('og-foot-keys'); if (!f) return;
     const sc = settings.shortcuts;
@@ -1428,7 +1561,7 @@
 
   // ── DOM build ────────────────────────────────────────────────────────────
   function build() {
-    const root = $('outangutan'); if (!root || built) return;
+    const root = $('outrangutan'); if (!root || built) return;
     root.innerHTML =
       '<div class="og-bar">'
         + '<button class="og-back" id="og-back">' + sym('action.back') + '<span>Cueola</span></button>'
@@ -1436,10 +1569,14 @@
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
-        + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
-        + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
-        + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
-        + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+        + '<details class="og-theme-menu" id="og-theme-menu"><summary title="Theme">' + sym('action.settings') + '<span id="og-theme-label">Theme</span><span class="sf-symbol og-menu-chev" data-symbol="action.expand" aria-hidden="true"></span></summary><div class="og-theme-pop" id="og-theme-options"></div></details>'
+        + '<details class="og-tools-menu"><summary>' + sym('action.filter') + '<span>Tools</span></summary><div class="og-tools-pop">'
+          + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
+          + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
+          + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
+          + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
+          + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+        + '</div></details>'
       + '</div>'
       + '<div class="og-recovery" id="og-recovery"><span id="og-recovery-text"></span><div class="og-bar-spacer"></div>'
         + '<button id="og-recovery-standby">Standby that cue</button><button id="og-recovery-dismiss">Dismiss</button></div>'
@@ -1453,15 +1590,17 @@
             + '<input type="file" id="og-file-input" accept="video/*,audio/*" multiple hidden>'
           + '</div>'
           + '<div class="og-pane og-program-pane">'
-            + '<div class="og-pane-head">Program<div class="og-pane-actions"><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" title="Time of day">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
+            + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" title="Time of day">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
             + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
-              + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video></div>'
+              + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
+              + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
+            + '<div class="og-scopes" id="og-scopes"><div class="og-scope"><span class="og-scope-lbl">WAVEFORM</span><canvas id="og-wfm" width="256" height="120"></canvas></div><div class="og-scope"><span class="og-scope-lbl">VECTORSCOPE</span><canvas id="og-vscope" width="132" height="132"></canvas></div></div>'
             + '<div class="og-clock" id="og-clock"><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-label" id="og-clock-label">STANDBY</div><div class="og-clock-cue" id="og-clock-cue">—</div></div>'
             + '<div class="og-transport">'
               + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
               + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'GO<span class="og-tbtn-key" id="og-k-go"></span></button>'
               + '<button class="og-tbtn" id="og-pause">' + sym('media.pause') + 'Pause<span class="og-tbtn-key" id="og-k-pause"></span></button>'
-              + '<button class="og-tbtn" id="og-fade">' + sym('action.down') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
+              + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
               + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'PANIC<span class="og-tbtn-key" id="og-k-panic"></span></button>'
             + '</div>'
           + '</div>'
@@ -1472,7 +1611,7 @@
         // ── SFX ──
         + '<div class="og-sfx">'
           + '<div class="og-pane og-sfx-main">'
-            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('media.stop') + 'Stop SFX</button></div></div>'
+            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
             + '<div class="og-pad-grid" id="og-pad-grid"></div>'
             + '<input type="file" id="og-pad-file" accept="audio/*,video/*" hidden>'
           + '</div>'
@@ -1490,6 +1629,7 @@
         + '<button class="og-help-close" id="og-help-close">Done</button></div></div>'
       + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
       + '<div class="og-join" id="og-join"><div class="og-join-card">'
         + '<div class="og-join-glyph">🦧</div><h3>Join a session</h3>'
         + '<p>Enter your show’s session code to tie Outrangutan to it — the same code Cueola, Planda Bear, and Flowmingo use. Live cross-device cue sync arrives in Phase 4; for now your cue list is saved under this code on this device.</p>'
@@ -1508,16 +1648,19 @@
     decks.a.el.style.opacity = 1; decks.b.el.style.opacity = 0;
 
     // wire static controls
-    $('og-back').onclick = exitOutangutan;
+    $('og-back').onclick = exitOutrangutan;
     $('og-tab-play').onclick = () => setTab('play');
     $('og-tab-sfx').onclick = () => setTab('sfx');
     $('og-output-btn').onclick = openOutputsPanel;
     $('og-sd-btn').onclick = openSdPanel;
+    $('og-pro-btn').onclick = openIntegrations;
+    $('og-scopes-btn').onclick = toggleScopes;
     $('og-lock-btn').onclick = toggleLock;
     $('og-help-btn').onclick = openHelp;
     $('og-help-close').onclick = closeHelp;
     $('og-outputs-x').onclick = closeOutputsPanel;
     $('og-sd-x').onclick = closeSdPanel;
+    $('og-integrations-x').onclick = closeIntegrations;
     $('og-join-go').onclick = joinSession;
     $('og-join-skip').onclick = joinStandaloneInstead;
     $('og-join-code').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); joinStandaloneInstead(); } });
@@ -1531,6 +1674,8 @@
     $('og-sfx-stop').onclick = stopAllPads;
     $('og-multi').onchange = (e) => { settings.multiTrigger = e.target.checked; scheduleSave(); };
     $('og-master-gain').oninput = (e) => { ensureAudio(); setMasterGain(parseFloat(e.target.value)); scheduleSave(); };
+    renderThemeControl();
+    watchCueolaTheme();
 
     const fileInput = $('og-file-input');
     $('og-add-btn').onclick = () => fileInput.click();
@@ -1563,13 +1708,13 @@
   }
 
   // ── screen nav ───────────────────────────────────────────────────────────
-  function isOpen() { const el = $('outangutan'); return el && el.classList.contains('on'); }
+  function isOpen() { const el = $('outrangutan'); return el && el.classList.contains('on'); }
   function setModeBadge() { const b = $('og-mode-badge'); if (b) b.textContent = (mode === 'session' && sessionCode) ? ('Session · ' + sessionCode) : 'Standalone'; }
   function showScreen() {
     ['entry', 'rundown', 'liveshow', 'promptypus', 'flowOp'].forEach(s => { const el = $(s); if (el) el.classList.remove('on'); });
-    $('outangutan').classList.add('on');
-    try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('outangutan'); } catch (e) {}
-    $('outangutan').classList.toggle('locked', settings.showLock);
+    $('outrangutan').classList.add('on');
+    try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('outrangutan'); } catch (e) {}
+    $('outrangutan').classList.toggle('locked', settings.showLock);
     $('og-lock-btn').classList.toggle('on', settings.showLock);
   }
   async function applyShow() {
@@ -1582,7 +1727,7 @@
     setModeBadge();
     if (mode === 'session' && sessionCode) subscribeSession(); else unsubscribeSession();
   }
-  async function enterOutangutan(m) {
+  async function enterOutrangutan(m) {
     build(); ensureChannel(); showScreen();
     if (m === 'session') openSessionJoin();
     else { mode = 'standalone'; sessionCode = null; closeSessionJoin(); await applyShow(); }
@@ -1593,7 +1738,7 @@
     const sheet = $('og-join'); if (!sheet) { applyShow(); return; }
     const input = $('og-join-code');
     let pre = sessionCode || '';
-    try { pre = pre || localStorage.getItem('cueola_outangutan_code') || (window.session && window.session.code) || localStorage.getItem('cueola_last_code') || ''; } catch (e) {}
+    try { pre = pre || localStorage.getItem('cueola_outrangutan_code') || (window.session && window.session.code) || localStorage.getItem('cueola_last_code') || ''; } catch (e) {}
     if (input) input.value = pre;
     const err = $('og-join-err'); if (err) err.textContent = '';
     renderTransportKeys(); renderAll();
@@ -1606,28 +1751,29 @@
     const code = (input ? input.value : '').trim().toUpperCase();
     if (!code) { if (err) err.textContent = 'Enter a session code, or continue without one.'; if (input) input.focus(); return; }
     sessionCode = code; mode = 'session';
-    try { localStorage.setItem('cueola_outangutan_code', code); } catch (e) {}
+    try { localStorage.setItem('cueola_outrangutan_code', code); } catch (e) {}
     closeSessionJoin(); await applyShow();
     toast('Joined session ' + code + '. Live cross-device cue sync arrives in Phase 4 — your cue list is saved under this code on this device.');
   }
   async function joinStandaloneInstead() { mode = 'standalone'; sessionCode = null; closeSessionJoin(); await applyShow(); }
 
-  function exitOutangutan() {
+  function exitOutrangutan() {
     stopAll({ silent: true }); stopAllPads(); closeSessionJoin(); unsubscribeSession();
     outputs.forEach(o => { const r = outputWins.get(o.id); if (r && r.identify) identifyOutput(o.id, false); });
     closeOutputsPanel(); closeSdPanel();
-    $('outangutan').classList.remove('on');
+    $('outrangutan').classList.remove('on');
     const entry = $('entry'); if (entry) entry.classList.add('on');
     try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('entry'); } catch (e) {}
   }
 
   // ── exports ──────────────────────────────────────────────────────────────
-  window.enterOutangutan = enterOutangutan;
-  window.exitOutangutan = exitOutangutan;
-  window.Outangutan = { enter: enterOutangutan, exit: exitOutangutan,
+  window.enterOutrangutan = enterOutrangutan;
+  window.exitOutrangutan = exitOutrangutan;
+  window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
     _state: () => ({ cues, pads, outputs, sdMap, selectedId, settings, active: active && active.cue.id, mode, sessionCode }),
-    _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER };
+    _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
+    _p5: { drawScopes, makeKeyer, webPlayable, obs, obsReq, frontVideoEl } };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if ($('outangutan')) build(); }, { once: true });
-  else if ($('outangutan')) build();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if ($('outrangutan')) build(); }, { once: true });
+  else if ($('outrangutan')) build();
 })();

@@ -25,7 +25,7 @@ platform's full feature set today. Nothing is hidden from current web users.
   `window.CUEOLA_PLATFORM`, else `?platform=` dev override, else `web`. A plain browser
   (even on an iPad) is the web app; the native shells inject their flag.
 - **Hard device rule enforced in code** (not just the table): iPad & iPhone always get
-  `outangutan: 'none'` regardless of tier/gating — applied after the table lookup so a
+  `outrangutan: 'none'` regardless of tier/gating — applied after the table lookup so a
   future table edit can't leak it. Verified it holds even when forced paid + gating on.
 - **Wiring** (`cueola-app.js`): `cueolaComputeCapabilities()` resolves on boot and on
   every entitlement change; exposes `window.cueolaCapabilities`, `window.cueolaPlatform`,
@@ -60,14 +60,14 @@ platform's full feature set today. Nothing is hidden from current web users.
 
 ### How to test Phase 2
 1. Load the app → `window.cueolaPlatform === 'web'`, `window.cueolaCapabilities` shows
-   `cueola/plandaBear/flowmingo: 'full'`, `outangutan: 'basic'`; **no entry card hidden**;
+   `cueola/plandaBear/flowmingo: 'full'`, `outrangutan: 'basic'`; **no entry card hidden**;
    no console errors; existing flows unchanged.
 2. Pure function across platforms (console):
    `CueolaEntitlements.resolveCapabilities(CueolaEntitlements.freeEntitlement(),'mac')`
-   → `outangutan:'full'`; `'ipad'`/`'iphone'` → `outangutan:'none'`; `'iphone'` →
+   → `outrangutan:'full'`; `'ipad'`/`'iphone'` → `outrangutan:'none'`; `'iphone'` →
    `cueola:'read'`.
-3. Hard rule: force paid + gating on for iPad/iPhone → Outangutan still `'none'`.
-4. Gating preview: `resolveCapabilities(free,'web',{gatingEnabled:true}).outangutan ===
+3. Hard rule: force paid + gating on for iPad/iPhone → Outrangutan still `'none'`.
+4. Gating preview: `resolveCapabilities(free,'web',{gatingEnabled:true}).outrangutan ===
    'none'` vs paid → `'basic'`.
 
 ---
@@ -145,5 +145,5 @@ platform's full feature set today. Nothing is hidden from current web users.
 ### Open decisions still pending owner confirmation (left as config for later phases)
 1. **iPhone access level** — paid-required vs. open to any authenticated account.
 2. **iPad-class vs Mac-class entitlement** — keep one `paid`, or split $3.99 (web +
-   basic Outangutan) from $9 (full Mac engine). Model already supports a second tier
+   basic Outrangutan) from $9 (full Mac engine). Model already supports a second tier
    (`pro` slot is reserved); flip on when decided.

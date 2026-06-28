@@ -15,12 +15,15 @@
   #bars > div { flex: 1; }
   #idlabel { position: absolute; inset: 0; display: grid; place-items: center; font: 800 8vw -apple-system, system-ui, sans-serif; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.8); letter-spacing: .04em; }
   #waiting { position: absolute; inset: 0; display: grid; place-items: center; color: #2a2a2a; font: 700 3vw -apple-system, system-ui, sans-serif; z-index: 1; }
+  #keycv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 3; display: none; }
+  #keycv.on { display: block; }
 </style>
 </head>
 <body>
   <div id="waiting">OUTRANGUTAN OUTPUT — waiting…</div>
   <video id="va" class="deck front" playsinline></video>
   <video id="vb" class="deck" playsinline></video>
+  <canvas id="keycv"></canvas>
   <div id="identify">
     <div id="bars">
       <div style="background:#c0c0c0"></div><div style="background:#c0c000"></div>
@@ -34,14 +37,14 @@
 <script>
 (function () {
   'use strict';
-  const DB_NAME = 'outangutan', DB_VER = 1, STORE = 'media';
+  const DB_NAME = 'outrangutan', DB_VER = 1, STORE = 'media';
   const idEl = document.getElementById('identify');
   const idLabel = document.getElementById('idlabel');
   const waiting = document.getElementById('waiting');
-  const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outangutan-output') : null;
+  const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outrangutan-output') : null;
   // this output's id (controller addresses messages with `target`; null = broadcast)
   const MY_ID = (parseInt((location.hash.match(/out=(\d+)/) || [])[1], 10) || 1);
-  document.title = 'Outangutan Output ' + MY_ID;
+  document.title = 'Outrangutan Output ' + MY_ID;
 
   // two decks for crossfades
   const decks = { a: deck('va'), b: deck('vb') };
@@ -95,6 +98,59 @@
   function bringFront(d) { decks.a.el.classList.toggle('front', d === decks.a); decks.b.el.classList.toggle('front', d === decks.b); front = d; }
   function stopDeck(d) { try { d.el.pause(); } catch (e) {} d.el.removeAttribute('src'); d.el.load(); revoke(d); d.mediaId = null; d.el.style.opacity = 0; }
 
+  // ── keyer (Phase 5: chroma/luma/alpha key, mirrored from the controller) ──
+  const keycv = document.getElementById('keycv');
+  let keyer = null, keyState = { mode: 'off' }, keyRAF = null;
+  const KEY_VERT = 'attribute vec2 p; varying vec2 v_uv; void main(){ v_uv = vec2((p.x+1.0)/2.0, 1.0-(p.y+1.0)/2.0); gl_Position = vec4(p,0.0,1.0); }';
+  const KEY_FRAG = [
+    'precision mediump float;',
+    'uniform sampler2D u_tex; uniform int u_mode; uniform vec3 u_key;',
+    'uniform float u_sim; uniform float u_smooth; uniform vec3 u_bg; varying vec2 v_uv;',
+    'void main(){ vec4 c = texture2D(u_tex, v_uv); float a = c.a;',
+    '  if(u_mode==1){ a = smoothstep(u_sim, u_sim+u_smooth+0.001, distance(c.rgb, u_key)); }',
+    '  else if(u_mode==2){ a = smoothstep(u_sim, u_sim+u_smooth+0.001, dot(c.rgb, vec3(0.299,0.587,0.114))); }',
+    '  else if(u_mode==3){ a = c.a; }',
+    '  gl_FragColor = vec4(mix(u_bg, c.rgb, a), 1.0); }'
+  ].join('\n');
+  function hexRGB(h) { h = (h || '').replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h || '000000', 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+  function makeKeyer(canvas) {
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl'); if (!gl) return null;
+    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return gl.getShaderParameter(o, gl.COMPILE_STATUS) ? o : null; };
+    const vs = sh(gl.VERTEX_SHADER, KEY_VERT), fs = sh(gl.FRAGMENT_SHADER, KEY_FRAG); if (!vs || !fs) return null;
+    const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const U = { mode: gl.getUniformLocation(prog, 'u_mode'), key: gl.getUniformLocation(prog, 'u_key'), sim: gl.getUniformLocation(prog, 'u_sim'), smooth: gl.getUniformLocation(prog, 'u_smooth'), bg: gl.getUniformLocation(prog, 'u_bg') };
+    const MODES = { off: 0, chroma: 1, luma: 2, alpha: 3 };
+    return { render(video, p) {
+      if (!video || !video.videoWidth) return;
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      try { gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video); } catch (e) { return; }
+      gl.uniform1i(U.mode, MODES[p.mode] || 0);
+      const k = hexRGB(p.color || '#00b140'); gl.uniform3f(U.key, k[0], k[1], k[2]);
+      gl.uniform1f(U.sim, p.sim == null ? 0.3 : p.sim); gl.uniform1f(U.smooth, p.smooth == null ? 0.1 : p.smooth);
+      const bg = hexRGB(p.bg || '#000000'); gl.uniform3f(U.bg, bg[0], bg[1], bg[2]);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    } };
+  }
+  function applyKey(m) {
+    keyState = (m && m.key) || { mode: 'off' };
+    if (keyState.mode && keyState.mode !== 'off') {
+      if (!keyer) keyer = makeKeyer(keycv);
+      if (!keyer) return;
+      keycv.classList.add('on');
+      if (!keyRAF) { const loop = () => { if (front && front.el && front.el.videoWidth) keyer.render(front.el, keyState); keyRAF = requestAnimationFrame(loop); }; keyRAF = requestAnimationFrame(loop); }
+    } else { keyOff(); }
+  }
+  function keyOff() { keycv.classList.remove('on'); if (keyRAF) { cancelAnimationFrame(keyRAF); keyRAF = null; } }
+
   async function doPlay(m) {
     const d = other(front);
     const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
@@ -132,10 +188,11 @@
       case 'fit': front.el.style.objectFit = m.fit || 'contain'; break;
       case 'fade': { const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; } }); break; }
       case 'black': { const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
-      case 'stop': stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; break;
+      case 'stop': stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; break;
       case 'holdLast': try { front.el.pause(); } catch (e) {} break;
       case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || ('Output ' + MY_ID); break;
       case 'audio': await applyAudio(m); break;   // per-output device routing (setSinkId)
+      case 'key': applyKey(m); break;             // chroma/luma/alpha key mirrored from controller
     }
   }
   async function applyAudio(m) {

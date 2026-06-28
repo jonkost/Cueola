@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260626a">
-<link rel="stylesheet" href="outangutan/outangutan.css?v=20260628c">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=20260628h">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -35,7 +35,7 @@
   --liquid-fill-strong:color-mix(in srgb,var(--s2) 82%,transparent);
   --liquid-edge:color-mix(in srgb,var(--text) 18%,var(--border));
   --liquid-edge-strong:color-mix(in srgb,var(--text) 28%,var(--bord2));
-  --liquid-highlight:linear-gradient(180deg,color-mix(in srgb,#fff 10%,transparent),transparent 48%);
+  --liquid-highlight:none;
   --liquid-shadow:0 18px 46px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.16),inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
   --liquid-shadow-raised:0 28px 74px rgba(0,0,0,.36),0 10px 28px rgba(0,0,0,.20),inset 0 1px 0 color-mix(in srgb,#fff 16%,transparent);
   --liquid-blur:26px;--liquid-saturation:155%;
@@ -69,10 +69,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .entry-theme-center .tbtn.icon-only:hover,.entry-notif .tbtn.icon-only:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 28%,var(--glass-border));background:color-mix(in srgb,var(--s3) 72%,transparent);transform:translateY(-1px)}
 .entry-theme-center .tbtn.icon-only:active,.entry-notif .tbtn.icon-only:active{transform:translateY(0) scale(.96)}
 #entryThemeGear.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--glass-border));background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.entry-theme-panel{position:absolute;top:calc(100% + 8px);right:0;width:min(320px,86vw);background:var(--s1);border:1px solid var(--bord2);border-radius:14px;padding:14px;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
+.entry-theme-panel{position:absolute;top:calc(100% + 8px);right:50%;translate:50% 0;width:min(360px,90vw);background:color-mix(in srgb,var(--s1) 92%,transparent);border:1px solid var(--glass-border);border-radius:16px;padding:14px;box-shadow:var(--liquid-shadow-raised);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .18s ease both}
 .entry-theme-panel[hidden]{display:none}
 .entry-theme-title{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
-.entry-theme-panel .theme-grid{grid-template-columns:repeat(4,1fr)}
+.entry-theme-panel .theme-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.entry-theme-panel .theme-swatch{min-width:0;padding:8px 4px}
+.entry-theme-panel .ts-preview{width:38px;height:38px}
+.entry-theme-panel .ts-name{max-width:100%;font-size:11px;line-height:1.18;overflow-wrap:anywhere}
+@media(max-width:520px){
+  .entry-theme-panel{position:fixed;top:96px;left:50%;right:auto;translate:-50% 0;width:min(350px,calc(100vw - 24px));max-height:calc(100vh - 118px);overflow:auto}
+}
 #entry::before,#entry::after{content:'';flex:1 0 28px;min-height:28px}
 .entry-wrap{width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;gap:0;animation:rise .5s ease both;flex:0 0 auto;padding-top:8px}
 @keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
@@ -89,8 +95,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-bottom:16px}
 .e-card{appearance:none;background:var(--s1);border:1.5px solid var(--bord2);border-radius:16px;padding:22px 20px;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),box-shadow .25s var(--ease),background .2s var(--ease);display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-sm);width:100%;text-align:left;color:inherit}
 .e-card:hover{transform:translateY(-3px);border-color:var(--oc,var(--accent));box-shadow:var(--shadow-lg),0 0 0 2px color-mix(in srgb,var(--oc,var(--accent)) 60%,transparent);background:color-mix(in srgb,var(--s1) 90%,var(--text))}
-.e-card.flowmingo-card,.e-card.outangutan-card{cursor:default}
-.e-card.flowmingo-card:hover,.e-card.outangutan-card:hover{transform:none;border-color:var(--bord2);box-shadow:var(--shadow-sm);background:var(--s1)}
+.e-card.flowmingo-card,.e-card.outrangutan-card{cursor:default}
+.e-card.flowmingo-card:hover,.e-card.outrangutan-card:hover{transform:none;border-color:var(--bord2);box-shadow:var(--shadow-sm);background:var(--s1)}
 .e-card:active{transform:translateY(-1px)}
 .e-card.inst{--oc:var(--accent)}.e-card.stud{--oc:var(--green)}.e-card.demo{--oc:var(--yellow)}.e-card.exp{--oc:var(--text2)}
 .e-card-full{grid-column:span 2}
@@ -530,6 +536,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-script-quickbar{display:flex;gap:5px;flex-wrap:wrap}
 /* Formatting toolbar above the editor — like a real text editor */
 .ls-script-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--glass-border);background:color-mix(in srgb,var(--text) 3%,transparent);flex:0 0 auto}
+.ls-format-menu{position:relative;display:block;padding:7px 10px;overflow:visible}
+.ls-format-menu>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:6px 11px;border:1px solid var(--glass-border);border-radius:999px;background:color-mix(in srgb,var(--s2) 70%,transparent);color:var(--text2);font-size:12px;font-weight:800;cursor:pointer;user-select:none}
+.ls-format-menu>summary::-webkit-details-marker{display:none}
+.ls-format-menu>summary:hover{color:var(--text);border-color:color-mix(in srgb,var(--accent) 34%,var(--glass-border));background:color-mix(in srgb,var(--accent) 8%,var(--s2))}
+.ls-format-menu .ls-menu-chev{margin-left:auto;font-size:10px;transition:transform .15s var(--ease)}
+.ls-format-menu[open] .ls-menu-chev{transform:rotate(180deg)}
+.ls-format-menu-body{position:absolute;left:10px;right:10px;top:calc(100% + 8px);z-index:90;display:none;align-items:center;gap:7px;flex-wrap:wrap;padding:10px;border:1px solid var(--liquid-edge);border-radius:16px;background:color-mix(in srgb,var(--s1) 78%,transparent);box-shadow:var(--liquid-shadow-raised);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
+.ls-format-menu[open] .ls-format-menu-body{display:flex}
 .fmt-btn{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid var(--bord2);background:var(--s3);color:var(--text2);font-size:14px;cursor:pointer;transition:all .12s}
 .fmt-btn strong{font-weight:800}.fmt-btn.fmt-i em{font-style:italic;font-family:Georgia,'Times New Roman',serif}
 .fmt-btn:hover{color:var(--cyan);border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 10%,var(--s3))}
@@ -897,13 +911,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .settings-sheet{max-height:80vh;overflow-y:auto;padding-bottom:16px}
 .settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .settings-section{display:flex;flex-direction:column;gap:12px}
-.theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;justify-items:center}
-.theme-swatch{appearance:none;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;padding:4px;border:0;background:transparent;color:inherit;border-radius:12px;transition:background .15s var(--ease)}
+.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;justify-items:stretch}
+.theme-swatch{appearance:none;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;padding:7px 4px;border:0;background:transparent;color:inherit;border-radius:12px;transition:background .15s var(--ease);min-width:0}
 .theme-swatch:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
 .ts-preview{width:44px;height:44px;border-radius:50%;border:2px solid var(--bord2);display:block;transition:transform .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
 .theme-swatch:hover .ts-preview{transform:scale(1.06);box-shadow:var(--shadow-md)}
 .ts-dot{display:none}
-.ts-name{font-size:12px;font-weight:600;color:var(--text2);letter-spacing:0;text-align:center}
+.ts-name{font-size:12px;font-weight:600;color:var(--text2);letter-spacing:0;text-align:center;line-height:1.18;overflow-wrap:anywhere}
 .theme-swatch.active .ts-preview{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--accent),var(--shadow-md)}
 .theme-swatch.active .ts-name{color:var(--text)}
 /* shared mini-swatch (used in PrepBear pills) */
@@ -918,6 +932,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="koala"]{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7a7a7a;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;--video:#ffffff;--video-bg:rgba(255,255,255,.08);--cue-add:#ffffff;--cue-add-bg:rgba(255,255,255,.04);--cue-add-border:rgba(255,255,255,.28)}
 [data-theme="panda"]{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;--video:#ffffff;--video-bg:rgba(255,255,255,.06);--cue-add:#a8a8a8;--cue-add-bg:rgba(255,255,255,.03);--cue-add-border:rgba(255,255,255,.22)}
 [data-theme="flamingo"]{--bg:#0e0410;--s1:#160820;--s2:#1d0d28;--s3:#251234;--s4:#2e1842;--border:#241338;--bord2:#3e2658;--text:#f5edff;--text2:#a890c4;--text3:#6e5882;--accent:#9d4ed8;--acg:#c14fa0;--green:#5cd0a8;--cyan:#5ec0e8;--purple:#a560ff;--yellow:#e8b850;--red:#e85a78;--orange:#e88858;--video:#9d4ed8;--video-bg:rgba(157,78,216,.14);--cue-add:#9d4ed8;--cue-add-bg:rgba(157,78,216,.07);--cue-add-border:rgba(157,78,216,.42)}
+[data-theme="outrangutan"]{--bg:#100c09;--s1:#17110d;--s2:#211711;--s3:#2d1e14;--s4:#3c2718;--border:#3a2a20;--bord2:#6d4b34;--text:#fff1df;--text2:#d2b89a;--text3:#8d735d;--accent:#ff7a1a;--acg:#ffc15f;--green:#70d77b;--cyan:#2ac7b8;--purple:#b987ff;--yellow:#ffd166;--red:#ff5a5f;--orange:#ff7a1a;--video:#ff7a1a;--video-bg:rgba(255,122,26,.12);--cue-add:#ff7a1a;--cue-add-bg:rgba(255,122,26,.07);--cue-add-border:rgba(255,122,26,.42)}
 [data-theme="prepbear"]{--bg:#080a14;--s1:#0d1124;--s2:#141930;--s3:#1e2548;--s4:#2a346a;--border:#1e2548;--bord2:#3a4585;--text:#f5f0dc;--text2:#b8b89c;--text3:#7a7868;--accent:#eeca57;--acg:#d4a830;--green:#7ed68c;--cyan:#7ec8e0;--purple:#c878d8;--yellow:#eeca57;--red:#e85a40;--orange:#f5933a;--video:#eeca57;--video-bg:rgba(238,202,87,.12);--cue-add:#eeca57;--cue-add-bg:rgba(238,202,87,.06);--cue-add-border:rgba(238,202,87,.36)}
 [data-theme="koala"] .topbar{background:linear-gradient(90deg,var(--s1),var(--s2),var(--s1));border-bottom-color:var(--border)}
 [data-theme="koala"] .brand::after{content:'koala mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--text);border:1px solid rgba(255,255,255,.30);border-radius:999px;padding:3px 7px;background:rgba(255,255,255,.06)}
@@ -932,6 +947,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="flamingo"] .brand::after{content:'flowmingo mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(222,75,154,.40);border-radius:999px;padding:3px 7px;background:rgba(222,75,154,.10);box-shadow:0 0 24px rgba(222,75,154,.16)}
 [data-theme="flamingo"] .rd-scroll{background:radial-gradient(circle at 72% 8%,rgba(222,75,154,.18),transparent 28%),linear-gradient(180deg,rgba(222,75,154,.06),transparent 180px)}
 [data-theme="flamingo"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(222,75,154,.18)}
+[data-theme="outrangutan"] #entry{background:var(--bg)}
+[data-theme="outrangutan"] .topbar{background:color-mix(in srgb,var(--s1) 86%,transparent)}
+[data-theme="outrangutan"] .brand::after{content:'outrangutan mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(255,138,61,.42);border-radius:999px;padding:3px 7px;background:rgba(255,138,61,.10);box-shadow:0 0 24px rgba(255,138,61,.16)}
+[data-theme="outrangutan"] .rd-scroll{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
+[data-theme="outrangutan"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(255,138,61,.14)}
+.ts-preview.theme-outrangutan-preview{background:#ff7a1a;border-color:#ffb169;box-shadow:inset 0 0 0 9px rgba(16,12,9,.68),var(--shadow-sm)}
 [data-theme="prepbear"] .brand::after{content:'prepbear mode';font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(238,202,87,.40);border-radius:999px;padding:3px 7px;background:rgba(238,202,87,.10);box-shadow:0 0 24px rgba(238,202,87,.16)}
 [data-theme="prepbear"] .rd-scroll{background:radial-gradient(circle at 82% 8%,rgba(238,202,87,.10),transparent 28%),repeating-linear-gradient(45deg,rgba(238,202,87,.025) 0 1px,transparent 1px 22px),linear-gradient(180deg,rgba(238,202,87,.05),transparent 160px)}
 [data-theme="prepbear"] .lv-cur-card{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 32%,transparent),0 18px 60px rgba(238,202,87,.14)}
@@ -1380,7 +1401,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .tbtn-badge[hidden]{display:none}
 @keyframes pbBadgePop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 #notifBellBtn.on{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.notif-panel{position:absolute;top:calc(100% + 8px);right:0;z-index:600;width:340px;max-width:min(340px,calc(100vw - 36px));max-height:min(440px,calc(100vh - 220px));display:flex;flex-direction:column;border:1px solid var(--bord2);border-radius:16px;background:color-mix(in srgb,var(--s2) 98%,transparent);box-shadow:0 20px 56px rgba(0,0,0,.5);overflow:hidden;animation:pbBadgePop .16s var(--ease)}
+.notif-panel{position:absolute;top:calc(100% + 10px);left:auto;right:auto;z-index:600;width:min(360px,calc(100vw - 20px));max-width:calc(100vw - 20px);max-height:min(440px,calc(100vh - 92px));display:flex;flex-direction:column;border:1px solid var(--liquid-edge);border-radius:18px;background:color-mix(in srgb,var(--s2) 88%,transparent);box-shadow:var(--liquid-shadow-raised);overflow:hidden;animation:pbBadgePop .16s var(--ease);transform-origin:top center;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 .notif-panel[hidden]{display:none}
 .notif-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s3) 60%,transparent)}
 .notif-title{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--text)}
@@ -1578,6 +1599,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
 #promptypus[data-pt-theme="flamingo"] #pt-panel,
 #promptypus[data-pt-theme="flamingo"] #pt-bar,
 #promptypus[data-pt-theme="flamingo"] .pt-hint{box-shadow:0 18px 54px rgba(255,126,182,.12),inset 0 1px 0 rgba(255,255,255,.06)}
+/* Outrangutan prompter theme — orange-forward material, calm stage. */
+#promptypus[data-pt-theme="outrangutan"]{background:#100c09}
+#promptypus[data-pt-theme="outrangutan"]::before{content:'Outrangutan';position:absolute;right:clamp(20px,4vw,56px);bottom:clamp(18px,4vh,48px);z-index:2;font-family:var(--syne);font-size:clamp(34px,7vw,92px);font-weight:800;letter-spacing:-.01em;color:rgba(255,122,26,.07);pointer-events:none}
+#promptypus[data-pt-theme="outrangutan"] #pt-stage{background:color-mix(in srgb,#ff7a1a 4%,transparent)}
+#promptypus[data-pt-theme="outrangutan"] #pt-text{text-shadow:0 1px 0 rgba(16,12,9,.72)}
+#promptypus[data-pt-theme="outrangutan"] #pt-read-line{height:3px;box-shadow:0 0 16px rgba(255,122,26,.42)}
 #promptypus[data-pt-theme="white"] :is(#pt-panel,#pt-bar,.pt-hint,#pt-edit-box,#pt-script-input){background:#fff;color:#000;border-color:#c9c5bd}
 #promptypus[data-pt-theme="white"] :is(.pt-btn,.pt-cueola-input,.pt-bar-controls-btn,.pt-back-btn){background:#f4f2ee;color:#000;border-color:#c9c5bd}
 
@@ -1768,13 +1795,13 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* HIG grouped controls for Script Op and Flowmingo Op */
 .ls-sidebar{
   width:clamp(390px,30vw,468px);
-  background:var(--liquid-highlight),var(--liquid-fill-strong);
+  background:var(--liquid-fill-strong);
   border-left-color:var(--liquid-edge);
   box-shadow:-18px 0 42px rgba(0,0,0,.22),inset 1px 0 0 color-mix(in srgb,#fff 8%,transparent);
 }
 .ls-sidebar-head{
   padding:14px 16px 10px;
-  background:var(--liquid-highlight),color-mix(in srgb,var(--s2) 64%,transparent);
+  background:color-mix(in srgb,var(--s2) 64%,transparent);
   -webkit-backdrop-filter:blur(20px) saturate(145%);
   backdrop-filter:blur(20px) saturate(145%);
 }
@@ -2008,6 +2035,282 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   .flow-control-segment{grid-template-columns:1fr repeat(3,minmax(42px,1fr))!important}
 }
 
+/* Shared liquid controls pass: toolbars stay translucent, content stays solid. */
+:is(.topbar,.bot-bar,.ls-bar,.follow-bar,.pb-board-toolbar,.ls-script-toolbar,.ls-editor-actions,.flowop-top){
+  background:var(--liquid-fill-strong);
+  border-color:var(--liquid-edge);
+  box-shadow:var(--glass-highlight);
+  -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+  backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+}
+:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn){
+  border-radius:var(--ui-radius-control);
+  border-color:var(--liquid-edge);
+  background:color-mix(in srgb,var(--s2) 62%,transparent);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 9%,transparent);
+}
+:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn):hover{
+  border-color:color-mix(in srgb,var(--accent) 42%,var(--liquid-edge));
+  background:color-mix(in srgb,var(--accent) 10%,var(--s2));
+}
+:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn):active{transform:scale(.98)}
+.tbtn-live{
+  background:#e9433a;
+  color:#fff;
+  border-color:color-mix(in srgb,#ff453a 58%,transparent);
+  box-shadow:0 10px 24px rgba(255,69,58,.24),inset 0 1px 0 rgba(255,255,255,.25);
+}
+.tbtn-live:hover{background:#f2554c}
+:is(.pt-btn.active,.flow-control-section .pt-btn.active,#po-play-btn.active,#flowOpPlayBtn.active,#entryThemeGear.active,#notifBellBtn.on){
+  background:color-mix(in srgb,var(--pt-accent,var(--accent)) 24%,var(--s2));
+  border-color:color-mix(in srgb,var(--pt-accent,var(--accent)) 64%,var(--liquid-edge));
+  color:var(--pt-accent,var(--accent));
+  box-shadow:0 8px 22px color-mix(in srgb,var(--pt-accent,var(--accent)) 16%,transparent),inset 0 1px 0 rgba(255,255,255,.18);
+}
+.ls-sidebar{
+  width:clamp(420px,34vw,540px);
+  max-width:min(540px,48vw);
+}
+.ls-sidebar-head{gap:10px}
+.ls-sidebar .ls-sidebar-head{
+  padding:10px 12px 8px;
+  min-height:0;
+}
+.ls-sidebar .ls-script-toolbar{
+  padding:6px 8px;
+  min-height:42px;
+}
+.ls-sidebar .ls-format-menu{
+  padding:7px 10px;
+}
+.ls-editor-actions{
+  position:relative;
+  z-index:12;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-top:1px solid var(--liquid-edge);
+  border-bottom:1px solid var(--liquid-edge);
+  flex:0 0 auto;
+}
+.ls-editor-actions .ls-script-toolbar,
+.ls-editor-actions .ls-format-menu{
+  flex:1 1 auto;
+  min-width:0;
+  padding:0;
+  min-height:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+.ls-editor-actions .ls-format-menu>summary{
+  width:100%;
+  min-height:38px;
+  justify-content:flex-start;
+  border-radius:999px;
+  padding:7px 12px;
+}
+.ls-editor-actions .ls-format-menu-body{
+  left:0;
+  right:0;
+  top:calc(100% + 8px);
+  max-height:min(300px,46vh);
+  overflow:auto;
+}
+.ls-prompter-text{
+  flex:0 0 clamp(84px,13vh,150px);
+  min-height:84px;
+  border-bottom:1px solid var(--liquid-edge);
+}
+.ls-push-primary{
+  flex:0 0 auto;
+  width:auto;
+  max-width:48%;
+  min-height:38px;
+  margin:0;
+  padding:8px 14px;
+  border-radius:999px;
+  white-space:nowrap;
+}
+.ls-operator-drawer{
+  flex:1 1 auto;
+  min-height:0;
+  padding:10px 12px 12px;
+  gap:8px;
+}
+.ls-operator-drawer > .ls-disclosure,
+.ls-operator-drawer > .ls-prompter-actions{
+  flex:0 0 auto;
+}
+.ls-operator-drawer > .ls-disclosure{
+  overflow:visible;
+}
+.ls-operator-drawer > .ls-disclosure > summary{
+  min-height:40px;
+}
+.ls-live-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.ls-live-actions .flow-control-section{min-width:0}
+.ls-live-actions .flow-control-cue{grid-column:1/-1}
+.ls-live-actions .flow-control-rowcue,
+.ls-live-actions .flow-control-onair{grid-column:auto}
+.ls-sidebar #lsPrompterRemote .prompt-op-panel.flow-control-panel{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+}
+.ls-sidebar #lsPrompterRemote .flow-control-display{grid-column:1/-1}
+.flow-control-section{
+  background:color-mix(in srgb,var(--pt-ui-bg,var(--s1)) 58%,transparent);
+  border-color:color-mix(in srgb,var(--pt-ui-border,var(--liquid-edge)) 78%,transparent);
+  -webkit-backdrop-filter:blur(16px) saturate(145%);
+  backdrop-filter:blur(16px) saturate(145%);
+}
+.ls-sidebar .ls-disclosure{
+  border:1px solid var(--liquid-edge);
+  border-radius:14px;
+  background:color-mix(in srgb,var(--s1) 50%,transparent);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent),0 8px 22px rgba(0,0,0,.14);
+  overflow:hidden;
+}
+.ls-sidebar .ls-cascade-body{
+  padding:10px;
+  border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent);
+}
+#lsTransportDisclosure[open] .ls-cascade-body{
+  max-height:clamp(120px,17vh,160px);
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.ls-sidebar .flow-control-section{
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+.ls-sidebar .flow-control-section + .flow-control-section,
+.ls-sidebar .flow-clock-stack > .flow-control-section:not(:first-child){
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent);
+}
+.ls-sidebar .flow-control-title{
+  color:var(--text);
+  margin-bottom:8px;
+}
+.ls-sidebar .flow-control-grid{
+  gap:8px;
+}
+.ls-sidebar .pt-btn{
+  min-height:40px;
+}
+.pt-nudge-back,.pt-nudge-forward{display:inline-block}
+.pt-nudge-back{transform:rotate(180deg)}
+.flow-control-cue .pt-live-cue{
+  grid-template-columns:38px minmax(0,1fr) 38px!important;
+  gap:8px;
+}
+.flow-control-cue .pt-live-cue .pt-ctrl-label{
+  grid-column:1/-1;
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--text3);
+}
+.ls-sidebar .flow-control-cue .pt-live-cue .pt-ctrl-label{display:none}
+.flow-control-cue input[type="range"]{
+  height:34px;
+  min-height:34px;
+}
+.flow-control-cue input[type="range"]::-webkit-slider-runnable-track{
+  height:11px;
+  border-radius:999px;
+  background:
+    repeating-linear-gradient(90deg,color-mix(in srgb,var(--pt-accent,var(--accent)) 30%,transparent) 0 1px,transparent 1px 12px),
+    color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.14));
+}
+.flow-control-cue input[type="range"]::-moz-range-track{
+  height:11px;
+  background:color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.14));
+}
+.flow-control-title{display:flex;align-items:center;min-height:16px}
+.flow-control-slider{
+  grid-template-columns:minmax(46px,auto) 38px minmax(0,1fr) 38px!important;
+}
+.flow-control-slider .pt-btn,.pt-icon-btn{
+  min-width:38px;
+  width:38px;
+  padding-inline:0;
+}
+input.pt-range,
+#promptypus input[type="range"],
+#flowOp input[type="range"]{
+  -webkit-appearance:none;
+  appearance:none;
+  height:30px;
+  min-height:30px;
+  background:transparent;
+  border:0;
+  cursor:pointer;
+  touch-action:pan-y;
+  accent-color:var(--pt-accent,var(--accent));
+}
+input.pt-range::-webkit-slider-runnable-track,
+#promptypus input[type="range"]::-webkit-slider-runnable-track,
+#flowOp input[type="range"]::-webkit-slider-runnable-track{
+  height:7px;
+  border-radius:999px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--pt-accent,var(--accent)) 52%,transparent),color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.16)));
+  border:1px solid color-mix(in srgb,var(--pt-accent,var(--accent)) 28%,transparent);
+}
+input.pt-range::-webkit-slider-thumb,
+#promptypus input[type="range"]::-webkit-slider-thumb,
+#flowOp input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:24px;
+  height:24px;
+  margin-top:-9.5px;
+  border-radius:50%;
+  background:var(--pt-accent,var(--accent));
+  border:2px solid color-mix(in srgb,var(--pt-bg,var(--bg)) 86%,#fff);
+  box-shadow:0 7px 18px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.35);
+}
+input.pt-range::-moz-range-track,
+#promptypus input[type="range"]::-moz-range-track,
+#flowOp input[type="range"]::-moz-range-track{
+  height:7px;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--pt-accent,var(--accent)) 32%,rgba(255,255,255,.16));
+  border:1px solid color-mix(in srgb,var(--pt-accent,var(--accent)) 28%,transparent);
+}
+input.pt-range::-moz-range-thumb,
+#promptypus input[type="range"]::-moz-range-thumb,
+#flowOp input[type="range"]::-moz-range-thumb{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:var(--pt-accent,var(--accent));
+  border:2px solid color-mix(in srgb,var(--pt-bg,var(--bg)) 86%,#fff);
+  box-shadow:0 7px 18px rgba(0,0,0,.32);
+}
+@media(max-width:980px){
+  .ls-sidebar{width:min(440px,48vw);max-width:52vw}
+  .ls-sidebar #lsPrompterRemote .prompt-op-panel.flow-control-panel{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .ls-sidebar{width:100%;max-width:none}
+  .ls-live-actions{grid-template-columns:1fr}
+}
+
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #pt-edit-overlay.open{display:flex}
@@ -2155,6 +2458,11 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):hover{
   background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 14%,var(--flow-glass-strong));
 }
+:is(#promptypus,#flowOp) .pt-btn.active{
+  background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 22%,var(--flow-glass-strong));
+  border-color:var(--pt-accent,#7eb8c8);
+  color:var(--pt-accent,#7eb8c8);
+}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn,.pt-setup-input,.pt-cueola-input,#pt-script-input,.flowop-code):focus-visible{
   outline:2px solid var(--pt-accent,#7eb8c8);
   outline-offset:2px;
@@ -2232,7 +2540,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   align-items:center;
   padding:18px clamp(18px,3vw,30px);
   margin:-18px -22px 16px;
-  background:var(--liquid-highlight),var(--liquid-fill-strong);
+  background:var(--liquid-fill-strong);
   border-bottom:1px solid var(--liquid-edge);
   box-shadow:0 12px 28px rgba(0,0,0,.18),inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
@@ -2271,7 +2579,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 }
 .paperwork-card-num{
   width:38px;height:38px;border-radius:12px;
-  background:var(--liquid-highlight),color-mix(in srgb,var(--accent) 10%,var(--s2));
+  background:color-mix(in srgb,var(--accent) 10%,var(--s2));
   border-color:color-mix(in srgb,var(--accent) 24%,var(--border));
   color:var(--accent);
 }
@@ -2279,7 +2587,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .paperwork-card-sub{font-size:12.5px;color:var(--ui-label-secondary)}
 .paperwork-notes-bar{
   border-radius:var(--ui-radius-group);
-  background:var(--liquid-highlight),color-mix(in srgb,var(--accent) 10%,var(--s1));
+  background:color-mix(in srgb,var(--accent) 10%,var(--s1));
   border-color:color-mix(in srgb,var(--accent) 36%,var(--liquid-edge));
   box-shadow:var(--shadow-sm),inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
 }
@@ -2291,7 +2599,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   border-color:color-mix(in srgb,var(--text) 11%,var(--border));
 }
 .paperwork-flow-actions{
-  background:var(--liquid-highlight),var(--liquid-fill-strong);
+  background:var(--liquid-fill-strong);
   border-color:var(--liquid-edge);
   box-shadow:0 -14px 36px rgba(0,0,0,.28),inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
@@ -2448,7 +2756,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
         </div>
       </div>
       <div class="entry-theme-center">
-        <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
         <div class="entry-theme-panel" id="entryThemePanel" hidden>
           <div class="entry-theme-title">Theme</div>
           <div class="theme-grid">
@@ -2459,6 +2767,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
             <button type="button" class="theme-swatch" data-theme="koala" onclick="pickEntryTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
             <button type="button" class="theme-swatch" data-theme="panda" onclick="pickEntryTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
             <button type="button" class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
+            <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="pickEntryTheme('outrangutan')" aria-pressed="false"><div class="ts-preview theme-outrangutan-preview"></div><div class="ts-name">Outrangutan</div></button>
             <button type="button" class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
           </div>
         </div>
@@ -2486,13 +2795,13 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
           <button class="ec-mini-btn" onclick="event.stopPropagation();openFlowmingoOperator()">Remote Op</button>
         </div>
       </div>
-      <div class="e-card e-card-full outangutan-card" style="--oc:#5b8df8;--ob:rgba(91,141,248,.07)">
+      <div class="e-card e-card-full outrangutan-card" style="--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 8%,transparent)">
         <div class="ec-icon">🦧</div>
         <div class="ec-title">Out<span class="og-wm-hi">rangutan</span></div>
         <div class="ec-desc">Cue and play video &amp; sound effects — a simple, web-native show-playback system. Best in Chrome or Edge.</div>
         <div class="ec-actions">
-          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutangutan('session')">Session</button>
-          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutangutan('standalone')">Standalone</button>
+          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutrangutan('session')">Session</button>
+          <button class="ec-mini-btn" onclick="event.stopPropagation();enterOutrangutan('standalone')">Standalone</button>
         </div>
       </div>
       <button type="button" class="e-card demo" onclick="loadDemo()">
@@ -2543,7 +2852,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="exportPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
-      <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       <div class="tb-divider"></div>
       <button class="tbtn tbtn-live" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
     </div>
@@ -2608,7 +2917,6 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 	      <button class="ls-exit-btn" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
 	      <button class="ls-exit-btn" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Flow<span class="brand-hi">mingo</span></span> Op</button>
 	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)"><span>Flow<span class="brand-hi">mingo</span></span></button>
-	      <button class="ls-exit-btn" id="liveCueQBtn" onclick="openCueQConsole()" title="Open the QLab cue console (runs on this computer)" style="display:none;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)"><span>Cue<span class="brand-hi">ola</span> → <span class="brand-hi">Q</span></span></button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
 	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
       <button class="ls-exit-btn" onclick="requestExitLive()"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span><span>Exit</span></button>
@@ -2641,31 +2949,36 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
         <div class="ls-sidebar-title">Script Op</div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
-      <div class="ls-script-toolbar" aria-label="Formatting and markers">
-        <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" title="Bold (⌘B)" aria-label="Bold"><strong>B</strong></button>
-        <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" title="Italic (⌘I)" aria-label="Italic"><em>I</em></button>
-        <span class="fmt-sep"></span>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" title="New paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
-      </div>
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
-      <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
+      <div class="ls-editor-actions">
+        <details class="ls-script-toolbar ls-format-menu" aria-label="Formatting and markers">
+          <summary><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span><span>Formatting and markers</span><span class="sf-symbol ls-menu-chev" data-symbol="action.expand" aria-hidden="true"></span></summary>
+          <div class="ls-format-menu-body">
+            <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" title="Bold (⌘B)" aria-label="Bold"><strong>B</strong></button>
+            <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" title="Italic (⌘I)" aria-label="Italic"><em>I</em></button>
+            <span class="fmt-sep"></span>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" title="New paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
+            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
+          </div>
+        </details>
+        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
+      </div>
       <div class="ls-operator-drawer">
+        <details class="ls-disclosure ls-cascade" id="lsTransportDisclosure" open>
+          <summary><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Prompter Transport</span></summary>
+          <div class="ls-cascade-body" id="lsPrompterRemote"></div>
+        </details>
         <details class="ls-disclosure ls-cascade ls-control-card ls-live-control-card" id="lsLiveDisclosure" open>
-          <summary><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Live Prompter</span></summary>
+          <summary><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Cue &amp; On Air</span></summary>
           <div class="ls-cascade-body ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div>
         </details>
         <details class="ls-disclosure ls-cascade" id="lsClockDisclosure">
           <summary><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span>Clocks &amp; Alerts</span></summary>
           <div class="ls-cascade-body" id="lsClockActions"></div>
-        </details>
-        <details class="ls-disclosure ls-cascade" id="lsTransportDisclosure">
-          <summary><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Transport &amp; Display</span></summary>
-          <div class="ls-cascade-body" id="lsPrompterRemote"></div>
         </details>
         <div class="ls-prompter-actions">
           <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit cue script</span></button>
@@ -2805,6 +3118,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       <div class="pt-theme-dot" id="pt-t-koala" style="background:#1c1c1b" onclick="ptSetTheme('koala')" title="Koala"></div>
       <div class="pt-theme-dot" id="pt-t-panda" style="background:#000000" onclick="ptSetTheme('panda')" title="Planda Bear"></div>
       <div class="pt-theme-dot" id="pt-t-flamingo" style="background:#0e0410" onclick="ptSetTheme('flamingo')" title="Flowmingo"></div>
+      <div class="pt-theme-dot" id="pt-t-outrangutan" style="background:#ff7a1a" onclick="ptSetTheme('outrangutan')" title="Outrangutan"></div>
       <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear"></div>
     </div>
     <div class="pt-ctrl-group">
@@ -3093,7 +3407,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
       </div>
       <div class="plandabear-tools">
       <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown"><span>Cue<span class="brand-hi">ola</span></span></button>
-      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" title="Planda Bear theme settings" aria-label="Planda Bear theme settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" title="Planda Bear theme settings" aria-label="Planda Bear theme settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       </div>
     </div>
     <div class="pb-modal-body">
@@ -3588,15 +3902,9 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
         <button type="button" class="theme-swatch" data-theme="koala" onclick="selectTheme('koala')" aria-pressed="false"><div class="ts-preview" style="background:#1c1c1b"></div><div class="ts-name">Koala</div></button>
         <button type="button" class="theme-swatch" data-theme="panda" onclick="selectTheme('panda')" aria-pressed="false"><div class="ts-preview" style="background:#000000"></div><div class="ts-name">Planda Bear</div></button>
         <button type="button" class="theme-swatch" data-theme="flamingo" onclick="selectTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
+        <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="selectTheme('outrangutan')" aria-pressed="false"><div class="ts-preview theme-outrangutan-preview"></div><div class="ts-name">Outrangutan</div></button>
         <button type="button" class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
       </div>
-    </div>
-    <div class="settings-section" style="margin-top:12px">
-      <div class="settings-sec-label">Show Control</div>
-      <button type="button" class="btn-secondary cueq-open" onclick="openCueQConsole()">
-        Open <b>Cue<span style="color:var(--accent)">ola</span> → <span style="color:var(--accent)">Q</span></b> Console&nbsp;↗
-      </button>
-      <div class="field-hint" style="margin-top:8px">Fire QLab cues from a keypad. Requires the bridge running — double-click <b>Start&nbsp;QLab&nbsp;Bridge.command</b> in your <code>qlab-agent</code> folder.</div>
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
@@ -3608,16 +3916,16 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 <!-- Print area -->
 <div id="printArea"></div>
 
-<!-- Outangutan 🦧 — web playback & cue system (module owns its own DOM) -->
-<div class="screen" id="outangutan"></div>
+<!-- Outrangutan 🦧 — web playback & cue system (module owns its own DOM) -->
+<div class="screen" id="outrangutan"></div>
 
 <!-- Toast -->
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=20260628b"></script>
-<script src="outangutan/outangutan.js?v=20260628c"></script>
+<script src="cueola-app.js?v=20260628c"></script>
+<script src="outrangutan/outrangutan.js?v=20260628h"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

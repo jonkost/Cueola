@@ -290,34 +290,34 @@
   const PLATFORMS = ['web', 'mac', 'ipad', 'iphone'];
 
   // Levels: cueola/flowmingo 'none'|'read'|'full'; plandaBear 'none'|'full';
-  // outangutan 'none'|'basic'|'full'; upload 'none'|'limited'|'full';
+  // outrangutan 'none'|'basic'|'full'; upload 'none'|'limited'|'full';
   // playout 'none'|'simple'|'full'. `full` = entitled row, `base` = unentitled row.
   const CAPABILITY_MATRIX = {
     web: {
       full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
-              outangutan: 'basic', outangutanUpload: 'limited', outangutanPlayout: 'simple' },
+              outrangutan: 'basic', outrangutanUpload: 'limited', outrangutanPlayout: 'simple' },
       base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
     },
     mac: {
       full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
-              outangutan: 'full', outangutanUpload: 'full', outangutanPlayout: 'full' },
+              outrangutan: 'full', outrangutanUpload: 'full', outrangutanPlayout: 'full' },
       base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: false, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
     },
-    ipad: { // Full tailored trio + Flowmingo usable as the prompter itself. No Outangutan.
+    ipad: { // Full tailored trio + Flowmingo usable as the prompter itself. No Outrangutan.
       full: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
       base: { cueola: 'full', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
     },
-    iphone: { // Rundown READING + simple op; full Planda; full Flowmingo (prompter). No Outangutan.
+    iphone: { // Rundown READING + simple op; full Planda; full Flowmingo (prompter). No Outrangutan.
       // Open decision #1 (iPhone-requires-paid) left as the default below: base == full,
       // i.e. open to any account. Flip the `base` row when gating goes live to require paid.
       full: { cueola: 'read', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
       base: { cueola: 'read', plandaBear: 'full', flowmingo: 'full', flowmingoAsPrompter: true, sync: true,
-              outangutan: 'none', outangutanUpload: 'none', outangutanPlayout: 'none' },
+              outrangutan: 'none', outrangutanUpload: 'none', outrangutanPlayout: 'none' },
     },
   };
 
@@ -328,7 +328,7 @@
   // Authoritative platform = the native build flag (window.CUEOLA_PLATFORM), else a
   // ?platform= dev override, else 'web'. A plain browser — even on an iPad/iPhone — IS
   // the web app; the native iPad/iPhone shells inject their flag so the hosted web view
-  // reports ipad/iphone and Outangutan can never leak into it (the hard rule below).
+  // reports ipad/iphone and Outrangutan can never leak into it (the hard rule below).
   function detectPlatform(nav, opts) {
     opts = opts || {};
     if (PLATFORMS.indexOf(opts.force) >= 0) return opts.force;
@@ -358,10 +358,10 @@
     // Gating off (no pricing yet) → everyone gets the full set. Gating on → free/paid split.
     const useFull = !gatingEnabled || entitled;
     const caps = Object.assign({}, useFull ? rows.full : rows.base);
-    // HARD device rule, applied last so no table edit can leak it: Outangutan is absent
+    // HARD device rule, applied last so no table edit can leak it: Outrangutan is absent
     // on iPad & iPhone at the device level, regardless of tier/gating.
     if (plat === 'ipad' || plat === 'iphone') {
-      caps.outangutan = 'none'; caps.outangutanUpload = 'none'; caps.outangutanPlayout = 'none';
+      caps.outrangutan = 'none'; caps.outrangutanUpload = 'none'; caps.outrangutanPlayout = 'none';
     }
     return Object.assign({ platform: plat, tier: ent.tier, entitled, gatingEnabled }, caps);
   }

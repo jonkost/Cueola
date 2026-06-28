@@ -1,46 +1,122 @@
-# Outangutan 🦧 — NOTES
+# Outrangutan 🦧 — NOTES
 
 Running log of decisions, tradeoffs, reduced-scope choices, and browser limits.
 Newest phase on top.
 
 ---
 
+## Phase 5 — Pro features & monitoring  (built; awaiting review) — FINAL PHASE
+
+All five web-achievable pro features. Self-contained in `outrangutan.js` +
+`output.html` (keyer mirror) + the global CSS; no new stack.
+
+### What shipped
+- **Scopes** — a toggleable **waveform monitor + vectorscope** computed from the
+  program frame. Resolution-aware: we always downsample to ~160 px wide first, so a
+  4K source stays cheap (vectorscope thins further above 20k samples). Waveform = luma
+  per column (additive-green plot + IRE grid); vectorscope = Rec.601 U/V scatter over a
+  graticule. Toggle button in the Program header; a strip sits under the program video.
+- **Keying (key/fill)** — a **WebGL** keyer (`makeKeyer`): **chroma** (RGB distance →
+  smoothstep alpha), **luma** (luma threshold), **alpha** (VP9/AV1 WebM alpha
+  passthrough), composited over a chosen background. Per-cue Inspector **Key** section
+  (mode / key colour / similarity / smoothness / background). When a keyed cue is live
+  the raw `<video>` is hidden and an overlay `<canvas>` renders it each frame; the same
+  keyer + params are **mirrored to the output window** (a `key` message; output runs an
+  identical shader on a `#keycv` overlay).
+- **OBS** — an **obs-websocket v5** client (`obsConnect`): Hello→Identify SHA-256 auth
+  handshake (SubtleCrypto), requests (op6) / responses (op7) / events (op5). Integrations
+  panel: connect (host/port/password), live **scene buttons**, **stream/record** toggles.
+  Per-cue Inspector **OBS** section: on fire → switch scene / start-stop record & stream;
+  and **fire a cue when OBS switches to a named scene** (`CurrentProgramSceneChanged`).
+- **Dropbox** — token-paste connect (`dropboxList`/`dropboxPull`): list a folder via the
+  HTTP API, pull media files into local cues (download → `importFiles` → IndexedDB).
+- **Transcode-on-upload** — `webPlayable()` gate + lazy **ffmpeg.wasm** (CDN, ~30 MB):
+  when “Normalize uploads” is on, a non-web-playable drop (.mov/.mkv/ProRes/…) is
+  transcoded to H.264/AAC MP4 before becoming a cue. Always falls back to storing as-is.
+
+### UI surface
+- Program header: **Scopes** toggle. **Tools ▸ Integrations** opens the OBS/Dropbox/
+  Transcode sheet. Inspector gains **Key** (video) + **OBS** (any cue) sections.
+
+### Verified (browser preview, Chromium)
+- No console errors through enter / scopes / integrations / keying / inspector.
+- **Scopes plot from a real frame**: with a solid-green looping clip live, the waveform
+  canvas lit 1753 px and the vectorscope 102 px (graticule + the green/white chroma
+  points) — both compute correctly.
+- **Keyer**: `makeKeyer` compiles + links the shader (WebGL present); setting a cue to
+  **chroma** engages the overlay canvas and hides the raw deck; **off** disengages.
+- **Transcode**: `webPlayable` correct — mp4/webm/wav → passthrough, **mov/mkv →
+  transcode**.
+- **OBS**: `obsReq` is safe when disconnected (no throw); default port 4455; panel renders
+  connect form / scene buttons / stream-record toggles.
+- Integrations panel + inspector Key/OBS sections render (screens captured).
+
+### Reduced scope / can only be verified live (honest limits)
+- **rAF is paused in the headless preview**, so the live scope animation, the keyer’s
+  per-frame composite, and crossfade dissolves don’t *move* here — the compute/compile is
+  verified; the moving picture needs a **visible Chrome/Edge** window.
+- **OBS round-trip needs a running OBS** with the WebSocket server enabled (Tools ▸
+  WebSocket Server Settings). The v5 client + auth are built; only the live socket is
+  untested here. WebSocket is `ws://` (localhost) — fine for local OBS.
+- **Dropbox** needs a **personal access token** from a Dropbox app (paste). A full
+  OAuth/PKCE flow needs a registered redirect + (ideally) a backend — deferred; token
+  paste works for one user. `content.dropboxapi.com` allows CORS for the download call.
+- **Transcode** loads ffmpeg.wasm from a CDN (~30 MB) on first use and needs SharedArray
+  Buffer/cross-origin isolation for best speed; it’s **opt-in** and always falls back to
+  storing as-is. ProRes/DNxHD/HEVC-alpha & large jobs remain the **native-engine** job
+  (§4) — this is the small-job ffmpeg.wasm path the brief allows.
+- **Alpha keying** relies on the source being a **VP9/AV1 WebM with an alpha channel**
+  (browser-decodable); ProRes 4444 / HEVC-alpha aren’t browser-decodable → use chroma/luma
+  (per §4).
+
+### How to test Phase 5 (visible Chrome/Edge)
+1. **Scopes**: GO a video → Program header → **Scopes**: the waveform + vectorscope track
+   the picture live.
+2. **Keying**: select a green-screen video cue → Inspector ▸ **Key** ▸ Chroma, pick the
+   key colour + a background; GO → the key composites (control + any open output window).
+3. **OBS**: enable OBS’s WebSocket server → Tools ▸ **Integrations** ▸ OBS ▸ Connect →
+   scene buttons + stream/record work; set a cue’s OBS action / “fire on scene”.
+4. **Dropbox**: paste a token + folder → List media → Pull. **Transcode**: tick Normalize,
+   drop a .mov → it converts to MP4 before becoming a cue.
+
+---
+
 ## Phase 4 — Cueola integration  (built; awaiting review)
 
 **First phase that touches `cueola-app.js`** (P1–3 changed it zero times). Mirrors
-the existing **QLab transport** exactly — but Outangutan *is* the consumer (no
+the existing **QLab transport** exactly — but Outrangutan *is* the consumer (no
 external agent) and also *publishes back*.
 
-### The bus — `sessions/<code>.outangutan` (dotted sub-fields, never clobbered)
-- `outangutan.command` — **written by the rundown** (cueola-app), read by Outangutan.
+### The bus — `sessions/<code>.outrangutan` (dotted sub-fields, never clobbered)
+- `outrangutan.command` — **written by the rundown** (cueola-app), read by Outrangutan.
   `{ commandId, ts, sender, action:'cue'|'go'|'stop'|'panic'|'fadeStop', cueId }`.
-- `outangutan.cues` / `outangutan.cuesTs` — **written by Outangutan**: a media-free
+- `outrangutan.cues` / `outrangutan.cuesTs` — **written by Outrangutan**: a media-free
   cue-list summary `{ [cueId]: {num,name,type,dur} }` (blobs never go to Firestore).
-- `outangutan.live` — **written by Outangutan**: `{ status, cueId, name, type, dur,
+- `outrangutan.live` — **written by Outrangutan**: `{ status, cueId, name, type, dur,
   remaining, thumb, ts, sender }` (the live cue's thumb only — one at a time keeps the
   doc small).
   Both sides use `updateDoc` with dotted paths, so the rundown's `command` and
-  Outangutan's `cues`/`live` coexist without overwriting each other.
+  Outrangutan's `cues`/`live` coexist without overwriting each other.
 
 ### cueola-app.js (rundown side)
-- **Link block** on the **playback** cue-config modal only (`outangutanCueFields`,
+- **Link block** on the **playback** cue-config modal only (`outrangutanCueFields`,
   appended next to `qlabCueFields`): a `<select>` of the session's published
-  Outangutan cues + “Auto-fire when this row advances live” + “Fire now”. Saved as
+  Outrangutan cues + “Auto-fire when this row advances live” + “Fire now”. Saved as
   `d.outCueId` / `d.outAuto`.
-- **Manual GO** on the live cue card (`outangutanGoBtnHTML` → `fireOutangutanCueCell`)
-  and **auto-fire** in `lsNext` (`fireOutangutanAutoForBeat`) — both call
-  `fireOutangutanCommand`, which writes `outangutan.command` (same guard/shape as
+- **Manual GO** on the live cue card (`outrangutanGoBtnHTML` → `fireOutrangutanCueCell`)
+  and **auto-fire** in `lsNext` (`fireOutrangutanAutoForBeat`) — both call
+  `fireOutrangutanCommand`, which writes `outrangutan.command` (same guard/shape as
   `fireQlabCommand`: live non-demo session, id’d by `commandId`).
-- **Auto-populate**: the session snapshot calls `applyOutangutanState(d.outangutan)`,
+- **Auto-populate**: the session snapshot calls `applyOutrangutanState(d.outrangutan)`,
   which caches cues/live and re-renders the rundown/live **only on cue-set or
   status change** (not every remaining-time tick — avoids thrashing). The playback
   cell shows a 🦧 badge with the linked cue’s name/dur + an **ON AIR / PRE / PAUSE**
-  pill (`outangutanCellBadge`). A playback cell with *only* a link no longer counts as
+  pill (`outrangutanCellBadge`). A playback cell with *only* a link no longer counts as
   empty.
 
-### outangutan.js (module side)
+### outrangutan.js (module side)
 - On **session join** (`applyShow` when mode=session) it `subscribeSession()`s to
-  `sessions/<code>`, listens for `outangutan.command`, dedupes by `commandId`, ignores
+  `sessions/<code>`, listens for `outrangutan.command`, dedupes by `commandId`, ignores
   its **own** sender (loop guard) and stale (>30 s) commands, then runs the action
   **locally** (GO/stop/panic/fade/`cue`-by-id). Standalone never subscribes.
 - **Publishes** a cue summary on any list change (via `scheduleSave` → `publishCues`,
@@ -53,34 +129,34 @@ external agent) and also *publishes back*.
 ### Verified (browser preview, mocked Firestore)
 Real Firestore is permission-denied/App-Check-unconfigured in the preview, so the
 round-trip was verified with `window._updateDoc`/`_onSnapshot` mocked:
-- Join → Outangutan publishes **`outangutan.cues` + `outangutan.live`**.
-- Fire a cue → publishes **`outangutan.live` `status:play`** (auto-populate).
+- Join → Outrangutan publishes **`outrangutan.cues` + `outrangutan.live`**.
+- Fire a cue → publishes **`outrangutan.live` `status:play`** (auto-populate).
 - Remote **`stop`** command → clears program; remote **`cue`** command → fires that cue.
-- **Loop guard**: a command with Outangutan’s own sender is ignored.
-- cueola-app: `applyOutangutanState` populates the link `<select>` and the cell badge
-  shows the linked name + **ON AIR**; `outangutanCueFields` is **playback-only**
+- **Loop guard**: a command with Outrangutan’s own sender is ignored.
+- cueola-app: `applyOutrangutanState` populates the link `<select>` and the cell badge
+  shows the linked name + **ON AIR**; `outrangutanCueFields` is **playback-only**
   (video/audio return empty); `getCueCell` renders the badge without error.
 - Both files load clean (no console errors); rundown render unaffected.
 
 ### Reduced scope / honest limits
 - **Real Firestore delivery** needs a live (non-demo) session on a network — not
   reachable in the locked-down preview; the *logic* on both sides is mock-verified.
-- **One-way cue-list sync.** Outangutan publishes a *summary* (+ accepts commands);
+- **One-way cue-list sync.** Outrangutan publishes a *summary* (+ accepts commands);
   it does **not** sync the editable cue list or media across devices — **media blobs
   can’t traverse Firestore**, and a second device can’t play media it doesn’t hold.
-  The authoritative cue list + media stay on the operator’s Outangutan (local-first).
+  The authoritative cue list + media stay on the operator’s Outrangutan (local-first).
   This is the web-feasible reading of “sync cue list + transport”.
 - The rundown cell shows live **status** (not a per-second countdown) to avoid
-  re-rendering the rundown every tick; the precise count-out lives in Outangutan.
-- **Multiple Outangutan operators** in one session would each act on a command
+  re-rendering the rundown every tick; the precise count-out lives in Outrangutan.
+- **Multiple Outrangutan operators** in one session would each act on a command
   (they may hold different media) — typical setup is one operator + the rundown.
 
 ### How to test Phase 4 (live, non-demo session, 2 devices or 2 tabs)
 1. Open Cueola on a session code; open **🦧 Outrangutan → Session**, join the same
-   code. Add a couple of cues in Outangutan.
+   code. Add a couple of cues in Outrangutan.
 2. In the rundown, open a **Playback** cue → the “Outrangutan playback” block lists
    those cues → link one, tick auto-fire. The cell shows the 🦧 name/dur badge.
-3. Go **Live**; advancing onto that row (or the cell’s 🦧 GO) fires the Outangutan
+3. Go **Live**; advancing onto that row (or the cell’s 🦧 GO) fires the Outrangutan
    cue on the other device; the cell flips to **ON AIR** while it plays.
 
 ---
@@ -160,7 +236,7 @@ round-trip was verified with `window._updateDoc`/`_onSnapshot` mocked:
 ## Phase 2 — SFX board + audio engine  (built; awaiting review)
 
 ### What shipped
-- **Web Audio engine** (`outangutan.js`): one lazy `AudioContext` (created on first
+- **Web Audio engine** (`outrangutan.js`): one lazy `AudioContext` (created on first
   GO / pad / SFX-tab, resumed on the user gesture). Master bus = `masterGain →
   masterAnalyser → destination`. A reusable **channel** = `input → lowshelf →
   peaking → highshelf → compressor → gain → analyser → master`. `makeChannel()`,
@@ -229,7 +305,7 @@ round-trip was verified with `window._updateDoc`/`_onSnapshot` mocked:
   Stream Deck, multi-window enumeration — **Phases 3 / 5** (unchanged).
 
 ### How to test Phase 2 (in a visible Chrome/Edge window)
-1. Open **🦧 Outangutan → Standalone**. Drop a few audio + video files on the cue
+1. Open **🦧 Outrangutan → Standalone**. Drop a few audio + video files on the cue
    list. Select one → GO: it plays, **MASTER meter** moves, clock counts down.
 2. **SFX tab**: drop sounds on pads; each gets a hotkey. With a program cue running,
    hit a pad hotkey → the SFX layers **over** the program (toggle Multi-trigger off
@@ -245,15 +321,15 @@ round-trip was verified with `window._updateDoc`/`_onSnapshot` mocked:
 ## Phase 1.2 — Session entry fix (owner: "can't click Session to get anywhere")
 
 Two real problems, both fixed:
-- **Root cause of "can't click":** the front-page Outangutan card was a plain `.e-card`,
+- **Root cause of "can't click":** the front-page Outrangutan card was a plain `.e-card`,
   which gives the whole card body `cursor:pointer` + a hover-lift — but only the small
   Session/Standalone pills had handlers, so clicking the card body did nothing. The
-  Flowmingo card avoids this with a `cursor:default` / no-lift override; Outangutan was
-  missing it. Added `.outangutan-card` to that rule so the card reads as a container and
+  Flowmingo card avoids this with a `cursor:default` / no-lift override; Outrangutan was
+  missing it. Added `.outrangutan-card` to that rule so the card reads as a container and
   the pills are clearly the actionable targets (consistent with Flowmingo).
 - **"Doesn't get anywhere":** Session mode previously just opened the same empty workspace
   as Standalone, badged "Session (sync: Phase 4)" — a dead end. Now **Session opens a join
-  sheet**: enter the show's session code (prefilled from a prior Outangutan code, an active
+  sheet**: enter the show's session code (prefilled from a prior Outrangutan code, an active
   Cueola session, or the last code used), or "Continue without a session". On join the
   badge shows **"Session · <CODE>"**, the code is remembered, and the cue list is **scoped
   per-session** in IndexedDB (`current_<CODE>` vs standalone `current`). Empty code shows an
@@ -291,13 +367,13 @@ Two real problems, both fixed:
 ## Phase 1 — MVP playback  (built; awaiting review)
 
 ### What shipped
-- **`outangutan/outangutan.js`** — engine + control UI (one vanilla global script, the
-  same stack as the rest of Cueola). Builds its own DOM into `<div id="outangutan">`.
-- **`outangutan/output.html`** — chrome-free output window (separate doc for a 2nd
+- **`outrangutan/outrangutan.js`** — engine + control UI (one vanilla global script, the
+  same stack as the rest of Cueola). Builds its own DOM into `<div id="outrangutan">`.
+- **`outrangutan/output.html`** — chrome-free output window (separate doc for a 2nd
   monitor); reads media from IndexedDB and follows transport over a `BroadcastChannel`.
-- **`outangutan/outangutan.css`** — styles via the global theme tokens.
-- **`index.html`** — front-page **🦧 Outangutan** card (Standalone / Session), an empty
-  `<div class="screen" id="outangutan">`, and the `<link>`/`<script>` includes. Cache-bust
+- **`outrangutan/outrangutan.css`** — styles via the global theme tokens.
+- **`index.html`** — front-page **🦧 Outrangutan** card (Standalone / Session), an empty
+  `<div class="screen" id="outrangutan">`, and the `<link>`/`<script>` includes. Cache-bust
   `?v=20260622a`. **`cueola-app.js` was not touched** (lowest-risk integration).
 
 ### Features delivered (Phase 1 brief)
@@ -334,7 +410,7 @@ Two real problems, both fixed:
   follows play/pause/seek/stop/fade/identify. This makes Phase 1 testable on one screen.
   *Tradeoff:* the program is decoded twice and the two elements aren't frame-locked — fine
   for MVP; **frame-accurate multi-output sync is a deferred Mac-engine concern (§4).**
-- **Self-contained in `/outangutan`** (not inlined into `cueola-app.js`). Same stack, same
+- **Self-contained in `/outrangutan`** (not inlined into `cueola-app.js`). Same stack, same
   tokens, same `enterX()` screen + back-nav pattern, so it *feels native* while keeping the
   12k-line file untouched (this repo has lost markup in a merge before). Flag for review:
   if you'd rather it live in `cueola-app.js`, say so.
@@ -366,7 +442,7 @@ Two real problems, both fixed:
 - **Pop-up blocker** can stop the output window — the app toasts a hint to allow pop-ups.
 
 ### How to test Phase 1 (before Phase 2)
-1. Front page shows the **🦧 Outangutan** card. Click **Standalone** → the Outangutan
+1. Front page shows the **🦧 Outrangutan** card. Click **Standalone** → the Outrangutan
    screen builds (cue list / program / clock / inspector / transport / footer). No console
    errors. Back button returns to the front page.
 2. **Add media**: drag a video and an audio file onto the cue pane (or “Add media”). Cues
@@ -378,6 +454,6 @@ Two real problems, both fixed:
    shows a countdown before firing.
 5. **Output window**: click **Output Window**, drag it to a 2nd display, fullscreen it →
    the program mirrors there; **Identify** shows bars + label.
-6. **Crash recovery**: add cues, then reload the page and re-enter Outangutan → the show is
+6. **Crash recovery**: add cues, then reload the page and re-enter Outrangutan → the show is
    restored; if you reload mid-playback, the recovery banner offers to standby that cue.
 7. **Network**: everything above works with the network off (local-first IndexedDB).

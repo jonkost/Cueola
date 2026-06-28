@@ -49,7 +49,7 @@ this same offline-tolerant pattern — never block on a live server call.**
 ### What does NOT exist yet (this task builds it)
 
 - ❌ No `entitlement` / `tier` / `paid` / `license` concept anywhere.
-- ❌ No **Outangutan** — **0 references** in `index.html` or `cueola-app.js`. It is a
+- ❌ No **Outrangutan** — **0 references** in `index.html` or `cueola-app.js`. It is a
   future product, not an existing feature.
 - ❌ No platform detection (web / Mac / iPad / iPhone).
 - ❌ No payment, IAP, or webhook code. No Cloud Functions directory.
@@ -109,7 +109,7 @@ multiplatform pattern). Two non-negotiables hold throughout:
 - One **pure** `resolveCapabilities(entitlement, platform) → featureSet`, driven by the
   editable **`CAPABILITY_MATRIX`** table; platform detection via `detectPlatform()`
   (native `window.CUEOLA_PLATFORM` flag → `?platform=` → `web`). Hard rule enforced **in
-  code after the table lookup**: iPad & iPhone always resolve Outangutan to `none`,
+  code after the table lookup**: iPad & iPhone always resolve Outrangutan to `none`,
   regardless of tier/gating, so the hosted web view can't leak it.
 - Wired into boot (`cueola-app.js`): `window.cueolaCapabilities` / `cueolaCan(key)` /
   `applyCapabilityVisibility()` (declarative `data-cap-requires`, a no-op on web today).
@@ -132,7 +132,7 @@ multiplatform pattern). Two non-negotiables hold throughout:
   sync/bandwidth allowance. Reject/degrade past cap; surface usage vs. cap in the UI.
   The `limits` block + `TIERS` table seeded in Phase 1 are the hook for this.
 
-### Phase 5 — Outangutan download + license gating
+### Phase 5 — Outrangutan download + license gating
 - Direct download from cueola.com gated by **Mac-level** entitlement; issue a
   **signed JWT license** tied to the account. The native Mac engine validates locally
   (signature + expiry), caches it, re-checks when online, with a **grace period** so a
