@@ -5,6 +5,86 @@ Newest phase on top.
 
 ---
 
+## Phase 4 — Cueola integration  (built; awaiting review)
+
+**First phase that touches `cueola-app.js`** (P1–3 changed it zero times). Mirrors
+the existing **QLab transport** exactly — but Outangutan *is* the consumer (no
+external agent) and also *publishes back*.
+
+### The bus — `sessions/<code>.outangutan` (dotted sub-fields, never clobbered)
+- `outangutan.command` — **written by the rundown** (cueola-app), read by Outangutan.
+  `{ commandId, ts, sender, action:'cue'|'go'|'stop'|'panic'|'fadeStop', cueId }`.
+- `outangutan.cues` / `outangutan.cuesTs` — **written by Outangutan**: a media-free
+  cue-list summary `{ [cueId]: {num,name,type,dur} }` (blobs never go to Firestore).
+- `outangutan.live` — **written by Outangutan**: `{ status, cueId, name, type, dur,
+  remaining, thumb, ts, sender }` (the live cue's thumb only — one at a time keeps the
+  doc small).
+  Both sides use `updateDoc` with dotted paths, so the rundown's `command` and
+  Outangutan's `cues`/`live` coexist without overwriting each other.
+
+### cueola-app.js (rundown side)
+- **Link block** on the **playback** cue-config modal only (`outangutanCueFields`,
+  appended next to `qlabCueFields`): a `<select>` of the session's published
+  Outangutan cues + “Auto-fire when this row advances live” + “Fire now”. Saved as
+  `d.outCueId` / `d.outAuto`.
+- **Manual GO** on the live cue card (`outangutanGoBtnHTML` → `fireOutangutanCueCell`)
+  and **auto-fire** in `lsNext` (`fireOutangutanAutoForBeat`) — both call
+  `fireOutangutanCommand`, which writes `outangutan.command` (same guard/shape as
+  `fireQlabCommand`: live non-demo session, id’d by `commandId`).
+- **Auto-populate**: the session snapshot calls `applyOutangutanState(d.outangutan)`,
+  which caches cues/live and re-renders the rundown/live **only on cue-set or
+  status change** (not every remaining-time tick — avoids thrashing). The playback
+  cell shows a 🦧 badge with the linked cue’s name/dur + an **ON AIR / PRE / PAUSE**
+  pill (`outangutanCellBadge`). A playback cell with *only* a link no longer counts as
+  empty.
+
+### outangutan.js (module side)
+- On **session join** (`applyShow` when mode=session) it `subscribeSession()`s to
+  `sessions/<code>`, listens for `outangutan.command`, dedupes by `commandId`, ignores
+  its **own** sender (loop guard) and stale (>30 s) commands, then runs the action
+  **locally** (GO/stop/panic/fade/`cue`-by-id). Standalone never subscribes.
+- **Publishes** a cue summary on any list change (via `scheduleSave` → `publishCues`,
+  debounced) and live transport on every status change (`setStatus` → `publishLive`)
+  + throttled (~700 ms) during playback (the ticker). All writes are guarded by
+  `fbReady()` + session mode.
+- **Live-critical stays local-first**: every transport path fires locally *first*;
+  the session is a pure overlay, so a network drop never blocks GO/stop/panic.
+
+### Verified (browser preview, mocked Firestore)
+Real Firestore is permission-denied/App-Check-unconfigured in the preview, so the
+round-trip was verified with `window._updateDoc`/`_onSnapshot` mocked:
+- Join → Outangutan publishes **`outangutan.cues` + `outangutan.live`**.
+- Fire a cue → publishes **`outangutan.live` `status:play`** (auto-populate).
+- Remote **`stop`** command → clears program; remote **`cue`** command → fires that cue.
+- **Loop guard**: a command with Outangutan’s own sender is ignored.
+- cueola-app: `applyOutangutanState` populates the link `<select>` and the cell badge
+  shows the linked name + **ON AIR**; `outangutanCueFields` is **playback-only**
+  (video/audio return empty); `getCueCell` renders the badge without error.
+- Both files load clean (no console errors); rundown render unaffected.
+
+### Reduced scope / honest limits
+- **Real Firestore delivery** needs a live (non-demo) session on a network — not
+  reachable in the locked-down preview; the *logic* on both sides is mock-verified.
+- **One-way cue-list sync.** Outangutan publishes a *summary* (+ accepts commands);
+  it does **not** sync the editable cue list or media across devices — **media blobs
+  can’t traverse Firestore**, and a second device can’t play media it doesn’t hold.
+  The authoritative cue list + media stay on the operator’s Outangutan (local-first).
+  This is the web-feasible reading of “sync cue list + transport”.
+- The rundown cell shows live **status** (not a per-second countdown) to avoid
+  re-rendering the rundown every tick; the precise count-out lives in Outangutan.
+- **Multiple Outangutan operators** in one session would each act on a command
+  (they may hold different media) — typical setup is one operator + the rundown.
+
+### How to test Phase 4 (live, non-demo session, 2 devices or 2 tabs)
+1. Open Cueola on a session code; open **🦧 Outrangutan → Session**, join the same
+   code. Add a couple of cues in Outangutan.
+2. In the rundown, open a **Playback** cue → the “Outrangutan playback” block lists
+   those cues → link one, tick auto-fire. The cell shows the 🦧 name/dur badge.
+3. Go **Live**; advancing onto that row (or the cell’s 🦧 GO) fires the Outangutan
+   cue on the other device; the cell flips to **ON AIR** while it plays.
+
+---
+
 ## Phase 3 — Workspaces, multi-output, control surfaces  (built; awaiting review)
 
 ### What shipped

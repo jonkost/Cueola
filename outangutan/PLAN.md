@@ -85,7 +85,7 @@ Tabs/custom workspaces (persisted). Multi-output via **Window Management API**
 (`getScreenDetails`), per-cue output targeting, **identify** patterns, per-output `setSinkId`.
 **Stream Deck via WebHID** (no Elgato software). Multi-trigger toggle.
 
-### Phase 4 — Cueola integration
+### Phase 4 — Cueola integration  ← BUILT (awaiting review); see NOTES.md
 Front-page **session** entry; join the same `sessions/{code}` and sync the cue list +
 transport; live rundown fires Outangutan cues (link a `playback` cue → Outangutan cue id);
 auto-populate the rundown cell (name/thumb/duration/live status) and keep it in sync.
@@ -112,11 +112,11 @@ first; degrade gracefully elsewhere.
 ---
 
 ## Definition of done (per phase) — tracking
-- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1 · 2 · 3)*
+- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1 · 2 · 3 · 4)*
 - [x] Live-critical paths (GO / Stop / Panic) fully **keyboard-operable**. *(Phase 1 · 2: + pad hotkeys, Tab · 3: + Stream Deck keys)*
 - [x] Autosave/recovery protects anything that would hurt to lose mid-show. *(Phase 1 · 2 · 3: schema-3 incl. pads/outputs/sdMap/settings)*
-- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1 · 2 · 3)*
-- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase. *(Phase 1 · 2 · 3)*
+- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1 · 2 · 3 · 4: session is a pure overlay; transport fires locally first)*
+- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase. *(Phase 1 · 2 · 3 · 4)*
 
 **Phase 2 status:** Web Audio engine, SFX pad board (pre-decoded buffers, instant
 trigger, per-pad EQ/comp/meter, hotkeys, retrigger), per-cue audio chain, A/V fades
@@ -136,3 +136,17 @@ gen-2 key images), persisted workspace (tab + outputs + sdMap + devices). Schema
 mapping, per-cue routing, no regressions. **Window-placement / WebHID input / setSinkId
 device routing need real hardware + permission** — written defensively, degrade
 gracefully, need a real Chrome/Edge check. Cache-bust `?v=20260628b`.
+
+**Phase 4 status:** First touch of `cueola-app.js`. Bus = `sessions/<code>.outangutan`
+(dotted sub-fields): rundown writes `outangutan.command`, Outangutan publishes
+`outangutan.cues` (media-free summary) + `outangutan.live`. **Rundown side**
+(cueola-app): a 🦧 link block on the **playback** cue modal (`d.outCueId`/`d.outAuto`),
+manual GO on the live card, auto-fire in `lsNext`, and `applyOutangutanState` →
+playback-cell badge (name/dur + ON AIR). **Module side** (outangutan): subscribe on
+session join, consume commands (dedupe + own-sender loop guard + local-first fire),
+publish cues on list change + live on transport. Verified end-to-end with **mocked
+Firestore** (preview FS is permission-denied): join publishes cues+live, fire publishes
+live `status:play`, remote stop/cue commands execute, loop guard holds, cueola options +
+badge render. **One-way sync by design** (media blobs can’t cross Firestore; a 2nd
+device can’t play media it lacks). Real Firestore delivery needs a live non-demo
+session. Cache-bust: cueola-app `?v=20260628b`, outangutan `?v=20260628c`.

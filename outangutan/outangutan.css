@@ -334,3 +334,19 @@
 .og-sdk-i { font-family: var(--mono-num, monospace); font-size: 10px; color: var(--text3); }
 .og-sdk select { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 11.5px; padding: 5px 6px; width: 100%; min-width: 0; }
 .og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
+
+/* ============================================================================
+ * PHASE 4 — Cueola rundown ⇄ Outangutan integration (loaded globally, so these
+ * style the rundown cell badge + the cue-config modal link block).
+ * ==========================================================================*/
+.cue-out-badge { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; color: var(--text2); overflow: hidden; }
+.cue-out-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cue-out-live { margin-left: auto; flex: 0 0 auto; font-size: 9px; font-weight: 800; letter-spacing: .05em; padding: 1px 5px; border-radius: 4px; }
+.cue-out-play { background: var(--red); color: #fff; animation: og-pulse 1.4s ease-in-out infinite; }
+.cue-out-pre { background: var(--yellow); color: #000; }
+.cue-out-pause { background: var(--orange); color: #000; }
+.cc-out-glyph { font-size: 13px; vertical-align: -1px; }
+.cc-outangutan { border-top: 1px solid color-mix(in srgb, #5b8df8 30%, var(--border)); }
+.cc-out-hint { font-size: 11px; color: var(--text3); margin-top: 5px; }
+.lf-out-go { background: color-mix(in srgb, #5b8df8 22%, transparent) !important; border-color: color-mix(in srgb, #5b8df8 55%, var(--border)) !important; color: var(--text) !important; }
+.lf-out-go:hover { background: color-mix(in srgb, #5b8df8 34%, transparent) !important; }

@@ -48,7 +48,7 @@
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
     clockMode: 'remaining', multiTrigger: true, showLock: false, tab: 'play',
-    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
+    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
 
@@ -223,6 +223,10 @@
     });
   }
   async function storeFile(file) {       // import one file → MEDIA_STORE, return { mediaId, kind, duration, thumb, name }
+    // Phase 5: transcode-on-upload — normalize non-web-playable video to H.264 MP4.
+    if (settings.transcode && !webPlayable(file) && ((file.type || '').startsWith('video') || /\.(mov|mkv|avi|mxf|m2ts|ts)$/i.test(file.name || ''))) {
+      file = await transcodeFile(file);
+    }
     const kind = file.type.startsWith('video') ? 'video' : (file.type.startsWith('audio') ? 'audio' : null);
     if (!kind) { toast('Skipped "' + file.name + '" — not a video or audio file.'); return null; }
     const mediaId = rid('m_');
@@ -256,6 +260,9 @@
       endAction: 'stop',        // 'stop' | 'hold' | 'black'
       fit: 'contain', scale: 1, posX: 0, posY: 0,
       output: 1,                // target output window id (Phase 3 multi-output)
+      key: { mode: 'off', color: '#00b140', sim: 0.30, smooth: 0.10, bg: '#000000' }, // Phase 5 keying
+      obs: { action: 'none', scene: '' },   // OBS action on fire
+      obsTriggerScene: '',                  // fire this cue when OBS switches to this scene
     };
   }
   function renumber() { cues.forEach((c, i) => { c.num = i + 1; }); }
@@ -566,6 +573,334 @@
     Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; if (sd) sdPaintKey(k); scheduleSave(); }; });
   }
 
+  // ── Cueola session sync (Phase 4) ────────────────────────────────────────
+  // When joined to a session, ride the existing Firestore session doc as a bus:
+  //   • LISTEN for `outangutan.command` (the rundown's playback cue fires us);
+  //   • PUBLISH a lightweight cue-list summary (`outangutan.cues`, no media blobs)
+  //     and live transport (`outangutan.live`) so the rundown auto-populates.
+  // Strictly an overlay — every transport path fires LOCALLY first (live-critical
+  // never blocks on the network); sync is best-effort and survives a drop.
+  const OG_SENDER = 'outangutan_' + Math.random().toString(36).slice(2, 9);
+  let sessionSub = null;          // onSnapshot unsubscribe
+  let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
+  let pubTimer = null, lastLiveTs = 0;
+
+  function fbReady() { return !!(window._firebaseReady && window._db && window._doc && window._updateDoc && window._onSnapshot); }
+  function sessionRef() { return window._doc(window._db, 'sessions', sessionCode); }
+
+  function subscribeSession() {
+    unsubscribeSession();
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    try { sessionSub = window._onSnapshot(sessionRef(), snap => { try { onSessionDoc(snap.data() || {}); } catch (e) {} }, () => {}); } catch (e) {}
+    publishCues(); publishLive(true);
+  }
+  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } lastCmdId = null; }
+
+  function onSessionDoc(d) {
+    const cmd = d && d.outangutan && d.outangutan.command;
+    if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
+    if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
+    if (cmd.ts && Date.now() - cmd.ts > 30000) return;          // ignore stale commands
+    lastCmdId = cmd.commandId;
+    applyRemoteCommand(cmd);
+  }
+  function applyRemoteCommand(cmd) {
+    switch (cmd.action) {
+      case 'go': go(); break;
+      case 'stop': stopAll(); break;
+      case 'panic': panic(); break;
+      case 'fadeStop': fadeStopAll(); break;
+      case 'cue': {
+        const c = cueById(cmd.cueId) || cues.find(x => String(x.num) === String(cmd.cueId));
+        if (c) { selectedId = c.id; go(); }
+        else toast('Rundown fired a cue Outangutan doesn’t have on this device (' + cmd.cueId + ').');
+        break;
+      }
+      default: return;
+    }
+    renderCueList(); renderInspector();
+  }
+
+  // publish a media-free cue-list summary so the rundown can list + link cues
+  function publishCues() {
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    if (pubTimer) clearTimeout(pubTimer);
+    pubTimer = setTimeout(() => {
+      pubTimer = null;
+      const map = {};
+      cues.forEach(c => { map[c.id] = { num: c.num, name: c.name, type: c.type, dur: Math.round(c.duration || 0) }; });
+      try { window._updateDoc(sessionRef(), { 'outangutan.cues': map, 'outangutan.cuesTs': Date.now(), 'outangutan.sender': OG_SENDER }); } catch (e) {}
+    }, 400);
+  }
+  // publish live transport (throttled) — feeds the rundown cell's name/dur/status/thumb
+  function publishLive(force) {
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    const now = Date.now();
+    if (!force && now - lastLiveTs < 700) return;
+    lastLiveTs = now;
+    let live = { status: 'idle', ts: now, sender: OG_SENDER };
+    if (preInfo) live = { status: 'pre', cueId: preInfo.cue.id, name: preInfo.cue.name, type: preInfo.cue.type, ts: now, sender: OG_SENDER };
+    else if (active && active.el) {
+      const el = active.el, end = (active.cue.trimOut != null ? active.cue.trimOut : (isFinite(el.duration) ? el.duration : active.cue.duration));
+      const remaining = Math.max(0, (end || 0) - el.currentTime);
+      live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
+    }
+    try { window._updateDoc(sessionRef(), { 'outangutan.live': live }); } catch (e) {}
+  }
+
+  // ── Phase 5: scopes (waveform monitor + vectorscope) ─────────────────────
+  // Computed from the program frame on a small offscreen canvas — resolution-
+  // aware (we always downsample to ~160px wide, so 4K stays cheap). Toggleable.
+  let scopesOn = false, scopeRAF = null;
+  const scopeSrc = document.createElement('canvas');
+  function frontVideoEl() {
+    if (active && active.kind === 'video' && active.el && active.el.videoWidth) return active.el;
+    if (decks) for (const k of ['a', 'b']) { const d = decks[k]; if (d && d.el && d.el.videoWidth && d.el.classList.contains('front')) return d.el; }
+    return null;
+  }
+  function toggleScopes() {
+    scopesOn = !scopesOn;
+    const s = $('og-scopes'); if (s) s.classList.toggle('on', scopesOn);
+    const b = $('og-scopes-btn'); if (b) b.classList.toggle('on', scopesOn);
+    if (scopesOn) { if (!scopeRAF) { const loop = () => { drawScopes(); scopeRAF = requestAnimationFrame(loop); }; scopeRAF = requestAnimationFrame(loop); } }
+    else if (scopeRAF) { cancelAnimationFrame(scopeRAF); scopeRAF = null; }
+  }
+  function drawScopes() {
+    const wfm = $('og-wfm'), vec = $('og-vscope'); if (!wfm || !vec) return;
+    const v = frontVideoEl();
+    if (!v) { wfm.getContext('2d').clearRect(0, 0, wfm.width, wfm.height); drawVecGraticule(vec); return; }
+    const sw = 160, sh = Math.max(1, Math.round(sw * ((v.videoHeight || 9) / (v.videoWidth || 16))));
+    scopeSrc.width = sw; scopeSrc.height = sh;
+    const sc = scopeSrc.getContext('2d', { willReadFrequently: true });
+    let img; try { sc.drawImage(v, 0, 0, sw, sh); img = sc.getImageData(0, 0, sw, sh); } catch (e) { return; }
+    drawWaveform(wfm, img, sw, sh);
+    drawVectorscope(vec, img, sw, sh);
+  }
+  function drawWaveform(cv, img, sw, sh) {
+    const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
+    ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, W, H);
+    const out = ctx.createImageData(W, H), o = out.data, d = img.data;
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+      const i = (y * sw + x) * 4, luma = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      const px = (x / sw * W) | 0, py = ((1 - luma / 255) * (H - 1)) | 0;
+      const oi = (py * W + px) * 4; o[oi + 1] = Math.min(255, o[oi + 1] + 60); o[oi] = Math.min(255, o[oi] + 12); o[oi + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1;
+    [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, f * H); ctx.lineTo(W, f * H); ctx.stroke(); });
+  }
+  function drawVecGraticule(cv) {
+    const W = cv.width, H = cv.height, ctx = cv.getContext('2d'), cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 2;
+    ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke();
+    return { ctx, cx, cy, r };
+  }
+  function drawVectorscope(cv, img, sw, sh) {
+    const g = drawVecGraticule(cv), ctx = g.ctx, scale = g.r / 140;
+    const d = img.data; ctx.fillStyle = 'rgba(110,231,160,.5)';
+    const step = sw * sh > 20000 ? 2 : 1;   // resolution-aware thinning
+    for (let p = 0; p < sw * sh; p += step) {
+      const i = p * 4, R = d[i], G = d[i + 1], B = d[i + 2];
+      const U = -0.169 * R - 0.331 * G + 0.5 * B;     // Rec.601 chroma
+      const V = 0.5 * R - 0.419 * G - 0.081 * B;
+      ctx.fillRect(g.cx + U * scale, g.cy - V * scale, 1, 1);
+    }
+  }
+
+  // ── Phase 5: WebGL keyer (chroma / luma / alpha → composite over a bg) ────
+  const KEY_FRAG = [
+    'precision mediump float;',
+    'uniform sampler2D u_tex; uniform int u_mode; uniform vec3 u_key;',
+    'uniform float u_sim; uniform float u_smooth; uniform vec3 u_bg;',
+    'varying vec2 v_uv;',
+    'void main(){',
+    '  vec4 c = texture2D(u_tex, v_uv); float a = c.a;',
+    '  if(u_mode==1){ float d = distance(c.rgb, u_key); a = smoothstep(u_sim, u_sim+u_smooth+0.001, d); }',
+    '  else if(u_mode==2){ float l = dot(c.rgb, vec3(0.299,0.587,0.114)); a = smoothstep(u_sim, u_sim+u_smooth+0.001, l); }',
+    '  else if(u_mode==3){ a = c.a; }',
+    '  gl_FragColor = vec4(mix(u_bg, c.rgb, a), 1.0);',
+    '}'
+  ].join('\n');
+  const KEY_VERT = 'attribute vec2 p; varying vec2 v_uv; void main(){ v_uv = vec2((p.x+1.0)/2.0, 1.0-(p.y+1.0)/2.0); gl_Position = vec4(p,0.0,1.0); }';
+  function makeKeyer(canvas) {
+    const gl = canvas.getContext('webgl', { premultipliedAlpha: false }) || canvas.getContext('experimental-webgl');
+    if (!gl) return null;
+    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) { console.warn('[outangutan] key shader', gl.getShaderInfoLog(o)); return null; } return o; };
+    const vs = sh(gl.VERTEX_SHADER, KEY_VERT), fs = sh(gl.FRAGMENT_SHADER, KEY_FRAG);
+    if (!vs || !fs) return null;
+    const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const U = {
+      mode: gl.getUniformLocation(prog, 'u_mode'), key: gl.getUniformLocation(prog, 'u_key'), sim: gl.getUniformLocation(prog, 'u_sim'),
+      smooth: gl.getUniformLocation(prog, 'u_smooth'), bg: gl.getUniformLocation(prog, 'u_bg'),
+    };
+    const MODES = { off: 0, chroma: 1, luma: 2, alpha: 3 };
+    return {
+      gl, ok: true,
+      render(video, p) {
+        if (!video || !video.videoWidth) return;
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        try { gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video); } catch (e) { return; }
+        gl.uniform1i(U.mode, MODES[p.mode] || 0);
+        const k = hexRGB(p.color || '#00b140'); gl.uniform3f(U.key, k[0], k[1], k[2]);
+        gl.uniform1f(U.sim, p.sim == null ? 0.3 : p.sim); gl.uniform1f(U.smooth, p.smooth == null ? 0.1 : p.smooth);
+        const bg = hexRGB(p.bg || '#000000'); gl.uniform3f(U.bg, bg[0], bg[1], bg[2]);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      },
+    };
+  }
+  function hexRGB(h) { h = (h || '').replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h || '000000', 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+
+  let keyer = null, keyRAF = null;
+  function keyActiveFor(cue) { return cue && cue.type === 'video' && cue.key && cue.key.mode && cue.key.mode !== 'off'; }
+  function startKeyLoop() {
+    const cv = $('og-key-canvas'); if (!cv) return;
+    if (!keyer) keyer = makeKeyer(cv);
+    if (!keyer || !keyer.ok) { toast('Keying needs WebGL (Chrome/Edge).'); return; }
+    cv.classList.add('on');
+    if (keyRAF) return;
+    const loop = () => {
+      const v = active && active.kind === 'video' ? active.el : frontVideoEl();
+      const cue = active && active.cue;
+      if (v && cue && keyActiveFor(cue)) keyer.render(v, cue.key);
+      keyRAF = requestAnimationFrame(loop);
+    };
+    keyRAF = requestAnimationFrame(loop);
+  }
+  function stopKeyLoop() { if (keyRAF) { cancelAnimationFrame(keyRAF); keyRAF = null; } const cv = $('og-key-canvas'); if (cv) cv.classList.remove('on'); if (decks) { decks.a.el.style.visibility = ''; decks.b.el.style.visibility = ''; } }
+  function applyKeyForActive() {
+    const cue = active && active.cue;
+    if (keyActiveFor(cue)) { startKeyLoop(); if (active.deck && decks[active.deck]) decks[active.deck].el.style.visibility = 'hidden'; }
+    else { stopKeyLoop(); if (active && active.deck && decks[active.deck]) decks[active.deck].el.style.visibility = ''; }
+    if (active && active.kind === 'video') sendOut({ t: 'key', key: cue.key || { mode: 'off' } }, cue.output || 1);
+  }
+
+  // ── Phase 5: OBS integration (obs-websocket v5) ──────────────────────────
+  // Talks directly to OBS's WebSocket server (Tools ▸ WebSocket Server Settings).
+  // v5 handshake: Hello(op0) → Identify(op1, SHA-256 auth) → Identified(op2);
+  // requests op6/responses op7; events op5. Needs a running OBS to round-trip.
+  let obs = { ws: null, connected: false, scenes: [], current: '', streaming: false, recording: false, cfg: { host: 'localhost', port: 4455, password: '' } };
+  let _obsSeq = 0; const obsPending = {};
+  async function sha256b64(str) { const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); let bin = ''; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b)); return btoa(bin); }
+  function obsConnect(host, port, password) {
+    obsDisconnect();
+    obs.cfg = { host: host || 'localhost', port: port || 4455, password: password || '' };
+    let ws; try { ws = new WebSocket('ws://' + obs.cfg.host + ':' + obs.cfg.port); } catch (e) { toast('OBS: invalid address.'); return; }
+    obs.ws = ws;
+    ws.onclose = () => { obs.connected = false; renderIntegrations(); };
+    ws.onerror = () => { toast('OBS: connection failed — enable the WebSocket server in OBS.'); };
+    ws.onmessage = async (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.op === 0) {
+        const id = { op: 1, d: { rpcVersion: 1 } };
+        if (m.d.authentication) { const a = m.d.authentication; const secret = await sha256b64(obs.cfg.password + a.salt); id.d.authentication = await sha256b64(secret + a.challenge); }
+        ws.send(JSON.stringify(id));
+      } else if (m.op === 2) {
+        obs.connected = true; toast('OBS connected.'); obsReq('GetSceneList'); obsReq('GetStreamStatus'); obsReq('GetRecordStatus'); renderIntegrations();
+      } else if (m.op === 7) {
+        const cb = obsPending[m.d.requestId]; if (cb) { delete obsPending[m.d.requestId]; cb(m.d.responseData || {}); }
+        const rd = m.d.responseData || {};
+        if (m.d.requestType === 'GetSceneList') { obs.scenes = (rd.scenes || []).map(s => s.sceneName).reverse(); obs.current = rd.currentProgramSceneName || ''; renderIntegrations(); }
+        if (m.d.requestType === 'GetStreamStatus') { obs.streaming = !!rd.outputActive; renderIntegrations(); }
+        if (m.d.requestType === 'GetRecordStatus') { obs.recording = !!rd.outputActive; renderIntegrations(); }
+      } else if (m.op === 5) {
+        const e = m.d;
+        if (e.eventType === 'CurrentProgramSceneChanged') { obs.current = e.eventData.sceneName; onObsSceneChanged(obs.current); renderIntegrations(); }
+        else if (e.eventType === 'StreamStateChanged') { obs.streaming = !!e.eventData.outputActive; renderIntegrations(); }
+        else if (e.eventType === 'RecordStateChanged') { obs.recording = !!e.eventData.outputActive; renderIntegrations(); }
+      }
+    };
+  }
+  function obsDisconnect() { if (obs.ws) { try { obs.ws.close(); } catch (e) {} obs.ws = null; } obs.connected = false; }
+  function obsReq(requestType, requestData, cb) {
+    if (!obs.ws || obs.ws.readyState !== 1) return;
+    const requestId = 'r' + (++_obsSeq); if (cb) obsPending[requestId] = cb;
+    obs.ws.send(JSON.stringify({ op: 6, d: { requestType, requestId, requestData: requestData || {} } }));
+  }
+  function fireObsForCue(cue) {
+    const a = cue && cue.obs; if (!a || !a.action || a.action === 'none' || !obs.connected) return;
+    if (a.action === 'scene' && a.scene) obsReq('SetCurrentProgramScene', { sceneName: a.scene });
+    else if (a.action === 'startRecord') obsReq('StartRecord');
+    else if (a.action === 'stopRecord') obsReq('StopRecord');
+    else if (a.action === 'startStream') obsReq('StartStream');
+    else if (a.action === 'stopStream') obsReq('StopStream');
+  }
+  function onObsSceneChanged(scene) { const c = cues.find(x => x.obsTriggerScene && x.obsTriggerScene === scene); if (c) { selectedId = c.id; go(); } }
+
+  // ── Phase 5: Dropbox sync (token connect → list a folder → pull to cues) ──
+  // Personal access token (OBS-style, no backend): a full OAuth/PKCE flow needs a
+  // registered Dropbox app + redirect, deferred. Token paste works for one user.
+  let dbx = { token: '', folder: '', files: [] };
+  function guessMime(n) { n = n.toLowerCase(); if (/\.(mp4|m4v|mov)$/.test(n)) return 'video/mp4'; if (/\.webm$/.test(n)) return 'video/webm'; if (/\.mp3$/.test(n)) return 'audio/mpeg'; if (/\.wav$/.test(n)) return 'audio/wav'; if (/\.(m4a|aac)$/.test(n)) return 'audio/aac'; if (/\.(ogg|opus)$/.test(n)) return 'audio/ogg'; return ''; }
+  async function dropboxList() {
+    if (!dbx.token) { toast('Paste a Dropbox access token first.'); return; }
+    try {
+      const res = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers: { 'Authorization': 'Bearer ' + dbx.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dbx.folder === '/' ? '' : (dbx.folder || ''), recursive: false }) });
+      if (!res.ok) { toast('Dropbox: ' + res.status + ' — check the token/folder.'); return; }
+      const j = await res.json();
+      dbx.files = (j.entries || []).filter(e => e['.tag'] === 'file' && /\.(mp4|webm|mov|m4v|mp3|wav|aac|m4a|ogg|opus)$/i.test(e.name));
+      toast('Dropbox: ' + dbx.files.length + ' media file' + (dbx.files.length === 1 ? '' : 's') + ' found.');
+      renderIntegrations();
+    } catch (e) { toast('Dropbox list failed (token/CORS).'); }
+  }
+  async function dropboxPull(path, name) {
+    try {
+      const res = await fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { 'Authorization': 'Bearer ' + dbx.token, 'Dropbox-API-Arg': JSON.stringify({ path }) } });
+      if (!res.ok) { toast('Dropbox download failed (' + res.status + ').'); return; }
+      const blob = await res.blob();
+      await importFiles([new File([blob], name, { type: blob.type || guessMime(name) })]);
+    } catch (e) { toast('Dropbox pull failed.'); }
+  }
+
+  // ── Phase 5: transcode-on-upload (ffmpeg.wasm, lazy) ─────────────────────
+  // Browsers can't decode ProRes/DNxHD/MOV/MKV — when "Normalize uploads" is on we
+  // transcode non-web-playable files to H.264/AAC MP4 via ffmpeg.wasm (lazy CDN
+  // load, ~30 MB). No server here, so this is the ffmpeg.wasm path; large/pro files
+  // belong to the future native engine (§4). Always falls back to storing as-is.
+  let ffmpeg = null, ffmpegLoading = null;
+  function webPlayable(file) {
+    const t = (file.type || '').toLowerCase(), n = (file.name || '').toLowerCase();
+    if (t.startsWith('video/')) return /mp4|webm|ogg/.test(t) || /\.(mp4|m4v|webm|ogv)$/.test(n);
+    if (t.startsWith('audio/')) return /mpeg|mp3|aac|wav|ogg|opus|webm/.test(t) || /\.(mp3|m4a|aac|wav|ogg|opus|weba)$/.test(n);
+    return /\.(mp4|m4v|webm|ogv|mp3|m4a|aac|wav|ogg|opus)$/.test(n);
+  }
+  function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+  async function loadFFmpeg() {
+    if (ffmpeg) return ffmpeg;
+    if (ffmpegLoading) return ffmpegLoading;
+    ffmpegLoading = (async () => {
+      try {
+        if (!window.FFmpeg) await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+        const ff = window.FFmpeg.createFFmpeg({ log: false, corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js' });
+        await ff.load(); ffmpeg = ff; return ff;
+      } catch (e) { ffmpegLoading = null; return null; }
+    })();
+    return ffmpegLoading;
+  }
+  async function transcodeFile(file) {
+    const ff = await loadFFmpeg();
+    if (!ff) { toast('Transcoder unavailable — storing “' + file.name + '” as-is.'); return file; }
+    try {
+      toast('Transcoding “' + file.name + '” → web-playable MP4…');
+      const inName = 'in_' + Date.now(), outName = 'out.mp4';
+      ff.FS('writeFile', inName, new Uint8Array(await file.arrayBuffer()));
+      await ff.run('-i', inName, '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', outName);
+      const data = ff.FS('readFile', outName);
+      try { ff.FS('unlink', inName); ff.FS('unlink', outName); } catch (e) {}
+      toast('Transcoded “' + file.name + '”.');
+      return new File([data.buffer], file.name.replace(/\.[^.]+$/, '') + '.mp4', { type: 'video/mp4' });
+    } catch (e) { toast('Transcode failed — storing as-is.'); return file; }
+  }
+
   // ── program decks (transport) ────────────────────────────────────────────
   function deckOf(a) { return a && decks[a.deck]; }
   function freeVideoDeck() { return (active && active.deck === 'a') ? decks.b : decks.a; }
@@ -656,6 +991,8 @@
     } else if (prevOut != null) {
       sendOut({ t: 'black', ms: (cue.fadeIn || 0) * 1000 }, prevOut);     // program became audio → clear that picture
     }
+    applyKeyForActive();          // Phase 5: keying on/off for this cue (control + output)
+    fireObsForCue(cue);           // Phase 5: any OBS action programmed on this cue
   }
 
   function autoFrom(cue) {
@@ -678,11 +1015,11 @@
     setStatus('idle'); if (isVid) sendOut({ t: 'stop' }, out); renderCueList();
   }
 
-  function stopAll(opts) { clearPre(); stopAllDecks(); setStatus('idle'); sendOut({ t: 'stop' }); renderCueList(); if (!opts || !opts.silent) toast('Stopped.'); }
+  function stopAll(opts) { clearPre(); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' }); renderCueList(); if (!opts || !opts.silent) toast('Stopped.'); }
   function panic() {
     clearPre();
     fades.forEach((r) => cancelAnimationFrame(r)); fades.clear();
-    stopAllDecks(); stopAllPads();
+    stopAllDecks(); stopAllPads(); stopKeyLoop();
     setStatus('idle'); sendOut({ t: 'stop' }); renderCueList(); toast('PANIC — all stopped.');
   }
   function pauseResume() {
@@ -707,13 +1044,16 @@
   }
 
   function setStatus(s) {
-    const tag = $('og-program-status'); if (!tag) return;
-    tag.className = 'og-program-status og-status-' + (s === 'play' ? 'play' : s === 'pre' ? 'pre' : s === 'pause' ? 'pause' : 'idle');
-    tag.textContent = s === 'play' ? 'ON AIR' : s === 'pre' ? 'PRE-WAIT' : s === 'pause' ? 'PAUSED' : 'IDLE';
+    const tag = $('og-program-status');
+    if (tag) {
+      tag.className = 'og-program-status og-status-' + (s === 'play' ? 'play' : s === 'pre' ? 'pre' : s === 'pause' ? 'pause' : 'idle');
+      tag.textContent = s === 'play' ? 'ON AIR' : s === 'pre' ? 'PRE-WAIT' : s === 'pause' ? 'PAUSED' : 'IDLE';
+    }
+    publishLive(true);            // push transport change to the rundown immediately
   }
 
   // ── count-out clock + ticker ─────────────────────────────────────────────
-  function startTicker() { if (rafId) return; const loop = () => { renderClock(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
+  function startTicker() { if (rafId) return; const loop = () => { renderClock(); publishLive(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
   function stopTicker() { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
   function renderClock() {
     const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), wrap = $('og-clock');
@@ -990,7 +1330,7 @@
 
   // ── autosave + recovery ──────────────────────────────────────────────────
   function showKey() { return SHOW_KEY + (sessionCode ? '_' + sessionCode : ''); }
-  function scheduleSave() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(saveShow, 500); }
+  function scheduleSave() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(saveShow, 500); publishCues(); }
   async function saveShow() {
     saveTimer = null;
     try { await idbPut(SHOW_STORE, showKey(), { schema: SCHEMA, savedAt: Date.now(), activeCueId: active ? active.cue.id : null, cues, pads, outputs, selectedId, settings }); } catch (e) {}
@@ -1240,6 +1580,7 @@
     const mg = $('og-master-gain'); if (mg) mg.value = settings.masterGain == null ? 1 : settings.masterGain;
     if (s) showRecovery(s); else $('og-recovery').classList.remove('on');
     setModeBadge();
+    if (mode === 'session' && sessionCode) subscribeSession(); else unsubscribeSession();
   }
   async function enterOutangutan(m) {
     build(); ensureChannel(); showScreen();
@@ -1272,7 +1613,7 @@
   async function joinStandaloneInstead() { mode = 'standalone'; sessionCode = null; closeSessionJoin(); await applyShow(); }
 
   function exitOutangutan() {
-    stopAll({ silent: true }); stopAllPads(); closeSessionJoin();
+    stopAll({ silent: true }); stopAllPads(); closeSessionJoin(); unsubscribeSession();
     outputs.forEach(o => { const r = outputWins.get(o.id); if (r && r.identify) identifyOutput(o.id, false); });
     closeOutputsPanel(); closeSdPanel();
     $('outangutan').classList.remove('on');
@@ -1283,7 +1624,9 @@
   // ── exports ──────────────────────────────────────────────────────────────
   window.enterOutangutan = enterOutangutan;
   window.exitOutangutan = exitOutangutan;
-  window.Outangutan = { enter: enterOutangutan, exit: exitOutangutan, _state: () => ({ cues, pads, outputs, sdMap, selectedId, settings, active: active && active.cue.id, mode }) };
+  window.Outangutan = { enter: enterOutangutan, exit: exitOutangutan,
+    _state: () => ({ cues, pads, outputs, sdMap, selectedId, settings, active: active && active.cue.id, mode, sessionCode }),
+    _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if ($('outangutan')) build(); }, { once: true });
   else if ($('outangutan')) build();

@@ -2596,6 +2596,8 @@ function setupFirestore() {
       // QLab agent presence + cue-fire acks (Cueola → QLab integration).
       if (d.qlab?.agentHeartbeat?.ts) noteQlabAgentBeat(d.qlab.agentHeartbeat);
       if (d.qlab?.lastAck) handleQlabAck(d.qlab.lastAck);
+      // Outangutan playback module — cue list + live status published back to us.
+      if (d.outangutan) applyOutangutanState(d.outangutan);
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
         const cmd = d.forceCmd;
@@ -3027,7 +3029,7 @@ function getCueCell(b, type) {
   const d = b.cues?.[type];
   const on  = getCueOn(d);
   const off = getCueOff(d);
-  const isEmpty = !on && !off && (type !== 'script' || !d?.text);
+  const isEmpty = !on && !off && (type !== 'script' || !d?.text) && !(type === 'playback' && d?.outCueId);
   if (isEmpty) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
@@ -3038,9 +3040,10 @@ function getCueCell(b, type) {
   const scriptMeta = type === 'script' && d?.text
     ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
     : '';
+  const outBadge = type === 'playback' ? outangutanCellBadge(d) : '';
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
-    <div class="cue-cell-info">${lines}${scriptMeta}</div>
+    <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
   </div>`;
 }
 
@@ -3318,7 +3321,7 @@ function openCueConfig(beatId, type) {
   const tc = CT[type];
   document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
   const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
-  document.getElementById('cueConfigFields').innerHTML = bodyHTML + qlabCueFields(type, existing);
+  document.getElementById('cueConfigFields').innerHTML = bodyHTML + qlabCueFields(type, existing) + outangutanCueFields(type, existing);
   updateQlabFireBtn();
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
@@ -4118,6 +4121,12 @@ function saveCueConfig() {
     d.qlabAction = qlabAction;
     d.qlabAuto = qlabAuto;
   }
+  // Outangutan playback link (playback cells only)
+  if (cueConfigType === 'playback') {
+    const outCue = document.getElementById('cc-out-cue')?.value || '';
+    const outAuto = document.getElementById('cc-out-auto')?.checked || false;
+    if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; }
+  }
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
   setRundownPresence(null);
@@ -4330,6 +4339,124 @@ function qlabGoBtnHTML(beatId, type, d) {
   const label = (action === 'start' || action === 'go') ? 'GO' : action.toUpperCase();
   const tip = action === 'go' ? 'Fire QLab GO (playhead)' : `Fire QLab ${action} · cue ${esc(d.qlabCue || '')}`;
   return `<button type="button" class="lf-qlab-go" title="${tip}" onclick="event.stopPropagation();fireQlabCueCell('${beatId}','${type}')">${sfIcon('action.forward')} ${label}</button>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTANGUTAN INTEGRATION (Cueola rundown ⇄ Outangutan playback)
+// A rundown `playback` cue can link to an Outangutan cue. Firing it (manual GO
+// or auto on live advance) writes sessions/<code>.outangutan.command; the
+// Outangutan module (subscribed to the same session) plays it locally and
+// publishes back sessions/<code>.outangutan.{cues,live}, which we render into
+// the cell. Mirrors the QLab transport: one command object, deduped by id.
+// ─────────────────────────────────────────────────────────────
+let outangutanState = { cues: {}, live: null };
+let _outCmdSeq = 0;
+
+// Snapshot → local state. Re-render only when the cue set or live status
+// changes (not on every remaining-time tick) to avoid thrashing the rundown.
+function applyOutangutanState(og) {
+  if (!og) return;
+  let changed = false;
+  if (og.cues && JSON.stringify(og.cues) !== JSON.stringify(outangutanState.cues)) { outangutanState.cues = og.cues; changed = true; }
+  if (og.live) {
+    const prev = outangutanState.live || {};
+    if (prev.cueId !== og.live.cueId || prev.status !== og.live.status) changed = true;
+    outangutanState.live = og.live;
+  }
+  if (changed) {
+    if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
+    if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+  }
+}
+
+function outangutanFmtDur(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+
+// <select> options of the Outangutan cues published into this session.
+function outangutanCueOptions(cur) {
+  const map = outangutanState.cues || {};
+  const ids = Object.keys(map).sort((a, b) => (map[a].num || 0) - (map[b].num || 0));
+  let html = `<option value="">— none —</option>`;
+  for (const id of ids) html += `<option value="${esc(id)}" ${cur === id ? 'selected' : ''}>#${map[id].num} ${esc(map[id].name || 'Cue')}</option>`;
+  if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked cue (offline)</option>`;
+  return html;
+}
+
+// Optional Outangutan link block — only appended to `playback` cue modals.
+function outangutanCueFields(type, d) {
+  if (type !== 'playback') return '';
+  d = d || {};
+  const empty = !Object.keys(outangutanState.cues || {}).length;
+  return `
+    <div class="field cc-qlab cc-outangutan">
+      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph">🦧</span> Outrangutan playback <span class="cc-qlab-optional">— optional</span></div>
+      <div class="cc-qlab-row">
+        <div class="cc-qlab-cue-field" style="flex:1">
+          <label class="field-lbl">Link to an Outrangutan cue</label>
+          <select class="field-in" id="cc-out-cue">${outangutanCueOptions(d.outCueId || '')}</select>
+          ${empty ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
+        </div>
+      </div>
+      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>
+      <div class="cc-qlab-actions">
+        <button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutangutanFromModal()"><span class="cc-out-glyph">🦧</span> Fire in Outrangutan now</button>
+      </div>
+    </div>`;
+}
+
+// Core writer: push a fire command to the session doc for Outangutan to consume.
+function fireOutangutanCommand(action, cueId) {
+  if (!(window._firebaseReady && session.code && !session.isDemo)) { toast('Outangutan needs a live (non-demo) session.'); return false; }
+  _outCmdSeq += 1;
+  const command = {
+    commandId: `out_${CLIENT_ID}_${Date.now().toString(36)}_${_outCmdSeq}`,
+    ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
+    action: action || 'cue', cueId: cueId || '',
+  };
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outangutan.command': command })
+    .catch(err => toast(firebaseConnectionLabel(err, 'Outangutan command failed')));
+  return true;
+}
+
+function fireOutangutanFromModal() {
+  const outCue = document.getElementById('cc-out-cue')?.value || '';
+  if (!outCue) { toast('Link an Outangutan cue first.'); return; }
+  if (fireOutangutanCommand('cue', outCue)) toast('Outangutan: GO sent.');
+}
+
+function outangutanCellLinked(d) { return !!(d && d.outCueId); }
+
+// Manual GO from a live cue card.
+function fireOutangutanCueCell(beatId) {
+  const d = beats.find(x => x.id === beatId)?.cues?.playback;
+  if (!outangutanCellLinked(d)) { toast('No Outangutan cue linked.'); return; }
+  if (fireOutangutanCommand('cue', d.outCueId)) toast('Outangutan: GO sent.');
+}
+
+// GO button for a live cue card (playback cells linked to an Outangutan cue).
+function outangutanGoBtnHTML(beatId, d) {
+  if (!outangutanCellLinked(d)) return '';
+  return `<button type="button" class="lf-qlab-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutangutanCueCell('${beatId}')"><span class="cc-out-glyph">🦧</span> GO</button>`;
+}
+
+// Auto-fire the linked Outangutan cue when a row advances live (lsNext only).
+function fireOutangutanAutoForBeat(beat) {
+  const d = beat?.cues?.playback;
+  if (d && d.outAuto && d.outCueId) fireOutangutanCommand('cue', d.outCueId);
+}
+
+// Rundown playback-cell badge: linked cue name/dur + live status (auto-populate).
+function outangutanCellBadge(d) {
+  if (!outangutanCellLinked(d)) return '';
+  const id = d.outCueId, c = (outangutanState.cues || {})[id], live = outangutanState.live;
+  const name = c ? c.name : 'Linked cue';
+  const dur = c && c.dur ? ` · ${outangutanFmtDur(c.dur)}` : '';
+  const isLive = live && live.cueId === id && live.status && live.status !== 'idle';
+  const label = isLive ? (live.status === 'play' ? 'ON AIR' : live.status === 'pre' ? 'PRE' : live.status === 'pause' ? 'PAUSE' : '') : '';
+  const status = isLive ? `<span class="cue-out-live cue-out-${live.status}">${label}</span>` : '';
+  return `<div class="cue-out-badge">🦧 <span class="cue-out-name">${esc(name)}</span>${dur}${status}</div>`;
 }
 
 
@@ -5022,7 +5149,8 @@ function focusCuesForBeat(b) {
       if (on)  lines += `<div class="lf-cue-take">▶ ${esc(on)}</div>`;
       if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
     }
-    const goBtn = qlabGoBtnHTML(b.id, type, d);
+    const outGo = type === 'playback' ? outangutanGoBtnHTML(b.id, d) : '';
+    const goBtn = qlabGoBtnHTML(b.id, type, d) + outGo;
     return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
       <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
       <div class="lf-cue-lines">${lines}</div>
@@ -5368,6 +5496,7 @@ function lsNext() {
     lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     fireQlabAutoForBeat(beats[lsIdx]);  // auto-fire any QLab cues programmed on the new row
+    fireOutangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outangutan playback cue
     renderLive();
     syncLiveIdx();
   }
