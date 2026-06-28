@@ -2183,11 +2183,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   padding:10px;
   border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent);
 }
-#lsTransportDisclosure[open] .ls-cascade-body{
-  max-height:clamp(120px,17vh,160px);
-  overflow:auto;
-  overscroll-behavior:contain;
-}
+/* The operator drawer is the single scroll container, so each disclosure
+   shows its full contents — no inner viewport-scaled peephole that would
+   crop the Display/Theme/Screen controls. */
+.ls-sidebar #lsPrompterRemote{padding:10px}
 .ls-sidebar .flow-control-section{
   padding:0;
   border:0;
@@ -2202,6 +2201,13 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   margin-top:10px;
   padding-top:10px;
   border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent);
+}
+/* Cue & On Air lays its sections out on a grid, so adjacent-sibling
+   dividers would draw stray half-width lines — keep that group clean. */
+.ls-live-actions .flow-control-section + .flow-control-section{
+  margin-top:0;
+  padding-top:0;
+  border-top:0;
 }
 .ls-sidebar .flow-control-title{
   color:var(--text);

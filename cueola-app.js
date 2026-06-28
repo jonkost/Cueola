@@ -6620,7 +6620,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
     return i < beats.length ? i : -1;
   })();
   const rowCue = isFlow ? '' : `<div class="flow-control-section flow-control-rowcue">
-      <div class="flow-control-title">Transport</div>
+      <div class="flow-control-title">Cue</div>
       <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
         <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
         <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
