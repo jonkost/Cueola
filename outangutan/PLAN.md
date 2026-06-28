@@ -80,7 +80,7 @@ Trigger-pad grid (drag file → pad, name/color/hotkey), **Web Audio pre-decoded
 volume, loop/hold/fade-on-end). Phase 1 audio uses a simple element player as a placeholder;
 Phase 2 replaces it with the Web Audio graph.
 
-### Phase 3 — Workspaces, multi-output, control surfaces
+### Phase 3 — Workspaces, multi-output, control surfaces  ← BUILT (awaiting review); see NOTES.md
 Tabs/custom workspaces (persisted). Multi-output via **Window Management API**
 (`getScreenDetails`), per-cue output targeting, **identify** patterns, per-output `setSinkId`.
 **Stream Deck via WebHID** (no Elgato software). Multi-trigger toggle.
@@ -112,11 +112,11 @@ first; degrade gracefully elsewhere.
 ---
 
 ## Definition of done (per phase) — tracking
-- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1 · 2)*
-- [x] Live-critical paths (GO / Stop / Panic) fully **keyboard-operable**. *(Phase 1 · 2: + pad hotkeys, Tab)*
-- [x] Autosave/recovery protects anything that would hurt to lose mid-show. *(Phase 1 · 2: schema-2 incl. pads/settings)*
-- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1 · 2)*
-- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase. *(Phase 1 · 2)*
+- [x] Runs in the existing dev env, **no new stack**, matches conventions. *(Phase 1 · 2 · 3)*
+- [x] Live-critical paths (GO / Stop / Panic) fully **keyboard-operable**. *(Phase 1 · 2: + pad hotkeys, Tab · 3: + Stream Deck keys)*
+- [x] Autosave/recovery protects anything that would hurt to lose mid-show. *(Phase 1 · 2 · 3: schema-3 incl. pads/outputs/sdMap/settings)*
+- [x] Live-critical features keep working through a network drop (local-first IndexedDB). *(Phase 1 · 2 · 3)*
+- [x] `NOTES.md` records reduced-scope + browser limits; pause & summarize before next phase. *(Phase 1 · 2 · 3)*
 
 **Phase 2 status:** Web Audio engine, SFX pad board (pre-decoded buffers, instant
 trigger, per-pad EQ/comp/meter, hotkeys, retrigger), per-cue audio chain, A/V fades
@@ -124,4 +124,15 @@ trigger, per-pad EQ/comp/meter, hotkeys, retrigger), per-cue audio chain, A/V fa
 (fit/scale/pos, on-end hold/black), Playback/SFX tabs. Verified in the browser
 preview (audio path, simultaneity, transport, inspector, A/B alternation). The
 cross-dissolve + meter animation need a quick check in a **visible** Chrome/Edge
-window (the headless preview pauses rAF and won't play media). Cache-bust `?v=20260625a`.
+window (the headless preview pauses rAF and won't play media).
+
+**Phase 3 status:** Addressable multi-output (one BroadcastChannel + `target`;
+`output.html#out=<id>` filters; per-cue Output target; Outputs panel with add/remove/
+identify/screen/audio-device), Window Management `getScreenDetails()` placement,
+per-output + master `setSinkId` (outputs muted by default → fixes P2 double-audio),
+WebHID **Stream Deck** (connect, press→action map for GO/Stop/Pause/Fade/PANIC/cue/pad,
+gen-2 key images), persisted workspace (tab + outputs + sdMap + devices). Schema → **3**
+(back-fills P1/P2). Verified in preview: addressing both control + output side, panels,
+mapping, per-cue routing, no regressions. **Window-placement / WebHID input / setSinkId
+device routing need real hardware + permission** — written defensively, degrade
+gracefully, need a real Chrome/Edge check. Cache-bust `?v=20260628b`.

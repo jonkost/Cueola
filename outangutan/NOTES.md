@@ -5,6 +5,78 @@ Newest phase on top.
 
 ---
 
+## Phase 3 — Workspaces, multi-output, control surfaces  (built; awaiting review)
+
+### What shipped
+- **Addressable multi-output.** One `BroadcastChannel`, but every message now
+  carries a `target` (null = broadcast); each output window opens with
+  `output.html#out=<id>`, reads its id from the hash, and **filters on `target`**
+  (verified). Each video cue has an **`output`** id (Inspector → Output select);
+  GO posts `play`/`xfade` to that output only, and `stop`s the output it left.
+  Outputs report id back on ready/pong/closed so the controller tracks liveness.
+- **Outputs panel** (top bar → Outputs): add/remove/rename outputs, **Open/Focus**,
+  per-output **Identify** (color bars + label), a **master audio device** select,
+  and per-output **Display** + **audio device**. ≥1 output always kept; deleting an
+  output re-homes its cues.
+- **Window Management API**: “Detect displays” calls `getScreenDetails()`; an output
+  can target a screen, and Open places the window on that screen’s bounds +
+  requests fullscreen. Guarded — degrades to manual drag where unsupported/denied.
+- **Per-output + master audio device (`setSinkId`)**: output windows are **muted by
+  default** (the control bus carries program audio — this also kills the latent
+  P2 double-audio), and a per-output “Audio on this output” + device routes that
+  window via `videoEl.setSinkId`. Master (control) device via `AudioContext.setSinkId`
+  where supported. Devices come from `enumerateDevices()` (labels need OS permission).
+- **Stream Deck over WebHID** (top bar → Stream Deck): connect directly (vendor
+  `0x0fd9`, no Elgato software), parse key-press input reports → fire a mapped action
+  (**GO / Stop / Pause / Fade·Stop / PANIC / a specific cue / an SFX pad**), and paint
+  key images on gen-2 (JPEG) models (MK.2 / XL / v2) + brightness/reset. Model table
+  keyed by productId (15/6/32 keys). One-screen mapping grid that works **before** the
+  device is attached. Persisted in `settings.sdMap`.
+- **Workspaces**: P2’s Playback/SFX tabs + the persisted layout (active tab, outputs,
+  Stream Deck map, master device, multi-trigger) **is** the persisted-workspace story.
+  Schema bumped to **3**; loader back-fills P1/P2 saves (default 1 output, empty map).
+
+### Verified (browser preview, Chromium)
+- No console errors through enter / panels / add-output / mapping / GO / stop.
+- **Multi-output addressing, control side**: a video cue set to Output 2 → GO posts a
+  `play` message with **`target: 2`** (captured off the channel).
+- **Multi-output addressing, output side**: two `#out=1` / `#out=2` frames — an
+  addressed `identify` lit **only** Output 2 (with its label); a broadcast cleared it;
+  each frame self-titled from its id.
+- Outputs panel renders (2 rows, master sink, detect, per-output device); inspector
+  **Output select** lists every output and routes `cue.output`.
+- Stream Deck panel renders a 15-key grid, mapping persists (`sdMap`), the cue/pad
+  **ref select appears** when action = Cue/Pad, Connect enabled (WebHID present).
+- Regression: audio cue still GO → **ON AIR** → stop clears.
+
+### Reduced scope / can only be verified with hardware (noted honestly)
+- **Second-monitor placement (Window Management), Stream Deck key I/O (WebHID), and
+  per-output `setSinkId` device routing need real hardware + a permission grant** — not
+  reachable in a headless tab. All three are written defensively (feature-detected,
+  every HID/screen/sink call guarded) and degrade gracefully; they need a 2-minute
+  check on a real Chrome/Edge with a 2nd display / a Stream Deck / multiple audio devices.
+- **Stream Deck input byte-offset + image protocol** are model-specific and untested
+  without the device: input `stateOffset` defaults to gen2=3 / gen1=0, image upload is
+  implemented for gen-2 JPEG only (gen-1 BMP keys stay dark but still trigger). If keys
+  map to the wrong index on a given unit, adjust `SD_MODELS[pid].stateOffset`.
+- **Cross-display crossfade** isn’t a real dissolve (different screens) — a cue moving
+  to a *different* output cuts in there and clears the old output; same-output
+  crossfade dissolves via the output’s A/B decks (from P2).
+- **Custom drag-to-rearrange workspace layouts** beyond tabs/panels — deferred; tabs +
+  the Outputs/Stream Deck panels cover the practical need. Noted, not pretended.
+
+### How to test Phase 3 (real Chrome/Edge)
+1. **Outputs**: top bar → Outputs → Add output (2). “Detect displays”, allow Window
+   management → pick a screen per output → Open (it should place + fullscreen there).
+   Set cue 1 → Output 1 and cue 2 → Output 2 in the Inspector; GO each → they land on
+   the right screen. Identify shows bars+label per output.
+2. **Per-output audio**: tick “Audio on this output”, pick a device → that window’s
+   audio routes there; the control master device routes the program/SFX bus.
+3. **Stream Deck**: top bar → Stream Deck → Connect (pick the device). Map keys to GO /
+   PANIC / a cue / a pad; press physical keys → they fire; gen-2 keys show labels.
+
+---
+
 ## Phase 2 — SFX board + audio engine  (built; awaiting review)
 
 ### What shipped

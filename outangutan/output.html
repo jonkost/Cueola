@@ -39,11 +39,15 @@
   const idLabel = document.getElementById('idlabel');
   const waiting = document.getElementById('waiting');
   const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outangutan-output') : null;
+  // this output's id (controller addresses messages with `target`; null = broadcast)
+  const MY_ID = (parseInt((location.hash.match(/out=(\d+)/) || [])[1], 10) || 1);
+  document.title = 'Outangutan Output ' + MY_ID;
 
   // two decks for crossfades
   const decks = { a: deck('va'), b: deck('vb') };
   let front = decks.a;
-  function deck(id) { return { el: document.getElementById(id), url: null, mediaId: null }; }
+  // muted by default — the controller carries program audio; per-output audio is opt-in (setSinkId)
+  function deck(id) { const el = document.getElementById(id); el.muted = true; return { el: el, url: null, mediaId: null }; }
   function other(d) { return d === decks.a ? decks.b : decks.a; }
 
   const fades = {};
@@ -130,13 +134,23 @@
       case 'black': { const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
       case 'stop': stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; break;
       case 'holdLast': try { front.el.pause(); } catch (e) {} break;
-      case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || 'Output'; break;
+      case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || ('Output ' + MY_ID); break;
+      case 'audio': await applyAudio(m); break;   // per-output device routing (setSinkId)
     }
   }
-  function reply(msg) { if (bc) bc.postMessage(Object.assign({ _from: 'output' }, msg)); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, msg), '*'); } catch (e) {} }
+  async function applyAudio(m) {
+    const on = !!m.on;
+    for (const d of [decks.a, decks.b]) {
+      d.el.muted = !on;
+      if (on && m.sinkId && d.el.setSinkId) { try { await d.el.setSinkId(m.sinkId); } catch (e) {} }
+    }
+  }
+  function reply(msg) { const out = Object.assign({ _from: 'output', id: MY_ID }, msg); if (bc) bc.postMessage(out); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, out), '*'); } catch (e) {} }
 
-  if (bc) bc.onmessage = (e) => { if (e.data && e.data._from !== 'output') handle(e.data); };
-  window.addEventListener('message', (e) => { if (e.data && e.data._og && e.data._from !== 'output') handle(e.data); });
+  // act only on broadcast (target null) or messages addressed to this output
+  function forMe(d) { return d && d._from !== 'output' && (d.target == null || d.target === MY_ID); }
+  if (bc) bc.onmessage = (e) => { if (forMe(e.data)) handle(e.data); };
+  window.addEventListener('message', (e) => { if (e.data && e.data._og && forMe(e.data)) handle(e.data); });
 
   decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
   decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });
