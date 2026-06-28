@@ -6093,7 +6093,7 @@ const PT_THEMES = {
   koala:    { bg:'#1f1f1e', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(38,38,38,.92)',    uiBorder:'rgba(255,255,255,.28)' },
   panda:    { bg:'#000000', text:'#ffffff', accent:'#ffffff', uiBg:'rgba(10,10,10,.92)',    uiBorder:'rgba(255,255,255,.28)' },
   flamingo: { bg:'#330512', text:'#ffffff', accent:'#de4b9a', uiBg:'rgba(59,20,41,.88)',    uiBorder:'rgba(222,75,154,.34)' },
-  outrangutan: { bg:'#100c09', text:'#fff1df', accent:'#ff7a1a', uiBg:'rgba(23,17,13,.86)', uiBorder:'rgba(255,122,26,.34)' },
+  outrangutan: { bg:'#0c0906', text:'#ffffff', accent:'#ff6a00', uiBg:'rgba(26,18,11,.88)', uiBorder:'rgba(255,106,0,.38)' },
   prepbear: { bg:'#080912', text:'#ffffff', accent:'#eeca57', uiBg:'rgba(20,23,42,.92)',    uiBorder:'rgba(238,202,87,.30)' },
 };
 

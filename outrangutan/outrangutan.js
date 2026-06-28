@@ -60,7 +60,7 @@
   const THEME_PREVIEWS = {
     cool:'#0a0d18', warm:'#140803', white:'#fafaf7', green:'#041208',
     koala:'#1c1c1b', panda:'#000000', flamingo:'#0e0410',
-    outrangutan:'#ff7a1a', prepbear:'#080a14',
+    outrangutan:'#ff6a00', prepbear:'#080a14',
   };
 
   // ── state ──────────────────────────────────────────────────────────────
