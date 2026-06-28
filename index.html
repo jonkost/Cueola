@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=20260628h">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=20260628m">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -1763,6 +1763,9 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-live-actions :is(.pt-tech-btn,.pt-bars-btn){width:100%;min-height:38px;padding:9px;font-size:12px;border-radius:10px}
 .ls-live-actions .pt-live-rowcue{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ls-live-actions .pt-live-rowcue .pt-btn{min-height:36px;padding:9px;font-size:12px;border-radius:10px;border-color:var(--pt-accent,#c8a97e);color:var(--pt-accent,#c8a97e)}
+/* Let long labels (e.g. "Tech Difficulty") wrap instead of overflowing the half-width cell. */
+.ls-live-actions .pt-btn{white-space:normal}
+.ls-live-actions .pt-btn>span{white-space:normal;overflow-wrap:anywhere;line-height:1.08}
 .ls-live-actions .pt-live-cue{flex:1 1 100%}
 .ls-live-actions .pt-range{flex:1}
 .ls-live-actions .flow-clock-stack{flex:1 1 100%;width:100%}
@@ -1963,9 +1966,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   letter-spacing:0;
 }
 .flow-theme-grid{
-  display:flex!important;
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:8px;
-  flex-wrap:wrap;
+  justify-items:center;
   align-items:center;
 }
 .pt-theme-dot,.flowop-theme-dot{
@@ -2310,6 +2314,18 @@ input.pt-range::-moz-range-thumb,
   .ls-sidebar{width:100%;max-width:none}
   .ls-live-actions{grid-template-columns:1fr}
 }
+
+/* Script Op opened as a real browser window (?scriptop=) — focus the window on
+   just the controls: hide the rundown grid/stats and fill with the sidebar. */
+body.scriptop-popout .follow-bar,
+body.scriptop-popout .ls-overview,
+body.scriptop-popout #lsBody,
+body.scriptop-popout #lsResizer,
+body.scriptop-popout #lsPopoutBtn{display:none!important}
+body.scriptop-popout #liveshow{display:flex;flex-direction:column}
+body.scriptop-popout .ls-body{flex:1 1 auto;min-height:0;display:block}
+body.scriptop-popout .ls-sidebar{position:static!important;width:100%!important;max-width:none!important;min-width:0!important;height:100%!important;transform:none!important;border-left:0!important}
+body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 /* Script Op: reorganized controls + pop-out controls panel */
 .ls-sidebar-head-row{display:flex;align-items:center;gap:8px}
@@ -3974,8 +3990,8 @@ input.pt-range::-moz-range-thumb,
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=20260628c"></script>
-<script src="outrangutan/outrangutan.js?v=20260628h"></script>
+<script src="cueola-app.js?v=20260628n"></script>
+<script src="outrangutan/outrangutan.js?v=20260628m"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

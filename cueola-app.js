@@ -5932,26 +5932,33 @@ function renderLivePrompterControls() {
 // so the operator keeps a lot of controls at the ready. We toggle a class on
 // the sidebar in place (no DOM moving), so every .ls-sidebar-scoped control
 // rule keeps applying and renderLivePrompterControls() still works unchanged.
-function toggleScriptOpPopout() {
-  const sidebar = document.getElementById('lsSidebar');
-  if (!sidebar) return;
-  sidebar.classList.contains('is-popped') ? dockScriptOpPopout() : openScriptOpPopout();
-}
+// "Pop out" now opens the Script Op controls in a REAL, scaled, resizable browser
+// window (drag it to another monitor). The new window boots the app at
+// ?scriptop=<code>, auto-joins the SAME session, goes live and opens the Script Op
+// panel — so it drives the same Flowmingo through the existing session sync (the
+// session is the bridge; no separate messaging layer needed).
+let _scriptOpWin = null;
+function toggleScriptOpPopout() { openScriptOpPopout(); }
 
 function openScriptOpPopout() {
-  const sidebar = document.getElementById('lsSidebar');
-  if (!sidebar) return;
-  sidebar.classList.add('is-popped');
+  if (document.body.classList.contains('scriptop-popout')) return; // already inside a pop-out window
+  const code = (session.code || '').trim();
+  if (!code || session.isDemo) { toast('Script Op pop-out needs a live (non-demo) session.'); return; }
+  if (_scriptOpWin && !_scriptOpWin.closed) { _scriptOpWin.focus(); return; }
+  const url = location.origin + location.pathname + '?scriptop=' + encodeURIComponent(code)
+    + (session.userName ? '&name=' + encodeURIComponent(session.userName) : '');
+  const w = Math.min(560, (screen.availWidth || 1280) - 40);
+  const h = Math.min(940, (screen.availHeight || 900) - 40);
+  _scriptOpWin = window.open(url, 'cueolaScriptOp_' + code, `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`);
+  if (!_scriptOpWin) { toast('Pop-out blocked — allow pop-ups for Cueola.'); return; }
   const btn = document.getElementById('lsPopoutBtn');
-  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Dock'); btn.classList.add('active'); }
+  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Script Op window'); btn.classList.add('active'); }
+  toast('Script Op opened in a new window — drag it to another monitor.');
 }
 
 function dockScriptOpPopout() {
-  const sidebar = document.getElementById('lsSidebar');
-  if (!sidebar) return;
-  sidebar.classList.remove('is-popped');
-  // Clear any drag-applied inline position so it re-docks cleanly.
-  sidebar.style.left = sidebar.style.top = sidebar.style.right = '';
+  if (_scriptOpWin && !_scriptOpWin.closed) { try { _scriptOpWin.close(); } catch (e) {} }
+  _scriptOpWin = null;
   const btn = document.getElementById('lsPopoutBtn');
   if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Pop out'); btn.classList.remove('active'); }
 }
@@ -12964,6 +12971,31 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
+  // Script Op pop-out window: boot focused into the live Script Op controls,
+  // joined to the same session (opened by openScriptOpPopout in another window).
+  if (params.has('scriptop')) {
+    sessionStorage.setItem('cueola_screen', 'entry');
+    document.body.classList.add('scriptop-popout');
+    const code = (params.get('scriptop') || params.get('code') || '').trim().toUpperCase();
+    let name = (params.get('name') || '').trim();
+    try { name = name || localStorage.getItem('cueola_last_name') || ''; } catch (e) {}
+    name = name || 'Script Op';
+    const bootScriptOp = () => {
+      if (!code) { showModal('modal-stud'); return; }
+      session = { code, role: 'instructor', userName: name, isDemo: false, isExpert: false };
+      freeTextMode = false;
+      enterRundown();
+      setTimeout(() => {
+        try { if (!document.getElementById('liveshow').classList.contains('on')) goLive(); } catch (e) {}
+        setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch (e) {} }, 500);
+      }, 400);
+    };
+    waitForFirebaseReady().then(ready => {
+      if (ready || !code) bootScriptOp();
+      else { try { openLocalSession(code, name, 'instructor'); } catch (e) {} setTimeout(() => { try { if (!document.getElementById('liveshow').classList.contains('on')) goLive(); } catch (e) {} setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch (e) {} }, 500); }, 400); }
+    });
+    return;
+  }
   if (location.hash === '#flowmingo-op' || location.hash === '#flowop' || params.has('flowop') || params.has('operator')) {
     sessionStorage.setItem('cueola_screen', 'entry');
     setTimeout(() => openFlowmingoOperator(params.get('code') || ''), 0);

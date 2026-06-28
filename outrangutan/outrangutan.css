@@ -166,20 +166,10 @@
 .og-help-row input { width: 110px; text-align: center; font-family: var(--mono); background: var(--s2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r-sm); padding: 6px; }
 .og-help-close { margin-top: 14px; width: 100%; padding: 10px; border-radius: var(--r-sm); background: var(--accent); color: #fff; border: none; font-weight: 700; cursor: pointer; }
 
-/* ── session join sheet ──────────────────────────────────────────────────── */
-.og-join { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 31; }
+/* ── session join sheet — uses the global .modal pattern so it matches every
+   other module's join splash (Cueola / Planda Bear / Flowmingo). ─────────────── */
+.og-join { position: absolute; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 31; }
 .og-join.on { display: flex; }
-.og-join-card { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 26px 24px; width: min(420px, 92vw); text-align: center; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
-.og-join-glyph { font-size: 40px; line-height: 1; }
-.og-join-card h3 { font-family: var(--syne); font-weight: 800; margin: 10px 0 6px; }
-.og-join-card p { color: var(--text2); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
-.og-join-card input { width: 100%; box-sizing: border-box; text-align: center; font-family: var(--mono); font-size: 20px; letter-spacing: .14em; text-transform: uppercase; background: var(--s2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r-sm); padding: 13px; }
-.og-join-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.og-join-err { color: var(--red); font-size: 12px; min-height: 16px; margin: 7px 0 3px; }
-.og-join-go { width: 100%; padding: 13px; border: none; border-radius: var(--r-sm); background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
-.og-join-go:hover { filter: brightness(1.07); }
-.og-join-skip { width: 100%; margin-top: 12px; padding: 8px; background: transparent; border: none; color: var(--text2); font-size: 12.5px; cursor: pointer; }
-.og-join-skip:hover { color: var(--text); }
 
 /* ── Outrangutan brand wordmark ───────────────────────────────────────────────
    Two-tone like the other Cueola wordmarks (Cu·e/ola, Plan/da Bear): the base
@@ -729,3 +719,55 @@
 .og-dbx-files { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .og-dbx-file { display: flex; align-items: center; gap: 8px; }
 .og-dbx-name { flex: 1 1 auto; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================================
+ * Resizable mockup layout — CUE LIST | Preview | Inspector (top, draggable
+ * columns) + full-width Clip Editor (bottom, draggable height). Overrides the
+ * earlier .og-main grid.
+ * ==========================================================================*/
+.og-main { display: flex !important; flex-direction: column; min-height: 0;
+  grid-template-columns: none !important; grid-template-rows: none !important; }
+.og-toprow { flex: 1 1 auto; display: flex; min-height: 0; }
+.og-toprow > .og-pane { min-width: 0; min-height: 0; }
+.og-cuelist-pane { flex: 0 0 var(--og-w-cuelist, 300px); grid-row: auto !important; }
+.og-program-pane { flex: 1 1 auto; min-width: 320px; grid-column: auto !important; grid-row: auto !important; }
+.og-inspector-pane { flex: 0 0 var(--og-w-inspector, 300px); grid-column: auto !important; grid-row: auto !important; border-left: 0 !important; border-top: 0 !important; max-height: none !important; }
+
+.og-splitter { flex: 0 0 6px; background: var(--border); position: relative; touch-action: none; transition: background .12s; }
+.og-splitter-v { cursor: col-resize; }
+.og-splitter-h { cursor: row-resize; }
+.og-splitter:hover, .og-splitter.drag { background: var(--accent); }
+.og-splitter-v::after { content: ''; position: absolute; inset: 0 -4px; }   /* wider hit target */
+.og-splitter-h::after { content: ''; position: absolute; inset: -4px 0; }
+
+.og-edit-pane { flex: 0 0 var(--og-h-edit, 200px); display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); background: var(--s1); }
+.og-edit-body { flex: 1 1 auto; overflow: auto; padding: 12px 14px; }
+.og-edit-empty { color: var(--text3); font-size: 13px; text-align: center; padding: 26px 8px; }
+.og-edit-actions { display: flex; gap: 6px; }
+
+/* clip trim/scrub track */
+.og-trk-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; font-size: 12px; }
+.og-trk-name { font-weight: 700; font-size: 13px; }
+.og-trk-times { font-family: var(--mono-num, monospace); color: var(--text2); font-variant-numeric: tabular-nums; }
+.og-trk-times b { color: var(--text); }
+.og-track { position: relative; height: 58px; background: #05070a; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; user-select: none; }
+.og-track-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .32; }
+.og-track-thumb.og-track-audio { background: repeating-linear-gradient(90deg, transparent 0 3px, color-mix(in srgb, var(--green) 34%, transparent) 3px 4px); opacity: .5; }
+.og-track-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); border-left: 2px solid var(--green); border-right: 2px solid var(--red); }
+.og-track-h { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; cursor: ew-resize; z-index: 3; }
+.og-track-h::before { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; }
+.og-track-in::before { background: var(--green); }
+.og-track-out::before { background: var(--red); }
+.og-track-h::after { content: ''; position: absolute; top: 50%; left: 1px; width: 10px; height: 20px; margin-top: -10px; border-radius: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.og-track-in::after { background: var(--green); }
+.og-track-out::after { background: var(--red); }
+.og-track-play { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 4; pointer-events: none; box-shadow: 0 0 6px rgba(255,255,255,.6); }
+.og-trk-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+.og-type-video-fg { color: var(--video); }
+.og-type-audio-fg { color: var(--green); }
+
+@media (max-width: 920px) {
+  .og-toprow { flex-direction: column; }
+  .og-splitter-v { display: none; }
+  .og-cuelist-pane, .og-inspector-pane { flex-basis: auto !important; }
+}

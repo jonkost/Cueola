@@ -5,6 +5,59 @@ Newest phase on top.
 
 ---
 
+## Polish — UI batch (theme grid, Script Op buttons/window, Outrangutan layout)
+
+Four owner requests:
+- **Theme picker → 3×3 grid.** Only `.flow-theme-grid` (Script Op + Flowmingo Op
+  theme dots, in index.html) was a `flex-wrap` (→ 5/4); switched to
+  `grid-template-columns:repeat(3,…)` for 9 themes = 3×3. The entry / Planda Bear /
+  Outrangutan pickers were already 3-col.
+- **Script Op "Cue & On Air" buttons overflowed** ("Tech Difficulty" spilled over
+  "NTSC Bars"): `.flow-control-grid .pt-btn` had `white-space:nowrap`. Added
+  `.ls-live-actions .pt-btn{white-space:normal}` + `>span{overflow-wrap:anywhere}`
+  so long labels wrap in their half-width cells. Verified: 0px overflow.
+- **Script Op "Pop out" → a REAL browser window** (was an in-page float). Now
+  `openScriptOpPopout()` does `window.open(?scriptop=<code>&name=<name>)`; a new boot
+  branch in `autoJoinFromDashboard()` joins that session, goes live, opens the Script
+  Op panel, and adds `body.scriptop-popout` to hide the rundown grid/stats and fill
+  the window with the controls. **The session is the bridge** — the popout drives the
+  same Flowmingo through the existing `sessions/{code}.prompter.control` sync; no
+  separate messaging layer. Verified: `?scriptop=…` boots focused (live + Script Op
+  open, rundown hidden, sidebar full-width), no console errors. Real cross-device
+  control still needs a live (non-demo) session to exercise end-to-end.
+- **Outrangutan resizable layout (mockup):** `.og-main` is now a flex column — a
+  **toprow** (Cue List | Preview | Inspector) with two draggable vertical splitters,
+  and a full-width **Clip Editor** below with a horizontal splitter. Pane sizes are
+  CSS vars (`--og-w-cuelist/-inspector/-h-edit`) persisted in `settings.layout`.
+  The **Clip Editor** is a trim/scrub track for the selected cue: draggable green IN /
+  red OUT handles, a white playhead (ticks live during playback), click-to-scrub, and
+  Set In/Set Out/Reset + numeric trim fields — all drive `cue.trimIn/trimOut` and the
+  active deck. Transport + scopes stay by the preview (per owner). Verified: all 3
+  splitters resize + persist across reload; IN/OUT drag + numeric trim work.
+  Gotchas fixed: splitter handlers must read `settings.layout` fresh (loadShow
+  reassigns `settings`); the height splitter must `querySelector('.og-main')`
+  (it's a class, not an id). Below 920px the columns stack + vertical splitters hide.
+
+Cache-bust: cueola-app `?v=20260628n`, outrangutan `?v=20260628m`.
+
+---
+
+## Polish — Session join splash now matches every other module (owner: "odd verbage")
+
+The custom `og-join` card (its own glyph/heading/paragraph + the stale line "Live
+cross-device cue sync arrives in Phase 4…") was replaced with the **global `.modal`
+pattern** every other join uses (`modal-prepro-join` / `modal-stud`): `.modal-title`
+**"Open Outrangutan"**, `.modal-sub` "Enter the session code to run playback for this
+show.", a **Session Code** field + **Your Name** field (standard styling), `.modal-err`
+"Please fill in both fields.", **btn-primary "Open Outrangutan"**, **btn-secondary
+"Cancel"**. The join toast lost its Phase-4 verbiage (now just "Joined session <CODE>.").
+`Cancel`/Esc → back to the front page (Standalone stays its own card button). Prefills
+from `cueola_last_code`/`cueola_last_name` like the others; the name is stored in
+`sessionUserName`. `.og-join` overlay now uses the same blur scrim as `.modal-wrap`; the
+orphaned `.og-join-card/-glyph/-go/-skip/-err` CSS was removed. Cache-bust `?v=20260628i`.
+
+---
+
 ## Phase 5 — Pro features & monitoring  (built; awaiting review) — FINAL PHASE
 
 All five web-achievable pro features. Self-contained in `outrangutan.js` +

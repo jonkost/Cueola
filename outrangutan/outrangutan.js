@@ -48,7 +48,8 @@
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
     clockMode: 'remaining', multiTrigger: true, showLock: false, tab: 'play',
-    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
+    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false,
+    layout: { wCuelist: 300, wInspector: 300, hEdit: 200 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
   const THEME_ORDER = ['cool','warm','white','green','koala','panda','flamingo','outrangutan','prepbear'];
@@ -67,6 +68,7 @@
   let built = false;
   let mode = 'standalone';
   let sessionCode = null;
+  let sessionUserName = '';       // name entered on the join splash (parity with other modules)
   let cues = [];
   let pads = [];                 // SFX pads: [{ id, slot, name, mediaId, color, key, gain, loop, fadeIn, fadeOut, eq:{low,mid,high}, comp, trimIn, trimOut, retrigger }]
   let selectedId = null;         // standby cue
@@ -718,7 +720,7 @@
       }
       default: return;
     }
-    renderCueList(); renderInspector();
+    renderCueList(); renderInspector(); renderEditArea();
   }
 
   // publish a media-free cue-list summary so the rundown can list + link cues
@@ -1029,7 +1031,7 @@
     const next = nextArmedAfter(cue.id);
     fireCue(cue);
     selectedId = next || selectedId;
-    renderCueList(); renderInspector();
+    renderCueList(); renderInspector(); renderEditArea();
   }
   function fireCue(cue) {
     clearPre();
@@ -1101,7 +1103,7 @@
     if (!next) return;
     selectedId = nextArmedAfter(next.id) || nextId;
     fireCue(next);
-    renderCueList(); renderInspector();
+    renderCueList(); renderInspector(); renderEditArea();
   }
   function handleEnded(cue) {
     const m = cue.continueMode;
@@ -1153,7 +1155,7 @@
   }
 
   // ── count-out clock + ticker ─────────────────────────────────────────────
-  function startTicker() { if (rafId) return; const loop = () => { renderClock(); publishLive(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
+  function startTicker() { if (rafId) return; const loop = () => { renderClock(); renderEditPlayhead(); publishLive(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
   function stopTicker() { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
   function renderClock() {
     const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), wrap = $('og-clock');
@@ -1206,7 +1208,7 @@
   }
 
   // ── rendering ────────────────────────────────────────────────────────────
-  function renderAll() { renderCueList(); renderInspector(); renderClock(); renderPads(); renderPadInspector(); }
+  function renderAll() { renderCueList(); renderInspector(); renderEditArea(); renderClock(); renderPads(); renderPadInspector(); }
 
   function renderCueList() {
     const wrap = $('og-cuelist'); if (!wrap) return;
@@ -1224,7 +1226,7 @@
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
-      el.onclick = () => { selectedId = el.getAttribute('data-id'); renderCueList(); renderInspector(); if (!active && !preInfo) renderClock(); };
+      el.onclick = () => { selectedId = el.getAttribute('data-id'); renderCueList(); renderInspector(); renderEditArea(); if (!active && !preInfo) renderClock(); };
       el.ondblclick = () => { selectedId = el.getAttribute('data-id'); go(); };
     });
   }
@@ -1350,6 +1352,89 @@
   function field(label, inner) { return '<div class="og-field"><label>' + label + '</label>' + inner + '</div>'; }
   function opt(val, label, cur) { return '<option value="' + val + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + label + '</option>'; }
   function sub(t) { return '<div class="og-insp-sub">' + t + '</div>'; }
+
+  // ── Clip Editor (trim / scrub the selected cue) ──────────────────────────
+  // The full-width bottom pane: a timeline of the selected clip with draggable
+  // IN/OUT handles + a scrub playhead. Live — drives cue.trimIn/trimOut and seeks
+  // the active deck. (Resizable layout below.)
+  function editClipDuration(c) { return (c && c.duration) || ((active && active.cue.id === (c && c.id) && active.el && isFinite(active.el.duration)) ? active.el.duration : 0); }
+  function renderEditArea() {
+    const body = $('og-edit-body'), acts = $('og-edit-actions'); if (!body) return;
+    const c = cueById(selectedId);
+    if (!c) { body.innerHTML = '<div class="og-edit-empty">Select a cue to trim and scrub it.</div>'; if (acts) acts.innerHTML = ''; return; }
+    const dur = editClipDuration(c) || 0;
+    const tin = clamp(c.trimIn || 0, 0, dur || 1e9);
+    const tout = (c.trimOut == null ? dur : clamp(c.trimOut, 0, dur || 1e9)) || dur;
+    const isLive = active && active.cue.id === c.id;
+    if (acts) acts.innerHTML =
+      '<button class="og-bar-btn" id="og-edit-setin" title="Set IN at the playhead">Set In</button>'
+      + '<button class="og-bar-btn" id="og-edit-setout" title="Set OUT at the playhead">Set Out</button>'
+      + '<button class="og-bar-btn" id="og-edit-reset" title="Clear trim">Reset</button>';
+    const pct = (t) => dur > 0 ? (clamp(t, 0, dur) / dur * 100) : 0;
+    body.innerHTML =
+      '<div class="og-trk-meta"><span class="og-trk-name og-type-' + c.type + '-fg">' + esc(c.name) + '</span>'
+        + '<span class="og-trk-times"><b id="og-trk-cur">0:00</b> · IN ' + fmtClock(tin) + ' · OUT ' + fmtClock(tout) + ' · ' + fmtClock(dur) + '</span></div>'
+      + '<div class="og-track" id="og-track">'
+        + (c.thumb ? '<img class="og-track-thumb" src="' + c.thumb + '" alt="">' : '<div class="og-track-thumb og-track-' + c.type + '"></div>')
+        + '<div class="og-track-region" id="og-trk-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
+        + '<div class="og-track-h og-track-in" id="og-trk-in" style="left:' + pct(tin) + '%" title="Trim in"></div>'
+        + '<div class="og-track-h og-track-out" id="og-trk-out" style="left:' + pct(tout) + '%" title="Trim out"></div>'
+        + '<div class="og-track-play" id="og-trk-play" style="left:' + pct(isLive ? active.el.currentTime : tin) + '%"></div>'
+      + '</div>'
+      + '<div class="og-trk-fields">'
+        + field('Trim in (s)', '<input id="og-trk-in-n" type="number" min="0" step="0.1" value="' + (Math.round(tin * 10) / 10) + '">')
+        + field('Trim out (s)', '<input id="og-trk-out-n" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : Math.round(tout * 10) / 10) + '" placeholder="end">')
+        + field('Loop', '<select id="og-trk-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>')
+      + '</div>';
+
+    const track = $('og-track');
+    const setIn = (v) => { c.trimIn = clamp(v, 0, (c.trimOut == null ? dur : c.trimOut) - 0.05); if (active && active.cue.id === c.id) { try { active.el.currentTime = c.trimIn; } catch (e) {} } renderEditArea(); renderInspector(); scheduleSave(); };
+    const setOut = (v) => { c.trimOut = clamp(v, (c.trimIn || 0) + 0.05, dur || v); renderEditArea(); renderInspector(); scheduleSave(); };
+    const tFromX = (clientX) => { const r = track.getBoundingClientRect(); return clamp((clientX - r.left) / r.width, 0, 1) * dur; };
+    const dragHandle = (el, apply) => { if (!el) return; el.onpointerdown = (e) => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (er) {} const mv = (ev) => apply(tFromX(ev.clientX)); const up = () => { try { el.releasePointerCapture(e.pointerId); } catch (er) {} el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); }; el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); }; };
+    dragHandle($('og-trk-in'), setIn);
+    dragHandle($('og-trk-out'), setOut);
+    // click/drag on the track body = scrub the live cue (or set the playhead preview)
+    track.onpointerdown = (e) => { if (e.target.id === 'og-trk-in' || e.target.id === 'og-trk-out') return; const t = tFromX(e.clientX); if (active && active.cue.id === c.id) { try { active.el.currentTime = t; sendOut({ t: 'seek', at: t }, c.output || 1); } catch (er) {} } const ph = $('og-trk-play'); if (ph && dur) ph.style.left = (t / dur * 100) + '%'; };
+    const b = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
+    b('og-edit-setin', 'onclick', () => setIn(isLive ? active.el.currentTime : (c.trimIn || 0)));
+    b('og-edit-setout', 'onclick', () => setOut(isLive ? active.el.currentTime : dur));
+    b('og-edit-reset', 'onclick', () => { c.trimIn = 0; c.trimOut = null; renderEditArea(); renderInspector(); scheduleSave(); });
+    b('og-trk-in-n', 'onchange', (e) => setIn(Math.max(0, parseFloat(e.target.value) || 0)));
+    b('og-trk-out-n', 'onchange', (e) => { const v = parseFloat(e.target.value); if (isNaN(v)) { c.trimOut = null; renderEditArea(); renderInspector(); scheduleSave(); } else setOut(v); });
+    b('og-trk-loop', 'onchange', (e) => { c.loop = e.target.value === '1'; if (active && active.cue.id === c.id) active.el.loop = c.loop; renderInspector(); scheduleSave(); });
+  }
+  function renderEditPlayhead() {
+    const ph = $('og-trk-play'), cur = $('og-trk-cur'); if (!ph || !active) return;
+    const c = cueById(selectedId); if (!c || active.cue.id !== c.id) return;
+    const dur = editClipDuration(c) || 0; if (!dur) return;
+    ph.style.left = (clamp(active.el.currentTime, 0, dur) / dur * 100) + '%';
+    if (cur) cur.textContent = fmtClock(active.el.currentTime);
+  }
+
+  // ── Resizable panes ──────────────────────────────────────────────────────
+  function applyLayout() {
+    const L = settings.layout || (settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 });
+    const root = $('outrangutan'); if (!root) return;
+    root.style.setProperty('--og-w-cuelist', (L.wCuelist || 300) + 'px');
+    root.style.setProperty('--og-w-inspector', (L.wInspector || 300) + 'px');
+    root.style.setProperty('--og-h-edit', (L.hEdit || 200) + 'px');
+  }
+  function wireSplitter(id, onMove) {
+    const el = $(id); if (!el) return;
+    el.onpointerdown = (e) => {
+      e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (er) {} el.classList.add('drag');
+      const mv = (ev) => onMove(ev);
+      const up = () => { try { el.releasePointerCapture(e.pointerId); } catch (er) {} el.classList.remove('drag'); el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); scheduleSave(); };
+      el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up);
+    };
+  }
+  function initSplitters() {
+    // read settings.layout fresh each move — `settings` is reassigned by loadShow()
+    wireSplitter('og-split-c', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wCuelist = clamp(ev.clientX - r.left, 200, r.width - 460); applyLayout(); });
+    wireSplitter('og-split-i', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 460); applyLayout(); });
+    wireSplitter('og-split-h', (ev) => { const m = document.querySelector('.og-main'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
+  }
 
   async function deleteCue(id) {
     const c = cueById(id); if (!c) return;
@@ -1524,7 +1609,7 @@
   function moveSelection(d) {
     if (!cues.length) return;
     let i = cueIndex(selectedId); i = clamp((i < 0 ? 0 : i) + d, 0, cues.length - 1);
-    selectedId = cues[i].id; renderCueList(); renderInspector(); if (!active && !preInfo) renderClock();
+    selectedId = cues[i].id; renderCueList(); renderInspector(); renderEditArea(); if (!active && !preInfo) renderClock();
   }
 
   // ── help / shortcut editor ───────────────────────────────────────────────
@@ -1583,12 +1668,14 @@
       + '<div class="og-stage" id="og-stage">'
         // ── PLAYBACK ──
         + '<div class="og-main">'
+          + '<div class="og-toprow" id="og-toprow">'
           + '<div class="og-pane og-cuelist-pane">'
             + '<div class="og-pane-head">Cue List<div class="og-pane-actions"><button class="og-bar-btn" id="og-add-btn">Add media</button></div></div>'
             + '<div class="og-cuelist" id="og-cuelist"></div>'
             + '<button class="og-cue-add" id="og-cue-add">Drop video / audio here, or click to add</button>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*" multiple hidden>'
           + '</div>'
+          + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
             + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" title="Time of day">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
             + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
@@ -1604,8 +1691,15 @@
               + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'PANIC<span class="og-tbtn-key" id="og-k-panic"></span></button>'
             + '</div>'
           + '</div>'
+          + '<div class="og-splitter og-splitter-v" id="og-split-i" title="Drag to resize"></div>'
           + '<div class="og-pane og-inspector-pane">'
             + '<div class="og-pane-head">Inspector</div><div class="og-inspector" id="og-inspector"></div>'
+          + '</div>'
+          + '</div>'   // /og-toprow
+          + '<div class="og-splitter og-splitter-h" id="og-split-h" title="Drag to resize the clip editor"></div>'
+          + '<div class="og-pane og-edit-pane" id="og-edit-pane">'
+            + '<div class="og-pane-head">Clip Editor<div class="og-pane-actions" id="og-edit-actions"></div></div>'
+            + '<div class="og-edit-body" id="og-edit-body"></div>'
           + '</div>'
         + '</div>'
         // ── SFX ──
@@ -1630,13 +1724,14 @@
       + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
       + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
-      + '<div class="og-join" id="og-join"><div class="og-join-card">'
-        + '<div class="og-join-glyph">🦧</div><h3>Join a session</h3>'
-        + '<p>Enter your show’s session code to tie Outrangutan to it — the same code Cueola, Planda Bear, and Flowmingo use. Live cross-device cue sync arrives in Phase 4; for now your cue list is saved under this code on this device.</p>'
-        + '<input id="og-join-code" placeholder="SESSION CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">'
-        + '<div class="og-join-err" id="og-join-err"></div>'
-        + '<button class="og-join-go" id="og-join-go">Join Session</button>'
-        + '<button class="og-join-skip" id="og-join-skip">Continue without a session</button>'
+      + '<div class="og-join" id="og-join"><div class="modal">'
+        + '<div class="modal-title">Open Outrangutan</div>'
+        + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
+        + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>'
+        + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
+        + '<div class="modal-err" id="og-join-err">Please fill in both fields.</div>'
+        + '<button class="btn-primary" id="og-join-go">Open Outrangutan</button>'
+        + '<button class="btn-secondary" id="og-join-skip">Cancel</button>'
       + '</div></div>';
 
     // program decks reference
@@ -1662,8 +1757,10 @@
     $('og-sd-x').onclick = closeSdPanel;
     $('og-integrations-x').onclick = closeIntegrations;
     $('og-join-go').onclick = joinSession;
-    $('og-join-skip').onclick = joinStandaloneInstead;
-    $('og-join-code').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); joinStandaloneInstead(); } });
+    $('og-join-skip').onclick = exitOutrangutan;   // Cancel → back to the front page (standalone is its own card button)
+    const ogJoinKey = e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); exitOutrangutan(); } };
+    $('og-join-code').addEventListener('keydown', ogJoinKey);
+    $('og-join-name').addEventListener('keydown', ogJoinKey);
     $('og-go').onclick = go;
     $('og-stop').onclick = () => stopAll();
     $('og-pause').onclick = pauseResume;
@@ -1695,6 +1792,7 @@
 
     built = true;
     renderTransportKeys();
+    initSplitters(); applyLayout();
 
     const pad2 = n => String(n).padStart(2, '0');
     setInterval(() => { const t = $('og-wallclock-t'); if (!t || !isOpen()) return; const d = new Date(); t.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }, 1000);
@@ -1719,6 +1817,8 @@
   }
   async function applyShow() {
     const s = await loadShow();
+    if (!settings.layout) settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 };
+    applyLayout();
     renderTransportKeys(); renderAll();
     setTab(settings.tab || 'play');
     const mc = $('og-multi'); if (mc) mc.checked = !!settings.multiTrigger;
@@ -1736,26 +1836,31 @@
   function openSessionJoin() {
     mode = 'session';
     const sheet = $('og-join'); if (!sheet) { applyShow(); return; }
-    const input = $('og-join-code');
-    let pre = sessionCode || '';
-    try { pre = pre || localStorage.getItem('cueola_outrangutan_code') || (window.session && window.session.code) || localStorage.getItem('cueola_last_code') || ''; } catch (e) {}
-    if (input) input.value = pre;
-    const err = $('og-join-err'); if (err) err.textContent = '';
+    const codeEl = $('og-join-code'), nameEl = $('og-join-name'), err = $('og-join-err');
+    let preCode = sessionCode || '', preName = '';
+    try {
+      preCode = preCode || localStorage.getItem('cueola_outrangutan_code') || (window.session && window.session.code) || localStorage.getItem('cueola_last_code') || '';
+      preName = localStorage.getItem('cueola_last_name') || '';
+    } catch (e) {}
+    if (codeEl && !codeEl.value) codeEl.value = preCode;
+    if (nameEl && !nameEl.value) nameEl.value = preName;
+    if (err) err.classList.remove('on');
     renderTransportKeys(); renderAll();
     sheet.classList.add('on');
-    setTimeout(() => { if (input) { input.focus(); input.select(); } }, 40);
+    setTimeout(() => { const f = (codeEl && codeEl.value) ? nameEl : codeEl; if (f) { f.focus(); if (f.select) f.select(); } }, 40);
   }
   function closeSessionJoin() { const s = $('og-join'); if (s) s.classList.remove('on'); }
   async function joinSession() {
-    const input = $('og-join-code'), err = $('og-join-err');
-    const code = (input ? input.value : '').trim().toUpperCase();
-    if (!code) { if (err) err.textContent = 'Enter a session code, or continue without one.'; if (input) input.focus(); return; }
-    sessionCode = code; mode = 'session';
-    try { localStorage.setItem('cueola_outrangutan_code', code); } catch (e) {}
+    const codeEl = $('og-join-code'), nameEl = $('og-join-name'), err = $('og-join-err');
+    const code = (codeEl ? codeEl.value : '').trim().toUpperCase();
+    const name = (nameEl ? nameEl.value : '').trim();
+    if (!code || !name) { if (err) { err.textContent = 'Please fill in both fields.'; err.classList.add('on'); } const f = code ? nameEl : codeEl; if (f) f.focus(); return; }
+    if (err) err.classList.remove('on');
+    sessionCode = code; sessionUserName = name; mode = 'session';
+    try { localStorage.setItem('cueola_outrangutan_code', code); localStorage.setItem('cueola_last_code', code); localStorage.setItem('cueola_last_name', name); } catch (e) {}
     closeSessionJoin(); await applyShow();
-    toast('Joined session ' + code + '. Live cross-device cue sync arrives in Phase 4 — your cue list is saved under this code on this device.');
+    toast('Joined session ' + code + '.');
   }
-  async function joinStandaloneInstead() { mode = 'standalone'; sessionCode = null; closeSessionJoin(); await applyShow(); }
 
   function exitOutrangutan() {
     stopAll({ silent: true }); stopAllPads(); closeSessionJoin(); unsubscribeSession();
