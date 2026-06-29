@@ -112,8 +112,8 @@ const CUEOLA_THEME_LABELS = {
   prepbear: 'PrepBear',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
-const PLANDABEAR_THEMES = ['default','honey','glacier','polar-bear','eucalyptus','koala','panda','flamingo','prepbear'];
-function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'default'; }
+const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
+function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
 let plandaBearTheme = normalizePlandaBearTheme(localStorage.getItem('cueola_plandabear_theme'));
@@ -166,6 +166,43 @@ function restoreLocalDraft() {
   } catch {
     return false;
   }
+}
+
+// Save / open a rundown as a file on the user's computer (portable backup).
+function exportRundownFile() {
+  try {
+    if (!beats.length) { toast('Add a row before saving the rundown.'); return; }
+    const payload = {
+      kind: 'cueola-rundown', app: 'cueola', version: 1, exportedAt: Date.now(),
+      show: { name: show.name || 'Untitled Show', start: normalizeTimeValue(show.start) },
+      beats, customSources: sessionCustomSources, freeTextMode,
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const safe = (show.name || 'Cueola Rundown').replace(/[^\w \-]+/g, '').trim() || 'Cueola Rundown';
+    a.download = safe + '.cueola.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('Rundown saved — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
+  } catch (e) { toast('Could not save the rundown file.'); }
+}
+async function importRundownFile(file) {
+  if (!file) return;
+  if (session.isDemo) { toast('Exit demo mode before opening a rundown file.'); return; }
+  let payload;
+  try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid rundown file.'); return; }
+  if (!payload || payload.kind !== 'cueola-rundown' || !Array.isArray(payload.beats)) { toast('That isn’t a Cueola rundown file.'); return; }
+  if (beats.length && !window.confirm('Replace the current ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + ' with ' + payload.beats.length + ' from this file?')) return;
+  try {
+    show = { name: payload.show?.name || 'Untitled Show', start: normalizeTimeValue(payload.show?.start) };
+    beats = payload.beats.map(migrateBeat);
+    sessionCustomSources = payload.customSources || {};
+    freeTextMode = Boolean(payload.freeTextMode);
+    renderRundown();
+    syncToFirestore();
+    toast('Rundown opened — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
+  } catch (e) { toast('Could not open the rundown file.'); }
 }
 
 // Add-row wizard state
@@ -4941,6 +4978,7 @@ function applyLivePrompterPanelState() {
   if (sidebar) {
     sidebar.classList.toggle('open', livePrompterOpen);
     sidebar.style.width = `${liveSidebarWidth}px`;
+    if (livePrompterOpen) { try { const h = parseFloat(localStorage.getItem('cueola_scriptOpHeight')); if (h) applyScriptOpHeight(h); } catch (e) {} }
   }
   if (resizer) resizer.classList.toggle('on', livePrompterOpen);
   if (btn) {
@@ -5990,6 +6028,41 @@ function _soPopoutEnd() {
   _soPopoutDrag = null;
   window.removeEventListener('pointermove', _soPopoutMove);
   window.removeEventListener('pointerup', _soPopoutEnd);
+}
+
+// Drag the divider under the script to grow/shrink the "Live Flowmingo script"
+// editor — drag down to reveal more of the script (the controls drawer takes the rest).
+let _scriptHeightDrag = null;
+function applyScriptOpHeight(h) {
+  const ta = document.getElementById('lsPrompterText');
+  if (!ta) return;
+  if (h == null || isNaN(h)) { ta.style.flex = ''; return; }
+  ta.style.flex = '0 0 ' + Math.round(h) + 'px';
+}
+function startScriptHeightResize(e) {
+  const ta = document.getElementById('lsPrompterText');
+  if (!ta) return;
+  _scriptHeightDrag = { startY: e.clientY, startH: ta.getBoundingClientRect().height };
+  document.body.style.userSelect = 'none';
+  window.addEventListener('pointermove', _scriptHeightMove);
+  window.addEventListener('pointerup', _scriptHeightEnd);
+  e.preventDefault();
+}
+function _scriptHeightMove(e) {
+  const ta = document.getElementById('lsPrompterText');
+  if (!ta || !_scriptHeightDrag) return;
+  const sidebar = ta.closest('.ls-sidebar');
+  const maxH = sidebar ? Math.max(180, sidebar.getBoundingClientRect().height - 200) : 1400;
+  const h = Math.max(140, Math.min(maxH, _scriptHeightDrag.startH + (e.clientY - _scriptHeightDrag.startY)));
+  applyScriptOpHeight(h);
+}
+function _scriptHeightEnd() {
+  _scriptHeightDrag = null;
+  document.body.style.userSelect = '';
+  window.removeEventListener('pointermove', _scriptHeightMove);
+  window.removeEventListener('pointerup', _scriptHeightEnd);
+  const ta = document.getElementById('lsPrompterText');
+  try { if (ta) localStorage.setItem('cueola_scriptOpHeight', parseFloat(ta.style.flexBasis) || ''); } catch (e) {}
 }
 
 async function pushToPrompter() {

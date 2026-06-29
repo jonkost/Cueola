@@ -73,6 +73,7 @@
   let pads = [];                 // SFX pads: [{ id, slot, bank, name, emoji, mediaId, color, key, gain, ... }]
   let banks = [];                // SFX banks (pages): [{ id, name }]
   let currentBankId = null;      // active SFX bank
+  let bankRenamingId = null;     // SFX bank being inline-renamed
   let padSearch = '';            // SFX search query
   let selectedId = null;         // standby cue
   let selectedPadId = null;      // pad in the SFX inspector
@@ -101,6 +102,9 @@
   let decks = null;              // { a, b, audio } program decks (built in build())
   const bufferCache = new Map(); // mediaId -> AudioBuffer (pads)
   const decodeJobs = new Map();  // mediaId -> Promise<AudioBuffer|null>
+  const filmstripCache = new Map(); // mediaId -> [frameDataURL,...] (Clip Editor filmstrip)
+  const filmstripJobs = new Map();  // mediaId -> Promise<frames|null>
+  const FILMSTRIP_FRAMES = 14;
   const padRT = new Map();       // padId -> { ch, voices:[], buffer }
   const fades = new Map();       // fade token -> rAF id
   let meterRAF = null;
@@ -278,6 +282,37 @@
       };
       el.onerror = () => done(0, null);
     });
+  }
+  // Build a filmstrip (row of frames) for a video clip — sampled across its duration.
+  // Cached per mediaId; generated on demand the first time a video cue opens in the Clip Editor.
+  function buildFilmstrip(mediaId, frames) {
+    if (filmstripCache.has(mediaId)) return Promise.resolve(filmstripCache.get(mediaId));
+    if (filmstripJobs.has(mediaId)) return filmstripJobs.get(mediaId);
+    const job = (async () => {
+      const media = await idbGet(MEDIA_STORE, mediaId);
+      if (!media || !media.blob || media.kind !== 'video') return null;
+      const url = URL.createObjectURL(media.blob);
+      const v = document.createElement('video');
+      v.preload = 'auto'; v.muted = true; v.playsInline = true; v.src = url;
+      try {
+        await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('meta')); });
+        const dur = isFinite(v.duration) ? v.duration : 0;
+        const W = 96, H = Math.max(1, Math.round(W * (v.videoHeight || 9) / (v.videoWidth || 16)));
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const cx = cv.getContext('2d');
+        const out = [];
+        for (let i = 0; i < frames; i++) {
+          const t = dur > 0 ? Math.min(Math.max(0, dur - 0.04), dur * (i + 0.5) / frames) : 0;
+          await new Promise((res) => { let fin = false; const done = () => { if (fin) return; fin = true; res(); }; v.onseeked = done; try { v.currentTime = t; } catch (e) { done(); } setTimeout(done, 1200); });
+          try { cx.drawImage(v, 0, 0, W, H); out.push(cv.toDataURL('image/jpeg', 0.55)); } catch (e) { out.push(null); }
+        }
+        filmstripCache.set(mediaId, out);
+        return out;
+      } catch (e) { return null; }
+      finally { URL.revokeObjectURL(url); filmstripJobs.delete(mediaId); }
+    })();
+    filmstripJobs.set(mediaId, job);
+    return job;
   }
   async function storeFile(file) {       // import one file → MEDIA_STORE, return { mediaId, kind, duration, thumb, name }
     // Phase 5: transcode-on-upload — normalize non-web-playable video to H.264 MP4.
@@ -1397,9 +1432,11 @@
     const pct = (t) => dur > 0 ? (clamp(t, 0, dur) / dur * 100) : 0;
     body.innerHTML =
       '<div class="og-trk-meta"><span class="og-trk-name og-type-' + c.type + '-fg">' + esc(c.name) + '</span>'
-        + '<span class="og-trk-times"><b id="og-trk-cur">0:00</b> · IN ' + fmtClock(tin) + ' · OUT ' + fmtClock(tout) + ' · ' + fmtClock(dur) + '</span></div>'
+        + '<span class="og-trk-times"><b id="og-trk-cur">0:00</b> · IN <span id="og-trk-in-t">' + fmtClock(tin) + '</span> · OUT <span id="og-trk-out-t">' + fmtClock(tout) + '</span> · ' + fmtClock(dur) + '</span></div>'
       + '<div class="og-track" id="og-track">'
-        + (c.thumb ? '<img class="og-track-thumb" src="' + c.thumb + '" alt="">' : '<div class="og-track-thumb og-track-' + c.type + '"></div>')
+        + (c.type === 'video'
+            ? '<div class="og-track-strip loading" id="og-trk-strip">' + (c.thumb ? '<div class="frame" style="background-image:url(' + c.thumb + ')"></div>' : '') + '</div>'
+            : '<div class="og-track-thumb og-track-' + c.type + '"></div>')
         + '<div class="og-track-region" id="og-trk-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
         + '<div class="og-track-h og-track-in" id="og-trk-in" style="left:' + pct(tin) + '%" title="Trim in"></div>'
         + '<div class="og-track-h og-track-out" id="og-trk-out" style="left:' + pct(tout) + '%" title="Trim out"></div>'
@@ -1412,21 +1449,64 @@
       + '</div>';
 
     const track = $('og-track');
-    const setIn = (v) => { c.trimIn = clamp(v, 0, (c.trimOut == null ? dur : c.trimOut) - 0.05); if (active && active.cue.id === c.id) { try { active.el.currentTime = c.trimIn; } catch (e) {} } renderEditArea(); renderInspector(); scheduleSave(); };
-    const setOut = (v) => { c.trimOut = clamp(v, (c.trimIn || 0) + 0.05, dur || v); renderEditArea(); renderInspector(); scheduleSave(); };
+    // Patch only the trim DOM in place — keeps drag handles alive (a full re-render would
+    // detach the element being dragged) and avoids regenerating the filmstrip on every move.
+    const refreshTrimUI = () => {
+      const ti = clamp(c.trimIn || 0, 0, dur || 1e9);
+      const to = (c.trimOut == null ? dur : clamp(c.trimOut, 0, dur || 1e9)) || dur;
+      const region = $('og-trk-region'), inH = $('og-trk-in'), outH = $('og-trk-out');
+      if (region) { region.style.left = pct(ti) + '%'; region.style.right = (100 - pct(to)) + '%'; }
+      if (inH) inH.style.left = pct(ti) + '%';
+      if (outH) outH.style.left = pct(to) + '%';
+      const inT = $('og-trk-in-t'); if (inT) inT.textContent = fmtClock(ti);
+      const outT = $('og-trk-out-t'); if (outT) outT.textContent = fmtClock(to);
+      const nIn = $('og-trk-in-n'); if (nIn && document.activeElement !== nIn) nIn.value = Math.round(ti * 10) / 10;
+      const nOut = $('og-trk-out-n'); if (nOut && document.activeElement !== nOut) nOut.value = (c.trimOut == null ? '' : Math.round(to * 10) / 10);
+      if (!isLive) { const ph = $('og-trk-play'); if (ph) ph.style.left = pct(ti) + '%'; }
+    };
+    const setIn = (v) => { c.trimIn = clamp(v, 0, (c.trimOut == null ? dur : c.trimOut) - 0.05); if (active && active.cue.id === c.id) { try { active.el.currentTime = c.trimIn; } catch (e) {} } refreshTrimUI(); renderInspector(); scheduleSave(); };
+    const setOut = (v) => { c.trimOut = clamp(v, (c.trimIn || 0) + 0.05, dur || v); refreshTrimUI(); renderInspector(); scheduleSave(); };
     const tFromX = (clientX) => { const r = track.getBoundingClientRect(); return clamp((clientX - r.left) / r.width, 0, 1) * dur; };
-    const dragHandle = (el, apply) => { if (!el) return; el.onpointerdown = (e) => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (er) {} const mv = (ev) => apply(tFromX(ev.clientX)); const up = () => { try { el.releasePointerCapture(e.pointerId); } catch (er) {} el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); }; el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); }; };
-    dragHandle($('og-trk-in'), setIn);
-    dragHandle($('og-trk-out'), setOut);
+    const liveIn = (v) => { c.trimIn = clamp(v, 0, (c.trimOut == null ? dur : c.trimOut) - 0.05); if (active && active.cue.id === c.id) { try { active.el.currentTime = c.trimIn; } catch (e) {} } refreshTrimUI(); };
+    const liveOut = (v) => { c.trimOut = clamp(v, (c.trimIn || 0) + 0.05, dur || v); refreshTrimUI(); };
+    const dragHandle = (el, live) => {
+      if (!el) return;
+      el.onpointerdown = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        try { el.setPointerCapture(e.pointerId); } catch (er) {}
+        const mv = (ev) => live(tFromX(ev.clientX));
+        const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); try { el.releasePointerCapture(e.pointerId); } catch (er) {} renderInspector(); scheduleSave(); };
+        el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      };
+    };
+    dragHandle($('og-trk-in'), liveIn);
+    dragHandle($('og-trk-out'), liveOut);
     // click/drag on the track body = scrub the live cue (or set the playhead preview)
     track.onpointerdown = (e) => { if (e.target.id === 'og-trk-in' || e.target.id === 'og-trk-out') return; const t = tFromX(e.clientX); if (active && active.cue.id === c.id) { try { active.el.currentTime = t; sendOut({ t: 'seek', at: t }, c.output || 1); } catch (er) {} } const ph = $('og-trk-play'); if (ph && dur) ph.style.left = (t / dur * 100) + '%'; };
     const b = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
     b('og-edit-setin', 'onclick', () => setIn(isLive ? active.el.currentTime : (c.trimIn || 0)));
     b('og-edit-setout', 'onclick', () => setOut(isLive ? active.el.currentTime : dur));
-    b('og-edit-reset', 'onclick', () => { c.trimIn = 0; c.trimOut = null; renderEditArea(); renderInspector(); scheduleSave(); });
+    b('og-edit-reset', 'onclick', () => { c.trimIn = 0; c.trimOut = null; refreshTrimUI(); renderInspector(); scheduleSave(); });
     b('og-trk-in-n', 'onchange', (e) => setIn(Math.max(0, parseFloat(e.target.value) || 0)));
-    b('og-trk-out-n', 'onchange', (e) => { const v = parseFloat(e.target.value); if (isNaN(v)) { c.trimOut = null; renderEditArea(); renderInspector(); scheduleSave(); } else setOut(v); });
+    b('og-trk-out-n', 'onchange', (e) => { const v = parseFloat(e.target.value); if (isNaN(v)) { c.trimOut = null; refreshTrimUI(); renderInspector(); scheduleSave(); } else setOut(v); });
     b('og-trk-loop', 'onchange', (e) => { c.loop = e.target.value === '1'; if (active && active.cue.id === c.id) active.el.loop = c.loop; renderInspector(); scheduleSave(); });
+    mountFilmstrip(c);
+  }
+  function paintFilmstrip(strip, frames) {
+    if (!strip) return;
+    strip.innerHTML = frames.map(f => '<div class="frame"' + (f ? ' style="background-image:url(' + f + ')"' : '') + '></div>').join('');
+    strip.classList.remove('loading');
+  }
+  function mountFilmstrip(c) {
+    const strip = $('og-trk-strip'); if (!strip || c.type !== 'video' || !c.mediaId) return;
+    const cached = filmstripCache.get(c.mediaId);
+    if (cached) { paintFilmstrip(strip, cached); return; }
+    strip.classList.add('loading');
+    buildFilmstrip(c.mediaId, FILMSTRIP_FRAMES).then((frames) => {
+      if (!frames) { const s = $('og-trk-strip'); if (s) s.classList.remove('loading'); return; }
+      const cur = cueById(selectedId), liveStrip = $('og-trk-strip');
+      if (liveStrip && cur && cur.id === c.id) paintFilmstrip(liveStrip, frames);
+    });
   }
   function renderEditPlayhead() {
     const ph = $('og-trk-play'), cur = $('og-trk-cur'); if (!ph || !active) return;
@@ -1554,17 +1634,31 @@
     ensureBanks();
     bar.innerHTML = banks.map(b => {
       const on = b.id === currentBankId, n = pads.filter(p => p.bank === b.id && p.mediaId).length;
-      return '<button class="og-bank-tab' + (on ? ' on' : '') + '" data-bank="' + b.id + '" title="Double-click to rename">'
-        + '<span class="og-bank-name">' + esc(b.name) + '</span>' + (n ? '<span class="og-bank-count">' + n + '</span>' : '')
-        + (on && banks.length > 1 ? '<span class="og-bank-x" data-del="' + b.id + '" title="Delete bank">×</span>' : '')
+      const editing = b.id === bankRenamingId;
+      const label = editing
+        ? '<input class="og-bank-rename" type="text" value="' + esc(b.name) + '" maxlength="40" spellcheck="false" aria-label="Bank name">'
+        : '<span class="og-bank-name">' + esc(b.name) + '</span>';
+      return '<button class="og-bank-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-bank="' + b.id + '" title="Double-click to rename">'
+        + label + (n && !editing ? '<span class="og-bank-count">' + n + '</span>' : '')
+        + (on && banks.length > 1 && !editing ? '<span class="og-bank-x" data-del="' + b.id + '" title="Delete bank">×</span>' : '')
         + '</button>';
     }).join('') + '<button class="og-bank-add" id="og-bank-add" title="Add a bank">' + sym('action.add') + '</button>';
     Array.prototype.forEach.call(bar.querySelectorAll('.og-bank-tab'), t => {
       const id = t.getAttribute('data-bank');
+      const input = t.querySelector('.og-bank-rename');
+      if (input) {
+        const commit = (save) => { if (bankRenamingId !== id) return; bankRenamingId = null; if (save) renameBank(id, input.value.trim()); else renderBanks(); };
+        input.onclick = (e) => e.stopPropagation();
+        input.ondblclick = (e) => e.stopPropagation();
+        input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') { e.preventDefault(); commit(false); } };
+        input.onblur = () => commit(true);
+        return;
+      }
       t.onclick = (e) => { if (e.target.closest('.og-bank-x')) { removeBank(id); return; } setBank(id); };
-      t.ondblclick = () => { const b = banks.find(x => x.id === id); const name = prompt('Rename bank', b ? b.name : ''); if (name != null) renameBank(id, name.trim()); };
+      t.ondblclick = (e) => { e.preventDefault(); bankRenamingId = id; if (currentBankId !== id) { currentBankId = id; selectedPadId = null; renderPads(); renderPadInspector(); renderPadEditArea(); } renderBanks(); };
     });
     const add = $('og-bank-add'); if (add) add.onclick = addBank;
+    if (bankRenamingId) { const inp = bar.querySelector('.og-bank-rename'); if (inp) { inp.focus(); inp.select(); } }
   }
   function renderPadSearch() {
     const box = $('og-pad-search-results'); if (!box) return;
@@ -1690,6 +1784,60 @@
     pads.forEach(p => { if (p.mediaId) decodeBuffer(p.mediaId); });   // warm pad buffers for instant trigger
     return s;
   }
+  // ── Save / open a show file (a portable backup that includes the media) ────
+  function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob); }); }
+  async function exportShowFile() {
+    try {
+      if (!cues.length && !pads.length) { toast('Nothing to save yet — add a cue or pad first.'); return; }
+      const ids = new Set();
+      cues.forEach(c => { if (c.mediaId) ids.add(c.mediaId); });
+      pads.forEach(p => { if (p.mediaId) ids.add(p.mediaId); });
+      const media = {};
+      for (const id of ids) {
+        const m = await idbGet(MEDIA_STORE, id);
+        if (!m || !m.blob) continue;
+        const data = await blobToDataURL(m.blob);
+        if (!data) continue;
+        media[id] = { name: m.name || '', mime: m.mime || '', kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, data };
+      }
+      const payload = { kind: 'outrangutan-show', app: 'outrangutan', schema: SCHEMA, exportedAt: Date.now(),
+        show: { cues, pads, banks, currentBankId, outputs, selectedId, settings }, media };
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Outrangutan Show ' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      const nMedia = Object.keys(media).length;
+      toast('Show saved — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + (nMedia ? ' · ' + nMedia + ' media' : '') + '.');
+    } catch (e) { toast('Could not save the show file.'); }
+  }
+  async function importShowFile(file) {
+    let payload;
+    try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid show file.'); return; }
+    if (!payload || payload.kind !== 'outrangutan-show' || !payload.show || !Array.isArray(payload.show.cues)) { toast('That isn’t an Outrangutan show file.'); return; }
+    const sc = payload.show.cues.length, sp = Array.isArray(payload.show.pads) ? payload.show.pads.length : 0;
+    if ((cues.length || pads.length) && !dangerOK('Open this show? It replaces the current ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + ' / ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') + ' with ' + sc + ' / ' + sp + '.')) return;
+    try {
+      try { stopAll({ silent: true }); } catch (e) {}
+      const media = payload.media || {};
+      for (const id of Object.keys(media)) {
+        const m = media[id]; if (!m || !m.data) continue;
+        let blob; try { blob = await (await fetch(m.data)).blob(); } catch (e) { continue; }
+        await idbPut(MEDIA_STORE, id, { blob, name: m.name || '', mime: m.mime || blob.type, kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null });
+      }
+      bufferCache.clear(); decodeJobs.clear(); filmstripCache.clear(); filmstripJobs.clear();
+      const s = payload.show;
+      await idbPut(SHOW_STORE, showKey(), { schema: payload.schema || SCHEMA, savedAt: Date.now(), activeCueId: null,
+        cues: s.cues, pads: s.pads || [], banks: s.banks || [], currentBankId: s.currentBankId || null,
+        outputs: s.outputs || defaultOutputs(), selectedId: s.selectedId || null, settings: s.settings || DEFAULT_SETTINGS() });
+      active = null;
+      await loadShow();
+      renderAll();
+      scheduleSave();
+      toast('Show opened — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
+    } catch (e) { toast('Could not open the show file.'); }
+  }
   function showRecovery(s) {
     const bar = $('og-recovery'); if (!bar) return;
     const wasPlaying = s && s.activeCueId && cueById(s.activeCueId);
@@ -1785,7 +1933,11 @@
           + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
           + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
           + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+          + '<div class="og-tools-sep"></div>'
+          + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show…</button>'
+          + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show…</button>'
         + '</div></details>'
+        + '<input type="file" id="og-showfile-input" accept=".json,application/json" hidden>'
       + '</div>'
       + '<div class="og-recovery" id="og-recovery"><span id="og-recovery-text"></span><div class="og-bar-spacer"></div>'
         + '<button id="og-recovery-standby">Standby that cue</button><button id="og-recovery-dismiss">Dismiss</button></div>'
@@ -1885,6 +2037,10 @@
     $('og-scopes-btn').onclick = toggleScopes;
     $('og-lock-btn').onclick = toggleLock;
     $('og-help-btn').onclick = openHelp;
+    $('og-save-file-btn').onclick = exportShowFile;
+    const showFileInput = $('og-showfile-input');
+    $('og-open-file-btn').onclick = () => showFileInput.click();
+    showFileInput.onchange = () => { if (showFileInput.files[0]) importShowFile(showFileInput.files[0]); showFileInput.value = ''; };
     $('og-help-close').onclick = closeHelp;
     $('og-outputs-x').onclick = closeOutputsPanel;
     $('og-sd-x').onclick = closeSdPanel;
