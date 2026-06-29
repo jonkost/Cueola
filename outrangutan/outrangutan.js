@@ -115,7 +115,7 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   function toast(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} console.log('[outrangutan]', msg); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  function fmtClock(sec) { sec = Math.max(0, sec || 0); const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+  function fmtClock(sec) { sec = Math.max(0, sec || 0); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60); return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0'); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
   function currentCueolaTheme() {
@@ -1176,12 +1176,18 @@
     setStatus('idle'); if (isVid) sendOut({ t: 'stop' }, out); renderCueList();
   }
 
-  function stopAll(opts) { clearPre(); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' }); renderCueList(); if (!opts || !opts.silent) toast('Stopped.'); }
+  // Cue the standby cursor back to the first armed cue, so the next GO restarts the show.
+  function cueToTop() { const first = cues.find(c => c.armed !== false) || cues[0]; if (first) selectedId = first.id; }
+  function stopAll(opts) {
+    clearPre(); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' });
+    if (!opts || !opts.silent) { cueToTop(); renderInspector(); renderEditArea(); toast('Stopped.'); }
+    renderCueList();
+  }
   function panic() {
     clearPre();
     fades.forEach((r) => cancelAnimationFrame(r)); fades.clear();
     stopAllDecks(); stopAllPads(); stopKeyLoop();
-    setStatus('idle'); sendOut({ t: 'stop' }); renderCueList(); toast('PANIC — all stopped.');
+    setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); toast('PANIC — all stopped.');
   }
   function pauseResume() {
     if (!active || !active.el) { if (preInfo) stopAll(); return; }
@@ -1200,7 +1206,7 @@
       if (d._url && !d.el.paused) { any = true; runFade('out-' + d.id, v => { deckGain(d, v); deckOpacity(d, v); }, 1, 0, ms, curve, () => stopDeck(d)); }
     });
     padRT.forEach((rt, id) => { const p = padById(id); if (p && rt.voices.length) { any = true; runFade('padin-' + id, v => { rt.ch.gain.gain.value = v * (p.gain == null ? 1 : p.gain); }, 1, 0, ms, curve, () => stopPad(p)); } });
-    if (any) { toast('Fading out…'); setTimeout(() => { active = null; setStatus('idle'); renderCueList(); renderPads(); }, ms + 30); }
+    if (any) { toast('Fading out…'); setTimeout(() => { active = null; setStatus('idle'); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); renderPads(); }, ms + 30); }
     else stopAll();
   }
 
@@ -2079,6 +2085,13 @@
     listPane.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
 
     document.addEventListener('keydown', onKey);
+    // Close the top-bar Theme / Tools dropdowns when clicking anywhere outside them.
+    document.addEventListener('pointerdown', (e) => {
+      if (!isOpen()) return;
+      Array.prototype.forEach.call(document.querySelectorAll('#outrangutan details.og-theme-menu[open], #outrangutan details.og-tools-menu[open]'), (d) => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
     window.addEventListener('beforeunload', () => { if (cues.length || pads.length) saveShow(); });
 
     built = true;

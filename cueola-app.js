@@ -5449,6 +5449,8 @@ async function pasteClipboardToPrompter(pushNow=false) {
   try {
     text = await navigator.clipboard.readText();
   } catch {
+    // Paste-Push should fire straight through — never interrupt with a prompt.
+    if (pushNow) { markLivePrompterStatus('Allow clipboard access to paste', 'busy'); return; }
     text = prompt('Paste chat text to send to Flowmingo:', '') || '';
   }
   text = cleanPrompterText(text);
@@ -6387,9 +6389,11 @@ function ptUpdateProgress() {
   const prog = ptEl('pt-progress');
   if (prog) prog.style.width = pct + '%';
   // Keep the operator cue scrubber tracking the live position (unless being dragged).
-  ['po-seek', 'lsq-seek'].forEach(id => {
+  // Only when there's a real scrollable track here — in the Script Op (no rendered talent
+  // track, max=0) leave the scrubber where the operator set it instead of snapping to 0.
+  if (max > 0) ['po-seek', 'lsq-seek'].forEach(id => {
     const s = document.getElementById(id);
-    if (s && document.activeElement !== s) s.value = Math.round(pct);
+    if (s && document.activeElement !== s && s.dataset.seekDragging !== '1') s.value = Math.round(pct);
   });
 }
 
@@ -6749,8 +6753,11 @@ function liveActionsHTML(scope = 'po', disabled = false) {
     ? `flowOpApplyControlPreview('seek_set_'+this.value,true)`
     : `sendPrompterPreviewControl('seek_set_'+this.value)`;
   const seekChange = isFlow
-    ? ` onchange="flowOpSendControl('seek_set_'+this.value)"`
-    : ` onchange="sendPrompterControl('seek_set_'+this.value)"`;
+    ? ` onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''"`
+    : ` onchange="sendPrompterControl('seek_set_'+this.value);this.dataset.seekDragging=''"`;
+  // Mark the scrubber as actively dragged so the live-position sync can't yank its
+  // value back mid-drag (which made the release land on the wrong spot / snap to 0).
+  const seekDrag = ` onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
   const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
   const nextRowIdx = (() => {
     let i = lsIdx;
@@ -6779,7 +6786,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
       <div class="pt-ctrl-group pt-live-cue flow-control-slider">
       <span class="pt-ctrl-label">Cue</span>
       <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
-      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${dis}>
+      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${seekDrag}${dis}>
       <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
       </div>
     </div>`;
@@ -7336,7 +7343,7 @@ function applyClockActionToState(action, target='talent') {
   } else if (action.startsWith('wrapup_')) {
     const sec = Math.max(1, parseInt(action.replace('wrapup_', ''), 10) || 300);
     update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, size:2 });
-  } else if (action === 'clock_size_up') update({ size:Math.min(2, (current.size || 1) + 1) });
+  } else if (action === 'clock_size_up') update({ size:Math.min(4, (current.size || 1) + 1) });
   else if (action === 'clock_size_down') update({ size:Math.max(0, (current.size || 1) - 1) });
   if (isFlow) flowOpRenderClockPreview();
   else {
@@ -7641,9 +7648,10 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
       <div class="flow-clock-grid flow-wrap-grid flow-control-grid four">
         ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
         ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
-        <label class="flow-wrap-custom"><span>${sfIcon('state.warning')}<b>Wrap</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
         ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
+        ${btn('media.stop', 'Hide', send('clock_off'), false, 'pt-wrap-btn')}
       </div>
+      <label class="flow-wrap-custom flow-wrap-custom-row"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
     </div>
     <div class="flow-control-section flow-alert-section">
       <div class="flow-control-title">Alerts</div>
@@ -8484,7 +8492,18 @@ function toggleEntryThemes() {
   const open = panel.hasAttribute('hidden');
   panel.toggleAttribute('hidden', !open);
   gear?.classList.toggle('active', open);
-  if (open) syncEntryThemeSwatches();
+  if (open) { syncEntryThemeSwatches(); setTimeout(() => document.addEventListener('click', entryThemesOutside, { once: true }), 0); }
+}
+function entryThemesOutside(e) {
+  if (e.target.closest?.('#entryThemePanel, #entryThemeGear')) {
+    document.addEventListener('click', entryThemesOutside, { once: true });
+    return;
+  }
+  closeEntryThemes();
+}
+function closeEntryThemes() {
+  document.getElementById('entryThemePanel')?.setAttribute('hidden', '');
+  document.getElementById('entryThemeGear')?.classList.remove('active');
 }
 function pickEntryTheme(t) {
   currentTheme = normalizeCueolaTheme(t);
