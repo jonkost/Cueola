@@ -70,7 +70,10 @@
   let sessionCode = null;
   let sessionUserName = '';       // name entered on the join splash (parity with other modules)
   let cues = [];
-  let pads = [];                 // SFX pads: [{ id, slot, name, mediaId, color, key, gain, loop, fadeIn, fadeOut, eq:{low,mid,high}, comp, trimIn, trimOut, retrigger }]
+  let pads = [];                 // SFX pads: [{ id, slot, bank, name, emoji, mediaId, color, key, gain, ... }]
+  let banks = [];                // SFX banks (pages): [{ id, name }]
+  let currentBankId = null;      // active SFX bank
+  let padSearch = '';            // SFX search query
   let selectedId = null;         // standby cue
   let selectedPadId = null;      // pad in the SFX inspector
   let settings = DEFAULT_SETTINGS();
@@ -325,25 +328,46 @@
   function nextArmedAfter(id) { let i = cueIndex(id); for (let j = i + 1; j < cues.length; j++) if (cues[j].armed !== false) return cues[j].id; return null; }
   function fadeCurveOf(cue) { return cue && cue.fadeCurve ? cue.fadeCurve : settings.fadeCurve; }
 
-  // ── SFX pads ─────────────────────────────────────────────────────────────
-  function padBySlot(slot) { return pads.find(p => p.slot === slot) || null; }
+  // ── SFX banks + pads ───────────────────────────────────────────────────────
+  function defaultBanks() { return [{ id: rid('bk_'), name: 'Bank 1' }]; }
+  function ensureBanks() {
+    if (!Array.isArray(banks) || !banks.length) banks = defaultBanks();
+    if (!banks.find(b => b.id === currentBankId)) currentBankId = banks[0].id;
+  }
+  function padBySlot(slot) { return pads.find(p => (p.bank || (banks[0] && banks[0].id)) === currentBankId && p.slot === slot) || null; }
   function padById(id) { return pads.find(p => p.id === id) || null; }
   function nextFreePadKey() { const used = new Set(pads.map(p => p.key).filter(Boolean)); const tk = new Set(Object.values(settings.shortcuts)); for (const k of PAD_KEYS) if (!used.has(k) && !tk.has(k)) return k; return ''; }
   function makePad(slot, o) {
     return {
-      id: rid('p_'), slot, name: o.name || 'Pad', mediaId: o.mediaId, color: o.color || 'var(--purple)',
-      key: nextFreePadKey(), gain: 1, loop: false, fadeIn: 0, fadeOut: 0,
+      id: rid('p_'), slot, bank: o.bank || currentBankId, name: o.name || 'Pad', emoji: o.emoji || '',
+      mediaId: o.mediaId, color: o.color || 'var(--purple)',
+      key: nextFreePadKey(), gain: 1, loop: false, fadeIn: 0, fadeOut: 0, dur: o.dur || 0,
       eq: { low: 0, mid: 0, high: 0 }, comp: false, trimIn: 0, trimOut: null, retrigger: 'restart',
     };
   }
+  function setBank(id) { if (!banks.find(b => b.id === id)) return; currentBankId = id; selectedPadId = null; renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave(); }
+  function addBank() { const b = { id: rid('bk_'), name: 'Bank ' + (banks.length + 1) }; banks.push(b); currentBankId = b.id; selectedPadId = null; renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave(); }
+  function renameBank(id, name) { const b = banks.find(x => x.id === id); if (b) { b.name = name || b.name; renderBanks(); scheduleSave(); } }
+  function removeBank(id) {
+    if (banks.length <= 1) { toast('Keep at least one bank.'); return; }
+    const bank = banks.find(b => b.id === id); if (!bank) return;
+    if (!dangerOK('Delete “' + bank.name + '” and its pads?')) return;
+    pads.filter(p => p.bank === id).forEach(p => { stopPad(p); padRT.delete(p.id); removePadMediaIfOrphan(p); });
+    pads = pads.filter(p => p.bank !== id);
+    banks = banks.filter(b => b.id !== id);
+    if (currentBankId === id) currentBankId = banks[0].id;
+    selectedPadId = null;
+    renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave();
+  }
+  function dangerOK(msg) { try { return window.confirm(msg); } catch (e) { return true; } }
   async function assignPad(slot, file) {
     const m = await storeFile(file); if (!m) return;
     if (m.kind === 'video') { /* still usable as a sound — play its audio track */ }
     const existing = padBySlot(slot);
-    if (existing) { removePadMediaIfOrphan(existing); existing.mediaId = m.mediaId; existing.name = m.name.replace(/\.[^.]+$/, ''); padRT.delete(existing.id); }
-    else pads.push(makePad(slot, { name: m.name.replace(/\.[^.]+$/, ''), mediaId: m.mediaId }));
+    if (existing) { removePadMediaIfOrphan(existing); existing.mediaId = m.mediaId; existing.name = m.name.replace(/\.[^.]+$/, ''); existing.dur = m.duration || 0; padRT.delete(existing.id); }
+    else pads.push(makePad(slot, { name: m.name.replace(/\.[^.]+$/, ''), mediaId: m.mediaId, dur: m.duration }));
     decodeBuffer(m.mediaId);
-    renderPads(); renderPadInspector(); scheduleSave();
+    renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave();
   }
   function removePadMediaIfOrphan(pad) {
     if (!pad || !pad.mediaId) return;
@@ -1208,7 +1232,7 @@
   }
 
   // ── rendering ────────────────────────────────────────────────────────────
-  function renderAll() { renderCueList(); renderInspector(); renderEditArea(); renderClock(); renderPads(); renderPadInspector(); }
+  function renderAll() { renderCueList(); renderInspector(); renderEditArea(); renderClock(); renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); renderPadSearch(); }
 
   function renderCueList() {
     const wrap = $('og-cuelist'); if (!wrap) return;
@@ -1412,6 +1436,45 @@
     if (cur) cur.textContent = fmtClock(active.el.currentTime);
   }
 
+  // ── Pad Editor (the SFX-board bottom pane: trim the selected pad's sound) ──
+  function padDuration(p) { const buf = p && bufferCache.get(p.mediaId); return (buf && buf.duration) || (p && p.dur) || 0; }
+  function renderPadEditArea() {
+    const body = $('og-sfx-edit-body'), acts = $('og-sfx-edit-actions'); if (!body) return;
+    const p = padById(selectedPadId);
+    if (!p) { body.innerHTML = '<div class="og-edit-empty">Select a pad’s ' + sym('action.more') + ' to trim its sound.</div>'; if (acts) acts.innerHTML = ''; return; }
+    const dur = padDuration(p) || 0;
+    const tin = clamp(p.trimIn || 0, 0, dur || 1e9);
+    const tout = (p.trimOut == null ? dur : clamp(p.trimOut, 0, dur || 1e9)) || dur;
+    if (acts) acts.innerHTML = '<button class="og-bar-btn" id="og-sfx-edit-fire">' + sym('media.play') + ' Fire</button><button class="og-bar-btn" id="og-sfx-edit-reset">Reset</button>';
+    const pct = (t) => dur > 0 ? clamp(t, 0, dur) / dur * 100 : 0;
+    body.innerHTML =
+      '<div class="og-trk-meta"><span class="og-trk-name" style="color:' + p.color + '">' + esc(p.name) + '</span>'
+        + '<span class="og-trk-times">IN ' + fmtClock(tin) + ' · OUT ' + fmtClock(tout) + ' · ' + (dur ? fmtClock(dur) : '—') + '</span></div>'
+      + '<div class="og-track" id="og-sfx-track">'
+        + '<div class="og-track-thumb og-track-audio"></div>'
+        + '<div class="og-track-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
+        + '<div class="og-track-h og-track-in" id="og-sfx-in" style="left:' + pct(tin) + '%" title="Trim in"></div>'
+        + '<div class="og-track-h og-track-out" id="og-sfx-out" style="left:' + pct(tout) + '%" title="Trim out"></div>'
+      + '</div>'
+      + '<div class="og-trk-fields">'
+        + field('Trim in (s)', '<input id="og-sfx-in-n" type="number" min="0" step="0.1" value="' + (Math.round(tin * 10) / 10) + '">')
+        + field('Trim out (s)', '<input id="og-sfx-out-n" type="number" min="0" step="0.1" value="' + (p.trimOut == null ? '' : Math.round(tout * 10) / 10) + '" placeholder="end">')
+        + field('Loop', '<select id="og-sfx-loop">' + opt('0', 'No', p.loop ? '1' : '0') + opt('1', 'Yes', p.loop ? '1' : '0') + '</select>')
+      + '</div>';
+    const track = $('og-sfx-track');
+    const setIn = (v) => { p.trimIn = clamp(v, 0, (p.trimOut == null ? dur : p.trimOut) - 0.05); renderPadEditArea(); renderPadInspector(); scheduleSave(); };
+    const setOut = (v) => { p.trimOut = clamp(v, (p.trimIn || 0) + 0.05, dur || v); renderPadEditArea(); renderPadInspector(); scheduleSave(); };
+    const tFromX = (x) => { const r = track.getBoundingClientRect(); return clamp((x - r.left) / r.width, 0, 1) * dur; };
+    const dh = (el, apply) => { if (!el) return; el.onpointerdown = (e) => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (er) {} const mv = (ev) => apply(tFromX(ev.clientX)); const up = () => { try { el.releasePointerCapture(e.pointerId); } catch (er) {} el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); }; el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); }; };
+    dh($('og-sfx-in'), setIn); dh($('og-sfx-out'), setOut);
+    const b = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
+    b('og-sfx-edit-fire', 'onclick', () => firePad(p));
+    b('og-sfx-edit-reset', 'onclick', () => { p.trimIn = 0; p.trimOut = null; renderPadEditArea(); renderPadInspector(); scheduleSave(); });
+    b('og-sfx-in-n', 'onchange', (e) => setIn(Math.max(0, parseFloat(e.target.value) || 0)));
+    b('og-sfx-out-n', 'onchange', (e) => { const v = parseFloat(e.target.value); if (isNaN(v)) { p.trimOut = null; renderPadEditArea(); renderPadInspector(); scheduleSave(); } else setOut(v); });
+    b('og-sfx-loop', 'onchange', (e) => { p.loop = e.target.value === '1'; renderPadInspector(); scheduleSave(); });
+  }
+
   // ── Resizable panes ──────────────────────────────────────────────────────
   function applyLayout() {
     const L = settings.layout || (settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 });
@@ -1434,6 +1497,9 @@
     wireSplitter('og-split-c', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wCuelist = clamp(ev.clientX - r.left, 200, r.width - 460); applyLayout(); });
     wireSplitter('og-split-i', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 460); applyLayout(); });
     wireSplitter('og-split-h', (ev) => { const m = document.querySelector('.og-main'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
+    // SFX board shares the same inspector-width + edit-height vars (one resize, both views)
+    wireSplitter('og-split-si', (ev) => { const r = $('og-sfx-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 320); applyLayout(); });
+    wireSplitter('og-split-sh', (ev) => { const m = document.querySelector('.og-sfx'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
   }
 
   async function deleteCue(id) {
@@ -1448,6 +1514,7 @@
   // ── SFX board rendering ──────────────────────────────────────────────────
   function renderPads() {
     const grid = $('og-pad-grid'); if (!grid) return;
+    ensureBanks();
     let html = '';
     for (let i = 0; i < PAD_COUNT; i++) {
       const p = padBySlot(i);
@@ -1456,6 +1523,7 @@
       html += '<button class="og-pad' + (playing ? ' live' : '') + (p.id === selectedPadId ? ' sel' : '') + '" data-pad="' + p.id + '" style="--pad:' + p.color + '">'
         + '<span class="og-pad-key">' + (p.key ? keyLabel(p.key) : '') + '</span>'
         + '<span class="og-pad-edit" data-edit="' + p.id + '" title="Edit pad">' + sym('action.more') + '</span>'
+        + (p.emoji ? '<span class="og-pad-emoji">' + esc(p.emoji) + '</span>' : '')
         + '<span class="og-pad-name">' + esc(p.name) + '</span>'
         + '<span class="og-pad-meter"><span class="og-pad-meter-fill" id="og-padmeter-' + p.id + '"></span></span>'
         + '</button>';
@@ -1470,7 +1538,7 @@
     });
     Array.prototype.forEach.call(grid.querySelectorAll('.og-pad[data-pad]'), b => {
       const id = b.getAttribute('data-pad'); const p = padById(id);
-      b.onclick = (e) => { if (e.target.closest('.og-pad-edit')) { selectedPadId = id; renderPads(); renderPadInspector(); return; } firePad(p); };
+      b.onclick = (e) => { if (e.target.closest('.og-pad-edit')) { selectedPadId = id; renderPads(); renderPadInspector(); renderPadEditArea(); return; } firePad(p); };
       ['dragenter', 'dragover'].forEach(ev => b.addEventListener(ev, e => { e.preventDefault(); b.classList.add('drag'); }));
       ['dragleave', 'drop'].forEach(ev => b.addEventListener(ev, e => { e.preventDefault(); b.classList.remove('drag'); }));
       b.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files[0]) assignPad(p.slot, e.dataTransfer.files[0]); });
@@ -1480,13 +1548,64 @@
   let padSlotForFile = 0;
   let listeningPadKey = false;
 
+  // ── SFX banks bar + search ─────────────────────────────────────────────────
+  function renderBanks() {
+    const bar = $('og-bank-bar'); if (!bar) return;
+    ensureBanks();
+    bar.innerHTML = banks.map(b => {
+      const on = b.id === currentBankId, n = pads.filter(p => p.bank === b.id && p.mediaId).length;
+      return '<button class="og-bank-tab' + (on ? ' on' : '') + '" data-bank="' + b.id + '" title="Double-click to rename">'
+        + '<span class="og-bank-name">' + esc(b.name) + '</span>' + (n ? '<span class="og-bank-count">' + n + '</span>' : '')
+        + (on && banks.length > 1 ? '<span class="og-bank-x" data-del="' + b.id + '" title="Delete bank">×</span>' : '')
+        + '</button>';
+    }).join('') + '<button class="og-bank-add" id="og-bank-add" title="Add a bank">' + sym('action.add') + '</button>';
+    Array.prototype.forEach.call(bar.querySelectorAll('.og-bank-tab'), t => {
+      const id = t.getAttribute('data-bank');
+      t.onclick = (e) => { if (e.target.closest('.og-bank-x')) { removeBank(id); return; } setBank(id); };
+      t.ondblclick = () => { const b = banks.find(x => x.id === id); const name = prompt('Rename bank', b ? b.name : ''); if (name != null) renameBank(id, name.trim()); };
+    });
+    const add = $('og-bank-add'); if (add) add.onclick = addBank;
+  }
+  function renderPadSearch() {
+    const box = $('og-pad-search-results'); if (!box) return;
+    const q = (padSearch || '').trim();
+    if (!q) { box.classList.remove('on'); box.innerHTML = ''; return; }
+    const ql = q.toLowerCase();
+    const matches = pads.filter(p => p.mediaId && ((p.name || '').toLowerCase().includes(ql) || (p.emoji && p.emoji.includes(q)) || (p.key && keyLabel(p.key).toLowerCase() === ql)));
+    box.classList.add('on');
+    if (!matches.length) { box.innerHTML = '<div class="og-search-none">No pads match “' + esc(q) + '”.</div>'; return; }
+    box.innerHTML = matches.map(p => {
+      const bank = banks.find(b => b.id === p.bank);
+      return '<div class="og-search-row" data-pad="' + p.id + '">'
+        + '<span class="og-search-emoji">' + (p.emoji ? esc(p.emoji) : '<span class="og-search-dot" style="background:' + p.color + '"></span>') + '</span>'
+        + '<span class="og-search-name">' + esc(p.name) + '</span>'
+        + '<span class="og-search-bank">' + esc(bank ? bank.name : '') + (p.key ? ' · ' + keyLabel(p.key) : '') + '</span>'
+        + '<button class="og-search-fire" data-fire="' + p.id + '" title="Fire">' + sym('media.play') + '</button>'
+        + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('.og-search-row'), row => {
+      const id = row.getAttribute('data-pad');
+      row.onclick = (e) => {
+        if (e.target.closest('.og-search-fire')) { const p = padById(id); if (p) firePad(p); return; }
+        const p = padById(id); if (!p) return;
+        currentBankId = p.bank; selectedPadId = id; padSearch = '';
+        const inp = $('og-pad-search'); if (inp) inp.value = '';
+        renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); renderPadSearch();
+      };
+    });
+  }
+
   function renderPadInspector() {
     const box = $('og-pad-inspector'); if (!box) return;
     const p = padById(selectedPadId);
     if (!p) { box.innerHTML = '<div class="og-insp-empty">Select a pad’s ' + sym('action.more') + ' to edit it, or drop a sound on an empty pad.</div>'; return; }
     const eq = p.eq || (p.eq = { low: 0, mid: 0, high: 0 });
     box.innerHTML =
-      field('Name', '<input id="og-p-name" type="text" value="' + esc(p.name) + '">') +
+      '<div class="og-field-row og-namerow">' +
+        field('Label', '<input id="og-p-name" type="text" value="' + esc(p.name) + '">') +
+        field('Emoji', '<input id="og-p-emoji" class="og-emoji-in" type="text" value="' + esc(p.emoji || '') + '" maxlength="4" placeholder="🔔">') +
+      '</div>' +
+      '<div class="og-emoji-quick">' + ['🔔', '💥', '🎺', '👏', '😂', '🚨', '🥁', '✨', '🎉', '💨', '🐶', '📣', '🔥', '💧', '🎬', '📢'].map(e => '<button type="button" class="og-emoji-pick" data-e="' + e + '">' + e + '</button>').join('') + '</div>' +
       '<div class="og-field-row">' +
         field('Hotkey', '<button class="og-bar-btn og-p-key" id="og-p-key">' + (p.key ? keyLabel(p.key) : 'Set key') + '</button>') +
         field('Retrigger', '<select id="og-p-retrig">' + opt('restart', 'Restart', p.retrigger) + opt('poly', 'Layer', p.retrigger) + opt('toggle', 'Toggle', p.retrigger) + '</select>') +
@@ -1512,6 +1631,8 @@
     const b = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
     const live = () => { const rt = padRT.get(p.id); if (rt) applyChannel(rt.ch, { eq: p.eq, comp: p.comp }); };
     b('og-p-name', 'oninput', e => { p.name = e.target.value; renderPads(); scheduleSave(); });
+    b('og-p-emoji', 'oninput', e => { p.emoji = e.target.value; renderPads(); scheduleSave(); });
+    Array.prototype.forEach.call(box.querySelectorAll('.og-emoji-pick'), btn => { btn.onclick = () => { p.emoji = btn.getAttribute('data-e'); const inp = $('og-p-emoji'); if (inp) inp.value = p.emoji; renderPads(); scheduleSave(); }; });
     b('og-p-retrig', 'onchange', e => { p.retrigger = e.target.value; scheduleSave(); });
     b('og-p-gain', 'oninput', e => { p.gain = clamp(parseFloat(e.target.value), 0, 1); const rt = padRT.get(p.id); if (rt) rt.ch.gain.gain.value = p.gain; scheduleSave(); });
     b('og-p-eqlow', 'oninput', e => { p.eq.low = parseFloat(e.target.value) || 0; live(); scheduleSave(); });
@@ -1550,13 +1671,16 @@
   function scheduleSave() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(saveShow, 500); publishCues(); }
   async function saveShow() {
     saveTimer = null;
-    try { await idbPut(SHOW_STORE, showKey(), { schema: SCHEMA, savedAt: Date.now(), activeCueId: active ? active.cue.id : null, cues, pads, outputs, selectedId, settings }); } catch (e) {}
+    try { await idbPut(SHOW_STORE, showKey(), { schema: SCHEMA, savedAt: Date.now(), activeCueId: active ? active.cue.id : null, cues, pads, banks, currentBankId, outputs, selectedId, settings }); } catch (e) {}
   }
   async function loadShow() {
     const s = await idbGet(SHOW_STORE, showKey());
-    if (!s || !Array.isArray(s.cues)) { outputs = defaultOutputs(); sdMap = {}; return null; }
+    if (!s || !Array.isArray(s.cues)) { outputs = defaultOutputs(); sdMap = {}; banks = defaultBanks(); currentBankId = banks[0].id; return null; }
     cues = s.cues.map(c => Object.assign(makeCue({ type: c.type }), c, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, c.eq || {}) }));
-    pads = Array.isArray(s.pads) ? s.pads.map(p => Object.assign({ eq: { low: 0, mid: 0, high: 0 }, gain: 1, retrigger: 'restart', fadeIn: 0, trimIn: 0 }, p, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, p.eq || {}) })) : [];
+    banks = (Array.isArray(s.banks) && s.banks.length) ? s.banks.slice() : defaultBanks();
+    currentBankId = (s.currentBankId && banks.find(b => b.id === s.currentBankId)) ? s.currentBankId : banks[0].id;
+    pads = Array.isArray(s.pads) ? s.pads.map(p => Object.assign({ eq: { low: 0, mid: 0, high: 0 }, gain: 1, retrigger: 'restart', fadeIn: 0, trimIn: 0, emoji: '', bank: banks[0].id }, p, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, p.eq || {}) })) : [];
+    pads.forEach(p => { if (!banks.find(b => b.id === p.bank)) p.bank = banks[0].id; });   // re-home orphaned pads
     outputs = (Array.isArray(s.outputs) && s.outputs.length) ? s.outputs.map(o => Object.assign({ screenId: null, sinkId: null, audioOn: false }, o)) : defaultOutputs();
     selectedId = s.selectedId || (cues[0] && cues[0].id) || null;
     settings = Object.assign(DEFAULT_SETTINGS(), s.settings || {});
@@ -1702,17 +1826,26 @@
             + '<div class="og-edit-body" id="og-edit-body"></div>'
           + '</div>'
         + '</div>'
-        // ── SFX ──
+        // ── SFX ── (mockup: SFX Board | Pad Inspector on top + full-width Pad Editor below)
         + '<div class="og-sfx">'
+          + '<div class="og-toprow" id="og-sfx-toprow">'
           + '<div class="og-pane og-sfx-main">'
-            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
-            + '<div class="og-pad-grid" id="og-pad-grid"></div>'
+            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><div class="og-pad-search"><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><input id="og-pad-search" type="search" placeholder="Search pads…" autocomplete="off"></div><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
+            + '<div class="og-bank-bar" id="og-bank-bar"></div>'
+            + '<div class="og-pad-grid-wrap"><div class="og-pad-grid" id="og-pad-grid"></div><div class="og-pad-search-results" id="og-pad-search-results"></div></div>'
             + '<input type="file" id="og-pad-file" accept="audio/*,video/*" hidden>'
           + '</div>'
+          + '<div class="og-splitter og-splitter-v" id="og-split-si" title="Drag to resize"></div>'
           + '<div class="og-pane og-sfx-side">'
             + '<div class="og-pane-head">Pad Inspector<div class="og-pane-actions"><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill2"></span></span></span></div></div>'
             + '<div class="og-sfx-master"><label class="og-field"><span>Master level</span><input type="range" id="og-master-gain" min="0" max="1.2" step="0.01" value="1"></label></div>'
             + '<div class="og-pad-inspector" id="og-pad-inspector"></div>'
+          + '</div>'
+          + '</div>'   // /og-sfx-toprow
+          + '<div class="og-splitter og-splitter-h" id="og-split-sh" title="Drag to resize the pad editor"></div>'
+          + '<div class="og-pane og-edit-pane" id="og-sfx-edit-pane">'
+            + '<div class="og-pane-head">Pad Editor<div class="og-pane-actions" id="og-sfx-edit-actions"></div></div>'
+            + '<div class="og-edit-body" id="og-sfx-edit-body"></div>'
           + '</div>'
         + '</div>'
       + '</div>'
@@ -1769,6 +1902,8 @@
     $('og-clock').onclick = () => { settings.clockMode = settings.clockMode === 'remaining' ? 'elapsed' : 'remaining'; renderClock(); scheduleSave(); };
     $('og-recovery-dismiss').onclick = () => $('og-recovery').classList.remove('on');
     $('og-sfx-stop').onclick = stopAllPads;
+    $('og-pad-search').oninput = (e) => { padSearch = e.target.value; renderPadSearch(); };
+    $('og-pad-search').onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); padSearch = ''; e.target.value = ''; renderPadSearch(); e.target.blur(); } };
     $('og-multi').onchange = (e) => { settings.multiTrigger = e.target.checked; scheduleSave(); };
     $('og-master-gain').oninput = (e) => { ensureAudio(); setMasterGain(parseFloat(e.target.value)); scheduleSave(); };
     renderThemeControl();
@@ -1818,6 +1953,7 @@
   async function applyShow() {
     const s = await loadShow();
     if (!settings.layout) settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 };
+    ensureBanks();
     applyLayout();
     renderTransportKeys(); renderAll();
     setTab(settings.tab || 'play');
@@ -1875,7 +2011,7 @@
   window.enterOutrangutan = enterOutrangutan;
   window.exitOutrangutan = exitOutrangutan;
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
-    _state: () => ({ cues, pads, outputs, sdMap, selectedId, settings, active: active && active.cue.id, mode, sessionCode }),
+    _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     _p5: { drawScopes, makeKeyer, webPlayable, obs, obsReq, frontVideoEl } };
 

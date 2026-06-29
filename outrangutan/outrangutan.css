@@ -725,8 +725,9 @@
  * columns) + full-width Clip Editor (bottom, draggable height). Overrides the
  * earlier .og-main grid.
  * ==========================================================================*/
-.og-main { display: flex !important; flex-direction: column; min-height: 0;
+.og-main { display: flex; flex-direction: column; min-height: 0;
   grid-template-columns: none !important; grid-template-rows: none !important; }
+.og-stage.sfx .og-main { display: none !important; }   /* tab toggle beats the flex above */
 .og-toprow { flex: 1 1 auto; display: flex; min-height: 0; }
 .og-toprow > .og-pane { min-width: 0; min-height: 0; }
 .og-cuelist-pane { flex: 0 0 var(--og-w-cuelist, 300px); grid-row: auto !important; }
@@ -771,3 +772,79 @@
   .og-splitter-v { display: none; }
   .og-cuelist-pane, .og-inspector-pane { flex-basis: auto !important; }
 }
+
+/* ============================================================================
+ * SFX board → mockup layout (Board | Pad Inspector + full-width Pad Editor),
+ * resizable (shares the playback inspector-width + edit-height vars).
+ * ==========================================================================*/
+.og-stage.sfx .og-sfx { display: flex; flex-direction: column; }
+.og-sfx > .og-toprow { flex: 1 1 auto; display: flex; min-height: 0; }
+.og-sfx .og-sfx-main { flex: 1 1 auto; min-width: 0; }
+.og-sfx .og-sfx-side { flex: 0 0 var(--og-w-inspector, 300px) !important; min-width: 0; border-left: 0 !important; border-top: 0 !important; }
+.og-sfx > #og-sfx-edit-pane { flex: 0 0 var(--og-h-edit, 200px); }
+
+/* count-out clock scales with the (resizable) program pane, not the viewport */
+.og-program-pane { container-type: inline-size; }
+.og-clock-time { font-size: clamp(34px, 13cqw, 92px) !important; }
+
+/* ============================================================================
+ * Overall density pass — tighten paddings/gaps a touch (later rules win by order).
+ * ==========================================================================*/
+.og-program-wrap { margin: 8px 10px 6px; }
+.og-clock { padding: 2px 0 4px; }
+.og-inspector, .og-pad-inspector { padding: 11px 12px; gap: 9px; }
+.og-edit-body { padding: 9px 12px; }
+.og-trk-fields { margin-top: 9px; gap: 9px; }
+.og-field { gap: 3px; }
+.og-field-row, .og-field-row3 { gap: 8px; }
+.og-cue { padding: 8px 11px; }
+.og-pad-grid { padding: 12px; gap: 9px; }
+.og-insp-sub { padding-top: 6px; margin: 2px 0 -3px; }
+.og-sfx-master { padding: 9px 12px; }
+
+/* ============================================================================
+ * SFX banks + emoji labels + search.
+ * ==========================================================================*/
+/* search box in the SFX header */
+.og-pad-search { display: inline-flex; align-items: center; gap: 5px; background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 8px; }
+.og-pad-search .sf-symbol { font-size: 12px; color: var(--text3); }
+.og-pad-search input { background: transparent; border: 0; color: var(--text); font-size: 12.5px; width: 120px; outline: none; font-family: var(--sans); }
+.og-pad-search input::placeholder { color: var(--text3); }
+
+/* bank bar */
+.og-bank-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); overflow-x: auto; flex: 0 0 auto; }
+.og-bank-tab { display: inline-flex; align-items: center; gap: 6px; background: var(--s2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.og-bank-tab:hover { background: var(--s3); color: var(--text); }
+.og-bank-tab.on { background: color-mix(in srgb, var(--accent) 18%, var(--s2)); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); color: var(--text); }
+.og-bank-count { font-size: 10px; background: var(--s4); border-radius: 999px; padding: 0 5px; color: var(--text2); font-variant-numeric: tabular-nums; }
+.og-bank-x { font-size: 15px; line-height: 1; color: var(--text3); padding: 0 1px; border-radius: 4px; }
+.og-bank-x:hover { color: var(--red); }
+.og-bank-add { width: 28px; height: 28px; border-radius: 50%; background: var(--s2); border: 1px dashed var(--border); color: var(--text2); cursor: pointer; flex: 0 0 auto; display: inline-grid; place-items: center; }
+.og-bank-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* pad grid wrap (holds the grid + the search-results overlay) */
+.og-pad-grid-wrap { flex: 1 1 auto; position: relative; min-height: 0; display: flex; }
+.og-pad-grid-wrap .og-pad-grid { flex: 1 1 auto; height: 100%; }
+
+/* emoji on the pad face */
+.og-pad-emoji { font-size: 28px; line-height: 1.05; margin-bottom: 1px; }
+
+/* emoji field + quick-pick in the pad inspector */
+.og-namerow { grid-template-columns: 1fr 72px; }
+.og-emoji-in { text-align: center; font-size: 18px !important; }
+.og-emoji-quick { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.og-emoji-pick { font-size: 16px; background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 4px 0; cursor: pointer; line-height: 1.1; }
+.og-emoji-pick:hover { background: var(--s3); transform: translateY(-1px); }
+
+/* search results overlay over the pad grid */
+.og-pad-search-results { display: none; position: absolute; inset: 0 0 auto 0; max-height: 100%; overflow: auto; background: color-mix(in srgb, var(--s1) 97%, var(--bg)); border-bottom: 1px solid var(--border); box-shadow: 0 18px 40px rgba(0,0,0,.3); z-index: 6; }
+.og-pad-search-results.on { display: block; }
+.og-search-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.og-search-row:hover { background: var(--s2); }
+.og-search-emoji { font-size: 18px; width: 24px; text-align: center; flex: 0 0 auto; }
+.og-search-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+.og-search-name { flex: 1 1 auto; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.og-search-bank { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.og-search-fire { background: var(--s3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); width: 30px; height: 26px; cursor: pointer; display: grid; place-items: center; flex: 0 0 auto; }
+.og-search-fire:hover { background: var(--green); color: #04130d; border-color: var(--green); }
+.og-search-none { padding: 16px; text-align: center; color: var(--text3); font-size: 12.5px; }

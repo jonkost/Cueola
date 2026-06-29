@@ -5,6 +5,54 @@ Newest phase on top.
 
 ---
 
+## SFX — emoji labels, multiple banks, search
+
+- **Emoji + text labels.** Pads gained an `emoji` field: shown big on the pad face
+  above the name; the Pad Inspector has separate **Label** + **Emoji** inputs plus a
+  quick-pick emoji row. (`renderPads` adds `.og-pad-emoji`; inspector binds
+  `og-p-emoji` + `.og-emoji-pick`.)
+- **Multiple banks (pages).** New `banks = [{id,name}]` + `currentBankId`; each pad has
+  a `bank` id. `padBySlot` filters by `currentBankId`, so each bank is its own 12-slot
+  page. Bank bar above the grid: tabs (with pad-count badge), **+** add, double-click to
+  rename, **×** to delete (with confirm; re-homes/orphan-cleans pads, keeps ≥1).
+  `setBank/addBank/renameBank/removeBank`. Persisted in the show record (`banks`,
+  `currentBankId`); `loadShow` migrates old pads → first bank. Pad **hotkeys stay global**
+  (onKey searches all pads), so a pad fires from any bank.
+- **Search.** A box in the SFX header (`#og-pad-search`) filters pads **across all banks**
+  by name / emoji / hotkey into an overlay dropdown (`renderPadSearch`); each result shows
+  emoji+name+bank and a Fire button. Clicking a result switches to that pad's bank and
+  selects it; Esc clears.
+- Verified in preview: default Bank 1, add Bank 2 (isolated/empty), pad in B2, switch back
+  to B1 shows only its pad, emoji saves + shows on face, search from B1 finds the B2 pad
+  and jumps to it. No console errors. Cache-bust `?v=20260628s`.
+
+---
+
+## Polish — SFX board mockup layout + clock scaling + density
+
+- **SFX board → mockup layout** (matches the playback view): `.og-sfx` is now a flex
+  column — a **toprow** (SFX Board | Pad Inspector, draggable splitter `#og-split-si`)
+  + a full-width **Pad Editor** (`#og-sfx-edit-pane`, splitter `#og-split-sh`). The SFX
+  splitters reuse the playback `--og-w-inspector` / `--og-h-edit` vars (one resize, both
+  views stay consistent). The Pad Editor (`renderPadEditArea`) is a trim track for the
+  selected pad: draggable green IN / red OUT handles + Fire/Reset + numeric trim/loop,
+  driving `pad.trimIn/trimOut`. **Bug fixed:** the resizable-layout `.og-main{display:
+  flex !important}` was overriding `.og-stage.sfx .og-main{display:none}`, so the
+  playback view showed *on top of* the SFX board — dropped the `!important` (source
+  order already wins) and added `.og-stage.sfx .og-main{display:none !important}`.
+  **Pad duration** now stored on the pad (`pad.dur` from the probe) as a fallback when
+  the AudioBuffer isn't decoded yet, so the trim track has a valid length immediately.
+- **Count-out clock scales with the program pane** (not the viewport): added
+  `container-type:inline-size` to `.og-program-pane` and `.og-clock-time{font-size:
+  clamp(34px,13cqw,92px)}`. Verified: 92px at a wide pane → ~74px when the pane narrows.
+- **Density pass:** lighter paddings/gaps on pane-heads, cues, inspectors, fields, the
+  clip/pad editor bodies, program-wrap margin, pad grid. (Owner is also actively
+  restyling — kept it to appended, source-order overrides, no fights.)
+
+Cache-bust: outrangutan `?v=20260628r`.
+
+---
+
 ## Polish — UI batch (theme grid, Script Op buttons/window, Outrangutan layout)
 
 Four owner requests:
