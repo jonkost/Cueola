@@ -6222,6 +6222,12 @@ let ptQuestionOn = false;
 let flowOpQuestionOn = false;
 let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
 let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
+// Operator-entered clock inputs — persisted so a panel re-render doesn't wipe the
+// typed duration / count-to time (which broke "change duration" + "countdown to time").
+let flowClockDurationMin = 5;
+let flowClockCountTime = '';
+function setFlowClockDuration(v) { const n = parseInt(v, 10); if (!isNaN(n)) flowClockDurationMin = Math.max(1, Math.min(999, n)); }
+function setFlowClockCountTime(v) { flowClockCountTime = (v || '').trim(); }
 let ptClockInterval = null;
 const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD|TECHNICAL DIFFICULTIES)(?:[^\]]*)\]/i;
 
@@ -7639,8 +7645,8 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
         ${btn('media.stop', 'Hide', send('clock_off'), false)}
       </div>
       <div class="flow-clock-fields">
-        <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="5" aria-label="Duration minutes"${dis}></label>
-        <label class="flow-clock-field"><span>${sfIcon('time.clock')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" aria-label="Countdown target time"${dis}></label>
+        <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="${flowClockDurationMin}" oninput="setFlowClockDuration(this.value)" aria-label="Duration minutes"${dis}></label>
+        <label class="flow-clock-field"><span>${sfIcon('time.clock')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" value="${flowClockCountTime}" oninput="setFlowClockCountTime(this.value)" aria-label="Countdown target time"${dis}></label>
       </div>
     </div>
     <div class="flow-control-section flow-wrap-section">

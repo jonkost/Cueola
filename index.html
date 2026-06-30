@@ -2026,19 +2026,22 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 }
 .prompt-op-panel.flow-control-panel{gap:10px}
 .prompt-op-active .prompt-op-panel.flow-control-panel{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
-  align-items:start;
-  justify-content:center;
-  max-height:min(44vh,360px);
+  display:block;
+  column-width:228px;
+  column-gap:12px;
+  max-height:min(46vh,380px);
   overflow-y:auto;
-  padding:12px;
+  padding:14px 16px;
   overscroll-behavior:contain;
 }
+/* Pack the control cards into balanced columns (no ragged grid gaps). Each card stays
+   intact; the Clock preview sits right above the Clock card in the natural flow. */
 .prompt-op-active .prompt-op-panel.flow-control-panel .flow-clock-stack{display:contents}
-.prompt-op-active .flow-control-section{flex:1 1 210px}
-.prompt-op-active .flow-control-section{min-width:0;padding:8px;gap:7px}
+.prompt-op-active .prompt-op-panel.flow-control-panel .flow-control-section,
+.prompt-op-active .prompt-op-panel.flow-control-panel .flow-clock-preview{break-inside:avoid;margin:0 0 12px}
+.prompt-op-active .flow-control-section{min-width:0;padding:11px 12px;gap:8px}
 .prompt-op-active .flow-control-title{font-size:11px}
+.prompt-op-active .flow-theme-grid{display:flex!important;flex-direction:row!important;flex-wrap:wrap;gap:8px;justify-content:flex-start;grid-template-columns:none!important}
 .prompt-op-active .flow-control-grid.four,.prompt-op-active .flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ls-sidebar .flow-control-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -4008,7 +4011,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=20260629g"></script>
+<script src="cueola-app.js?v=20260629h"></script>
 <script src="outrangutan/outrangutan.js?v=20260629f"></script>
 
 <script type="module">
