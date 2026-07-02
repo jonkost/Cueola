@@ -1928,7 +1928,7 @@
     root.innerHTML =
       '<div class="og-bar">'
         + '<button class="og-back" id="og-back">' + sym('action.back') + '<span>Cueola</span></button>'
-        + '<div class="og-title"><span class="og-glyph">🦧</span>Out<span class="og-wm-hi">rangutan</span></div>'
+        + '<div class="og-title"><span class="og-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span>Out<span class="og-wm-hi">rangutan</span></div>'
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'

@@ -244,6 +244,10 @@ let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise,
 let liveClockRunning = false;
 let paperworkDirty = false;
 let flowmingoRemoteOverrideUntil = 0;
+// How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
+// Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
+// clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
+const FLOWMINGO_REMOTE_OVERRIDE_MS = 5000;
 let collapsedSegments = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('cueola_collapsed_segs')||'[]')); }
   catch { return new Set(); }
@@ -2614,7 +2618,7 @@ function setupFirestore() {
       if (d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
         const control = d.prompter.control;
         if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId) && control.source === 'flowmingo-op') {
-          flowmingoRemoteOverrideUntil = Date.now() + 30000;
+          flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
         }
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
@@ -4407,7 +4411,7 @@ function outrangutanCueFields(type, d) {
   const empty = !Object.keys(outrangutanState.cues || {}).length;
   return `
     <div class="field cc-qlab cc-outrangutan">
-      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph">🦧</span> Outrangutan playback <span class="cc-qlab-optional">— optional</span></div>
+      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan playback <span class="cc-qlab-optional">— optional</span></div>
       <div class="cc-qlab-row">
         <div class="cc-qlab-cue-field" style="flex:1">
           <label class="field-lbl">Link to an Outrangutan cue</label>
@@ -4417,7 +4421,7 @@ function outrangutanCueFields(type, d) {
       </div>
       <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>
       <div class="cc-qlab-actions">
-        <button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph">🦧</span> Fire in Outrangutan now</button>
+        <button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>
       </div>
     </div>`;
 }
@@ -4454,7 +4458,7 @@ function fireOutrangutanCueCell(beatId) {
 // GO button for a live cue card (playback cells linked to an Outrangutan cue).
 function outrangutanGoBtnHTML(beatId, d) {
   if (!outrangutanCellLinked(d)) return '';
-  return `<button type="button" class="lf-qlab-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph">🦧</span> GO</button>`;
+  return `<button type="button" class="lf-qlab-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
 }
 
 // Auto-fire the linked Outrangutan cue when a row advances live (lsNext only).
@@ -4472,7 +4476,7 @@ function outrangutanCellBadge(d) {
   const isLive = live && live.cueId === id && live.status && live.status !== 'idle';
   const label = isLive ? (live.status === 'play' ? 'ON AIR' : live.status === 'pre' ? 'PRE' : live.status === 'pause' ? 'PAUSE' : '') : '';
   const status = isLive ? `<span class="cue-out-live cue-out-${live.status}">${label}</span>` : '';
-  return `<div class="cue-out-badge">🦧 <span class="cue-out-name">${esc(name)}</span>${dur}${status}</div>`;
+  return `<div class="cue-out-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${status}</div>`;
 }
 
 
@@ -6110,6 +6114,22 @@ function isQuietPrompterControl(action) {
   return !action || action.endsWith('_stop') || action.includes('_set_');
 }
 
+// "Collaborative" controls set discrete talent state (clock, wrap-up, question,
+// stand-by slate) or jump the cue position — they're last-writer-wins and never
+// fight the live scroll the way transport (play/speed/brake/boost/direction) does.
+// A connected Flowmingo Op arms a 30s "remote has control" lockout on the Script Op
+// desk; that's meant to stop the desk stomping the remote's SCROLL, but it was also
+// silently swallowing these complementary commands. Let them through so the desk can
+// always drive the clock/cue even while the remote handles scrolling.
+function isCollaborativePrompterControl(action) {
+  if (!action) return false;
+  return action.startsWith('clock_')
+      || action.startsWith('wrapup_')
+      || action.startsWith('question_')
+      || action.startsWith('slate_')
+      || action.startsWith('seek_');   // cue to row / scrub position
+}
+
 function trackPrompterControl(control, origin='live', quiet=false) {
   if (!control?.controlId || quiet || isQuietPrompterControl(control.action)) return;
   const label = flowOpControlLabel(control.action);
@@ -6155,7 +6175,7 @@ function sendPrompterPreviewControl(action) {
 }
 
 function sendPrompterControl(action) {
-  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil) {
+  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return;
   }

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola — Instructor Dashboard</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐨</text></svg>">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23b9bbbd'/><ellipse cx='30' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='70' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='50' cy='56' rx='27' ry='30' fill='%23161618'/><ellipse cx='50' cy='62' rx='9' ry='14' fill='%23ededee'/></svg>">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
 <style>
 :root {
@@ -75,6 +75,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand{display:flex;align-items:center;gap:8px;cursor:pointer;border:none;background:none;color:inherit;text-decoration:none;white-space:nowrap;transition:opacity .15s var(--ease)}
 .brand:hover{opacity:.78}
 .brand-logo{font-size:22px;line-height:1}
+.brand-ico{width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex:none;overflow:visible}
+.brand-logo .brand-ico{display:block;vertical-align:0}
 .brand-text{font-family:var(--syne);font-size:17px;font-weight:700;letter-spacing:0}
 .brand-text span{color:var(--accent)}
 .brand-tag{font-size:11px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--text3);margin-left:2px;padding:5px 11px;border:1px solid var(--border);border-radius:20px;background:var(--s3)}
@@ -448,10 +450,50 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 </head>
 <body>
 
+<!-- Brand icon sprite (Cueola koala, Planda Bear panda) — referenced via <svg class="brand-ico"><use href="#ic-NAME"/></svg> -->
+<svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="cu-bg" cx=".5" cy=".42" r=".72"><stop offset="0" stop-color="#eaeaec"/><stop offset=".68" stop-color="#c2c3c5"/><stop offset="1" stop-color="#84868a"/></radialGradient>
+    <radialGradient id="cu-face" cx=".5" cy=".36" r=".75"><stop offset="0" stop-color="#46464a"/><stop offset="1" stop-color="#101013"/></radialGradient>
+    <linearGradient id="cu-nose" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2f3"/><stop offset="1" stop-color="#a9abad"/></linearGradient>
+    <linearGradient id="cu-ear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ededef"/><stop offset="1" stop-color="#9c9ea0"/></linearGradient>
+    <symbol id="ic-cueola" viewBox="0 0 100 100">
+      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#cu-bg)"/>
+      <rect x="4" y="4" width="92" height="44" rx="22" fill="#fff" opacity=".14"/>
+      <ellipse cx="30" cy="38" rx="18" ry="20" fill="url(#cu-ear)" stroke="#76787c" stroke-width="1.4"/>
+      <ellipse cx="70" cy="38" rx="18" ry="20" fill="url(#cu-ear)" stroke="#76787c" stroke-width="1.4"/>
+      <ellipse cx="30" cy="40" rx="8.5" ry="11" fill="#74767a" opacity=".5"/>
+      <ellipse cx="70" cy="40" rx="8.5" ry="11" fill="#74767a" opacity=".5"/>
+      <ellipse cx="50" cy="56" rx="27" ry="30" fill="url(#cu-face)"/>
+      <ellipse cx="50" cy="62" rx="9" ry="14" fill="url(#cu-nose)"/>
+      <ellipse cx="46.5" cy="57" rx="2.6" ry="4.6" fill="#fff" opacity=".55"/>
+    </symbol>
+    <linearGradient id="pb-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a1430"/><stop offset="1" stop-color="#040f26"/></linearGradient>
+    <linearGradient id="pb-white" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cdd9ee"/></linearGradient>
+    <symbol id="ic-plandabear" viewBox="0 0 100 100">
+      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#pb-bg)"/>
+      <ellipse cx="36" cy="24" rx="8" ry="9" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
+      <ellipse cx="64" cy="24" rx="8" ry="9" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
+      <path d="M30 58 q-2 -16 20 -16 q22 0 20 16 l0 18 q0 8 -8 8 l-24 0 q-8 0 -8 -8 z" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
+      <ellipse cx="50" cy="68" rx="13" ry="16" fill="url(#pb-white)"/>
+      <rect x="42" y="60" width="16" height="20" rx="2" fill="#0c1730" stroke="#3a5588" stroke-width="1.5"/>
+      <rect x="47" y="57" width="6" height="4" rx="1.5" fill="#cdd9ee"/>
+      <circle cx="50" cy="32" r="16" fill="url(#pb-white)"/>
+      <path d="M44 28 l-3 7" stroke="#0c1730" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M56 28 l3 7" stroke="#0c1730" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M46 38 q4 3 8 0" stroke="#0c1730" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <circle cx="34" cy="84" r="7" fill="#0c1730" stroke="#2c3e66" stroke-width="1.2"/>
+      <circle cx="66" cy="84" r="7" fill="#0c1730" stroke="#2c3e66" stroke-width="1.2"/>
+      <g fill="#9fb4d8"><circle cx="34" cy="86" r="2.2"/><circle cx="31" cy="82" r="1.3"/><circle cx="34" cy="81" r="1.3"/><circle cx="37" cy="82" r="1.3"/></g>
+      <g fill="#9fb4d8"><circle cx="66" cy="86" r="2.2"/><circle cx="63" cy="82" r="1.3"/><circle cx="66" cy="81" r="1.3"/><circle cx="69" cy="82" r="1.3"/></g>
+    </symbol>
+  </defs>
+</svg>
+
 <!-- ── TOPBAR ── -->
 <nav class="topbar">
   <a class="brand" href="index.html" aria-label="Go to Cueola front page">
-    <div class="brand-logo">🐨</div>
+    <div class="brand-logo"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>
     <div>
       <span class="brand-text">Cue<span>ola</span></span>
     </div>
@@ -1185,12 +1227,12 @@ function renderSessions() {
           ${s.createdBy ? `<div class="sc-m">Owner ${escapeHtml(s.createdBy)}</div>` : ''}
           <div class="sc-m">👥 ${learnerCount} learner${learnerCount===1?'':'s'}</div>
           <div class="sc-m">🎯 ${assignedCount} assigned</div>
-          ${pbContributors ? `<div class="sc-m">🐼 ${pbContributors} on Planda Bear</div>` : ''}
+          ${pbContributors ? `<div class="sc-m"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> ${pbContributors} on Planda Bear</div>` : ''}
         </div>
       </div>
       <div class="sc-right">
         <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
-        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)">🐼 Planda Bear</button>
+        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> Planda Bear</button>
         <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
         <button class="sc-btn sc-btn-muted" onclick="showDetail('${s.code||s.id}',event)">Session Setup ⚙</button>
       </div>
