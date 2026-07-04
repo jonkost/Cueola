@@ -2662,13 +2662,66 @@ function setupFirestore() {
       sessionParticipantNames = collectSessionParticipantNames(d);
       renderPresence(d.presence||{});
       pbApplyRemoteCollab();   // Planda Bear live presence + field sync
-      renderRundown();
+      // P3: rebuild the rundown table only when its inputs actually changed.
+      // Before this gate, EVERY snapshot (playout status ~1.4×/s, presence
+      // heartbeats, clock writes) rebuilt the whole table — the measured driver
+      // of the AVT "Questions" blanking/flash and main-thread flooding.
+      renderRundownIfChanged(d);
+      noteSnapshotArrived(snap);
     }, err => reportCloudWriteFailure('Cloud listener', err));
   };
 
   if (window._firebaseReady) init();
   else window.addEventListener('firebaseReady', init, {once:true});
 }
+
+// ── P3: snapshot render gating + connection-state surfacing ────────────────
+let _rundownSnapFp = '';      // fingerprint of the last rendered snapshot inputs
+let _rundownSnapDirty = false;
+// Key-sorted stringify: Firestore serializes map keys in a different order on
+// local-echo vs server snapshots, so plain JSON.stringify flaps between
+// data-identical snapshots and would defeat the gate.
+function stableStringify(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+}
+function renderRundownIfChanged(d) {
+  let fp;
+  try {
+    fp = stableStringify(d.beats || []) + '|' + (d.showName || '') + '|' + (d.startTime || '')
+      + '|' + (d.freeMode ? 1 : 0) + '|' + stableStringify(d.rundownAliases || {})
+      + '|' + stableStringify(d.outrangutan?.cues || {});
+  } catch (e) { fp = 'x' + Date.now(); }
+  if (fp === _rundownSnapFp) return;
+  _rundownSnapFp = fp;
+  if (document.getElementById('rundown')?.classList.contains('on')) { renderRundown(); _rundownSnapDirty = false; }
+  else _rundownSnapDirty = true;   // render once when the screen next becomes visible
+}
+// Flush the deferred render the moment the rundown screen is shown again.
+(() => {
+  const el = document.getElementById('rundown');
+  if (!el || typeof MutationObserver === 'undefined') return;
+  new MutationObserver(() => {
+    if (_rundownSnapDirty && el.classList.contains('on')) { _rundownSnapDirty = false; renderRundown(); }
+  }).observe(el, { attributes: true, attributeFilter: ['class'] });
+})();
+
+// Explicit "reconnecting" state: a follower must never sit on a stale screen
+// without knowing it. Cached snapshots and offline events show the chip; the
+// next server snapshot clears it (Firestore resyncs full state on reconnect).
+let _lastSnapshotTs = 0;
+function noteSnapshotArrived(snap) {
+  _lastSnapshotTs = Date.now();
+  setSyncReconnecting(!!(snap && snap.metadata && snap.metadata.fromCache && !(snap.metadata.hasPendingWrites)));
+}
+function setSyncReconnecting(on) {
+  const chip = document.getElementById('ls-stat-sync');
+  if (chip) chip.hidden = !on;
+  if (on) setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
+}
+window.addEventListener('offline', () => { if (session.code && !session.isDemo && !session.isExpert) setSyncReconnecting(true); });
+window.addEventListener('online', () => { /* chip clears on the next server snapshot */ });
 
 function syncToFirestore() {
   saveLocalDraft();
@@ -3081,7 +3134,7 @@ function getCueCell(b, type) {
   const scriptMeta = type === 'script' && d?.text
     ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
     : '';
-  const outBadge = type === 'playback' ? outrangutanCellBadge(d) : '';
+  const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
     <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
@@ -4371,22 +4424,46 @@ function qlabGoBtnHTML(beatId, type, d) {
 // ─────────────────────────────────────────────────────────────
 let outrangutanState = { cues: {}, live: null };
 let _outCmdSeq = 0;
+let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out-of-order packets (P3)
 
-// Snapshot → local state. Re-render only when the cue set or live status
-// changes (not on every remaining-time tick) to avoid thrashing the rundown.
+// Snapshot → local state. Structural changes (the cue set) re-render the visible
+// screen; live-status changes only patch the rundown badges IN PLACE — the live
+// grid shows no continuous playout state, so it must never rebuild for one. (P3:
+// this is what kept the "Questions" segment flashing at playout-publish rate.)
 function applyOutrangutanState(og) {
   if (!og) return;
-  let changed = false;
-  if (og.cues && JSON.stringify(og.cues) !== JSON.stringify(outrangutanState.cues)) { outrangutanState.cues = og.cues; changed = true; }
+  let structural = false;
+  // stableStringify: Firestore snapshot map-key order differs between local-echo
+  // and server emissions — a plain JSON compare re-renders on identical data.
+  if (og.cues && stableStringify(og.cues) !== stableStringify(outrangutanState.cues)) { outrangutanState.cues = og.cues; structural = true; }
   if (og.live) {
-    const prev = outrangutanState.live || {};
-    if (prev.cueId !== og.live.cueId || prev.status !== og.live.status) changed = true;
-    outrangutanState.live = og.live;
+    // ts is the version stamp (monotonic per sender, survives publisher reloads);
+    // seq breaks ties for writes landing in the same millisecond.
+    const stamp = ((og.live.ts || 0) * 1000) + ((og.live.seq || 0) % 1000);
+    if (!stamp || stamp >= _ogLiveStamp) {
+      _ogLiveStamp = stamp;
+      const prev = outrangutanState.live || {};
+      const statusChanged = prev.cueId !== og.live.cueId || prev.status !== og.live.status;
+      outrangutanState.live = og.live;
+      if (statusChanged && !structural) refreshOutrangutanBadges();
+    }
   }
-  if (changed) {
+  if (structural) {
     if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
   }
+}
+
+// Patch every playback-cell badge in place — no table rebuild, no scroll loss.
+function refreshOutrangutanBadges() {
+  document.querySelectorAll('[data-outbadge]').forEach(el => {
+    const beat = beats.find(b => String(b.id) === el.getAttribute('data-outbadge'));
+    const html = outrangutanCellBadge(beat?.cues?.playback, beat?.id);
+    if (!html) { el.remove(); return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    if (tmp.firstElementChild) el.replaceWith(tmp.firstElementChild);
+  });
 }
 
 function outrangutanFmtDur(sec) {
@@ -4468,7 +4545,8 @@ function fireOutrangutanAutoForBeat(beat) {
 }
 
 // Rundown playback-cell badge: linked cue name/dur + live status (auto-populate).
-function outrangutanCellBadge(d) {
+// Carries data-outbadge=<beatId> so live-status flaps can patch it in place (P3).
+function outrangutanCellBadge(d, beatId) {
   if (!outrangutanCellLinked(d)) return '';
   const id = d.outCueId, c = (outrangutanState.cues || {})[id], live = outrangutanState.live;
   const name = c ? c.name : 'Linked cue';
@@ -4476,7 +4554,7 @@ function outrangutanCellBadge(d) {
   const isLive = live && live.cueId === id && live.status && live.status !== 'idle';
   const label = isLive ? (live.status === 'play' ? 'ON AIR' : live.status === 'pre' ? 'PRE' : live.status === 'pause' ? 'PAUSE' : '') : '';
   const status = isLive ? `<span class="cue-out-live cue-out-${live.status}">${label}</span>` : '';
-  return `<div class="cue-out-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${status}</div>`;
+  return `<div class="cue-out-badge"${beatId != null ? ` data-outbadge="${esc(String(beatId))}"` : ''}><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${status}</div>`;
 }
 
 
@@ -5315,11 +5393,17 @@ function renderLive() {
   });
   html += `</tbody></table></div>`;
 
+  // P3: an innerHTML rebuild resets scroll to the top — the visible "flash" for
+  // anyone reading elsewhere in the rundown. Keep their place unless the live
+  // position actually moved (then center it as before).
+  const prevScroll = body.scrollTop;
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
   if (cur && _lastLiveScrollIdx !== lsIdx) {
     _lastLiveScrollIdx = lsIdx;
     cur.scrollIntoView({behavior:'auto', block:'center'});
+  } else {
+    body.scrollTop = prevScroll;
   }
   applyLivePrompterPanelState();
   renderFollowChips();
@@ -6496,8 +6580,6 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="prompt-op-panel flow-control-panel">
-    ${includeLiveActions ? liveActionsHTML('po') : ''}
-    ${includeLiveActions ? clockAndAlertControlsHTML('po') : ''}
     <div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
@@ -6510,6 +6592,8 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
       </div>
     </div>
+    ${includeLiveActions ? liveActionsHTML('po') : ''}
+    ${includeLiveActions ? clockAndAlertControlsHTML('po') : ''}
     <div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">
@@ -7696,8 +7780,6 @@ function flowOpControlsHTML(disabled=false) {
   const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   return `<div class="flowop-controls flow-control-panel">
-    ${liveActionsHTML('flow', disabled)}
-    ${clockAndAlertControlsHTML('flow', disabled)}
     <div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
@@ -7710,6 +7792,8 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
       </div>
     </div>
+    ${liveActionsHTML('flow', disabled)}
+    ${clockAndAlertControlsHTML('flow', disabled)}
     <div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">

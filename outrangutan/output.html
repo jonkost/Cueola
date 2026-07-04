@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Outrangutan Output</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23b9bbbd'/><ellipse cx='30' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='70' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='50' cy='56' rx='27' ry='30' fill='%23161618'/><ellipse cx='50' cy='62' rx='9' ry='14' fill='%23ededee'/></svg>">
+<link rel="icon" type="image/svg+xml" href="../assets/Brand/Outrangutan_icon.svg">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
   .deck { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: 0; }
@@ -18,12 +18,14 @@
   #waiting { position: absolute; inset: 0; display: grid; place-items: center; color: #2a2a2a; font: 700 3vw -apple-system, system-ui, sans-serif; z-index: 1; }
   #keycv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 3; display: none; }
   #keycv.on { display: block; }
+  #vimg { z-index: 3; }   /* still image sits above the video decks while shown */
 </style>
 </head>
 <body>
   <div id="waiting">OUTRANGUTAN OUTPUT — waiting…</div>
   <video id="va" class="deck front" playsinline></video>
   <video id="vb" class="deck" playsinline></video>
+  <img id="vimg" class="deck" alt="">
   <canvas id="keycv"></canvas>
   <div id="identify">
     <div id="bars">
@@ -89,15 +91,41 @@
   async function loadInto(d, mediaId, at, loop, fit) {
     const blob = await getBlob(mediaId);
     revoke(d); d.mediaId = mediaId;
-    if (!blob) { d.el.removeAttribute('src'); d.el.load(); return false; }
+    if (!blob) { d.el.removeAttribute('src'); d.el.load(); reply({ t: 'error', mediaId: mediaId }); return false; }
     d.url = URL.createObjectURL(blob);
+    // decode failure mid-show → black slate here + alert the controller
+    d.el.onerror = () => { reply({ t: 'error', mediaId: mediaId }); stopDeck(d); };
     d.el.src = d.url; d.el.loop = !!loop; d.el.style.objectFit = fit || 'contain'; d.el.load();
     if (typeof at === 'number') { try { d.el.currentTime = at; } catch (e) {} }
     waiting.style.display = 'none';
     return true;
   }
   function bringFront(d) { decks.a.el.classList.toggle('front', d === decks.a); decks.b.el.classList.toggle('front', d === decks.b); front = d; }
-  function stopDeck(d) { try { d.el.pause(); } catch (e) {} d.el.removeAttribute('src'); d.el.load(); revoke(d); d.mediaId = null; d.el.style.opacity = 0; }
+  function stopDeck(d) { d.el.onerror = null; try { d.el.pause(); } catch (e) {} d.el.removeAttribute('src'); d.el.load(); revoke(d); d.mediaId = null; d.el.style.opacity = 0; }
+
+  // ── still images (Phase 2 master plan) ──
+  const vimg = document.getElementById('vimg');
+  let imgUrl = null;
+  function releaseImgUrl() { if (imgUrl) { try { URL.revokeObjectURL(imgUrl); } catch (e) {} imgUrl = null; } }
+  async function doImage(m) {
+    const blob = await getBlob(m.mediaId);
+    if (!blob) { reply({ t: 'error', mediaId: m.mediaId }); return; }
+    releaseImgUrl();
+    imgUrl = URL.createObjectURL(blob);
+    vimg.onerror = () => { reply({ t: 'error', mediaId: m.mediaId }); clearImage(0); };
+    vimg.src = imgUrl;
+    vimg.style.objectFit = m.fit || 'contain';
+    vimg.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')';
+    waiting.style.display = 'none';
+    const clearVideo = () => { stopDeck(decks.a); stopDeck(decks.b); };
+    if (m.fadeIn > 0) { vimg.style.opacity = 0; runFade('img', v => { vimg.style.opacity = v; }, 0, 1, m.fadeIn, m.curve, clearVideo); }
+    else { vimg.style.opacity = 1; clearVideo(); }
+  }
+  function clearImage(ms, curve) {
+    if (!vimg.getAttribute('src')) return;
+    const from = parseFloat(vimg.style.opacity || '1') || 1;
+    runFade('img', v => { vimg.style.opacity = v; }, from, 0, ms || 0, curve, () => { vimg.onerror = null; vimg.removeAttribute('src'); releaseImgUrl(); });
+  }
 
   // ── keyer (Phase 5: chroma/luma/alpha key, mirrored from the controller) ──
   const keycv = document.getElementById('keycv');
@@ -159,7 +187,8 @@
     if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
     d.el.volume = (m.fadeIn > 0) ? 0 : (typeof m.volume === 'number' ? m.volume : 1);
     bringFront(d);
-    try { await d.el.play(); } catch (e) {}
+    try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
+    clearImage(m.fadeIn || 0, m.curve);
     const prev = other(d);
     if (m.fadeIn > 0) { d.el.style.opacity = 0; runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * (m.volume == null ? 1 : m.volume); }, 0, 1, m.fadeIn, m.curve, () => stopDeck(prev)); }
     else { d.el.style.opacity = 1; stopDeck(prev); }
@@ -171,7 +200,8 @@
     if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
     d.el.volume = 0; d.el.style.opacity = 0;
     bringFront(d);
-    try { await d.el.play(); } catch (e) {}
+    try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
+    clearImage(m.ms, m.curve);
     const vol = (m.volume == null ? 1 : m.volume);
     runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * vol; }, 0, 1, m.ms, m.curve);
     runFade('out', v => { prev.el.volume = v * (prev.el.volume || vol); }, 1, 0, m.ms, m.curve, () => stopDeck(prev));
@@ -182,14 +212,15 @@
       case 'ping': reply({ t: 'pong' }); break;
       case 'play': await doPlay(m); break;
       case 'xfade': await doXfade(m); break;
+      case 'image': await doImage(m); break;
       case 'pause': try { front.el.pause(); } catch (e) {} break;
       case 'resume': try { await front.el.play(); } catch (e) {} break;
       case 'seek': try { front.el.currentTime = m.at; } catch (e) {} break;
       case 'volume': front.el.volume = Math.max(0, Math.min(1, m.v)); break;
       case 'fit': front.el.style.objectFit = m.fit || 'contain'; break;
-      case 'fade': { const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; } }); break; }
-      case 'black': { const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
-      case 'stop': stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; break;
+      case 'fade': { clearImage(m.ms, m.curve); const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; } }); break; }
+      case 'black': { clearImage(m.ms || 0, m.curve); const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
+      case 'stop': clearImage(0); stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; break;
       case 'holdLast': try { front.el.pause(); } catch (e) {} break;
       case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || ('Output ' + MY_ID); break;
       case 'audio': await applyAudio(m); break;   // per-output device routing (setSinkId)

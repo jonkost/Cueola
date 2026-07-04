@@ -80,9 +80,11 @@
   let settings = DEFAULT_SETTINGS();
   let themeObserver = null;
 
-  let active = null;             // { cue, kind, deck:'a'|'b'|'audio', el, ch } — running program cue
+  let active = null;             // { cue, kind, deck:'a'|'b'|'audio'|'img', el, ch } — running program cue
   let preTimer = null, preInfo = null;
   let rafId = null, saveTimer = null;
+  let pendingResume = null;      // { cueId, offset } — recovered pause point; next fire of that cue starts there
+  let lastTransportSave = 0;     // throttles playhead persistence during playback
 
   // ── multi-output (Phase 3) ───────────────────────────────────────────────
   let bc = null;
@@ -259,28 +261,62 @@
   }
 
   // ── media import ───────────────────────────────────────────────────────
+  // Probe on import: duration, dimensions, thumbnail — and REJECT anything this
+  // browser can't decode (unsupported codec/container, damaged file), so
+  // failures surface at import time, never at showtime. 8 s stall guard.
   function probeMedia(blob, kind) {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
       const el = document.createElement(kind === 'audio' ? 'audio' : 'video');
+      let settled = false;
+      const finish = (res) => { if (settled) return; settled = true; clearTimeout(guard); URL.revokeObjectURL(url); resolve(res); };
+      const fail = (why) => finish({ ok: false, error: why || 'undecodable', duration: 0, thumb: null, width: 0, height: 0 });
+      const guard = setTimeout(() => fail('timed out reading metadata'), 8000);
       el.preload = 'metadata'; el.muted = true; el.src = url;
-      const done = (duration, thumb) => { URL.revokeObjectURL(url); resolve({ duration: duration || 0, thumb: thumb || null }); };
+      el.onerror = () => fail((el.error && el.error.message) || 'undecodable');
       el.onloadedmetadata = () => {
         const duration = isFinite(el.duration) ? el.duration : 0;
-        if (kind !== 'video') return done(duration, null);
+        const width = el.videoWidth || 0, height = el.videoHeight || 0;
+        if (kind !== 'video') return finish({ ok: true, duration, thumb: null, width: 0, height: 0 });
+        if (!width || !height) return fail('no decodable video track');
         const t = Math.min(Math.max(0.1, duration * 0.1), Math.max(0.1, duration - 0.05));
         el.onseeked = () => {
           try {
             const c = document.createElement('canvas');
-            const w = 160, h = Math.max(1, Math.round(w * (el.videoHeight || 9) / (el.videoWidth || 16)));
+            const w = 160, h = Math.max(1, Math.round(w * height / width));
             c.width = w; c.height = h;
             c.getContext('2d').drawImage(el, 0, 0, w, h);
-            done(duration, c.toDataURL('image/jpeg', 0.6));
-          } catch (e) { done(duration, null); }
+            finish({ ok: true, duration, thumb: c.toDataURL('image/jpeg', 0.6), width, height });
+          } catch (e) { finish({ ok: true, duration, thumb: null, width, height }); }
         };
-        try { el.currentTime = t; } catch (e) { done(duration, null); }
+        try { el.currentTime = t; } catch (e) { finish({ ok: true, duration, thumb: null, width, height }); }
       };
-      el.onerror = () => done(0, null);
+    });
+  }
+  // Stills probe: dimensions + thumbnail via Image() (PNG/JPEG/WebP/SVG/GIF).
+  function probeImage(blob) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const im = new Image();
+      let settled = false;
+      const finish = (res) => { if (settled) return; settled = true; clearTimeout(guard); URL.revokeObjectURL(url); resolve(res); };
+      const fail = (why) => finish({ ok: false, error: why, duration: 0, thumb: null, width: 0, height: 0 });
+      const guard = setTimeout(() => fail('timed out decoding image'), 8000);
+      im.onload = () => {
+        const width = im.naturalWidth || 0, height = im.naturalHeight || 0;
+        if (!width || !height) return fail('empty image');
+        let thumb = null;
+        try {
+          const c = document.createElement('canvas');
+          const w = 160, h = Math.max(1, Math.round(w * height / width));
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(im, 0, 0, w, h);
+          thumb = c.toDataURL('image/jpeg', 0.6);
+        } catch (e) {}
+        finish({ ok: true, duration: 0, thumb, width, height });
+      };
+      im.onerror = () => fail('undecodable image');
+      im.src = url;
     });
   }
   // Build a filmstrip (row of frames) for a video clip — sampled across its duration.
@@ -319,13 +355,15 @@
     if (settings.transcode && !webPlayable(file) && ((file.type || '').startsWith('video') || /\.(mov|mkv|avi|mxf|m2ts|ts)$/i.test(file.name || ''))) {
       file = await transcodeFile(file);
     }
-    const kind = file.type.startsWith('video') ? 'video' : (file.type.startsWith('audio') ? 'audio' : null);
-    if (!kind) { toast('Skipped "' + file.name + '" — not a video or audio file.'); return null; }
-    const mediaId = rid('m_');
+    const t = file.type || '';
+    const kind = t.startsWith('video') ? 'video' : t.startsWith('audio') ? 'audio' : t.startsWith('image') ? 'image' : null;
+    if (!kind) { toast('Skipped "' + file.name + '" — not a video, audio, or image file.'); return null; }
     const blob = file.slice(0, file.size, file.type);
-    const probe = await probeMedia(blob, kind);
-    await idbPut(MEDIA_STORE, mediaId, { blob, name: file.name, mime: file.type, kind, duration: probe.duration, thumb: probe.thumb });
-    return { mediaId, kind, duration: probe.duration, thumb: probe.thumb, name: file.name };
+    const probe = kind === 'image' ? await probeImage(blob) : await probeMedia(blob, kind);
+    if (!probe.ok) { toast('⚠ "' + file.name + '" can’t play in this browser (' + (probe.error || 'unsupported or damaged') + ') — not added.'); return null; }
+    const mediaId = rid('m_');
+    await idbPut(MEDIA_STORE, mediaId, { blob, name: file.name, mime: file.type, kind, duration: probe.duration, thumb: probe.thumb, width: probe.width || 0, height: probe.height || 0 });
+    return { mediaId, kind, duration: probe.duration, thumb: probe.thumb, name: file.name, width: probe.width || 0, height: probe.height || 0 };
   }
   async function importFiles(fileList) {
     const files = Array.prototype.slice.call(fileList || []);
@@ -333,7 +371,7 @@
     for (const file of files) {
       try {
         const m = await storeFile(file); if (!m) continue;
-        cues.push(makeCue({ name: m.name.replace(/\.[^.]+$/, ''), type: m.kind, mediaId: m.mediaId, duration: m.duration, thumb: m.thumb }));
+        cues.push(makeCue({ name: m.name.replace(/\.[^.]+$/, ''), type: m.kind, mediaId: m.mediaId, duration: m.duration, thumb: m.thumb, srcW: m.width, srcH: m.height }));
         added++;
       } catch (e) { toast('Could not import "' + file.name + '".'); }
     }
@@ -343,7 +381,8 @@
   function makeCue(o) {
     return {
       id: rid('c_'), num: 0, name: o.name || 'Untitled', type: o.type || 'video',
-      mediaId: o.mediaId || null, color: o.type === 'audio' ? 'var(--green)' : 'var(--video)',
+      mediaId: o.mediaId || null, color: o.type === 'audio' ? 'var(--green)' : (o.type === 'image' ? 'var(--yellow)' : 'var(--video)'),
+      srcW: o.srcW || 0, srcH: o.srcH || 0, broken: false,
       preWait: 0, continueMode: 'manual', duration: o.duration || 0, thumb: o.thumb || null,
       trimIn: 0, trimOut: null, volume: 1, loop: false, armed: true, notes: '',
       // Phase 2 audio + fades + edits
@@ -357,7 +396,7 @@
       obsTriggerScene: '',                  // fire this cue when OBS switches to this scene
     };
   }
-  function renumber() { cues.forEach((c, i) => { c.num = i + 1; }); }
+  function renumber() { cues.forEach((c, i) => { c.num = i + 1; }); clearPreload(); }   // order changed → staged next-cue is stale
   function cueById(id) { return cues.find(c => c.id === id) || null; }
   function cueIndex(id) { return cues.findIndex(c => c.id === id); }
   function nextArmedAfter(id) { let i = cueIndex(id); for (let j = i + 1; j < cues.length; j++) if (cues[j].armed !== false) return cues[j].id; return null; }
@@ -458,6 +497,7 @@
       const id = m.id || 1, rec = outputWins.get(id);
       if (m.t === 'ready' || m.t === 'pong') { if (rec) rec.alive = true; updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id); }
       if (m.t === 'closed') { if (rec) rec.alive = false; updateOutputUI(); }
+      if (m.t === 'error') toast('⚠ Output ' + id + ' could not play the media — black slate on that output.');
     };
   }
   function sendOut(msg, target) { ensureChannel(); if (bc) bc.postMessage(Object.assign({ _from: 'control', target: (target == null ? null : target) }, msg)); }
@@ -480,7 +520,9 @@
   function tryFullscreen(win) { try { const d = win.document.documentElement; if (d && d.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch (e) {} }
   function focusOrOpenOutput(id) { const r = outputWins.get(id); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
   function resendActiveToOutput(id) {
-    if (!active || active.kind !== 'video' || active.cue.output !== id) return;
+    if (!active || active.cue.output !== id) return;
+    if (active.kind === 'image') { sendOut({ t: 'image', mediaId: active.cue.mediaId, fadeIn: 0, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0 }, id); return; }
+    if (active.kind !== 'video') return;
     sendOut({ t: 'play', mediaId: active.cue.mediaId, at: active.el.currentTime, loop: active.cue.loop, volume: active.cue.volume, fit: active.cue.fit }, id);
   }
   function identifyOutput(id, on) {
@@ -793,7 +835,10 @@
       try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }); } catch (e) {}
     }, 400);
   }
-  // publish live transport (throttled) — feeds the rundown cell's name/dur/status/thumb
+  // publish live transport (throttled ~1 Hz, Decisions Log #5) — feeds the
+  // rundown cell's name/dur/status/thumb. Monotonic seq lets receivers drop
+  // stale out-of-order packets (P3 sync hardening).
+  let _liveSeq = 0;
   function publishLive(force) {
     if (mode !== 'session' || !sessionCode || !fbReady()) return;
     const now = Date.now();
@@ -801,23 +846,38 @@
     lastLiveTs = now;
     let live = { status: 'idle', ts: now, sender: OG_SENDER };
     if (preInfo) live = { status: 'pre', cueId: preInfo.cue.id, name: preInfo.cue.name, type: preInfo.cue.type, ts: now, sender: OG_SENDER };
+    else if (active && active.kind === 'image') {
+      const left = active.remainMs > 0
+        ? (active.paused ? active.remainMs : Math.max(0, active.remainMs - (performance.now() - active.timerStart))) / 1000
+        : 0;
+      live = { status: active.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: 'image', dur: Math.round(active.cue.duration || 0), remaining: Math.round(left), thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
+    }
     else if (active && active.el) {
       const el = active.el, end = (active.cue.trimOut != null ? active.cue.trimOut : (isFinite(el.duration) ? el.duration : active.cue.duration));
       const remaining = Math.max(0, (end || 0) - el.currentTime);
-      live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
+      live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), offset: Math.round(el.currentTime * 10) / 10, thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
     }
+    live.seq = ++_liveSeq;
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }); } catch (e) {}
   }
 
   // ── Phase 5: scopes (waveform monitor + vectorscope) ─────────────────────
   // Computed from the program frame on a small offscreen canvas — resolution-
-  // aware (we always downsample to ~160px wide, so 4K stays cheap). Toggleable.
+  // aware (we always downsample to ~192px wide, so 4K stays cheap). Toggleable.
+  // Each canvas is re-backed at its on-screen size × devicePixelRatio so the
+  // traces and graticules stay crisp however the panes are resized.
   let scopesOn = false, scopeRAF = null;
   const scopeSrc = document.createElement('canvas');
   function frontVideoEl() {
     if (active && active.kind === 'video' && active.el && active.el.videoWidth) return active.el;
     if (decks) for (const k of ['a', 'b']) { const d = decks[k]; if (d && d.el && d.el.videoWidth && d.el.classList.contains('front')) return d.el; }
     return null;
+  }
+  function fitScopeCanvas(cv) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const r = cv.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
   }
   function toggleScopes() {
     scopesOn = !scopesOn;
@@ -828,44 +888,83 @@
   }
   function drawScopes() {
     const wfm = $('og-wfm'), vec = $('og-vscope'); if (!wfm || !vec) return;
+    fitScopeCanvas(wfm); fitScopeCanvas(vec);
     const v = frontVideoEl();
-    if (!v) { wfm.getContext('2d').clearRect(0, 0, wfm.width, wfm.height); drawVecGraticule(vec); return; }
-    const sw = 160, sh = Math.max(1, Math.round(sw * ((v.videoHeight || 9) / (v.videoWidth || 16))));
+    if (!v) { drawWfmGraticule(wfm); drawVecGraticule(vec); return; }
+    const sw = 192, sh = Math.max(1, Math.round(sw * ((v.videoHeight || 9) / (v.videoWidth || 16))));
     scopeSrc.width = sw; scopeSrc.height = sh;
     const sc = scopeSrc.getContext('2d', { willReadFrequently: true });
     let img; try { sc.drawImage(v, 0, 0, sw, sh); img = sc.getImageData(0, 0, sw, sh); } catch (e) { return; }
     drawWaveform(wfm, img, sw, sh);
     drawVectorscope(vec, img, sw, sh);
   }
-  function drawWaveform(cv, img, sw, sh) {
+  function drawWfmGraticule(cv) {
     const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
-    ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, W, H);
-    const out = ctx.createImageData(W, H), o = out.data, d = img.data;
-    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
-      const i = (y * sw + x) * 4, luma = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-      const px = (x / sw * W) | 0, py = ((1 - luma / 255) * (H - 1)) | 0;
-      const oi = (py * W + px) * 4; o[oi + 1] = Math.min(255, o[oi + 1] + 60); o[oi] = Math.min(255, o[oi] + 12); o[oi + 3] = 255;
+    ctx.fillStyle = '#04060a'; ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+      const y = Math.round(f * (H - 1)) + 0.5;
+      ctx.strokeStyle = f === 0 || f === 1 ? 'rgba(150,180,210,.30)' : 'rgba(150,180,210,.16)';
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    });
+    const fs = Math.max(9, Math.round(H * 0.085));
+    ctx.fillStyle = 'rgba(160,190,220,.55)'; ctx.font = fs + 'px monospace'; ctx.textAlign = 'right';
+    ctx.textBaseline = 'top'; ctx.fillText('100', W - 5, 3);
+    ctx.textBaseline = 'bottom'; ctx.fillText('0', W - 5, H - 3);
+    return ctx;
+  }
+  function drawWaveform(cv, img, sw, sh) {
+    const W = cv.width, H = cv.height, ctx = drawWfmGraticule(cv), d = img.data;
+    // Additive luma trace: one source column per output pixel column, so the
+    // plot is continuous (no comb gaps) at any backing resolution.
+    const out = ctx.getImageData(0, 0, W, H), o = out.data;
+    for (let X = 0; X < W; X++) {
+      const x = (X * sw / W) | 0;
+      for (let y = 0; y < sh; y++) {
+        const i = (y * sw + x) * 4, luma = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+        const py = ((1 - luma / 255) * (H - 1)) | 0, oi = (py * W + X) * 4;
+        o[oi] = Math.min(255, o[oi] + 24); o[oi + 1] = Math.min(255, o[oi + 1] + 92); o[oi + 2] = Math.min(255, o[oi + 2] + 42); o[oi + 3] = 255;
+      }
     }
     ctx.putImageData(out, 0, 0);
-    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1;
-    [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, f * H); ctx.lineTo(W, f * H); ctx.stroke(); });
   }
+  // Rec.601 75% color-bar targets for the vectorscope graticule
+  const VEC_TARGETS = ['R,191,0,0', 'Mg,191,0,191', 'B,0,0,191', 'Cy,0,191,191', 'G,0,191,0', 'Yl,191,191,0'].map(s => {
+    const [k, R, G, B] = s.split(',').map((v, i) => i ? +v : v);
+    return { k, u: -0.169 * R - 0.331 * G + 0.5 * B, v: 0.5 * R - 0.419 * G - 0.081 * B };
+  });
   function drawVecGraticule(cv) {
-    const W = cv.width, H = cv.height, ctx = cv.getContext('2d'), cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 2;
-    ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+    const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
+    const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - Math.max(3, Math.min(W, H) * 0.03);
+    ctx.fillStyle = '#04060a'; ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(150,180,210,.30)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,180,210,.14)';
+    ctx.beginPath(); ctx.arc(cx, cy, r / 2, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke();
-    return { ctx, cx, cy, r };
+    const scale = r / 140, box = Math.max(3, r * 0.05);
+    ctx.font = Math.max(8, Math.round(r * 0.11)) + 'px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    VEC_TARGETS.forEach(t => {
+      const x = cx + t.u * scale, y = cy - t.v * scale;
+      ctx.strokeStyle = 'rgba(220,235,255,.42)';
+      ctx.strokeRect(x - box, y - box, box * 2, box * 2);
+      ctx.fillStyle = 'rgba(200,220,245,.6)';
+      ctx.fillText(t.k, cx + t.u * scale * 1.3, cy - t.v * scale * 1.3);
+    });
+    return { ctx, cx, cy, r, scale };
   }
   function drawVectorscope(cv, img, sw, sh) {
-    const g = drawVecGraticule(cv), ctx = g.ctx, scale = g.r / 140;
-    const d = img.data; ctx.fillStyle = 'rgba(110,231,160,.5)';
+    const g = drawVecGraticule(cv), ctx = g.ctx;
+    const d = img.data, ds = Math.max(1.5, g.r / 70);
+    ctx.fillStyle = 'rgba(125,240,180,.65)';
     const step = sw * sh > 20000 ? 2 : 1;   // resolution-aware thinning
     for (let p = 0; p < sw * sh; p += step) {
       const i = p * 4, R = d[i], G = d[i + 1], B = d[i + 2];
       const U = -0.169 * R - 0.331 * G + 0.5 * B;     // Rec.601 chroma
       const V = 0.5 * R - 0.419 * G - 0.081 * B;
-      ctx.fillRect(g.cx + U * scale, g.cy - V * scale, 1, 1);
+      ctx.fillRect(g.cx + U * g.scale - ds / 2, g.cy - V * g.scale - ds / 2, ds, ds);
     }
   }
 
@@ -1067,23 +1166,38 @@
   function freeVideoDeck() { return (active && active.deck === 'a') ? decks.b : decks.a; }
   function deckGain(deck, v) { v = clamp(v, 0, 1); if (audioOK && deck.ch) deck.ch.gain.gain.value = v * (deck.vol == null ? 1 : deck.vol); else deck.el.volume = v * (deck.vol == null ? 1 : deck.vol); }
   function deckSetVol(deck, vol) { deck.vol = clamp(vol, 0, 1); }
-  function deckOpacity(deck, v) { if (deck.kind === 'video') deck.el.style.opacity = v; }
+  function deckOpacity(deck, v) { if (deck.kind === 'video' || deck.kind === 'image') deck.el.style.opacity = v; }
   function showDeck(deck) { if (deck.kind !== 'video') return; decks.a.el.classList.toggle('front', deck === decks.a); decks.b.el.classList.toggle('front', deck === decks.b); }
-  function applyFit(deck, cue) { const el = deck.el; if (deck.kind !== 'video') return; el.style.objectFit = cue.fit || 'contain'; el.style.transform = 'translate(' + (cue.posX || 0) + '%,' + (cue.posY || 0) + '%) scale(' + (cue.scale || 1) + ')'; }
+  function applyFit(deck, cue) { const el = deck.el; if (deck.kind !== 'video' && deck.kind !== 'image') return; el.style.objectFit = cue.fit || 'contain'; el.style.transform = 'translate(' + (cue.posX || 0) + '%,' + (cue.posY || 0) + '%) scale(' + (cue.scale || 1) + ')'; }
+  function aspectLabel(w, h) { const g = (a, b) => b ? g(b, a % b) : a; const d = g(w, h) || 1; const rw = w / d, rh = h / d; return (rw > 40 || rh > 40) ? (w / h).toFixed(2) + ':1' : rw + ':' + rh; }
 
   function clearPre() { if (preTimer) { clearTimeout(preTimer); preTimer = null; } preInfo = null; }
 
   function stopDeck(deck, opts) {
     if (!deck) return;
+    deck.el.onerror = null;   // teardown must never look like a media failure
+    if (deck.kind === 'image') {
+      cancelFade('in-img');
+      if (!opts || !opts.keepFrame) { deck.el.removeAttribute('src'); deck.el.style.opacity = 0; }
+      if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} deck._url = null; }
+      return;
+    }
     try { deck.el.pause(); } catch (e) {}
-    deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = null;
+    deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = deck.el.onplaying = null;
     cancelFade('in-' + deck.id); cancelFade('out-' + deck.id);
     if (!opts || !opts.keepFrame) { deck.el.removeAttribute('src'); try { deck.el.load(); } catch (e) {} deckOpacity(deck, 0); }
     if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} deck._url = null; }
   }
-  function stopAllDecks(opts) { ['a', 'b', 'audio'].forEach(k => stopDeck(decks[k], opts)); active = null; }
+  function stopAllDecks(opts) { clearImageTimer(); clearPreload(); ['a', 'b', 'audio', 'img'].forEach(k => stopDeck(decks[k], opts)); active = null; }
 
+  function isActivePaused() {
+    if (!active || preInfo) return false;
+    return active.kind === 'image' ? !!active.paused : !!(active.el && active.el.paused);
+  }
+  // GO doubles as RESUME while the program is paused — the AVT-lab fix:
+  // trigger-after-pause continues from the pause offset, never from the top.
   function go() {
+    if (isActivePaused()) { pauseResume(); return; }
     let cue = cueById(selectedId);
     if (!cue) { cue = cues.find(c => c.armed !== false); if (cue) selectedId = cue.id; }
     if (!cue) { toast('No cue to fire. Add media first.'); return; }
@@ -1091,6 +1205,15 @@
     fireCue(cue);
     selectedId = next || selectedId;
     renderCueList(); renderInspector(); renderEditArea();
+  }
+  // Keep the big transport button honest about what Space will do.
+  function syncGoButton() {
+    const b = $('og-go'); if (!b) return;
+    const paused = isActivePaused();
+    if (b._pausedLabel === paused) return;
+    b._pausedLabel = paused;
+    const keyTxt = ($('og-k-go') && $('og-k-go').textContent) || '';
+    b.innerHTML = sym('media.play') + (paused ? 'RESUME' : 'GO') + '<span class="og-tbtn-key" id="og-k-go">' + esc(keyTxt) + '</span>';
   }
   function fireCue(cue) {
     clearPre();
@@ -1104,26 +1227,42 @@
     beginMedia(cue);
   }
   async function beginMedia(cue) {
+    if (cue.type === 'image') return beginImage(cue);
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
     if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
     ensureAudio();
     const isAudio = cue.type === 'audio';
     const prev = active;
-    const deck = isAudio ? decks.audio : freeVideoDeck();
-    if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} }
-    deck._url = URL.createObjectURL(media.blob);
-    deck.el.src = deck._url; deck.el.loop = !!cue.loop; deckSetVol(deck, cue.volume);
-    deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = null;
+    // fire on the preloaded deck when this cue was cue-ahead staged there
+    let deck = isAudio ? decks.audio : freeVideoDeck();
+    if (!isAudio && preloaded && preloaded.cueId === cue.id && preloaded.kind === 'video' && decks[preloaded.deck] && (!active || active.deck !== preloaded.deck)) deck = decks[preloaded.deck];
+    const pre = (preloaded && preloaded.cueId === cue.id && preloaded.deck === deck.id) ? preloaded : null;
+    if (pre) { preloaded = null; }   // media already staged on this deck's src
+    else {
+      if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} }
+      deck._url = URL.createObjectURL(media.blob);
+      deck.el.src = deck._url;
+    }
+    deck.el.loop = !!cue.loop; deckSetVol(deck, cue.volume);
+    deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = deck.el.onplaying = deck.el.onerror = null;
     if (audioOK && deck.ch) { applyChannel(deck.ch, { eq: cue.eq, comp: cue.comp }); deck.el.volume = 1; }
     applyFit(deck, cue);
 
     active = { cue, kind: isAudio ? 'audio' : 'video', deck: isAudio ? 'audio' : (deck === decks.a ? 'a' : 'b'), el: deck.el, ch: deck.ch };
     deck.el.onplay = () => { if (cue.continueMode === 'auto_continue') setTimeout(() => autoFrom(cue), 60); };
+    deck.el.onplaying = () => { if (cue.broken) { cue.broken = false; renderCueList(); scheduleSave(); } };
     deck.el.ontimeupdate = () => { if (cue.trimOut != null && deck.el.currentTime >= cue.trimOut) handleEnded(cue); };
     deck.el.onended = () => { if (!deck.el.loop) handleEnded(cue); };
-    try { deck.el.currentTime = cue.trimIn || 0; } catch (e) {}
+    deck.el.onerror = () => failLive(cue, deck);   // decode death mid-show → black slate, never a hang
+    // resume from a persisted pause offset when this cue was recovered mid-show
+    let startAt = cue.trimIn || 0;
+    if (pendingResume && pendingResume.cueId === cue.id) { startAt = Math.max(startAt, pendingResume.offset || 0); pendingResume = null; }
+    try { deck.el.currentTime = startAt; } catch (e) {}
     if (!isAudio) showDeck(deck);
-    try { await deck.el.play(); } catch (e) { toast('Playback blocked — click GO again.'); }
+    try { await deck.el.play(); } catch (e) {
+      if (e && e.name === 'NotAllowedError') { toast('Playback blocked by the browser — press GO again.'); }
+      else { failLive(cue, deck, e); return; }
+    }
 
     const curve = fadeCurveOf(cue);
     const xf = cue.xfade || 0;
@@ -1154,6 +1293,97 @@
     }
     applyKeyForActive();          // Phase 5: keying on/off for this cue (control + output)
     fireObsForCue(cue);           // Phase 5: any OBS action programmed on this cue
+    preloadNext(cue);             // Phase 2 (master plan): stage the next armed cue for an instant GO
+  }
+
+  // ── Phase 2 (master plan): stills as first-class playout items ───────────
+  // An image cue holds on screen until advanced; an optional duration (>0)
+  // arms an auto-advance timer that honours the cue's continue/end settings.
+  async function beginImage(cue) {
+    const media = await idbGet(MEDIA_STORE, cue.mediaId);
+    if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
+    const prev = active;
+    const deck = decks.img, el = deck.el;
+    const pre = (preloaded && preloaded.cueId === cue.id && preloaded.kind === 'image') ? preloaded : null;
+    if (deck._url && (!pre || pre.url !== deck._url)) { try { URL.revokeObjectURL(deck._url); } catch (e) {} deck._url = null; }
+    if (pre) { deck._url = pre.url; preloaded = null; }
+    if (!deck._url) deck._url = URL.createObjectURL(media.blob);
+    el.onerror = () => failLive(cue, deck);
+    el.src = deck._url;
+    el.style.objectFit = cue.fit || 'contain';
+    el.style.transform = 'translate(' + (cue.posX || 0) + '%,' + (cue.posY || 0) + '%) scale(' + (cue.scale || 1) + ')';
+    active = { cue, kind: 'image', deck: 'img', el: null, paused: false, shownAt: performance.now(), remainMs: cue.duration > 0 ? cue.duration * 1000 : 0, imgTimer: null, timerStart: 0 };
+    const out = cue.output || 1, curve = fadeCurveOf(cue), fi = (cue.fadeIn || 0) * 1000;
+    sendOut({ t: 'image', mediaId: cue.mediaId, fadeIn: fi, curve, fit: cue.fit, scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0 }, out);
+    if (prev) {
+      const pd = deckOf(prev); if (pd && pd !== deck) stopDeck(pd);
+      if (prev.kind === 'video' && (prev.cue.output || 1) !== out) sendOut({ t: 'stop' }, prev.cue.output || 1);
+    }
+    if (fi > 0) { el.style.opacity = 0; runFade('in-img', v => { el.style.opacity = v; }, 0, 1, fi, curve); }
+    else el.style.opacity = 1;
+    if (active.remainMs > 0) armImageTimer();
+    setStatus('play'); startTicker(); renderCueList();
+    applyKeyForActive();          // stills never key — this also stops a leftover key loop
+    fireObsForCue(cue);
+    preloadNext(cue);
+  }
+  function armImageTimer() {
+    clearImageTimer();
+    if (!active || active.kind !== 'image' || !(active.remainMs > 0)) return;
+    active.timerStart = performance.now();
+    active.imgTimer = setTimeout(() => { if (active && active.kind === 'image') handleEnded(active.cue); }, active.remainMs);
+  }
+  function clearImageTimer() { if (active && active.imgTimer) { clearTimeout(active.imgTimer); active.imgTimer = null; } }
+
+  // ── Phase 2 (master plan): black-slate failure containment ───────────────
+  // A cue that dies mid-show never hangs the program: picture cuts to black,
+  // the operator gets a non-blocking alert, the cue is flagged in the list,
+  // and the rundown stays advanceable. (Decisions Log #4: black slate.)
+  function failLive(cue, deck, err) {
+    try { console.warn('[outrangutan] cue failed:', cue && cue.name, (err && err.message) || (deck && deck.el && deck.el.error && deck.el.error.message) || err || ''); } catch (e) {}
+    if (active && active.kind === 'image') clearImageTimer();
+    cue.broken = true;
+    if (deck) stopDeck(deck);
+    if (active && active.cue && active.cue.id === cue.id) active = null;
+    setStatus('idle');
+    if (cue.type === 'video' || cue.type === 'image') sendOut({ t: 'black', ms: 0 }, cue.output || 1);
+    renderCueList(); scheduleSave();
+    toast('⚠ “' + cue.name + '” failed to play — black slate. Show continues; cue is marked.');
+  }
+
+  // ── Phase 2 (master plan): cue-ahead preload ──────────────────────────────
+  // Scoped to the control-side decks (outputs still load on demand at fire
+  // time): the next armed cue's media is staged on the idle deck so GO is
+  // instant. Staged video/audio URLs are owned by the deck lifecycle; a staged
+  // image URL is owned by `preloaded` until adopted.
+  let preloaded = null;   // { cueId, kind, deck? , url? }
+  function clearPreload() {
+    if (preloaded && preloaded.kind === 'image' && preloaded.url) { try { URL.revokeObjectURL(preloaded.url); } catch (e) {} }
+    preloaded = null;
+  }
+  async function preloadNext(fromCue) {
+    try {
+      const next = cueById(nextArmedAfter(fromCue.id));
+      if (!next || !next.mediaId || next.broken) { clearPreload(); return; }
+      if (preloaded && preloaded.cueId === next.id) return;
+      clearPreload();
+      const media = await idbGet(MEDIA_STORE, next.mediaId);
+      if (!media || !media.blob) return;
+      if (next.type === 'video' || next.type === 'audio') {
+        const deck = next.type === 'audio' ? decks.audio : freeVideoDeck();
+        if (active && deckOf(active) === deck) return;   // never touch the live deck
+        if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} }
+        deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = deck.el.onplaying = deck.el.onerror = null;
+        deck._url = URL.createObjectURL(media.blob);
+        deck.el.preload = 'auto'; deck.el.src = deck._url;
+        try { deck.el.load(); } catch (e) {}
+        preloaded = { cueId: next.id, kind: next.type, deck: deck.id };
+      } else if (next.type === 'image') {
+        const url = URL.createObjectURL(media.blob);
+        const im = new Image(); im.src = url;   // warms the decode cache
+        preloaded = { cueId: next.id, kind: 'image', url };
+      }
+    } catch (e) { clearPreload(); }
   }
 
   function autoFrom(cue) {
@@ -1165,15 +1395,16 @@
     renderCueList(); renderInspector(); renderEditArea();
   }
   function handleEnded(cue) {
+    clearImageTimer();
     const m = cue.continueMode;
     if (m === 'auto_follow') { autoFrom(cue); return; }
-    // end action for the picture/audio (output messages only for video — audio cues never touch a picture)
+    // end action for the picture/audio (output messages only for picture cues — audio never touches one)
     const deck = active ? deckOf(active) : null;
-    const isVid = cue.type === 'video', out = cue.output || 1;
-    if (deck && cue.endAction === 'hold') { try { deck.el.pause(); } catch (e) {} setStatus('idle'); if (isVid) sendOut({ t: 'holdLast' }, out); renderCueList(); return; }
-    if (deck && cue.endAction === 'black') { runFade('out-' + deck.id, v => { deckGain(deck, v); deckOpacity(deck, v); }, 1, 0, 600, fadeCurveOf(cue), () => stopDeck(deck)); active = null; if (isVid) sendOut({ t: 'black', ms: 600 }, out); setStatus('idle'); renderCueList(); return; }
+    const hasPicture = cue.type === 'video' || cue.type === 'image', out = cue.output || 1;
+    if (deck && cue.endAction === 'hold') { try { if (deck.el.pause) deck.el.pause(); } catch (e) {} setStatus('idle'); if (cue.type === 'video') sendOut({ t: 'holdLast' }, out); renderCueList(); return; }
+    if (deck && cue.endAction === 'black') { runFade('out-' + deck.id, v => { deckGain(deck, v); deckOpacity(deck, v); }, 1, 0, 600, fadeCurveOf(cue), () => stopDeck(deck)); active = null; if (hasPicture) sendOut({ t: 'black', ms: 600 }, out); setStatus('idle'); renderCueList(); return; }
     if (deck) stopDeck(deck); active = null;
-    setStatus('idle'); if (isVid) sendOut({ t: 'stop' }, out); renderCueList();
+    setStatus('idle'); if (hasPicture) sendOut({ t: 'stop' }, out); renderCueList();
   }
 
   // Cue the standby cursor back to the first armed cue, so the next GO restarts the show.
@@ -1190,18 +1421,27 @@
     setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); toast('PANIC — all stopped.');
   }
   function pauseResume() {
+    if (active && active.kind === 'image') {
+      if (active.paused) { active.paused = false; if (active.remainMs > 0) armImageTimer(); setStatus('play'); }
+      else {
+        if (active.imgTimer) { active.remainMs = Math.max(0, active.remainMs - (performance.now() - active.timerStart)); clearImageTimer(); }
+        active.paused = true; setStatus('pause'); saveShow();
+      }
+      renderCueList(); return;
+    }
     if (!active || !active.el) { if (preInfo) stopAll(); return; }
     const el = active.el;
     const out = active.cue.output || 1;
     if (el.paused) { el.play(); setStatus('play'); sendOut({ t: 'resume' }, out); }
-    else { el.pause(); setStatus('pause'); sendOut({ t: 'pause' }, out); }
+    else { el.pause(); setStatus('pause'); sendOut({ t: 'pause' }, out); saveShow(); }   // persist the pause offset immediately
     renderCueList();
   }
   function fadeStopAll() {
     const ms = 800, curve = settings.fadeCurve;
+    clearImageTimer();
     sendOut({ t: 'fade', to: 0, ms });
     let any = false;
-    ['a', 'b', 'audio'].forEach(k => {
+    ['a', 'b', 'audio', 'img'].forEach(k => {
       const d = decks[k];
       if (d._url && !d.el.paused) { any = true; runFade('out-' + d.id, v => { deckGain(d, v); deckOpacity(d, v); }, 1, 0, ms, curve, () => stopDeck(d)); }
     });
@@ -1216,11 +1456,21 @@
       tag.className = 'og-program-status og-status-' + (s === 'play' ? 'play' : s === 'pre' ? 'pre' : s === 'pause' ? 'pause' : 'idle');
       tag.textContent = s === 'play' ? 'ON AIR' : s === 'pre' ? 'PRE-WAIT' : s === 'pause' ? 'PAUSED' : 'IDLE';
     }
+    syncGoButton();               // GO ⇄ RESUME label tracks the paused state
     publishLive(true);            // push transport change to the rundown immediately
   }
 
   // ── count-out clock + ticker ─────────────────────────────────────────────
-  function startTicker() { if (rafId) return; const loop = () => { renderClock(); renderEditPlayhead(); publishLive(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
+  function startTicker() { if (rafId) return; const loop = () => { renderClock(); renderEditPlayhead(); publishLive(); maybePersistTransport(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
+  // Persist the playhead every ~10 s while the program runs, so a UI reload
+  // mid-show recovers to (at worst) a few seconds behind the real position.
+  function maybePersistTransport() {
+    if (!active) return;
+    const now = Date.now();
+    if (now - lastTransportSave < 10000) return;
+    lastTransportSave = now;
+    saveShow();
+  }
   function stopTicker() { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
   function renderClock() {
     const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), wrap = $('og-clock');
@@ -1229,6 +1479,22 @@
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
       timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
       cueEl.textContent = ''; wrap.className = 'og-clock warn'; return;
+    }
+    if (active && active.kind === 'image') {
+      const c = active.cue;
+      if (active.remainMs > 0 || c.duration > 0) {
+        const left = active.paused ? active.remainMs / 1000
+          : Math.max(0, (active.remainMs - (performance.now() - active.timerStart)) / 1000);
+        timeEl.textContent = fmtClock(left);
+        labelEl.textContent = active.paused ? 'PAUSED' : 'REMAINING';
+        wrap.className = 'og-clock ' + (active.paused || left <= 10 ? 'warn' : 'run');
+      } else {
+        timeEl.textContent = fmtClock((performance.now() - active.shownAt) / 1000);
+        labelEl.textContent = active.paused ? 'PAUSED' : 'HOLD';
+        wrap.className = 'og-clock' + (active.paused ? ' warn' : ' run');
+      }
+      cueEl.textContent = c.name;
+      return;
     }
     if (active && active.el && !active.el.paused) {
       const el = active.el, end = (active.cue.trimOut != null ? active.cue.trimOut : (isFinite(el.duration) ? el.duration : active.cue.duration));
@@ -1277,17 +1543,18 @@
 
   function renderCueList() {
     const wrap = $('og-cuelist'); if (!wrap) return;
-    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty">No cues yet.<br>Drop a video or audio file below, or click “Add media”.</div>'; return; }
+    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty">No cues yet.<br>Drop a video, audio, or still-image file below, or click “Add media”.</div>'; return; }
     const playingId = active ? active.cue.id : (preInfo ? preInfo.cue.id : null);
     wrap.innerHTML = cues.map(c => {
-      const cls = ['og-cue']; if (c.id === selectedId) cls.push('selected'); if (c.id === playingId) cls.push('playing'); if (c.armed === false) cls.push('armed-off');
+      const cls = ['og-cue']; if (c.id === selectedId) cls.push('selected'); if (c.id === playingId) cls.push('playing'); if (c.armed === false) cls.push('armed-off'); if (c.broken) cls.push('broken');
       const cont = c.continueMode === 'auto_follow' ? 'FOLLOW' : c.continueMode === 'auto_continue' ? 'CONT' : '';
+      const durTxt = c.type === 'image' ? (c.duration > 0 ? fmtClock(c.duration) : 'HOLD') : fmtClock(c.duration);
       return '<div class="' + cls.join(' ') + '" data-id="' + c.id + '">'
         + '<span class="og-cue-color-dot" style="background:' + c.color + '"></span>'
         + '<span class="og-cue-num">' + c.num + '</span>'
-        + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : 'department.video') + '</span>'
+        + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : c.type === 'image' ? 'content.image' : 'department.video') + '</span>'
         + '<span class="og-cue-name">' + esc(c.name) + '</span>'
-        + '<span class="og-cue-meta">' + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + fmtClock(c.duration) + '</span></span>'
+        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time — replace or re-import this media">⚠</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
@@ -1301,14 +1568,19 @@
     const c = cueById(selectedId);
     if (!c) { ins.innerHTML = '<div class="og-insp-empty">Select a cue to edit its properties.</div>'; return; }
     const eq = c.eq || (c.eq = { low: 0, mid: 0, high: 0 });
+    const dims = c.srcW && c.srcH
+      ? '<div class="og-insp-meta">' + c.srcW + '×' + c.srcH + ' · ' + aspectLabel(c.srcW, c.srcH) + (c.type === 'image' ? ' · still' : '') + '</div>'
+      : '';
     ins.innerHTML =
       field('Name', '<input id="og-i-name" type="text" value="' + esc(c.name) + '">') +
+      dims +
       '<div class="og-field-row">' +
         field('Pre-wait (s)', '<input id="og-i-prewait" type="number" min="0" step="0.5" value="' + c.preWait + '">') +
         field('Continue', '<select id="og-i-continue">' +
           opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Auto-continue', c.continueMode) + opt('auto_follow', 'Auto-follow', c.continueMode) + '</select>') +
       '</div>' +
-      // ── Audio
+      // ── Audio (not for stills)
+      (c.type === 'image' ? '' :
       sub('Audio') +
       field('Level <span class="og-cue-meter"><span class="og-cue-meter-fill" id="og-cue-meter-fill"></span></span>', '<input id="og-i-volume" type="range" min="0" max="1" step="0.01" value="' + c.volume + '">') +
       '<div class="og-field-row3">' +
@@ -1316,7 +1588,7 @@
         field('Mid', '<input id="og-i-eqmid" type="range" min="-12" max="12" step="0.5" value="' + (eq.mid || 0) + '">') +
         field('High', '<input id="og-i-eqhigh" type="range" min="-12" max="12" step="0.5" value="' + (eq.high || 0) + '">') +
       '</div>' +
-      '<label class="og-check"><input id="og-i-comp" type="checkbox"' + (c.comp ? ' checked' : '') + '> Compressor</label>' +
+      '<label class="og-check"><input id="og-i-comp" type="checkbox"' + (c.comp ? ' checked' : '') + '> Compressor</label>') +
       // ── Fades
       sub('Fades') +
       '<div class="og-field-row3">' +
@@ -1325,17 +1597,23 @@
         field('Curve', '<select id="og-i-fadecurve">' + opt('', 'Default', c.fadeCurve) + opt('linear', 'Linear', c.fadeCurve) + opt('s', 'S-curve', c.fadeCurve) + opt('log', 'Log', c.fadeCurve) + '</select>') +
       '</div>' +
       (c.type === 'video' ? field('Crossfade in (s)', '<input id="og-i-xfade" type="number" min="0" step="0.1" value="' + (c.xfade || 0) + '">') : '') +
-      // ── Edit
-      sub('Edit') +
-      '<div class="og-field-row">' +
-        field('Trim in (s)', '<input id="og-i-trimin" type="number" min="0" step="0.1" value="' + (c.trimIn || 0) + '">') +
-        field('Trim out (s)', '<input id="og-i-trimout" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : c.trimOut) + '" placeholder="end">') +
-      '</div>' +
-      '<div class="og-field-row">' +
-        field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
-        field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop / black', c.endAction) + opt('hold', 'Hold last frame', c.endAction) + opt('black', 'Fade to black', c.endAction) + '</select>') +
-      '</div>' +
-      (c.type === 'video' ?
+      // ── Edit (stills: an optional duration replaces trim/loop — 0 holds until advanced)
+      sub(c.type === 'image' ? 'Timing' : 'Edit') +
+      (c.type === 'image' ?
+        '<div class="og-field-row">' +
+          field('Duration (s) — 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
+          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut to black', c.endAction) + opt('hold', 'Keep holding', c.endAction) + opt('black', 'Fade to black', c.endAction) + '</select>') +
+        '</div>'
+      :
+        '<div class="og-field-row">' +
+          field('Trim in (s)', '<input id="og-i-trimin" type="number" min="0" step="0.1" value="' + (c.trimIn || 0) + '">') +
+          field('Trim out (s)', '<input id="og-i-trimout" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : c.trimOut) + '" placeholder="end">') +
+        '</div>' +
+        '<div class="og-field-row">' +
+          field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
+          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop / black', c.endAction) + opt('hold', 'Hold last frame', c.endAction) + opt('black', 'Fade to black', c.endAction) + '</select>') +
+        '</div>') +
+      (c.type === 'video' || c.type === 'image' ?
         '<div class="og-field-row3">' +
           field('Fit', '<select id="og-i-fit">' + opt('contain', 'Contain', c.fit) + opt('cover', 'Cover', c.fit) + opt('fill', 'Fill', c.fit) + '</select>') +
           field('Scale', '<input id="og-i-scale" type="range" min="0.25" max="3" step="0.05" value="' + (c.scale || 1) + '">') +
@@ -1394,6 +1672,14 @@
     bind('og-i-trimout', 'onchange', e => { const v = parseFloat(e.target.value); c.trimOut = isNaN(v) ? null : v; scheduleSave(); });
     bind('og-i-loop', 'onchange', e => { c.loop = e.target.value === '1'; if (active && active.cue.id === c.id) active.el.loop = c.loop; scheduleSave(); });
     bind('og-i-endaction', 'onchange', e => { c.endAction = e.target.value; scheduleSave(); });
+    bind('og-i-imgdur', 'onchange', e => {   // still-image duration: 0 = hold until advanced
+      c.duration = Math.max(0, parseFloat(e.target.value) || 0);
+      if (active && active.kind === 'image' && active.cue.id === c.id) {
+        active.remainMs = c.duration > 0 ? c.duration * 1000 : 0;
+        if (active.paused || !(active.remainMs > 0)) clearImageTimer(); else armImageTimer();
+      }
+      renderCueList(); scheduleSave();
+    });
     bind('og-i-fit', 'onchange', e => { c.fit = e.target.value; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); sendOut({ t: 'fit', fit: c.fit }, c.output || 1); scheduleSave(); });
     bind('og-i-scale', 'oninput', e => { c.scale = parseFloat(e.target.value) || 1; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
     bind('og-i-posx', 'onchange', e => { c.posX = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
@@ -1427,6 +1713,7 @@
     const body = $('og-edit-body'), acts = $('og-edit-actions'); if (!body) return;
     const c = cueById(selectedId);
     if (!c) { body.innerHTML = '<div class="og-edit-empty">Select a cue to trim and scrub it.</div>'; if (acts) acts.innerHTML = ''; return; }
+    if (c.type === 'image') { body.innerHTML = '<div class="og-edit-empty">Stills have no timeline — set an optional duration in the Inspector (0 holds until advanced).</div>'; if (acts) acts.innerHTML = ''; return; }
     const dur = editClipDuration(c) || 0;
     const tin = clamp(c.trimIn || 0, 0, dur || 1e9);
     const tout = (c.trimOut == null ? dur : clamp(c.trimOut, 0, dur || 1e9)) || dur;
@@ -1644,8 +1931,9 @@
       const label = editing
         ? '<input class="og-bank-rename" type="text" value="' + esc(b.name) + '" maxlength="40" spellcheck="false" aria-label="Bank name">'
         : '<span class="og-bank-name">' + esc(b.name) + '</span>';
-      return '<button class="og-bank-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-bank="' + b.id + '" title="Double-click to rename">'
+      return '<button class="og-bank-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-bank="' + b.id + '" title="Double-click or ✎ to rename">'
         + label + (n && !editing ? '<span class="og-bank-count">' + n + '</span>' : '')
+        + (on && !editing ? '<span class="og-bank-edit" data-edit="' + b.id + '" title="Rename bank" role="button" aria-label="Rename bank">' + sym('action.edit') + '</span>' : '')
         + (on && banks.length > 1 && !editing ? '<span class="og-bank-x" data-del="' + b.id + '" title="Delete bank">×</span>' : '')
         + '</button>';
     }).join('') + '<button class="og-bank-add" id="og-bank-add" title="Add a bank">' + sym('action.add') + '</button>';
@@ -1660,8 +1948,9 @@
         input.onblur = () => commit(true);
         return;
       }
-      t.onclick = (e) => { if (e.target.closest('.og-bank-x')) { removeBank(id); return; } setBank(id); };
-      t.ondblclick = (e) => { e.preventDefault(); bankRenamingId = id; if (currentBankId !== id) { currentBankId = id; selectedPadId = null; renderPads(); renderPadInspector(); renderPadEditArea(); } renderBanks(); };
+      const startRename = () => { bankRenamingId = id; if (currentBankId !== id) { currentBankId = id; selectedPadId = null; renderPads(); renderPadInspector(); renderPadEditArea(); } renderBanks(); };
+      t.onclick = (e) => { if (e.target.closest('.og-bank-x')) { removeBank(id); return; } if (e.target.closest('.og-bank-edit')) { startRename(); return; } setBank(id); };
+      t.ondblclick = (e) => { e.preventDefault(); startRename(); };
     });
     const add = $('og-bank-add'); if (add) add.onclick = addBank;
     if (bankRenamingId) { const inp = bar.querySelector('.og-bank-rename'); if (inp) { inp.focus(); inp.select(); } }
@@ -1769,9 +2058,17 @@
   // ── autosave + recovery ──────────────────────────────────────────────────
   function showKey() { return SHOW_KEY + (sessionCode ? '_' + sessionCode : ''); }
   function scheduleSave() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(saveShow, 500); publishCues(); }
+  function activeOffset() {
+    if (!active || active.kind === 'image') return 0;
+    const el = active.el;
+    return el && isFinite(el.currentTime) ? el.currentTime : 0;
+  }
   async function saveShow() {
     saveTimer = null;
-    try { await idbPut(SHOW_STORE, showKey(), { schema: SCHEMA, savedAt: Date.now(), activeCueId: active ? active.cue.id : null, cues, pads, banks, currentBankId, outputs, selectedId, settings }); } catch (e) {}
+    const transport = active
+      ? { cueId: active.cue.id, offset: Math.round(activeOffset() * 10) / 10, paused: isActivePaused() }
+      : null;
+    try { await idbPut(SHOW_STORE, showKey(), { schema: SCHEMA, savedAt: Date.now(), activeCueId: active ? active.cue.id : null, transport, cues, pads, banks, currentBankId, outputs, selectedId, settings }); } catch (e) {}
   }
   async function loadShow() {
     const s = await idbGet(SHOW_STORE, showKey());
@@ -1849,12 +2146,20 @@
     const wasPlaying = s && s.activeCueId && cueById(s.activeCueId);
     if (!s || (!cues.length && !pads.length)) { bar.classList.remove('on'); return; }
     const cw = cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '');
+    // A persisted transport offset means we can resume from the exact point.
+    const t = (s.transport && s.transport.cueId === s.activeCueId) ? s.transport : null;
+    const at = t && t.offset > 0 ? ' at ' + fmtClock(t.offset) : '';
     $('og-recovery-text').textContent = wasPlaying
-      ? 'Recovered ' + cw + '. The show was mid-playback (“' + wasPlaying.name + '”) when it stopped.'
+      ? 'Recovered ' + cw + '. The show was mid-playback (“' + wasPlaying.name + '”' + at + ') when it stopped.'
       : 'Recovered your previous show — ' + cw + '.';
     const standbyBtn = $('og-recovery-standby');
     standbyBtn.style.display = wasPlaying ? '' : 'none';
-    standbyBtn.onclick = () => { selectedId = s.activeCueId; renderAll(); bar.classList.remove('on'); };
+    standbyBtn.textContent = t && t.offset > 0 ? 'Standby at ' + fmtClock(t.offset) : 'Standby that cue';
+    standbyBtn.onclick = () => {
+      selectedId = s.activeCueId;
+      if (t && t.offset > 0) pendingResume = { cueId: t.cueId, offset: t.offset };   // next GO starts there
+      renderAll(); bar.classList.remove('on');
+    };
     bar.classList.add('on');
   }
 
@@ -1954,16 +2259,17 @@
           + '<div class="og-pane og-cuelist-pane">'
             + '<div class="og-pane-head">Cue List<div class="og-pane-actions"><button class="og-bar-btn" id="og-add-btn">Add media</button></div></div>'
             + '<div class="og-cuelist" id="og-cuelist"></div>'
-            + '<button class="og-cue-add" id="og-cue-add">Drop video / audio here, or click to add</button>'
-            + '<input type="file" id="og-file-input" accept="video/*,audio/*" multiple hidden>'
+            + '<button class="og-cue-add" id="og-cue-add">Drop video / audio / stills here, or click to add</button>'
+            + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
           + '</div>'
           + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
             + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" title="Time of day">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
             + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
               + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
+              + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
               + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
-            + '<div class="og-scopes" id="og-scopes"><div class="og-scope"><span class="og-scope-lbl">WAVEFORM</span><canvas id="og-wfm" width="256" height="120"></canvas></div><div class="og-scope"><span class="og-scope-lbl">VECTORSCOPE</span><canvas id="og-vscope" width="132" height="132"></canvas></div></div>'
+            + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
             + '<div class="og-clock" id="og-clock"><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-label" id="og-clock-label">STANDBY</div><div class="og-clock-cue" id="og-clock-cue">—</div></div>'
             + '<div class="og-transport">'
               + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
@@ -2030,6 +2336,7 @@
       a: { id: 'a', kind: 'video', el: $('og-program-a'), src: null, ch: null, vol: 1, _url: null },
       b: { id: 'b', kind: 'video', el: $('og-program-b'), src: null, ch: null, vol: 1, _url: null },
       audio: { id: 'audio', kind: 'audio', el: $('og-audio-deck'), src: null, ch: null, vol: 1, _url: null },
+      img: { id: 'img', kind: 'image', el: $('og-program-img'), src: null, ch: null, vol: 1, _url: null },
     };
     decks.a.el.style.opacity = 1; decks.b.el.style.opacity = 0;
 

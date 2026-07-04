@@ -1,3 +1,5 @@
 .venv-kokoro/
 __pycache__/
 *.pyc
+.DS_Store
+test-media/

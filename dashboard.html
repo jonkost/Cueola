@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola — Instructor Dashboard</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23b9bbbd'/><ellipse cx='30' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='70' cy='38' rx='18' ry='20' fill='%23dadbdc'/><ellipse cx='50' cy='56' rx='27' ry='30' fill='%23161618'/><ellipse cx='50' cy='62' rx='9' ry='14' fill='%23ededee'/></svg>">
+<link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
 <style>
 :root {
@@ -75,7 +75,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand{display:flex;align-items:center;gap:8px;cursor:pointer;border:none;background:none;color:inherit;text-decoration:none;white-space:nowrap;transition:opacity .15s var(--ease)}
 .brand:hover{opacity:.78}
 .brand-logo{font-size:22px;line-height:1}
-.brand-ico{width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex:none;overflow:visible}
+.brand-ico{width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex:none;overflow:hidden;border-radius:22.5%}
 .brand-logo .brand-ico{display:block;vertical-align:0}
 .brand-text{font-family:var(--syne);font-size:17px;font-weight:700;letter-spacing:0}
 .brand-text span{color:var(--accent)}
@@ -453,39 +453,43 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- Brand icon sprite (Cueola koala, Planda Bear panda) — referenced via <svg class="brand-ico"><use href="#ic-NAME"/></svg> -->
 <svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
   <defs>
-    <radialGradient id="cu-bg" cx=".5" cy=".42" r=".72"><stop offset="0" stop-color="#eaeaec"/><stop offset=".68" stop-color="#c2c3c5"/><stop offset="1" stop-color="#84868a"/></radialGradient>
-    <radialGradient id="cu-face" cx=".5" cy=".36" r=".75"><stop offset="0" stop-color="#46464a"/><stop offset="1" stop-color="#101013"/></radialGradient>
-    <linearGradient id="cu-nose" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2f3"/><stop offset="1" stop-color="#a9abad"/></linearGradient>
-    <linearGradient id="cu-ear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ededef"/><stop offset="1" stop-color="#9c9ea0"/></linearGradient>
-    <symbol id="ic-cueola" viewBox="0 0 100 100">
-      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#cu-bg)"/>
-      <rect x="4" y="4" width="92" height="44" rx="22" fill="#fff" opacity=".14"/>
-      <ellipse cx="30" cy="38" rx="18" ry="20" fill="url(#cu-ear)" stroke="#76787c" stroke-width="1.4"/>
-      <ellipse cx="70" cy="38" rx="18" ry="20" fill="url(#cu-ear)" stroke="#76787c" stroke-width="1.4"/>
-      <ellipse cx="30" cy="40" rx="8.5" ry="11" fill="#74767a" opacity=".5"/>
-      <ellipse cx="70" cy="40" rx="8.5" ry="11" fill="#74767a" opacity=".5"/>
-      <ellipse cx="50" cy="56" rx="27" ry="30" fill="url(#cu-face)"/>
-      <ellipse cx="50" cy="62" rx="9" ry="14" fill="url(#cu-nose)"/>
-      <ellipse cx="46.5" cy="57" rx="2.6" ry="4.6" fill="#fff" opacity=".55"/>
+    <!-- Symbols inlined from assets/Brand/*.svg (class styles converted to fill
+         attributes; kept in lockstep with the index.html sprite). -->
+    <!-- Cueola — koala + play cue row (assets/Brand/Cueola_Icon.svg) -->
+    <symbol id="ic-cueola" viewBox="0 0 1024 1024">
+      <path fill="#32836c" d="M1023.4,295.11c0-.27-.01-.54-.02-.82-.71-26.13-2.25-52.49-6.89-78.34-4.71-26.22-12.4-50.62-24.53-74.44-11.92-23.41-27.49-44.84-46.07-63.41s-40-34.15-63.41-46.07c-23.82-12.12-48.22-19.82-74.44-24.53-25.84-4.65-52.2-6.18-78.34-6.89-11.99-.33-23.99-.46-35.98-.53C679.48,0,665.24,0,651,0h-278C358.76,0,344.52,0,330.27.08c-12,.07-23.99.21-35.98.53-26.13.71-52.49,2.25-78.34,6.89-26.22,4.71-50.62,12.4-74.44,24.53-23.41,11.92-44.84,27.49-63.41,46.07s-34.15,40-46.07,63.41c-12.12,23.82-19.82,48.22-24.53,74.44-4.65,25.84-6.18,52.2-6.89,78.34-.33,11.99-.46,23.99-.53,35.98C0,344.52,0,358.76,0,373v278c0,14.24,0,28.48.08,42.73.07,12,.21,23.99.53,35.98.71,26.13,2.25,52.49,6.89,78.34,4.71,26.22,12.4,50.62,24.53,74.44,11.92,23.41,27.49,44.84,46.07,63.41s40,34.15,63.41,46.07c23.82,12.12,48.22,19.82,74.44,24.53,25.84,4.65,52.2,6.18,78.34,6.89,11.99.33,23.99.46,35.98.53,14.24.09,28.48.08,42.73.08h278c14.24,0,28.48,0,42.73-.08,12-.07,23.99-.21,35.98-.53,26.13-.71,52.49-2.25,78.34-6.89,26.22-4.71,50.62-12.4,74.44-24.53,23.41-11.92,44.84-27.49,63.41-46.07s34.15-40,46.07-63.41c12.12-23.82,19.82-48.22,24.53-74.44,4.65-25.84,6.18-52.2,6.89-78.34,0-.27.01-.54.02-.82v-433.79Z"/>
+      <ellipse fill="#30302f" cx="512" cy="363.19" rx="254.79" ry="232.77"/>
+      <path fill="#30302f" d="M306.68,362.04c-6.84,5.69-10.7,13.24-20.29,14.54-5.43.74-10.94-.03-16.42.07-8.23.16-16.41,2.34-23.63,6.3-1.27.69-2.61,1.47-4.05,1.36-4.13-.3-4.3-6.16-4.63-10.3-.79-9.96-10.05-17.64-19.83-19.6-8.54-1.72-18.73,2.96-27.42,2.92-2.03,0-4.22-.17-5.81-1.45-2.18-1.76-2.44-4.92-2.5-7.72-.22-9.47-.85-20.42-8.5-25.99-6.97-5.07-16.59-3.26-24.96-1.24-.93-7.96,12.46-13.62,9.19-20.94-1.5-3.35-5.77-4.37-8.21-7.1-7.29-8.13,8.24-22.09,8.29-30.87-.19-5.35-4.35-7.92-5.18-13.67-.63-4.66.52-9.09,1.18-13.87.86-5.47,1.89-11.91,2.73-17.25,4.25-38.19,16.68-91.3,75.34-116.88,19.54-8.3,39.13-10.51,60.08-10.82,56.74-1.02,102.46,32.45,117.73,59.26.52,1.66-.15,2.35-.45,5.05-.61,3.47-1.63,9.03-3.11,16.15-9.36,47.66-38.69,153.58-99.35,191.82,0,0-.22.19-.22.19Z"/>
+      <path fill="#30302f" d="M717.32,362.04c6.84,5.69,10.7,13.24,20.29,14.54,5.43.74,10.94-.03,16.42.07,8.23.16,16.41,2.34,23.63,6.3,1.27.69,2.61,1.47,4.05,1.36,4.13-.3,4.3-6.16,4.63-10.3.79-9.96,10.05-17.64,19.83-19.6,8.54-1.72,18.73,2.96,27.42,2.92,2.03,0,4.22-.17,5.81-1.45,2.18-1.76,2.44-4.92,2.5-7.72.22-9.47.85-20.42,8.5-25.99,6.97-5.07,16.59-3.26,24.96-1.24.93-7.96-12.46-13.62-9.19-20.94,1.5-3.35,5.77-4.37,8.21-7.1,7.29-8.13-8.24-22.09-8.29-30.87.19-5.35,4.35-7.92,5.18-13.67.63-4.66-.52-9.09-1.18-13.87-.86-5.47-1.89-11.91-2.73-17.25-4.25-38.19-16.68-91.3-75.34-116.88-19.54-8.3-39.13-10.51-60.08-10.82-56.74-1.02-102.46,32.45-117.73,59.26-.52,1.66.15,2.35.45,5.05.61,3.47,1.63,9.03,3.11,16.15,9.36,47.66,38.69,153.58,99.35,191.82,0,0,.22.19.22.19Z"/>
+      <ellipse fill="#606060" cx="512" cy="511.52" rx="86.15" ry="105.19"/>
+      <path fill="#f6f6f7" d="M177.76,664.93l144.8,72.55c25.32,12.69,25.29,48.83-.05,61.47l-144.8,72.24c-22.85,11.4-49.7-5.22-49.7-30.75v-144.8c0-25.56,26.91-42.17,49.76-30.72Z"/>
+      <rect fill="#f6f6f7" x="383.58" y="704.41" width="460.85" height="127.73" rx="45" ry="45"/>
     </symbol>
-    <linearGradient id="pb-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a1430"/><stop offset="1" stop-color="#040f26"/></linearGradient>
-    <linearGradient id="pb-white" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cdd9ee"/></linearGradient>
-    <symbol id="ic-plandabear" viewBox="0 0 100 100">
-      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#pb-bg)"/>
-      <ellipse cx="36" cy="24" rx="8" ry="9" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
-      <ellipse cx="64" cy="24" rx="8" ry="9" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
-      <path d="M30 58 q-2 -16 20 -16 q22 0 20 16 l0 18 q0 8 -8 8 l-24 0 q-8 0 -8 -8 z" fill="#0c1730" stroke="#2c3e66" stroke-width="1.5"/>
-      <ellipse cx="50" cy="68" rx="13" ry="16" fill="url(#pb-white)"/>
-      <rect x="42" y="60" width="16" height="20" rx="2" fill="#0c1730" stroke="#3a5588" stroke-width="1.5"/>
-      <rect x="47" y="57" width="6" height="4" rx="1.5" fill="#cdd9ee"/>
-      <circle cx="50" cy="32" r="16" fill="url(#pb-white)"/>
-      <path d="M44 28 l-3 7" stroke="#0c1730" stroke-width="3.4" stroke-linecap="round"/>
-      <path d="M56 28 l3 7" stroke="#0c1730" stroke-width="3.4" stroke-linecap="round"/>
-      <path d="M46 38 q4 3 8 0" stroke="#0c1730" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <circle cx="34" cy="84" r="7" fill="#0c1730" stroke="#2c3e66" stroke-width="1.2"/>
-      <circle cx="66" cy="84" r="7" fill="#0c1730" stroke="#2c3e66" stroke-width="1.2"/>
-      <g fill="#9fb4d8"><circle cx="34" cy="86" r="2.2"/><circle cx="31" cy="82" r="1.3"/><circle cx="34" cy="81" r="1.3"/><circle cx="37" cy="82" r="1.3"/></g>
-      <g fill="#9fb4d8"><circle cx="66" cy="86" r="2.2"/><circle cx="63" cy="82" r="1.3"/><circle cx="66" cy="81" r="1.3"/><circle cx="69" cy="82" r="1.3"/></g>
+    <!-- Planda Bear — panda clipboard (assets/Brand/Planda Bear.svg) -->
+    <symbol id="ic-plandabear" viewBox="0 0 1024 1024">
+      <path fill="#000" d="M1023.4,295.11c0-.27-.01-.54-.02-.82-.71-26.13-2.25-52.49-6.89-78.34-4.71-26.22-12.4-50.62-24.53-74.44-11.92-23.41-27.49-44.84-46.07-63.41s-40-34.15-63.41-46.07c-23.82-12.12-48.22-19.82-74.44-24.53-25.84-4.65-52.2-6.18-78.34-6.89-11.99-.33-23.99-.46-35.98-.53C679.48,0,665.24,0,651,0h-278C358.76,0,344.52,0,330.27.08c-12,.07-23.99.21-35.98.53-26.13.71-52.49,2.25-78.34,6.89-26.22,4.71-50.62,12.4-74.44,24.53-23.41,11.92-44.84,27.49-63.41,46.07s-34.15,40-46.07,63.41c-12.12,23.82-19.82,48.22-24.53,74.44-4.65,25.84-6.18,52.2-6.89,78.34-.33,11.99-.46,23.99-.53,35.98C0,344.52,0,358.76,0,373v278c0,14.24,0,28.48.08,42.73.07,12,.21,23.99.53,35.98.71,26.13,2.25,52.49,6.89,78.34,4.71,26.22,12.4,50.62,24.53,74.44,11.92,23.41,27.49,44.84,46.07,63.41s40,34.15,63.41,46.07c23.82,12.12,48.22,19.82,74.44,24.53,25.84,4.65,52.2,6.18,78.34,6.89,11.99.33,23.99.46,35.98.53,14.24.09,28.48.08,42.73.08h278c14.24,0,28.48,0,42.73-.08,12-.07,23.99-.21,35.98-.53,26.13-.71,52.49-2.25,78.34-6.89,26.22-4.71,50.62-12.4,74.44-24.53,23.41-11.92,44.84-27.49,63.41-46.07s34.15-40,46.07-63.41c12.12-23.82,19.82-48.22,24.53-74.44,4.65-25.84,6.18-52.2,6.89-78.34,0-.27.01-.54.02-.82v-433.79Z"/>
+      <rect x="215.74" y="178.07" width="591.32" height="717.93" rx="70.73" ry="70.73" fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5"/>
+      <path fill="#f6f6f7" stroke="#fff" stroke-miterlimit="10" stroke-width="5" d="M687.21,253.75l-46.87-1.67-2.79-32.92-66.4-22.88-27.65-35.47c4-6,6.34-13.2,6.34-20.96,0-20.9-16.94-37.84-37.84-37.84s-37.84,16.94-37.84,37.84c0,7.75,2.34,14.96,6.34,20.96l-27.65,35.47-66.4,22.88-2.79,32.92-46.87,1.67-6.7,30.13h363.82l-6.7-30.13ZM512,159.87c-13.09,0-23.7-10.61-23.7-23.7s10.61-23.7,23.7-23.7,23.7,10.61,23.7,23.7-10.61,23.7-23.7,23.7Z"/>
+      <path fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5" d="M425.87,141.33c7.42-21.13-13.72-45.72-35.03-38.84-34.13,11.01-73.16,65.31-38.73,95.58,41.11,36.15,73.73-56.64,73.76-56.74Z"/>
+      <path fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5" d="M596.93,141.33c-7.42-21.13,13.72-45.72,35.03-38.84,34.13,11.01,73.16,65.31,38.73,95.58-41.11,36.15-73.73-56.64-73.76-56.74Z"/>
+      <ellipse fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5" cx="459.76" cy="206.43" rx="42.58" ry="25.01" transform="translate(87.25 545.88) rotate(-66.52)"/>
+      <ellipse fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5" cx="564.24" cy="206.43" rx="25.01" ry="42.58" transform="translate(-35.53 241.89) rotate(-23.48)"/>
+      <path fill="#000" stroke="#fff" stroke-miterlimit="10" stroke-width="5" d="M542.63,262.62c-4.34-2.78-8.79-2.01-13.66-1.59-2.87.25-5.74.49-8.6.74-1.38.12-2.75.24-4.13.36-1.1.1-3.11-.11-4.23.29-1.12-.4-3.13-.19-4.23-.29-1.38-.12-2.75-.24-4.13-.36-2.87-.25-5.74-.49-8.6-.74-4.88-.42-9.32-1.19-13.66,1.59-5.97,3.82-3.96,12.04-.97,17.77,5.99,10.49,31.6,17.76,31.6,17.76,0-.01,0-.02,0-.03,0,.01,0,.02,0,.03,0,0,25.61-7.28,31.6-17.76,2.99-5.73,5-13.95-.97-17.77Z"/>
+      <ellipse fill="#fff" cx="512" cy="566.05" rx="182.8" ry="201.95"/>
+      <g>
+        <circle fill="#000" cx="386.22" cy="768" r="70.06"/>
+        <circle fill="#f6f6f7" cx="340.47" cy="755.46" r="11.44"/>
+        <circle fill="#f6f6f7" cx="370.59" cy="731.81" r="12.21"/>
+        <circle fill="#f6f6f7" cx="406.03" cy="734.49" r="11.44"/>
+        <circle fill="#f6f6f7" cx="431.58" cy="768" r="14.1"/>
+      </g>
+      <g>
+        <circle fill="#000" cx="636.58" cy="768" r="70.06"/>
+        <circle fill="#f6f6f7" cx="682.34" cy="755.46" r="11.44"/>
+        <circle fill="#f6f6f7" cx="652.21" cy="731.81" r="12.21"/>
+        <circle fill="#f6f6f7" cx="616.77" cy="734.49" r="11.44"/>
+        <circle fill="#f6f6f7" cx="591.23" cy="768" r="14.1"/>
+      </g>
     </symbol>
   </defs>
 </svg>

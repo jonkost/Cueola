@@ -187,6 +187,14 @@
 .og-tbtn-go .sf-symbol { font-size: 19px; }
 .og-cue-cont .sf-symbol { font-size: 10px; vertical-align: -1px; }
 
+/* Phase 2 (master plan): stills + failure containment */
+.og-img-deck { z-index: 3; opacity: 0; pointer-events: none; object-fit: contain; }
+.og-type-image { background: var(--yellow); }
+.og-cue.broken { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.og-cue.broken .og-cue-name { color: color-mix(in srgb, var(--red) 70%, var(--text)); }
+.og-cue-bad { color: var(--red) !important; border-color: color-mix(in srgb, var(--red) 55%, var(--border)) !important; font-weight: 800; }
+.og-insp-meta { font-family: var(--mono); font-size: 11px; color: var(--text3); font-variant-numeric: tabular-nums; margin: -4px 0 2px; }
+
 /* wall clock — time of day, alongside the count-out clock (HIG: quiet, mono) */
 .og-wallclock { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text2); letter-spacing: .02em; }
 .og-wallclock .sf-symbol { font-size: 12px; opacity: .8; }
@@ -209,7 +217,6 @@
 
 /* ── stage holds the two tab views ───────────────────────────────────────── */
 .og-stage { flex: 1 1 auto; min-height: 0; display: flex; }
-.og-main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(188px, auto); min-height: 0; background: color-mix(in srgb, var(--s1) 26%, var(--bg)); }
 .og-sfx { flex: 1 1 auto; display: none; min-height: 0; }
 .og-stage.sfx .og-main { display: none; }
 .og-stage.sfx .og-sfx { display: flex; }
@@ -695,16 +702,26 @@
 .og-key { display: none; opacity: 1 !important; z-index: 4; }
 .og-key.on { display: block; }
 
-/* scopes strip (between program + clock), hidden until toggled */
-.og-scopes { display: none; gap: 10px; padding: 8px 12px 0; align-items: flex-end; }
+/* scopes strip (between program + clock), hidden until toggled.
+   Canvases fill their boxes; JS re-backs them at CSS size × devicePixelRatio,
+   so the traces stay crisp at any pane width. Heights track the pane via
+   container-query units (fixed fallback first for older engines). */
+.og-scopes { display: none; gap: 10px; padding: 4px 10px 0; align-items: stretch; }
 .og-scopes.on { display: flex; }
-.og-scope { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.og-scope:first-child { flex: 1 1 auto; }
-.og-scope:last-child { flex: 0 0 auto; }
-.og-scope-lbl { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text3); }
-.og-scope canvas { background: #05070a; border: 1px solid var(--border); border-radius: 6px; display: block; }
-.og-scope:first-child canvas { width: 100%; height: 96px; }
-.og-scope:last-child canvas { width: 110px; height: 110px; }
+.og-scope {
+  position: relative; min-width: 0; overflow: hidden;
+  height: 118px; height: clamp(96px, 16cqh, 156px);
+  border: 1px solid var(--border); border-radius: 10px; background: #04060a;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+.og-scope-wfm { flex: 1 1 auto; }
+.og-scope-vec { flex: 0 0 auto; aspect-ratio: 1; }
+.og-scope-lbl {
+  position: absolute; top: 6px; left: 9px; z-index: 1; pointer-events: none;
+  font-size: 9px; font-weight: 800; letter-spacing: .09em;
+  color: rgba(214,232,240,.62); text-shadow: 0 1px 3px rgba(0,0,0,.85);
+}
+.og-scope canvas { display: block; width: 100%; height: 100%; }
 .og-scopes-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* Integrations panel (OBS · Dropbox · Transcode) */
@@ -792,7 +809,22 @@
 
 /* count-out clock scales with the (resizable) program pane, not the viewport */
 .og-program-pane { container-type: inline-size; }
-.og-clock-time { font-size: clamp(34px, 13cqw, 130px) !important; }
+.og-clock-time { font-size: clamp(34px, 13cqw, 130px); }
+/* On desktop the clock also flexes vertically: it becomes its own size
+   container, so the digits track BOTH the pane width and whatever height the
+   splitters leave it — drag any splitter and the clock rescales to fit. */
+@media (min-width: 921px) {
+  .og-program-pane { container-type: size; }
+  /* Cap the program monitor so the clock always keeps a healthy share of the
+     pane; the monitor stays 16:9 and centers itself when height-limited. */
+  .og-program-wrap { width: min(100% - 20px, calc(52cqh * 16 / 9)); margin: 8px auto 6px; }
+  .og-clock {
+    flex: 1 1 auto; min-height: 88px; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    container-type: size;
+  }
+  .og-clock-time { font-size: clamp(30px, min(16cqw, 60cqh), 240px); }
+}
 
 /* ============================================================================
  * Overall density pass — tighten paddings/gaps a touch (later rules win by order).
@@ -828,6 +860,9 @@
 .og-bank-count { font-size: 10px; background: var(--s4); border-radius: 999px; padding: 0 5px; color: var(--text2); font-variant-numeric: tabular-nums; }
 .og-bank-x { font-size: 15px; line-height: 1; color: var(--text3); padding: 0 1px; border-radius: 4px; }
 .og-bank-x:hover { color: var(--red); }
+.og-bank-edit { line-height: 1; color: var(--text3); padding: 0 1px; border-radius: 4px; }
+.og-bank-edit:hover { color: var(--accent); }
+.og-bank-edit .sf-symbol { font-size: 11px; }
 .og-bank-add { width: 28px; height: 28px; border-radius: 50%; background: var(--s2); border: 1px dashed var(--border); color: var(--text2); cursor: pointer; flex: 0 0 auto; display: inline-grid; place-items: center; }
 .og-bank-add:hover { border-color: var(--accent); color: var(--accent); }
 
