@@ -2856,80 +2856,282 @@ function consumeRemoteKey(e) {
   e.stopPropagation();
 }
 
-function handleLiveRemoteKeydown(e) {
-  const inPromptOp = promptOpMode && document.getElementById('liveshow')?.classList.contains('on');
-  const inScriptPanel = livePrompterOpen || isLiveScriptPanelTarget(e.target);
-  if (!inPromptOp && !inScriptPanel) return false;
-  if (isTextEditingTarget(e.target) && !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return false;
+// ── P5: central keymap registry ─────────────────────────────────────────────
+// One source of truth: key dispatch AND the "?" reference overlay are generated
+// from this table, so documentation can never drift from behavior. Operator-
+// approved layout (Decisions Log #8): arrows always drive the rundown — even
+// with the Script Op panel open — Space/J/K/L drive the prompter, G/P/S drive
+// playout, Shift+Esc is PANIC. Bindings can be overridden per action via
+// localStorage.cueola_keymap = {"playout.go":["G","F13"], …}.
+const KEYMAP = [
+  { id: 'rundown.next',        scope: 'live', group: 'Rundown',  keys: ['ArrowRight', 'ArrowDown'], label: 'Next row',                    run: () => lsNext() },
+  { id: 'rundown.back',        scope: 'live', group: 'Rundown',  keys: ['ArrowLeft', 'ArrowUp'],    label: 'Previous row',                run: () => lsPrev() },
+  { id: 'prompter.playpause',  scope: 'live', group: 'Prompter', keys: ['Space'],  label: 'Play / pause',                  run: () => sendPrompterControl(ptPlaying ? 'pause' : 'resume') },
+  { id: 'prompter.toggle',     scope: 'live', group: 'Prompter', keys: ['K'],      label: 'Play / pause (JKL)',            run: () => sendPrompterControl(ptPlaying ? 'pause' : 'resume') },
+  { id: 'prompter.brake',      scope: 'live', group: 'Prompter', keys: ['J'],      label: 'Brake (hold)',                  hold: ['brake_start', 'brake_stop'] },
+  { id: 'prompter.boost',      scope: 'live', group: 'Prompter', keys: ['L'],      label: 'Boost (hold)',                  hold: ['boost_start', 'boost_stop'] },
+  { id: 'prompter.size.down',  scope: 'live', group: 'Prompter', keys: ['-'],      label: 'Text smaller',                  run: () => sendPrompterControl('size_down') },
+  { id: 'prompter.size.up',    scope: 'live', group: 'Prompter', keys: ['='],      label: 'Text bigger',                   run: () => sendPrompterControl('size_up') },
+  { id: 'prompter.speed.down', scope: 'live', group: 'Prompter', keys: ['['],      label: 'Speed down',                    run: () => sendPrompterControl('speed_down') },
+  { id: 'prompter.speed.up',   scope: 'live', group: 'Prompter', keys: [']'],      label: 'Speed up',                      run: () => sendPrompterControl('speed_up') },
+  { id: 'prompter.nudge.back', scope: 'live', group: 'Prompter', keys: [','],      label: 'Nudge back',                    run: () => poNudgeSeek(-3) },
+  { id: 'prompter.nudge.fwd',  scope: 'live', group: 'Prompter', keys: ['.'],      label: 'Nudge forward',                 run: () => poNudgeSeek(3) },
+  { id: 'prompter.cue.current',scope: 'live', group: 'Prompter', keys: ['C'],      label: 'Cue prompter to current row',   run: () => sendPrompterControl('seek_row_' + (Math.max(lsIdx, 0) + 1)) },
+  { id: 'prompter.top',        scope: 'live', group: 'Prompter', keys: ['T'],      label: 'Prompter to top',               run: () => sendPrompterControl('reset') },
+  { id: 'prompter.fullscreen', scope: 'live', group: 'Prompter', keys: ['F'],      label: 'Talent fullscreen',             run: () => sendPrompterControl('fullscreen') },
+  { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Reset talent screen',           run: () => sendPrompterControl('reset') },
+  { id: 'prompter.hideui',     scope: 'live', group: 'Prompter', keys: ['H'],      label: 'Hide talent UI',                run: () => sendPrompterControl('hide_interface') },
+  { id: 'prompter.mirror',     scope: 'live', group: 'Prompter', keys: ['M'],      label: 'Mirror talent screen',          run: () => sendPrompterControl('mirror') },
+  { id: 'prompter.editscript', scope: 'live', group: 'Prompter', keys: ['E'],      label: 'Edit current row script',       run: () => openLiveScript(Math.max(lsIdx, 0)) },
+  { id: 'prompter.dir.fwd',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowUp'],   label: 'Direction forward',      run: () => sendPrompterControl('direction_forward') },
+  { id: 'prompter.dir.rev',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowDown'], label: 'Direction reverse',      run: () => sendPrompterControl('direction_reverse') },
+  { id: 'playout.go',          scope: 'live', group: 'Playout',  keys: ['G'],          label: 'GO (Outrangutan)',          run: () => fireOutrangutanTransport('go') },
+  { id: 'playout.pause',       scope: 'live', group: 'Playout',  keys: ['P'],          label: 'Pause / resume playout',    run: () => fireOutrangutanTransport('pause') },
+  { id: 'playout.stop',        scope: 'live', group: 'Playout',  keys: ['S'],          label: 'Stop playout',              run: () => fireOutrangutanTransport('stop') },
+  { id: 'playout.fade',        scope: 'live', group: 'Playout',  keys: ['Shift+S'],    label: 'Fade-stop playout',         run: () => fireOutrangutanTransport('fadeStop') },
+  { id: 'playout.panic',       scope: 'live', group: 'Playout',  keys: ['Shift+Escape'], label: 'PANIC (all stop)',        run: () => fireOutrangutanTransport('panic') },
+  { id: 'scrub.open',          scope: 'live', group: 'Scrub & reference', keys: ['/'], label: 'Jog-wheel scrub (Enter cues, Esc cancels)', run: () => openJogScrub() },
+  { id: 'ref.open',            scope: 'live', group: 'Scrub & reference', keys: ['?'], label: 'This shortcut reference',   run: () => toggleKeymapRef() },
+  { id: 'ref.open.build',      scope: 'build', group: 'Scrub & reference', keys: ['?'], label: 'Shortcut reference',       run: () => toggleKeymapRef() },
+];
 
-  if (inScriptPanel) {
-    if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
-      if (['ArrowLeft','ArrowRight',' ','Space','f','F','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
-      return true;
-    }
-    if (e.key === ' ' || e.key === 'Space') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true; }
-    if (e.key === 'ArrowUp')    { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('boost_start'); return true; }
-    if (e.key === 'ArrowDown')  { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('brake_start'); return true; }
-    if (e.key === 'ArrowLeft')  { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_down'); return true; }
-    if (e.key === 'ArrowRight') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_up'); return true; }
-    if (e.key === 'f' || e.key === 'F') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('fullscreen'); return true; }
-    if (e.key === 'r' || e.key === 'R') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('reset'); return true; }
-    if (e.key === 'h' || e.key === 'H') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('hide_interface'); return true; }
-    if (e.key === 'm' || e.key === 'M') { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('mirror'); return true; }
-    return false;
+// Effective bindings = defaults overridden per action id from localStorage.
+function keymapBindings(action) {
+  try {
+    const ov = JSON.parse(localStorage.getItem('cueola_keymap') || '{}');
+    if (Array.isArray(ov[action.id]) && ov[action.id].length) return ov[action.id];
+  } catch (e) {}
+  return action.keys;
+}
+// "Shift+S" / "Alt+ArrowUp" / "Space" / "?" → match against a keyboard event.
+// Letters compare case-insensitively with an exact shift requirement; punctuation
+// (?, =, [ …) matches e.key directly, so layouts that need Shift still work.
+function keymapMatches(e, binding) {
+  const parts = String(binding).split('+');
+  const base = parts.pop();
+  const mods = parts.map(p => p.toLowerCase());
+  if (e.altKey !== mods.includes('alt')) return false;
+  if (e.ctrlKey || e.metaKey) return false;
+  const key = e.key === ' ' ? 'Space' : e.key;
+  if (/^[a-z]$/i.test(base)) {
+    if (key.toLowerCase() !== base.toLowerCase()) return false;
+    return e.shiftKey === mods.includes('shift');
   }
-
-  if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('direction_reverse'); return true; }
-  if (e.key === 'ArrowUp' && e.altKey)   { consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('direction_forward'); return true; }
-  if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
-    if (['ArrowLeft','ArrowRight',' ','Space','f','F','e','E','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
+  if (mods.includes('shift') && !e.shiftKey) return false;
+  return key === base;
+}
+function keymapScopeNow() {
+  if (document.getElementById('liveshow')?.classList.contains('on')) return 'live';
+  if (document.getElementById('rundown')?.classList.contains('on')) return 'build';
+  return null;
+}
+const _keymapHolds = new Map();   // action.id → stop control while a hold key is down
+function keymapDispatch(e, phase) {
+  const scope = keymapScopeNow();
+  if (!scope) return false;
+  // Overlays own their keys before the map runs.
+  if (document.getElementById('lsRowPreviewOv')?.classList.contains('on')) {
+    if (phase !== 'down' || isTextEditingTarget(e.target)) return false;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { consumeRemoteKey(e); previewRelativeRow(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { consumeRemoteKey(e); previewRelativeRow(-1); }
+    else if (e.key === 'Escape') { consumeRemoteKey(e); hideOverlay('lsRowPreviewOv'); }
     return true;
   }
-  switch (e.key) {
-    case ' ':
-    case 'Space':      consumeRemoteKey(e); sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true;
-    case 'ArrowUp':    consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('boost_start'); return true;
-    case 'ArrowDown':  consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('brake_start'); return true;
-    case 'ArrowLeft':  consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_down'); return true;
-    case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('size_up'); return true;
-    case 'f': case 'F': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('fullscreen'); return true;
-    case 'e': case 'E': consumeRemoteKey(e); if (!e.repeat) openLiveScript(Math.max(lsIdx,0)); return true;
-    case 'r': case 'R': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('reset'); return true;
-    case 'h': case 'H': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('hide_interface'); return true;
-    case 'm': case 'M': consumeRemoteKey(e); if (!e.repeat) sendPrompterControl('mirror'); return true;
-    default: return false;
+  if (typeof jogScrubHandleKey === 'function' && jogScrubHandleKey(e, phase)) return true;
+  if (isTextEditingTarget(e.target)) return false;   // typing suppresses everything (Esc keeps browser default)
+  for (const action of KEYMAP) {
+    if (action.scope !== scope) continue;
+    if (!keymapBindings(action).some(b => keymapMatches(e, b))) continue;
+    if (action.hold) {
+      if (phase === 'down') { consumeRemoteKey(e); if (!e.repeat && !_keymapHolds.has(action.id)) { _keymapHolds.set(action.id, action.hold[1]); sendPrompterControl(action.hold[0]); } }
+      else if (_keymapHolds.has(action.id)) { consumeRemoteKey(e); sendPrompterControl(_keymapHolds.get(action.id)); _keymapHolds.delete(action.id); }
+      return true;
+    }
+    if (phase !== 'down' || e.repeat) { if (phase === 'down') consumeRemoteKey(e); return true; }
+    consumeRemoteKey(e);
+    action.run();
+    return true;
   }
+  return false;
+}
+document.addEventListener('keydown', e => { keymapDispatch(e, 'down'); });
+document.addEventListener('keyup', e => { keymapDispatch(e, 'up'); });
+// Losing window focus mid-hold must never leave the prompter braking/boosting.
+window.addEventListener('blur', () => { _keymapHolds.forEach(stop => sendPrompterControl(stop)); _keymapHolds.clear(); });
+
+// ── P5: shortcut reference (?) — generated from KEYMAP so it cannot drift ────
+function toggleKeymapRef() {
+  let ov = document.getElementById('keymapRefOv');
+  if (ov && !ov.hidden) { ov.hidden = true; return; }
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'keymapRefOv'; ov.className = 'km-ov';
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.km-x')) ov.hidden = true; });
+    document.body.appendChild(ov);
+  }
+  const chip = b => `<span class="km-key">${esc(b)}</span>`;
+  const groups = {};
+  KEYMAP.filter(a => a.scope === 'live').forEach(a => { (groups[a.group] = groups[a.group] || []).push(a); });
+  let html = `<div class="km-card"><div class="km-head"><h3>Keyboard shortcuts — live screen</h3><button type="button" class="btn-secondary km-x">Done</button></div><div class="km-cols">`;
+  Object.keys(groups).forEach(g => {
+    html += `<div class="km-group"><div class="km-group-t">${esc(g)}</div>`
+      + groups[g].map(a => `<div class="km-row"><span class="km-lbl">${esc(a.label)}</span><span class="km-keys">${keymapBindings(a).map(chip).join('')}</span></div>`).join('')
+      + `</div>`;
+  });
+  // Outrangutan's own screen — read its LIVE bindings so this stays truthful.
+  const og = window.Outrangutan && window.Outrangutan._state ? window.Outrangutan._state() : null;
+  const sc = og && og.settings && og.settings.shortcuts;
+  if (sc) {
+    const nice = k => String(k) === ' ' ? 'Space' : (String(k).length === 1 ? String(k).toUpperCase() : String(k));
+    html += `<div class="km-group"><div class="km-group-t">Outrangutan screen</div>`
+      + [['GO', sc.go], ['Stop', sc.stop], ['Pause', sc.pause], ['Fade-stop', sc.fadeStop], ['PANIC', sc.panic], ['SFX board', 'Tab']]
+        .map(([l, k]) => `<div class="km-row"><span class="km-lbl">${l}</span><span class="km-keys">${chip(nice(k))}</span></div>`).join('')
+      + `<div class="km-note">Rebind inside Outrangutan (Tools ▸ Shortcuts); SFX pads carry per-pad hotkeys.</div></div>`;
+  }
+  html += `</div><div class="km-foot">Typing in any field suppresses shortcuts. Override a binding via <code>localStorage.cueola_keymap</code>, e.g. <code>{"playout.go":["G"]}</code> — ids match the registry.</div></div>`;
+  ov.innerHTML = html;
+  ov.hidden = false;
 }
 
-function handleLiveRemoteKeyup(e) {
-  const liveOn = document.getElementById('liveshow')?.classList.contains('on');
-  if (!liveOn) return;
-  if (promptOpMode || livePrompterOpen || isLiveScriptPanelTarget(e.target)) {
-    if (e.key === 'ArrowUp')   { consumeRemoteKey(e); sendPrompterControl('boost_stop'); }
-    if (e.key === 'ArrowDown') { consumeRemoteKey(e); sendPrompterControl('brake_stop'); }
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') consumeRemoteKey(e);
+// ── P5: jog-wheel scrub — traverse the whole script, local until committed ──
+// Position model: (script segment = rundown row anchor, char offset within it).
+// Wheel / drag / arrows move it; Shift accelerates; Enter cues the prompter to
+// the exact point (Decisions #9); Esc abandons. Talent sees nothing until Enter.
+let jogState = null;
+function jogSegments() {
+  const text = prompterText || '';
+  if (!text.trim()) return null;
+  const segs = []; let off = 0;
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\[(\d+)\]\s*(.*)/);
+    if (m) segs.push({ row: +m[1], label: (m[2] || ('Row ' + m[1])).slice(0, 64), start: off });
+    off += line.length + 1;
   }
+  if (!segs.length || segs[0].start > 0) segs.unshift({ row: 0, label: 'Top of script', start: 0 });
+  const total = Math.max(1, text.length);
+  segs.forEach((s, i) => { s.end = i + 1 < segs.length ? segs[i + 1].start : total; });
+  return { segs, total };
 }
-
-// Arrow key navigation in live screen
+function jogSegAt(pos) { let idx = 0; jogState.segs.forEach((s, i) => { if (pos >= s.start) idx = i; }); return idx; }
+function openJogScrub() {
+  const built = jogSegments();
+  if (!built) { toast('No script loaded to scrub.'); return; }
+  let ov = document.getElementById('jogScrubOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'jogScrubOv'; ov.className = 'km-ov';
+    document.body.appendChild(ov);
+    ov.addEventListener('wheel', e => { e.preventDefault(); if (jogState) jogNudge(e.deltaY * (e.shiftKey ? 5 : 1) * jogState.total / 4000); }, { passive: false });
+    ov.addEventListener('pointerdown', e => { if (!jogState) return; if (e.target.closest('.jog-bar')) { ov.setPointerCapture(e.pointerId); jogState.drag = true; jogDragTo(e); } });
+    ov.addEventListener('pointermove', e => { if (jogState && jogState.drag) jogDragTo(e); });
+    ov.addEventListener('pointerup', () => { if (jogState) jogState.drag = false; });
+    ov.addEventListener('click', e => {
+      if (e.target.closest('.jog-commit')) { commitJogScrub(); return; }
+      if (e.target.closest('.jog-cancel') || e.target === ov) { closeJogScrub(); return; }
+      const segEl = e.target.closest('[data-jogseg]');
+      if (segEl && jogState) { jogState.pos = jogState.segs[+segEl.getAttribute('data-jogseg')].start; renderJogScrub(); }
+    });
+  }
+  jogState = Object.assign(built, { pos: Math.max(0, Math.min(100, ptProgressPct() || 0)) / 100 * built.total, drag: false });
+  ov.hidden = false;
+  renderJogScrub();
+}
+function jogNudge(d) { jogState.pos = Math.max(0, Math.min(jogState.total, jogState.pos + d)); renderJogScrub(); }
+function jogDragTo(e) {
+  const bar = document.querySelector('#jogScrubOv .jog-bar');
+  if (!bar) return;
+  const r = bar.getBoundingClientRect();
+  jogState.pos = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * jogState.total;
+  renderJogScrub();
+}
+function renderJogScrub() {
+  const ov = document.getElementById('jogScrubOv');
+  if (!ov || !jogState) return;
+  const { segs, total, pos } = jogState;
+  const cur = jogSegAt(pos);
+  const seg = segs[cur];
+  const inSeg = seg.end > seg.start ? (pos - seg.start) / (seg.end - seg.start) : 0;
+  const from = Math.max(0, cur - 4), to = Math.min(segs.length, cur + 5);   // windowed — long scripts stay cheap
+  const rows = segs.slice(from, to).map((s, k) => {
+    const i = from + k;
+    return `<div class="jog-seg${i === cur ? ' cur' : ''}" data-jogseg="${i}">${s.row ? `<span class="jog-num">${s.row}</span>` : ''}<span class="jog-seg-lbl">${esc(s.label)}</span>${i === cur ? `<span class="jog-inpct">${Math.round(inSeg * 100)}% in</span>` : ''}</div>`;
+  }).join('');
+  ov.innerHTML = `<div class="km-card jog-card">
+    <div class="km-head"><h3>Scrub script</h3><span class="jog-pct">${(pos / total * 100).toFixed(1)}%</span></div>
+    <div class="jog-list">${rows}</div>
+    <div class="jog-bar" title="Drag to scrub"><div class="jog-fill" style="width:${(pos / total * 100).toFixed(2)}%"></div></div>
+    <div class="km-note">Wheel or drag to scrub · Shift = faster · ↑ ↓ jump rows · ← → fine · <b>Enter cues the prompter here</b> · Esc cancels</div>
+    <div class="km-actions"><button type="button" class="btn-secondary jog-cancel">Cancel</button><button type="button" class="btn-primary jog-commit">Cue here (Enter)</button></div>
+  </div>`;
+}
+function commitJogScrub() {
+  if (!jogState) return;
+  const pct = Math.max(0, Math.min(100, jogState.pos / jogState.total * 100));
+  sendPrompterControl('seek_set_' + pct.toFixed(2));
+  toast('Prompter cued to ' + pct.toFixed(0) + '% of the script.');
+  closeJogScrub();
+}
+function closeJogScrub() {
+  const ov = document.getElementById('jogScrubOv');
+  if (ov) ov.hidden = true;
+  jogState = null;
+}
+// ── P6: one shared dismissal utility (plan item 6) ───────────────────────────
+// Click-outside or Esc closes any registered popover/tool panel. Panels with
+// unsaved edits (cue config, settings modal, Planda Bear compose) deliberately
+// stay explicit-dismiss — flagged in the Phase 6 proposal.
+const _uiDismiss = [];
+function uiDismissRegister(getEl, closeFn, opts = {}) {
+  _uiDismiss.push({ getEl, closeFn, isOpen: opts.isOpen || null, ignore: opts.ignore || [] });
+}
+document.addEventListener('pointerdown', e => {
+  _uiDismiss.forEach(d => {
+    const el = d.getEl(); if (!el) return;
+    const open = d.isOpen ? d.isOpen(el) : !el.hidden;
+    if (!open || el.contains(e.target)) return;
+    if (d.ignore.some(sel => e.target.closest?.(sel))) return;
+    d.closeFn(el);
+  });
+}, true);
 document.addEventListener('keydown', e => {
-  const liveOn = document.getElementById('liveshow')?.classList.contains('on');
-  if (!liveOn) return;
-  // Row preview pop-out open: arrows page through rows in the overlay (and Esc
-  // closes it) instead of moving the live position underneath it.
-  if (document.getElementById('lsRowPreviewOv')?.classList.contains('on')) {
-    if (isTextEditingTarget(e.target)) return;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); previewRelativeRow(1); }
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); previewRelativeRow(-1); }
-    else if (e.key === 'Escape') { e.preventDefault(); hideOverlay('lsRowPreviewOv'); }
-    return;
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  for (let i = _uiDismiss.length - 1; i >= 0; i--) {
+    const d = _uiDismiss[i], el = d.getEl(); if (!el) continue;
+    const open = d.isOpen ? d.isOpen(el) : !el.hidden;
+    if (open) { d.closeFn(el); e.preventDefault(); return; }
   }
-  if (handleLiveRemoteKeydown(e)) return;
-  if (isTextEditingTarget(e.target)) return;
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); lsNext(); }
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); lsPrev(); }
 });
-document.addEventListener('keyup', handleLiveRemoteKeyup);
+uiDismissRegister(() => document.getElementById('notifPanel'), () => closeNotifCenter(), { ignore: ['#notifBellBtn'] });
+uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeEntryThemes(), { isOpen: el => !el.hasAttribute('hidden'), ignore: ['#entryThemeGear'] });
+
+// Owns ALL keys while open (called first from keymapDispatch).
+function jogScrubHandleKey(e, phase) {
+  const kmOv = document.getElementById('keymapRefOv');
+  if (kmOv && !kmOv.hidden) {
+    if (phase === 'down' && (e.key === 'Escape' || e.key === '?')) { consumeRemoteKey(e); kmOv.hidden = true; }
+    return true;
+  }
+  const ov = document.getElementById('jogScrubOv');
+  if (!ov || ov.hidden || !jogState) return false;
+  if (phase !== 'down') return true;
+  if (e.key === 'Enter') { consumeRemoteKey(e); commitJogScrub(); return true; }
+  if (e.key === 'Escape') { consumeRemoteKey(e); closeJogScrub(); return true; }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    consumeRemoteKey(e);
+    const i = jogSegAt(jogState.pos);
+    const next = e.key === 'ArrowDown' ? Math.min(jogState.segs.length - 1, i + 1)
+      : (jogState.pos > jogState.segs[i].start + 2 ? i : Math.max(0, i - 1));
+    jogState.pos = jogState.segs[next].start;
+    renderJogScrub(); return true;
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    consumeRemoteKey(e);
+    jogNudge((e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 5 : 1) * jogState.total / 400);
+    return true;
+  }
+  consumeRemoteKey(e);
+  return true;
+}
 
 // ─────────────────────────────────────────────────────────────
 // RUNDOWN RENDERING
@@ -3123,7 +3325,7 @@ function getCueCell(b, type) {
   const d = b.cues?.[type];
   const on  = getCueOn(d);
   const off = getCueOff(d);
-  const isEmpty = !on && !off && (type !== 'script' || !d?.text) && !(type === 'playback' && d?.outCueId);
+  const isEmpty = !on && !off && (type !== 'script' || !d?.text) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
   if (isEmpty) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
@@ -3134,7 +3336,7 @@ function getCueCell(b, type) {
   const scriptMeta = type === 'script' && d?.text
     ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
     : '';
-  const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
+  const outBadge = (type === 'playback' ? outrangutanCellBadge(d, b.id) : '') + ((type === 'playback' || type === 'audio') ? outrangutanSfxBadge(d) : '');
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
     <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
@@ -4205,11 +4407,18 @@ function saveCueConfig() {
       d.scriptTags  = [..._sOnTags];
       break;
   }
-  // Outrangutan playback link (playback cells only)
+  // Outrangutan links — playback cells carry cue + SFX links; audio cells carry SFX (P4)
   if (cueConfigType === 'playback') {
     const outCue = document.getElementById('cc-out-cue')?.value || '';
     const outAuto = document.getElementById('cc-out-auto')?.checked || false;
     if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; }
+    else { delete d.outCueId; delete d.outAuto; }
+  }
+  if (cueConfigType === 'playback' || cueConfigType === 'audio') {
+    const outPad = document.getElementById('cc-out-pad')?.value || '';
+    const outPadAuto = document.getElementById('cc-out-pad-auto')?.checked || false;
+    if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; }
+    else { delete d.outPadId; delete d.outPadAuto; }
   }
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
@@ -4422,7 +4631,7 @@ function qlabGoBtnHTML(beatId, type, d) {
 // publishes back sessions/<code>.outrangutan.{cues,live}, which we render into
 // the cell. Mirrors the QLab transport: one command object, deduped by id.
 // ─────────────────────────────────────────────────────────────
-let outrangutanState = { cues: {}, live: null };
+let outrangutanState = { cues: {}, pads: {}, live: null };
 let _outCmdSeq = 0;
 let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out-of-order packets (P3)
 
@@ -4436,6 +4645,8 @@ function applyOutrangutanState(og) {
   // stableStringify: Firestore snapshot map-key order differs between local-echo
   // and server emissions — a plain JSON compare re-renders on identical data.
   if (og.cues && stableStringify(og.cues) !== stableStringify(outrangutanState.cues)) { outrangutanState.cues = og.cues; structural = true; }
+  if (og.pads && stableStringify(og.pads) !== stableStringify(outrangutanState.pads || {})) { outrangutanState.pads = og.pads; }   // P4: pad summary (feeds the cue modal only — no re-render)
+  if (og.sfxFire) applySfxFireEvent(og.sfxFire);   // P4: transient follower chip
   if (og.live) {
     // ts is the version stamp (monotonic per sender, survives publisher reloads);
     // seq breaks ties for writes landing in the same millisecond.
@@ -4452,6 +4663,24 @@ function applyOutrangutanState(og) {
     if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
   }
+}
+
+// P4: SFX fire → transient chip in the live overview (Decisions #7). Stale/dup
+// events are dropped by ts+seq stamp, same scheme as outrangutan.live.
+let _sfxFireStamp = 0, _sfxChipTimer = null;
+function applySfxFireEvent(ev) {
+  if (!ev || !ev.ts) return;
+  const stamp = (ev.ts * 1000) + ((ev.seq || 0) % 1000);
+  if (stamp <= _sfxFireStamp) return;
+  const fresh = (Date.now() - ev.ts) < 10000;
+  _sfxFireStamp = stamp;
+  if (!fresh) return;   // old event replayed by a snapshot — record the stamp, show nothing
+  const chip = document.getElementById('ls-stat-sfx');
+  if (!chip) return;
+  chip.textContent = `${ev.emoji ? ev.emoji + ' ' : ''}SFX · ${ev.name || ''}`.trim();
+  chip.hidden = false;
+  clearTimeout(_sfxChipTimer);
+  _sfxChipTimer = setTimeout(() => { chip.hidden = true; }, 2500);
 }
 
 // Patch every playback-cell badge in place — no table rebuild, no scroll loss.
@@ -4481,36 +4710,71 @@ function outrangutanCueOptions(cur) {
   return html;
 }
 
-// Optional Outrangutan link block — only appended to `playback` cue modals.
+// <select> options of the Outrangutan SFX pads published into this session (P4).
+function outrangutanPadOptions(cur) {
+  const map = outrangutanState.pads || {};
+  const ids = Object.keys(map).sort((a, b) => (map[a].bank + map[a].name).localeCompare(map[b].bank + map[b].name));
+  let html = `<option value="">— none —</option>`;
+  ids.forEach(id => {
+    const p = map[id];
+    html += `<option value="${esc(id)}"${cur === id ? ' selected' : ''}>${esc((p.emoji ? p.emoji + ' ' : '') + p.name + (p.bank ? ' · ' + p.bank : ''))}</option>`;
+  });
+  if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked pad (offline)</option>`;
+  return html;
+}
+
+// Optional Outrangutan link block — playback cells get cue + SFX links; audio
+// cells get the SFX link (P4: rundown items cue SFX through the same cue flow).
 function outrangutanCueFields(type, d) {
-  if (type !== 'playback') return '';
+  if (type !== 'playback' && type !== 'audio') return '';
   d = d || {};
-  const empty = !Object.keys(outrangutanState.cues || {}).length;
-  return `
-    <div class="field cc-qlab cc-outrangutan">
-      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan playback <span class="cc-qlab-optional">— optional</span></div>
+  const emptyCues = !Object.keys(outrangutanState.cues || {}).length;
+  const emptyPads = !Object.keys(outrangutanState.pads || {}).length;
+  const cuePart = type !== 'playback' ? '' : `
       <div class="cc-qlab-row">
         <div class="cc-qlab-cue-field" style="flex:1">
           <label class="field-lbl">Link to an Outrangutan cue</label>
           <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '')}</select>
-          ${empty ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
+          ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>
+      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>`;
+  const sfxPart = `
+      <div class="cc-qlab-row">
+        <div class="cc-qlab-cue-field" style="flex:1">
+          <label class="field-lbl">SFX pad</label>
+          <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '')}</select>
+          ${emptyPads ? `<div class="cc-out-hint">Assign pads on Outrangutan's SFX board to list them here.</div>` : ''}
+        </div>
+      </div>
+      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
+  return `
+    <div class="field cc-qlab cc-outrangutan">
+      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-qlab-optional">— optional</span></div>
+      ${cuePart}
+      ${sfxPart}
       <div class="cc-qlab-actions">
-        <button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>
+        ${type === 'playback' ? `<button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
+        <button type="button" class="cc-qlab-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
       </div>
     </div>`;
 }
 
 // Core writer: push a fire command to the session doc for Outrangutan to consume.
-function fireOutrangutanCommand(action, cueId) {
+// P4 fast path: when Outrangutan runs in THIS tab on the same session (the
+// one-operator setup), fire it directly — <30 ms trigger-to-sound, no network.
+function fireOutrangutanCommand(action, targetId) {
+  const local = window.Outrangutan && window.Outrangutan._local;
+  if (local && session.code && local.session() === session.code) {
+    if (action === 'pad' && local.firePad(targetId)) return true;
+    if (action === 'cue' && local.fireCue(targetId)) return true;
+  }
   if (!(window._firebaseReady && session.code && !session.isDemo)) { toast('Outrangutan needs a live (non-demo) session.'); return false; }
   _outCmdSeq += 1;
   const command = {
     commandId: `out_${CLIENT_ID}_${Date.now().toString(36)}_${_outCmdSeq}`,
     ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
-    action: action || 'cue', cueId: cueId || '',
+    action: action || 'cue', cueId: action === 'pad' ? '' : (targetId || ''), padId: action === 'pad' ? (targetId || '') : '',
   };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
     .catch(err => toast(firebaseConnectionLabel(err, 'Outrangutan command failed')));
@@ -4523,7 +4787,46 @@ function fireOutrangutanFromModal() {
   if (fireOutrangutanCommand('cue', outCue)) toast('Outrangutan: GO sent.');
 }
 
+function fireOutrangutanSfxFromModal() {
+  const outPad = document.getElementById('cc-out-pad')?.value || '';
+  if (!outPad) { toast('Link an SFX pad first.'); return; }
+  if (fireOutrangutanCommand('pad', outPad)) toast('Outrangutan: SFX sent.');
+}
+
+// P5: playout transport from the live-screen keymap — same-tab fast path first,
+// session-doc command otherwise. Actions: go / pause / stop / fadeStop / panic.
+function fireOutrangutanTransport(action) {
+  const local = window.Outrangutan && window.Outrangutan._local;
+  if (local && local.transport && session.code && local.session() === session.code && local.transport(action)) {
+    toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
+    return true;
+  }
+  return fireOutrangutanCommand(action, '');
+}
+
+// Manual SFX trigger on a live row (P4, Decisions #6: manual + optional auto).
+function fireOutrangutanSfxCell(beatId, type) {
+  const b = beats.find(x => x.id === beatId);
+  const d = b?.cues?.[type];
+  if (!d || !d.outPadId) { toast('No SFX pad linked.'); return; }
+  if (fireOutrangutanCommand('pad', d.outPadId)) toast('SFX sent.');
+}
+
 function outrangutanCellLinked(d) { return !!(d && d.outCueId); }
+
+// Small SFX chip on rundown cells that link a pad (P4) — name only, no live state.
+function outrangutanSfxBadge(d) {
+  if (!d || !d.outPadId) return '';
+  const p = (outrangutanState.pads || {})[d.outPadId];
+  const label = p ? `${p.emoji ? p.emoji + ' ' : ''}${p.name}` : 'Linked SFX';
+  return `<div class="cue-out-badge cue-sfx-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">SFX · ${esc(label)}</span>${d.outPadAuto ? '<span class="cue-out-live cue-out-auto">AUTO</span>' : ''}</div>`;
+}
+
+// Manual SFX trigger button for the live focus view (P4).
+function outrangutanSfxGoBtnHTML(beatId, type, d) {
+  if (!d || !d.outPadId) return '';
+  return `<button type="button" class="lf-qlab-go lf-out-go lf-sfx-go" title="Fire the linked SFX pad" onclick="event.stopPropagation();fireOutrangutanSfxCell('${beatId}','${type}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> SFX</button>`;
+}
 
 // Manual GO from a live cue card.
 function fireOutrangutanCueCell(beatId) {
@@ -4538,10 +4841,15 @@ function outrangutanGoBtnHTML(beatId, d) {
   return `<button type="button" class="lf-qlab-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
 }
 
-// Auto-fire the linked Outrangutan cue when a row advances live (lsNext only).
+// Auto-fire linked Outrangutan cues/SFX when a row advances live (lsNext only).
 function fireOutrangutanAutoForBeat(beat) {
   const d = beat?.cues?.playback;
   if (d && d.outAuto && d.outCueId) fireOutrangutanCommand('cue', d.outCueId);
+  // P4: SFX auto-fire (playback + audio cells; Decisions #6)
+  ['playback', 'audio'].forEach(t => {
+    const c = beat?.cues?.[t];
+    if (c && c.outPadAuto && c.outPadId) fireOutrangutanCommand('pad', c.outPadId);
+  });
 }
 
 // Rundown playback-cell badge: linked cue name/dur + live status (auto-populate).
@@ -5248,7 +5556,8 @@ function focusCuesForBeat(b) {
       if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
     }
     const outGo = type === 'playback' ? outrangutanGoBtnHTML(b.id, d) : '';
-    const goBtn = outGo;
+    const sfxGo = (type === 'playback' || type === 'audio') ? outrangutanSfxGoBtnHTML(b.id, type, d) : '';
+    const goBtn = outGo + sfxGo;
     return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
       <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
       <div class="lf-cue-lines">${lines}</div>
@@ -6617,14 +6926,13 @@ function promptOpControlsHTML(includeLiveActions = true) {
     </div>
     <div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
-      <div class="pt-ctrl-group flow-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="pt-theme-dot${ptThemeName===name?' active':''}" style="background:${PT_THEMES[name].bg}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"></button>`).join('')}
+      <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>
     <div class="flow-control-section flow-control-screen">
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid four">
-        ${includeLiveActions ? '' : `<button class="pt-btn" onclick="openLiveScript(${Math.max(lsIdx,0)})">Script</button>`}
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
         <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide UI</button>
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
@@ -6963,9 +7271,11 @@ function ptSetTheme(name) {
   document.documentElement.style.setProperty('--pt-ui-bg', t.uiBg);
   document.documentElement.style.setProperty('--pt-ui-border', t.uiBorder);
   try { localStorage.setItem('promptypus_theme', name); } catch {}
-  document.querySelectorAll('.pt-theme-dot').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.pt-theme-dot').forEach(d => { d.classList.remove('active'); d.classList.remove('on'); });
   const dot = ptEl('pt-t-' + name);
   if (dot) dot.classList.add('active');
+  // P6 theme tiles (Script Op / op overlay) carry the kit's "on" state too
+  document.querySelectorAll(`.pt-theme-dot[onclick*="theme_${name}"]`).forEach(d => { d.classList.add('active'); d.classList.add('on'); });
 }
 
 // Display-only formatting for the talent + operator screens. The stored script
@@ -7405,7 +7715,9 @@ function ptRenderClockOverlay() {
     if (valueEl) valueEl.textContent = value;
     clock.classList.toggle('expired', state.mode !== 'timeofday' && left <= 0);
   }
-  question.classList.toggle('on', ptQuestionOn);
+  // P6 (Decisions #11): the question indicator rides the same global overlay
+  // size as the clock/wrap banner — one stepper controls all three readouts.
+  question.className = 'size-' + Math.max(0, Math.min(4, state.size ?? 1)) + (ptQuestionOn ? ' on' : '');
   if (visible && !ptClockInterval) ptClockInterval = setInterval(ptRenderClockOverlay, 500);
   if (!visible && !ptQuestionOn && ptClockInterval) {
     clearInterval(ptClockInterval);
@@ -7755,20 +8067,25 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
     </div>
     <div class="flow-control-section flow-wrap-section">
       <div class="flow-control-title">Wrap Up</div>
-      <div class="flow-clock-grid flow-wrap-grid flow-control-grid four">
+      <div class="flow-clock-grid flow-wrap-grid flow-control-grid three">
         ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
         ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
         ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
-        ${btn('media.stop', 'Hide', send('clock_off'), false, 'pt-wrap-btn')}
       </div>
       <label class="flow-wrap-custom flow-wrap-custom-row"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
     </div>
     <div class="flow-control-section flow-alert-section">
       <div class="flow-control-title">Alerts</div>
-      <div class="flow-clock-grid flow-alert-grid flow-control-grid three">
+      <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
         ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn')}
-        ${btn('action.down', 'Smaller', send('clock_size_down'))}
-        ${btn('action.up', 'Bigger', send('clock_size_up'))}
+      </div>
+      <div class="ui-row" style="border:0">
+        <span class="ui-row-lbl">Overlay size</span>
+        <div class="ui-stepper">
+          <button type="button" class="ui-step-btn" onclick="${send('clock_size_down')}" aria-label="Overlay smaller"${dis}>−</button>
+          <span class="ui-step-val">${['S','M','L','XL','MAX'][Math.max(0, Math.min(4, state?.size ?? 1))]}</span>
+          <button type="button" class="ui-step-btn" onclick="${send('clock_size_up')}" aria-label="Overlay bigger"${dis}>+</button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -7817,8 +8134,8 @@ function flowOpControlsHTML(disabled=false) {
     </div>
     <div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
-      <div class="pt-ctrl-group flow-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="flowop-theme-dot${ptThemeName===name?' active':''}" data-flowop-theme="${name}" style="background:${PT_THEMES[name].bg}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}></button>`).join('')}
+      <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>
     <div class="flow-control-section flow-control-screen">
@@ -7856,6 +8173,7 @@ function flowOpSyncControls() {
   });
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
+    btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
   });
   flowOpRenderClockPreview();
 }
@@ -8602,14 +8920,7 @@ function toggleEntryThemes() {
   const open = panel.hasAttribute('hidden');
   panel.toggleAttribute('hidden', !open);
   gear?.classList.toggle('active', open);
-  if (open) { syncEntryThemeSwatches(); setTimeout(() => document.addEventListener('click', entryThemesOutside, { once: true }), 0); }
-}
-function entryThemesOutside(e) {
-  if (e.target.closest?.('#entryThemePanel, #entryThemeGear')) {
-    document.addEventListener('click', entryThemesOutside, { once: true });
-    return;
-  }
-  closeEntryThemes();
+  if (open) syncEntryThemeSwatches();   // dismissal handled by uiDismissRegister (P6)
 }
 function closeEntryThemes() {
   document.getElementById('entryThemePanel')?.setAttribute('hidden', '');
@@ -10706,18 +11017,10 @@ function toggleNotifCenter(e) {
     window.addEventListener('scroll', positionNotifPanel, true);
     document.getElementById('notifBellBtn')?.classList.add('on');
     pbMarkNotesRead();                       // clears the badge (panel keeps its highlight)
-    setTimeout(() => document.addEventListener('click', notifOutside, { once: true }), 0);
+    // dismissal handled by the shared uiDismissRegister utility (P6)
   } else {
     closeNotifCenter();
   }
-}
-
-function notifOutside(e) {
-  if (e.target.closest?.('#notifCenter')) {
-    document.addEventListener('click', notifOutside, { once: true });
-    return;
-  }
-  closeNotifCenter();
 }
 
 function closeNotifCenter() {

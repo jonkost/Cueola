@@ -480,6 +480,7 @@
     src.onended = () => { rt.voices = rt.voices.filter(v => v !== src); renderPadLive(pad.id); };
     rt.voices.push(src);
     renderPadLive(pad.id);
+    publishSfxFire(pad);   // P4: discrete fire event → follower chips
   }
   function stopVoices(rt) { if (!rt) return; rt.voices.slice().forEach(v => { try { v.onended = null; v.stop(); } catch (e) {} }); rt.voices = []; }
   function stopPad(pad) { const rt = padRT.get(pad.id); if (!rt) return; cancelFade('padin-' + pad.id); stopVoices(rt); renderPadLive(pad.id); }
@@ -813,10 +814,17 @@
       case 'stop': stopAll(); break;
       case 'panic': panic(); break;
       case 'fadeStop': fadeStopAll(); break;
+      case 'pause': pauseResume(); break;   // P5: live-screen P key
       case 'cue': {
         const c = cueById(cmd.cueId) || cues.find(x => String(x.num) === String(cmd.cueId));
         if (c) { selectedId = c.id; go(); }
         else toast('Rundown fired a cue Outrangutan doesn’t have on this device (' + cmd.cueId + ').');
+        break;
+      }
+      case 'pad': {   // Phase 4 (master plan): rundown-cued SFX
+        const p = padById(cmd.padId);
+        if (p && p.mediaId) firePad(p);
+        else toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.');
         break;
       }
       default: return;
@@ -832,8 +840,26 @@
       pubTimer = null;
       const map = {};
       cues.forEach(c => { map[c.id] = { num: c.num, name: c.name, type: c.type, dur: Math.round(c.duration || 0) }; });
-      try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }); } catch (e) {}
+      // P4: also publish the SFX pad summary so rundown cells can link pads.
+      const padMap = {};
+      pads.forEach(p => {
+        if (!p.mediaId) return;
+        const bank = banks.find(bk => bk.id === p.bank);
+        padMap[p.id] = { name: p.name || 'Pad', bank: bank ? bank.name : '', emoji: p.emoji || '' };
+      });
+      try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.pads': padMap, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }); } catch (e) {}
     }, 400);
+  }
+  // P4: broadcast each SFX fire as a discrete event (followers show a transient
+  // chip — Decisions Log #7). Light 250 ms throttle so pad-mashing can't flood
+  // the doc; the newest fire always wins.
+  let _sfxFireSeq = 0, _lastSfxFireTs = 0;
+  function publishSfxFire(pad) {
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    const now = Date.now();
+    if (now - _lastSfxFireTs < 250) return;
+    _lastSfxFireTs = now;
+    try { window._updateDoc(sessionRef(), { 'outrangutan.sfxFire': { padId: pad.id, name: pad.name || 'SFX', emoji: pad.emoji || '', ts: now, seq: ++_sfxFireSeq, sender: OG_SENDER } }); } catch (e) {}
   }
   // publish live transport (throttled ~1 Hz, Decisions Log #5) — feeds the
   // rundown cell's name/dur/status/thumb. Monotonic seq lets receivers drop
@@ -1571,87 +1597,88 @@
     const dims = c.srcW && c.srcH
       ? '<div class="og-insp-meta">' + c.srcW + '×' + c.srcH + ' · ' + aspectLabel(c.srcW, c.srcH) + (c.type === 'image' ? ' · still' : '') + '</div>'
       : '';
+    // P6 rebuild (Decisions #13): reference language — context pill, grouped
+    // ui-cards with row layout, segmented/stepper/toggle controls (upgraded in
+    // place after binding), setup-only Key/OBS behind "More options".
     ins.innerHTML =
-      field('Name', '<input id="og-i-name" type="text" value="' + esc(c.name) + '">') +
+      '<div class="ui-context-pill"><span class="ui-pill-dot" style="background:' + c.color + '"></span><span class="ui-pill-name"><input id="og-i-name" type="text" value="' + esc(c.name) + '" aria-label="Cue name"></span></div>' +
       dims +
-      '<div class="og-field-row">' +
+      card('Timing',
         field('Pre-wait (s)', '<input id="og-i-prewait" type="number" min="0" step="0.5" value="' + c.preWait + '">') +
         field('Continue', '<select id="og-i-continue">' +
-          opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Auto-continue', c.continueMode) + opt('auto_follow', 'Auto-follow', c.continueMode) + '</select>') +
-      '</div>' +
+          opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Continue', c.continueMode) + opt('auto_follow', 'Follow', c.continueMode) + '</select>') +
+        (c.type === 'image' ?
+          field('Duration (s) — 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
+          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
+        : '')
+      ) +
       // ── Audio (not for stills)
       (c.type === 'image' ? '' :
-      sub('Audio') +
-      field('Level <span class="og-cue-meter"><span class="og-cue-meter-fill" id="og-cue-meter-fill"></span></span>', '<input id="og-i-volume" type="range" min="0" max="1" step="0.01" value="' + c.volume + '">') +
-      '<div class="og-field-row3">' +
-        field('Low', '<input id="og-i-eqlow" type="range" min="-12" max="12" step="0.5" value="' + (eq.low || 0) + '">') +
-        field('Mid', '<input id="og-i-eqmid" type="range" min="-12" max="12" step="0.5" value="' + (eq.mid || 0) + '">') +
-        field('High', '<input id="og-i-eqhigh" type="range" min="-12" max="12" step="0.5" value="' + (eq.high || 0) + '">') +
-      '</div>' +
-      '<label class="og-check"><input id="og-i-comp" type="checkbox"' + (c.comp ? ' checked' : '') + '> Compressor</label>') +
+      card('Audio',
+        field('Level <span class="og-cue-meter"><span class="og-cue-meter-fill" id="og-cue-meter-fill"></span></span>', '<input id="og-i-volume" type="range" min="0" max="1" step="0.01" value="' + c.volume + '">') +
+        '<details class="og-eq-details"><summary class="og-drill">EQ <span class="og-drill-val">' + (eq.low || 0) + ' / ' + (eq.mid || 0) + ' / ' + (eq.high || 0) + '</span><span class="ui-chevron">›</span></summary>' +
+        '<div class="og-field-row3">' +
+          field('Low', '<input id="og-i-eqlow" type="range" min="-12" max="12" step="0.5" value="' + (eq.low || 0) + '">') +
+          field('Mid', '<input id="og-i-eqmid" type="range" min="-12" max="12" step="0.5" value="' + (eq.mid || 0) + '">') +
+          field('High', '<input id="og-i-eqhigh" type="range" min="-12" max="12" step="0.5" value="' + (eq.high || 0) + '">') +
+        '</div></details>' +
+        '<label class="og-check og-field"><span style="flex:1">Compressor</span><input id="og-i-comp" type="checkbox"' + (c.comp ? ' checked' : '') + '></label>'
+      )) +
       // ── Fades
-      sub('Fades') +
-      '<div class="og-field-row3">' +
+      card('Fades',
         field('In (s)', '<input id="og-i-fadein" type="number" min="0" step="0.1" value="' + (c.fadeIn || 0) + '">') +
         field('Out (s)', '<input id="og-i-fadeout" type="number" min="0" step="0.1" value="' + (c.fadeOut || 0) + '">') +
-        field('Curve', '<select id="og-i-fadecurve">' + opt('', 'Default', c.fadeCurve) + opt('linear', 'Linear', c.fadeCurve) + opt('s', 'S-curve', c.fadeCurve) + opt('log', 'Log', c.fadeCurve) + '</select>') +
-      '</div>' +
-      (c.type === 'video' ? field('Crossfade in (s)', '<input id="og-i-xfade" type="number" min="0" step="0.1" value="' + (c.xfade || 0) + '">') : '') +
-      // ── Edit (stills: an optional duration replaces trim/loop — 0 holds until advanced)
-      sub(c.type === 'image' ? 'Timing' : 'Edit') +
-      (c.type === 'image' ?
-        '<div class="og-field-row">' +
-          field('Duration (s) — 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
-          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut to black', c.endAction) + opt('hold', 'Keep holding', c.endAction) + opt('black', 'Fade to black', c.endAction) + '</select>') +
-        '</div>'
-      :
+        field('Curve', '<select id="og-i-fadecurve">' + opt('', 'Auto', c.fadeCurve) + opt('linear', 'Linear', c.fadeCurve) + opt('s', 'S', c.fadeCurve) + opt('log', 'Log', c.fadeCurve) + '</select>') +
+        (c.type === 'video' ? field('Crossfade in (s)', '<input id="og-i-xfade" type="number" min="0" step="0.1" value="' + (c.xfade || 0) + '">') : '')
+      ) +
+      // ── Edit (a/v only — stills carry their timing above)
+      (c.type === 'image' ? '' :
+      card('Edit',
         '<div class="og-field-row">' +
           field('Trim in (s)', '<input id="og-i-trimin" type="number" min="0" step="0.1" value="' + (c.trimIn || 0) + '">') +
           field('Trim out (s)', '<input id="og-i-trimout" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : c.trimOut) + '" placeholder="end">') +
         '</div>' +
-        '<div class="og-field-row">' +
-          field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
-          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop / black', c.endAction) + opt('hold', 'Hold last frame', c.endAction) + opt('black', 'Fade to black', c.endAction) + '</select>') +
-        '</div>') +
+        field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
+        field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
+      )) +
+      // ── Picture (video + stills)
       (c.type === 'video' || c.type === 'image' ?
-        '<div class="og-field-row3">' +
-          field('Fit', '<select id="og-i-fit">' + opt('contain', 'Contain', c.fit) + opt('cover', 'Cover', c.fit) + opt('fill', 'Fill', c.fit) + '</select>') +
-          field('Scale', '<input id="og-i-scale" type="range" min="0.25" max="3" step="0.05" value="' + (c.scale || 1) + '">') +
-          field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>') +
-        '</div>' +
+      card('Picture',
+        field('Fit', '<select id="og-i-fit">' + opt('contain', 'Contain', c.fit) + opt('cover', 'Cover', c.fit) + opt('fill', 'Fill', c.fit) + '</select>') +
+        field('Scale', '<input id="og-i-scale" type="range" min="0.25" max="3" step="0.05" value="' + (c.scale || 1) + '">') +
         '<div class="og-field-row">' +
           field('Pos X (%)', '<input id="og-i-posx" type="number" step="1" value="' + (c.posX || 0) + '">') +
           field('Pos Y (%)', '<input id="og-i-posy" type="number" step="1" value="' + (c.posY || 0) + '">') +
         '</div>' +
-        field('Output', '<select id="og-i-output">' + outputs.map(o => opt(o.id, o.label, c.output || 1)).join('') + '</select>')
-        : field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>')) +
-      // ── Key (video only)
+        field('Output', '<select id="og-i-output">' + outputs.map(o => opt(o.id, o.label, c.output || 1)).join('') + '</select>') +
+        field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>')
+      )
+      : card('Cue state', field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>'))) +
+      // ── setup-only sections live behind progressive disclosure (never live-critical)
+      '<details class="og-more-details"><summary class="ui-more">' + sym('action.more') + ' More options — ' + (c.type === 'video' ? 'Key & OBS' : 'OBS') + '</summary>' +
       (c.type === 'video' ? (function () { const k = c.key || (c.key = { mode: 'off', color: '#00b140', sim: 0.3, smooth: 0.1, bg: '#000000' });
-        return sub('Key') +
-          '<div class="og-field-row">' +
-            field('Mode', '<select id="og-i-keymode">' + opt('off', 'Off', k.mode) + opt('chroma', 'Chroma', k.mode) + opt('luma', 'Luma', k.mode) + opt('alpha', 'Alpha (WebM)', k.mode) + '</select>') +
-            field('Key colour', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
-          '</div>' +
+        return card('Key',
+          field('Mode', '<select id="og-i-keymode">' + opt('off', 'Off', k.mode) + opt('chroma', 'Chroma', k.mode) + opt('luma', 'Luma', k.mode) + opt('alpha', 'Alpha', k.mode) + '</select>') +
+          field('Key colour', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
           '<div class="og-field-row">' +
             field('Similarity', '<input id="og-i-keysim" type="range" min="0" max="1" step="0.01" value="' + (k.sim == null ? 0.3 : k.sim) + '">') +
             field('Smoothness', '<input id="og-i-keysmooth" type="range" min="0" max="0.5" step="0.01" value="' + (k.smooth == null ? 0.1 : k.smooth) + '">') +
           '</div>' +
-          field('Background', '<input id="og-i-keybg" type="color" value="' + (k.bg || '#000000') + '">');
+          field('Background', '<input id="og-i-keybg" type="color" value="' + (k.bg || '#000000') + '">'));
       })() : '') +
-      // ── OBS (any cue)
       (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
-        return sub('OBS') +
-          '<div class="og-field-row">' +
-            field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
-            (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : field('Fire on scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">')) +
-          '</div>' +
-          (ob.action === 'scene' ? field('Fire on OBS scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">') : '');
+        return card('OBS',
+          field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
+          (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : '') +
+          field('Fire on OBS scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">'));
       })() +
+      '</details>' +
       // ── meta
-      sub('Cue') +
-      field('Color', '<div class="og-swatches">' + ['var(--video)', 'var(--green)', 'var(--red)', 'var(--yellow)', 'var(--purple)', 'var(--cyan)'].map(col =>
-        '<button class="og-swatch' + (c.color === col ? ' sel' : '') + '" data-col="' + col + '" style="background:' + col + '" aria-label="Set cue color"></button>').join('') + '</div>') +
-      field('Notes', '<input id="og-i-notes" type="text" value="' + esc(c.notes || '') + '">') +
+      card('Cue',
+        field('Color', '<div class="og-swatches">' + ['var(--video)', 'var(--green)', 'var(--red)', 'var(--yellow)', 'var(--purple)', 'var(--cyan)'].map(col =>
+          '<button class="og-swatch' + (c.color === col ? ' sel' : '') + '" data-col="' + col + '" style="background:' + col + '" aria-label="Set cue color"></button>').join('') + '</div>') +
+        field('Notes', '<input id="og-i-notes" type="text" value="' + esc(c.notes || '') + '">')
+      ) +
       '<button class="og-cue-del" id="og-i-del">' + sym('action.delete') + ' Delete cue</button>';
 
     const bind = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
@@ -1699,10 +1726,65 @@
     bind('og-i-notes', 'oninput', e => { c.notes = e.target.value; scheduleSave(); });
     bind('og-i-del', 'onclick', () => deleteCue(c.id));
     Array.prototype.forEach.call(ins.querySelectorAll('.og-swatch'), sw => { sw.onclick = () => { c.color = sw.getAttribute('data-col'); renderCueList(); renderInspector(); scheduleSave(); }; });
+    // P6: upgrade to kit controls IN PLACE — bindings stay on the original
+    // elements (hidden but still receiving value + onchange from the upgrades).
+    ['og-i-continue', 'og-i-fadecurve', 'og-i-endaction', 'og-i-fit', 'og-i-loop', 'og-i-armed'].forEach(id => upgradeSelectToSeg(ins, id));
+    [['og-i-prewait', 0.5], ['og-i-fadein', 0.1], ['og-i-fadeout', 0.1], ['og-i-xfade', 0.1], ['og-i-imgdur', 0.5]].forEach(p => upgradeNumberToStepper(ins, p[0], p[1]));
+    upgradeCheckToToggle(ins, 'og-i-comp');
   }
   function field(label, inner) { return '<div class="og-field"><label>' + label + '</label>' + inner + '</div>'; }
   function opt(val, label, cur) { return '<option value="' + val + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + label + '</option>'; }
   function sub(t) { return '<div class="og-insp-sub">' + t + '</div>'; }
+  function card(title, inner) { return '<div class="ui-card-label">' + title + '</div><div class="ui-card og-kit">' + inner + '</div>'; }
+  // ── P6 kit upgrades: swap a rendered control for its reference-language
+  // equivalent without touching the binding (the original element keeps its id,
+  // holds the value, and still fires its own onchange/oninput). ──
+  function upgradeSelectToSeg(root, id) {
+    const sel = root.querySelector('#' + id);
+    if (!sel || sel.options.length > 4) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'ui-seg';
+    Array.from(sel.options).forEach(o => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ui-seg-btn' + (o.value === sel.value ? ' on' : '');
+      b.textContent = o.textContent;
+      b.onclick = () => { sel.value = o.value; Array.from(wrap.children).forEach(x => x.classList.toggle('on', x === b)); if (sel.onchange) sel.onchange({ target: sel }); };
+      wrap.appendChild(b);
+    });
+    sel.style.display = 'none';
+    sel.parentNode.insertBefore(wrap, sel);
+  }
+  function upgradeNumberToStepper(root, id, step) {
+    const inp = root.querySelector('#' + id);
+    if (!inp) return;
+    const st = step || parseFloat(inp.step) || 1;
+    const wrap = document.createElement('div');
+    wrap.className = 'ui-stepper';
+    const bump = d => {
+      const min = inp.min !== '' ? parseFloat(inp.min) : -1e9, max = inp.max !== '' ? parseFloat(inp.max) : 1e9;
+      inp.value = String(Math.round(Math.max(min, Math.min(max, (parseFloat(inp.value) || 0) + d)) * 100) / 100);
+      if (inp.onchange) inp.onchange({ target: inp });
+    };
+    const mk = (t, d) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ui-step-btn'; b.textContent = t; b.onclick = () => bump(d); return b; };
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(mk('−', -st));
+    wrap.appendChild(inp);            // moves the input inside the stepper
+    wrap.appendChild(mk('+', st));
+    inp.classList.add('ui-step-input');
+  }
+  function upgradeCheckToToggle(root, id) {
+    const chk = root.querySelector('#' + id);
+    if (!chk) return;
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'ui-toggle' + (chk.checked ? ' on' : '');
+    t.setAttribute('role', 'switch');
+    t.setAttribute('aria-checked', chk.checked ? 'true' : 'false');
+    t.onclick = () => { chk.checked = !chk.checked; t.classList.toggle('on', chk.checked); t.setAttribute('aria-checked', chk.checked ? 'true' : 'false'); if (chk.onchange) chk.onchange({ target: chk }); };
+    chk.style.display = 'none';
+    chk.parentNode.insertBefore(t, chk);
+  }
 
   // ── Clip Editor (trim / scrub the selected cue) ──────────────────────────
   // The full-width bottom pane: a timeline of the selected clip with draggable
@@ -2377,6 +2459,14 @@
     $('og-master-gain').oninput = (e) => { ensureAudio(); setMasterGain(parseFloat(e.target.value)); scheduleSave(); };
     renderThemeControl();
     watchCueolaTheme();
+    // P6: pad inspector rides the shared kit's row mapping
+    const padIns = $('og-pad-inspector'); if (padIns) padIns.classList.add('og-kit');
+    // P6: theme/tools popovers close on outside click (shared dismissal pattern)
+    document.addEventListener('pointerdown', (e) => {
+      document.querySelectorAll('details.og-theme-menu[open], details.og-tools-menu[open]').forEach(d => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    }, true);
 
     const fileInput = $('og-file-input');
     $('og-add-btn').onclick = () => fileInput.click();
@@ -2489,6 +2579,23 @@
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
     _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
+    // P4: same-page fast path — when Cueola and Outrangutan share this tab (the
+    // one-operator setup), the rundown fires pads/cues directly (<30 ms) instead
+    // of round-tripping a Firestore command.
+    _local: {
+      session: () => (mode === 'session' ? sessionCode : ''),
+      firePad: (id) => { const p = padById(id); if (p && p.mediaId) { firePad(p); return true; } return false; },
+      fireCue: (id) => { const c = cueById(id); if (c) { selectedId = c.id; go(); renderCueList(); renderInspector(); renderEditArea(); return true; } return false; },
+      // P5: whole-transport fast path for the live-screen keymap (G/P/S/…)
+      transport: (action) => {
+        if (action === 'go') { go(); return true; }
+        if (action === 'pause') { pauseResume(); return true; }
+        if (action === 'stop') { stopAll(); return true; }
+        if (action === 'fadeStop') { fadeStopAll(); return true; }
+        if (action === 'panic') { panic(); return true; }
+        return false;
+      },
+    },
     _p5: { drawScopes, makeKeyer, webPlayable, obs, obsReq, frontVideoEl } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if ($('outrangutan')) build(); }, { once: true });

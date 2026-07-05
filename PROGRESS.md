@@ -46,15 +46,41 @@ Tracks execution of `CUEOLA MASTER PLAN.md`. Every session: read the plan, then 
 **Phase 3 root causes (reproduced + measured 2026-07-04):**
 1. Every Firestore snapshot ran an unconditional `renderRundown()` (full `#rdBody` innerHTML rebuild) and any live-view trigger ran full-innerHTML `renderLive()` — so Outrangutan's ~1.4 Hz playout publishing (plus presence/clock writes) rebuilt tables continuously, resetting scroll and flooding the main thread; on one machine running rundown + script op + playout simultaneously (the AVT setup), that manifests as the segment blanking/flash while followers starve.
 2. Found while verifying the fix: Firestore serializes **map keys in a different order on local-echo vs server snapshots**, so any plain `JSON.stringify` equality gate flaps between data-identical snapshots (measured: ~1 render per own-write echo/server pair, 254 rebuilds in a 105 s soak). All snapshot-diff gates now use a key-sorted `stableStringify`. Post-fix: 0 renders under the same storm on both the rundown and live screens.
-- [ ] Phase 4 — SFX system
-  - [x] *(pulled forward 2026-07-04, operator request)* Bank renaming verified end-to-end: double-click **or new ✎ button on the active tab** opens inline rename; Enter commits, Esc cancels; names persist across reload; cues/pads reference banks by stable id, so renames never break links (pad stayed in its bank through two renames + reload).
-- [ ] Phase 5 — Single-operator control
-- [ ] Phase 6 — Control & inspector redesign
+- [x] **Phase 4 — SFX system** *(complete — awaiting gate approval; gate 3→4 passed 2026-07-05)*
+  - [x] *(pulled forward 2026-07-04, operator request)* Bank renaming verified end-to-end: double-click **or ✎ button on the active tab** opens inline rename; Enter commits, Esc cancels; names persist across reload; cues/pads reference banks by stable id, so renames never break links (pad stayed in its bank through two renames + reload).
+  - [x] Rundown items cue SFX through the same cue flow: playback **and** audio cue cells get an "Outrangutan SFX" link block (pad `<select>` populated from a published pad summary) + a "Fire SFX now" button; a `SFX · name` badge shows on linked cells, with an `AUTO` tag when auto-fire is on.
+  - [x] Firing model = **both** (Decisions #6): per-cell "Auto-fire SFX when this row advances live" toggle (rides the existing `lsNext` auto-fire hook) **and** a manual green **SFX** button on the live focus row.
+  - [x] Latency: pads pre-decode to Web Audio buffers on load (existing); a new **same-tab local fast path** (`Outrangutan._local.firePad/fireCue`) fires directly when Cueola + Outrangutan share the tab — measured **3.3 ms** trigger-to-start, well under the ~30 ms target. Cross-device still routes through the session-doc command.
+  - [x] Stable IDs: pads referenced by pad id, banks by bank id — renames never break links (verified in the bank-rename test).
+  - [x] Fire events sync (Decisions #7): each fire writes a throttled `outrangutan.sfxFire` discrete event; followers show a transient green **SFX · name** chip (2.5 s) in the live overview. Stale/duplicate events dropped by ts+seq stamp. Verified from a simulated **remote** operator's pad command too.
+
+**Phase 4 verification (2026-07-05, live DEMO1 session):** Outrangutan session-join publishes its pad summary to Cueola; the audio-cell cue modal lists the pad ("applause-ding · Bank 1"); linking shows the SFX badge; manual + auto fire paths both trigger; local fast-path latency 3.3 ms; follower chip appears on both local and remote fires; zero console errors. Test pad + session fields cleaned up afterward.
+- [x] **Phase 5 — Single-operator control** *(complete — awaiting gate approval; gate 4→5 passed 2026-07-05)*
+  - [x] Central keymap registry (`KEYMAP` in cueola-app.js): one table drives dispatch **and** the reference overlay; scopes (live/build) + priority rules (typing suppresses all; overlays own their keys first); hold-key actions with keyup + window-blur safety; bindings overridable per action via `localStorage.cueola_keymap`
+  - [x] Operator-approved layout live (Decisions #8): **arrows always drive the rundown — including with the Script Op panel open** (the AVT "second computer" fix); Space/J/K/L prompter transport; −/=/[/]/,/. size/speed/nudge; C cue-current, T top; **G/P/S playout GO/pause/stop, Shift+S fade, Shift+Esc PANIC** (routed via the same-tab fast path, else session-doc command; `pause` command + `_local.transport` added to Outrangutan)
+  - [x] `?` shortcut reference generated from the registry, including Outrangutan's own screen bindings read live from its settings (can't drift); Esc closes
+  - [x] `/` jog-wheel scrub: traverses the whole script by row anchors (`[N]` headers) with char-offset position; wheel/drag/arrows + Shift acceleration; windowed row list (virtualized); **local until Enter commits** (`seek_set_<pct>`, Decisions #9), Esc abandons
+
+**Phase 5 verification (2026-07-05, preview):** with Script Op open, ArrowRight/Left moved lsIdx 0→1→0; Space/J(hold)/[/]/−/=/C/T sent the exact prompter controls (brake_start→brake_stop on release verified); `?` rendered 5 groups/34 rows incl. live Outrangutan bindings; `/` listed all 4 script rows, arrows scrubbed to "Questions" (42.0 %), **Enter committed `seek_set_41.99`** and closed; keys inside the script editor dispatched nothing; zero console errors.
+- [x] **Phase 6 — Control & inspector redesign** *(complete — awaiting gate approval; gate 5→6 passed 2026-07-05)*
+  - [x] Reference studied (`design/reference/inspector-reference.jpeg` — iOS Pages inspector); inventory + per-panel proposals shown and **approved** (Decisions #13)
+  - [x] Shared kit built once in index.html, used by both apps: `ui-card / ui-row / ui-seg / ui-stepper / ui-toggle / ui-context-pill / ui-more / ui-theme-grid` — all on theme tokens, accent = `var(--accent)` (Decisions #10)
+  - [x] **Outrangutan cue inspector rebuilt**: context pill (color dot + name), Timing/Audio/Fades/Edit/Picture cards, EQ drill-down, Key+OBS behind "More options"; controls upgraded in place (selects→segmented, numbers→steppers, compressor→toggle) with every original id/binding intact — verified stepper preWait 0→1 and segmented → `auto_follow` landed in cue data. Pad inspector rides the same row mapping
+  - [x] Theme picker: Script Op + Flowmingo Op now show the **9 themes as a 3×3 grid of visual previews**, current marked with the accent (verified 3 cols × 9 tiles)
+  - [x] Button audit executed per Decisions #12: duplicate "Hide" (Wrap card) and "Script" (Screen section) removed — verified gone
+  - [x] "Bigger/Smaller" → one global **Overlay size − / + stepper** (S/M/L/XL/MAX), and the chat-question indicator now follows the same scale as the clock + wrap banner (Decisions #11)
+  - [x] One shared click-outside/Esc dismissal utility; migrated Message Center + entry theme panel off their bespoke handlers; Outrangutan theme/tools popovers close on outside click; **explicit-dismiss exceptions kept**: cue config, settings modal, PB compose (unsaved edits), Script Op pop-out (real window)
+  - [x] Message Center polish (unread accent dot, card radius, hairlines) — opened + click-outside-closed verified; Planda Bear tightening pass (denser paperwork cards/threads, hairline reply separation, pill chips)
+  - [x] Bonus: the long-standing <920 px Outrangutan stacked-layout overlap fixed (panes scroll at natural height; measured clock/inspector no longer intersect)
   - **Operator scope additions (2026-07-04):**
     - Planda Bear: tighten the whole surface — cleaner interface, less chrome, denser where it helps (falls under the Phase 6 inventory + card/row proposal step; show layouts before implementing, per plan).
     - Messaging: the messaging system (Message Center + Planda Bear notes/threads) must **look and function well** — treat as an explicit Phase 6 acceptance criterion.
     - Builder settings menu: consolidate file-level actions (Export PDF, Save File, Open File, etc.) into the settings menu to declutter the topbar. *(Pulled forward — implemented 2026-07-04, see below.)*
 - [ ] Phase 7 — Production hardening
+  - **Operator scope addition (2026-07-05): branded show-file types.** Approved idea, land in Phase 7 (or 8 if 7 runs heavy):
+    1. Branded extensions for exports — rundowns save as `.cueola`, Outrangutan shows as `.ogshow`; file inputs accept the new extensions (plus legacy `.json`); validation stays schema-header-based as today.
+    2. File System Access API save/open (Chrome/Edge): named type "Cueola Show (.cueola)" in the dialog + **save-in-place** (Cmd+S re-saves the opened file instead of downloading copies); download fallback for other browsers.
+    3. **Use the Cueola icon** (`assets/Brand/Cueola_Icon.svg`) as the file-type artwork wherever the type surfaces (picker type entry; and the PWA `file_handlers` icon if/when an installable Cueola manifest is built — Tier 3 stays optional/deferred).
 - [ ] Phase 8 — Dress rehearsal & release
 
 ## Decisions Log (⚠️ answers — never re-ask)
@@ -74,6 +100,15 @@ Tracks execution of `CUEOLA MASTER PLAN.md`. Every session: read the plan, then 
 | 3 | 2 | Stills with fixed duration? | **Yes, optional** — default hold-until-advanced; per-cue duration arms auto-advance | 2026-07-04 |
 | 4 | 2 | Failure slate | **Black slate** + non-blocking operator alert | 2026-07-04 |
 | 5 | 3 | Continuous playhead on followers? | **~1 Hz coarse** — cue/status changes exact + immediate; remaining-time ticks at ~1 s granularity (fits the one-doc Firestore write budget) | 2026-07-04 |
+| 6 | 4 | SFX firing model | **Both** — per-cell auto-fire-on-advance toggle + manual trigger button | 2026-07-05 |
+| 7 | 4 | Do followers see SFX fires? | **Yes** — transient green "SFX · name" chip (2.5 s) in the live overview | 2026-07-05 |
+| 8 | 5 | Live-screen keymap | **Approved as proposed:** arrows always drive the rundown (incl. with Script Op open); Space/J/K/L prompter transport; −/= size, [/] speed, ,/. nudge, C cue-current, T top; G/P/S playout GO/pause/stop, Shift+S fade, Shift+Esc PANIC; F/R/H/M/E + Alt+arrows unchanged; / scrub, ? reference | 2026-07-05 |
+| 9 | 5 | Scrub commit interaction | **Enter = cue there** — sends the prompter to the exact scrubbed point and closes; Esc abandons; local until commit | 2026-07-05 |
+| 10 | 6 | Accent color | **Cueola theme accent** (`var(--accent)`, theme-aware) — not the reference orange | 2026-07-05 |
+| 11 | 6 | Size stepper scope | **One global "Overlay size" stepper** (clock + wrap + question share the scale; question newly wired to it) | 2026-07-05 |
+| 12 | 6 | Script Op button removals | **Approved both:** duplicate "Hide" (Wrap Up card) and "Script" (Screen section, duplicates "Edit cue script") | 2026-07-05 |
+| 13 | 6 | Panel inventory + layouts | **Approved as proposed** — shared kit, panels in table order, before/after screenshots at gate | 2026-07-05 |
+| 14 | 7 | Autosave cadence + crash-recovery UX | **Resume banner** — keep save-on-every-change (existing); after an unclean exit, reopening shows a banner: one click rejoins the session and returns to the same screen (live at the synced row, Script Op reopened). Nothing moves without the click — matches Outrangutan's existing recovery bar. | 2026-07-05 |
 
 ## Known state / pre-plan work already in the tree (uncommitted)
 
@@ -93,10 +128,10 @@ Done earlier in this session, before the master plan was adopted:
 
 - ~~No import-time media validation; no still-image support; GO after pause restarts from trim-in; no failure slate~~ **fixed in Phase 2** (2026-07-04).
 - ~~"Questions"-segment blanking; no sequence numbers on sync~~ **reproduced, root-caused, and fixed in Phase 3** (2026-07-04). Continuous playhead stays ~1 Hz by design (Decisions #5).
-- No central keymap; shortcuts fragmented per surface (Phase 5).
+- ~~No central keymap; shortcuts fragmented per surface~~ **fixed in Phase 5** (2026-07-05). Note: the old Script-Op-open arrow behaviors (arrows = prompter size/boost) were deliberately replaced per the approved keymap — J/L now hold-brake/boost, −/= resize.
 - No error boundaries, no show log, no preflight (Phase 7).
 - Console noise at boot: entitlement `permission-denied` retries + App Check warning (known, by design pre-hardening).
-- Outrangutan narrow layout (<920px): count-clock and inspector text overlap in the stacked column view (pre-existing; observed 2026-07-04 during Phase 1 verification). Live ops run at desktop widths; queue for Phase 6 panel rework.
+- ~~Outrangutan narrow layout (<920px) overlap~~ **fixed in Phase 6** (2026-07-05): stacked column now scrolls at natural pane heights.
 
 ## Manual QA checklist (grows every phase)
 
@@ -119,3 +154,26 @@ Done earlier in this session, before the master plan was adopted:
 2. Kill the network on a follower (Wi-Fi off) — the yellow **SYNC RECONNECTING…** chip appears in the live overview; restore network — chip clears within one heartbeat and the position resyncs.
 3. Show caller advances rows rapidly — followers mirror each advance within ~1 s, one render per advance.
 4. Rundown edits made by a collaborator mid-show appear once (no repeated rebuild churn); the build screen refreshes when you switch back to it.
+
+**Phase 4 additions (SFX):**
+1. In Outrangutan (session mode), assign a pad on the SFX board; in Cueola open a playback/audio cue → the pad appears in the "Outrangutan SFX" dropdown.
+2. Link the pad; the rundown cell shows a green "SFX · name" badge; enable "Auto-fire on advance" → badge shows AUTO.
+3. Go live: the manual green **SFX** button on the row fires the pad; advancing into an AUTO row fires it automatically — sound is effectively instant when Outrangutan shares the tab.
+4. Rename the pad's bank → the link still fires (stable IDs).
+5. A follower sees a brief green "SFX · name" chip in the live overview when a pad fires (operator or remote).
+
+**Phase 5 additions (keyboard):**
+1. Open Script Op on the live screen — arrows must still advance/back the rundown.
+2. Space toggles the prompter; hold J to brake, L to boost (releases stop them); −/= resize, [/] speed.
+3. G fires Outrangutan GO (instant when Outrangutan is in the same tab); P pause/resume; S stop; Shift+S fade; Shift+Esc PANIC.
+4. Press ? — the reference must match every key above (it's generated from the registry); Esc closes it.
+5. Press / — scrub with wheel/drag/arrows across all rows; talent screen must NOT move until Enter; Enter cues it to the exact point; Esc leaves it untouched.
+6. Click into any text field — no shortcut may fire while typing.
+
+**Phase 6 additions (redesign):**
+1. Outrangutan: select a cue — inspector shows the context pill + Timing/Audio/Fades/Edit/Picture cards; steppers/segments/toggle edit the cue live; Key/OBS sit behind "More options".
+2. Script Op: theme section is a 3×3 grid of previews with the current theme accented; Alerts card shows the single "Overlay size" −/+ stepper; no duplicate Hide/Script buttons.
+3. Overlay size stepper scales the clock, wrap banner, AND chat-question indicator together on the talent screen.
+4. Message Center: opens from the bell, closes on click-outside or Esc, unread items carry the accent dot.
+5. Cue config + Settings modals still require explicit Cancel/Save (never auto-close).
+6. Narrow window (<920px) Outrangutan: panes stack and scroll — nothing overlaps.
