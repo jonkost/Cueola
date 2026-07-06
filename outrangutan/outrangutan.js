@@ -1605,13 +1605,21 @@
     const dims = c.srcW && c.srcH
       ? '<div class="og-insp-meta">' + c.srcW + '×' + c.srcH + ' · ' + aspectLabel(c.srcW, c.srcH) + (c.type === 'image' ? ' · still' : '') + '</div>'
       : '';
-    // P6 rebuild (Decisions #13): reference language — context pill, grouped
-    // ui-cards with row layout, segmented/stepper/toggle controls (upgraded in
-    // place after binding), setup-only Key/OBS behind "More options".
-    ins.innerHTML =
-      '<div class="ui-context-pill"><span class="ui-pill-dot" style="background:' + c.color + '"></span><span class="ui-pill-name"><input id="og-i-name" type="text" value="' + esc(c.name) + '" aria-label="Cue name"></span></div>' +
-      dims +
-      card('Timing',
+    // Inspector standard (DESIGN_GUIDELINES.md): icon tabs pick ONE flat group;
+    // sections are bold text headers + hairlines, controls sit on the panel
+    // background — no ui-card boxes. Tab remembered in localStorage.
+    const hasAudio = c.type !== 'image';
+    const hasPicture = c.type === 'video' || c.type === 'image';
+    const tabs = [{ key: 'timing', icon: 'state.timed', label: 'Timing' }]
+      .concat(hasAudio ? [{ key: 'audio', icon: 'department.audio', label: 'Audio' }] : [])
+      .concat(hasPicture ? [{ key: 'picture', icon: 'content.image', label: 'Picture' }] : [])
+      .concat([{ key: 'cue', icon: 'action.settings', label: 'Cue' }]);
+    let activeTab = 'timing';
+    try { activeTab = localStorage.getItem('og_insp_tab') || 'timing'; } catch (e) {}
+    if (!tabs.some(t => t.key === activeTab)) activeTab = 'timing';
+
+    const timingPane =
+      sec('Timing',
         field('Pre-wait (s)', '<input id="og-i-prewait" type="number" min="0" step="0.5" value="' + c.preWait + '">') +
         field('Continue', '<select id="og-i-continue">' +
           opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Continue', c.continueMode) + opt('auto_follow', 'Follow', c.continueMode) + '</select>') +
@@ -1620,9 +1628,24 @@
           field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
         : '')
       ) +
-      // ── Audio (not for stills)
+      sec('Fades',
+        field('In (s)', '<input id="og-i-fadein" type="number" min="0" step="0.1" value="' + (c.fadeIn || 0) + '">') +
+        field('Out (s)', '<input id="og-i-fadeout" type="number" min="0" step="0.1" value="' + (c.fadeOut || 0) + '">') +
+        field('Curve', '<select id="og-i-fadecurve">' + opt('', 'Auto', c.fadeCurve) + opt('linear', 'Linear', c.fadeCurve) + opt('s', 'S', c.fadeCurve) + opt('log', 'Log', c.fadeCurve) + '</select>') +
+        (c.type === 'video' ? field('Crossfade in (s)', '<input id="og-i-xfade" type="number" min="0" step="0.1" value="' + (c.xfade || 0) + '">') : '')
+      ) +
       (c.type === 'image' ? '' :
-      card('Audio',
+      sec('Edit',
+        '<div class="og-field-row">' +
+          field('Trim in (s)', '<input id="og-i-trimin" type="number" min="0" step="0.1" value="' + (c.trimIn || 0) + '">') +
+          field('Trim out (s)', '<input id="og-i-trimout" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : c.trimOut) + '" placeholder="end">') +
+        '</div>' +
+        field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
+        field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
+      ));
+
+    const audioPane = !hasAudio ? '' :
+      sec('Audio',
         field('Level <span class="og-cue-meter"><span class="og-cue-meter-fill" id="og-cue-meter-fill"></span></span>', '<input id="og-i-volume" type="range" min="0" max="1" step="0.01" value="' + c.volume + '">') +
         '<details class="og-eq-details"><summary class="og-drill">EQ <span class="og-drill-val">' + (eq.low || 0) + ' / ' + (eq.mid || 0) + ' / ' + (eq.high || 0) + '</span><span class="ui-chevron">›</span></summary>' +
         '<div class="og-field-row3">' +
@@ -1631,41 +1654,20 @@
           field('High', '<input id="og-i-eqhigh" type="range" min="-12" max="12" step="0.5" value="' + (eq.high || 0) + '">') +
         '</div></details>' +
         '<label class="og-check og-field"><span style="flex:1">Compressor</span><input id="og-i-comp" type="checkbox"' + (c.comp ? ' checked' : '') + '></label>'
-      )) +
-      // ── Fades
-      card('Fades',
-        field('In (s)', '<input id="og-i-fadein" type="number" min="0" step="0.1" value="' + (c.fadeIn || 0) + '">') +
-        field('Out (s)', '<input id="og-i-fadeout" type="number" min="0" step="0.1" value="' + (c.fadeOut || 0) + '">') +
-        field('Curve', '<select id="og-i-fadecurve">' + opt('', 'Auto', c.fadeCurve) + opt('linear', 'Linear', c.fadeCurve) + opt('s', 'S', c.fadeCurve) + opt('log', 'Log', c.fadeCurve) + '</select>') +
-        (c.type === 'video' ? field('Crossfade in (s)', '<input id="og-i-xfade" type="number" min="0" step="0.1" value="' + (c.xfade || 0) + '">') : '')
-      ) +
-      // ── Edit (a/v only — stills carry their timing above)
-      (c.type === 'image' ? '' :
-      card('Edit',
-        '<div class="og-field-row">' +
-          field('Trim in (s)', '<input id="og-i-trimin" type="number" min="0" step="0.1" value="' + (c.trimIn || 0) + '">') +
-          field('Trim out (s)', '<input id="og-i-trimout" type="number" min="0" step="0.1" value="' + (c.trimOut == null ? '' : c.trimOut) + '" placeholder="end">') +
-        '</div>' +
-        field('Loop', '<select id="og-i-loop">' + opt('0', 'No', c.loop ? '1' : '0') + opt('1', 'Yes', c.loop ? '1' : '0') + '</select>') +
-        field('On end', '<select id="og-i-endaction">' + opt('stop', 'Stop', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
-      )) +
-      // ── Picture (video + stills)
-      (c.type === 'video' || c.type === 'image' ?
-      card('Picture',
+      );
+
+    const picturePane = !hasPicture ? '' :
+      sec('Picture',
         field('Fit', '<select id="og-i-fit">' + opt('contain', 'Contain', c.fit) + opt('cover', 'Cover', c.fit) + opt('fill', 'Fill', c.fit) + '</select>') +
         field('Scale', '<input id="og-i-scale" type="range" min="0.25" max="3" step="0.05" value="' + (c.scale || 1) + '">') +
         '<div class="og-field-row">' +
           field('Pos X (%)', '<input id="og-i-posx" type="number" step="1" value="' + (c.posX || 0) + '">') +
           field('Pos Y (%)', '<input id="og-i-posy" type="number" step="1" value="' + (c.posY || 0) + '">') +
         '</div>' +
-        field('Output', '<select id="og-i-output">' + outputs.map(o => opt(o.id, o.label, c.output || 1)).join('') + '</select>') +
-        field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>')
-      )
-      : card('Cue state', field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>'))) +
-      // ── setup-only sections live behind progressive disclosure (never live-critical)
-      '<details class="og-more-details"><summary class="ui-more">' + sym('action.more') + ' More options — ' + (c.type === 'video' ? 'Key & OBS' : 'OBS') + '</summary>' +
+        field('Output', '<select id="og-i-output">' + outputs.map(o => opt(o.id, o.label, c.output || 1)).join('') + '</select>')
+      ) +
       (c.type === 'video' ? (function () { const k = c.key || (c.key = { mode: 'off', color: '#00b140', sim: 0.3, smooth: 0.1, bg: '#000000' });
-        return card('Key',
+        return sec('Key',
           field('Mode', '<select id="og-i-keymode">' + opt('off', 'Off', k.mode) + opt('chroma', 'Chroma', k.mode) + opt('luma', 'Luma', k.mode) + opt('alpha', 'Alpha', k.mode) + '</select>') +
           field('Key colour', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
           '<div class="og-field-row">' +
@@ -1673,21 +1675,51 @@
             field('Smoothness', '<input id="og-i-keysmooth" type="range" min="0" max="0.5" step="0.01" value="' + (k.smooth == null ? 0.1 : k.smooth) + '">') +
           '</div>' +
           field('Background', '<input id="og-i-keybg" type="color" value="' + (k.bg || '#000000') + '">'));
-      })() : '') +
-      (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
-        return card('OBS',
-          field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
-          (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : '') +
-          field('Fire on OBS scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">'));
-      })() +
-      '</details>' +
-      // ── meta
-      card('Cue',
+      })() : '');
+
+    const cuePane =
+      sec('Cue',
+        field('Armed', '<select id="og-i-armed">' + opt('1', 'On', c.armed === false ? '0' : '1') + opt('0', 'Off', c.armed === false ? '0' : '1') + '</select>') +
         field('Color', '<div class="og-swatches">' + ['var(--video)', 'var(--green)', 'var(--red)', 'var(--yellow)', 'var(--purple)', 'var(--cyan)'].map(col =>
           '<button class="og-swatch' + (c.color === col ? ' sel' : '') + '" data-col="' + col + '" style="background:' + col + '" aria-label="Set cue color"></button>').join('') + '</div>') +
         field('Notes', '<input id="og-i-notes" type="text" value="' + esc(c.notes || '') + '">')
       ) +
+      (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
+        return sec('OBS',
+          field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
+          (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : '') +
+          field('Fire on OBS scene', '<input id="og-i-obstrigger" type="text" value="' + esc(c.obsTriggerScene || '') + '" placeholder="(optional) OBS scene">'));
+      })() +
       '<button class="og-cue-del" id="og-i-del">' + sym('action.delete') + ' Delete cue</button>';
+
+    const paneFor = { timing: timingPane, audio: audioPane, picture: picturePane, cue: cuePane };
+    ins.innerHTML =
+      '<div class="insp-head og-insp-head">' +
+        '<div class="insp-tabs" role="tablist" aria-label="Cue inspector groups">' +
+          tabs.map(t => '<button type="button" class="insp-tab' + (t.key === activeTab ? ' on' : '') + '" role="tab" aria-selected="' + (t.key === activeTab ? 'true' : 'false') + '" data-insp="' + t.key + '" title="' + t.label + '">' + sym(t.icon) + '</button>').join('') +
+        '</div>' +
+        '<div class="insp-caption" id="og-insp-caption">' + (tabs.find(t => t.key === activeTab) || tabs[0]).label + '</div>' +
+      '</div>' +
+      '<div class="og-insp-body">' +
+        '<div class="ui-context-pill"><span class="ui-pill-dot" style="background:' + c.color + '"></span><span class="ui-pill-name"><input id="og-i-name" type="text" value="' + esc(c.name) + '" aria-label="Cue name"></span></div>' +
+        dims +
+        tabs.map(t => '<div class="insp-pane' + (t.key === activeTab ? ' on' : '') + '" data-insp-pane="' + t.key + '">' + paneFor[t.key] + '</div>').join('') +
+      '</div>';
+
+    Array.prototype.forEach.call(ins.querySelectorAll('.insp-tab'), b => {
+      b.onclick = () => {
+        const key = b.getAttribute('data-insp');
+        try { localStorage.setItem('og_insp_tab', key); } catch (e) {}
+        Array.prototype.forEach.call(ins.querySelectorAll('.insp-tab'), x => {
+          const on = x === b;
+          x.classList.toggle('on', on);
+          x.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        Array.prototype.forEach.call(ins.querySelectorAll('.insp-pane'), p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
+        const cap = $('og-insp-caption');
+        if (cap) cap.textContent = (tabs.find(t => t.key === key) || tabs[0]).label;
+      };
+    });
 
     const bind = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
     const live = () => { if (active && active.cue.id === c.id && active.ch) applyChannel(active.ch, { eq: c.eq, comp: c.comp }); };
@@ -1743,7 +1775,9 @@
   function field(label, inner) { return '<div class="og-field"><label>' + label + '</label>' + inner + '</div>'; }
   function opt(val, label, cur) { return '<option value="' + val + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + label + '</option>'; }
   function sub(t) { return '<div class="og-insp-sub">' + t + '</div>'; }
-  function card(title, inner) { return '<div class="ui-card-label">' + title + '</div><div class="ui-card og-kit">' + inner + '</div>'; }
+  // Inspector-standard section: bold text header on the panel background —
+  // hairlines between sections come from CSS, never a nested card.
+  function sec(title, inner) { return '<div class="og-insp-sec"><div class="og-sec-title">' + title + '</div><div class="og-kit">' + inner + '</div></div>'; }
   // ── P6 kit upgrades: swap a rendered control for its reference-language
   // equivalent without touching the binding (the original element keeps its id,
   // holds the value, and still fires its own onchange/oninput). ──

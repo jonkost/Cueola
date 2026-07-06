@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=20260705c">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0f">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -499,8 +499,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    (same page). Reference language: grouped rounded cards, hairline-divided
    rows (label left / value right / › drill-in), segmented accent pills,
    −/+ steppers, toggles. Accent = theme accent (Decisions #10). ── */
-.ui-card{background:color-mix(in srgb,var(--s2) 72%,transparent);border:1px solid var(--liquid-edge,var(--border));border-radius:18px;padding:4px 14px;box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 7%,transparent)}
-.ui-card-label{font-size:11px;font-weight:800;color:var(--text3);margin:12px 4px 5px}
 .ui-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:7px 2px}
 .ui-row+.ui-row{border-top:1px solid color-mix(in srgb,var(--text) 7%,transparent)}
 .ui-row-lbl{flex:1;font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -512,7 +510,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ui-seg-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:32px;min-width:0;padding:5px 9px;border:none;border-radius:9px;background:transparent;color:var(--text2);font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap}
 .ui-seg-btn:hover{color:var(--text)}
 .ui-seg-btn.on{background:var(--accent);color:#fff}
-.ui-stepper{display:inline-flex;align-items:center;background:color-mix(in srgb,var(--s1) 65%,transparent);border:1px solid var(--border);border-radius:10px;overflow:hidden;flex:none}
+.ui-stepper{display:inline-flex;align-items:center;background:color-mix(in srgb,var(--s1) 65%,transparent);border:1px solid var(--border);border-radius:999px;overflow:hidden;flex:none}
 .ui-step-btn{width:34px;min-height:32px;border:none;background:transparent;color:var(--text);font-size:16px;font-weight:700;cursor:pointer;line-height:1}
 .ui-step-btn:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
 .ui-step-val{min-width:48px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;padding:0 4px}
@@ -524,10 +522,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ui-pill-dot{width:10px;height:10px;border-radius:50%;flex:none}
 .ui-pill-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ui-pill-name input{width:100%;background:transparent;border:none;outline:none;color:inherit;font:inherit;padding:0}
-.ui-more{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;width:100%;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--s2) 55%,transparent);color:var(--text2);font-size:12.5px;font-weight:700;cursor:pointer;margin-top:10px;list-style:none}
-.ui-more::-webkit-details-marker{display:none}
-.ui-more:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
-details[open]>.ui-more{color:var(--accent)}
 /* 3×3 visual theme grid (Script Op / Flowmingo Op — plan item 3) */
 /* Theme picker tiles = the same circle swatches as the entry page / Settings
    (.theme-swatch/.ts-preview) — one look for theme choice across every app. */
@@ -657,7 +651,6 @@ details[open]>.ui-more{color:var(--accent)}
 .ls-script-resizer:hover::before,.ls-script-resizer:active::before{background:var(--accent)}
 .ls-prompter-text::placeholder{color:color-mix(in srgb,var(--text2) 58%,transparent)}
 .ls-prompter-text:focus{background:color-mix(in srgb,var(--cyan) 5%,transparent)}
-.ls-prompter-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:0 0 auto}
 .ls-script-quickbar{display:flex;gap:5px;flex-wrap:wrap}
 /* Formatting toolbar above the editor — like a real text editor */
 .ls-script-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--glass-border);background:color-mix(in srgb,var(--text) 3%,transparent);flex:0 0 auto}
@@ -1938,11 +1931,11 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
    Groups are pages, not boxes — headers are text + hairlines, controls sit
    directly on the panel background. */
 .insp-head{position:sticky;top:0;z-index:3;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:8px 10px 7px;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
-.insp-tabs{display:flex;justify-content:center;gap:2px}
-.insp-tab{appearance:none;border:0;background:transparent;color:var(--text3);width:44px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s var(--ease),color .15s var(--ease)}
-.insp-tab .sf-symbol{font-size:14px}
-.insp-tab:hover{color:var(--text2);background:color-mix(in srgb,var(--text) 6%,transparent)}
-.insp-tab.on{background:var(--s3);color:var(--accent)}
+.insp-tabs{display:flex;justify-content:center;gap:9px}
+.insp-tab{appearance:none;color:var(--text3);width:40px;height:40px;border-radius:50%;border:1px solid var(--glass-border);background:color-mix(in srgb,var(--s2) 64%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 9%,transparent);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease),transform .15s var(--ease)}
+.insp-tab .sf-symbol{font-size:17px}
+.insp-tab:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 28%,var(--glass-border));background:color-mix(in srgb,var(--s3) 72%,transparent);transform:translateY(-1px)}
+.insp-tab.on{background:color-mix(in srgb,var(--accent) 18%,var(--s2));color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--glass-border));box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 16%,transparent),inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent)}
 .insp-caption{text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--text3);margin-top:5px;text-transform:uppercase;font-family:var(--mono)}
 .insp-pane{display:none;padding:12px}
 .insp-pane.on{display:block}
@@ -1962,7 +1955,8 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-wrap-btn:hover{background:color-mix(in srgb,var(--red,#f05252) 13%,transparent);border-color:var(--red,#f05252)}
 .pt-question-btn{border-color:color-mix(in srgb,var(--yellow,#f5b731) 38%,var(--pt-ui-border,rgba(200,169,126,.25)));color:color-mix(in srgb,var(--yellow,#f5b731) 88%,var(--pt-text,#f0ead6))}
 .pt-question-btn.active{background:var(--yellow,#f5b731);border-color:var(--yellow,#f5b731);color:#171407}
-.flowop-clock-mini{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:9px;padding:7px 9px;background:rgba(0,0,0,.18);font-family:var(--mono)}
+/* One level of chrome only: the .flow-clock-preview wrapper is the box — the mini inside stays flat. */
+.flowop-clock-mini{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-family:var(--mono)}
 .flowop-clock-mini span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--pt-accent,#c8a97e)}
 .flowop-clock-mini strong{font-size:16px;font-weight:900;color:var(--pt-text,#f0ead6);font-variant-numeric:tabular-nums}
 .flowop-clock-mini em{grid-column:1/-1;font-style:normal;font-size:10px;font-weight:900;color:#ffd23c;text-transform:uppercase;letter-spacing:.08em}
@@ -1993,12 +1987,11 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   text-transform:none;
   color:var(--text);
 }
+/* Status is a quiet line under the title, not another pill-box. */
 .ls-prompter-status{
   gap:7px;
-  padding:5px 8px;
-  border:1px solid var(--glass-border);
-  border-radius:999px;
-  background:color-mix(in srgb,var(--s1) 46%,transparent);
+  padding:3px 2px 0;
+  color:var(--text3);
 }
 .ls-script-toolbar{
   padding:8px 10px;
@@ -2136,12 +2129,17 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-clock-preview{
   display:none;
   border:1px solid color-mix(in srgb,var(--pt-accent,#c8a97e) 24%,transparent);
-  border-radius:var(--ui-radius-control);
-  padding:9px 10px;
+  border-radius:999px;
+  padding:9px 16px;
   background:color-mix(in srgb,var(--pt-accent,#c8a97e) 9%,transparent);
   color:var(--pt-text,#f0ead6);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent);
 }
 .flow-clock-preview:not(:empty){display:grid}
+/* Clock off → a quiet one-line note, not an empty card. */
+.flow-clock-preview.off{border:0;background:transparent;box-shadow:none;padding:2px 6px}
+.flow-clock-preview.off .flowop-clock-mini strong{font-size:11px!important;font-weight:700;color:var(--text3,var(--pt-text));opacity:.85}
+.flow-clock-preview.off .flowop-clock-mini span{color:var(--text3,var(--pt-accent))}
 .flow-clock-fields,.flow-wrap-grid,.flow-alert-grid{gap:8px}
 .flow-clock-fields label,.flow-wrap-custom{
   min-height:var(--ui-control-height);
@@ -2164,28 +2162,39 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   font-weight:900;
 }
 .prompt-op-panel.flow-control-panel{gap:10px}
-/* Operator overlay: one responsive grid, cards in priority order (Transport first),
-   vertical scroll only — no horizontal scrollbar mid-show. */
+/* Operator overlay: same inspector standard as the Script Op drawer — icon
+   tabs pick ONE flat group, so the overlay stays compact mid-show. */
 .prompt-op-active .prompt-op-panel.flow-control-panel{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(224px,1fr));
-  grid-auto-flow:dense;
-  gap:10px 12px;
-  align-items:start;
-  width:min(1160px,96vw);
-  max-height:min(52vh,430px);
+  display:flex;
+  flex-direction:column;
+  flex-wrap:nowrap;
+  gap:0;
+  align-items:stretch;
+  width:min(760px,96vw);
+  max-height:min(56vh,470px);
   overflow-y:auto;
   overflow-x:hidden;
-  padding:14px 16px;
+  padding:0;
   overscroll-behavior:contain;
+  border-radius:22px;
 }
-.prompt-op-active .prompt-op-panel.flow-control-panel .flow-clock-stack{display:contents}
-.prompt-op-active .prompt-op-panel.flow-control-panel .flow-control-section,
-.prompt-op-active .prompt-op-panel.flow-control-panel .flow-clock-preview{break-inside:avoid;margin:0}
-.prompt-op-active .flow-control-section{min-width:0;padding:11px 12px;gap:8px}
+.prompt-op-active .flow-control-section{min-width:0}
 .prompt-op-active .flow-control-title{font-size:11px}
 .prompt-op-active .flow-theme-grid:not(.ui-theme-grid){display:flex!important;flex-direction:row!important;flex-wrap:wrap;gap:8px;justify-content:flex-start;grid-template-columns:none!important}
-.prompt-op-active .flow-control-grid.four,.prompt-op-active .flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* Inspector-standard panels (operator overlay + Flowmingo Op): sections are
+   flat pages under the tabs — text headers + hairlines, no nested cards. */
+.op-insp .insp-pane{padding:12px 15px 15px}
+.op-insp .flow-control-section{border:0;border-radius:0;background:transparent;box-shadow:none;padding:0;-webkit-backdrop-filter:none;backdrop-filter:none;gap:8px}
+.op-insp .flow-control-section + .flow-control-section{margin-top:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--pt-text,var(--text)) 10%,transparent)}
+.op-insp .ls-live-actions .flow-control-section + .flow-control-section{margin-top:0;padding-top:0;border-top:0}
+.op-insp .flow-clock-stack{display:flex;flex-direction:column;gap:10px;border:0;background:transparent;padding:0}
+.op-insp .flow-clock-stack > .flow-control-section:not(:first-child){margin-top:10px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--pt-text,var(--text)) 10%,transparent)}
+/* Tabs ride the surface's prompter theme (pt vars) on themed panels. */
+.op-insp .insp-head{background:color-mix(in srgb,var(--pt-ui-bg,var(--s1)) 88%,transparent);border-bottom-color:color-mix(in srgb,var(--pt-text,var(--text)) 9%,transparent)}
+.op-insp .insp-tab{color:color-mix(in srgb,var(--pt-text,#f0ead6) 62%,transparent);background:color-mix(in srgb,var(--pt-text,#fff) 7%,transparent);border-color:color-mix(in srgb,var(--pt-text,#fff) 16%,transparent)}
+.op-insp .insp-tab:hover{color:var(--pt-text,#f0ead6);background:color-mix(in srgb,var(--pt-text,#fff) 12%,transparent)}
+.op-insp .insp-tab.on{color:var(--pt-accent,var(--accent));background:color-mix(in srgb,var(--pt-accent,var(--accent)) 16%,transparent);border-color:color-mix(in srgb,var(--pt-accent,var(--accent)) 55%,transparent)}
+.op-insp .insp-caption{color:color-mix(in srgb,var(--pt-text,#f0ead6) 55%,transparent)}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ls-sidebar .flow-control-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ls-sidebar .flow-control-section{background:color-mix(in srgb,var(--s1) 68%,transparent)}
@@ -2193,7 +2202,8 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-sidebar .flow-clock-modes,.ls-sidebar .flow-wrap-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 .ls-sidebar .flow-clock-fields{grid-template-columns:1fr 1fr}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(auto-fit,minmax(84px,1fr))}
-.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:30px;padding:6px 7px;font-size:10.5px;border-radius:7px}
+.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:30px;padding:6px 7px;font-size:10.5px;border-radius:9px}
+.ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{width:34px;min-width:34px;height:34px;min-height:34px;padding:0;border-radius:50%}
 .ls-sidebar .flow-control-section{padding:9px 11px;gap:7px}
 .ls-sidebar .flow-clock-preview{padding:7px 12px}
 .ls-sidebar .flow-clock-preview .flowop-clock-mini strong{font-size:clamp(20px,4.5vw,28px)}
@@ -2313,12 +2323,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   padding:0;
   gap:0;
 }
-.ls-operator-drawer > .ls-prompter-actions{
-  flex:0 0 auto;
-  padding:10px 12px 12px;
-  margin-top:auto;
-  border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent);
-}
+/* Editor bar: quiet circular script actions on the left, the Push pill on the right. */
+.ls-pact-circle{width:36px;height:36px;padding:0;border-radius:50%;flex:none}
+.ls-pact-circle .sf-symbol{font-size:14px}
+.ls-editor-actions .ls-push-primary{margin-left:auto}
 .ls-live-actions{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
@@ -2396,10 +2404,14 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-control-slider{
   grid-template-columns:minmax(46px,auto) 38px minmax(0,1fr) 38px!important;
 }
+/* Slider end-caps and nudges can be circles — so they are (operator motif). */
 .flow-control-slider .pt-btn,.pt-icon-btn{
   min-width:38px;
   width:38px;
-  padding-inline:0;
+  height:38px;
+  min-height:38px;
+  padding:0;
+  border-radius:50%;
 }
 input.pt-range,
 #promptypus input[type="range"],
@@ -2471,7 +2483,7 @@ body.scriptop-popout #lsPopoutBtn{display:none!important}
 /* The × closes the docked panel — inside the dedicated pop-out window it would
    just blank the window, so hide it there. */
 body.scriptop-popout .ls-sidebar-close{display:none!important}
-.ls-sidebar-close{flex:none;padding:6px 8px}
+.ls-sidebar-close{margin-left:0}
 .ls-sidebar-close .sf-symbol{margin:0}
 body.scriptop-popout #liveshow{display:flex;flex-direction:column}
 body.scriptop-popout .ls-body{flex:1 1 auto;min-height:0;display:block}
@@ -2480,15 +2492,18 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 /* Script Op: reorganized controls + pop-out controls panel */
 .ls-sidebar-head-row{display:flex;align-items:center;gap:8px}
+/* Header controls are circles — the operator's motif (matches the entry bell/gear). */
 .ls-popout-btn{
-  margin-left:auto;display:inline-flex;align-items:center;gap:6px;
-  min-height:30px;padding:5px 11px;border-radius:999px;
-  border:1px solid var(--liquid-edge);
+  margin-left:auto;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;padding:0;border-radius:50%;flex:none;
+  border:1px solid var(--glass-border);
   background:color-mix(in srgb,var(--s2) 62%,transparent);
-  color:var(--text2);font-family:var(--sans);font-size:11px;font-weight:800;
-  letter-spacing:0;cursor:pointer;white-space:nowrap;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 9%,transparent);
+  color:var(--text2);cursor:pointer;
+  transition:color .15s var(--ease),border-color .15s var(--ease),background .15s var(--ease),transform .15s var(--ease);
 }
-.ls-popout-btn .sf-symbol{font-size:12px}
+.ls-popout-btn .sf-symbol{font-size:14px}
+.ls-popout-btn:active{transform:scale(.95)}
 .ls-popout-btn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 42%,var(--liquid-edge));background:color-mix(in srgb,var(--accent) 10%,var(--s2))}
 /* Formatting moved into the drawer: wrapping chip row */
 .ls-format-cascade{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
@@ -2569,7 +2584,10 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .flowop-meta-item{border:1px solid color-mix(in srgb,var(--pt-ui-border) 70%,transparent);border-radius:8px;padding:8px;background:rgba(0,0,0,.16);min-width:0}
 .flowop-meta-label{font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:var(--pt-accent);opacity:.65;margin-bottom:3px}
 .flowop-meta-value{font-family:var(--mono);font-size:12px;color:var(--pt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.flowop-controls{display:flex;flex-direction:column;gap:9px}
+.flowop-controls{display:flex;flex-direction:column;gap:0}
+/* The controls panel is the one box; the tabbed inspector runs edge-to-edge inside it. */
+.flowop-controls-panel{padding:0;overflow:hidden}
+.flowop-controls-panel .insp-head{border-top-left-radius:inherit;border-top-right-radius:inherit}
 .flowop-controls .pt-ctrl-group{display:flex;align-items:center;gap:8px}
 #flowOpPlayBtn{width:100%;padding:9px;font-size:13px;border-color:var(--pt-accent);color:var(--pt-accent);border-radius:10px}
 #flowOpPlayBtn.active{background:color-mix(in srgb,var(--pt-accent) 20%,transparent)}
@@ -3254,7 +3272,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <div class="ls-sidebar-head" id="lsSidebarHead" onpointerdown="startScriptOpPopoutDrag(event)">
         <div class="ls-sidebar-head-row">
           <div class="ls-sidebar-title">Script Op</div>
-          <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Pop out</span></button>
+          <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
           <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" title="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
@@ -3262,6 +3280,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <div class="ls-script-resizer" id="lsScriptResizer" onpointerdown="startScriptHeightResize(event)" title="Drag to resize the script" role="separator" aria-label="Resize the script editor"></div>
       <div class="ls-editor-actions">
+        <button class="ls-pact-btn ls-clear-btn ls-pact-circle" onclick="openLiveScript(Math.max(lsIdx,0))" title="Edit cue script" aria-label="Edit cue script"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span></button>
+        <button class="ls-pact-btn ls-clear-btn ls-pact-circle" onclick="clearPrompter()" title="Clear script" aria-label="Clear script"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span></button>
         <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
       </div>
       <!-- Inspector pattern (Keynote-style): icon tabs pick ONE control group,
@@ -3291,10 +3311,6 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
           </div>
-        </div>
-        <div class="ls-prompter-actions">
-          <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit cue script</span></button>
-          <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span><span>Clear script</span></button>
         </div>
       </div>
     </div>
@@ -3509,8 +3525,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           <div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>
         </div>
       </section>
-      <section class="flowop-panel">
-        <div class="flowop-panel-title">Remote Controls</div>
+      <section class="flowop-panel flowop-controls-panel">
         <div id="flowOpControls"></div>
       </section>
       <section class="flowop-panel">
@@ -4266,8 +4281,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0e"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0e"></script>
+<script src="cueola-app.js?v=1.0.0f"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0f"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

@@ -7413,8 +7413,7 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
-  return `<div class="prompt-op-panel flow-control-panel">
-    <div class="flow-control-section flow-control-transport">
+  const transport = `<div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
         <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}">${playIcon}<span>${playLabel}</span></button>
@@ -7425,10 +7424,8 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
         <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
       </div>
-    </div>
-    ${includeLiveActions ? liveActionsHTML('po') : ''}
-    ${includeLiveActions ? clockAndAlertControlsHTML('po') : ''}
-    <div class="flow-control-section flow-control-display">
+    </div>`;
+  const display = `<div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed</span>
@@ -7448,14 +7445,14 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn${ptAlign==='center'?' active':''}" onclick="sendPrompterControl('align_center')" aria-label="Align center"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
         <button class="pt-btn${ptAlign==='right'?' active':''}" onclick="sendPrompterControl('align_right')" aria-label="Align right"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
       </div>
-    </div>
-    <div class="flow-control-section flow-theme-section">
+    </div>`;
+  const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
         ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
-    </div>
-    <div class="flow-control-section flow-control-screen">
+    </div>`;
+  const screen = `<div class="flow-control-section flow-control-screen">
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid four">
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
@@ -7463,8 +7460,53 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
         <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
       </div>
-    </div>
+    </div>`;
+  // Script Op's Prompter pane: flat sections only — the drawer already has its own tabs.
+  if (!includeLiveActions) return `<div class="prompt-op-panel flow-control-panel">${transport}${display}${theme}${screen}</div>`;
+  // Operator overlay: the same inspector standard as the Script Op drawer —
+  // icon tabs pick ONE flat group, no card grid.
+  return `<div class="prompt-op-panel flow-control-panel op-insp" data-insp-scope="po">
+    ${opInspHeadHTML('po')}
+    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
+    <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${liveActionsHTML('po')}</div></div>
+    <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('po')}</div>
+    <div class="insp-pane" data-insp-pane="display">${display}${theme}</div>
+    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
   </div>`;
+}
+
+// ── Operator overlay / Flowmingo Op inspector tabs ─────────────────────────
+// Same pattern as the Script Op drawer (lsInspTab): icon tabs, one flat page,
+// remembered per surface so each panel reopens where the operator works.
+const OP_INSP_LABELS = { transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme', screen: 'Screen' };
+const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script', screen: 'action.fullscreen' };
+function opInspHeadHTML(scope) {
+  return `<div class="insp-head op-insp-head">
+    <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
+      ${Object.keys(OP_INSP_LABELS).map(key =>
+        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')" title="${OP_INSP_LABELS[key]}"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span></button>`).join('')}
+    </div>
+    <div class="insp-caption" data-insp-caption>${OP_INSP_LABELS.transport}</div>
+  </div>`;
+}
+function opInspTab(scope, key) {
+  if (!OP_INSP_LABELS[key]) key = 'transport';
+  document.querySelectorAll(`.op-insp[data-insp-scope="${scope}"]`).forEach(panel => {
+    panel.querySelectorAll('.insp-tab').forEach(b => {
+      const on = b.getAttribute('data-insp') === key;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panel.querySelectorAll('.insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
+    const cap = panel.querySelector('[data-insp-caption]');
+    if (cap) cap.textContent = OP_INSP_LABELS[key];
+  });
+  try { localStorage.setItem(`cueola_op_insp_tab_${scope}`, key); } catch {}
+}
+function opInspRestoreTab(scope) {
+  let key = 'transport';
+  try { key = localStorage.getItem(`cueola_op_insp_tab_${scope}`) || 'transport'; } catch {}
+  opInspTab(scope, key);
 }
 
 function ptStartPlay() {
@@ -8262,6 +8304,7 @@ function renderPromptOpClockPreview() {
       : state.mode === 'timeofday' ? formatTimeOfDay()
         : fmtClockOverlay(left, state.mode !== 'wrap');
     const label = !clockOn ? 'Clock' : (state.label || 'Clock');
+    el.classList.toggle('off', !clockOn);
     el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
       <span>${esc(label)}</span>
       <strong>${esc(value)}</strong>
@@ -8466,6 +8509,7 @@ function flowOpRenderClockPreview() {
     : state.mode === 'timeofday' ? formatTimeOfDay()
       : fmtClockOverlay(left, state.mode !== 'wrap');
   const label = !clockOn ? 'Clock' : (state.label || (state.mode === 'wrap' ? 'Wrap up' : 'Clock'));
+  el.classList.toggle('off', !clockOn);
   el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
     <span>${esc(label)}</span>
     <strong>${esc(value)}</strong>
@@ -8621,8 +8665,7 @@ function flowOpControlsHTML(disabled=false) {
   const playAction = flowOpPlaying ? 'pause' : 'resume';
   const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
-  return `<div class="flowop-controls flow-control-panel">
-    <div class="flow-control-section flow-control-transport">
+  const transport = `<div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
         <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${playIcon}<span>${playLabel}</span></button>
@@ -8633,10 +8676,8 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
         <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
       </div>
-    </div>
-    ${liveActionsHTML('flow', disabled)}
-    ${clockAndAlertControlsHTML('flow', disabled)}
-    <div class="flow-control-section flow-control-display">
+    </div>`;
+  const display = `<div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed</span>
@@ -8656,14 +8697,14 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
         <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
       </div>
-    </div>
-    <div class="flow-control-section flow-theme-section">
+    </div>`;
+  const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
         ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
-    </div>
-    <div class="flow-control-section flow-control-screen">
+    </div>`;
+  const screen = `<div class="flow-control-section flow-control-screen">
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid five">
         <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
@@ -8672,13 +8713,21 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
         <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
       </div>
-    </div>
+    </div>`;
+  return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
+    ${opInspHeadHTML('flow')}
+    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
+    <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${liveActionsHTML('flow', disabled)}</div></div>
+    <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('flow', disabled)}</div>
+    <div class="insp-pane" data-insp-pane="display">${display}${theme}</div>
+    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
   </div>`;
 }
 
 function flowOpRenderControls(disabled=false) {
   const el = flowOpEl('flowOpControls');
   if (el) el.innerHTML = flowOpControlsHTML(disabled);
+  opInspRestoreTab('flow');   // keep the remembered inspector tab active across re-renders
   flowOpSyncControls();
 }
 
@@ -9272,6 +9321,7 @@ function renderLivePromptOp() {
     </div>
     ${promptOpControlsHTML()}
   </div>`;
+  opInspRestoreTab('po');   // keep the remembered inspector tab active across re-renders
   renderPromptOpClockPreview();
   requestAnimationFrame(() => body.querySelector('.prompt-op-stage')?.focus({ preventScroll:true }));
 }
