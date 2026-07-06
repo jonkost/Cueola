@@ -8,6 +8,12 @@
       "port": 3001
     },
     {
+      "name": "Cueola-alt",
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "3011", "--directory", "/Users/jonkost/Documents/GitHub/Cueola"],
+      "port": 3011
+    },
+    {
       "name": "Prompt-Up-The-Jam",
       "runtimeExecutable": "/usr/local/bin/python3",
       "runtimeArgs": ["-m", "http.server", "3002", "--directory", "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam"],

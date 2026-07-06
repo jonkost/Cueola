@@ -116,6 +116,9 @@
   const rid = (p) => p + Math.random().toString(36).slice(2, 9);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   function toast(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} console.log('[outrangutan]', msg); }
+  // P7: same-tab bridge into Cueola's structured show log — cue fires, media
+  // failures, and transport hits land in the same per-session record.
+  function slog(cat, msg) { try { window.CueolaShowLog && window.CueolaShowLog.add(cat, '[Outrangutan] ' + msg); } catch (e) {} }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function fmtClock(sec) { sec = Math.max(0, sec || 0); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60); return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0'); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
@@ -360,7 +363,7 @@
     if (!kind) { toast('Skipped "' + file.name + '" — not a video, audio, or image file.'); return null; }
     const blob = file.slice(0, file.size, file.type);
     const probe = kind === 'image' ? await probeImage(blob) : await probeMedia(blob, kind);
-    if (!probe.ok) { toast('⚠ "' + file.name + '" can’t play in this browser (' + (probe.error || 'unsupported or damaged') + ') — not added.'); return null; }
+    if (!probe.ok) { slog('media', 'Import rejected: “' + file.name + '” — ' + (probe.error || 'unsupported or damaged')); toast('⚠ "' + file.name + '" can’t play in this browser (' + (probe.error || 'unsupported or damaged') + ') — not added.'); return null; }
     const mediaId = rid('m_');
     await idbPut(MEDIA_STORE, mediaId, { blob, name: file.name, mime: file.type, kind, duration: probe.duration, thumb: probe.thumb, width: probe.width || 0, height: probe.height || 0 });
     return { mediaId, kind, duration: probe.duration, thumb: probe.thumb, name: file.name, width: probe.width || 0, height: probe.height || 0 };
@@ -462,11 +465,12 @@
     let rt = padRT.get(pad.id);
     if (!rt) { rt = { ch: makeChannel(), voices: [], buffer: bufferCache.get(pad.mediaId) || null }; padRT.set(pad.id, rt); }
     if (!rt.buffer) { rt.buffer = bufferCache.get(pad.mediaId) || null; }
-    if (!rt.buffer) { const b = await decodeBuffer(pad.mediaId); if (!b) { toast('Could not decode “' + pad.name + '”.'); return; } rt.buffer = b; }
+    if (!rt.buffer) { const b = await decodeBuffer(pad.mediaId); if (!b) { slog('error', 'SFX pad “' + pad.name + '” would not decode'); toast('Could not decode “' + pad.name + '”.'); return; } rt.buffer = b; }
 
     if (!settings.multiTrigger) pads.forEach(p => { if (p.id !== pad.id) stopPad(p); });
     if (pad.retrigger === 'toggle' && rt.voices.length) { stopPad(pad); return; }
     if (pad.retrigger === 'restart' || !settings.multiTrigger) stopVoices(rt);
+    slog('sfx', 'Pad · “' + (pad.name || 'Pad') + '”');
 
     applyChannel(rt.ch, { gain: pad.fadeIn > 0 ? 0 : (pad.gain == null ? 1 : pad.gain), eq: pad.eq, comp: pad.comp });
     const src = ac.createBufferSource();
@@ -1243,6 +1247,7 @@
   }
   function fireCue(cue) {
     clearPre();
+    slog('cue', 'GO · #' + cue.num + ' “' + cue.name + '”' + (cue.preWait > 0 ? ' (pre-wait ' + cue.preWait + 's)' : ''));
     if (cue.preWait > 0) {
       setStatus('pre');
       preInfo = { cue, until: performance.now() + cue.preWait * 1000 };
@@ -1255,7 +1260,7 @@
   async function beginMedia(cue) {
     if (cue.type === 'image') return beginImage(cue);
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
-    if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
+    if (!media || !media.blob) { slog('error', 'Media missing for “' + cue.name + '” at fire time'); toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
     ensureAudio();
     const isAudio = cue.type === 'audio';
     const prev = active;
@@ -1374,6 +1379,7 @@
     setStatus('idle');
     if (cue.type === 'video' || cue.type === 'image') sendOut({ t: 'black', ms: 0 }, cue.output || 1);
     renderCueList(); scheduleSave();
+    slog('error', '“' + cue.name + '” failed to play — cut to black slate' + (err && err.message ? ' (' + err.message + ')' : ''));
     toast('⚠ “' + cue.name + '” failed to play — black slate. Show continues; cue is marked.');
   }
 
@@ -1437,14 +1443,16 @@
   function cueToTop() { const first = cues.find(c => c.armed !== false) || cues[0]; if (first) selectedId = first.id; }
   function stopAll(opts) {
     clearPre(); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' });
-    if (!opts || !opts.silent) { cueToTop(); renderInspector(); renderEditArea(); toast('Stopped.'); }
+    if (!opts || !opts.silent) { cueToTop(); renderInspector(); renderEditArea(); slog('media', 'Stop'); toast('Stopped.'); }
     renderCueList();
   }
   function panic() {
     clearPre();
     fades.forEach((r) => cancelAnimationFrame(r)); fades.clear();
     stopAllDecks(); stopAllPads(); stopKeyLoop();
-    setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); toast('PANIC — all stopped.');
+    setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea();
+    slog('media', 'PANIC — everything stopped');
+    toast('PANIC — all stopped.');
   }
   function pauseResume() {
     if (active && active.kind === 'image') {
@@ -1458,8 +1466,8 @@
     if (!active || !active.el) { if (preInfo) stopAll(); return; }
     const el = active.el;
     const out = active.cue.output || 1;
-    if (el.paused) { el.play(); setStatus('play'); sendOut({ t: 'resume' }, out); }
-    else { el.pause(); setStatus('pause'); sendOut({ t: 'pause' }, out); saveShow(); }   // persist the pause offset immediately
+    if (el.paused) { el.play(); setStatus('play'); sendOut({ t: 'resume' }, out); slog('media', 'Resume · “' + active.cue.name + '” at ' + (Math.round(el.currentTime * 10) / 10) + 's'); }
+    else { el.pause(); setStatus('pause'); sendOut({ t: 'pause' }, out); saveShow(); slog('media', 'Pause · “' + active.cue.name + '” at ' + (Math.round(el.currentTime * 10) / 10) + 's'); }   // persist the pause offset immediately
     renderCueList();
   }
   function fadeStopAll() {
@@ -2170,7 +2178,13 @@
     return s;
   }
   // ── Save / open a show file (a portable backup that includes the media) ────
+  // P7: branded ".ogshow" files. Chrome/Edge get the File System Access picker
+  // (a named "Outrangutan Show" type) and save-in-place — Cmd+S re-saves the
+  // opened/saved file; other browsers fall back to a download. Legacy ".json"
+  // files still open; validation stays schema-header-based (`kind` check).
+  let showFileHandle = null;   // FileSystemFileHandle → Cmd+S saves back into the same file
   function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob); }); }
+  function showFileName() { return 'Outrangutan Show ' + new Date().toISOString().slice(0, 10) + '.ogshow'; }
   async function exportShowFile() {
     try {
       if (!cues.length && !pads.length) { toast('Nothing to save yet — add a cue or pad first.'); return; }
@@ -2187,22 +2201,58 @@
       }
       const payload = { kind: 'outrangutan-show', app: 'outrangutan', schema: SCHEMA, exportedAt: Date.now(),
         show: { cues, pads, banks, currentBankId, outputs, selectedId, settings }, media };
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const json = JSON.stringify(payload);
+      const nMedia = Object.keys(media).length;
+      const summary = cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + (nMedia ? ' · ' + nMedia + ' media' : '');
+      if (window.showSaveFilePicker) {
+        try {
+          if (!showFileHandle) {
+            showFileHandle = await window.showSaveFilePicker({
+              suggestedName: showFileName(),
+              types: [{ description: 'Outrangutan Show', accept: { 'application/json': ['.ogshow'] } }],
+            });
+          }
+          const w = await showFileHandle.createWritable();
+          await w.write(json);
+          await w.close();
+          slog('session', 'Show saved → ' + showFileHandle.name + ' (' + summary + ')');
+          toast('Saved — ' + showFileHandle.name);
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;   // user cancelled the picker
+          showFileHandle = null;                      // stale or denied handle → plain download below
+        }
+      }
+      const blob = new Blob([json], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'Outrangutan Show ' + new Date().toISOString().slice(0, 10) + '.json';
+      a.download = showFileName();
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      const nMedia = Object.keys(media).length;
-      toast('Show saved — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + (nMedia ? ' · ' + nMedia + ' media' : '') + '.');
+      slog('session', 'Show downloaded → ' + showFileName() + ' (' + summary + ')');
+      toast('Show saved — ' + summary + '.');
     } catch (e) { toast('Could not save the show file.'); }
+  }
+  async function openShowFilePicker() {
+    if (window.showOpenFilePicker) {
+      try {
+        const [h] = await window.showOpenFilePicker({
+          types: [{ description: 'Outrangutan Show', accept: { 'application/json': ['.ogshow', '.json'] } }],
+        });
+        const ok = await importShowFile(await h.getFile());
+        if (ok) showFileHandle = h;   // Cmd+S now saves back into the opened file
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const input = $('og-showfile-input');
+    if (input) input.click();
   }
   async function importShowFile(file) {
     let payload;
-    try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid show file.'); return; }
-    if (!payload || payload.kind !== 'outrangutan-show' || !payload.show || !Array.isArray(payload.show.cues)) { toast('That isn’t an Outrangutan show file.'); return; }
+    try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid show file.'); return false; }
+    if (!payload || payload.kind !== 'outrangutan-show' || !payload.show || !Array.isArray(payload.show.cues)) { toast('That isn’t an Outrangutan show file.'); return false; }
     const sc = payload.show.cues.length, sp = Array.isArray(payload.show.pads) ? payload.show.pads.length : 0;
-    if ((cues.length || pads.length) && !dangerOK('Open this show? It replaces the current ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + ' / ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') + ' with ' + sc + ' / ' + sp + '.')) return;
+    if ((cues.length || pads.length) && !dangerOK('Open this show? It replaces the current ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + ' / ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') + ' with ' + sc + ' / ' + sp + '.')) return false;
     try {
       try { stopAll({ silent: true }); } catch (e) {}
       const media = payload.media || {};
@@ -2220,8 +2270,10 @@
       await loadShow();
       renderAll();
       scheduleSave();
+      slog('session', 'Show opened from file — ' + cues.length + ' cues · ' + pads.length + ' pads');
       toast('Show opened — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
-    } catch (e) { toast('Could not open the show file.'); }
+      return true;
+    } catch (e) { toast('Could not open the show file.'); return false; }
   }
   function showRecovery(s) {
     const bar = $('og-recovery'); if (!bar) return;
@@ -2330,7 +2382,7 @@
           + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show…</button>'
           + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show…</button>'
         + '</div></details>'
-        + '<input type="file" id="og-showfile-input" accept=".json,application/json" hidden>'
+        + '<input type="file" id="og-showfile-input" accept=".ogshow,.json,application/json" hidden>'
       + '</div>'
       + '<div class="og-recovery" id="og-recovery"><span id="og-recovery-text"></span><div class="og-bar-spacer"></div>'
         + '<button id="og-recovery-standby">Standby that cue</button><button id="og-recovery-dismiss">Dismiss</button></div>'
@@ -2434,7 +2486,7 @@
     $('og-help-btn').onclick = openHelp;
     $('og-save-file-btn').onclick = exportShowFile;
     const showFileInput = $('og-showfile-input');
-    $('og-open-file-btn').onclick = () => showFileInput.click();
+    $('og-open-file-btn').onclick = openShowFilePicker;
     showFileInput.onchange = () => { if (showFileInput.files[0]) importShowFile(showFileInput.files[0]); showFileInput.value = ''; };
     $('og-help-close').onclick = closeHelp;
     $('og-outputs-x').onclick = closeOutputsPanel;
@@ -2481,7 +2533,8 @@
     ['dragleave', 'drop'].forEach(ev => listPane.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === listPane) dropZone.classList.remove('drag'); }));
     listPane.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
 
-    document.addEventListener('keydown', onKey);
+    // P7: contained — a throwing shortcut handler must never kill live keys.
+    document.addEventListener('keydown', e => { try { onKey(e); } catch (err) { slog('error', 'Keyboard handler: ' + ((err && err.message) || err)); } });
     // Close the top-bar Theme / Tools dropdowns when clicking anywhere outside them.
     document.addEventListener('pointerdown', (e) => {
       if (!isOpen()) return;
@@ -2561,6 +2614,7 @@
     sessionCode = code; sessionUserName = name; mode = 'session';
     try { localStorage.setItem('cueola_outrangutan_code', code); localStorage.setItem('cueola_last_code', code); localStorage.setItem('cueola_last_name', name); } catch (e) {}
     closeSessionJoin(); await applyShow();
+    slog('session', 'Joined session ' + code);
     toast('Joined session ' + code + '.');
   }
 
@@ -2573,10 +2627,59 @@
     try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('entry'); } catch (e) {}
   }
 
+  // ── P7: preflight — deep-check this machine's library for the Cueola panel:
+  // every cue's media exists + probed decodable with known dimensions, every
+  // pad's audio decodes, and per-bank pad counts (empty banks get flagged).
+  async function preflightReport() {
+    // Use the live module state when loaded. Otherwise read the right show
+    // record straight from IndexedDB — the show for the joined session code
+    // (one show per code), never via loadShow(): a preflight must not mutate
+    // the running app, and on a fresh tab loadShow() would pull the
+    // *standalone* show and validate the wrong library (dress-rehearsal find).
+    let rCues = cues, rPads = pads, rBanks = banks;
+    if (!cues.length && !pads.length) {
+      let code = (mode === 'session' && sessionCode) || '';
+      try { code = code || localStorage.getItem('cueola_outrangutan_code') || localStorage.getItem('cueola_last_code') || ''; } catch (e) {}
+      const s = await idbGet(SHOW_STORE, SHOW_KEY + (code ? '_' + code : ''));
+      if (s && Array.isArray(s.cues)) {
+        rCues = s.cues; rPads = Array.isArray(s.pads) ? s.pads : []; rBanks = Array.isArray(s.banks) ? s.banks : [];
+      } else { rCues = []; rPads = []; rBanks = []; }
+    }
+    const report = { cues: [], pads: [], banks: [] };
+    for (const c of rCues) {
+      if (!c.mediaId) { report.cues.push({ id: c.id, num: c.num, name: c.name, ok: false, checked: true, issue: 'no media attached' }); continue; }
+      const m = await idbGet(MEDIA_STORE, c.mediaId);
+      let ok = true, issue = '';
+      if (!m || !m.blob) { ok = false; issue = 'media missing from the library'; }
+      else if (c.broken) { ok = false; issue = 'failed at its last play (⚠)'; }
+      else if (c.type !== 'image' && !(m.duration > 0)) { ok = false; issue = 'no decodable duration'; }
+      else if (c.type !== 'audio' && !(m.width > 0 && m.height > 0)) { ok = false; issue = 'unknown dimensions — re-import to probe'; }
+      report.cues.push({ id: c.id, num: c.num, name: c.name, ok, checked: true, issue, dims: (m && m.width) ? m.width + '×' + m.height : '', dur: (m && m.duration) || 0 });
+    }
+    for (const p of rPads) {
+      if (!p.mediaId) continue;
+      const bank = rBanks.find(b => b.id === p.bank);
+      const m = await idbGet(MEDIA_STORE, p.mediaId);
+      let ok = true, issue = '';
+      if (!m || !m.blob) { ok = false; issue = 'media missing from the library'; }
+      else {
+        const buf = bufferCache.get(p.mediaId) || await decodeBuffer(p.mediaId);
+        if (!buf) { ok = false; issue = 'audio won’t decode'; }
+      }
+      report.pads.push({ id: p.id, name: p.name || 'Pad', bank: bank ? bank.name : '', ok, issue });
+    }
+    report.banks = rBanks.map(b => ({ id: b.id, name: b.name, padCount: rPads.filter(p => p.bank === b.id && p.mediaId).length }));
+    const badC = report.cues.filter(c => !c.ok).length, badP = report.pads.filter(p => !p.ok).length;
+    slog('preflight', 'Deep check — ' + report.cues.length + ' cues (' + badC + ' bad) · ' + report.pads.length + ' pads (' + badP + ' bad)');
+    return report;
+  }
+
   // ── exports ──────────────────────────────────────────────────────────────
   window.enterOutrangutan = enterOutrangutan;
   window.exitOutrangutan = exitOutrangutan;
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
+    preflight: preflightReport,                     // P7: deep media/SFX check for the Cueola preflight panel
+    saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
     _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     // P4: same-page fast path — when Cueola and Outrangutan share this tab (the

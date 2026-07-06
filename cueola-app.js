@@ -1,5 +1,9 @@
 'use strict';
 
+// Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
+const CUEOLA_VERSION = '1.0.0';
+window.CUEOLA_VERSION = CUEOLA_VERSION;
+
 function sfIcon(symbol, className='') {
   const classes = className ? `sf-symbol ${className}` : 'sf-symbol';
   return `<span class="${classes}" data-symbol="${symbol}" aria-hidden="true"></span>`;
@@ -169,31 +173,76 @@ function restoreLocalDraft() {
 }
 
 // Save / open a rundown as a file on the user's computer (portable backup).
-function exportRundownFile() {
+// P7: branded ".cueola" show files. Chrome/Edge get the File System Access
+// picker (a named "Cueola Show" type) and save-in-place — Cmd+S re-saves the
+// opened/saved file instead of downloading copies; other browsers fall back
+// to a download. Legacy ".json"/".cueola.json" files still open; validation
+// stays schema-header-based (the payload `kind` check), not extension-based.
+let _cueolaFileHandle = null;   // FileSystemFileHandle → Cmd+S saves back into the same file
+function rundownFilePayload() {
+  return {
+    kind: 'cueola-rundown', app: 'cueola', version: 1, exportedAt: Date.now(),
+    show: { name: show.name || 'Untitled Show', start: normalizeTimeValue(show.start) },
+    beats, customSources: sessionCustomSources, freeTextMode,
+  };
+}
+function rundownFileName() {
+  const safe = (show.name || 'Cueola Rundown').replace(/[^\w \-]+/g, '').trim() || 'Cueola Rundown';
+  return safe + '.cueola';
+}
+async function exportRundownFile() {
+  if (!beats.length) { toast('Add a row before saving the rundown.'); return; }
+  const json = JSON.stringify(rundownFilePayload());
+  if (window.showSaveFilePicker) {
+    try {
+      if (!_cueolaFileHandle) {
+        _cueolaFileHandle = await window.showSaveFilePicker({
+          suggestedName: rundownFileName(),
+          types: [{ description: 'Cueola Show', accept: { 'application/json': ['.cueola'] } }],
+        });
+      }
+      const w = await _cueolaFileHandle.createWritable();
+      await w.write(json);
+      await w.close();
+      logShow('session', 'Rundown saved → ' + _cueolaFileHandle.name);
+      toast('Saved — ' + _cueolaFileHandle.name);
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;   // user cancelled the picker
+      _cueolaFileHandle = null;                   // stale or denied handle → plain download below
+    }
+  }
   try {
-    if (!beats.length) { toast('Add a row before saving the rundown.'); return; }
-    const payload = {
-      kind: 'cueola-rundown', app: 'cueola', version: 1, exportedAt: Date.now(),
-      show: { name: show.name || 'Untitled Show', start: normalizeTimeValue(show.start) },
-      beats, customSources: sessionCustomSources, freeTextMode,
-    };
-    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    const safe = (show.name || 'Cueola Rundown').replace(/[^\w \-]+/g, '').trim() || 'Cueola Rundown';
-    a.download = safe + '.cueola.json';
+    a.download = rundownFileName();
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    logShow('session', 'Rundown downloaded → ' + rundownFileName());
     toast('Rundown saved — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
   } catch (e) { toast('Could not save the rundown file.'); }
 }
+async function openRundownFilePicker() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [h] = await window.showOpenFilePicker({
+        types: [{ description: 'Cueola Show', accept: { 'application/json': ['.cueola', '.json'] } }],
+      });
+      const ok = await importRundownFile(await h.getFile());
+      if (ok) _cueolaFileHandle = h;   // Cmd+S now saves back into the opened file
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  document.getElementById('rundownFileInput')?.click();
+}
 async function importRundownFile(file) {
-  if (!file) return;
-  if (session.isDemo) { toast('Exit demo mode before opening a rundown file.'); return; }
+  if (!file) return false;
+  if (session.isDemo) { toast('Exit demo mode before opening a rundown file.'); return false; }
   let payload;
-  try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid rundown file.'); return; }
-  if (!payload || payload.kind !== 'cueola-rundown' || !Array.isArray(payload.beats)) { toast('That isn’t a Cueola rundown file.'); return; }
-  if (beats.length && !window.confirm('Replace the current ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + ' with ' + payload.beats.length + ' from this file?')) return;
+  try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid rundown file.'); return false; }
+  if (!payload || payload.kind !== 'cueola-rundown' || !Array.isArray(payload.beats)) { toast('That isn’t a Cueola rundown file.'); return false; }
+  if (beats.length && !window.confirm('Replace the current ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + ' with ' + payload.beats.length + ' from this file?')) return false;
   try {
     show = { name: payload.show?.name || 'Untitled Show', start: normalizeTimeValue(payload.show?.start) };
     beats = payload.beats.map(migrateBeat);
@@ -201,9 +250,228 @@ async function importRundownFile(file) {
     freeTextMode = Boolean(payload.freeTextMode);
     renderRundown();
     syncToFirestore();
+    logShow('session', 'Rundown opened from file — ' + beats.length + ' rows');
     toast('Rundown opened — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
-  } catch (e) { toast('Could not open the rundown file.'); }
+    return true;
+  } catch (e) { toast('Could not open the rundown file.'); return false; }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P7: STRUCTURED SHOW LOG — per-session, timestamped record of cue fires,
+// media events, sync events, and errors, so any live problem is diagnosable
+// afterward. Ring buffer persisted to localStorage (debounced); Outrangutan
+// logs into the same stream via window.CueolaShowLog (same-tab).
+// ─────────────────────────────────────────────────────────────
+const SHOWLOG_MAX = 1000;
+let showLogEntries = [];
+let _showLogSaveTimer = null;
+let _showLogLoadedKey = '';
+
+function showLogKey() {
+  if (session?.code && !session.isDemo) return 'cueola_showlog_' + session.code;
+  return 'cueola_showlog_local';
+}
+// Restore the persisted log for this session key so a reload (or crash) never
+// loses the record — the whole point is diagnosing what happened before one.
+// MERGES under anything already buffered in memory: entries logged before the
+// load (boot errors, pre-join events) must survive, and they're part of the
+// same tab's story anyway.
+function loadShowLog() {
+  const key = showLogKey();
+  if (key === _showLogLoadedKey) return;
+  _showLogLoadedKey = key;
+  try {
+    const prior = JSON.parse(localStorage.getItem(key) || '[]');
+    if (Array.isArray(prior) && prior.length) showLogEntries = prior.concat(showLogEntries).slice(-SHOWLOG_MAX);
+  } catch {}
+}
+function logShow(cat, msg, data) {
+  try {
+    if (!_showLogLoadedKey) loadShowLog();
+    const e = { t: Date.now(), cat: String(cat || 'info'), msg: String(msg || '') };
+    if (data !== undefined) { try { e.data = JSON.parse(JSON.stringify(data)); } catch {} }
+    showLogEntries.push(e);
+    if (showLogEntries.length > SHOWLOG_MAX) showLogEntries.splice(0, showLogEntries.length - SHOWLOG_MAX);
+    clearTimeout(_showLogSaveTimer);
+    _showLogSaveTimer = setTimeout(() => {
+      try { localStorage.setItem(showLogKey(), JSON.stringify(showLogEntries)); } catch {}
+    }, 800);
+    // Live-append when the viewer is open.
+    const wrap = document.getElementById('modal-showlog');
+    if (wrap?.classList.contains('on')) appendShowLogRow(e, true);
+  } catch {}
+}
+window.CueolaShowLog = { add: logShow };
+
+const SHOWLOG_CATS = { cue:'--accent', media:'--video', sfx:'--green', sync:'--cyan', session:'--text2', error:'--red', preflight:'--yellow' };
+function showLogTime(t) {
+  const d = new Date(t);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+}
+function showLogRowHtml(e) {
+  const dot = SHOWLOG_CATS[e.cat] || '--text3';
+  return `<div class="slog-row"><span class="slog-time">${showLogTime(e.t)}</span><span class="slog-dot" style="background:var(${dot})"></span><span class="slog-cat">${esc(e.cat)}</span><span class="slog-msg">${esc(e.msg)}</span></div>`;
+}
+function appendShowLogRow(e, scroll) {
+  const list = document.getElementById('showLogList');
+  if (!list) return;
+  list.insertAdjacentHTML('beforeend', showLogRowHtml(e));
+  if (scroll) list.scrollTop = list.scrollHeight;
+}
+function openShowLog() {
+  loadShowLog();
+  const list = document.getElementById('showLogList');
+  if (list) {
+    list.innerHTML = showLogEntries.length
+      ? showLogEntries.map(showLogRowHtml).join('')
+      : '<div class="slog-empty">Nothing logged yet. Cue fires, media events, sync changes, and errors will appear here.</div>';
+  }
+  const sub = document.getElementById('showLogSub');
+  if (sub) sub.textContent = (session?.code ? 'Session ' + session.code : 'Local workspace') + ' · ' + showLogEntries.length + ' event' + (showLogEntries.length === 1 ? '' : 's');
+  showModal('modal-showlog');
+  if (list) list.scrollTop = list.scrollHeight;
+}
+function exportShowLog() {
+  if (!showLogEntries.length) { toast('The show log is empty.'); return; }
+  const head = 'Cueola show log — ' + (session?.code ? 'session ' + session.code : 'local') + ' — exported ' + new Date().toLocaleString() + '\n\n';
+  const lines = showLogEntries.map(e => `${new Date(e.t).toLocaleDateString()} ${showLogTime(e.t)}  [${e.cat}]  ${e.msg}${e.data ? '  ' + JSON.stringify(e.data) : ''}`);
+  const blob = new Blob([head + lines.join('\n') + '\n'], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Cueola Show Log ' + (session?.code || 'local') + ' ' + new Date().toISOString().slice(0, 10) + '.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Show log exported — ' + showLogEntries.length + ' events.');
+}
+function clearShowLog() {
+  if (!window.confirm('Clear the show log for ' + (session?.code ? 'session ' + session.code : 'this workspace') + '?')) return;
+  showLogEntries = [];
+  try { localStorage.removeItem(showLogKey()); } catch {}
+  openShowLog();
+}
+
+// ─────────────────────────────────────────────────────────────
+// P7: ERROR CONTAINMENT — an exception in one panel logs and recovers
+// without taking down the show UI. Window-level handlers catch anything
+// uncaught; guardFn() wraps the live-critical render/dispatch paths so a
+// crash inside one leaves the rest of the surface running.
+// ─────────────────────────────────────────────────────────────
+let _errToastTs = 0;
+function containError(label, err) {
+  try {
+    const msg = (err && (err.message || err.reason?.message)) || String(err || 'unknown');
+    logShow('error', label + ': ' + msg, err?.stack ? { stack: String(err.stack).slice(0, 600) } : undefined);
+    const now = Date.now();
+    if (now - _errToastTs > 4000) {   // throttled: an error loop must not bury the operator in toasts
+      _errToastTs = now;
+      toast('⚠ ' + label + ' hit an error — logged to the show log. The show keeps running.', 3500);
+    }
+  } catch {}
+}
+window.addEventListener('error', e => containError('Uncaught', e.error || e.message));
+window.addEventListener('unhandledrejection', e => { containError('Async', e.reason); try { e.preventDefault(); } catch {} });
+function guardFn(fn, label) {
+  return function (...args) {
+    try { return fn.apply(this, args); }
+    catch (err) { containError(label, err); }
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// P7: SESSION RESUME (Decisions #14) — state already saves on every change;
+// this records WHERE the operator was (session, screen, live row, Script Op)
+// so an unclean exit offers a one-click "Resume where you left off" banner.
+// Nothing moves without the click. Cleared on an intentional leave.
+// ─────────────────────────────────────────────────────────────
+const RESUME_KEY = 'cueola_resume';
+const RESUME_MAX_AGE = 12 * 3600 * 1000;
+function markResumeState() {
+  if (!session?.code || session.isDemo || session.isExpert) return;
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify({
+      code: session.code, name: session.userName || '', role: session.role || 'instructor',
+      showName: show?.name || '',
+      screen: sessionStorage.getItem('cueola_screen') || 'build',
+      scriptOp: !!livePrompterOpen, lsIdx, ts: Date.now(),
+    }));
+  } catch {}
+}
+function clearResumeState() {
+  try { localStorage.removeItem(RESUME_KEY); } catch {}
+  const b = document.getElementById('resumeBanner');
+  if (b) b.hidden = true;
+}
+function readResumeState() {
+  try {
+    const r = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
+    if (!r || !r.code || !r.ts || (Date.now() - r.ts) > RESUME_MAX_AGE) return null;
+    return r;
+  } catch { return null; }
+}
+function initResumeBanner() {
+  const r = readResumeState();
+  const banner = document.getElementById('resumeBanner');
+  if (!r || !banner) return;
+  if (!document.getElementById('entry')?.classList.contains('on')) return;  // a deep link already routed elsewhere
+  const where = r.screen === 'live' ? 'live on row ' + ((r.lsIdx ?? 0) + 1) : 'building';
+  const text = document.getElementById('resumeBannerText');
+  if (text) text.innerHTML = `You were ${where} in session <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
+  banner.hidden = false;
+}
+function dismissResumeBanner() {
+  clearResumeState();
+  logShow('session', 'Resume banner dismissed');
+}
+function resumeLastSession() {
+  const r = readResumeState();
+  if (!r) { clearResumeState(); return; }
+  const banner = document.getElementById('resumeBanner');
+  if (banner) banner.hidden = true;
+  session = { code: r.code, role: r.role || 'instructor', userName: r.name || '', isDemo: false, isExpert: false };
+  freeTextMode = false;
+  rememberLastSession(r.code, r.name);
+  if (Number.isFinite(r.lsIdx)) lsIdx = r.lsIdx;
+  // The rundown arrives async (cloud snapshot / local draft) — goLive()'s clamp
+  // would zero the restored row on a still-empty list. Re-assert it once the
+  // beats land (give up quietly after ~6 s; the operator is already back live).
+  const reassertIdx = () => {
+    if (!Number.isFinite(r.lsIdx) || r.lsIdx < 1) return;
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      if (beats.length > r.lsIdx) {
+        clearInterval(t);
+        if (lsIdx !== r.lsIdx) {
+          lsIdx = r.lsIdx;
+          if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+          syncLiveIdx();
+        }
+      } else if (tries > 12) clearInterval(t);
+    }, 500);
+  };
+  const after = () => {
+    if (r.screen === 'live') {
+      try { if (!document.getElementById('liveshow')?.classList.contains('on')) goLive(); } catch {}
+      reassertIdx();
+      if (r.scriptOp) setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch {} }, 500);
+    }
+  };
+  waitForFirebaseReady().then(ready => {
+    if (ready) { enterRundown(); setTimeout(after, 400); }
+    else { try { openLocalSession(r.code, r.name || 'Operator', r.role || 'instructor'); } catch {} setTimeout(after, 400); }
+  });
+  logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + ((r.lsIdx ?? 0) + 1) + ')' : ''));
+}
+// Refresh the record every 20 s while in a session — the ts doubles as the
+// "was recently in use" signal for the banner's freshness window. Gated on a
+// session screen actually being up: `session` survives leaveSessionForFrontPage,
+// and an unguarded heartbeat resurrected the resume record after a deliberate
+// leave (dress-rehearsal find).
+setInterval(() => {
+  const inSession = document.getElementById('rundown')?.classList.contains('on')
+    || document.getElementById('liveshow')?.classList.contains('on');
+  if (inSession && session?.code && !session.isDemo && !session.isExpert) markResumeState();
+}, 20000);
 
 // Add-row wizard state
 let arStyle = null;
@@ -262,6 +530,8 @@ function pushSessionHistoryState(screen) {
 }
 
 function leaveSessionForFrontPage() {
+  logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
+  clearResumeState();   // P7: intentional leave — never offer to resume it (Decisions #14)
   stopTimer();
   if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
   document.getElementById('rundown')?.classList.remove('on');
@@ -544,6 +814,7 @@ function setCloudSyncState(state='synced', detail='') {
 
 function reportCloudWriteFailure(context='Cloud save', err=null) {
   console.warn(`${context} failed.`, err);
+  logShow('sync', context + ' failed — local draft kept' + (err?.code ? ' (' + err.code + ')' : ''));
   setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
   const now = Date.now();
   if (now - _lastCloudErrorToastAt > 8000) {
@@ -653,7 +924,7 @@ const LEARNING_LESSONS = [
     callouts:[
       ['Comments','Instructors can leave Planda Bear comments without overwriting student work.'],
       ['Production Notes','A shared discussion board: everyone posts, notes carry department tags and threaded replies, and the whole board joins the PDF package.'],
-      ['One package','Export One PDF Package gathers the paperwork, production notes, and rendered rundown into a shareable file.']
+      ['One package','Export PDF Package gathers the paperwork, production notes, and rendered rundown into one shareable file.']
     ],
     checks:['I can open Planda Bear.','I know which paperwork page to fill first.','I know where PDF export lives.'],
     actions:[['Open Planda Bear','plandabear']]
@@ -1937,21 +2208,27 @@ function migrateOldCue(type, d) {
     d.ready !== undefined ||
     d.take !== undefined
   ) return d; // already migrated
+  let migrated;
   switch(type) {
     case 'video':
-      return { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`${d.state==='Set'?'Dissolve':'Take'} ${d.source}`:'' };
+      migrated = { ready:[d.state,d.source].filter(Boolean).join(' '), take:d.source?`${d.state==='Set'?'Dissolve':'Take'} ${d.source}`:'' }; break;
     case 'audio':
-      return { ready:[d.action,d.source].filter(Boolean).join(' '), take:d.action||'' };
+      migrated = { ready:[d.action,d.source].filter(Boolean).join(' '), take:d.action||'' }; break;
     case 'playback':
-      return { ready:[d.state,d.clipName].filter(Boolean).join(' '), take:d.clipName?`Roll ${d.clipName}`:'Roll' };
+      migrated = { ready:[d.state,d.clipName].filter(Boolean).join(' '), take:d.clipName?`Roll ${d.clipName}`:'Roll' }; break;
     case 'gfx':
-      return { ready:[d.gfxType,d.transition].filter(Boolean).join(' / '), take:'Take GFX' };
+      migrated = { ready:[d.gfxType,d.transition].filter(Boolean).join(' / '), take:'Take GFX' }; break;
     case 'lighting':
-      return { ready:[d.action,d.fixture].filter(Boolean).join(' '), take:d.action==='At'?`Go ${d.intensity||0}%`:'Go' };
+      migrated = { ready:[d.action,d.fixture].filter(Boolean).join(' '), take:d.action==='At'?`Go ${d.intensity||0}%`:'Go' }; break;
     case 'script':
-      return { ready:d.who||'', take:'Begin', text:d.text||'' };
+      migrated = { ready:d.who||'', take:'Begin', text:d.text||'' }; break;
     default: return d;
   }
+  // P8 (dress-rehearsal find): the legacy rebuild above replaced the object and
+  // silently dropped the Outrangutan link fields (P4) — a linked cue in the old
+  // {state,clipName} shape lost its playout/SFX link on the next sync echo.
+  ['outCueId', 'outAuto', 'outPadId', 'outPadAuto'].forEach(k => { if (d[k] !== undefined) migrated[k] = d[k]; });
+  return migrated;
 }
 
 function migrateBeat(b) {
@@ -2281,6 +2558,12 @@ function enterRundown() {
   document.getElementById('rundown').classList.add('on');
   document.getElementById('liveshow').classList.remove('on');
   pushSessionHistoryState('build');
+  // P8 (dress-rehearsal find): without this, a stale 'live' from a previous
+  // session leaks into the resume record and the banner claims the wrong screen.
+  sessionStorage.setItem('cueola_screen', 'build');
+  loadShowLog();   // P7: pick up this session's persisted log before anything writes to it
+  logShow('session', 'Entered session' + (session?.code ? ' ' + session.code : '') + (session?.isDemo ? ' (demo)' : '') + (session?.userName ? ' as ' + session.userName : ''));
+  markResumeState();
 
   updateAdminUI();
 
@@ -2715,10 +2998,15 @@ function noteSnapshotArrived(snap) {
   _lastSnapshotTs = Date.now();
   setSyncReconnecting(!!(snap && snap.metadata && snap.metadata.fromCache && !(snap.metadata.hasPendingWrites)));
 }
+let _syncReconnState = false;
 function setSyncReconnecting(on) {
   const chip = document.getElementById('ls-stat-sync');
   if (chip) chip.hidden = !on;
   if (on) setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
+  if (on !== _syncReconnState) {   // P7: log only the transitions, not every snapshot
+    _syncReconnState = on;
+    logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : 'Cloud sync restored');
+  }
 }
 window.addEventListener('offline', () => { if (session.code && !session.isDemo && !session.isExpert) setSyncReconnecting(true); });
 window.addEventListener('online', () => { /* chip clears on the next server snapshot */ });
@@ -2740,6 +3028,7 @@ function syncToFirestore() {
 }
 
 function syncLiveIdx() {
+  markResumeState();   // P7: live position rides the resume record (Decisions #14)
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
   // Broadcast my own position into my presence record so anyone following me
   // mirrors it. (Your navigation only moves your followers, not the whole room.)
@@ -4656,6 +4945,7 @@ function applyOutrangutanState(og) {
       const prev = outrangutanState.live || {};
       const statusChanged = prev.cueId !== og.live.cueId || prev.status !== og.live.status;
       outrangutanState.live = og.live;
+      if (statusChanged) logShow('media', 'Playout ' + (og.live.status || 'idle') + (og.live.name ? ' · ' + og.live.name : ''));
       if (statusChanged && !structural) refreshOutrangutanBadges();
     }
   }
@@ -4675,6 +4965,7 @@ function applySfxFireEvent(ev) {
   const fresh = (Date.now() - ev.ts) < 10000;
   _sfxFireStamp = stamp;
   if (!fresh) return;   // old event replayed by a snapshot — record the stamp, show nothing
+  logShow('sfx', 'SFX fired · ' + (ev.name || 'pad') + (ev.by ? ' (' + ev.by + ')' : ''));
   const chip = document.getElementById('ls-stat-sfx');
   if (!chip) return;
   chip.textContent = `${ev.emoji ? ev.emoji + ' ' : ''}SFX · ${ev.name || ''}`.trim();
@@ -4776,9 +5067,15 @@ function fireOutrangutanCommand(action, targetId) {
     ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
     action: action || 'cue', cueId: action === 'pad' ? '' : (targetId || ''), padId: action === 'pad' ? (targetId || '') : '',
   };
+  logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
-    .catch(err => toast(firebaseConnectionLabel(err, 'Outrangutan command failed')));
+    .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
   return true;
+}
+// P7: resolve a cue/pad id to its published name for the show log.
+function outrangutanTargetName(action, id) {
+  const m = action === 'pad' ? (outrangutanState.pads || {})[id] : (outrangutanState.cues || {})[id];
+  return m?.name || id;
 }
 
 function fireOutrangutanFromModal() {
@@ -5056,35 +5353,219 @@ function preLiveCheck() {
   };
 }
 
-function confirmGoLive() {
-  const c = preLiveCheck();
-  const rows = [
-    { key:'Script',           ok:c.script.ok, detail:c.script.label },
-    { key:'Talent prompter',  ok:c.talent.ok, detail:c.talent.label },
-    { key:'Cloud sync',       ok:c.cloud.ok,  detail:c.cloud.label  },
-  ];
+// ─────────────────────────────────────────────────────────────
+// P7: SHOW PREFLIGHT — one panel, run before going live (or any time from
+// Settings), that validates the whole show: script/talent/cloud (the original
+// pre-live rows), every rundown→Outrangutan link, the playout media library
+// (exists + decodable + known dimensions, same-tab deep check), SFX banks,
+// a real cloud write→server-ack round-trip, and theme/brand assets. Failing
+// rows link straight to the rundown row that needs fixing.
+// ─────────────────────────────────────────────────────────────
+let _preflightRows = [];
+let _preflightRun = 0;
+let _preflightReviewOnly = false;
+
+function preflightIcon(state) { return state === 'ok' ? '✓' : state === 'fail' ? '✕' : state === 'pend' ? '…' : '!'; }
+function renderPreflightRows() {
   const container = document.getElementById('goLiveCheckRows');
   if (container) {
-    container.innerHTML = rows.map(r => `
-      <div class="precheck-row ${r.ok?'ok':'warn'}">
-        <div class="precheck-icon">${r.ok?'✓':'!'}</div>
+    container.innerHTML = _preflightRows.map(r => `
+      <div class="precheck-row ${r.state}">
+        <div class="precheck-icon">${preflightIcon(r.state)}</div>
         <div class="precheck-body">
           <div class="precheck-label">${esc(r.key)}</div>
           <div class="precheck-detail">${esc(r.detail)}</div>
         </div>
+        ${r.jump != null ? `<button type="button" class="precheck-jump" onclick="preflightJump(${Number(r.jump)})">Row ${Number(r.jumpRow) || ''} →</button>` : ''}
       </div>`).join('');
   }
+  const pending = _preflightRows.some(r => r.state === 'pend');
+  const fails = _preflightRows.filter(r => r.state === 'fail').length;
+  const warns = _preflightRows.filter(r => r.state === 'warn').length;
   const goBtn = document.getElementById('goLiveCheckGo');
-  if (goBtn) goBtn.textContent = c.allGreen ? 'Go Live' : 'Continue Anyway';
+  if (goBtn) goBtn.textContent = _preflightReviewOnly ? 'Done' : (fails || warns ? 'Continue Anyway' : 'Go Live');
   const note = document.getElementById('goLiveCheckNote');
-  if (note) note.textContent = c.allGreen
-    ? 'Everything looks set. You\'re clear to go live.'
-    : 'A couple of things aren\'t set yet — review before going live.';
+  if (note) note.textContent = pending ? 'Running preflight checks…'
+    : fails ? fails + ' check' + (fails === 1 ? '' : 's') + ' failed — jump to the item to fix it before going live.'
+    : warns ? 'A couple of things aren\'t set yet — review before going live.'
+    : 'Every check passed. You\'re clear to go live.';
+  const title = document.getElementById('goLiveCheckTitle');
+  if (title) title.textContent = _preflightReviewOnly ? 'Show preflight' : 'Ready to go live?';
+  return { pending, fails, warns };
+}
+function setPreflightRow(key, patch) {
+  const r = _preflightRows.find(x => x.key === key);
+  if (r) Object.assign(r, patch);
+}
+function addPreflightRow(row) { _preflightRows.push(row); }
+function removePreflightRow(key) { _preflightRows = _preflightRows.filter(r => r.key !== key); }
+
+// Every rundown cell that points at an Outrangutan cue or SFX pad.
+function collectPlayoutLinks() {
+  const cues = [], pads = [];
+  beats.forEach((b, i) => {
+    const pb = b?.cues?.playback, au = b?.cues?.audio;
+    if (pb?.outCueId) cues.push({ beatId: b.id, row: i + 1, id: pb.outCueId });
+    [pb, au].forEach(d => { if (d?.outPadId) pads.push({ beatId: b.id, row: i + 1, id: d.outPadId }); });
+  });
+  return { cues, pads };
+}
+
+function confirmGoLive() { runPreflight(false); }
+function openPreflightPanel() { runPreflight(true); }
+
+function runPreflight(reviewOnly) {
+  const c = preLiveCheck();
+  const run = ++_preflightRun;
+  _preflightReviewOnly = !!reviewOnly;
+  _preflightRows = [
+    { key: 'Script',          state: c.script.ok ? 'ok' : 'warn', detail: c.script.label },
+    { key: 'Talent prompter', state: c.talent.ok ? 'ok' : 'warn', detail: c.talent.label },
+    { key: 'Cloud sync',      state: c.cloud.ok  ? 'ok' : 'warn', detail: c.cloud.label },
+  ];
+  const links = collectPlayoutLinks();
+  if (links.cues.length || links.pads.length) addPreflightRow({ key: 'Playout links', state: 'pend', detail: 'Checking ' + (links.cues.length + links.pads.length) + ' linked cue/pad reference' + (links.cues.length + links.pads.length === 1 ? '' : 's') + '…' });
+  addPreflightRow({ key: 'Playout media', state: 'pend', detail: 'Checking the Outrangutan library…' });
+  addPreflightRow({ key: 'SFX banks', state: 'pend', detail: 'Checking pads…' });
+  if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
+    addPreflightRow({ key: 'Cloud round-trip', state: 'pend', detail: 'Writing a ping and waiting for the server echo…' });
+  }
+  addPreflightRow({ key: 'Theme & brand assets', state: 'pend', detail: 'Checking…' });
+  renderPreflightRows();
   showOverlay('goLiveCheckOv');
+  runPreflightAsync(run, links).catch(err => containError('Preflight', err));
+}
+
+async function runPreflightAsync(run, links) {
+  // 1) Deep-check the Outrangutan library when it shares this tab.
+  let deep = null;
+  try { deep = window.Outrangutan?.preflight ? await window.Outrangutan.preflight() : null; } catch (e) { deep = null; }
+  if (run !== _preflightRun) return;
+  const pubCues = outrangutanState.cues || {}, pubPads = outrangutanState.pads || {};
+  const hasLocal = !!(deep && (deep.cues.length || deep.pads.length));
+  const hasRemote = !!(Object.keys(pubCues).length || Object.keys(pubPads).length);
+
+  // Playout links — every rundown reference must resolve somewhere real.
+  if (links.cues.length || links.pads.length) {
+    const cueMap = deep ? Object.fromEntries(deep.cues.map(x => [x.id, x])) : {};
+    const padMap = deep ? Object.fromEntries(deep.pads.map(x => [x.id, x])) : {};
+    const bad = [];
+    links.cues.forEach(l => {
+      const local = cueMap[l.id];
+      if (local && !local.ok) bad.push({ ...l, why: '“' + local.name + '” — ' + local.issue });
+      else if (!local && !pubCues[l.id]) bad.push({ ...l, why: 'linked playout cue not found' });
+    });
+    links.pads.forEach(l => {
+      const local = padMap[l.id];
+      if (local && !local.ok) bad.push({ ...l, why: 'SFX “' + local.name + '” — ' + local.issue });
+      else if (!local && !pubPads[l.id]) bad.push({ ...l, why: 'linked SFX pad not found' });
+    });
+    if (!bad.length) setPreflightRow('Playout links', { state: 'ok', detail: (links.cues.length + links.pads.length) + ' link' + (links.cues.length + links.pads.length === 1 ? '' : 's') + ' verified' });
+    else {
+      // Replace the pending row in place so failures sit where the check ran.
+      const at = _preflightRows.findIndex(r => r.key === 'Playout links');
+      const failRows = bad.map(b => ({ key: 'Playout link · row ' + b.row, state: 'fail', detail: b.why, jump: b.beatId, jumpRow: b.row }));
+      if (at >= 0) _preflightRows.splice(at, 1, ...failRows);
+      else failRows.forEach(addPreflightRow);
+    }
+  }
+
+  // Playout media — exists on this machine, decodable, known dimensions.
+  if (hasLocal) {
+    const media = deep.cues.filter(c => c.checked);
+    const badMedia = media.filter(c => !c.ok);
+    if (!badMedia.length) setPreflightRow('Playout media', { state: 'ok', detail: media.length + ' cue' + (media.length === 1 ? '' : 's') + ' present & decodable, dimensions known' });
+    else setPreflightRow('Playout media', { state: 'fail', detail: badMedia.slice(0, 3).map(c => '#' + c.num + ' “' + c.name + '” — ' + c.issue).join(' · ') + (badMedia.length > 3 ? ' · +' + (badMedia.length - 3) + ' more' : '') });
+  } else if (hasRemote) {
+    setPreflightRow('Playout media', { state: 'warn', detail: 'Outrangutan runs on another machine — run its preflight there for the media deep-check' });
+  } else {
+    setPreflightRow('Playout media', { state: 'ok', detail: 'No playout in this show' });
+  }
+
+  // SFX banks — every pad's media loads; empty banks flagged.
+  if (hasLocal) {
+    const badPads = deep.pads.filter(p => !p.ok);
+    const emptyBanks = deep.banks.filter(b => !b.padCount);
+    if (badPads.length) setPreflightRow('SFX banks', { state: 'fail', detail: badPads.slice(0, 3).map(p => '“' + p.name + '” (' + p.bank + ') — ' + p.issue).join(' · ') + (badPads.length > 3 ? ' · +' + (badPads.length - 3) + ' more' : '') });
+    else if (!deep.pads.length) setPreflightRow('SFX banks', { state: 'ok', detail: 'No SFX pads in this show' });
+    else setPreflightRow('SFX banks', { state: emptyBanks.length ? 'warn' : 'ok', detail: deep.pads.length + ' pad' + (deep.pads.length === 1 ? '' : 's') + ' load & decode' + (emptyBanks.length ? ' · empty bank: ' + emptyBanks.map(b => '“' + b.name + '”').join(', ') : '') });
+  } else if (Object.keys(pubPads).length) {
+    setPreflightRow('SFX banks', { state: 'ok', detail: Object.keys(pubPads).length + ' pads published from the playout machine' });
+  } else {
+    setPreflightRow('SFX banks', { state: 'ok', detail: 'No SFX pads in this show' });
+  }
+  renderPreflightRows();
+
+  // 2) Cloud round-trip — a real write acknowledged by the server, timed.
+  if (_preflightRows.some(r => r.key === 'Cloud round-trip')) {
+    const rtt = await preflightCloudRoundTrip();
+    if (run !== _preflightRun) return;
+    if (rtt >= 0) setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Write → server ack in ' + rtt + ' ms' });
+    else setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Write failed — check the connection' : 'No server echo within 8 s — sync may be degraded' });
+    renderPreflightRows();
+  }
+
+  // 3) Theme & brand assets.
+  const themes = await preflightThemeAssets();
+  if (run !== _preflightRun) return;
+  setPreflightRow('Theme & brand assets', themes);
+  const { fails, warns } = renderPreflightRows();
+  logShow('preflight', 'Preflight finished — ' + fails + ' fail · ' + warns + ' warn · ' + _preflightRows.filter(r => r.state === 'ok').length + ' ok');
+}
+
+function preflightCloudRoundTrip() {
+  return new Promise(resolve => {
+    if (!(window._firebaseReady && session.code && !session.isDemo && !session.isExpert)) return resolve(-1);
+    let done = false, unsub = null;
+    const t0 = Date.now();
+    const token = 'pf_' + CLIENT_ID + '_' + t0.toString(36);
+    const finish = v => { if (done) return; done = true; try { unsub && unsub(); } catch {} resolve(v); };
+    try {
+      const ref = window._doc(window._db, 'sessions', session.code);
+      // includeMetadataChanges: the server ack arrives as a metadata-only
+      // transition (hasPendingWrites → false) that default snapshots skip.
+      unsub = window._onSnapshot(ref, { includeMetadataChanges: true }, snap => {
+        const p = snap.data()?.preflightPing;
+        if (p?.token === token && !snap.metadata.hasPendingWrites) finish(Date.now() - t0);
+      });
+      window._updateDoc(ref, { preflightPing: { token, ts: t0 } }).catch(() => finish(-1));
+      setTimeout(() => finish(-2), 8000);
+    } catch (e) { finish(-1); }
+  });
+}
+
+async function preflightThemeAssets() {
+  const notes = [];
+  ['ic-cueola', 'ic-plandabear', 'ic-flowmingo', 'ic-outrangutan'].forEach(id => {
+    if (!document.getElementById(id)) notes.push('brand sprite #' + id + ' missing');
+  });
+  if (!getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()) notes.push('theme tokens not resolving');
+  let svgWarn = '';
+  try {
+    const r = await fetch('assets/Brand/Cueola_Icon.svg', { method: 'HEAD', cache: 'no-store' });
+    if (!r.ok) notes.push('brand SVG returned ' + r.status);
+  } catch (e) { svgWarn = 'brand SVG unreachable (offline?) — in-page sprite still renders'; }
+  if (notes.length) return { state: 'fail', detail: notes.join(' · ') };
+  if (svgWarn) return { state: 'warn', detail: svgWarn };
+  return { state: 'ok', detail: 'Theme “' + currentTheme + '” tokens live · brand sprite + SVG present' };
+}
+
+// Jump from a failing preflight row straight to the rundown row it points at.
+function preflightJump(beatId) {
+  hideOverlay('goLiveCheckOv');
+  if (!document.getElementById('rundown')?.classList.contains('on')) { showRundown(); renderRundown(); }
+  setTimeout(() => {   // let the screen swap paint first (not rAF — headless previews starve it)
+    const row = document.querySelector(`#rdBody tr[data-id="${beatId}"]`) || document.querySelector(`tr[data-id="${beatId}"]`);
+    if (!row) { toast('Row not found — it may have been deleted.'); return; }
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.classList.add('preflight-hit');
+    setTimeout(() => row.classList.remove('preflight-hit'), 2600);
+  }, 60);
 }
 
 function confirmedGoLive() {
   hideOverlay('goLiveCheckOv');
+  if (_preflightReviewOnly) return;
   goLive();
 }
 
@@ -5101,6 +5582,8 @@ function goLive() {
   document.getElementById('tabBuild').classList.remove('on');
   sessionStorage.setItem('cueola_screen','live');
   pushSessionHistoryState('live');
+  logShow('session', 'Went live · row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
+  markResumeState();
   buildPromptFromRundown();
   initPrompter();
   sendToPrompter(true);
@@ -5121,6 +5604,8 @@ function showRundown() {
   document.getElementById('tabLive').classList.remove('on');
   sessionStorage.setItem('cueola_screen','build');
   pushSessionHistoryState('build');
+  logShow('session', 'Left live → build screen');
+  markResumeState();
   stopTimer();
   liveClockRunning = false;
   updateLiveClockButton();
@@ -5406,6 +5891,7 @@ function toggleLivePrompterPanel() {
     renderLive();
   }
   applyLivePrompterPanelState();
+  markResumeState();   // P7: Script Op open/closed is part of the resume snapshot
 }
 
 function startLivePanelResize(e) {
@@ -5911,9 +6397,15 @@ function lsNext() {
     lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     fireOutrangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outrangutan playback cue
+    logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     syncLiveIdx();
   }
+}
+// P7: short human label for a row in the show log.
+function rowLogLabel(b) {
+  const name = String(b?.info || b?.cues?.script?.who || '').trim();
+  return name ? ' · ' + name.slice(0, 60) : '';
 }
 
 function lsPrev() {
@@ -5922,6 +6414,7 @@ function lsPrev() {
   do { ni--; } while (ni >= 0 && beats[ni]?.style === 'segment');
   if (ni >= 0) {
     lsIdx = ni;
+    logShow('cue', 'Back → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
     syncLiveIdx();
@@ -8994,13 +9487,13 @@ window.showModal = function(id) {
 // CALL SHEET
 // ─────────────────────────────────────────────────────────────
 const PAPERWORK_ITEMS = [
-  { order:1, id:'call-sheet', title:'Call Sheet', sub:'Production details, crew, talent, location, and schedule.' },
-  { order:2, id:'production-scheduler', title:'Production Schedule', sub:'Setup day, show day, and the final ready-before-show checklist.' },
-  { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safety locations, weather, and equipment.' },
-  { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'The complete show rundown with every cue rendered out.' },
-  { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Editable row grid for label, destination, source, cabling, and notes.' },
-  { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Editable audio routing and comms assignment grids.' },
-  { order:7, id:'production-notes', title:'Production Notes', sub:'Team discussion board — post notes, tag departments, reply in threads, export anything.' },
+  { order:1, id:'call-sheet', title:'Call Sheet', sub:'Who, where, and when — the sheet the whole crew works from.' },
+  { order:2, id:'production-scheduler', title:'Production Schedule', sub:'Setup day and show day, hour by hour, ending in the last checks before doors.' },
+  { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safe locations, weather, and equipment — sorted before you need it.' },
+  { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
+  { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
+  { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
+  { order:7, id:'production-notes', title:'Production Notes', sub:'The crew’s message board — tag a department and the thread stays with the show.' },
 ];
 const PRODUCTION_CHECKLIST_GUIDES = [
   { area:'Record path', hint:'Confirm record destination, inputs, media space, format, and expected runtime.' },
@@ -9411,8 +9904,10 @@ function renderPaperworkNav(id, slotId='') {
   slot.hidden = false;
   const isFirst = idx <= 0;
   const isLast = idx >= PAPERWORK_ITEMS.length - 1;
-  const saveButton = id === 'rundown' ? '' : `<button type="button" class="save" onclick="savePaperworkItem('${item.id}',true)">Save Progress</button>`;
-  const previewButton = slotId === 'pbNavPreview' ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
+  // Notes post instantly and the rundown page renders itself — "Save Progress"
+  // and "Preview" only make sense on the form pages.
+  const saveButton = (id === 'rundown' || id === 'production-notes') ? '' : `<button type="button" class="save" onclick="savePaperworkItem('${item.id}',true)">Save Progress</button>`;
+  const previewButton = (slotId === 'pbNavPreview' || id === 'production-notes') ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
   slot.innerHTML = `
     <div class="paperwork-flow-left">
       <button type="button" onclick="returnToPaperworkHub()">Back to Planda Bear</button>
@@ -9667,9 +10162,9 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
       ? `<select class="field-in" id="${slotId}-section" aria-label="Comment section">${plandaBearCommentSectionOptions('Overall')}</select>`
       : `<input type="hidden" id="${slotId}-section" value="${esc(addSection)}">`;
     const studentCopy = comments.length
-      ? 'Review instructor feedback and mark comments reviewed after you have made changes or talked through the note.'
-      : 'No instructor comments yet.';
-    const instructorCopy = 'Leave feedback for students without changing their paperwork.';
+      ? 'Mark each note reviewed once you’ve made the change or talked it through.'
+      : 'Feedback from your instructor lands here.';
+    const instructorCopy = 'Leave feedback without touching the paperwork itself.';
     slot.innerHTML = `<div class="pb-comments" data-pb-comments-for="${esc(targetSection)}">
       <div class="pb-comments-head">
         <div>
@@ -9697,7 +10192,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
               ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Remove</button>` : ''}
             </div>
           </div>`;
-        }).join('') : `<div class="pb-comment-empty">${canComment ? 'No comments yet. Add one for students when you review this work.' : 'No instructor comments have been added for this section.'}</div>`}
+        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet — notes you leave show up here for the whole group.</div>' : '')}
       </div>
       ${canComment ? `<div class="pb-comment-form">
         ${sectionSelect}
@@ -10832,7 +11327,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   pbRenderNoteFilters(threads);
 
   if (!total) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board — post the first note, share a photo, or drop in a document. Everyone on this session sees the same board, live.</span></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board — post a note, a photo, or a file. Everyone in this session sees it live.</span></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -12621,7 +13116,7 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
 
 function showPreProPackagePreview() {
   loadPlandaBearNotes().then(() => {
-    showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export One PDF Package', 'exportPreProPackagePDF()', null);
+    showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export PDF Package', 'exportPreProPackagePDF()', null);
   });
 }
 
@@ -13565,3 +14060,33 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
     }
   });
 })();
+
+// ─────────────────────────────────────────────────────────────
+// P7: BOOT WIRING — error containment + session resume.
+// Wrap the live-critical render/dispatch paths so an exception in one panel
+// logs to the show log and recovers without taking down the show UI. These
+// rebind the top-level declarations; every caller picks up the guarded
+// version at call time.
+// ─────────────────────────────────────────────────────────────
+renderLive = guardFn(renderLive, 'Live view');
+renderRundown = guardFn(renderRundown, 'Rundown view');
+renderLiveFocus = guardFn(renderLiveFocus, 'Live focus view');
+renderLivePromptOp = guardFn(renderLivePromptOp, 'Flowmingo Op view');
+applyOutrangutanState = guardFn(applyOutrangutanState, 'Playout status');
+keymapDispatch = guardFn(keymapDispatch, 'Keyboard dispatch');
+
+// Offer to resume after an unclean exit (Decisions #14). The banner lives on
+// the entry screen; a deep link that routes elsewhere hides it with the screen.
+initResumeBanner();
+
+// P7: Save the show file with the standard shortcut — Cmd/Ctrl+S saves the
+// open surface in place (Outrangutan screen → .ogshow, otherwise → .cueola)
+// instead of triggering the browser's save-page dialog.
+window.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || String(e.key).toLowerCase() !== 's') return;
+  const og = document.getElementById('outrangutan')?.classList.contains('on');
+  const build = document.getElementById('rundown')?.classList.contains('on');
+  const live = document.getElementById('liveshow')?.classList.contains('on');
+  if (og) { e.preventDefault(); try { window.Outrangutan?.saveShowFile?.(); } catch (err) { containError('Show save', err); } return; }
+  if (build || live) { e.preventDefault(); exportRundownFile(); }
+}, true);

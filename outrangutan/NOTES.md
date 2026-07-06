@@ -5,6 +5,35 @@ Newest phase on top.
 
 ---
 
+## Cueola master-plan P7 — hardening surface (show files, preflight, show log)
+
+- **`.ogshow` show files.** `exportShowFile` saves through the File System Access
+  picker (named type "Outrangutan Show", `accept {'application/json': ['.ogshow']}`)
+  and keeps the `FileSystemFileHandle` — **Cmd+S** (global handler in cueola-app.js,
+  routed here via `window.Outrangutan.saveShowFile()`) re-saves the same file in
+  place. "Open Show…" uses `showOpenFilePicker` (`.ogshow` + legacy `.json`) and
+  adopts the handle on a successful import; both fall back to the old download /
+  file-input on other browsers or when the picker is denied. Validation unchanged
+  (payload `kind: 'outrangutan-show'`), so every legacy export still opens.
+  `importShowFile` now returns true/false so a bad file never captures a handle.
+- **Browser limit:** File System Access type entries can't carry a custom icon —
+  the branded artwork in the picker is the *named type text* only. The Cueola icon
+  as literal file-type artwork needs the (deferred, optional) PWA `file_handlers`
+  manifest.
+- **`Outrangutan.preflight()`** — deep library check for Cueola's preflight panel:
+  loads the show from IndexedDB if this tab hasn't entered the module yet, then
+  verifies every cue's media record exists + has a decodable duration + known
+  dimensions (and isn't ⚠-broken), decodes every pad's buffer, and reports per-bank
+  pad counts (empty banks flagged). Media never crosses to the panel — only
+  ok/issue summaries.
+- **Show-log bridge.** `slog(cat,msg)` → `window.CueolaShowLog.add()` (same-tab):
+  GO (with pre-wait), pause/resume (with offset), stop, PANIC, fail-to-black,
+  media-missing-at-fire, import rejects, pad fires, session join, show file
+  save/open. The keydown handler is wrapped so a throwing shortcut can't kill
+  live keys.
+
+---
+
 ## SFX — emoji labels, multiple banks, search
 
 - **Emoji + text labels.** Pads gained an `emoji` field: shown big on the pad face
