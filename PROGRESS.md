@@ -149,6 +149,20 @@ All five requests landed and were verified in the preview (`Cueola-alt`, port 30
 
 Not done / watch: entry page (Eucalyptus) untouched this round — nothing looked broken; flag specifics if still bothering. Outrangutan `outrangutan.css` is now versioned `?v=1.0.0f` alongside both JS files.
 
+## Framecheck pass round 5 — DONE 2026-07-06 (verified; css `?v=1.0.0i`, JS unchanged at `?v=1.0.0f`)
+
+All three halves finished and verified in the preview (zero console errors, every box measured unchanged):
+1. **Shadow strip verified** on entry/rundown/live+Script Op/Flowmingo Op overlay+standalone/Outrangutan/Add-Row+Settings modals, and koala/white themes. Kept glows confirmed working: LIVE button, Outrangutan GO (green glow + inset intact), status dots, focus/selection rings, sticky-column scrims, single soft ambients on floating overlays only.
+2. **Pop-out right-justified, verified numerically** — title now `flex:1`; pop-out at x1352 and × at x1394 sit flush against the 1428 row edge (the bug: `.ls-sidebar-close` also carries `.ls-popout-btn`, so BOTH had `margin-left:auto` and split the slack).
+3. **Type pass applied: 108 rule edits in index.html + 25 in outrangutan.css** (asserted batch script; every edit required selector+all-old-values+uniqueness). Fonts up ~1–2px and icons up ~1.5–2px across every button class on every surface (entry, topbar, rundown, Script Op, overlay, Flowmingo Op, Outrangutan, Planda Bear, modals, toasts); vertical padding cut where the box was content-driven so **no box grew** — measured: bell/gear 40px, tbtn row 38px, PLAY 46px, sidebar pt-btn 30px, slider circles 34px, og GO 65.5px (was 65.4), og tabs pill 42px (was ~42.5). New appended rules give explicit icon sizes (`.tbtn/.ls-exit-btn .sf-symbol`, slider-circle glyphs) per framecheck's icons ≥ text rule. Two overflow fixes found by measurement: `.og-tab` needed `white-space:nowrap` ("SFX Board" wrapped and ballooned the pill) + `line-height:1.25`; all other flagged risks (sidebar clock modes, cue-type grid, settings 3-col, toast) verified non-clipping.
+4. **Element language**: hover `translateY(-1px)` lift + shared transition on the interactive pill set (tbtn/exit/fmt/marker/pact/pt-btn/popout/chips/pb composer buttons), `:active scale(.98)` kept; remaining rectangular chips (`.chip/.cc-chip/.admin-act-btn/.admin-src-add/.precheck-jump/.pn-tag-chip/.pn-act-btn/.row-ea-btn`) → pills; Outrangutan input focus switched from hard 2px outline to the framecheck soft `0 0 0 3px` accent ring.
+
+`design/framecheck-pass/` research folder deleted as planned.
+
+**Follow-up (same day):** resume banner got 18px bottom margin (was flush against the guide row, verified 18px gap); the `#ic-plandabear` (index.html + dashboard.html) and `#ic-outrangutan` (index.html) sprite symbols rebuilt from the operator's 2026-07-06 exports (`Planda_Bear_icon.svg` — new gripping paws, resized clipboard, narrower head; `Outrangutan_icon.svg` — bigger triangle/orangutan) with the usual class-styles→attributes conversion; comments now reference the new `Planda_Bear_icon.svg` filename. Both verified rendering on the entry page, zero console errors.
+
+Framecheck design language, for future UI work (from the deleted `design/framecheck-pass/` research): shadows encode elevation tiers — controls get inset white top-highlights only, floating overlays get ONE large soft ambient, the single primary action glows in its own hue; text ≈ 44% of button height with icons ≥ text; status via `0 0 0 1–4px` rings at 12–20% alpha, focus via soft 3px accent rings; pills and circles over rectangles; hover lifts `translateY(-1px)`.
+
 ## Deferred items
 
 - Hardened Firestore rules exist in-repo but are **not deployed**; App Check unconfigured; admin-code rotation owed (pre-plan security audit). Likely lands with Phase 7 hardening unless prioritized sooner.
