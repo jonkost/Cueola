@@ -90,6 +90,25 @@ These make the principles enforceable in this codebase.
 
 ---
 
+## The inspector standard (control panels)
+
+Modeled on the Keynote/Pages inspector; the Script Op drawer is the reference
+implementation (`.insp-head/.insp-tabs/.insp-tab/.insp-caption/.insp-pane`).
+When a panel holds more than one group of controls:
+
+1. **Icon tabs on top** pick ONE group at a time — never a stacked accordion.
+   A small uppercase caption under the tabs names the active group.
+2. **One flat page per group.** Section headers are bold text; sections are
+   separated by hairlines (`color-mix(in srgb, var(--text) 8-10%, transparent)`),
+   never by nested bordered cards. Controls sit directly on the panel background.
+3. **No boxes in boxes.** A panel gets ONE level of container chrome (the panel
+   itself). If a section "needs" a border, it probably needs a header and a
+   hairline instead.
+4. Remember the active tab (`localStorage`) so panels reopen where the
+   operator works.
+
+---
+
 ## Pre-ship checklist
 
 - [ ] Reads clearly at a glance under time pressure?

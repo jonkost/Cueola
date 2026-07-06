@@ -6844,6 +6844,27 @@ function updateLsPrompter() {
   setLivePrompterEditorText(prompterText);
 }
 
+// Inspector tabs (Keynote-style): one control group at a time in the Script Op
+// drawer. The chosen tab is remembered so the panel reopens where you work.
+const LS_INSP_LABELS = { transport: 'Prompter', live: 'Cue & On Air', clock: 'Clocks & Alerts', format: 'Formatting & Markers' };
+function lsInspTab(key) {
+  if (!LS_INSP_LABELS[key]) key = 'transport';
+  document.querySelectorAll('#lsOperatorDrawer .insp-tab').forEach(b => {
+    const on = b.getAttribute('data-insp') === key;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('#lsOperatorDrawer .insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
+  const cap = document.getElementById('lsInspCaption');
+  if (cap) cap.textContent = LS_INSP_LABELS[key];
+  try { localStorage.setItem('cueola_insp_tab', key); } catch {}
+}
+function lsInspRestoreTab() {
+  let key = 'transport';
+  try { key = localStorage.getItem('cueola_insp_tab') || 'transport'; } catch {}
+  lsInspTab(key);
+}
+
 function renderLivePrompterControls() {
   // Live actions stay visible in the sidebar;
   // the full transport block lives in a collapsible disclosure below.
@@ -6855,6 +6876,7 @@ function renderLivePrompterControls() {
   const el = document.getElementById('lsPrompterRemote');
   if (el) el.innerHTML = promptOpControlsHTML(false);
   renderPromptOpClockPreview();
+  lsInspRestoreTab();   // keep the remembered inspector tab active across re-renders
 }
 
 // ── Script Op pop-out controls ─────────────────────────────────────────────

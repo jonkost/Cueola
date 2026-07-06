@@ -98,7 +98,18 @@ live view.
   when the panel overlaps it); hidden inside the dedicated pop-out window.
 - Build rundown: the sticky #/name columns no longer let the scrolled table
   show through — hover/edit dimming moved off the sticky cells onto the drag
-  icon itself.
+  icon itself, and both rundown tables switched from `border-collapse:collapse`
+  to `separate` (collapsed borders paint on the table grid, not the cells, so
+  scrolling strokes slid straight through the pinned columns).
+
+### Inspector redesign (operator-requested, Keynote-style)
+- The Script Op drawer's stacked accordion of bordered boxes is gone: **icon
+  tabs** at the top pick one control group (Prompter / Cue & On Air / Clocks &
+  Alerts / Formatting) shown as a single flat page — bold text headers,
+  hairline separators, controls directly on the panel. Active tab remembered.
+- All dead accordion CSS removed; the pattern is codified in
+  `DESIGN_GUIDELINES.md` ("The inspector standard") as the template for
+  de-boxing the remaining panels.
 
 ### Known deferrals (unchanged by this release)
 - Hardened Firestore rules exist in-repo but are **not deployed**; App Check and

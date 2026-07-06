@@ -199,7 +199,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ── RUNDOWN TABLE ── */
 .rd-scroll{flex:1;overflow-y:auto;overflow-x:auto;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,transparent),transparent 120px);scrollbar-width:thin}
-.rd-table{width:100%;min-width:100%;border-collapse:collapse;table-layout:fixed}
+/* border-collapse:separate — collapsed borders paint on the table's grid layer,
+   not the cells, so the scrolling cells' strokes slid straight through the
+   pinned columns. Separate keeps every border inside its own (sticky) cell.
+   Only bottom/right borders are declared, so the rendering is otherwise identical. */
+.rd-table{width:100%;min-width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
 .rd-table th,.rd-table td{padding:0;border-bottom:1px solid var(--border);vertical-align:top;border-right:1px solid var(--bord2)}
 .rd-table th:last-child,.rd-table td:last-child{border-right:none}
 .col-drag{width:20px}.col-num{width:32px}.col-info{width:22%}
@@ -374,7 +378,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Live rundown grid */
 .live-grid-wrap{overflow:auto;min-height:0;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.012)}
-.live-grid{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
+.live-grid{width:100%;min-width:860px;border-collapse:separate;border-spacing:0;table-layout:fixed}   /* same sticky-column stroke fix as .rd-table */
 .live-grid th,.live-grid td{border-bottom:1px solid var(--border);vertical-align:middle}
 .live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
 .live-grid td{padding:8px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
@@ -679,7 +683,6 @@ details[open]>.ui-more{color:var(--accent)}
 .ls-push-primary{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:13px 14px;border-radius:0;font-size:13.5px;font-weight:800;font-family:var(--sans);cursor:pointer;border:0;border-top:1px solid color-mix(in srgb,var(--cyan) 30%,var(--glass-border));box-shadow:0 -6px 20px color-mix(in srgb,var(--cyan) 14%,transparent);letter-spacing:.01em}
 .ls-push-primary .sf-symbol{font-size:15px}
 .ls-operator-drawer{flex:0 1 auto;max-height:min(48vh,430px);overflow-y:auto;padding:10px 12px 12px;border-top:1px solid var(--glass-border);display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,color-mix(in srgb,var(--text) 4%,transparent),color-mix(in srgb,var(--text) 2%,transparent));overscroll-behavior:contain}
-.ls-control-card{border:1px solid var(--glass-border);background:color-mix(in srgb,var(--s2) 72%,transparent);border-radius:12px;padding:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .ls-control-head{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.075em;text-transform:uppercase;color:var(--text2)}
 .ls-control-head .sf-symbol{font-size:12px;color:var(--cyan)}
 .ls-clear-btn{background:color-mix(in srgb,var(--s3) 82%,transparent);border:1px solid var(--glass-border);color:var(--text2)}
@@ -1931,16 +1934,19 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-live-actions .pt-live-cue{flex:1 1 100%}
 .ls-live-actions .pt-range{flex:1}
 .ls-live-actions .flow-clock-stack{flex:1 1 100%;width:100%}
-.ls-disclosure{border:1px solid var(--glass-border,rgba(255,255,255,.08));border-radius:12px;overflow:hidden;background:color-mix(in srgb,var(--s2) 64%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
-.ls-disclosure>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 12px;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.075em;text-transform:uppercase;color:var(--text2,#9aa6b2);user-select:none}
-.ls-disclosure>summary .sf-symbol{font-size:12px;color:var(--cyan)}
-.ls-disclosure>summary::-webkit-details-marker{display:none}
-.ls-disclosure>summary::after{content:'';margin-left:auto;width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .2s;opacity:.7}
-.ls-disclosure[open]>summary::after{transform:rotate(-135deg)}
-.ls-disclosure>summary:hover{color:var(--cyan,#22d3d3)}
-.ls-cascade-body{padding:0 10px 10px}
-.ls-cascade #lsPrompterRemote{padding:0}
-.ls-cascade .prompt-op-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}
+/* Inspector pattern (Keynote-style): icon tabs pick one flat control group.
+   Groups are pages, not boxes — headers are text + hairlines, controls sit
+   directly on the panel background. */
+.insp-head{position:sticky;top:0;z-index:3;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:8px 10px 7px;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
+.insp-tabs{display:flex;justify-content:center;gap:2px}
+.insp-tab{appearance:none;border:0;background:transparent;color:var(--text3);width:44px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s var(--ease),color .15s var(--ease)}
+.insp-tab .sf-symbol{font-size:14px}
+.insp-tab:hover{color:var(--text2);background:color-mix(in srgb,var(--text) 6%,transparent)}
+.insp-tab.on{background:var(--s3);color:var(--accent)}
+.insp-caption{text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--text3);margin-top:5px;text-transform:uppercase;font-family:var(--mono)}
+.insp-pane{display:none;padding:12px}
+.insp-pane.on{display:block}
+.insp-pane .prompt-op-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}
 .flow-clock-stack{display:flex;flex-direction:column;gap:9px;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));background:rgba(0,0,0,.14);border-radius:12px;padding:10px}
 .ls-sidebar .flow-clock-stack{border:0;background:transparent;border-radius:0;padding:0}
 .flow-clock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
@@ -2046,22 +2052,6 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   padding:12px 12px 14px;
   background:linear-gradient(180deg,color-mix(in srgb,var(--s1) 42%,transparent),color-mix(in srgb,var(--s1) 68%,transparent));
 }
-.ls-control-card,.ls-disclosure{
-  border-radius:var(--ui-radius-group);
-  background:color-mix(in srgb,var(--s1) 76%,transparent);
-  border-color:var(--liquid-edge);
-  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent);
-}
-.ls-control-head,.ls-disclosure>summary{
-  font-family:var(--sans);
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:0;
-  text-transform:none;
-  color:var(--text);
-}
-.ls-control-card.ls-disclosure{padding:0}
-.ls-live-control-card .ls-cascade-body{padding:0 10px 10px}
 .flow-control-panel{display:flex;flex-direction:column;gap:10px;width:100%}
 .flow-control-section{
   width:100%;
@@ -2320,18 +2310,14 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-operator-drawer{
   flex:1 1 auto;
   min-height:0;
-  padding:10px 12px 12px;
-  gap:8px;
+  padding:0;
+  gap:0;
 }
-.ls-operator-drawer > .ls-disclosure,
 .ls-operator-drawer > .ls-prompter-actions{
   flex:0 0 auto;
-}
-.ls-operator-drawer > .ls-disclosure{
-  overflow:visible;
-}
-.ls-operator-drawer > .ls-disclosure > summary{
-  min-height:40px;
+  padding:10px 12px 12px;
+  margin-top:auto;
+  border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent);
 }
 .ls-live-actions{
   display:grid;
@@ -2355,21 +2341,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   -webkit-backdrop-filter:blur(16px) saturate(145%);
   backdrop-filter:blur(16px) saturate(145%);
 }
-.ls-sidebar .ls-disclosure{
-  border:1px solid var(--liquid-edge);
-  border-radius:14px;
-  background:color-mix(in srgb,var(--s1) 50%,transparent);
-  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent),0 8px 22px rgba(0,0,0,.14);
-  overflow:hidden;
-}
-.ls-sidebar .ls-cascade-body{
-  padding:10px;
-  border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent);
-}
 /* The operator drawer is the single scroll container, so each disclosure
    shows its full contents — no inner viewport-scaled peephole that would
    crop the Display/Theme/Screen controls. */
-.ls-sidebar #lsPrompterRemote{padding:10px}
+.ls-sidebar #lsPrompterRemote{padding:0}
 .ls-sidebar .flow-control-section{
   padding:0;
   border:0;
@@ -2538,14 +2513,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 /* With the extra width, flow the control groups into responsive columns.
    align-items:start + min-content rows let each card take its natural height
    (no equal-row clipping); the drawer itself scrolls if it overflows. */
-.ls-sidebar.is-popped .ls-operator-drawer{
-  display:grid;align-content:start;align-items:start;
-  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
-  grid-auto-rows:min-content;
-  gap:10px;
-}
-.ls-sidebar.is-popped .ls-operator-drawer > .ls-disclosure{overflow:visible}
-.ls-sidebar.is-popped .ls-operator-drawer > .ls-prompter-actions{grid-column:1/-1}
+/* Popped-out floating panel keeps the same single-page inspector flow. */
+.ls-sidebar.is-popped .ls-operator-drawer{display:flex;flex-direction:column}
 @media(max-width:600px){
   .ls-sidebar.is-popped{top:10px;right:10px;left:10px;width:auto;height:88vh}
 }
@@ -3295,10 +3264,23 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <div class="ls-editor-actions">
         <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" title="Push to Flowmingo (⌘Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
       </div>
+      <!-- Inspector pattern (Keynote-style): icon tabs pick ONE control group,
+           shown as a flat single page — no stacked accordion, no nested cards. -->
       <div class="ls-operator-drawer" id="lsOperatorDrawer">
-        <details class="ls-disclosure ls-cascade" id="lsFormatDisclosure">
-          <summary><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span><span>Formatting &amp; Markers</span></summary>
-          <div class="ls-cascade-body ls-format-cascade" aria-label="Formatting and markers">
+        <div class="insp-head">
+          <div class="insp-tabs" role="tablist" aria-label="Script Op control groups">
+            <button type="button" class="insp-tab on" role="tab" aria-selected="true" data-insp="transport" onclick="lsInspTab('transport')" title="Prompter"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="live" onclick="lsInspTab('live')" title="Cue &amp; On Air"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="clock" onclick="lsInspTab('clock')" title="Clocks &amp; Alerts"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="format" onclick="lsInspTab('format')" title="Formatting &amp; Markers"><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span></button>
+          </div>
+          <div class="insp-caption" id="lsInspCaption">Prompter</div>
+        </div>
+        <div class="insp-pane on" data-insp-pane="transport"><div id="lsPrompterRemote"></div></div>
+        <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div></div>
+        <div class="insp-pane" data-insp-pane="clock"><div id="lsClockActions"></div></div>
+        <div class="insp-pane" data-insp-pane="format">
+          <div class="ls-format-cascade" aria-label="Formatting and markers">
             <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" title="Bold (⌘B)" aria-label="Bold"><strong>B</strong></button>
             <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" title="Italic (⌘I)" aria-label="Italic"><em>I</em></button>
             <span class="fmt-sep"></span>
@@ -3309,19 +3291,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
           </div>
-        </details>
-        <details class="ls-disclosure ls-cascade" id="lsTransportDisclosure" open>
-          <summary><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Prompter Transport</span></summary>
-          <div class="ls-cascade-body" id="lsPrompterRemote"></div>
-        </details>
-        <details class="ls-disclosure ls-cascade ls-control-card ls-live-control-card" id="lsLiveDisclosure" open>
-          <summary><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Cue &amp; On Air</span></summary>
-          <div class="ls-cascade-body ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div>
-        </details>
-        <details class="ls-disclosure ls-cascade" id="lsClockDisclosure">
-          <summary><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span>Clocks &amp; Alerts</span></summary>
-          <div class="ls-cascade-body" id="lsClockActions"></div>
-        </details>
+        </div>
         <div class="ls-prompter-actions">
           <button class="ls-pact-btn ls-clear-btn" onclick="openLiveScript(Math.max(lsIdx,0))"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit cue script</span></button>
           <button class="ls-pact-btn ls-clear-btn" onclick="clearPrompter()"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span><span>Clear script</span></button>
@@ -4296,8 +4266,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0d"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0d"></script>
+<script src="cueola-app.js?v=1.0.0e"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0e"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
