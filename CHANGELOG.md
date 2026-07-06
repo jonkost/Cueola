@@ -89,6 +89,16 @@ live view.
 - Consistency sweep: dashboard sign-in standardized on "admin code" (was three
   different names), stray emoji replaced with SF Symbols per the design
   guidelines, sessions empty-state copy rewritten.
+- Theme pickers unified on the **circle swatches** (the entry-page/Settings
+  look) across every surface — Script Op drawer and Flowmingo Op overlay
+  included; the rectangle tiles are gone.
+- The live **Cue scrubber mirrors its position into the Script Op editor** —
+  the operator sees the script fly by while dragging, not just a percentage.
+- Script Op panel gained its own **× close** (the topbar toggle can be covered
+  when the panel overlaps it); hidden inside the dedicated pop-out window.
+- Build rundown: the sticky #/name columns no longer let the scrolled table
+  show through — hover/edit dimming moved off the sticky cells onto the drag
+  icon itself.
 
 ### Known deferrals (unchanged by this release)
 - Hardened Firestore rules exist in-repo but are **not deployed**; App Check and

@@ -305,8 +305,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cue-row.dragging{opacity:.4}.cue-row.drag-over{box-shadow:inset 0 2px 0 var(--accent)}
 .cue-row.search-hit{background:color-mix(in srgb,var(--accent) 13%,transparent)!important}
 .cd{padding:7px 7px;vertical-align:middle;font-size:11px;line-height:1.4}
-.cd-drag{color:var(--text3);font-size:10px;text-align:center;opacity:0;cursor:grab;padding:8px 2px}
-.cue-row:hover .cd-drag{opacity:1}
+/* Reveal-on-hover lives on the icon, never the cell — the cell is a sticky
+   column and cell-level opacity let the scrolled table show through it. */
+.cd-drag{color:var(--text3);font-size:10px;text-align:center;cursor:grab;padding:8px 2px}
+.cd-drag>span{opacity:.15;transition:opacity .12s var(--ease)}
+.cue-row:hover .cd-drag>span{opacity:.6}
+.edit-mode-row .cd-drag>span{opacity:1}
 .cd-num{font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center}
 .cd-info{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.01em}
 .cd-subnote{font-size:10px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2489,6 +2493,11 @@ body.scriptop-popout .ls-overview,
 body.scriptop-popout #lsBody,
 body.scriptop-popout #lsResizer,
 body.scriptop-popout #lsPopoutBtn{display:none!important}
+/* The × closes the docked panel — inside the dedicated pop-out window it would
+   just blank the window, so hide it there. */
+body.scriptop-popout .ls-sidebar-close{display:none!important}
+.ls-sidebar-close{flex:none;padding:6px 8px}
+.ls-sidebar-close .sf-symbol{margin:0}
 body.scriptop-popout #liveshow{display:flex;flex-direction:column}
 body.scriptop-popout .ls-body{flex:1 1 auto;min-height:0;display:block}
 body.scriptop-popout .ls-sidebar{position:static!important;width:100%!important;max-width:none!important;min-width:0!important;height:100%!important;transform:none!important;border-left:0!important}
@@ -3277,6 +3286,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
         <div class="ls-sidebar-head-row">
           <div class="ls-sidebar-title">Script Op</div>
           <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Pop out</span></button>
+          <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" title="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
@@ -4286,8 +4296,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0b"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0b"></script>
+<script src="cueola-app.js?v=1.0.0d"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0d"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

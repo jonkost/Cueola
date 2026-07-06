@@ -3575,7 +3575,7 @@ function renderRundown() {
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
       </div>` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
-      <td class="cd cd-drag" style="opacity:${editMode?'1':'.15'};cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}">${sfIcon('action.drag')}</td>
+      <td class="cd cd-drag" style="cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
       <td class="cd cd-num">${cueNum}</td>
       <td class="cd" style="padding:8px 6px">
         <div class="cd-name">${esc(b.info||'—')}${rundownRowPresenceHTML(b.id)}</div>
@@ -6957,6 +6957,16 @@ function _scriptHeightEnd() {
   try { if (ta) localStorage.setItem('cueola_scriptOpHeight', parseFloat(ta.style.flexBasis) || ''); } catch (e) {}
 }
 
+// The Cue scrubber should show WHERE it is in the script, not just move the
+// talent screen — mirror the scrub position into the Script Op editor so the
+// operator watches the text fly by as they drag.
+function lsScrubPreviewScript(pct) {
+  const ta = document.getElementById('lsPrompterText');
+  if (!ta) return;
+  const p = Math.max(0, Math.min(100, parseFloat(pct) || 0)) / 100;
+  ta.scrollTop = p * Math.max(0, ta.scrollHeight - ta.clientHeight);
+}
+
 async function pushToPrompter() {
   const el = livePrompterEditor();
   if (el) adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
@@ -7662,7 +7672,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   const seekVal = isFlow ? 0 : ptProgressPct();
   const seekInput = isFlow
     ? `flowOpApplyControlPreview('seek_set_'+this.value,true)`
-    : `sendPrompterPreviewControl('seek_set_'+this.value)`;
+    : `sendPrompterPreviewControl('seek_set_'+this.value);lsScrubPreviewScript(this.value)`;
   const seekChange = isFlow
     ? ` onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''"`
     : ` onchange="sendPrompterControl('seek_set_'+this.value);this.dataset.seekDragging=''"`;
