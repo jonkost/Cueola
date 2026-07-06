@@ -130,15 +130,27 @@
   .og-tbtn { flex: 1 1 calc(50% - 4px); }
   .og-tbtn-go { flex-basis: 100%; }
 }
+/* The transport lives in the PROGRAM PANE, whose width the splitters control —
+   wrap on the pane's own width (container query), not the viewport, so nothing
+   clips when the operator drags the cue list / inspector wide. */
+@container (max-width: 600px) {
+  .og-transport { flex-wrap: wrap; }
+  .og-tbtn { flex: 1 1 calc(25% - 4px); min-width: 72px; }
+  .og-tbtn-go { flex-basis: 100%; order: -1; }   /* GO takes the top row; the four others share one row */
+  .og-master { display: none; }   /* the head meter yields before anything clips */
+}
+@container (max-width: 380px) {
+  .og-tbtn { flex: 1 1 calc(50% - 4px); }
+}
 
 /* ── inspector (right) ───────────────────────────────────────────────────── */
 .og-inspector { overflow: auto; flex: 1 1 auto; padding: 11px 12px 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-content: start; gap: 10px 14px; }
 .og-insp-empty { color: var(--text3); font-size: 13px; text-align: center; padding: 24px 8px; }
 .og-field { display: flex; flex-direction: column; gap: 4px; }
-.og-field label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.og-field label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
 .og-field input, .og-field select {
   background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm);
-  color: var(--text); font-size: 13px; padding: 8px 10px; font-family: var(--sans); width: 100%;
+  color: var(--text); font-size: 14px; padding: 8px 10px; font-family: var(--sans); width: 100%;
 }
 .og-field input[type="range"] { padding: 0; }
 .og-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -193,13 +205,13 @@
 .og-inspector .insp-head { padding: 9px 10px 8px; }
 .og-insp-body { padding: 11px 12px 13px; }
 .og-insp-sec + .og-insp-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
-.og-sec-title { font-family: var(--sans); font-size: 12px; font-weight: 800; color: var(--text); margin: 2px 0 3px; }
+.og-sec-title { font-family: var(--sans); font-size: 13px; font-weight: 800; color: var(--text); margin: 2px 0 3px; }
 .og-insp-sec .og-kit > .og-field:first-child, .og-insp-sec .og-kit > .og-field-row:first-child { border-top: 0; }
 .og-kit .og-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 42px; padding: 5px 0; }
 .og-kit .og-field + .og-field, .og-kit .og-field-row + .og-field, .og-kit .og-field + .og-field-row,
 .og-kit .og-field + details, .og-kit details + .og-field, .og-kit details + label,
 .og-kit .og-field-row + .og-field-row, .og-kit .og-field + .og-check, .og-kit .og-field-row3 + .og-check { border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
-.og-kit .og-field > label { flex: 1 0 auto; max-width: 46%; font-size: 12.5px; font-weight: 550; color: var(--text); letter-spacing: 0; text-transform: none; overflow: hidden; text-overflow: ellipsis; }
+.og-kit .og-field > label { flex: 1 0 auto; max-width: 46%; font-size: 13.5px; font-weight: 550; color: var(--text); letter-spacing: 0; text-transform: none; overflow: hidden; text-overflow: ellipsis; }
 .og-kit .og-field input[type="text"] { flex: 1; width: auto; min-width: 0; }
 .og-kit .og-field input[type="number"] { width: 70px; }
 .og-kit .og-field input[type="range"] { flex: 1; width: auto; min-width: 80px; }
@@ -210,7 +222,7 @@
 .og-kit .og-field .ui-seg { flex: 1 1 100%; min-width: 0; max-width: none; margin-bottom: 6px; }
 .og-kit .og-field .ui-stepper input[type="number"] { width: 56px; min-height: 30px; border: none; background: transparent; box-shadow: none; text-align: center; font-family: var(--mono-num, var(--mono)); font-size: 12px; padding: 0; border-radius: 0; }
 .og-kit .og-field-row .og-field, .og-kit .og-field-row3 .og-field { flex-direction: column; align-items: stretch; gap: 4px; min-height: 0; max-width: none; }
-.og-kit .og-field-row .og-field > label, .og-kit .og-field-row3 .og-field > label { max-width: none; font-size: 10.5px; color: var(--text2); font-weight: 650; }
+.og-kit .og-field-row .og-field > label, .og-kit .og-field-row3 .og-field > label { max-width: none; font-size: 11.5px; color: var(--text2); font-weight: 650; }
 .og-kit .og-field-row .og-field input, .og-kit .og-field-row .og-field select,
 .og-kit .og-field-row3 .og-field input, .og-kit .og-field-row3 .og-field select { width: 100%; max-width: none; }
 .og-kit .og-check { justify-content: space-between; padding: 8px 0; min-height: 42px; }
@@ -273,9 +285,9 @@
 
 /* ── inspector additions ─────────────────────────────────────────────────── */
 /* Pad-inspector section headers match the inspector standard: bold text + hairline. */
-.og-insp-sub { font-family: var(--sans); font-size: 12px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--text); margin: 10px 0 -2px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
+.og-insp-sub { font-family: var(--sans); font-size: 13px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--text); margin: 10px 0 -2px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
 .og-field-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-.og-field-row3 .og-field label { font-size: 10px; }
+.og-field-row3 .og-field label { font-size: 11px; }
 .og-check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text2); cursor: pointer; user-select: none; }
 .og-check input { width: 15px; height: 15px; accent-color: var(--accent); }
 .og-check-inline { font-size: 12px; }

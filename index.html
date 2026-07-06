@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0i">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0k">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -26,14 +26,15 @@
   --glass-bg:color-mix(in srgb,var(--s1) 78%,transparent);
   --glass-bg-strong:color-mix(in srgb,var(--s2) 88%,transparent);
   --glass-border:color-mix(in srgb,var(--text) 14%,transparent);
-  --glass-highlight:inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent); /* framecheck: lit glass edge, no drop */
+  --glass-highlight:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent),inset 0 -1px 0 color-mix(in srgb,#fff 4%,transparent); /* framecheck: lit glass edge top + faint bottom, no drop */
   --ui-label:var(--text);--ui-label-secondary:var(--text2);--ui-label-tertiary:var(--text3);
   --ui-fill:var(--s1);--ui-fill-secondary:var(--s2);--ui-separator:var(--border);
   --ui-control-height:40px;--ui-control-height-compact:34px;--ui-hit-target:44px;
   --ui-radius-control:12px;--ui-radius-group:16px;--ui-radius-panel:22px;
-  --liquid-fill:color-mix(in srgb,var(--s1) 68%,transparent);
-  --liquid-fill-strong:color-mix(in srgb,var(--s2) 82%,transparent);
-  --liquid-edge:color-mix(in srgb,var(--text) 18%,var(--border));
+  /* framecheck layered glass: diagonal body gradient + horizontal sheen (theme-tinted via color-mix) */
+  --liquid-fill:linear-gradient(145deg,color-mix(in srgb,var(--s2) 60%,transparent),color-mix(in srgb,var(--s1) 42%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));
+  --liquid-fill-strong:linear-gradient(145deg,color-mix(in srgb,var(--s2) 88%,transparent),color-mix(in srgb,var(--s1) 64%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 10%,transparent),color-mix(in srgb,#fff 3%,transparent));
+  --liquid-edge:color-mix(in srgb,var(--text) 24%,var(--border));
   --liquid-edge-strong:color-mix(in srgb,var(--text) 28%,var(--bord2));
   --liquid-highlight:none;
   --liquid-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
@@ -94,7 +95,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-title{font-family:var(--syne);font-size:clamp(30px,8vw,38px);font-weight:800;letter-spacing:-.01em;margin-bottom:0;line-height:1.08;color:var(--text)}
 .e-sub{font-size:clamp(13.5px,3.6vw,15px);color:var(--text2);text-align:center;line-height:1.5;margin-bottom:18px;max-width:420px;letter-spacing:0;text-wrap:balance}
 .e-sub em{color:var(--text);font-style:normal;font-weight:600}
-.entry-actions{width:100%;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+/* Entry actions ride a floating glass dock (framecheck sticky-bar language). */
+.entry-actions{width:max-content;max-width:100%;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin:0 auto 22px;padding:7px;border-radius:999px;border:1px solid var(--liquid-edge);background:var(--liquid-fill);box-shadow:var(--glass-highlight);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 .entry-admin-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto;border:1.5px solid color-mix(in srgb,var(--accent) 38%,var(--bord2));background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--text);border-radius:999px;padding:10px 20px;font-size:14.5px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease),box-shadow .15s var(--ease);letter-spacing:0}
 .entry-admin-link .eal-ico{font-size:16px;line-height:1}
 .entry-admin-link:hover{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 16%,transparent);transform:translateY(-1px)}
@@ -504,19 +506,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    −/+ steppers, toggles. Accent = theme accent (Decisions #10). ── */
 .ui-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:7px 2px}
 .ui-row+.ui-row{border-top:1px solid color-mix(in srgb,var(--text) 7%,transparent)}
-.ui-row-lbl{flex:1;font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ui-row-lbl{flex:1;font-size:14px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ui-row-val{font-size:12.5px;color:var(--text2);font-variant-numeric:tabular-nums}
 .ui-chevron{color:var(--text3);font-size:13px;flex:none}
 .ui-row.drill{cursor:pointer}
 .ui-row.drill:hover .ui-row-lbl{color:var(--accent)}
 .ui-seg{display:flex;gap:4px;background:color-mix(in srgb,var(--s1) 65%,transparent);border:1px solid var(--border);border-radius:12px;padding:3px;min-width:0}
-.ui-seg-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:32px;min-width:0;padding:5px 9px;border:none;border-radius:9px;background:transparent;color:var(--text2);font-size:13px;font-weight:650;cursor:pointer;white-space:nowrap}
+.ui-seg-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:34px;min-width:0;padding:5px 9px;border:none;border-radius:9px;background:transparent;color:var(--text2);font-size:13.5px;font-weight:650;cursor:pointer;white-space:nowrap}
 .ui-seg-btn:hover{color:var(--text)}
 .ui-seg-btn.on{background:var(--accent);color:#fff}
 .ui-stepper{display:inline-flex;align-items:center;background:color-mix(in srgb,var(--s1) 65%,transparent);border:1px solid var(--border);border-radius:999px;overflow:hidden;flex:none}
 .ui-step-btn{width:34px;min-height:32px;border:none;background:transparent;color:var(--text);font-size:18px;font-weight:700;cursor:pointer;line-height:1}
 .ui-step-btn:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
-.ui-step-val{min-width:48px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;padding:0 4px}
+.ui-step-val{min-width:48px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;padding:0 4px}
 .ui-toggle{position:relative;width:44px;height:26px;border-radius:999px;border:1px solid var(--border);background:var(--s3);cursor:pointer;transition:background .18s var(--ease),border-color .18s var(--ease);flex:none;padding:0}
 .ui-toggle::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s var(--ease)}
 .ui-toggle.on{background:var(--accent);border-color:var(--accent)}
@@ -643,10 +645,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Sidebar prompter */
 .ls-sidebar-head{padding:12px 14px 8px;border-bottom:1px solid var(--glass-border);flex-shrink:0;background:linear-gradient(180deg,color-mix(in srgb,var(--text) 4%,transparent),transparent)}
 .ls-sidebar-title{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin-bottom:4px}
-.ls-prompter-status{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.ls-prompter-status{font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px}
 .ls-prompter-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .ls-prompter-dot.off{background:var(--text3)}
-.ls-prompter-update{margin-left:auto;font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid rgba(34,211,160,.25);border-radius:999px;padding:2px 7px;background:rgba(34,211,160,.06)}
+.ls-prompter-update{margin-left:auto;font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid rgba(34,211,160,.25);border-radius:999px;padding:2px 7px;background:rgba(34,211,160,.06)}
 .ls-prompter-update.busy{color:var(--yellow);border-color:rgba(245,183,49,.28);background:rgba(245,183,49,.07)}
 .ls-prompter-text{flex:1 1 240px;overflow-y:auto;padding:13px 14px;font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;word-break:break-word;outline:none;min-height:180px;width:100%;border:0;border-radius:0;background:transparent;font-family:var(--sans);resize:none;caret-color:var(--cyan);tab-size:2}
 .ls-script-resizer{flex:0 0 auto;height:12px;cursor:ns-resize;position:relative;touch-action:none;background:transparent;border-top:1px solid var(--glass-border)}
@@ -849,7 +851,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);z-index:300;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s var(--ease) both}
 .modal-wrap.on{display:flex}
 #paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
-.modal{background:color-mix(in srgb,var(--s1) 96%,transparent);border:1px solid var(--border);border-radius:18px;padding:28px 26px;width:100%;max-width:440px;display:flex;flex-direction:column;gap:18px;box-shadow:0 32px 80px rgba(0,0,0,.40),inset 0 1px 0 color-mix(in srgb,var(--text) 8%,transparent);animation:rise .28s var(--ease) both}
+.modal{background:linear-gradient(145deg,color-mix(in srgb,var(--s1) 97%,transparent),color-mix(in srgb,var(--s1) 88%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));border:1px solid var(--liquid-edge);border-radius:18px;padding:28px 26px;width:100%;max-width:440px;display:flex;flex-direction:column;gap:18px;box-shadow:0 32px 80px rgba(0,0,0,.40),inset 0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .28s var(--ease) both}
 #paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#patchSheetModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
 .modal-title{font-family:var(--syne);font-size:24px;font-weight:700;letter-spacing:0;line-height:1.15}
 .modal-sub{font-size:14px;color:var(--text2);line-height:1.5;margin-top:-8px;letter-spacing:0}
@@ -1131,7 +1133,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prompt-op-active .prompt-op-panel .pt-ctrl-group{display:flex}
 .prompt-op-panel .pt-ctrl-group{min-width:0}
 .prompt-op-panel .pt-btn{padding:5px 9px;font-size:10px}
-.prompt-op-panel .pt-ctrl-label{font-size:8px;min-width:36px}
+.prompt-op-panel .pt-ctrl-label{font-size:11px;min-width:40px}
 .ls-sidebar .prompt-op-panel{position:static;transform:none;width:100%;z-index:auto;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-color:var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:14px 18px;margin-top:2px}
 
 /* Planda Bear paperwork */
@@ -1845,9 +1847,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-hint-desc{color:var(--pt-text,#f0ead6);opacity:.58;white-space:nowrap;text-align:right}
 .pt-ctrl-group{display:flex;align-items:center;gap:8px}
 .pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:9px;min-width:40px}
+.pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:11px;min-width:44px}
 .pt-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:var(--mono);font-size:12px;transition:background .15s,border-color .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-.pt-btn .sf-symbol{font-size:1.05em}
+.pt-btn .sf-symbol{font-size:1.25em}
 .pt-btn:disabled{opacity:.42;cursor:default}
 .pt-btn:hover{background:rgba(200,169,126,.12);border-color:var(--pt-accent,#c8a97e)}
 .pt-btn:disabled:hover{background:none;border-color:var(--pt-ui-border,rgba(200,169,126,.25))}
@@ -1939,7 +1941,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .insp-tab .sf-symbol{font-size:19px}
 .insp-tab:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 28%,var(--glass-border));background:color-mix(in srgb,var(--s3) 72%,transparent);transform:translateY(-1px)}
 .insp-tab.on{background:color-mix(in srgb,var(--accent) 18%,var(--s2));color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--glass-border));box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent)}
-.insp-caption{text-align:center;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--text3);margin-top:5px;text-transform:uppercase;font-family:var(--mono)}
+.insp-caption{text-align:center;font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--text3);margin-top:5px;text-transform:uppercase;font-family:var(--mono)}
 .insp-pane{display:none;padding:12px}
 .insp-pane.on{display:block}
 .insp-pane .prompt-op-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}
@@ -1948,10 +1950,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-clock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
 .flow-clock-grid .pt-btn{min-width:0;min-height:34px;padding:7px 7px;font-size:11px}
 .flow-clock-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.flow-clock-fields label,.flow-wrap-custom{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:center;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:8px;padding:6px 8px;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.flow-clock-fields label,.flow-wrap-custom{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:center;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:8px;padding:6px 8px;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
 .flow-clock-fields label>span,.flow-wrap-custom>span{display:inline-flex;align-items:center;gap:5px;min-width:0}
 .flow-clock-fields b,.flow-wrap-custom b{font:inherit}
-.flow-clock-fields input,.flow-wrap-custom input{min-width:0;width:100%;background:transparent;border:0;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:12px;outline:none}
+.flow-clock-fields input,.flow-wrap-custom input{min-width:0;width:100%;background:transparent;border:0;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:14px;outline:none}
 .flow-wrap-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .flow-wrap-custom-row{margin-top:7px}
 .pt-wrap-btn{border-color:color-mix(in srgb,var(--red,#f05252) 45%,var(--pt-ui-border,rgba(200,169,126,.25)));color:color-mix(in srgb,var(--red,#f05252) 80%,var(--pt-text,#f0ead6))}
@@ -1960,7 +1962,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-question-btn.active{background:var(--yellow,#f5b731);border-color:var(--yellow,#f5b731);color:#171407}
 /* One level of chrome only: the .flow-clock-preview wrapper is the box — the mini inside stays flat. */
 .flowop-clock-mini{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-family:var(--mono)}
-.flowop-clock-mini span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--pt-accent,#c8a97e)}
+.flowop-clock-mini span{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--pt-accent,#c8a97e)}
 .flowop-clock-mini strong{font-size:16px;font-weight:900;color:var(--pt-text,#f0ead6);font-variant-numeric:tabular-nums}
 .flowop-clock-mini em{grid-column:1/-1;font-style:normal;font-size:10px;font-weight:900;color:#ffd23c;text-transform:uppercase;letter-spacing:.08em}
 .ls-sidebar .flow-clock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -2061,7 +2063,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 }
 .flow-control-title{
   font-family:var(--sans);
-  font-size:12px;
+  font-size:13px;
   font-weight:800;
   letter-spacing:0;
   text-transform:none;
@@ -2078,7 +2080,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   min-height:var(--ui-control-height);
   border-radius:var(--ui-radius-control);
   font-family:var(--sans);
-  font-size:13.5px;
+  font-size:14px;
   font-weight:750;
   letter-spacing:0;
   white-space:nowrap;
@@ -2182,7 +2184,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   border-radius:22px;
 }
 .prompt-op-active .flow-control-section{min-width:0}
-.prompt-op-active .flow-control-title{font-size:11px}
+.prompt-op-active .flow-control-title{font-size:12px}
 .prompt-op-active .flow-theme-grid:not(.ui-theme-grid){display:flex!important;flex-direction:row!important;flex-wrap:wrap;gap:8px;justify-content:flex-start;grid-template-columns:none!important}
 /* Inspector-standard panels (operator overlay + Flowmingo Op): sections are
    flat pages under the tabs — text headers + hairlines, no nested cards. */
@@ -2202,17 +2204,18 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-sidebar .flow-control-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ls-sidebar .flow-control-section{background:color-mix(in srgb,var(--s1) 68%,transparent)}
 /* Script Op quick-controls: smaller buttons + more per row → fits horizontally, less scrolling. */
-.ls-sidebar .flow-clock-modes,.ls-sidebar .flow-wrap-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+/* Auto-fit so the bigger labels never clip — 4-across on a wide sidebar, 2-across when narrow. */
+.ls-sidebar .flow-clock-modes,.ls-sidebar .flow-wrap-grid{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important}
 .ls-sidebar .flow-clock-fields{grid-template-columns:1fr 1fr}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(auto-fit,minmax(84px,1fr))}
-.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:30px;padding:5px 7px;font-size:11.5px;border-radius:9px}
-.ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{width:34px;min-width:34px;height:34px;min-height:34px;padding:0;border-radius:50%}
+.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:36px;padding:6px 8px;font-size:13px;border-radius:11px}
+.ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{width:40px;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:50%}
 .ls-sidebar .flow-control-section{padding:9px 11px;gap:7px}
 .ls-sidebar .flow-clock-preview{padding:7px 12px}
 .ls-sidebar .flow-clock-preview .flowop-clock-mini strong{font-size:clamp(20px,4.5vw,28px)}
 @media(max-width:900px){
   .flow-control-grid.four,.flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .flow-control-slider{grid-template-columns:auto 34px minmax(0,1fr) 34px!important}
+  .flow-control-slider{grid-template-columns:auto 40px minmax(0,1fr) 40px!important}
 }
 @media(max-width:560px){
   .flow-control-grid.three,.flow-control-grid.four,.flow-control-grid.five{grid-template-columns:1fr 1fr}
@@ -2313,13 +2316,16 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-push-primary{
   flex:0 0 auto;
   width:auto;
-  max-width:48%;
-  min-height:38px;
+  max-width:100%;
+  min-height:40px;
   margin:0;
-  padding:8px 14px;
+  padding:8px 16px;
   border-radius:999px;
   white-space:nowrap;
+  font-size:14px;
 }
+/* Narrow sidebar: the bar wraps and the push pill takes its own full row. */
+.ls-editor-actions{flex-wrap:wrap}
 .ls-operator-drawer{
   flex:1 1 auto;
   min-height:0;
@@ -2391,7 +2397,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-nudge-back,.pt-nudge-forward{display:inline-block}
 .pt-nudge-back{transform:rotate(180deg)}
 .flow-control-cue .pt-live-cue{
-  grid-template-columns:38px minmax(0,1fr) 38px!important;
+  grid-template-columns:42px minmax(0,1fr) 42px!important;
   gap:8px;
 }
 .flow-control-cue .pt-live-cue .pt-ctrl-label{
@@ -2405,14 +2411,14 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* Cue scrubber uses the same clean slider styling as Speed/Size. */
 .flow-control-title{display:flex;align-items:center;min-height:16px}
 .flow-control-slider{
-  grid-template-columns:minmax(46px,auto) 38px minmax(0,1fr) 38px!important;
+  grid-template-columns:minmax(46px,auto) 42px minmax(0,1fr) 42px!important;
 }
 /* Slider end-caps and nudges can be circles — so they are (operator motif). */
 .flow-control-slider .pt-btn,.pt-icon-btn{
-  min-width:38px;
-  width:38px;
-  height:38px;
-  min-height:38px;
+  min-width:42px;
+  width:42px;
+  height:42px;
+  min-height:42px;
   padding:0;
   border-radius:50%;
 }
@@ -2421,8 +2427,8 @@ input.pt-range,
 #flowOp input[type="range"]{
   -webkit-appearance:none;
   appearance:none;
-  height:30px;
-  min-height:30px;
+  height:40px;
+  min-height:40px;
   background:transparent;
   border:0;
   cursor:pointer;
@@ -2432,7 +2438,7 @@ input.pt-range,
 input.pt-range::-webkit-slider-runnable-track,
 #promptypus input[type="range"]::-webkit-slider-runnable-track,
 #flowOp input[type="range"]::-webkit-slider-runnable-track{
-  height:7px;
+  height:12px;
   border-radius:999px;
   background:linear-gradient(90deg,color-mix(in srgb,var(--pt-accent,var(--accent)) 52%,transparent),color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.16)));
   border:1px solid color-mix(in srgb,var(--pt-accent,var(--accent)) 28%,transparent);
@@ -2441,9 +2447,9 @@ input.pt-range::-webkit-slider-thumb,
 #promptypus input[type="range"]::-webkit-slider-thumb,
 #flowOp input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none;
-  width:24px;
-  height:24px;
-  margin-top:-9.5px;
+  width:32px;
+  height:32px;
+  margin-top:-10px;
   border-radius:50%;
   background:var(--pt-accent,var(--accent));
   border:2px solid color-mix(in srgb,var(--pt-bg,var(--bg)) 86%,#fff);
@@ -2452,7 +2458,7 @@ input.pt-range::-webkit-slider-thumb,
 input.pt-range::-moz-range-track,
 #promptypus input[type="range"]::-moz-range-track,
 #flowOp input[type="range"]::-moz-range-track{
-  height:7px;
+  height:12px;
   border-radius:999px;
   background:color-mix(in srgb,var(--pt-accent,var(--accent)) 32%,rgba(255,255,255,.16));
   border:1px solid color-mix(in srgb,var(--pt-accent,var(--accent)) 28%,transparent);
@@ -2460,8 +2466,8 @@ input.pt-range::-moz-range-track,
 input.pt-range::-moz-range-thumb,
 #promptypus input[type="range"]::-moz-range-thumb,
 #flowOp input[type="range"]::-moz-range-thumb{
-  width:22px;
-  height:22px;
+  width:30px;
+  height:30px;
   border-radius:50%;
   background:var(--pt-accent,var(--accent));
   border:2px solid color-mix(in srgb,var(--pt-bg,var(--bg)) 86%,#fff);
@@ -2904,8 +2910,20 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .lf-up-seg{padding:5px 14px;font-size:9px;font-weight:800;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--yellow);opacity:.75}
 
 /* ── Production clock — LED display style ── */
-.ls-bot{padding:0;background:#0a0b0d;border-top:2px solid #1a1c20}
-.ls-bot-clocks{background:#0a0b0d;padding:8px 14px;gap:18px;flex:1}
+/* Floating glass dock (framecheck sticky-bar): the bar detaches from the screen
+   edges; the LED clock faces stay dark hardware islands inside the glass. */
+.ls-bot{
+  margin:10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding:6px 8px;
+  background:var(--liquid-fill-strong);
+  border:1px solid var(--liquid-edge);
+  border-radius:22px;
+  box-shadow:0 18px 50px rgba(0,0,0,.30),var(--glass-highlight);
+  backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+  -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+}
+.ls-bot-clocks{background:transparent;padding:4px 8px;gap:18px;flex:1}
+.ls-bot-sep{background:color-mix(in srgb,var(--text) 12%,transparent)!important}
 .ls-bot-clk{gap:2px}
 .ls-bot-lbl{color:#3a4050;font-size:8px;letter-spacing:.18em}
 .ls-prod-clock-face,.prod-clock-face{display:inline-flex;align-items:baseline;gap:0;background:#060709;border:1px solid #1c2028;border-radius:2px;padding:6px 12px}
@@ -2919,7 +2937,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .ls-timer.warn{color:#ffb030}
 .ls-remain{font-family:'Courier New',Courier,monospace;font-size:28px;font-weight:900;letter-spacing:.06em;color:#3ad090;line-height:1}
 .ls-remain.warn{color:#ffb030}
-.ls-nav{padding:0 12px;background:#0a0b0d;align-self:stretch;display:flex;align-items:center;gap:6px;border-left:1px solid #1a1c20}
+.ls-nav{padding:0 4px 0 12px;background:transparent;align-self:stretch;display:flex;align-items:center;gap:6px;border-left:1px solid color-mix(in srgb,var(--text) 10%,transparent)}
 
 /* ── Live, scaled down: stack the bottom bar so the production clocks never clip,
    and tighten the toolbar so it packs instead of sprawling. ── */
@@ -2967,13 +2985,18 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .ls-exit-btn .sf-symbol{font-size:14px}
 .readiness-remove{font-size:14px}
 .pt-icon-btn{font-size:13px}
-.flow-control-slider .pt-btn,.pt-icon-btn{font-size:14px}
-.ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{font-size:13px}
+.flow-control-slider .pt-btn,.pt-icon-btn{font-size:15px}
+.ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{font-size:14px}
 /* Framecheck element language: interactive pills lift on hover; chips are pills. */
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn){transition:transform .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),filter .15s var(--ease)}
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn):hover{transform:translateY(-1px)}
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn):active{transform:scale(.98)}
 .chip,.cc-chip,.admin-act-btn,.admin-src-add,.precheck-jump,.pn-tag-chip,.pn-act-btn,.row-ea-btn{border-radius:999px}
+
+/* Scale pass: 4-across quick-control grids read cleaner without icons — labels carry them. */
+.ls-sidebar .flow-clock-modes .pt-btn .sf-symbol,
+.ls-sidebar .flow-wrap-grid .pt-btn .sf-symbol{display:none}
+
 
 </style>
 </head>
