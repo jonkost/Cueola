@@ -688,7 +688,7 @@
             + '<div class="og-field"><label>Device</label><select class="og-out-sink" data-o="' + o.id + '">' + devOptions(o.sinkId) + '</select></div>'
           + '</div></div>';
       }).join('')
-      + '<p class="og-sheet-note">Each video cue targets an output (set it in the cue Inspector). Multiple displays use the Window Management API (Chrome/Edge) — “Detect displays”, then pick a screen and Open to place + fullscreen. Per-output audio uses <code>setSinkId</code>.</p>';
+      + '<p class="og-sheet-note">Outputs are where video appears. Add an output, choose its display and audio device, then Open it. Set each cue\'s output in the Inspector.</p>';
 
     $('og-out-add').onclick = addOutput;
     $('og-out-detect').onclick = detectScreens;
@@ -1507,18 +1507,22 @@
   }
   function stopTicker() { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
   function renderClock() {
-    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), wrap = $('og-clock');
+    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), elapsedEl = $('og-clock-elapsed'), wrap = $('og-clock');
     if (!timeEl) return;
+    const setElapsed = (label, secs) => { if (elapsedEl) elapsedEl.textContent = label + ' ' + fmtClock(Math.max(0, secs || 0)); };
     if (preInfo) {
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
+      setElapsed('CLIP', 0);
       timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
       cueEl.textContent = ''; wrap.className = 'og-clock warn'; return;
     }
     if (active && active.kind === 'image') {
       const c = active.cue;
+      let elapsed = Math.max(0, (performance.now() - active.shownAt) / 1000);
       if (active.remainMs > 0 || c.duration > 0) {
         const left = active.paused ? active.remainMs / 1000
           : Math.max(0, (active.remainMs - (performance.now() - active.timerStart)) / 1000);
+        elapsed = Math.max(0, (c.duration || 0) - left);
         timeEl.textContent = fmtClock(left);
         labelEl.textContent = active.paused ? 'PAUSED' : 'REMAINING';
         wrap.className = 'og-clock ' + (active.paused || left <= 10 ? 'warn' : 'run');
@@ -1527,6 +1531,7 @@
         labelEl.textContent = active.paused ? 'PAUSED' : 'HOLD';
         wrap.className = 'og-clock' + (active.paused ? ' warn' : ' run');
       }
+      setElapsed('CLIP', elapsed);
       cueEl.textContent = c.name;
       return;
     }
@@ -1538,17 +1543,20 @@
       timeEl.textContent = fmtClock(show);
       labelEl.textContent = settings.clockMode === 'elapsed' ? 'ELAPSED' : 'REMAINING';
       cueEl.textContent = active.cue.name;
+      setElapsed('CLIP', elapsed);
       wrap.className = 'og-clock ' + (remain <= 10 ? 'warn' : 'run');
       return;
     }
     if (active && active.el && active.el.paused) {
+      const elapsed = Math.max(0, active.el.currentTime - (active.cue.trimIn || 0));
       const remain = Math.max(0, ((active.cue.trimOut != null ? active.cue.trimOut : active.el.duration) || 0) - active.el.currentTime);
-      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PAUSED'; cueEl.textContent = active.cue.name; wrap.className = 'og-clock warn'; return;
+      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PAUSED'; cueEl.textContent = active.cue.name; setElapsed('CLIP', elapsed); wrap.className = 'og-clock warn'; return;
     }
     const sel = cueById(selectedId);
     timeEl.textContent = fmtClock(sel ? sel.duration : 0);
     labelEl.textContent = sel ? 'DURATION' : 'STANDBY';
     cueEl.textContent = sel ? sel.name : '—';
+    setElapsed('CLIP', 0);
     wrap.className = 'og-clock';
     if (!active && !preInfo) stopTicker();
   }
@@ -2405,16 +2413,20 @@
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
-        + '<details class="og-theme-menu" id="og-theme-menu"><summary title="Theme">' + sym('action.settings') + '<span id="og-theme-label">Theme</span><span class="sf-symbol og-menu-chev" data-symbol="action.expand" aria-hidden="true"></span></summary><div class="og-theme-pop" id="og-theme-options"></div></details>'
-        + '<details class="og-tools-menu"><summary>' + sym('action.filter') + '<span>Tools</span></summary><div class="og-tools-pop">'
-          + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
-          + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
-          + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
-          + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
-          + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+        + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary title="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
+          + '<div class="og-settings-label">Theme</div>'
+          + '<div class="og-theme-grid" id="og-theme-options"></div>'
           + '<div class="og-tools-sep"></div>'
-          + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show…</button>'
-          + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show…</button>'
+          + '<div class="og-settings-label">Tools</div>'
+          + '<div class="og-tools-pop-inline">'
+            + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
+            + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
+            + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
+            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
+            + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+            + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
+            + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
+          + '</div>'
         + '</div></details>'
         + '<input type="file" id="og-showfile-input" accept=".ogshow,.json,application/json" hidden>'
       + '</div>'
@@ -2438,7 +2450,7 @@
               + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
               + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
-            + '<div class="og-clock" id="og-clock"><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-label" id="og-clock-label">STANDBY</div><div class="og-clock-cue" id="og-clock-cue">—</div></div>'
+            + '<div class="og-clock" id="og-clock"><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-label" id="og-clock-label">STANDBY</div><div class="og-clock-cue" id="og-clock-cue">—</div><div class="og-clock-elapsed" id="og-clock-elapsed">CLIP 0:00</div></div>'
             + '<div class="og-transport">'
               + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
               + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'GO<span class="og-tbtn-key" id="og-k-go"></span></button>'
@@ -2462,7 +2474,7 @@
         + '<div class="og-sfx">'
           + '<div class="og-toprow" id="og-sfx-toprow">'
           + '<div class="og-pane og-sfx-main">'
-            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><div class="og-pad-search"><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><input id="og-pad-search" type="search" placeholder="Search pads…" autocomplete="off"></div><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
+            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><div class="og-pad-search"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span><input id="og-pad-search" type="search" placeholder="Search pads…" autocomplete="off"></div><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
             + '<div class="og-bank-bar" id="og-bank-bar"></div>'
             + '<div class="og-pad-grid-wrap"><div class="og-pad-grid" id="og-pad-grid"></div><div class="og-pad-search-results" id="og-pad-search-results"></div></div>'
             + '<input type="file" id="og-pad-file" accept="audio/*,video/*" hidden>'

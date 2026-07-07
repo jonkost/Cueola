@@ -7724,6 +7724,14 @@ function poNudgeSeek(delta) {
   sendPrompterControl('seek_set_' + next);
 }
 
+function poPunchInSeek(scope = 'lsq') {
+  const sl = document.getElementById(`${scope}-seek`) || document.getElementById('lsq-seek') || document.getElementById('po-seek');
+  const val = sl ? parseFloat(sl.value) || 0 : ptProgressPct();
+  const next = Math.max(0, Math.min(100, val));
+  sendPrompterControl('seek_set_' + next);
+  sendPrompterControl('resume');
+}
+
 // Shared "Live actions" block: Tech Difficulty toggle + the live cue scrubber.
 // scope: 'po' (prompt-op stage), 'lsq' (Script Op sidebar), 'flow' (Flowmingo Op).
 function liveActionsHTML(scope = 'po', disabled = false) {
@@ -7744,6 +7752,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   // value back mid-drag (which made the release land on the wrong spot / snap to 0).
   const seekDrag = ` onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
   const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
+  const punch = isFlow ? 'flowOpPunchInSeek()' : `poPunchInSeek('${scope}')`;
   const nextRowIdx = (() => {
     let i = lsIdx;
     do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
@@ -7766,15 +7775,16 @@ function liveActionsHTML(scope = 'po', disabled = false) {
         <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" title="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
       </div>
     </div>
-    <div class="flow-control-section flow-control-cue">
-      <div class="flow-control-title">Scrub</div>
-      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
-      <span class="pt-ctrl-label">Cue</span>
-      <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
-      <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${seekDrag}${dis}>
-      <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
-      </div>
-    </div>`;
+	    <div class="flow-control-section flow-control-cue">
+	      <div class="flow-control-title">Scrub</div>
+	      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
+	        <span class="pt-ctrl-label">Cue</span>
+	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
+	        <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${seekDrag}${dis}>
+	        <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
+	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" title="Punch in from this script position" aria-label="Punch in from this script position"${dis}>${sfIcon('media.play')}</button>
+	      </div>
+	    </div>`;
 }
 
 function ptToggleMirror() {
@@ -8898,6 +8908,14 @@ function flowOpNudgeSeek(delta) {
   flowOpSendControl('seek_set_' + next);
 }
 
+function flowOpPunchInSeek() {
+  const sl = flowOpEl('flow-seek');
+  const val = sl ? parseFloat(sl.value) || 0 : 0;
+  const next = Math.max(0, Math.min(100, val));
+  flowOpSendControl('seek_set_' + next);
+  flowOpSendControl('resume');
+}
+
 function flowOpReleaseHoldKeys() {
   if (!flowOpCode) return;
   if (ptBraking) flowOpSendControl('brake_stop', true);
@@ -9779,7 +9797,7 @@ function pbRefreshSafetyFields() {
   pbSetFieldIfIdle('sp-fire', safety.fire || '');
   pbSetFieldIfIdle('sp-emergency', safety.emergency || '');
   pbSetFieldIfIdle('sp-nonemergency', safety.nonemergency || '');
-  pbSetFieldIfIdle('sp-security', safety.security || '8822');
+  pbSetFieldIfIdle('sp-security', safety.security || '');
   pbSetFieldIfIdle('sp-late', safety.late || data.late || '');
   pbSetFieldIfIdle('sp-equipment', safety.equipment || data.equipment || '');
   pbSetFieldIfIdle('sp-notes', safety.notes || '');
@@ -9992,14 +10010,14 @@ function renderPaperworkNav(id, slotId='') {
   const previewButton = (slotId === 'pbNavPreview' || id === 'production-notes') ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
   slot.innerHTML = `
     <div class="paperwork-flow-left">
-      <button type="button" onclick="returnToPaperworkHub()">Back to Planda Bear</button>
-      <button type="button" onclick="openPaperworkRelative(-1)" ${isFirst ? 'disabled' : ''}>Previous</button>
+      <button type="button" onclick="returnToPaperworkHub()">${sfIcon('action.back')}<span>Planda Bear</span></button>
     </div>
     <div class="pb-step-pill">Step ${item.order} of ${PAPERWORK_ITEMS.length}</div>
     <div class="paperwork-flow-right">
       ${saveButton}
       ${previewButton}
-      <button type="button" class="primary" onclick="openPaperworkRelative(1)">${isLast ? 'Finish' : 'Next'}</button>
+      <button type="button" onclick="openPaperworkRelative(-1)" ${isFirst ? 'disabled' : ''}>${sfIcon('action.back')}<span>Previous</span></button>
+      <button type="button" class="primary" onclick="openPaperworkRelative(1)"><span>${isLast ? 'Finish' : 'Next'}</span>${sfIcon('action.forward')}</button>
     </div>`;
 }
 
@@ -11326,7 +11344,7 @@ function pbNoteFootHTML(note, replyCount) {
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${note.pinned ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
-    <button type="button" class="pb-note-act" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.download')} PDF</button>
+    <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.share')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
   </footer>`;
 }
@@ -12151,7 +12169,11 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
   document.getElementById('paperPreviewTitle').textContent = title;
   document.getElementById('paperPreviewBody').innerHTML = html;
   const primary = document.getElementById('paperPreviewPrimary');
-  primary.textContent = primaryLabel;
+  const isExportAction = /\b(export|download)\b/i.test(primaryLabel || '');
+  primary.classList.toggle('export-action', isExportAction);
+  primary.innerHTML = isExportAction
+    ? `${sfIcon('action.share')}<span>${esc(primaryLabel)}</span>`
+    : esc(primaryLabel);
   primary.setAttribute('onclick', primaryAction);
   const previewNav = document.getElementById('pbNavPreview');
   if (previewNav) {
@@ -12721,7 +12743,7 @@ function openSafetyPlan() {
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
   document.getElementById('sp-nonemergency').value = safety.nonemergency || '';
-  document.getElementById('sp-security').value = safety.security || '8822';
+  document.getElementById('sp-security').value = safety.security || '';
   document.getElementById('sp-late').value = safety.late || data.late || '';
   document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
   document.getElementById('sp-notes').value = safety.notes || '';
@@ -12745,7 +12767,7 @@ function getSafetyPlanData() {
     fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
     emergency: document.getElementById('sp-emergency')?.value?.trim() ?? existing.emergency ?? '',
     nonemergency: document.getElementById('sp-nonemergency')?.value?.trim() ?? existing.nonemergency ?? '',
-    security: document.getElementById('sp-security')?.value?.trim() || existing.security || '8822',
+    security: document.getElementById('sp-security')?.value?.trim() ?? existing.security ?? '',
     late: document.getElementById('sp-late')?.value?.trim() ?? existing.late ?? '',
     equipment: document.getElementById('sp-equipment')?.value?.trim() ?? existing.equipment ?? '',
     notes: document.getElementById('sp-notes')?.value ?? existing.notes ?? '',
@@ -12770,7 +12792,7 @@ function safetyPlanHTML(safety) {
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
       <tr><th>Non-Emergency Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
-      <tr><th>Security</th><td>${esc(safety.security || '8822')}</td></tr>
+      <tr><th>Security</th><td>${esc(safety.security || '')}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(safety.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
@@ -12909,7 +12931,7 @@ function renderProductionChecklist(items) {
         <input type="hidden" data-ps-row="${i}" data-ps-field="doneAt" value="${esc(String(row.doneAt||0))}">
       </div>
     `).join('')}
-    <button class="call-add-btn" onclick="addProductionChecklistRow()">+ Add checklist item</button>
+    <button class="call-add-btn" onclick="addProductionChecklistRow()">${sfIcon('action.add')}<span>Add checklist item</span></button>
   </div>`;
 }
 
@@ -13043,6 +13065,7 @@ function renderPatchTable(kind, title) {
   return `
     <div class="field">
       <label class="field-lbl">${title}</label>
+      <div class="field-hint">Type directly in the first row. Use Add row for another line, or import a CSV/TSV.</div>
       <div class="patch-table ${isComms ? 'comms' : kind}" id="${kind}-patch-table">
         ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div></div>
         ${rows.map((row,i) => isComms ? `
@@ -13060,8 +13083,8 @@ function renderPatchTable(kind, title) {
           <button class="patch-remove" onclick="removePatchRow('${kind}',${i})">x</button>
         `).join('')}
       </div>
-      <button class="call-add-btn" onclick="addPatchRow('${kind}')">+ Add row</button>
-      <input class="field-in" type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" style="margin-top:8px">
+      <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
+      <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import CSV/TSV</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
     </div>`;
 }
 
@@ -13719,7 +13742,7 @@ async function exportPreProPackagePDF() {
     section('3. Safety Plan');
     ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
       const labels = { hospital:'Local Hospital', weather:'Weather', firstAid:'First Aid Kit Location', fire:'Fire Extinguisher Location', emergency:'Emergency Numbers', nonemergency:'Non-Emergency Numbers', security:'Security', late:'Late / Lost Contact', equipment:'Equipment Needed', notes:'Safety Notes' };
-      field(labels[key], safety[key] || (key === 'security' ? '8822' : ''));
+      field(labels[key], safety[key] || '');
     });
 
     section('4. Full Rendered Rundown');

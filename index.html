@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0l">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0m">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -2997,6 +2997,118 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .ls-sidebar .flow-clock-modes .pt-btn .sf-symbol,
 .ls-sidebar .flow-wrap-grid .pt-btn .sf-symbol{display:none}
 
+/* 2026-07 UI cohesion pass: less nested chrome, larger circular icon targets,
+   and the same action/color language across Cueola, Planda Bear, and Flowmingo. */
+.entry-actions{padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;gap:10px}
+.entry-admin-link{min-height:40px;padding:9px 18px;border-radius:999px;background:color-mix(in srgb,var(--s2) 62%,transparent)}
+.entry-admin-link .sf-symbol{font-size:18px}
+.tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:42px;height:42px;border-radius:50%;font-size:21px}
+.tbtn.icon-only .sf-symbol,.entry-theme-center .tbtn.icon-only .sf-symbol,.entry-notif .tbtn.icon-only .sf-symbol{font-size:21px}
+.topbar .brand{gap:8px;padding:5px 4px!important}
+.topbar .brand .brand-ico,.ls-brand .brand-ico{width:26px;height:26px;vertical-align:-.34em}
+.ls-brand{display:inline-flex;align-items:center;gap:8px}
+#rundown .topbar #adminBtn,#rundown .topbar #pnPanelBtn,#rundown .topbar #plandaBearBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
+.settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.settings-action-grid .settings-file-btn{min-height:40px}
+.settings-info-card{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 70%,transparent);padding:12px 13px;font-size:12.5px;color:var(--text2);line-height:1.45}
+.settings-info-card b{display:block;color:var(--text);font-size:13px;margin-bottom:2px}
+.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action{
+  background:#ff453a!important;
+  border-color:#ff9f99!important;
+  color:#fff!important;
+  text-shadow:none!important;
+}
+.settings-file-btn.export-action:hover,.pb-chat-tool.export-action:hover,.pb-attach-add.export-action:hover,.pb-note-act.export-action:hover,.btn-export:hover,#paperPreviewPrimary.export-action:hover{filter:brightness(1.06)}
+.settings-file-btn .sf-symbol,.pb-chat-tool .sf-symbol,.pb-attach-add .sf-symbol,.pb-note-act .sf-symbol,.btn-export .sf-symbol,#paperPreviewPrimary .sf-symbol{font-size:17px}
+#liveshow .ls-exit-btn.icon-only{width:40px;height:40px;border-radius:50%;padding:0}
+#liveshow .ls-exit-btn.icon-only .sf-symbol{font-size:21px}
+#liveshow .ls-overview{
+  grid-template-columns:minmax(168px,1.05fr) minmax(120px,.85fr) minmax(120px,.85fr) minmax(112px,.7fr) auto;
+  gap:0;
+  align-items:center;
+  padding:8px 14px;
+  border-bottom:1px solid var(--liquid-edge);
+}
+#liveshow .ls-overview :is(.ls-show-card,.ls-stat-card,.ls-prompter-mini){
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  min-height:0;
+  padding:2px 14px;
+}
+#liveshow .ls-overview :is(.ls-show-card,.ls-stat-card){border-right:1px solid color-mix(in srgb,var(--text) 12%,transparent)!important}
+#liveshow .ls-overview .ls-prompter-mini{justify-content:flex-start;padding-right:0;font-size:9px}
+#liveshow .ls-overview .ls-progress{display:none}
+.ls-editor-actions{background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-top:1px solid var(--liquid-edge)!important;border-bottom:0!important}
+#liveshow .ls-push-primary{
+  background:color-mix(in srgb,var(--green) 86%,#fff)!important;
+  color:#03150c!important;
+  border:1px solid color-mix(in srgb,var(--green) 64%,#fff)!important;
+  border-radius:999px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28)!important;
+}
+#liveshow .ls-push-primary .sf-symbol{font-size:18px}
+.pt-tech-btn{
+  width:44px!important;
+  min-width:44px!important;
+  height:44px!important;
+  min-height:44px!important;
+  padding:0!important;
+  border-radius:50%!important;
+}
+.pt-tech-btn span:not(.sf-symbol){display:none!important}
+.pt-tech-btn .sf-symbol{font-size:23px!important;margin:0}
+.ls-live-actions .pt-live-slate{grid-template-columns:auto minmax(0,1fr)}
+.pt-icon-btn,.flow-control-slider .pt-btn{display:inline-flex;align-items:center;justify-content:center}
+.pt-icon-btn .sf-symbol,.flow-control-slider .pt-btn .sf-symbol{font-size:19px;margin:0;line-height:1}
+.flow-control-cue .pt-live-cue{grid-template-columns:42px minmax(0,1fr) 42px 42px!important;align-items:center}
+.flow-control-cue .pt-live-cue .pt-ctrl-label{display:none}
+.pt-punch-btn{background:color-mix(in srgb,var(--green) 78%,#fff)!important;border-color:color-mix(in srgb,var(--green) 70%,#fff)!important;color:#03150c!important}
+.pt-punch-btn .sf-symbol{font-size:20px!important}
+#pt-slate{background:#07090f;backdrop-filter:none;-webkit-backdrop-filter:none}
+.pt-slate-mark{box-shadow:none;background:transparent;border-color:#f5b84a}
+.pt-slate-title,.pt-slate-sub{text-shadow:none}
+.pt-clock-overlay{box-shadow:none}
+.modal-title .brand-ico{width:1.1em;height:1.1em;vertical-align:-.2em}
+.pb-modal-body{position:relative}
+.plandabear-settings-btn{width:40px;height:40px;border-radius:50%}
+.plandabear-settings-btn .sf-symbol{font-size:22px}
+.plandabear-theme-bar{
+  position:absolute;
+  top:12px;
+  right:22px;
+  z-index:50;
+  width:min(360px,calc(100% - 44px));
+  margin:0;
+  box-shadow:var(--liquid-shadow-raised);
+}
+.paperwork-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.paperwork-notes-bar{padding:12px 14px;margin-bottom:10px}
+.paperwork-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:12px}
+.paperwork-actions :is(.btn-primary,.btn-secondary){width:auto;min-height:38px;padding:8px 12px;font-size:13px}
+.pb-hub-activity{margin-top:12px}
+.pb-hub-activity-head{padding:9px 10px;font-size:10px}
+.paperwork-flow-actions{gap:8px;padding:10px 14px}
+.paperwork-flow-left,.paperwork-flow-right{gap:7px}
+.paperwork-flow-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 12px}
+.call-grid,.patch-table{border-radius:10px;background:color-mix(in srgb,var(--s2) 92%,transparent)}
+.call-grid .field-in,.patch-table .field-in{min-height:43px;background:color-mix(in srgb,var(--s1) 36%,transparent)}
+.call-grid .field-in:focus,.patch-table .field-in:focus{background:color-mix(in srgb,var(--accent) 7%,var(--s1))}
+.call-add-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;font-weight:800}
+.patch-upload-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:38px;margin-top:8px;border:1px dashed var(--bord2);border-radius:9px;background:transparent;color:var(--text2);font-size:12px;font-weight:800;cursor:pointer}
+.patch-upload-btn:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.pb-board-tools{gap:5px}
+.pb-chat-tool{padding:6px 9px;font-size:11.5px}
+@media(max-width:900px){
+  #liveshow .ls-overview{grid-template-columns:1fr 1fr}
+  #liveshow .ls-overview .ls-show-card{grid-column:1/-1}
+}
+@media(max-width:640px){
+  .settings-action-grid{grid-template-columns:1fr}
+  .paperwork-actions{grid-template-columns:1fr}
+}
+
 
 </style>
 </head>
@@ -3206,7 +3318,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
   <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:8px">
-      <button class="brand" onclick="goHome()" title="Back to home" aria-label="Back to home" style="background:none;border:none;cursor:pointer;color:inherit;padding:6px 4px"><span>Cue<span class="hi">ola</span></span></button>
+      <button class="brand" onclick="goHome()" title="Back to home" aria-label="Back to home" style="background:none;border:none;cursor:pointer;color:inherit;padding:6px 4px"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="hi">ola</span></span></button>
     </div>
     <div id="tabBuild" style="display:none"></div>
     <div id="tabLive" style="display:none"></div>
@@ -3226,7 +3338,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <!-- File actions (Export PDF / Save / Open) live in the Settings menu — operator request 2026-07-04 -->
 	      <input type="file" id="rundownFileInput" accept=".cueola,.json,application/json" hidden onchange="importRundownFile(this.files[0]); this.value='';">
-      <button class="tbtn tbtn-ghost icon-only" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
+      <button class="tbtn tbtn-ghost icon-only rundown-fullscreen-btn" onclick="toggleCueolaFullscreen('rundown')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" title="Settings" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       <div class="tb-divider"></div>
       <button class="tbtn tbtn-live" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
@@ -3284,7 +3396,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 ══════════════════════════════════════════ -->
 <div class="screen" id="liveshow">
   <div class="ls-bar">
-    <div class="ls-brand"><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
+    <div class="ls-brand"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn ls-start-btn" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
@@ -3782,7 +3894,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="pb-modal-header">
       <div>
         <div class="pb-modal-kicker">Pre-production workspace</div>
-        <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
+        <div class="modal-title"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg> Plan<span class="brand-hi">da Bear</span></div>
         <div class="pb-modal-sub">Six pages in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
       </div>
       <div class="plandabear-tools">
@@ -3805,6 +3917,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="outrangutan" onclick="setPlandaBearTheme('outrangutan')" aria-pressed="false"><div class="ts-preview" style="background:#ff6a00"></div><div class="ts-name">Outrangutan</div></button>
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
       </div>
+      <div id="plandabearHubActivity"></div>
     </div>
     <button class="paperwork-notes-bar" id="paperworkNotesBar" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')">
       <span class="pnb-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
@@ -3817,11 +3930,10 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbCommentsHub"></div>
-    <div id="plandabearHubActivity"></div>
     <div class="paperwork-actions">
-      <button class="btn-primary" onclick="exportPreProPackagePDF()">Export PDF Package</button>
+      <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF Package</span></button>
       <button class="btn-secondary" onclick="showPreProPackagePreview()">Preview Package</button>
-      <button class="btn-secondary" onclick="downloadCallSheetPDF()">Export Call Sheet Only</button>
+      <button class="btn-secondary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export Call Sheet Only</span></button>
       <button class="btn-secondary" onclick="closePlandaBear()">Close</button>
     </div>
     </div>
@@ -3923,8 +4035,9 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="prepro-section">
       <div class="prepro-section-title">Crew / Talent Contacts</div>
       <label class="field-lbl">Crew / Talent</label>
+      <div class="field-hint">Type directly in the row below. Use Add person when you need another row.</div>
       <div class="call-grid" id="pp-crew-grid"></div>
-      <button class="call-add-btn" onclick="addCallSheetPerson()">+ Add person</button>
+      <button class="call-add-btn" onclick="addCallSheetPerson()"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Add person</span></button>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title">Plans and Notes</div>
@@ -3932,7 +4045,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <textarea class="field-in" id="pp-notes" rows="3" placeholder="Key times, reminders, transportation, access notes" style="font-size:14px;line-height:1.6"></textarea>
     </div>
     <div class="paperwork-actions">
-      <button class="btn-primary" onclick="downloadCallSheetPDF()">Export Call Sheet PDF</button>
+      <button class="btn-primary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export Call Sheet PDF</span></button>
     </div>
     <div id="pbCommentsCallSheet"></div>
     <div class="paperwork-flow-actions" id="pbNavCallSheet"></div>
@@ -3956,7 +4069,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120"></div>
       <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
       <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160"></div>
-      <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" value="8822"></div>
+      <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80"></div>
       <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120"></div>
     </div>
     <div class="field">
@@ -4058,7 +4171,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
-          <button type="button" class="pb-chat-tool" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
+          <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
         </div>
       </div>
       <div class="pb-note-guide" id="pbNotesGuide">
@@ -4091,7 +4204,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           </div>
           <div class="pb-compose-actions">
             <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
-            <button type="button" class="pb-attach-add" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
+            <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
             <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
             <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
             <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
@@ -4286,17 +4399,28 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
         <button type="button" class="theme-swatch" data-theme="prepbear" onclick="selectTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
       </div>
     </div>
-    <div class="settings-section" style="margin-top:12px">
-      <div class="settings-sec-label">File</div>
-      <div class="settings-file-grid">
-        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Export PDF</span></button>
-        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" title="Save this rundown as a .cueola show file (Cmd+S re-saves it in place)"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
-        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openRundownFilePicker()" title="Open a saved .cueola show file (legacy .json still opens)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Open File</span></button>
-      </div>
-    </div>
-    <div class="settings-section" style="margin-top:12px">
-      <div class="settings-sec-label">Production</div>
-      <div class="settings-file-grid">
+	    <div class="settings-section" style="margin-top:12px">
+	      <div class="settings-sec-label">File</div>
+	      <div class="settings-file-grid">
+	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" title="Save this rundown as a .cueola show file (Cmd+S re-saves it in place)"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openRundownFilePicker()" title="Open a saved .cueola show file (legacy .json still opens)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Open File</span></button>
+	      </div>
+	    </div>
+	    <div class="settings-section" style="margin-top:12px">
+	      <div class="settings-sec-label">Apps</div>
+	      <div class="settings-action-grid">
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openAdminPanel()" title="Admin controls"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Admin</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');togglePnPanel()" title="Production notes sidebar"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openPaperworkHub()" title="Planda Bear paperwork"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg><span>Planda Bear</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openLearningHub()" title="Open the guide"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');toggleCueolaFullscreen('rundown')" title="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
+	      </div>
+	      <div class="settings-info-card" style="margin-top:8px"><b>Cueola workspace</b>Rundown, Planda Bear, Flowmingo, and Outrangutan use the same show data and theme language from here.</div>
+	    </div>
+	    <div class="settings-section" style="margin-top:12px">
+	      <div class="settings-sec-label">Production</div>
+	      <div class="settings-file-grid">
         <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openPreflightPanel()" title="Validate the whole show — media, links, SFX, sync, theme — before going live"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Preflight</span></button>
         <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openShowLog()" title="Timestamped record of cue fires, media and sync events, and errors"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Show Log</span></button>
       </div>
@@ -4334,8 +4458,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0f"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0f"></script>
+<script src="cueola-app.js?v=1.0.0g"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0g"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

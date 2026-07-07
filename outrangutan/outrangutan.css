@@ -955,3 +955,171 @@
 .og-bank-add { font-size: 15px; }
 .og-search-fire { font-size: 14px; }
 .og-tools-menu > summary, .og-theme-menu > summary { font-size: 13px; }
+
+/* 2026-07 UI cohesion pass: one settings gear, flat segmented tabs,
+   stronger red stop/export language, and clearer inspector controls. */
+.og-tabs {
+  gap: 0;
+  padding: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--s2) 86%, transparent);
+}
+.og-tab {
+  border: 0;
+  border-radius: 0;
+  min-height: 38px;
+  padding: 7px 16px;
+  box-shadow: none;
+  color: var(--text2);
+}
+.og-tab + .og-tab { border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent); }
+.og-tab.on {
+  background: var(--accent);
+  color: #07101e;
+  text-shadow: none;
+}
+.og-tab .sf-symbol { font-size: 19px; }
+.og-settings-menu { margin-left: 0; }
+.og-settings-menu > summary {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+.og-settings-menu > summary .sf-symbol { font-size: 22px; }
+.og-settings-pop {
+  display: none;
+  grid-template-columns: 1fr;
+  min-width: 300px;
+  gap: 8px;
+}
+.og-theme-menu[open] .og-settings-pop { display: grid; }
+.og-settings-label {
+  color: var(--text3);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 0 2px;
+}
+.og-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.og-tools-pop-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.og-tools-pop-inline .og-bar-btn {
+  min-height: 36px;
+  justify-content: center;
+}
+#og-sfx-stop {
+  background: #ff453a !important;
+  border-color: #ff9f99 !important;
+  color: #fff !important;
+  text-shadow: none !important;
+}
+#og-sfx-stop:hover { filter: brightness(1.06); }
+.og-pad-search {
+  background: color-mix(in srgb, var(--s3) 82%, var(--accent) 6%);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  min-height: 38px;
+  padding: 5px 10px;
+}
+.og-pad-search .sf-symbol {
+  font-size: 16px;
+  color: var(--accent);
+}
+.og-pad-search input {
+  width: clamp(140px, 16vw, 230px);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.og-clock-elapsed {
+  margin-top: 5px;
+  color: var(--text3);
+  font: 800 11px/1 var(--mono-num, monospace);
+  letter-spacing: .08em;
+}
+.og-transport {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 10px 10px;
+  gap: 8px;
+}
+.og-tbtn {
+  flex: 0 1 118px;
+  min-height: 64px;
+  border-radius: 12px;
+}
+.og-tbtn-go {
+  flex: 0 1 166px;
+  min-height: 70px;
+}
+.og-inspector .ui-seg,
+.og-pad-inspector .ui-seg {
+  overflow: hidden;
+}
+.og-inspector .ui-seg-btn,
+.og-pad-inspector .ui-seg-btn {
+  min-height: 34px;
+  color: var(--text);
+  font-weight: 800;
+  text-shadow: none;
+}
+.og-inspector .ui-seg-btn.on,
+.og-pad-inspector .ui-seg-btn.on {
+  color: #07101e !important;
+  background: var(--accent);
+}
+.og-inspector input[type="number"],
+.og-pad-inspector input[type="number"] {
+  -moz-appearance: textfield;
+  text-align: center;
+}
+.og-inspector input[type="number"]::-webkit-outer-spin-button,
+.og-inspector input[type="number"]::-webkit-inner-spin-button,
+.og-pad-inspector input[type="number"]::-webkit-outer-spin-button,
+.og-pad-inspector input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.og-insp-sec .ui-stepper {
+  justify-self: end;
+  margin-left: auto;
+}
+.og-field input[type="range"] {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.og-scopes-btn {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+}
+.og-out-tools {
+  align-items: end;
+  gap: 10px;
+}
+.og-out-row {
+  box-shadow: none;
+  background: color-mix(in srgb, var(--s2) 70%, transparent);
+}
+.og-sheet-note {
+  max-width: 68ch;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .og-tools-pop-inline,
+  .og-theme-grid { grid-template-columns: 1fr; }
+  .og-transport { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .og-tbtn,
+  .og-tbtn-go { flex: 1 1 auto; }
+}
