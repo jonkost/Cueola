@@ -127,8 +127,8 @@
 .og-tbtn-panic .og-tbtn-key { color: rgba(255,255,255,.7); }
 @media (max-width: 760px) {
   .og-transport { flex-wrap: wrap; }
-  .og-tbtn { flex: 1 1 calc(50% - 4px); }
-  .og-tbtn-go { flex-basis: 100%; }
+  .og-tbtn { flex: 1 1 calc(25% - 4px); min-width: 72px; }
+  .og-tbtn-go { flex-basis: 100%; order: -1; }   /* GO on top, the four others share one row */
 }
 /* The transport lives in the PROGRAM PANE, whose width the splitters control —
    wrap on the pane's own width (container query), not the viewport, so nothing
