@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0m">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0n">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -3012,14 +3012,17 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .settings-action-grid .settings-file-btn{min-height:40px}
 .settings-info-card{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 70%,transparent);padding:12px 13px;font-size:12.5px;color:var(--text2);line-height:1.45}
 .settings-info-card b{display:block;color:var(--text);font-size:13px;margin-bottom:2px}
-.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action{
+.sf-symbol[data-symbol="action.export"]{--sf-symbol:url("icons/export-file.svg")}
+:is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action){display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action{
   background:#ff453a!important;
   border-color:#ff9f99!important;
   color:#fff!important;
   text-shadow:none!important;
 }
-.settings-file-btn.export-action:hover,.pb-chat-tool.export-action:hover,.pb-attach-add.export-action:hover,.pb-note-act.export-action:hover,.btn-export:hover,#paperPreviewPrimary.export-action:hover{filter:brightness(1.06)}
-.settings-file-btn .sf-symbol,.pb-chat-tool .sf-symbol,.pb-attach-add .sf-symbol,.pb-note-act .sf-symbol,.btn-export .sf-symbol,#paperPreviewPrimary .sf-symbol{font-size:17px}
+.settings-file-btn.export-action:hover,.pb-chat-tool.export-action:hover,.pb-attach-add.export-action:hover,.pb-note-act.export-action:hover,.btn-export:hover,#paperPreviewPrimary.export-action:hover,.btn-secondary.export-action:hover{filter:brightness(1.06)}
+.settings-file-btn .sf-symbol,.pb-chat-tool .sf-symbol,.pb-attach-add .sf-symbol,.pb-note-act .sf-symbol,.btn-export .sf-symbol,#paperPreviewPrimary .sf-symbol,.btn-secondary.export-action .sf-symbol{font-size:17px}
+:is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action) .sf-symbol[data-symbol="action.export"]{font-size:18px;transform:translateY(-.5px)}
 #liveshow .ls-exit-btn.icon-only{width:40px;height:40px;border-radius:50%;padding:0}
 #liveshow .ls-exit-btn.icon-only .sf-symbol{font-size:21px}
 #liveshow .ls-overview{
@@ -3931,9 +3934,9 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbCommentsHub"></div>
     <div class="paperwork-actions">
-      <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF Package</span></button>
+      <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
       <button class="btn-secondary" onclick="showPreProPackagePreview()">Preview Package</button>
-      <button class="btn-secondary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export Call Sheet Only</span></button>
+      <button class="btn-secondary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export Call Sheet Only</span></button>
       <button class="btn-secondary" onclick="closePlandaBear()">Close</button>
     </div>
     </div>
@@ -4045,7 +4048,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <textarea class="field-in" id="pp-notes" rows="3" placeholder="Key times, reminders, transportation, access notes" style="font-size:14px;line-height:1.6"></textarea>
     </div>
     <div class="paperwork-actions">
-      <button class="btn-primary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export Call Sheet PDF</span></button>
+      <button class="btn-primary btn-export" onclick="downloadCallSheetPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export Call Sheet PDF</span></button>
     </div>
     <div id="pbCommentsCallSheet"></div>
     <div class="paperwork-flow-actions" id="pbNavCallSheet"></div>
@@ -4171,7 +4174,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
-          <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
+          <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
         </div>
       </div>
       <div class="pb-note-guide" id="pbNotesGuide">
@@ -4204,7 +4207,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           </div>
           <div class="pb-compose-actions">
             <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
-            <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
+            <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
             <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
             <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
             <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
@@ -4402,7 +4405,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 	    <div class="settings-section" style="margin-top:12px">
 	      <div class="settings-sec-label">File</div>
 	      <div class="settings-file-grid">
-	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.share" aria-hidden="true"></span><span>Export PDF</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" title="Save this rundown as a .cueola show file (Cmd+S re-saves it in place)"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openRundownFilePicker()" title="Open a saved .cueola show file (legacy .json still opens)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Open File</span></button>
 	      </div>
@@ -4441,7 +4444,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="slog-list" id="showLogList"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="clearShowLog()">Clear</button>
-      <button class="btn-secondary" onclick="exportShowLog()">Export .txt</button>
+      <button class="btn-secondary export-action" onclick="exportShowLog()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export .txt</span></button>
       <button class="btn-primary" onclick="hideModal('modal-showlog')">Done</button>
     </div>
   </div>
@@ -4458,7 +4461,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0g"></script>
+<script src="cueola-app.js?v=1.0.0h"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0g"></script>
 
 <script type="module">

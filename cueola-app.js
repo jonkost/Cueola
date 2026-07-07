@@ -11344,7 +11344,7 @@ function pbNoteFootHTML(note, replyCount) {
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${note.pinned ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
-    <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.share')} PDF</button>
+    <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
   </footer>`;
 }
@@ -12172,7 +12172,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
   const isExportAction = /\b(export|download)\b/i.test(primaryLabel || '');
   primary.classList.toggle('export-action', isExportAction);
   primary.innerHTML = isExportAction
-    ? `${sfIcon('action.share')}<span>${esc(primaryLabel)}</span>`
+    ? `${sfIcon('action.export')}<span>${esc(primaryLabel)}</span>`
     : esc(primaryLabel);
   primary.setAttribute('onclick', primaryAction);
   const previewNav = document.getElementById('pbNavPreview');

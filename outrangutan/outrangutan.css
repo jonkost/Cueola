@@ -1123,3 +1123,58 @@
   .og-tbtn,
   .og-tbtn-go { flex: 1 1 auto; }
 }
+
+/* Viewer and top-mode polish: center the program monitor inside the middle pane,
+   and make Playback / SFX read as one deliberate segmented control. */
+.og-program-wrap {
+  width: calc(100% - 24px);
+  max-width: calc(100% - 24px);
+  margin: 10px auto 8px !important;
+  align-self: center;
+}
+@media (min-width: 921px) {
+  .og-program-wrap {
+    width: min(calc(100% - 28px), calc(52cqh * 16 / 9));
+    max-width: calc(100% - 28px);
+  }
+}
+.og-tabs {
+  height: 44px;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border));
+  background: color-mix(in srgb, var(--s1) 72%, var(--s3));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+}
+.og-tab {
+  min-width: 132px;
+  min-height: 36px;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 850;
+  color: var(--text2);
+  background: transparent;
+}
+.og-tab + .og-tab { border-left: 0; }
+.og-tab:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.og-tab.on {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 70%, #fff);
+  color: #07101e;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 10px 24px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.og-tab .sf-symbol {
+  font-size: 18px;
+  opacity: .96;
+}
+@media (max-width: 720px) {
+  .og-tabs { width: 100%; }
+  .og-tab { flex: 1 1 0; min-width: 0; }
+}
