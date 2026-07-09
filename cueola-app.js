@@ -14645,3 +14645,36 @@ window.addEventListener('keydown', e => {
   if (og) { e.preventDefault(); try { window.Outrangutan?.saveShowFile?.(); } catch (err) { containError('Show save', err); } return; }
   if (build || live) { e.preventDefault(); exportRundownFile(); }
 }, true);
+
+// Name-badge hover tooltips (presence avatars, Planda Bear collab badges,
+// rundown presence dots). The old pure-CSS ::after tooltips were clipped by
+// scrollable ancestors (.tb-right gains overflow-x:auto under 900px, which
+// forces vertical clipping too), so the tooltip is a body-level fixed element
+// positioned from the badge's viewport rect instead.
+(function uiFloatTip() {
+  let tip = null, anchor = null;
+  const hide = () => { tip?.remove(); tip = null; anchor = null; };
+  document.addEventListener('mouseover', e => {
+    const t = e.target.closest?.('[data-fullname]');
+    if (!t) { if (anchor) hide(); return; }
+    if (t === anchor) return;
+    hide();
+    anchor = t;
+    tip = document.createElement('div');
+    tip.className = 'ui-float-tip';
+    tip.textContent = t.getAttribute('data-fullname') || '';
+    document.body.appendChild(tip);
+    const r = t.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    const x = Math.max(8, Math.min(r.left + r.width / 2 - tr.width / 2, innerWidth - tr.width - 8));
+    let y = r.bottom + 8;
+    if (y + tr.height > innerHeight - 8) y = r.top - tr.height - 8;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+    requestAnimationFrame(() => tip?.classList.add('on'));
+  });
+  document.addEventListener('mouseout', e => {
+    if (anchor && !(e.relatedTarget && anchor.contains(e.relatedTarget))) hide();
+  });
+  document.addEventListener('scroll', hide, true);
+  document.addEventListener('click', hide, true);
+})();

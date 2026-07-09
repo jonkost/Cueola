@@ -64,6 +64,10 @@
 .sf-symbol[data-symbol="media.stop"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/stop.circle.svg");}
 .sf-symbol[data-symbol="media.waveform"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/waveform.circle.svg");}
 .sf-symbol[data-symbol="media.waveform.low"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/waveform.low.svg");}
+.sf-symbol[data-symbol="media.forward"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/forward.fill.svg");}
+.sf-symbol[data-symbol="media.backward.circle"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/backward.circle.fill.svg");}
+.sf-symbol[data-symbol="media.forward.circle"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/forward.circle.fill.svg");}
+.sf-symbol[data-symbol="action.lock"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/lock.fill.svg");}
 .sf-symbol[data-symbol="content.calendar"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/time/calendar.svg");}
 .sf-symbol[data-symbol="content.checklist"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/checklist.svg");}
 .sf-symbol[data-symbol="content.script"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/textformatting/text.page.svg");}

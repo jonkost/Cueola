@@ -4,13 +4,15 @@
     {
       "name": "Cueola",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "3001", "--directory", "/Users/jonkost/Documents/GitHub/Cueola"],
+      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3001'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"],
+      "autoPort": true,
       "port": 3001
     },
     {
       "name": "Cueola-alt",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "3011", "--directory", "/Users/jonkost/Documents/GitHub/Cueola"],
+      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3011'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"],
+      "autoPort": true,
       "port": 3011
     },
     {

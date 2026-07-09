@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260708a">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0u">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260709b">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1a">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -197,10 +197,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .p-avatar:first-child{margin-left:0}
 .p-avatar:hover{z-index:20}
 .pb-collab-avatar[data-fullname]{position:relative}
-:is(.p-avatar,.pb-collab-avatar)[data-fullname]::after{content:attr(data-fullname);position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;letter-spacing:0;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 10px 26px rgba(0,0,0,.5)}
-:is(.p-avatar,.pb-collab-avatar)[data-fullname]::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%) translateY(3px);border:5px solid transparent;border-bottom-color:var(--bord2);opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:501}
-:is(.p-avatar,.pb-collab-avatar)[data-fullname]:hover::after,:is(.p-avatar,.pb-collab-avatar)[data-fullname]:hover::before{opacity:1;transform:translateX(-50%) translateY(0)}
 .pb-collab-avatar[data-fullname]:hover{z-index:20}
+/* Name-badge tooltips render as a body-level floating element (see uiFloatTip in
+   cueola-app.js) — CSS ::after tooltips were clipped by scrollable ancestors
+   like .tb-right's overflow-x:auto. */
+.ui-float-tip{position:fixed;background:color-mix(in srgb,var(--s1) 97%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;letter-spacing:0;opacity:0;transform:translateY(3px);pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:4000;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.ui-float-tip.on{opacity:1;transform:translateY(0)}
 .p-avatar.inst{background:var(--accent);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 80%,#000) inset}
 .p-avatar.stud{background:var(--green);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 80%,#000) inset}
 .p-avatar.extra{background:var(--s4);color:var(--text);font-size:11px;font-weight:700}
@@ -3064,8 +3066,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .rd-pres-avatar.inst{background:var(--accent)}
 .rd-pres-avatar.stud{background:var(--green)}
 .rd-pres-avatar:hover{z-index:20}
-.rd-pres-avatar[data-fullname]::after{content:attr(data-fullname);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%) translateY(3px);background:color-mix(in srgb,var(--s1) 97%,transparent);border:1px solid var(--bord2);border-radius:7px;padding:4px 8px;font-size:11px;font-weight:600;font-family:var(--sans);color:var(--text);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .14s var(--ease),transform .14s var(--ease);z-index:500;box-shadow:0 8px 22px rgba(0,0,0,.5)}
-.rd-pres-avatar[data-fullname]:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}
+/* rd-pres-avatar tooltips use the shared uiFloatTip (cueola-app.js). */
 .style-pill .sf-symbol{font-size:11px}
 .cd-drag .sf-symbol{font-size:12px}
 .col-drag .sf-symbol{font-size:12px;opacity:.7}
@@ -3246,6 +3247,21 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .themes-submenu>summary .tr-val{grid-column:3;justify-self:end;display:inline-flex;align-items:center;gap:6px;color:var(--text3);font-size:12px;font-weight:600}
 .themes-submenu>summary .tr-chev{transition:transform .18s var(--ease);font-size:13px;line-height:1}
 .themes-submenu[open]>summary .tr-chev{transform:rotate(90deg)}
+/* ── Contact rows + License submenu (front-page settings panel) ── */
+.entry-contact-row{text-decoration:none;border-radius:7px;padding:5px var(--settings-row-pad-x,8px);min-height:34px;align-items:center;transition:background .15s var(--ease),color .15s var(--ease)}
+.entry-contact-row:hover{color:var(--text);background:color-mix(in srgb,var(--text) 7%,transparent)}
+.entry-contact-row b{color:var(--text);font-weight:760}
+.entry-contact-row em{display:block;font-style:normal;font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:1px}
+.entry-contact-row:hover em{color:var(--accent)}
+.license-submenu{margin-top:0}
+.license-submenu>summary .tr-license-ico{grid-column:1;justify-self:start;font-size:16px;color:var(--accent)}
+.license-body{margin:6px 2px 8px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--s2) 70%,transparent);color:var(--text2);font-size:12px;line-height:1.5}
+.license-body .license-title{color:var(--text);font-size:13px;font-weight:800;margin-bottom:4px}
+.license-body p{margin:0 0 6px}
+.license-body ul{margin:0 0 8px;padding-left:16px;display:grid;gap:3px}
+.license-body b{color:var(--text)}
+.license-body .license-link{color:var(--yellow,#f5b731);font-weight:700;text-decoration:none}
+.license-body .license-link:hover{text-decoration:underline}
 /* Restore the classic circular 3×3 grid for the expanded swatches. */
 :is(.entry-theme-panel,#modal-settings .settings-sheet,.plandabear-theme-bar) .themes-submenu .theme-grid{
   display:grid;
@@ -3523,6 +3539,21 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           <div class="entry-theme-info">
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Front-page theme carries into the main app. Sub-app settings can still choose their own look.</span></div>
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Autosave uses this browser on this device.</span></div>
+            <a class="entry-theme-info-row entry-contact-row" href="mailto:support@cueola.live?subject=Cueola%20support"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span><b>Support</b> — bugs, questions &amp; help<em>support@cueola.live</em></span></a>
+            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span><span><b>Say hello</b> — info &amp; everything else<em>hello@cueola.live</em></span></a>
+            <details class="themes-submenu license-submenu">
+              <summary class="themes-row"><span class="sf-symbol tr-license-ico" data-symbol="content.script" aria-hidden="true"></span><span class="tr-lbl">License</span><span class="tr-val">BY-NC-ND<span class="tr-chev" aria-hidden="true">›</span></span></summary>
+              <div class="license-body">
+                <div class="license-title">Creative Commons BY-NC-ND 4.0</div>
+                <p>Copyright © 2026 Jon Kost. Free to use and share for non-commercial educational purposes with attribution. No derivatives or commercial use permitted.</p>
+                <ul>
+                  <li><b>Attribution</b> — credit must be given to Jon Kost</li>
+                  <li><b>NonCommercial</b> — no commercial use</li>
+                  <li><b>NoDerivatives</b> — no modified versions may be distributed</li>
+                </ul>
+                <a class="license-link" href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">Full license text</a>
+              </div>
+            </details>
             <div class="entry-theme-meta"><span>Cueola</span><b>v1.0.0</b></div>
           </div>
         </div>
@@ -4747,8 +4778,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0p"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0l"></script>
+<script src="cueola-app.js?v=1.0.0q"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0r"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

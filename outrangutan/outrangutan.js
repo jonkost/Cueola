@@ -121,6 +121,9 @@
   function slog(cat, msg) { try { window.CueolaShowLog && window.CueolaShowLog.add(cat, '[Outrangutan] ' + msg); } catch (e) {} }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function fmtClock(sec) { sec = Math.max(0, sec || 0); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60); return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0'); }
+  // SMPTE timecode HH:MM:SS;FF for the big count clock (30 fps frame base).
+  const OG_FPS = 30;
+  function fmtSmpte(sec) { sec = Math.max(0, sec || 0); const t = Math.floor(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60, f = Math.min(OG_FPS - 1, Math.floor((sec - t) * OG_FPS)); const p = n => String(n).padStart(2, '0'); return p(h) + ':' + p(m) + ':' + p(s) + ';' + p(f); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
   function assetIcon(name, cls) { return '<span class="og-svg-icon og-icon-' + name + (cls ? ' ' + cls : '') + '" aria-hidden="true"></span>'; }
@@ -213,7 +216,19 @@
         const g = ac.createGain(); g.gain.value = settings.masterGain == null ? 1 : settings.masterGain;
         const an = ac.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.6;
         g.connect(an); an.connect(ac.destination);
-        master = { gain: g, analyser: an, buf: new Uint8Array(an.fftSize) };
+        // True stereo tap for the program VU: split the master bus into L/R and
+        // meter each channel independently (the mono `an` above still drives the
+        // horizontal master fills). Splitter analysers are passive taps — no need
+        // to connect them onward to the destination.
+        const splitter = ac.createChannelSplitter(2);
+        const anL = ac.createAnalyser(); anL.fftSize = 1024; anL.smoothingTimeConstant = 0.6;
+        const anR = ac.createAnalyser(); anR.fftSize = 1024; anR.smoothingTimeConstant = 0.6;
+        g.connect(splitter); splitter.connect(anL, 0); splitter.connect(anR, 1);
+        master = {
+          gain: g, analyser: an, buf: new Uint8Array(an.fftSize),
+          analyserL: anL, bufL: new Uint8Array(anL.fftSize),
+          analyserR: anR, bufR: new Uint8Array(anR.fftSize),
+        };
         ['a', 'b', 'audio'].forEach(k => {
           const d = decks[k]; d.ch = makeChannel();
           try { d.src = ac.createMediaElementSource(d.el); d.src.connect(d.ch.input); } catch (e) { /* already wired or unsupported */ }
@@ -1248,14 +1263,28 @@
     selectedId = next || selectedId;
     renderCueList(); renderInspector(); renderEditArea();
   }
-  // Keep the big transport button honest about what Space will do.
+  // The green transport button (and its advertised GO/Space key): toggle pause
+  // while a cue is live, else fire the armed cue (folding in resume). Pausing an
+  // actively-playing cue matches its Play/Pause label — the key routes here too
+  // so the shortcut and the button behave identically.
+  function goPauseButton() {
+    if (preInfo) return;              // mid pre-wait: ignore taps, let it count in
+    if (active) { pauseResume(); return; }
+    go();
+  }
+  // Keep the big transport button honest about what it will do: pause glyph while
+  // a cue is actively playing, play glyph when idle or paused ("Resume").
   function syncGoButton() {
     const b = $('og-go'); if (!b) return;
     const paused = isActivePaused();
-    if (b._pausedLabel === paused) return;
-    b._pausedLabel = paused;
+    const playing = !!active && !preInfo && !paused;
+    const state = playing ? 'playing' : paused ? 'paused' : 'idle';
+    if (b._goState === state) return;
+    b._goState = state;
     const keyTxt = ($('og-k-go') && $('og-k-go').textContent) || '';
-    b.innerHTML = sym('media.play') + (paused ? 'RESUME' : 'GO') + '<span class="og-tbtn-key" id="og-k-go">' + esc(keyTxt) + '</span>';
+    const icon = playing ? sym('media.pause') : sym('media.play');
+    const label = paused ? 'Resume' : 'Play / Pause';
+    b.innerHTML = icon + label + '<span class="og-tbtn-key" id="og-k-go">' + esc(keyTxt) + '</span>';
   }
   function fireCue(cue) {
     clearPre();
@@ -1525,62 +1554,54 @@
     return Math.max(0, (out || 0) - (c.trimIn || 0));
   }
   function renderClock() {
-    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), elapsedEl = $('og-clock-elapsed'), durEl = $('og-clock-duration'), wrap = $('og-clock');
+    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), durEl = $('og-clock-duration'), wrap = $('og-clock');
     if (!timeEl) return;
-    const setElapsed = (label, secs) => { if (elapsedEl) elapsedEl.textContent = label + ' ' + fmtClock(Math.max(0, secs || 0)); };
     const setDuration = (secs) => { if (durEl) durEl.textContent = 'DUR ' + fmtClock(Math.max(0, secs || 0)); };
+    // dir: 'up' counting up (elapsed → green), 'down' counting down (remaining → red)
+    const setClock = (state, dir) => { wrap.className = 'og-clock' + (state ? ' ' + state : '') + ' ' + (dir === 'up' ? 'og-count-up' : 'og-count-down'); };
     if (preInfo) {
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
-      setElapsed('CLIP', 0);
       setDuration(cuePlayoutDuration(preInfo.cue));
-      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
-      cueEl.textContent = ''; wrap.className = 'og-clock warn'; return;
+      timeEl.textContent = fmtSmpte(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
+      setClock('warn', 'down'); return;
     }
     if (active && active.kind === 'image') {
       const c = active.cue;
-      let elapsed = Math.max(0, (performance.now() - active.shownAt) / 1000);
       setDuration(cuePlayoutDuration(c));
       if (active.remainMs > 0 || c.duration > 0) {
         const left = active.paused ? active.remainMs / 1000
           : Math.max(0, (active.remainMs - (performance.now() - active.timerStart)) / 1000);
-        elapsed = Math.max(0, (c.duration || 0) - left);
-        timeEl.textContent = fmtClock(left);
+        timeEl.textContent = fmtSmpte(left);
         labelEl.textContent = active.paused ? 'PAUSED' : 'REMAINING';
-        wrap.className = 'og-clock ' + (active.paused || left <= 10 ? 'warn' : 'run');
+        setClock(active.paused || left <= 10 ? 'warn' : 'run', 'down');
       } else {
-        timeEl.textContent = fmtClock((performance.now() - active.shownAt) / 1000);
+        timeEl.textContent = fmtSmpte((performance.now() - active.shownAt) / 1000);
         labelEl.textContent = active.paused ? 'PAUSED' : 'HOLD';
-        wrap.className = 'og-clock' + (active.paused ? ' warn' : ' run');
+        setClock(active.paused ? 'warn' : 'run', 'up');
       }
-      setElapsed('CLIP', elapsed);
-      cueEl.textContent = c.name;
       return;
     }
     if (active && active.el && !active.el.paused) {
       const el = active.el, end = (active.cue.trimOut != null ? active.cue.trimOut : (isFinite(el.duration) ? el.duration : active.cue.duration));
       const elapsed = el.currentTime - (active.cue.trimIn || 0);
       const remain = Math.max(0, end - el.currentTime);
-      const show = settings.clockMode === 'elapsed' ? Math.max(0, elapsed) : remain;
-      timeEl.textContent = fmtClock(show);
-      labelEl.textContent = settings.clockMode === 'elapsed' ? 'ELAPSED' : 'REMAINING';
+      const up = settings.clockMode === 'elapsed';
+      timeEl.textContent = fmtSmpte(up ? Math.max(0, elapsed) : remain);
+      labelEl.textContent = up ? 'ELAPSED' : 'REMAINING';
       setDuration(cuePlayoutDuration(active.cue, active.el));
-      cueEl.textContent = active.cue.name;
-      setElapsed('CLIP', elapsed);
-      wrap.className = 'og-clock ' + (remain <= 10 ? 'warn' : 'run');
+      setClock(remain <= 10 ? 'warn' : 'run', up ? 'up' : 'down');
       return;
     }
     if (active && active.el && active.el.paused) {
-      const elapsed = Math.max(0, active.el.currentTime - (active.cue.trimIn || 0));
       const remain = Math.max(0, ((active.cue.trimOut != null ? active.cue.trimOut : active.el.duration) || 0) - active.el.currentTime);
-      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PAUSED'; setDuration(cuePlayoutDuration(active.cue, active.el)); cueEl.textContent = active.cue.name; setElapsed('CLIP', elapsed); wrap.className = 'og-clock warn'; return;
+      timeEl.textContent = fmtSmpte(remain); labelEl.textContent = 'PAUSED'; setDuration(cuePlayoutDuration(active.cue, active.el)); setClock('warn', 'down'); return;
     }
     const sel = cueById(selectedId);
-    timeEl.textContent = fmtClock(sel ? sel.duration : 0);
+    timeEl.textContent = fmtSmpte(sel ? sel.duration : 0);
     labelEl.textContent = sel ? 'DURATION' : 'STANDBY';
     setDuration(sel ? cuePlayoutDuration(sel) : 0);
-    cueEl.textContent = sel ? sel.name : '—';
-    setElapsed('CLIP', 0);
-    wrap.className = 'og-clock';
+    // idle standby: colour by the clockMode preference (remaining→down/red, elapsed→up/green)
+    setClock('', settings.clockMode === 'elapsed' ? 'up' : 'down');
     if (!active && !preInfo) stopTicker();
   }
 
@@ -1616,9 +1637,20 @@
     fillEl.style.transform = 'scaleX(' + v.toFixed(3) + ')';
     if (peakEl) { let ph = parseFloat(peakEl.dataset.p || '0'); ph = Math.max(l.peak, ph - 0.013); peakEl.dataset.p = ph; peakEl.style.left = (Math.min(1, ph) * 100).toFixed(1) + '%'; peakEl.style.opacity = ph > 0.02 ? '1' : '0'; }
   }
+  // Vertical variant for the program VU bars (transform-origin: bottom in CSS).
+  function paintMeterY(fillEl, an, buf) {
+    const l = level(an, buf), v = Math.min(1, l.rms * 1.9);
+    fillEl.style.transform = 'scaleY(' + v.toFixed(3) + ')';
+  }
   function paintMeters() {
     if (!ac || !isOpen()) return;
-    const mf = $('og-master-fill'); if (mf && master) paintMeter(mf, $('og-master-peak'), master.analyser, master.buf);
+    // program VU: two vertical bars driven from the true L/R channel taps
+    // (falls back to the mono master analyser if the splitter is unavailable)
+    if (master) {
+      const vl = $('og-vu-l'), vr = $('og-vu-r');
+      if (vl) paintMeterY(vl, master.analyserL || master.analyser, master.bufL || master.buf);
+      if (vr) paintMeterY(vr, master.analyserR || master.analyser, master.bufR || master.buf);
+    }
     const mf2 = $('og-master-fill2'); if (mf2 && master) paintMeter(mf2, null, master.analyser, master.buf);
     const cf = $('og-cue-meter-fill'); if (cf && active && active.ch) paintMeter(cf, null, active.ch.analyser, active.ch.buf);
     if (settings.tab === 'sfx') {
@@ -1655,7 +1687,8 @@
   function renderInspector() {
     const ins = $('og-inspector'); if (!ins) return;
     const c = cueById(selectedId);
-    if (!c) { ins.innerHTML = '<div class="og-insp-empty">' + assetIcon('scope', 'og-insp-empty-icon') + '<span>Select a cue to edit its properties.</span></div>'; return; }
+    updateSelectionState();
+    if (!c) { ins.innerHTML = '<div class="og-insp-empty">Select a cue to edit its properties.</div>'; return; }
     const eq = c.eq || (c.eq = { low: 0, mid: 0, high: 0 });
     const dims = c.srcW && c.srcH
       ? '<div class="og-insp-meta">' + c.srcW + '×' + c.srcH + ' · ' + aspectLabel(c.srcW, c.srcH) + (c.type === 'image' ? ' · still' : '') + '</div>'
@@ -1993,6 +2026,7 @@
   function renderPadEditArea() {
     const body = $('og-sfx-edit-body'), acts = $('og-sfx-edit-actions'); if (!body) return;
     const p = padById(selectedPadId);
+    updatePadSelectionState();
     if (!p) { body.innerHTML = '<div class="og-edit-empty">Select a pad’s ' + sym('action.more') + ' to trim its sound.</div>'; if (acts) acts.innerHTML = ''; return; }
     const dur = padDuration(p) || 0;
     const tin = clamp(p.trimIn || 0, 0, dur || 1e9);
@@ -2084,6 +2118,60 @@
     // SFX board shares the same inspector-width + edit-height vars (one resize, both views)
     wireSplitter('og-split-si', (ev) => { const r = $('og-sfx-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 320); applyLayout(); });
     wireSplitter('og-split-sh', (ev) => { const m = document.querySelector('.og-sfx'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
+  }
+
+  // ── Responsive layout modes ───────────────────────────────────────────────
+  // wide (>720): three columns (Cue List | Program | Inspector) + bottom clip
+  //   editor, splitters live. The Inspector stays a right-hand column.
+  // narrow (≤720): the same panes stack and scroll as one column.
+  let layoutMode = null, bottomTab = 'insp';
+  function currentMode() {
+    const w = window.innerWidth || document.documentElement.clientWidth || 1280;
+    if (w <= 720) return 'narrow';
+    return 'wide';
+  }
+  function applyLayoutMode() {
+    const main = document.querySelector('.og-main');
+    const mode = currentMode();
+    if (main) {
+      main.classList.remove('og-lay-wide', 'og-lay-medium', 'og-lay-narrow');
+      main.classList.add('og-lay-' + mode);
+    }
+    // relocate the Inspector pane: a top-row column at wide, part of the shared
+    // tabbed bottom region at medium/narrow. Keep #og-inspector-pane intact.
+    const insp = $('og-inspector-pane'), bottom = $('og-bottom'),
+          editPane = $('og-edit-pane'), toprow = $('og-toprow');
+    if (insp && bottom && editPane && toprow) {
+      if (mode === 'wide') {
+        if (insp.parentElement !== toprow) toprow.appendChild(insp);   // back to the 3rd column slot
+      } else {
+        if (insp.parentElement !== bottom) bottom.insertBefore(insp, editPane);
+      }
+    }
+    layoutMode = mode;
+    updateSelectionState();
+    applyLayout();
+  }
+  // Reflect current cue selection so empty panes collapse instead of hogging space.
+  function updateSelectionState() {
+    const main = document.querySelector('.og-main'); if (!main) return;
+    const has = !!cueById(selectedId);
+    main.classList.toggle('og-has-sel', has);
+    main.classList.toggle('og-no-sel', !has);
+  }
+  // Pad-editor collapse mirror for the SFX board.
+  function updatePadSelectionState() {
+    const sfx = document.querySelector('.og-sfx'); if (!sfx) return;
+    const has = !!padById(selectedPadId);
+    sfx.classList.toggle('og-has-padsel', has);
+    sfx.classList.toggle('og-no-padsel', !has);
+  }
+  function setBottomTab(t) {
+    bottomTab = t;
+    const bottom = $('og-bottom'); if (bottom) bottom.classList.toggle('show-edit', t === 'edit');
+    const bi = $('og-bottom-tab-insp'), be = $('og-bottom-tab-edit');
+    if (bi) { bi.classList.toggle('on', t === 'insp'); bi.setAttribute('aria-selected', t === 'insp' ? 'true' : 'false'); }
+    if (be) { be.classList.toggle('on', t === 'edit'); be.setAttribute('aria-selected', t === 'edit' ? 'true' : 'false'); }
   }
 
   async function deleteCue(id) {
@@ -2432,7 +2520,7 @@
     const sc = settings.shortcuts, k = e.key;
     const match = (bound) => bound && (bound.length === 1 ? k.toLowerCase() === bound.toLowerCase() : k === bound);
     if (k === sc.panic) { e.preventDefault(); panic(); return; }
-    if (match(sc.go)) { e.preventDefault(); if (!e.repeat) go(); return; }
+    if (match(sc.go)) { e.preventDefault(); if (!e.repeat) goPauseButton(); return; }
     if (e.repeat) return;
     if (match(sc.stop)) { e.preventDefault(); stopAll(); return; }
     if (match(sc.pause)) { e.preventDefault(); pauseResume(); return; }
@@ -2494,8 +2582,9 @@
         + '<div class="og-bar-spacer"></div>'
         + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
         + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary title="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
-          + '<div class="og-settings-label">Theme</div>'
-          + '<div class="og-theme-grid" id="og-theme-options"></div>'
+          + '<details class="og-themes-submenu"><summary class="og-themes-row"><span class="og-tr-ico" aria-hidden="true"></span><span class="og-tr-lbl">Themes</span><span class="og-tr-val">Choose<span class="og-tr-chev" aria-hidden="true">›</span></span></summary>'
+            + '<div class="og-theme-grid" id="og-theme-options"></div>'
+          + '</details>'
           + '<div class="og-tools-sep"></div>'
           + '<div class="og-settings-label">Tools</div>'
           + '<div class="og-tools-pop-inline">'
@@ -2503,7 +2592,7 @@
             + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
             + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
             + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
-            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.pin') + 'Show Lock</button>'
+            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
             + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
             + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
@@ -2526,30 +2615,47 @@
           + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
             + '<div class="og-pane-head">Program</div>'
-            + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
-              + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
-              + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
-              + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
+            + '<div class="og-program-top">'
+              + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
+                + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
+                + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
+                + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
+              + '<div class="og-meters">'
+                + '<div class="og-vu-col"><div class="og-vu-pair"><span class="og-vu"><span class="og-vu-fill og-vu-fill-y" id="og-vu-l"></span></span><span class="og-vu"><span class="og-vu-fill og-vu-fill-y" id="og-vu-r"></span></span></div><span class="og-meter-col-lbl">VU</span></div>'
+                + '<div class="og-fader-col"><input type="range" class="og-vfader" id="og-master-gain-play" min="0" max="1.2" step="0.01" value="1" aria-label="Output level"><span class="og-meter-col-lbl">Output</span></div>'
+              + '</div>'
+            + '</div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
-            + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-cue" id="og-clock-cue">—</div><div class="og-clock-elapsed" id="og-clock-elapsed">CLIP 0:00</div></div>'
+            + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><button type="button" class="og-clock-dir" id="og-clock-dir" title="Toggle count direction (elapsed / remaining)" aria-label="Toggle count direction">' + sym('media.forward') + '</button><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div></div>'
             + '<div class="og-transport">'
-              + '<div class="og-transport-head"><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><label class="og-master-gain-inline"><span>Output</span><input type="range" id="og-master-gain-play" min="0" max="1.2" step="0.01" value="1"></label></div>'
-              + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
-              + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'GO<span class="og-tbtn-key" id="og-k-go"></span></button>'
-              + '<button class="og-tbtn" id="og-pause">' + sym('media.pause') + 'Pause<span class="og-tbtn-key" id="og-k-pause"></span></button>'
-              + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
-              + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'PANIC<span class="og-tbtn-key" id="og-k-panic"></span></button>'
+              + '<div class="og-transport-group">'
+                + '<button class="og-tbtn" id="og-prev">' + sym('media.backward.circle') + 'Previous Cue<span class="og-tbtn-key">↑</span></button>'
+                + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'Play / Pause<span class="og-tbtn-key" id="og-k-go"></span></button>'
+                + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
+                + '<button class="og-tbtn" id="og-next">' + sym('media.forward.circle') + 'Next Cue<span class="og-tbtn-key">↓</span></button>'
+              + '</div>'
+              + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'Panic<span class="og-tbtn-key" id="og-k-panic"></span></button>'
             + '</div>'
           + '</div>'
           + '<div class="og-splitter og-splitter-v" id="og-split-i" title="Drag to resize"></div>'
-          + '<div class="og-pane og-inspector-pane">'
+          + '<div class="og-pane og-inspector-pane" id="og-inspector-pane">'
             + '<div class="og-pane-head">Inspector</div><div class="og-inspector" id="og-inspector"></div>'
           + '</div>'
           + '</div>'   // /og-toprow
           + '<div class="og-splitter og-splitter-h" id="og-split-h" title="Drag to resize the clip editor"></div>'
-          + '<div class="og-pane og-edit-pane" id="og-edit-pane">'
-            + '<div class="og-pane-head">Clip Editor<div class="og-pane-actions" id="og-edit-actions"></div></div>'
-            + '<div class="og-edit-body" id="og-edit-body"></div>'
+          // shared bottom region — at medium/narrow widths the Inspector pane is
+          // relocated here (JS applyLayoutMode) and these tabs switch between it
+          // and the Clip Editor; hidden at wide, where the Inspector is a column.
+          + '<div class="og-bottom" id="og-bottom">'
+            + '<div class="og-bottom-tabs" id="og-bottom-tabs" role="tablist" aria-label="Bottom panel">'
+              + '<button type="button" class="og-bottom-tab on" id="og-bottom-tab-insp" data-btab="insp" role="tab">Inspector</button>'
+              + '<button type="button" class="og-bottom-tab" id="og-bottom-tab-edit" data-btab="edit" role="tab">Clip Editor</button>'
+              + '<span class="og-bottom-hint" id="og-bottom-hint">Select a cue to inspect or trim</span>'
+            + '</div>'
+            + '<div class="og-pane og-edit-pane" id="og-edit-pane">'
+              + '<div class="og-pane-head">Clip Editor<div class="og-pane-actions" id="og-edit-actions"></div></div>'
+              + '<div class="og-edit-body" id="og-edit-body"></div>'
+            + '</div>'
           + '</div>'
         + '</div>'
         // ── SFX ── (mockup: SFX Board | Pad Inspector on top + full-width Pad Editor below)
@@ -2606,6 +2712,8 @@
     $('og-back').onclick = exitOutrangutan;
     $('og-tab-play').onclick = () => setTab('play');
     $('og-tab-sfx').onclick = () => setTab('sfx');
+    $('og-bottom-tab-insp').onclick = () => setBottomTab('insp');
+    $('og-bottom-tab-edit').onclick = () => setBottomTab('edit');
     $('og-output-btn').onclick = openOutputsPanel;
     $('og-sd-btn').onclick = openSdPanel;
     $('og-pro-btn').onclick = openIntegrations;
@@ -2625,12 +2733,16 @@
     const ogJoinKey = e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); exitOutrangutan(); } };
     $('og-join-code').addEventListener('keydown', ogJoinKey);
     $('og-join-name').addEventListener('keydown', ogJoinKey);
-    $('og-go').onclick = go;
-    $('og-stop').onclick = () => stopAll();
-    $('og-pause').onclick = pauseResume;
+    $('og-go').onclick = goPauseButton;
+    $('og-prev').onclick = () => moveSelection(-1);
+    $('og-next').onclick = () => moveSelection(1);
     $('og-fade').onclick = fadeStopAll;
     $('og-panic').onclick = panic;
-    $('og-clock').onclick = () => { settings.clockMode = settings.clockMode === 'remaining' ? 'elapsed' : 'remaining'; renderClock(); scheduleSave(); };
+    const syncClockDir = () => { const d = $('og-clock-dir'); if (d) d.classList.toggle('is-elapsed', settings.clockMode === 'elapsed'); };
+    const toggleClockDir = () => { settings.clockMode = settings.clockMode === 'remaining' ? 'elapsed' : 'remaining'; syncClockDir(); renderClock(); toast(settings.clockMode === 'elapsed' ? 'Clock counts up (elapsed)' : 'Clock counts down (remaining)'); scheduleSave(); };
+    $('og-clock-dir').onclick = toggleClockDir;   // the ›/‹ chevron is the sole count-direction toggle
+    $('og-clock').style.cursor = 'default';
+    syncClockDir();
     $('og-wallclock').onclick = toggleWallClockMode;
     $('og-wallclock').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWallClockMode(); } };
     $('og-recovery-dismiss').onclick = () => $('og-recovery').classList.remove('on');
@@ -2685,7 +2797,9 @@
 
     built = true;
     renderTransportKeys();
-    initSplitters(); applyLayout();
+    initSplitters(); applyLayoutMode();
+    let ogResizeT = 0;
+    window.addEventListener('resize', () => { if (ogResizeT) clearTimeout(ogResizeT); ogResizeT = setTimeout(applyLayoutMode, 120); });
 
     renderWallClock();
     setInterval(renderWallClock, 1000);
@@ -2712,7 +2826,7 @@
     const s = await loadShow();
     if (!settings.layout) settings.layout = { wCuelist: 280, wInspector: 280, hEdit: 150 };
     ensureBanks();
-    applyLayout();
+    applyLayoutMode();
     renderTransportKeys(); renderAll();
     setTab(settings.tab || 'play');
     const mc = $('og-multi'); if (mc) mc.checked = !!settings.multiTrigger;

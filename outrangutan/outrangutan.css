@@ -93,24 +93,19 @@
 @keyframes og-pulse { 50% { opacity: .55; } }
 
 /* count-out clock — the loudest thing on screen */
-.og-clock { text-align: center; padding: 4px 0 6px; cursor: pointer; user-select: none; }
-.og-clock-time { font-family: var(--mono); font-weight: 800; font-size: clamp(48px, 9vw, 96px); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text); }
-.og-clock.run .og-clock-time { color: var(--red); }
-.og-clock.warn .og-clock-time { color: var(--yellow); }
+.og-clock { text-align: left; padding: 4px 0 6px; cursor: pointer; user-select: none; }
+/* SMPTE timecode in SF Pro; colour is set below strictly by count direction. */
+.og-clock-time { font-family: var(--display); font-weight: 800; font-size: clamp(48px, 9vw, 96px); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--red); }
+/* colour is strictly direction-driven: RED counting down (remaining), GREEN counting up (elapsed) */
+.og-clock.og-count-down .og-clock-time { color: var(--red); }
+.og-clock.og-count-up .og-clock-time { color: var(--green); }
 .og-clock-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); margin-top: 2px; }
-.og-clock-cue { font-size: 12.5px; color: var(--text2); margin-top: 3px; min-height: 16px; }
 
 /* transport */
 .og-transport {
-  width: min(calc(100% - 24px), 860px);
-  margin: 0 auto 12px;
   display: flex;
-  gap: 4px;
-  justify-content: center;
-  padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--s1) 74%, transparent);
+  gap: 8px;
+  align-items: stretch;
 }
 .og-tbtn {
   flex: 1 1 0;
@@ -120,29 +115,12 @@
 }
 .og-tbtn:hover { background: color-mix(in srgb, var(--text) 8%, transparent); transform: translateY(-1px); }
 .og-tbtn .og-tbtn-key { font-family: var(--mono); font-size: 10px; line-height:1; font-weight: 600; color: var(--text3); }
-.og-tbtn-go { background: var(--green); color: #04130d; border-color: var(--green); font-size: 15px; box-shadow: 0 12px 28px rgba(50,211,160,.22), inset 0 1px 0 rgba(255,255,255,.26); }
+.og-tbtn-go { background: var(--green); color: #04130d; border-color: var(--green); font-size: 15px; box-shadow: none; }
 .og-tbtn-go:hover { filter: brightness(1.08); background: var(--green); }
 .og-tbtn-go .og-tbtn-key { color: rgba(4,19,13,.6); }
 .og-tbtn-panic { background: color-mix(in srgb, var(--red) 82%, var(--s3)); color: #fff; border-color: color-mix(in srgb, var(--red) 82%, white); }
 .og-tbtn-panic:hover { filter: brightness(1.08); background: var(--red); }
 .og-tbtn-panic .og-tbtn-key { color: rgba(255,255,255,.7); }
-@media (max-width: 760px) {
-  .og-transport { flex-wrap: wrap; }
-  .og-tbtn { flex: 1 1 calc(25% - 4px); min-width: 72px; }
-  .og-tbtn-go { flex-basis: 100%; order: -1; }   /* GO on top, the four others share one row */
-}
-/* The transport lives in the PROGRAM PANE, whose width the splitters control —
-   wrap on the pane's own width (container query), not the viewport, so nothing
-   clips when the operator drags the cue list / inspector wide. */
-@container (max-width: 600px) {
-  .og-transport { flex-wrap: wrap; }
-  .og-tbtn { flex: 1 1 calc(25% - 4px); min-width: 72px; }
-  .og-tbtn-go { flex-basis: 100%; order: -1; }   /* GO takes the top row; the four others share one row */
-  .og-master { display: none; }   /* the head meter yields before anything clips */
-}
-@container (max-width: 380px) {
-  .og-tbtn { flex: 1 1 calc(50% - 4px); }
-}
 
 /* ── inspector (right) ───────────────────────────────────────────────────── */
 .og-inspector { overflow: auto; flex: 1 1 auto; padding: 11px 12px 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-content: start; gap: 10px 14px; }
@@ -305,10 +283,10 @@
   border: 1px solid var(--border); background: var(--s2); color: var(--text);
   display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; text-align: left; overflow: hidden;
 }
-.og-pad[data-pad] { border-color: color-mix(in srgb, var(--pad) 55%, var(--border)); background: color-mix(in srgb, var(--pad) 12%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pad) 22%, transparent); }
+.og-pad[data-pad] { border-color: color-mix(in srgb, var(--pad) 55%, var(--border)); background: color-mix(in srgb, var(--pad) 12%, var(--s2)); box-shadow: none; }
 .og-pad[data-pad]:hover { background: color-mix(in srgb, var(--pad) 20%, var(--s2)); transform: translateY(-1px); }
 .og-pad[data-pad]:active { transform: translateY(0) scale(.985); }
-.og-pad.live { box-shadow: 0 0 0 2px var(--pad), 0 0 18px color-mix(in srgb, var(--pad) 60%, transparent); }
+.og-pad.live { box-shadow: 0 0 0 2px var(--pad); }
 .og-pad.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .og-pad.empty { border: 1.5px dashed var(--border); background: transparent; color: var(--text3); align-items: center; justify-content: center; gap: 4px; flex-direction: column; }
 .og-pad.empty:hover, .og-pad.drag { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
@@ -363,7 +341,7 @@
 .og-sheet-head {
   background: var(--liquid-fill-strong, color-mix(in srgb, var(--s2) 82%, transparent));
   border-color: var(--liquid-edge, var(--border));
-  box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255,255,255,.08));
+  box-shadow: none;
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -500,7 +478,7 @@
   border: 1px solid var(--liquid-edge, var(--border));
   border-radius: 16px;
   background: color-mix(in srgb, var(--s1) 92%, transparent);
-  box-shadow: var(--liquid-shadow-raised, 0 28px 74px rgba(0,0,0,.36));
+  box-shadow: none;
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -552,7 +530,7 @@
   border: 1px solid var(--liquid-edge, var(--border));
   border-radius: 16px;
   background: color-mix(in srgb, var(--s1) 88%, transparent);
-  box-shadow: var(--liquid-shadow-raised, 0 28px 74px rgba(0,0,0,.36));
+  box-shadow: none;
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -567,12 +545,8 @@
   border-color: var(--liquid-edge, var(--border));
 }
 .og-tab { border-radius: 999px; padding: 7px 12px; }
-.og-transport {
-  border-color: var(--liquid-edge, var(--border));
-  background: color-mix(in srgb, var(--s1) 76%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
-}
+/* transport sits flat on the panel background — no bubble material (border, fill,
+   or backdrop blur). The button tiles below keep their filled-quiet surface. */
 .og-tbtn {
   border-color: var(--liquid-edge, var(--border));
   background: transparent;
@@ -598,7 +572,7 @@
   border-radius: var(--ui-radius-control, 12px);
   border-color: color-mix(in srgb, var(--text) 13%, var(--border));
   background: color-mix(in srgb, var(--s2) 76%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  box-shadow: none;
 }
 .og-field input:focus,
 .og-field select:focus,
@@ -611,7 +585,7 @@
   /* framecheck focus: soft 3px ring, not a hard outline */
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .og-field input[type="range"],
 .og-sfx-master input[type="range"],
@@ -645,7 +619,7 @@
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
+  box-shadow: none;
 }
 .og-field input[type="range"]::-moz-range-track,
 .og-sfx-master input[type="range"]::-moz-range-track,
@@ -670,7 +644,7 @@
   background: color-mix(in srgb, var(--s1) 90%, transparent);
   border-color: var(--liquid-edge, var(--border));
   border-radius: var(--ui-radius-panel, 22px);
-  box-shadow: var(--liquid-shadow-raised, 0 28px 74px rgba(0,0,0,.36));
+  box-shadow: none;
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -693,7 +667,7 @@
 .og-sheet-head .sf-symbol { font-size: 15px; color: var(--text2); }
 .og-sheet-x { margin-left: auto; background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 6px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
 .og-sheet-x:hover { filter: brightness(1.07); }
-#og-outputs-body, #og-sd-body { padding: 18px 20px; }
+#og-outputs-body, #og-sd-body, #og-integrations-body { padding: 18px 20px; }
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.55; margin: 14px 0 0; }
 .og-sheet-note code { font-family: var(--mono-num, monospace); background: var(--s3); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 
@@ -705,7 +679,7 @@
 .og-out-row { border: 1px solid var(--border); border-radius: var(--r); padding: 12px; margin-bottom: 12px; background: var(--s2); }
 .og-out-main { display: flex; align-items: center; gap: 8px; }
 .og-out-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); flex: 0 0 auto; }
-.og-out-dot.live { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 28%, transparent); }
+.og-out-dot.live { background: var(--green); box-shadow: none; }
 .og-out-label { flex: 1 1 auto; min-width: 80px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 13.5px; font-weight: 600; padding: 7px 10px; }
 .og-out-cfg { display: grid; grid-template-columns: 1.4fr 1fr 1.4fr; gap: 10px; align-items: center; margin-top: 10px; }
 .og-out-cfg .og-field label { font-size: 10px; }
@@ -796,7 +770,7 @@
   position: relative; min-width: 0; overflow: hidden;
   height: 118px; height: clamp(96px, 16cqh, 156px);
   border: 1px solid var(--border); border-radius: 10px; background: #04060a;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: none;
 }
 .og-scope-wfm { flex: 1 1 auto; }
 .og-scope-vec { flex: 0 0 auto; aspect-ratio: 1; }
@@ -808,14 +782,29 @@
 .og-scope canvas { display: block; width: 100%; height: 100%; }
 .og-scopes-btn.on { background: var(--accent); color: #fff; border-color: transparent; }
 
-/* Integrations panel (OBS · Dropbox · Transcode) */
-.og-intg-sect { padding: 14px 0; border-bottom: 1px solid var(--border); }
-.og-intg-sect:last-child { border-bottom: none; }
-.og-intg-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; margin-bottom: 10px; }
-.og-intg-head .og-out-note { font-weight: 400; }
-.og-intg-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-.og-intg-in { flex: 1 1 120px; min-width: 80px; box-sizing: border-box; background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 13px; padding: 8px 10px; }
-.og-intg-port { flex: 0 0 72px; }
+/* Integrations panel (OBS · Dropbox · Transcode) — flat "filled quiet" language */
+.og-intg-sect { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.og-intg-sect:first-child { padding-top: 0; }
+.og-intg-sect:last-child { border-bottom: none; padding-bottom: 0; }
+.og-intg-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13.5px; color: var(--text); margin-bottom: 12px; }
+.og-intg-head .sf-symbol { font-size: 15px; color: var(--text2); }
+.og-intg-head .og-out-note { font-weight: 500; }
+.og-intg-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.og-intg-row:last-child { margin-bottom: 0; }
+.og-intg-in {
+  flex: 1 1 120px; min-width: 80px; box-sizing: border-box;
+  min-height: var(--ui-control-height, 40px);
+  background: color-mix(in srgb, var(--s2) 76%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border));
+  border-radius: var(--ui-radius-control, 12px);
+  color: var(--text); font-size: 13px; padding: 8px 12px;
+}
+.og-intg-in:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.og-intg-port { flex: 0 0 80px; }
 .og-obs-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .og-obs-scene.on { background: var(--accent); color: #fff; border-color: transparent; }
 .og-dbx-files { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
@@ -870,23 +859,22 @@
 .og-track-h::after { content: ''; position: absolute; top: 50%; left: 1px; width: 10px; height: 20px; margin-top: -10px; border-radius: 3px; }
 .og-track-in::after { background: var(--green); }
 .og-track-out::after { background: var(--red); }
-.og-track-play { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 4; pointer-events: none; box-shadow: 0 0 6px rgba(255,255,255,.6); }
+.og-track-play { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 4; pointer-events: none; box-shadow: none; }
 .og-trk-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
 .og-type-video-fg { color: var(--video); }
 .og-type-audio-fg { color: var(--green); }
 
 @media (max-width: 920px) {
-  /* P6: the stacked layout scrolls as one column — panes take their natural
-     height instead of squeezing into the viewport (fixes the clock/inspector
-     overlap logged during Phase 1 verification). */
-  .og-main { overflow-y: auto; }
-  .og-toprow { flex: none; flex-direction: column; }
-  .og-toprow > .og-pane { flex: none !important; }
-  .og-cuelist-pane { max-height: 38vh; }
-  .og-cuelist-pane, .og-inspector-pane { flex-basis: auto !important; }
-  .og-edit-pane { flex: none !important; min-height: 160px; }
-  .og-splitter-v, .og-splitter-h { display: none; }
-  .og-clock { min-height: 84px; }
+  /* SFX board only — the playback panes are handled by the .og-lay-* modes
+     appended at the end of this file. The SFX board still stacks & scrolls as
+     one column here (Board → Pad Inspector → Pad Editor). */
+  .og-sfx { overflow-y: auto; }
+  .og-sfx > .og-toprow { flex: none; flex-direction: column; }
+  .og-sfx > .og-toprow > .og-pane { flex: none !important; }
+  .og-sfx .og-sfx-main { max-height: 60vh; }
+  .og-sfx .og-sfx-side { flex-basis: auto !important; }
+  .og-sfx > #og-sfx-edit-pane { flex: none !important; min-height: 160px; }
+  .og-sfx .og-splitter-v, .og-sfx .og-splitter-h { display: none; }
 }
 
 /* ============================================================================
@@ -916,8 +904,6 @@
     container-type: inline-size;
   }
   .og-clock-time { font-size: clamp(36px, 10cqw, 58px); }
-  .og-clock-cue { min-height: 14px; margin-top: 1px; }
-  .og-clock-elapsed { margin-top: 3px; }
 }
 
 /* ============================================================================
@@ -975,7 +961,7 @@
 .og-emoji-pick:hover { background: var(--s3); transform: translateY(-1px); }
 
 /* search results overlay over the pad grid */
-.og-pad-search-results { display: none; position: absolute; inset: 0 0 auto 0; max-height: 100%; overflow: auto; background: color-mix(in srgb, var(--s1) 97%, var(--bg)); border-bottom: 1px solid var(--border); box-shadow: 0 18px 40px rgba(0,0,0,.3); z-index: 6; }
+.og-pad-search-results { display: none; position: absolute; inset: 0 0 auto 0; max-height: 100%; overflow: auto; background: color-mix(in srgb, var(--s1) 97%, var(--bg)); border-bottom: 1px solid var(--border); box-shadow: none; z-index: 6; }
 .og-pad-search-results.on { display: block; }
 .og-search-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .og-search-row:hover { background: var(--s2); }
@@ -1113,12 +1099,6 @@
   font-size: 13.5px;
   font-weight: 650;
 }
-.og-clock-elapsed {
-  margin-top: 5px;
-  color: var(--text3);
-  font: 800 11px/1 var(--mono-num, monospace);
-  letter-spacing: .08em;
-}
 .og-transport {
   border: 0;
   background: transparent;
@@ -1191,23 +1171,30 @@
 @media (max-width: 720px) {
   .og-tools-pop-inline,
   .og-theme-grid { grid-template-columns: 1fr; }
-  .og-transport { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .og-tbtn,
-  .og-tbtn-go { flex: 1 1 auto; }
 }
 
-/* Viewer and top-mode polish: center the program monitor inside the middle pane,
-   and make Playback / SFX read as one deliberate segmented control. */
-.og-program-wrap {
-  width: calc(100% - 24px);
-  max-width: calc(100% - 24px);
-  margin: 10px auto 8px !important;
-  align-self: center;
+/* Top row of the program pane: the monitor flexes to fill, with the VU + Output
+   meter column pinned to its right at full monitor height. */
+.og-program-top {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px 14px 4px;
+  min-height: 0;
+}
+.og-program-top > .og-program-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
 }
 @media (min-width: 921px) {
-  .og-program-wrap {
-    width: min(calc(100% - 28px), calc(52cqh * 16 / 9));
-    max-width: calc(100% - 28px);
+  /* cap the monitor by its 16:9 height so the clock + transport always keep a
+     healthy share of the pane (the pane is a size container on desktop). */
+  .og-program-top > .og-program-wrap {
+    flex: 0 1 auto;
+    width: min(100%, calc(54cqh * 16 / 9));
   }
 }
 .og-tabs {
@@ -1216,7 +1203,7 @@
   gap: 3px;
   border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
   background: color-mix(in srgb, var(--s1) 72%, var(--s3));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  box-shadow: none;
 }
 .og-tab {
   min-width: 132px;
@@ -1240,7 +1227,7 @@
   background: color-mix(in srgb, var(--accent) 88%, #fff);
   border-color: transparent;
   color: #07101e;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 10px 24px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: none;
 }
 .og-tab .sf-symbol {
   font-size: 18px;
@@ -1263,7 +1250,7 @@
   white-space: nowrap;
 }
 .og-program-pane {
-  align-items: center;
+  align-items: stretch;   /* full-width top row / left-aligned clock / flat transport */
   background:
     radial-gradient(70% 48% at 50% 30%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%),
     color-mix(in srgb, var(--bg) 94%, var(--s1));
@@ -1278,69 +1265,87 @@
   background: color-mix(in srgb, var(--bg) 96%, var(--s1));
 }
 @media (min-width: 921px) {
-  .og-program-wrap {
-    width: min(calc(100% - 56px), 920px, calc(58cqh * 16 / 9));
-    max-width: calc(100% - 56px);
-    margin: 16px auto 8px !important;
-    border-radius: 12px;
-  }
-  .og-clock {
-    width: min(calc(100% - 56px), 680px);
-    flex: 0 0 auto;
-    min-height: 84px;
-    margin: 2px auto 8px;
-    padding: 0;
-  }
+  .og-program-wrap { border-radius: 12px; }
   .og-clock-time {
     font-size: clamp(40px, 8cqw, 68px);
   }
 }
+/* Flat transport row: tiles sit directly on the panel background — no bubble
+   container, no grid. Prev · Play/Pause (green) · Fade · Next, then Panic pushed
+   to the far right. */
 .og-transport {
-  display: grid !important;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
   align-items: stretch;
-  width: min(calc(100% - 56px), 760px);
-  margin: 0 auto 18px;
-  padding: 8px;
+  flex-wrap: nowrap;              /* one row; shrink tiles to fit the pane */
+  width: auto;
+  margin: 4px 0 12px;
+  padding: 6px 14px 0;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--border));
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--s1) 78%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .og-tbtn {
-  flex: none;
+  flex: 1 1 0;
   min-width: 0;
-  min-height: 68px;
+  min-height: 66px;
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 8px 8px;
   background: color-mix(in srgb, var(--s2) 88%, transparent);
-  border-color: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text2);
   box-shadow: none;
 }
-#og-stop { grid-column: 1; grid-row: 1; }
-#og-pause { grid-column: 2; grid-row: 1; }
 #og-go {
-  grid-column: 3 / span 2;
-  grid-row: 1;
-  min-height: 72px;
+  /* Play/Pause reads as the primary AND matches Panic's rendered width: the 68px
+     flex-basis pre-pays the transport-group's fixed chrome (padding + inner gaps)
+     that otherwise comes out of this tile's share only, so #og-go ≈ #og-panic at
+     every pane width (a constant compensation, since that chrome is constant). */
+  flex: 1.6 1 68px;
+  min-width: 0;
+  min-height: 66px;
 }
-#og-fade { grid-column: 5; grid-row: 1; }
-#og-panic { grid-column: 6; grid-row: 1; }
+/* The four core buttons read as one rounded unit; Panic sits apart at the end. */
+.og-transport-group {
+  display: flex;
+  flex: 4.6 1 0;                 /* 4 buttons (prev 1 + go 1.6 + fade 1 + next 1) */
+  min-width: 0;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--s3) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+}
+/* Panic matches Play/Pause: 1.6 units of the same 6.2-unit row → equal width. */
+.og-transport > .og-tbtn-panic { flex: 1.6 1 0; min-width: 0; }
+#og-panic { margin-left: 16px; }   /* small gap sets the emergency stop apart */
 .og-tbtn:hover {
   box-shadow: none;
+  transform: translateY(-1px);
 }
 .og-tbtn:not(.og-tbtn-go):not(.og-tbtn-panic):hover {
   color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
 }
 .og-tbtn-go {
-  flex: none;
+  flex: 1.6 1 0;
   color: #04130d;
 }
 .og-tbtn-panic {
   background: color-mix(in srgb, var(--red) 72%, var(--s3));
   border-color: color-mix(in srgb, var(--red) 70%, var(--border));
+}
+/* Only when the program pane (splitter-driven — so key off the pane's own width,
+   not the viewport) gets too tight for one row, wrap to a compact 3-up grid. The
+   tiles shrink to fit one row above this, so this fires only when genuinely cramped. */
+@container (max-width: 460px) {
+  .og-transport { flex-wrap: wrap; }
+  .og-transport-group { flex: 1 1 100%; flex-wrap: wrap; }
+  .og-transport-group .og-tbtn,
+  .og-transport-group #og-go,
+  .og-transport-group .og-tbtn-go { flex: 1 1 calc(50% - 3px); }
+  .og-transport > .og-tbtn-panic { margin-left: 0; flex: 1 1 100%; min-width: 0; }
 }
 .og-edit-pane {
   background: color-mix(in srgb, var(--s1) 90%, var(--bg));
@@ -1355,30 +1360,10 @@
   .og-program-pane {
     align-items: stretch;
   }
-  .og-program-wrap,
   .og-clock,
   .og-transport {
     width: auto;
     max-width: none;
-    margin-left: 12px;
-    margin-right: 12px;
-  }
-}
-@media (max-width: 720px) {
-  .og-transport {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  #og-stop,
-  #og-pause,
-  #og-go,
-  #og-fade,
-  #og-panic {
-    grid-column: auto;
-    grid-row: auto;
-  }
-  #og-go {
-    grid-column: 1 / -1;
-    order: -1;
   }
 }
 
@@ -1415,15 +1400,11 @@
   background: color-mix(in srgb, var(--green) 86%, #ffffff) !important;
   border-color: color-mix(in srgb, var(--green) 72%, #ffffff) !important;
   color: #04130d !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.38),
-    0 12px 28px color-mix(in srgb, var(--green) 26%, transparent) !important;
+  box-shadow: none !important;
 }
 #og-go.og-tbtn-go:hover {
   background: color-mix(in srgb, var(--green) 94%, #ffffff) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.42),
-    0 14px 32px color-mix(in srgb, var(--green) 32%, transparent) !important;
+  box-shadow: none !important;
 }
 #og-go.og-tbtn-go .sf-symbol,
 #og-go.og-tbtn-go .og-tbtn-key {
@@ -1464,7 +1445,7 @@
 .og-splitter:hover::before,
 .og-splitter.drag::before {
   background: var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: none;
 }
 .og-splitter-v:hover::before,
 .og-splitter-v.drag::before {
@@ -1620,21 +1601,27 @@
 .og-cue-add.drag .og-svg-icon {
   color: var(--accent);
 }
+/* Flat clock: no hairline rules or bubble — sits directly on the panel, its
+   content left-aligned (a compact label row over the big orange timecode). */
 .og-clock {
-  width: min(calc(100% - 56px), 620px);
+  width: auto;
   min-height: 0;
-  margin: 6px auto 8px;
-  padding: 8px 10px 9px;
-  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  margin: 0;
+  padding: 2px 14px 8px;
+  border: 0;
   background: transparent;
   box-shadow: none;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 .og-clock-meta {
   display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 12px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   margin-bottom: 2px;
 }
 .og-clock-label {
@@ -1642,6 +1629,26 @@
   font-size: 10px;
   letter-spacing: .14em;
 }
+/* the small square chevron toggles the count direction (elapsed ⇄ remaining) */
+.og-clock-dir {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--s2) 80%, transparent);
+  color: var(--text2);
+  cursor: pointer;
+}
+.og-clock-dir:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.og-clock-dir .sf-symbol { font-size: 12px; transition: transform .16s ease; transform: rotate(90deg); }   /* points down = counting down (remaining) */
+.og-clock-dir.is-elapsed .sf-symbol { transform: rotate(-90deg); }   /* points up = counting up (elapsed) */
 .og-clock-duration {
   color: var(--text3);
   font: 800 10px/1 var(--mono-num, monospace);
@@ -1651,64 +1658,311 @@
   font-size: clamp(40px, 7cqw, 62px);
   letter-spacing: 0;
 }
-.og-clock-cue {
-  margin-top: 1px;
-}
-.og-clock-elapsed {
-  margin-top: 5px;
-}
-.og-transport-head {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 26px;
-  padding: 0 4px 2px;
-  color: var(--text2);
-}
-.og-transport-head .og-master {
-  display: inline-flex;
-}
-.og-master-gain-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 180px;
+.og-insp-empty {
   color: var(--text3);
-  font: 800 10px/1 var(--mono);
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 14px 14px 16px;
 }
-.og-master-gain-inline input {
-  width: 120px;
-  height: 18px;
-  border: 0;
+
+/* ============================================================================
+ * Panel layout UX rework (2026-07) — three responsive modes driven by the
+ * .og-lay-wide / .og-lay-medium / .og-lay-narrow class on .og-main (set by
+ * applyLayoutMode in JS) plus .og-has-sel / .og-no-sel for empty-pane collapse.
+ * Selectors are prefixed with .og-main so they win over the older scattered
+ * media queries by specificity + source order. The Inspector pane is physically
+ * relocated between the top row (wide) and #og-bottom (medium/narrow) in JS.
+ * ==========================================================================*/
+
+/* shared bottom region + its segmented tabs (filled quiet button language) */
+.og-bottom { display: flex; flex-direction: column; min-height: 0; }
+.og-bottom > .og-pane + .og-pane { border-left: 0; }   /* stacked, one shows at a time */
+.og-bottom-tabs {
+  display: none; align-items: center; gap: 6px; flex: 0 0 auto;
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--s1) 80%, transparent);
+}
+.og-bottom-tab {
+  min-height: 34px; padding: 6px 15px;
+  border-radius: var(--ui-radius-control, 12px);
+  background: color-mix(in srgb, var(--s2) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text2); font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .15s var(--ease, ease), color .15s var(--ease, ease), border-color .15s var(--ease, ease);
+}
+.og-bottom-tab:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, var(--s2));
+}
+.og-bottom-tab.on {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--s2));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.og-bottom-hint { margin-left: auto; font-size: 12px; color: var(--text3); white-space: nowrap; }
+.og-main.og-has-sel .og-bottom-hint { display: none; }
+
+/* ── WIDE (>1180): keep 3 columns; collapse the clip editor when idle ─────── */
+.og-main.og-lay-wide #og-bottom-tabs { display: none; }
+.og-main.og-lay-wide #og-bottom {
+  flex: 0 0 var(--og-h-edit, 200px); display: flex; flex-direction: column; min-height: 0;
+}
+.og-main.og-lay-wide #og-bottom > .og-edit-pane { flex: 1 1 auto; min-height: 0; border-top: 0; }
+/* no cue selected → clip editor shrinks to just its header, splitter hides */
+.og-main.og-lay-wide.og-no-sel #og-split-h { display: none; }
+.og-main.og-lay-wide.og-no-sel #og-bottom { flex: 0 0 auto; }
+.og-main.og-lay-wide.og-no-sel #og-edit-pane .og-edit-body { display: none; }
+
+/* ── MEDIUM (721–1180): Cue List | Program up top, shared tabbed bottom ───── */
+.og-main.og-lay-medium { display: flex; flex-direction: column; overflow: hidden; }
+.og-main.og-lay-medium .og-toprow { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; }
+.og-main.og-lay-medium .og-toprow > .og-pane { min-width: 0; }
+.og-main.og-lay-medium .og-toprow > .og-cuelist-pane { flex: 0 0 clamp(260px, 30%, 320px); max-height: none; }
+.og-main.og-lay-medium .og-toprow > .og-program-pane { flex: 1 1 auto; min-width: 320px; }
+.og-main.og-lay-medium #og-split-c,
+.og-main.og-lay-medium #og-split-i,
+.og-main.og-lay-medium #og-split-h { display: none; }
+.og-main.og-lay-medium #og-bottom {
+  flex: 0 0 auto; border-top: 1px solid var(--border);
+}
+.og-main.og-lay-medium #og-bottom-tabs { display: flex; }
+.og-main.og-lay-medium.og-has-sel #og-bottom { flex: 0 0 min(42vh, 380px); }
+.og-main.og-lay-medium #og-inspector-pane,
+.og-main.og-lay-medium #og-edit-pane { flex: 1 1 auto; min-height: 0; }
+.og-main.og-lay-medium #og-inspector-pane > .og-pane-head { display: none; }   /* tab replaces it */
+/* tabbed visibility (default = Inspector) */
+.og-main.og-lay-medium #og-bottom:not(.show-edit) #og-edit-pane { display: none; }
+.og-main.og-lay-medium #og-bottom.show-edit #og-inspector-pane { display: none; }
+/* collapsed when nothing is selected → the region is just the slim tab bar */
+.og-main.og-lay-medium.og-no-sel #og-inspector-pane,
+.og-main.og-lay-medium.og-no-sel #og-edit-pane { display: none; }
+
+/* ── NARROW (≤720): stacked scroll, same collapse-when-empty behaviour ────── */
+.og-main.og-lay-narrow { display: flex; flex-direction: column; overflow-y: auto; }
+.og-main.og-lay-narrow .og-toprow { flex: none; display: flex; flex-direction: column; min-height: 0; }
+.og-main.og-lay-narrow .og-toprow > .og-pane { flex: none !important; }
+.og-main.og-lay-narrow .og-cuelist-pane { max-height: 42vh; flex-basis: auto !important; }
+.og-main.og-lay-narrow #og-split-c,
+.og-main.og-lay-narrow #og-split-i,
+.og-main.og-lay-narrow #og-split-h { display: none; }
+.og-main.og-lay-narrow #og-bottom { flex: none; border-top: 1px solid var(--border); }
+.og-main.og-lay-narrow #og-bottom-tabs { display: flex; }
+.og-main.og-lay-narrow #og-inspector-pane > .og-pane-head { display: none; }
+.og-main.og-lay-narrow #og-inspector-pane,
+.og-main.og-lay-narrow #og-edit-pane { flex: none; min-height: 220px; }
+.og-main.og-lay-narrow #og-bottom:not(.show-edit) #og-edit-pane { display: none; }
+.og-main.og-lay-narrow #og-bottom.show-edit #og-inspector-pane { display: none; }
+.og-main.og-lay-narrow.og-no-sel #og-inspector-pane,
+.og-main.og-lay-narrow.og-no-sel #og-edit-pane { display: none; }
+.og-main.og-lay-narrow .og-clock { min-height: 84px; }
+/* In the stacked layout the program pane's height is content-driven; the monitor
+   sizes from width and the VU/Output meters drop below it as a short row. */
+.og-main.og-lay-narrow .og-program-top { flex-direction: column; align-items: stretch; }
+.og-main.og-lay-narrow .og-program-top > .og-program-wrap { flex: 0 0 auto; width: auto; max-width: 100%; }
+.og-main.og-lay-narrow .og-meters { flex: 0 0 auto; height: 64px; justify-content: flex-start; }
+
+/* ── SFX board: collapse the Pad Editor when no pad is selected ───────────── */
+.og-sfx.og-no-padsel > #og-split-sh { display: none; }
+.og-sfx.og-no-padsel > #og-sfx-edit-pane { flex: 0 0 auto !important; }
+.og-sfx.og-no-padsel > #og-sfx-edit-pane .og-edit-body { display: none; }
+
+/* ============================================================================
+ * Program VU meters (two vertical bars) + vertical Output fader. These live in
+ * the top row's meter column, pinned to the right of the monitor at full height.
+ * Flat theme-token surfaces — no bordered pill. The VU bars are fed from the
+ * (mono) master analyser via paintMeterY() (scaleY, origin bottom).
+ * ==========================================================================*/
+.og-meters {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.og-vu-col,
+.og-fader-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+}
+.og-vu-pair {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 5px;
+  align-items: stretch;
+  min-height: 40px;
+}
+.og-vu {
+  position: relative;
+  width: 8px;
+  border-radius: 4px;
+  background: var(--s3);
+  overflow: hidden;
+}
+.og-vu-fill-y {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  transform-origin: bottom center;
+  transform: scaleY(0);
+  background: linear-gradient(0deg, var(--green) 0%, var(--green) 55%, var(--yellow) 80%, var(--red) 100%);
+}
+.og-meter-col-lbl {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+/* vertical Output fader — same round-thumb language as the other ranges, rotated
+   to run bottom→top. Keeps id #og-master-gain-play (setMasterGain targets it). */
+.og-vfader {
+  flex: 1 1 auto;
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 20px;
+  min-height: 40px;
+  padding: 0;
+  margin: 0;
   background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  accent-color: var(--accent);
+}
+.og-vfader::-webkit-slider-runnable-track {
+  width: 7px;
+  height: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,.16));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.og-vfader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff);
   box-shadow: none;
 }
-.og-insp-empty {
-  min-height: 180px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
-  color: var(--text3);
-  text-align: center;
+.og-vfader::-moz-range-track {
+  width: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 32%, rgba(255,255,255,.16));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
 }
-.og-insp-empty-icon {
-  width: 28px;
-  height: 28px;
+.og-vfader::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff);
+}
+.og-vfader:focus-visible {
+  outline: none;
+}
+.og-vfader:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ============================================================================
+ * Themes submenu inside the settings popover — a collapsible "Themes" row that
+ * opens a 3×3 grid of circular theme swatches (mirrors the main-app pattern in
+ * index.html, scoped to Outrangutan tokens/classes). Appended last so it wins
+ * over the flat vertical-list treatment of .og-settings-pop .theme-swatch.
+ * ==========================================================================*/
+.og-themes-submenu { display: block; }
+.og-themes-submenu > summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 760;
+  white-space: nowrap;
+  user-select: none;
+  transition: background .15s var(--ease, ease), color .15s var(--ease, ease);
+}
+.og-themes-submenu > summary::-webkit-details-marker { display: none; }
+.og-themes-submenu > summary:hover,
+.og-themes-submenu[open] > summary { color: var(--text); }
+.og-themes-submenu > summary:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.og-themes-submenu > summary .og-tr-ico {
+  grid-column: 1; justify-self: start; width: 18px; height: 18px; border-radius: 50%;
+  background: conic-gradient(from 120deg, var(--accent), var(--green), var(--yellow), var(--accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
+}
+.og-themes-submenu > summary .og-tr-lbl { grid-column: 2; justify-self: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.og-themes-submenu > summary .og-tr-val { grid-column: 3; justify-self: end; display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; font-weight: 600; }
+.og-themes-submenu > summary .og-tr-chev { transition: transform .18s var(--ease, ease); font-size: 13px; line-height: 1; }
+.og-themes-submenu[open] > summary .og-tr-chev { transform: rotate(90deg); }
+
+/* the grid: restore the 3-column circular-swatch layout inside the submenu */
+.og-settings-pop .og-themes-submenu .og-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+  padding: 2px 2px 6px;
+}
+.og-settings-pop .og-themes-submenu .theme-swatch {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0 !important;
+  border-radius: 12px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text2);
+  text-align: center;
+  font-weight: 600;
+  white-space: normal;
+}
+.og-settings-pop .og-themes-submenu .theme-swatch:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent) !important;
+}
+.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) {
+  background: transparent !important;
+}
+/* suppress the flat-list ✓ tick — active is shown by ringing the preview instead */
+.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"])::after { content: none; }
+.og-settings-pop .og-themes-submenu .ts-preview {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--text) 22%, var(--border));
+  box-shadow: none;
+}
+.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-preview {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+.og-settings-pop .og-themes-submenu .ts-name {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
   color: var(--text2);
 }
+.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-name { color: var(--accent); }
 @media (max-width: 720px) {
-  .og-transport-head {
-    grid-column: 1 / -1;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .og-master-gain-inline {
-    min-width: 0;
-    justify-content: space-between;
-  }
+  .og-settings-pop .og-themes-submenu .og-theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
