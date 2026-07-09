@@ -49,7 +49,7 @@
   const DEFAULT_SETTINGS = () => ({
     clockMode: 'remaining', wallClockMode: '24', multiTrigger: true, showLock: false, tab: 'play',
     fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false,
-    layout: { wCuelist: 300, wInspector: 300, hEdit: 200 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
+    layout: { wCuelist: 280, wInspector: 280, hEdit: 150 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
   const THEME_ORDER = ['cool','warm','white','green','koala','panda','flamingo','outrangutan','prepbear'];
@@ -123,6 +123,7 @@
   function fmtClock(sec) { sec = Math.max(0, sec || 0); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60); return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0'); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
+  function assetIcon(name, cls) { return '<span class="og-svg-icon og-icon-' + name + (cls ? ' ' + cls : '') + '" aria-hidden="true"></span>'; }
   function currentCueolaTheme() {
     return document.documentElement.getAttribute('data-theme') || localStorage.getItem('cueola_theme') || 'cool';
   }
@@ -246,7 +247,14 @@
     setComp(ch.comp, !!o.comp);
     if (o.gain != null) ch.gain.gain.value = o.gain;
   }
-  function setMasterGain(v) { settings.masterGain = clamp(v, 0, 1.2); if (master) master.gain.gain.value = settings.masterGain; }
+  function setMasterGain(v, sourceId) { settings.masterGain = clamp(v, 0, 1.2); if (master) master.gain.gain.value = settings.masterGain; syncMasterGainInputs(sourceId); }
+  function syncMasterGainInputs(skip) {
+    ['og-master-gain', 'og-master-gain-play'].forEach(id => {
+      if (id === skip) return;
+      const input = $(id);
+      if (input) input.value = settings.masterGain == null ? 1 : settings.masterGain;
+    });
+  }
 
   async function decodeBuffer(mediaId) {
     if (bufferCache.has(mediaId)) return bufferCache.get(mediaId);
@@ -1510,19 +1518,28 @@
     saveShow();
   }
   function stopTicker() { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
+  function cuePlayoutDuration(c, el) {
+    if (!c) return 0;
+    const base = c.type === 'image' ? (c.duration || 0) : ((el && isFinite(el.duration)) ? el.duration : (c.duration || 0));
+    const out = c.trimOut != null ? c.trimOut : base;
+    return Math.max(0, (out || 0) - (c.trimIn || 0));
+  }
   function renderClock() {
-    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), elapsedEl = $('og-clock-elapsed'), wrap = $('og-clock');
+    const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), cueEl = $('og-clock-cue'), elapsedEl = $('og-clock-elapsed'), durEl = $('og-clock-duration'), wrap = $('og-clock');
     if (!timeEl) return;
     const setElapsed = (label, secs) => { if (elapsedEl) elapsedEl.textContent = label + ' ' + fmtClock(Math.max(0, secs || 0)); };
+    const setDuration = (secs) => { if (durEl) durEl.textContent = 'DUR ' + fmtClock(Math.max(0, secs || 0)); };
     if (preInfo) {
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
       setElapsed('CLIP', 0);
+      setDuration(cuePlayoutDuration(preInfo.cue));
       timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
       cueEl.textContent = ''; wrap.className = 'og-clock warn'; return;
     }
     if (active && active.kind === 'image') {
       const c = active.cue;
       let elapsed = Math.max(0, (performance.now() - active.shownAt) / 1000);
+      setDuration(cuePlayoutDuration(c));
       if (active.remainMs > 0 || c.duration > 0) {
         const left = active.paused ? active.remainMs / 1000
           : Math.max(0, (active.remainMs - (performance.now() - active.timerStart)) / 1000);
@@ -1546,6 +1563,7 @@
       const show = settings.clockMode === 'elapsed' ? Math.max(0, elapsed) : remain;
       timeEl.textContent = fmtClock(show);
       labelEl.textContent = settings.clockMode === 'elapsed' ? 'ELAPSED' : 'REMAINING';
+      setDuration(cuePlayoutDuration(active.cue, active.el));
       cueEl.textContent = active.cue.name;
       setElapsed('CLIP', elapsed);
       wrap.className = 'og-clock ' + (remain <= 10 ? 'warn' : 'run');
@@ -1554,11 +1572,12 @@
     if (active && active.el && active.el.paused) {
       const elapsed = Math.max(0, active.el.currentTime - (active.cue.trimIn || 0));
       const remain = Math.max(0, ((active.cue.trimOut != null ? active.cue.trimOut : active.el.duration) || 0) - active.el.currentTime);
-      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PAUSED'; cueEl.textContent = active.cue.name; setElapsed('CLIP', elapsed); wrap.className = 'og-clock warn'; return;
+      timeEl.textContent = fmtClock(remain); labelEl.textContent = 'PAUSED'; setDuration(cuePlayoutDuration(active.cue, active.el)); cueEl.textContent = active.cue.name; setElapsed('CLIP', elapsed); wrap.className = 'og-clock warn'; return;
     }
     const sel = cueById(selectedId);
     timeEl.textContent = fmtClock(sel ? sel.duration : 0);
     labelEl.textContent = sel ? 'DURATION' : 'STANDBY';
+    setDuration(sel ? cuePlayoutDuration(sel) : 0);
     cueEl.textContent = sel ? sel.name : '—';
     setElapsed('CLIP', 0);
     wrap.className = 'og-clock';
@@ -1636,7 +1655,7 @@
   function renderInspector() {
     const ins = $('og-inspector'); if (!ins) return;
     const c = cueById(selectedId);
-    if (!c) { ins.innerHTML = '<div class="og-insp-empty">Select a cue to edit its properties.</div>'; return; }
+    if (!c) { ins.innerHTML = '<div class="og-insp-empty">' + assetIcon('scope', 'og-insp-empty-icon') + '<span>Select a cue to edit its properties.</span></div>'; return; }
     const eq = c.eq || (c.eq = { low: 0, mid: 0, high: 0 });
     const dims = c.srcW && c.srcH
       ? '<div class="og-insp-meta">' + c.srcW + '×' + c.srcH + ' · ' + aspectLabel(c.srcW, c.srcH) + (c.type === 'image' ? ' · still' : '') + '</div>'
@@ -2010,25 +2029,57 @@
 
   // ── Resizable panes ──────────────────────────────────────────────────────
   function applyLayout() {
-    const L = settings.layout || (settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 });
+    const L = settings.layout || (settings.layout = { wCuelist: 280, wInspector: 280, hEdit: 150 });
     const root = $('outrangutan'); if (!root) return;
-    root.style.setProperty('--og-w-cuelist', (L.wCuelist || 300) + 'px');
-    root.style.setProperty('--og-w-inspector', (L.wInspector || 300) + 'px');
-    root.style.setProperty('--og-h-edit', (L.hEdit || 200) + 'px');
+    const top = $('og-toprow');
+    const topW = (top && top.clientWidth) || root.clientWidth || 1280;
+    const maxSide = clamp(Math.floor(topW * 0.28), 240, 380);
+    const minCenter = clamp(Math.floor(topW * 0.46), 480, 820);
+    let cuelistW = clamp(Number(L.wCuelist) || 280, 210, maxSide);
+    let inspectorW = clamp(Number(L.wInspector) || 280, 210, maxSide);
+    const sideBudget = topW - minCenter - 12;
+    if (sideBudget > 0 && cuelistW + inspectorW > sideBudget) {
+      const side = clamp(Math.floor(sideBudget / 2), 210, maxSide);
+      cuelistW = Math.min(cuelistW, side);
+      inspectorW = Math.min(inspectorW, side);
+    }
+    const main = document.querySelector('.og-main');
+    const mainH = (main && main.clientHeight) || root.clientHeight || 900;
+    const maxEdit = clamp(Math.floor(mainH * 0.24), 140, 260);
+    const editH = clamp(Number(L.hEdit) || 150, 96, maxEdit);
+    root.style.setProperty('--og-w-cuelist', cuelistW + 'px');
+    root.style.setProperty('--og-w-inspector', inspectorW + 'px');
+    root.style.setProperty('--og-h-edit', editH + 'px');
   }
   function wireSplitter(id, onMove) {
     const el = $(id); if (!el) return;
-    el.onpointerdown = (e) => {
-      e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (er) {} el.classList.add('drag');
-      const mv = (ev) => onMove(ev);
-      const up = () => { try { el.releasePointerCapture(e.pointerId); } catch (er) {} el.classList.remove('drag'); el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); scheduleSave(); };
-      el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up);
+    let dragging = false;
+    const start = (e, moveName, upName, pointerId) => {
+      if (dragging) return;
+      dragging = true;
+      e.preventDefault();
+      if (pointerId != null) { try { el.setPointerCapture(pointerId); } catch (er) {} }
+      el.classList.add('drag');
+      const mv = (ev) => { ev.preventDefault(); onMove(ev); };
+      const up = () => {
+        if (pointerId != null) { try { el.releasePointerCapture(pointerId); } catch (er) {} }
+        dragging = false;
+        el.classList.remove('drag');
+        document.removeEventListener(moveName, mv);
+        document.removeEventListener(upName, up);
+        scheduleSave();
+      };
+      document.addEventListener(moveName, mv);
+      document.addEventListener(upName, up);
+      onMove(e);
     };
+    el.onpointerdown = (e) => start(e, 'pointermove', 'pointerup', e.pointerId);
+    el.onmousedown = (e) => start(e, 'mousemove', 'mouseup', null);
   }
   function initSplitters() {
     // read settings.layout fresh each move — `settings` is reassigned by loadShow()
-    wireSplitter('og-split-c', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wCuelist = clamp(ev.clientX - r.left, 200, r.width - 460); applyLayout(); });
-    wireSplitter('og-split-i', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 460); applyLayout(); });
+    wireSplitter('og-split-c', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wCuelist = clamp(ev.clientX - r.left, 180, r.width - 420); applyLayout(); });
+    wireSplitter('og-split-i', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 180, r.width - 420); applyLayout(); });
     wireSplitter('og-split-h', (ev) => { const m = document.querySelector('.og-main'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
     // SFX board shares the same inspector-width + edit-height vars (one resize, both views)
     wireSplitter('og-split-si', (ev) => { const r = $('og-sfx-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 320); applyLayout(); });
@@ -2437,20 +2488,22 @@
     root.innerHTML =
       '<div class="og-bar">'
         + '<button class="og-back" id="og-back">' + sym('action.back') + '<span>Cueola</span></button>'
-        + '<div class="og-title"><span class="og-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span>Out<span class="og-wm-hi">rangutan</span></div>'
+        + '<div class="og-title"><span class="og-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span><span class="og-wordmark">Out<span class="og-wm-hi">rangutan</span></span></div>'
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
+        + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
         + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary title="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
           + '<div class="og-settings-label">Theme</div>'
           + '<div class="og-theme-grid" id="og-theme-options"></div>'
           + '<div class="og-tools-sep"></div>'
           + '<div class="og-settings-label">Tools</div>'
           + '<div class="og-tools-pop-inline">'
+            + '<button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + assetIcon('scope') + '<span>Scopes</span></button>'
             + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
             + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
             + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
-            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">Show Lock</button>'
+            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.pin') + 'Show Lock</button>'
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
             + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
             + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
@@ -2465,21 +2518,22 @@
         + '<div class="og-main">'
           + '<div class="og-toprow" id="og-toprow">'
           + '<div class="og-pane og-cuelist-pane">'
-            + '<div class="og-pane-head">Cue List<div class="og-pane-actions"><button class="og-bar-btn" id="og-add-btn">Add media</button></div></div>'
+            + '<div class="og-pane-head">Cue List</div>'
             + '<div class="og-cuelist" id="og-cuelist"></div>'
-            + '<button class="og-cue-add" id="og-cue-add">Drop video / audio / stills here, or click to add</button>'
+            + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
           + '</div>'
           + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
-            + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
+            + '<div class="og-pane-head">Program</div>'
             + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
               + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
               + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
               + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
-            + '<div class="og-clock" id="og-clock"><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-label" id="og-clock-label">STANDBY</div><div class="og-clock-cue" id="og-clock-cue">—</div><div class="og-clock-elapsed" id="og-clock-elapsed">CLIP 0:00</div></div>'
+            + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div><div class="og-clock-cue" id="og-clock-cue">—</div><div class="og-clock-elapsed" id="og-clock-elapsed">CLIP 0:00</div></div>'
             + '<div class="og-transport">'
+              + '<div class="og-transport-head"><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><label class="og-master-gain-inline"><span>Output</span><input type="range" id="og-master-gain-play" min="0" max="1.2" step="0.01" value="1"></label></div>'
               + '<button class="og-tbtn" id="og-stop">' + sym('media.stop') + 'Stop<span class="og-tbtn-key" id="og-k-stop"></span></button>'
               + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'GO<span class="og-tbtn-key" id="og-k-go"></span></button>'
               + '<button class="og-tbtn" id="og-pause">' + sym('media.pause') + 'Pause<span class="og-tbtn-key" id="og-k-pause"></span></button>'
@@ -2584,9 +2638,17 @@
     $('og-pad-search').oninput = (e) => { padSearch = e.target.value; renderPadSearch(); };
     $('og-pad-search').onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); padSearch = ''; e.target.value = ''; renderPadSearch(); e.target.blur(); } };
     $('og-multi').onchange = (e) => { settings.multiTrigger = e.target.checked; scheduleSave(); };
-    $('og-master-gain').oninput = (e) => { ensureAudio(); setMasterGain(parseFloat(e.target.value)); scheduleSave(); };
+    ['og-master-gain', 'og-master-gain-play'].forEach(id => {
+      const gain = $(id);
+      if (gain) gain.oninput = (e) => { ensureAudio(); setMasterGain(parseFloat(e.target.value), id); scheduleSave(); };
+    });
     renderThemeControl();
     watchCueolaTheme();
+    const settingsSummary = document.querySelector('#og-theme-menu > summary');
+    if (settingsSummary) {
+      settingsSummary.onclick = (e) => { e.preventDefault(); const menu = $('og-theme-menu'); if (menu) menu.open = !menu.open; };
+      settingsSummary.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); settingsSummary.click(); } };
+    }
     // P6: pad inspector rides the shared kit's row mapping
     const padIns = $('og-pad-inspector'); if (padIns) padIns.classList.add('og-kit');
     // P6: theme/tools popovers close on outside click (shared dismissal pattern)
@@ -2597,7 +2659,8 @@
     }, true);
 
     const fileInput = $('og-file-input');
-    $('og-add-btn').onclick = () => fileInput.click();
+    const addBtn = $('og-add-btn');
+    if (addBtn) addBtn.onclick = () => fileInput.click();
     $('og-cue-add').onclick = () => fileInput.click();
     fileInput.onchange = () => { importFiles(fileInput.files); fileInput.value = ''; };
     const padFile = $('og-pad-file');
@@ -2647,13 +2710,13 @@
   }
   async function applyShow() {
     const s = await loadShow();
-    if (!settings.layout) settings.layout = { wCuelist: 300, wInspector: 300, hEdit: 200 };
+    if (!settings.layout) settings.layout = { wCuelist: 280, wInspector: 280, hEdit: 150 };
     ensureBanks();
     applyLayout();
     renderTransportKeys(); renderAll();
     setTab(settings.tab || 'play');
     const mc = $('og-multi'); if (mc) mc.checked = !!settings.multiTrigger;
-    const mg = $('og-master-gain'); if (mg) mg.value = settings.masterGain == null ? 1 : settings.masterGain;
+    syncMasterGainInputs();
     if (s) showRecovery(s); else $('og-recovery').classList.remove('on');
     setModeBadge();
     if (mode === 'session' && sessionCode) subscribeSession(); else unsubscribeSession();

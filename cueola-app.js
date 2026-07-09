@@ -1797,7 +1797,7 @@ function renderAdminBody() {
         <select id="adminFollowSelect" class="field-in" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn" ${presenceNames.length?'':'disabled'} style="background:rgba(240,82,82,.15);border-color:rgba(240,82,82,.4);color:var(--red);${presenceNames.length?'':'opacity:.45;cursor:not-allowed'}" onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
+        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'}${presenceNames.length?'':' style="opacity:.45;cursor:not-allowed"'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
       </div>
     </div>`;
   }
