@@ -4117,6 +4117,50 @@
       "distributionStatus": "review-required"
     },
     {
+      "name": "pin.fill",
+      "displayName": "Pin Fill",
+      "primaryCategory": "objectsandtools",
+      "appleCategories": [
+        "objectsandtools"
+      ],
+      "keywords": [],
+      "cueolaTags": [],
+      "semanticNames": [
+        "action.pin"
+      ],
+      "availability": null,
+      "directionalCandidate": false,
+      "sourcePath": "source/objectsandtools/pin.fill.svg",
+      "runtimePath": "runtime/regular-small/objectsandtools/pin.fill.svg",
+      "sha256": "faa12f412280f8e88c95586336b324d85ec5a296407d13a4ca46a86de6b92be2",
+      "aliases": [],
+      "template": {
+        "glyph": "1003A7",
+        "fontVersion": "22.0d4e4",
+        "templateVersion": "7.0",
+        "xcodeRequirement": "Requires Xcode 26 or greater",
+        "descriptiveName": "Generated from pin.fill",
+        "viewBox": "0 0 3300 2200",
+        "masters": [
+          "Black-S",
+          "Regular-S",
+          "Ultralight-S"
+        ],
+        "renderingModes": [
+          "hierarchical",
+          "monochrome",
+          "multicolor"
+        ]
+      },
+      "runtime": {
+        "master": "Regular-S",
+        "viewBox": "13.322 -81.552 65.398 94.695",
+        "pathCount": 1,
+        "rendering": "monochrome-mask"
+      },
+      "distributionStatus": "review-required"
+    },
+    {
       "name": "pizza.slice",
       "displayName": "Pizza Slice",
       "primaryCategory": "objectsandtools",

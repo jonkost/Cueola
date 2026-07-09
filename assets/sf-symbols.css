@@ -105,6 +105,7 @@
 .sf-symbol[data-symbol="geo.location"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/maps/location.svg");}
 .sf-symbol[data-symbol="time.clock"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/clock.svg");}
 .sf-symbol[data-symbol="nature.tree"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/nature/tree.svg");}
+.sf-symbol[data-symbol="action.pin"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/pin.fill.svg");}
 
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }

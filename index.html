@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260628d">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260708a">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0n">
 <style>
 :root {
@@ -87,7 +87,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .entry-wrap{width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;gap:0;animation:rise .5s ease both;flex:0 0 auto;padding-top:8px}
 @keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .e-brandrow{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px}
-.e-logo{font-size:clamp(40px,11vw,50px);line-height:1}
+.e-logo{font-size:clamp(48px,12vw,60px);line-height:1}
 /* Brand app-icon glyphs (replace emoji). Size inherits from container font-size. */
 .brand-ico{width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex:none;overflow:hidden;border-radius:22.5%}
 .e-logo .brand-ico,.ec-icon .brand-ico,.pt-setup-logo .brand-ico{display:block;vertical-align:0}
@@ -113,7 +113,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .e-card:active{transform:translateY(-1px)}
 .e-card.inst{--oc:var(--accent)}.e-card.stud{--oc:var(--green)}.e-card.demo{--oc:var(--yellow)}.e-card.exp{--oc:var(--text2)}
 .e-card-full{grid-column:span 2}
-.ec-icon{font-size:52px;line-height:1;min-width:52px;min-height:52px;display:flex;align-items:center;justify-content:center}
+.ec-icon{font-size:60px;line-height:1;min-width:60px;min-height:60px;display:flex;align-items:center;justify-content:center}
 .ec-icon .sf-symbol{font-size:26px}
 /* Non-brand cards (Demo, Blank Slate): give the glyph the same rounded-tile
    treatment as the brand icons, and give the tag its own full-width row so it
@@ -149,7 +149,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .role-badge{padding:5px 11px;border-radius:20px;font-size:11px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
 .role-inst{background:rgba(91,141,248,.15);color:var(--accent)}.role-stud{background:rgba(34,211,160,.15);color:var(--green)}
 .role-admin{background:rgba(240,82,82,.15);color:var(--red)}
-.tb-right{display:flex;gap:7px;align-items:center;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;min-width:0}
+/* Overflow stays visible on desktop so the avatar name tooltips can escape the bar;
+   narrow screens trade tooltips for horizontal scrolling (media query below). */
+.tb-right{display:flex;gap:7px;align-items:center;min-width:0}
+@media(max-width:900px){.tb-right{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}}
 .tb-right::-webkit-scrollbar{display:none}
 .tb-divider{width:1px;height:24px;background:var(--bord2);flex-shrink:0;opacity:.6;margin:0 2px}
 .tbtn{padding:7px 14px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
@@ -182,6 +185,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .p-avatar.stud{background:var(--green);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 80%,#000) inset}
 .p-avatar.extra{background:var(--s4);color:var(--text);font-size:11px;font-weight:700}
 .presence-wrap:hover .p-avatar{transform:translateY(-1px)}
+.p-avatar.pi-click{cursor:pointer}
+.p-avatar.pi-click:hover{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)}
 .p-tooltip{display:none;position:absolute;top:calc(100% + 8px);right:0;background:color-mix(in srgb,var(--s1) 96%,transparent);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid var(--bord2);border-radius:12px;padding:10px 12px;min-width:180px;max-width:280px;z-index:400;flex-direction:column;gap:7px;box-shadow:0 12px 32px rgba(0,0,0,.55)}
 /* Group dropdown retired in favour of per-avatar hover tooltips. */
 .p-tip-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden}
@@ -1300,6 +1305,35 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-hub-row .b{font-size:11px;color:var(--text2);font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pb-hub-row .w{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
 .pb-hub-empty{font-size:12px;color:var(--text3);padding:4px 0}
+.pb-assign-card{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent);padding:12px 14px}
+.pb-assign-title{font-size:12px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.pb-assign-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:6px 0;border-top:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
+.pb-assign-row:first-of-type{border-top:0}
+.pb-assign-name{font-size:13px;font-weight:700;color:var(--text)}
+.pb-assign-pos{font-size:11px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
+.pb-assign-items{font-size:12px;color:var(--text2)}
+/* Person info — admin click on a presence badge */
+.person-info-modal{max-width:480px}
+.pi-head{display:flex;align-items:center;gap:12px}
+.pi-ava{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);flex-shrink:0}
+.pi-ava.inst{background:var(--accent)}
+.pi-ava.stud{background:var(--green)}
+.pi-name{font-size:17px;font-weight:800;color:var(--text);line-height:1.2}
+.pi-sub{display:flex;align-items:center;gap:9px;margin-top:4px;font-size:11px;color:var(--text3);font-family:var(--mono);flex-wrap:wrap}
+.pi-role{padding:2px 7px;border-radius:5px;font-size:9.5px;font-weight:700;letter-spacing:.08em}
+.pi-role.inst{background:rgba(91,141,248,.15);color:var(--accent)}
+.pi-role.stud{background:rgba(34,211,160,.15);color:var(--green)}
+.pi-live{display:inline-flex;align-items:center;gap:5px}
+.pi-live .dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.pi-live.on .dot{background:var(--green);box-shadow:0 0 6px var(--green)}
+.pi-sec{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px}
+.pi-card{border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:10px 12px;font-size:12.5px;color:var(--text2);line-height:1.55}
+.pi-card b{color:var(--text)}
+.pi-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.pi-stat{border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:9px 6px;text-align:center}
+.pi-stat b{display:block;font-size:19px;color:var(--text);font-variant-numeric:tabular-nums}
+.pi-stat span{font-size:9px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+.pi-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 /* ── Production Notes — shared discussion board ── */
 #productionNotesModal .modal{height:92vh;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;gap:14px}
 .pb-board{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--s1) 72%,transparent);overflow:hidden}
@@ -1323,6 +1357,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .t-audio{--tagc:var(--green)}
 .t-video{--tagc:var(--cyan)}
 .t-lighting{--tagc:var(--yellow)}
+.t-content{--tagc:var(--purple)}
+.t-gfx{--tagc:#e05fa9}
 .t-todo{--tagc:var(--orange)}
 /* Filter button + popover */
 .pb-filter-wrap{position:relative;display:inline-flex}
@@ -1391,7 +1427,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-board-threads{position:relative;flex:1;min-height:0;overflow-y:auto;padding:14px 14px 88px;display:flex;flex-direction:column;gap:12px}
 .pb-thread{border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:none}
 .pb-thread.pinned{border-color:color-mix(in srgb,var(--yellow) 45%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s2))}
-.pb-pin-flag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow)}
+.pb-pin-flag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
+.pb-pin-flag .sf-symbol{font-size:11px}
 .pb-note-head{display:flex;align-items:center;gap:10px;min-width:0}
 .pb-note-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);flex:none;user-select:none}
 .pb-note-who{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -1433,7 +1470,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-file-dl{font-size:14px;color:var(--text3);flex:none}
 .pb-file-chip:hover .pb-file-dl{color:var(--text)}
 .pb-note-foot{display:flex;align-items:center;gap:2px;flex-wrap:wrap;border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent);padding-top:7px}
-.pb-note-act{border:0;background:transparent;color:var(--text3);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.pb-note-act{border:0;background:transparent;color:var(--text3);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .pb-note-act:hover{background:var(--s3);color:var(--text)}
 .pb-note-act.danger:hover{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
 .pb-like{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--text3);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -1477,9 +1514,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-note-empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.55;max-width:380px;padding:28px 20px}
 .pb-note-empty-ico{font-size:30px}
 .pb-note-empty b{color:var(--text2);font-size:14px}
-.pb-lightbox{display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:30px;cursor:zoom-out}
+.pb-lightbox{display:none;position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:30px;cursor:zoom-out}
 .pb-lightbox.on{display:flex}
-.pb-lightbox img{max-width:94vw;max-height:92vh;border-radius:12px;box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.pb-lightbox img{max-width:94vw;max-height:88vh;border-radius:12px;box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.pb-lightbox-close{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(22,24,32,.78);color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .15s var(--ease),transform .15s var(--ease)}
+.pb-lightbox-close:hover{background:rgba(64,68,86,.9);transform:scale(1.07)}
+.pb-lightbox-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:12px;font-family:var(--mono);letter-spacing:.04em;color:rgba(255,255,255,.65);pointer-events:none}
 @media(max-width:680px){
   .pb-board-threads{padding:10px 10px 84px;gap:10px}
   .pb-thread{padding:10px 11px}
@@ -1638,6 +1678,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-card-tag.t-audio{color:var(--green);background:color-mix(in srgb,var(--green) 9%,transparent)}
 .pn-card-tag.t-video{color:var(--video);background:color-mix(in srgb,var(--video) 9%,transparent)}
 .pn-card-tag.t-lighting{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
+.pn-card-tag.t-content{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
+.pn-card-tag.t-gfx{color:#e05fa9;background:color-mix(in srgb,#e05fa9 9%,transparent)}
 .pn-card-tag.t-todo{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 9%,transparent)}
 .pn-card-by{font-size:11px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pn-card-time{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0}
@@ -1790,7 +1832,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-setup{position:absolute;inset:0;z-index:150;display:none;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--pt-bg,#08090f) 86%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .pt-setup.on{display:flex}
 .pt-setup-card{width:min(440px,94vw);background:var(--pt-ui-bg,rgba(15,15,25,.96));border:1px solid var(--pt-ui-border,rgba(126,184,200,.3));border-radius:20px;padding:30px 28px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
-.pt-setup-logo{font-size:38px;line-height:1;margin-bottom:10px}
+.pt-setup-logo{font-size:46px;line-height:1;margin-bottom:10px}
 .pt-setup-title{font-family:var(--syne);font-size:21px;font-weight:800;color:var(--pt-text,#eef);margin:0 0 6px}
 .pt-setup-sub{font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.72;margin:0 0 18px;line-height:1.5}
 .pt-setup-row{display:flex;gap:8px;margin-bottom:8px}
@@ -2231,17 +2273,19 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
-:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn){
+:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add){
   border-radius:var(--ui-radius-control);
   border-color:var(--liquid-edge);
   background:color-mix(in srgb,var(--s2) 62%,transparent);
   box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 9%,transparent);
 }
-:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn):hover{
+:is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add):hover{
   border-color:color-mix(in srgb,var(--accent) 42%,var(--liquid-edge));
   background:color-mix(in srgb,var(--accent) 10%,var(--s2));
 }
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn):active{transform:scale(.98)}
+/* Post stays a filled accent action — the liquid-glass chip treatment above made it read as disabled. */
+.pb-post-btn{border-radius:var(--ui-radius-control)}
 .tbtn-live{
   background:#e9433a;
   color:#fff;
@@ -3005,22 +3049,25 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:42px;height:42px;border-radius:50%;font-size:21px}
 .tbtn.icon-only .sf-symbol,.entry-theme-center .tbtn.icon-only .sf-symbol,.entry-notif .tbtn.icon-only .sf-symbol{font-size:21px}
 .topbar .brand{gap:8px;padding:5px 4px!important}
-.topbar .brand .brand-ico,.ls-brand .brand-ico{width:26px;height:26px;vertical-align:-.34em}
+.topbar .brand .brand-ico,.ls-brand .brand-ico{width:32px;height:32px;vertical-align:-.42em}
 .ls-brand{display:inline-flex;align-items:center;gap:8px}
 #rundown .topbar #adminBtn,#rundown .topbar #pnPanelBtn,#rundown .topbar #plandaBearBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
 .settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .settings-action-grid .settings-file-btn{min-height:40px}
 .settings-info-card{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 70%,transparent);padding:12px 13px;font-size:12.5px;color:var(--text2);line-height:1.45}
 .settings-info-card b{display:block;color:var(--text);font-size:13px;margin-bottom:2px}
-.sf-symbol[data-symbol="action.export"]{--sf-symbol:url("icons/export-file.svg")}
+/* Root-relative on purpose: relative url() in a custom property resolves against the
+   stylesheet that USES the var (assets/sf-symbols.css), not the one that declares it. */
+.sf-symbol[data-symbol="action.export"]{--sf-symbol:url("/assets/icons/EXPORT_ARROW.svg?v=1")}
 :is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action){display:inline-flex;align-items:center;justify-content:center;gap:7px}
-.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action{
+/* Per-note PDF buttons (.pb-note-act) stay ghost-style like Reply/Pin/Delete — red is for the page-level exports only. */
+.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action{
   background:#ff453a!important;
   border-color:#ff9f99!important;
   color:#fff!important;
   text-shadow:none!important;
 }
-.settings-file-btn.export-action:hover,.pb-chat-tool.export-action:hover,.pb-attach-add.export-action:hover,.pb-note-act.export-action:hover,.btn-export:hover,#paperPreviewPrimary.export-action:hover,.btn-secondary.export-action:hover{filter:brightness(1.06)}
+.settings-file-btn.export-action:hover,.pb-chat-tool.export-action:hover,.pb-attach-add.export-action:hover,.btn-export:hover,#paperPreviewPrimary.export-action:hover,.btn-secondary.export-action:hover{filter:brightness(1.06)}
 .settings-file-btn .sf-symbol,.pb-chat-tool .sf-symbol,.pb-attach-add .sf-symbol,.pb-note-act .sf-symbol,.btn-export .sf-symbol,#paperPreviewPrimary .sf-symbol,.btn-secondary.export-action .sf-symbol{font-size:17px}
 :is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action) .sf-symbol[data-symbol="action.export"]{font-size:18px;transform:translateY(-.5px)}
 #liveshow .ls-exit-btn.icon-only{width:40px;height:40px;border-radius:50%;padding:0}
@@ -3073,7 +3120,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .pt-slate-mark{box-shadow:none;background:transparent;border-color:#f5b84a}
 .pt-slate-title,.pt-slate-sub{text-shadow:none}
 .pt-clock-overlay{box-shadow:none}
-.modal-title .brand-ico{width:1.1em;height:1.1em;vertical-align:-.2em}
+.modal-title .brand-ico{width:1.35em;height:1.35em;vertical-align:-.28em}
+.settings-file-btn .brand-ico{width:19px;height:19px}
 .pb-modal-body{position:relative}
 .plandabear-settings-btn{width:40px;height:40px;border-radius:50%}
 .plandabear-settings-btn .sf-symbol{font-size:22px}
@@ -3932,6 +3980,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <span class="pnb-arrow sf-symbol" data-symbol="action.forward" aria-hidden="true"></span>
     </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
+    <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
     <div class="paperwork-actions">
       <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
@@ -4221,7 +4270,17 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="paperwork-flow-actions" id="pbNavNotes"></div>
   </div>
 </div>
-<div class="pb-lightbox" id="pbLightbox" onclick="this.classList.remove('on')"><img id="pbLightboxImg" alt="Attachment preview"></div>
+<div class="modal-wrap" id="personInfoModal">
+  <div class="modal person-info-modal">
+    <div id="personInfoBody"></div>
+    <div class="modal-actions" id="personInfoActions"></div>
+  </div>
+</div>
+<div class="pb-lightbox" id="pbLightbox" onclick="pbCloseLightbox()">
+  <button type="button" class="pb-lightbox-close" onclick="event.stopPropagation();pbCloseLightbox()" title="Close (Esc)" aria-label="Close image preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+  <img id="pbLightboxImg" alt="Attachment preview">
+  <span class="pb-lightbox-hint">Click anywhere or press Esc to close</span>
+</div>
 <div class="pb-notify-toast" id="pbNotifyToast" hidden onclick="pbOpenFromNotify()" title="Open Production Notes">
   <span class="pb-notify-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
   <span class="pb-notify-text"></span>
@@ -4461,7 +4520,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0h"></script>
+<script src="cueola-app.js?v=1.0.0m"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0g"></script>
 
 <script type="module">

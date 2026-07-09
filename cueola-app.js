@@ -1544,6 +1544,7 @@ function loginAdmin(code) {
     if (owner) {
       adminSession = { id:owner.id, name:owner.name, level:owner.level };
       try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
+      try { renderPresence(currentPresence); } catch {}
       return adminSession;
     }
     toast('Admin data loading — try again in a moment.');
@@ -1555,6 +1556,7 @@ function loginAdmin(code) {
   if (!resolved) return null;
   adminSession = { id:resolved.id, name:resolved.name, level:resolved.level };
   try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
+  try { renderPresence(currentPresence); } catch {}   // badges become clickable right away
   return adminSession;
 }
 
@@ -1562,6 +1564,7 @@ function logoutAdmin() {
   adminSession = null;
   try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch {}
   updateAdminUI();
+  try { renderPresence(currentPresence); } catch {}
 }
 
 function restoreAdminSession() {
@@ -1701,6 +1704,12 @@ function closeAdminPanel(e) {
 
 function renderAdminBody() {
   const body = document.getElementById('adminBody');
+  // Presence heartbeats rebuild this panel while it is open. Safari never gives
+  // checkboxes/selects focus, so the activeElement guard can't protect mid-edit
+  // assignment rows — carry any unsaved edits into the rebuild instead of
+  // silently resetting them to the last saved state.
+  const pendingAssignments = body?.querySelector('[data-role-assignment-row]')
+    ? getRoleAssignmentsFromAdminDOM(true) : null;
   const admins = getAdmins();
   const isSuper = adminSession.level==='super';
   const isFull  = adminSession.level==='full'||isSuper;
@@ -1793,13 +1802,50 @@ function renderAdminBody() {
     </div>`;
   }
   if (session.code || session.isExpert) {
+    const positionOptions = getRolePositionOptions();
     html += `<div class="admin-section">
       <div class="admin-section-label">Role and Planda Bear Assignments</div>
-      <div id="adminRoleAssignments">${renderRoleAssignmentRows()}</div>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-bottom:8px">Changes save automatically and show on the Planda Bear hub for everyone in the session.</div>
+      <div class="admin-src-row" style="margin-bottom:10px">
+        <span class="admin-src-label">Positions</span>
+        <div class="admin-src-chips">
+          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Remove ${esc(p)} from this production">x</button></span>`).join('')}
+          <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
+        </div>
+      </div>
+      <div id="adminRoleAssignments" onchange="autoSaveRoleAssignments()">${renderRoleAssignmentRows(pendingAssignments?.length ? pendingAssignments : undefined)}</div>
       <div class="admin-assignment-actions">
         <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add Person</button>
         <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save Assignments</button>
       </div>
+    </div>`;
+  }
+
+  // ── People in session (remove a device from the code) ──
+  if (session.code && !session.isDemo && !session.isExpert) {
+    const people = getActivePresencePeople();
+    html += `<div class="admin-section" style="margin-top:16px">
+      <div class="admin-section-label">People in Session</div>
+      ${people.length ? `<div class="admin-list">` + people.map(p => {
+        const isMe = sameParticipantName(p.name, session.userName);
+        return `<div class="admin-item">
+          <div class="admin-item-name">${esc(p.name)}
+            <span class="admin-level-chip ${p.role==='instructor'?'alc-full':'alc-standard'}" style="margin-left:7px">${p.role==='instructor'?'INST':'STU'}</span>
+          </div>
+          <div style="flex:1"></div>
+          ${isMe ? '<span class="admin-item-you">YOU</span>'
+                 : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${JSON.stringify(p.name).replace(/"/g,'&quot;')})">Remove</button></div>`}
+        </div>`;
+      }).join('') + `</div>`
+      : `<div style="font-size:11px;color:var(--text3)">No one is connected right now.</div>`}
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-top:8px">Remove disconnects that person's device from this code. They can rejoin with the same code — move the session to a new code to keep them out.</div>
+    </div>`;
+
+    // ── Session rescue: move the whole show to a fresh code ──
+    html += `<div class="admin-section" style="margin-top:16px">
+      <div class="admin-section-label">Session Code</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Current code: <b style="color:var(--text);font-family:var(--mono)">${esc(session.code)}</b>. If there's a problem with this session — a leaked code, stale data, or someone who keeps rejoining — move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
+      <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move Session to a New Code</button>
     </div>`;
   }
   html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Logout Admin</button>`;
@@ -1953,11 +1999,59 @@ function getRoleAssignments() {
   return rows.length ? rows : defaultRoleAssignments();
 }
 
+// Positions offered in the assignment dropdown, tailored per production:
+// the built-in list minus anything this session removed, plus anything it
+// added, alphabetical. Stored on the session's prePro doc so every device
+// on the code sees the same list.
+function getRolePositionOptions(data=loadPreProData()) {
+  const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : []).map(v => String(v || '').trim().toLowerCase());
+  const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom : [];
+  return cleanUniqueStrings([
+    ...ROLE_POSITION_OPTIONS.filter(p => !removed.includes(p.toLowerCase())),
+    ...custom,
+  ]).sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' }));
+}
+
+function addPositionOption() {
+  const name = (prompt('Add a position for this production:') || '').trim();
+  if (!name) return;
+  const data = loadPreProData();
+  const key = name.toLowerCase();
+  const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom.slice() : [];
+  const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : [])
+    .filter(r => String(r || '').trim().toLowerCase() !== key);   // re-adding a removed default un-hides it
+  const listed = getRolePositionOptions({ ...data, positionsCustom: custom, positionsRemoved: removed });
+  if (listed.some(p => p.toLowerCase() === key)) {
+    if ((data.positionsRemoved || []).length === removed.length) { toast('That position is already in the list.'); return; }
+  } else {
+    custom.push(name);
+  }
+  persistPreProData({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
+  renderAdminBody();
+  toast(`Position "${name}" added.`);
+}
+
+function removePositionOption(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return;
+  const data = loadPreProData();
+  const custom = (Array.isArray(data.positionsCustom) ? data.positionsCustom : [])
+    .filter(p => String(p || '').trim().toLowerCase() !== key);
+  const removed = Array.isArray(data.positionsRemoved) ? data.positionsRemoved.slice() : [];
+  if (ROLE_POSITION_OPTIONS.some(p => p.toLowerCase() === key) && !removed.some(r => String(r || '').trim().toLowerCase() === key)) {
+    removed.push(String(name).trim());
+  }
+  persistPreProData({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
+  renderAdminBody();
+  toast(`Position "${name}" removed. Anyone already assigned to it keeps it.`);
+}
+
 function rolePositionOptionsHTML(selected='') {
   const chosen = String(selected || '').trim();
-  const options = ROLE_POSITION_OPTIONS.some(opt => opt.toLowerCase() === chosen.toLowerCase())
-    ? ROLE_POSITION_OPTIONS
-    : cleanUniqueStrings([chosen, ...ROLE_POSITION_OPTIONS]);
+  // Keep the chosen value selectable even if it was removed from this
+  // production's list — an existing assignment must never silently change.
+  const options = cleanUniqueStrings([...getRolePositionOptions(), chosen])
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' }));
   return `<option value="">Select position</option>` + options.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase() === chosen.toLowerCase() ? 'selected' : ''}>${esc(opt)}</option>`).join('');
 }
 
@@ -2021,10 +2115,24 @@ function removeRoleAssignmentRow(index) {
 }
 
 function saveRoleAssignmentsFromAdmin() {
+  clearTimeout(_assignmentAutoSaveTimer);
   const rows = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
   persistPreProData({ roleAssignments: rows }, 'Role Assignments');
   rerenderRoleAssignments(rows);
+  renderPlandaBearAssignmentsCard();
   toast('Role assignments saved.');
+}
+
+// Every change (position picked, paperwork checked, name entered) saves right
+// away — a presence-driven panel rebuild must never eat an unsaved assignment.
+let _assignmentAutoSaveTimer = null;
+function autoSaveRoleAssignments() {
+  clearTimeout(_assignmentAutoSaveTimer);
+  _assignmentAutoSaveTimer = setTimeout(() => {
+    const rows = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
+    persistPreProData({ roleAssignments: rows });   // no section → no activity-log spam per click
+    renderPlandaBearAssignmentsCard();
+  }, 400);
 }
 
 function renderSourcesRow(key, label) {
@@ -2107,6 +2215,96 @@ function shareSessionInvite(name='') {
     navigator.share({ title:'Cueola Session', text }).catch(()=>{});
   } else {
     writeClipboard(text, 'Session invite copied.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SESSION RESCUE — remove a person, or move the show to a new code
+// ─────────────────────────────────────────────────────────────
+// Sessions have no accounts, so "remove" is a soft kick: delete the person's
+// presence entries and flag their device ids so their clients bounce back to
+// the front page. A determined person can rejoin with the code — moving the
+// session to a fresh code is the hard lock-out.
+async function removePersonFromSession(name) {
+  if (!session.code || !window._firebaseReady) { toast('A cloud session is required to remove people.'); return; }
+  if (!dangerConfirm(`Remove "${name}" from this session?`, 'Their device is disconnected from this session code. They can rejoin with the same code — use "Move Session to a New Code" to keep them out for good.')) return;
+  try {
+    const ref = window._doc(window._db, 'sessions', session.code);
+    const updates = {};
+    Object.entries(currentPresence || {}).forEach(([id, p]) => {
+      if (p?.name && sameParticipantName(p.name, name)) {
+        updates[`presence.${id}`] = window._deleteField();
+        updates[`kicked.${id}`] = Date.now();
+      }
+    });
+    const snap = await window._getDoc(ref);
+    const parts = (snap.exists() && Array.isArray(snap.data().participants)) ? snap.data().participants : [];
+    updates.participants = parts.filter(p => !sameParticipantName(p?.name, name));
+    await window._updateDoc(ref, updates);
+    toast(`${name} removed from ${session.code}.`);
+    renderAdminBody();
+  } catch {
+    toast('Could not remove — check the connection and try again.');
+  }
+}
+
+// Copy the whole session doc to a fresh code and leave a forwarding pointer on
+// the old doc. Every connected client sees `movedTo` and follows automatically.
+async function moveSessionToNewCode() {
+  if (!session.code || !window._firebaseReady || session.isDemo || session.isExpert) { toast('A cloud session is required to move codes.'); return; }
+  if (!dangerConfirm('Move this session to a new code?', 'Cueola copies the whole show — rundown, Planda Bear paperwork, and notes — to a fresh session code. Everyone connected right now follows automatically. The old code stops updating, and anyone joining later needs the new code.')) return;
+  const oldCode = session.code;
+  try {
+    let newCode = '';
+    for (let i = 0; i < 10 && !newCode; i++) {
+      const candidate = genCode() + (i > 2 ? String(Math.floor(Math.random() * 9) + 1) : '');
+      if (candidate === oldCode) continue;
+      const taken = await window._getDoc(window._doc(window._db, 'sessions', candidate));
+      if (!taken.exists()) newCode = candidate;
+    }
+    if (!newCode) { toast('Could not find a free code — try again.'); return; }
+
+    const oldRef = window._doc(window._db, 'sessions', oldCode);
+    const snap = await window._getDoc(oldRef);
+    const data = snap.exists() ? { ...snap.data() } : {};
+    delete data.presence; delete data.kicked; delete data.movedTo; delete data.forceCmd;
+    data.code = newCode;
+    data.movedFrom = oldCode;
+    data.participants = [];
+    data.createdAt = window._serverTimestamp();
+    await window._setDoc(window._doc(window._db, 'sessions', newCode), data);
+
+    // Per-code local caches follow the show to the new key.
+    ['cueola_prepro_', 'cueola_pb_notes_', 'cueola_pb_note_draft_', 'cueola_pb_comments_', 'cueola_customSources_'].forEach(prefix => {
+      try {
+        const v = localStorage.getItem(prefix + oldCode);
+        if (v != null) localStorage.setItem(prefix + newCode, v);
+      } catch {}
+    });
+
+    await window._updateDoc(oldRef, { movedTo: { code: newCode, by: session.userName || 'Instructor', at: Date.now() } });
+    hideOverlay('adminPanel');
+    followSessionMove(newCode, true);
+  } catch {
+    toast('Could not move the session — check the connection and try again.');
+  }
+}
+
+// Switch this client onto a new session code (as the mover, or following a
+// movedTo pointer another instructor wrote).
+function followSessionMove(newCode, isMover = false) {
+  const wasLive = document.getElementById('liveshow')?.classList.contains('on');
+  if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
+  leavePresence();   // builds its doc ref from session.code synchronously — still the old code here
+  session.code = String(newCode || '').trim().toUpperCase();
+  rememberLastSession(session.code, session.userName);
+  enterRundown();    // re-subscribes Firestore, rejoins presence, refreshes the code badge
+  if (wasLive) setTimeout(goLive, 300);
+  if (isMover) {
+    copySessionCode();
+    toast(`Session moved — new code ${session.code} copied. Share it with anyone joining later.`);
+  } else {
+    toast(`This session moved to a new code: ${session.code}`);
   }
 }
 
@@ -2846,6 +3044,18 @@ function setupFirestore() {
       if (!snap.exists()) return;
       setCloudSyncState(rundownPendingBatches.length ? 'saving' : 'synced', rundownPendingBatches.length ? 'Cloud sync saving changes...' : `Cloud sync connected · ${session.code}`);
       const d = snap.data();
+      // Session rescue — handle a kick or a code move before adopting any other state.
+      if (d.kicked && d.kicked[presenceId]) {
+        if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
+        leavePresence();
+        leaveSessionForFrontPage();
+        toast('An instructor removed you from this session.');
+        return;
+      }
+      if (typeof d.movedTo?.code === 'string' && d.movedTo.code && d.movedTo.code !== session.code) {
+        followSessionMove(d.movedTo.code);
+        return;
+      }
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
       if (d.beats && Array.isArray(d.beats)) {
         rundownCloudBeats = d.beats.map(migrateBeat);
@@ -3115,8 +3325,13 @@ function renderPresence(map) {
     if (parts.length>=2) return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
     return String(n||'?').slice(0,2).toUpperCase();
   };
+  const canInspect = Boolean(adminSession);   // admins can click a badge for that person's session work
   document.getElementById('presenceAvatars').innerHTML =
-    shown.map(p=>`<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}" data-fullname="${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}">${initials(p.name)}</div>`).join('')+
+    shown.map(p=>{
+      const tip = `${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}${canInspect?' · click for info':''}`;
+      const click = canInspect ? ` onclick="openPersonInfo(${JSON.stringify(p.name).replace(/"/g,'&quot;')})"` : '';
+      return `<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}${canInspect?' pi-click':''}" data-fullname="${tip}"${click}>${initials(p.name)}</div>`;
+    }).join('')+
     (extra>0?`<div class="p-avatar extra" data-fullname="${extra} more in session">+${extra}</div>`:'');
   document.getElementById('presenceTooltip').innerHTML =
     `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
@@ -3125,6 +3340,99 @@ function renderPresence(map) {
       return `<div class="p-tip-row" title="${esc(p.name)}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span><span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
   refreshAdminBodyForSessionPeople();
+}
+
+// ── Person info: admin clicks a presence badge → that person's session work ──
+async function openPersonInfo(name) {
+  if (!adminSession) { toast('Log in as admin to view session info.'); return; }
+  const body = document.getElementById('personInfoBody');
+  const actions = document.getElementById('personInfoActions');
+  if (!body || !actions) return;
+
+  const entries = Object.values(currentPresence || {}).filter(p => p?.name && sameParticipantName(p.name, name));
+  const now = Date.now();
+  const newest = entries.slice().sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0))[0];
+  const online = Boolean(newest && (now - (newest.lastSeen||0)) < 90000);
+  const isInst = newest?.role === 'instructor';
+
+  let where = '';
+  if (online) {
+    if (newest.pbPage) where = `In Planda Bear · ${PB_PAGE_LABELS[newest.pbPage] || newest.pbPage}`;
+    else if (Number.isFinite(newest.idx)) where = `On rundown row ${(newest.idx|0) + 1}`;
+  }
+  const following = newest?.following && !sameParticipantName(newest.following, name) ? newest.following : '';
+
+  const assignment = (Array.isArray(loadPreProData().roleAssignments) ? loadPreProData().roleAssignments : [])
+    .map(r => normalizeRoleAssignment(r))
+    .find(r => sameParticipantName(r.person, name));
+
+  const head = `
+    <div class="pi-head">
+      <div class="pi-ava ${isInst ? 'inst' : 'stud'}">${esc(pbInitials(name))}</div>
+      <div>
+        <div class="pi-name">${esc(name)}</div>
+        <div class="pi-sub">
+          <span class="pi-role ${isInst ? 'inst' : 'stud'}">${isInst ? 'INSTRUCTOR' : 'STUDENT'}</span>
+          <span class="pi-live ${online ? 'on' : ''}"><span class="dot"></span>${online ? 'Online now' : (newest?.lastSeen ? `Last seen ${pbAgo(newest.lastSeen)}` : 'Not connected')}</span>
+        </div>
+      </div>
+    </div>
+    ${where || following ? `<div class="pi-sec">Right now</div><div class="pi-card">${esc(where || '')}${where && following ? '<br>' : ''}${following ? `Following <b>${esc(following)}</b>` : ''}</div>` : ''}
+    <div class="pi-sec">Assignment</div>
+    <div class="pi-card">${assignment && (assignment.position || assignment.paperwork.length)
+      ? `${assignment.position ? `Position: <b>${esc(assignment.position)}</b>` : 'No position picked yet'}
+         ${assignment.paperwork.length ? `<div class="pi-chips">${assignment.paperwork.map(p => `<span class="admin-src-chip">${esc(p)}</span>`).join('')}</div>` : ''}`
+      : 'No assignment yet — set one in Admin → Role and Planda Bear Assignments.'}</div>`;
+
+  body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
+  actions.innerHTML = `
+    <button class="btn-secondary" style="color:var(--red)" onclick="hideModal('personInfoModal');removePersonFromSession(${JSON.stringify(name).replace(/"/g,'&quot;')})">Remove from Session</button>
+    <button class="btn-primary" onclick="hideModal('personInfoModal')">Done</button>`;
+  showModal('personInfoModal');
+
+  // Notes board contributions
+  let stats = { posts:0, replies:0, todosDone:0, todosOpen:0, lastAt:0 };
+  try {
+    await loadPlandaBearNotes();
+    const mine = plandaBearNotes.filter(n => n?.by && sameParticipantName(n.by, name));
+    stats = {
+      posts: mine.filter(n => !n.replyTo).length,
+      replies: mine.filter(n => n.replyTo).length,
+      todosDone: plandaBearNotes.filter(n => n.tag === 'todo' && n.done && n.doneBy && sameParticipantName(n.doneBy, name)).length,
+      todosOpen: plandaBearNotes.filter(n => n.tag === 'todo' && !n.done && n.assignee && sameParticipantName(n.assignee, name)).length,
+      lastAt: mine.reduce((m, n) => Math.max(m, n.editedAt || n.at || 0), 0),
+    };
+  } catch {}
+
+  // Paperwork saves logged on the session doc
+  let saves = [];
+  if (session.code && !session.isDemo && !session.isExpert && window._firebaseReady) {
+    try {
+      const snap = await window._getDoc(window._doc(window._db, 'sessions', session.code));
+      const log = snap.exists() && Array.isArray(snap.data().preProActivity) ? snap.data().preProActivity : [];
+      saves = log.filter(e => e?.by && sameParticipantName(e.by, name));
+    } catch {}
+  }
+  // Note posts log activity entries too — keep the paperwork stat about paperwork.
+  const paperworkSaves = saves.filter(e => !/^(Production Note|To-Do|Instructor Comment)/i.test(e.section || ''));
+  const bySection = {};
+  paperworkSaves.forEach(e => { if (e.section) bySection[e.section] = (bySection[e.section] || 0) + 1; });
+  const sectionLine = Object.entries(bySection).sort((a,b)=>b[1]-a[1])
+    .map(([s, c]) => `${esc(s)}${c > 1 ? ` ×${c}` : ''}`).join(' · ');
+  const lastSave = saves.reduce((m, e) => Math.max(m, e.at || 0), 0);
+  const lastTouch = Math.max(stats.lastAt, lastSave);
+
+  body.innerHTML = head + `
+    <div class="pi-sec">Session work</div>
+    <div class="pi-stats">
+      <div class="pi-stat"><b>${stats.posts}</b><span>Notes</span></div>
+      <div class="pi-stat"><b>${stats.replies}</b><span>Replies</span></div>
+      <div class="pi-stat"><b>${stats.todosDone}</b><span>To-Dos done</span></div>
+      <div class="pi-stat"><b>${paperworkSaves.length}</b><span>PB saves</span></div>
+    </div>
+    ${stats.todosOpen ? `<div class="pi-card" style="margin-top:7px">Open to-dos assigned to them: <b>${stats.todosOpen}</b></div>` : ''}
+    ${sectionLine ? `<div class="pi-sec">Paperwork touched</div><div class="pi-card">${sectionLine}</div>` : ''}
+    ${lastTouch ? `<div class="pi-sec">Last contribution</div><div class="pi-card">${esc(pbAgo(lastTouch))}</div>` : (paperworkSaves.length || stats.posts ? '' : `<div class="pi-card" style="margin-top:7px">No paperwork saves or notes from ${esc(name)} in this session yet.</div>`)}`;
 }
 
 window.addEventListener('beforeunload', leavePresence);
@@ -9780,10 +10088,26 @@ function pbRenderFieldPresence() {
   });
 }
 
-// Update a scalar field from the latest cloud data, unless the user is in it.
+// Fields this user touched in the last few seconds. The collab refresh must
+// never revert them: a time picked from the native picker (or any field the
+// user clicks away from) is no longer document.activeElement when the 650ms
+// debounced save runs, and the old focus-only guard let the pre-save merge
+// overwrite the fresh value with the last-saved one — typed times vanished.
+const _pbRecentLocalEdits = new Map();   // field id -> last local input ts
+const PB_LOCAL_EDIT_HOLD_MS = 10000;
+function pbNoteLocalEdit(id) {
+  if (id) _pbRecentLocalEdits.set(id, Date.now());
+}
+function pbFieldRecentlyEdited(id) {
+  const t = _pbRecentLocalEdits.get(id);
+  return Boolean(t && (Date.now() - t) < PB_LOCAL_EDIT_HOLD_MS);
+}
+
+// Update a scalar field from the latest cloud data, unless the user is in it
+// (or just edited it — see above).
 function pbSetFieldIfIdle(id, val) {
   const el = document.getElementById(id);
-  if (!el || el === document.activeElement) return;
+  if (!el || el === document.activeElement || pbFieldRecentlyEdited(id)) return;
   if (el.value !== val) el.value = val;
 }
 
@@ -9936,9 +10260,10 @@ function pbInitCollabListeners() {
       clearTimeout(_pbFieldBlurTimer);
       _pbFieldBlurTimer = setTimeout(() => pbSetPresenceField(null), 1500);
     });
-    modal.addEventListener('input', e => {
+    const queuePaperworkAutosave = e => {
       if (!pbIsCollabField(e.target)) return;
       paperworkDirty = true;
+      pbNoteLocalEdit(e.target.id);
       clearTimeout(_pbFieldSaveTimer);
       _pbFieldSaveTimer = setTimeout(() => {
         // Merge in collaborators' latest values before saving so two people on
@@ -9947,7 +10272,10 @@ function pbInitCollabListeners() {
         _pbSuppressActivity = true;
         try { saveOpenPaperworkSection(false); } finally { _pbSuppressActivity = false; }
       }, 650);
-    });
+    };
+    modal.addEventListener('input', queuePaperworkAutosave);
+    // Safari commits time pickers and <select>s with only a 'change' event.
+    modal.addEventListener('change', queuePaperworkAutosave);
   });
 }
 
@@ -10058,6 +10386,27 @@ function openPaperworkHub() {
   renderPlandaBearComments('All', 'pbCommentsHub');
   loadPlandaBearNotes().then(() => { annotatePlandaBearNoteCards(); pbUpdatePlandaBearBadge(); });
   renderPlandaBearHubActivity();
+  renderPlandaBearAssignmentsCard();
+}
+
+// Crew assignments (set in Admin → Role and Planda Bear Assignments) shown to
+// everyone on the hub — proof the instructor's assignments actually landed.
+function renderPlandaBearAssignmentsCard() {
+  const wrap = document.getElementById('pbAssignmentsCard');
+  if (!wrap) return;
+  const data = loadPreProData();
+  const rows = Array.isArray(data.roleAssignments)
+    ? data.roleAssignments.map(row => normalizeRoleAssignment(row)).filter(row => row.person && (row.position || row.paperwork.length))
+    : [];
+  if (!rows.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="pb-assign-card">
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
+    ${rows.map(row => `<div class="pb-assign-row">
+      <span class="pb-assign-name">${esc(row.person)}</span>
+      ${row.position ? `<span class="pb-assign-pos">${esc(row.position)}</span>` : ''}
+      ${row.paperwork.length ? `<span class="pb-assign-items">${esc(row.paperwork.join(' · '))}</span>` : ''}
+    </div>`).join('')}
+  </div>`;
 }
 
 // Leave the Planda Bear workspace and clear my page presence so collaborators
@@ -10350,6 +10699,8 @@ const PB_NOTE_TAGS = {
   audio:    { label:'Audio',    symbol:'department.audio' },
   video:    { label:'Video',    symbol:'department.video' },
   lighting: { label:'Lighting', symbol:'department.lighting' },
+  content:  { label:'Content',  symbol:'content.script' },
+  gfx:      { label:'GFX',      symbol:'department.graphics' },
   todo:     { label:'To-Do',    symbol:'content.checklist' },
 };
 
@@ -10895,6 +11246,13 @@ async function pbOpenLightbox(fileId) {
   box.classList.add('on');
 }
 
+function pbCloseLightbox() {
+  document.getElementById('pbLightbox')?.classList.remove('on');
+}
+// Esc closes the enlarged image (registered last → wins over modals underneath).
+uiDismissRegister(() => document.getElementById('pbLightbox'), el => el.classList.remove('on'),
+  { isOpen: el => el.classList.contains('on') });
+
 /* ── Threading: group flat notes into root + replies. Reply chains flatten
    to one level under the root note; replies whose root was deleted are
    promoted to top-level so nothing ever disappears from the board. ── */
@@ -11343,7 +11701,7 @@ function pbNoteFootHTML(note, replyCount) {
     ${pbLikeButtonHTML(note)}
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
-    ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${note.pinned ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
+    ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${sfIcon('action.pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
     <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
   </footer>`;
@@ -11401,7 +11759,7 @@ function pbThreadHTML(t) {
   if (root.pinned) classes.push('pinned');
   if (root.tag === 'todo' && root.done) classes.push('done');
   return `<article class="${classes.join(' ')}" data-note-id="${root.id}">
-    ${root.pinned ? '<div class="pb-pin-flag">📌 Pinned</div>' : ''}
+    ${root.pinned ? `<div class="pb-pin-flag">${sfIcon('action.pin')} Pinned</div>` : ''}
     ${pbNoteHeadHTML(root)}
     ${pbNoteBodyHTML(root)}
     ${pbNoteFootHTML(root, t.replies.length)}
@@ -12315,10 +12673,12 @@ function hydrateCallSheetForm(sheet) {
   document.getElementById('pp-sheet-label').value = data.label || '';
   document.getElementById('pp-production').value = data.production || show.name || '';
   document.getElementById('pp-date').value = data.date || '';
-  setTimeInputValue('pp-call', data.call, show.start);
+  // No fallback times: an unset field stays --:-- so the user knows to fill it
+  // in (times must never silently default from the rundown or another sheet).
+  setTimeInputValue('pp-call', data.call);
   const showNA = data.showStart === 'N/A';
   setShowNotApplicable(showNA);
-  if (!showNA) setTimeInputValue('pp-show-start', data.showStart, show.start);
+  if (!showNA) setTimeInputValue('pp-show-start', data.showStart);
   const wrapNA = data.wrap === 'N/A';
   setWrapNotApplicable(wrapNA);
   if (!wrapNA) setTimeInputValue('pp-wrap', data.wrap);
@@ -12548,20 +12908,46 @@ function onCallSheetWeatherInput(field, value) {
   paperworkDirty = true;
 }
 
+// The Open-Meteo geocoder matches place names and postal codes only — a full
+// street address ("123 Main St, Springfield, IL 62704") finds nothing. Build a
+// candidate list from the location AND address fields: full string, then the
+// tail segments after each comma (usually city/state), each segment, each
+// segment with zip/state abbreviation stripped, and any zip code on its own.
+function weatherGeoQueries(...sources) {
+  const out = [];
+  const push = q => {
+    q = String(q || '').replace(/\s+/g, ' ').trim();
+    if (q.length >= 2 && !/^\d{1,4}$/.test(q) && !out.some(x => x.toLowerCase() === q.toLowerCase())) out.push(q);
+  };
+  sources.forEach(src => {
+    const s = String(src || '').trim();
+    if (!s) return;
+    push(s);
+    const zip = s.match(/\b\d{5}(?:-\d{4})?\b/);
+    if (zip) push(zip[0]);
+    const segs = s.split(',').map(x => x.trim()).filter(Boolean);
+    for (let i = 1; i < segs.length; i++) push(segs.slice(i).join(', '));
+    segs.forEach(seg => {
+      push(seg);
+      const noZip = seg.replace(/\b\d{5}(?:-\d{4})?\b/g, '').trim();
+      push(noZip);
+      push(noZip.replace(/\b[A-Z]{2}\.?$/, '').trim());   // trailing state abbreviation
+    });
+  });
+  return out.slice(0, 10);
+}
+
 async function fetchCallSheetWeather() {
   const btn = document.getElementById('pp-weather-fetch-btn');
   const location = document.getElementById('pp-location')?.value?.trim() || '';
+  const address = document.getElementById('pp-address')?.value?.trim() || '';
   const date = document.getElementById('pp-date')?.value || '';
-  if (!location) { setWeatherStatus('Add a location first, then get the forecast.', true); document.getElementById('pp-location')?.focus(); return; }
+  if (!location && !address) { setWeatherStatus('Add a location or address first, then get the forecast.', true); document.getElementById('pp-location')?.focus(); return; }
   if (!date) { setWeatherStatus('Add a shoot date first, then get the forecast.', true); document.getElementById('pp-date')?.focus(); return; }
   if (btn) btn.disabled = true;
   setWeatherStatus('Finding location…');
   try {
-    // The geocoder matches plain place names only — "Austin, TX" finds nothing.
-    // Try the full string first, then fall back to the part before the comma.
-    const geoQueries = [location];
-    const beforeComma = location.split(',')[0].trim();
-    if (beforeComma && beforeComma !== location) geoQueries.push(beforeComma);
+    const geoQueries = weatherGeoQueries(location, address);
     let place = null;
     for (const q of geoQueries) {
       const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
@@ -12569,7 +12955,7 @@ async function fetchCallSheetWeather() {
       place = (await geoRes.json())?.results?.[0];
       if (place) break;
     }
-    if (!place) { setWeatherStatus(`Couldn't find "${location}". Check the spelling or enter weather manually below.`, true); return; }
+    if (!place) { setWeatherStatus(`Couldn't find "${location || address}". Try just a city name (e.g. "Boston"), or enter weather manually below.`, true); return; }
     setWeatherStatus('Loading forecast…');
     const q = `latitude=${place.latitude}&longitude=${place.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&start_date=${date}&end_date=${date}`;
     const fRes = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`);
@@ -12847,8 +13233,10 @@ function productionScheduleWithCallSheet(schedule={}, callSheet=loadPreProData()
     setup: normalizeTimeValue(base.setup),
     wrap: normalizeTimeValue(base.wrap),
     showDate: base.showDate || callSheet.date || '',
-    call: normalizeTimeValue(base.call) || normalizeTimeValue(callSheet.call),
-    show: normalizeTimeValue(base.show) || normalizeTimeValue(callSheet.showStart) || normalizeTimeValue(show.start),
+    // Times never default from the call sheet or rundown — an unset time stays
+    // blank (--:--) so the user knows it still needs a real value.
+    call: normalizeTimeValue(base.call),
+    show: normalizeTimeValue(base.show),
     doors: base.doors || callSheet.doors || '',
     location: base.location || callSheet.location || '',
     address: base.address || callSheet.address || '',
