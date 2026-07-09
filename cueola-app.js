@@ -118,9 +118,16 @@ const CUEOLA_THEME_LABELS = {
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
 function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
+function cueolaThemeToPlandaBearTheme(t) {
+  const map = { cool: 'glacier', warm: 'honey', white: 'polar-bear' };
+  return normalizePlandaBearTheme(map[normalizeCueolaTheme(t)] || normalizeCueolaTheme(t));
+}
+function hasPlandaBearThemeOverride() {
+  try { return localStorage.getItem('cueola_plandabear_theme') !== null; } catch { return false; }
+}
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
-let plandaBearTheme = normalizePlandaBearTheme(localStorage.getItem('cueola_plandabear_theme'));
+let plandaBearTheme = normalizePlandaBearTheme(hasPlandaBearThemeOverride() ? localStorage.getItem('cueola_plandabear_theme') : cueolaThemeToPlandaBearTheme(currentTheme));
 let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
 let adminSession = null; // { id, name, level }
 let sessionCustomSources = {}; // { video:[], audio:[], gfx:[], scriptWho:[] }
@@ -9831,6 +9838,7 @@ function pickEntryTheme(t) {
   currentTheme = normalizeCueolaTheme(t);
   applyTheme(currentTheme);
   try { localStorage.setItem('cueola_theme', currentTheme); } catch {}
+  if (!hasPlandaBearThemeOverride()) applyPlandaBearTheme(cueolaThemeToPlandaBearTheme(currentTheme));
   syncEntryThemeSwatches();
 }
 function syncEntryThemeSwatches() {
@@ -10121,10 +10129,11 @@ function pbRefreshSafetyFields() {
   pbSetFieldIfIdle('sp-fire', safety.fire || '');
   pbSetFieldIfIdle('sp-emergency', safety.emergency || '');
   pbSetFieldIfIdle('sp-nonemergency', safety.nonemergency || '');
-  pbSetFieldIfIdle('sp-security', safety.security || '');
+  pbSetFieldIfIdle('sp-security', safetySecurityValue(safety.security));
   pbSetFieldIfIdle('sp-late', safety.late || data.late || '');
   pbSetFieldIfIdle('sp-equipment', safety.equipment || data.equipment || '');
   pbSetFieldIfIdle('sp-notes', safety.notes || '');
+  renderSafetyPlanWeatherSymbols(data);
 }
 
 function pbRefreshScheduleFields() {
@@ -12823,8 +12832,8 @@ function weatherSummaryLine(w) {
   return parts.join(' · ');
 }
 
-// Cute one-liner with weather icons — for on-screen use (HTML preview, the
-// safety-plan field, the html2canvas package PDF where emoji render fine).
+// Cute one-liner with emoji icons — used only where plain text rendering is
+// acceptable. Form fields use sf-symbol icons beside plain editable text.
 function weatherCuteSummary(w, withSun=false) {
   w = normalizeCallSheetWeather(w);
   if (!w) return '';
@@ -12838,6 +12847,18 @@ function weatherCuteSummary(w, withSun=false) {
   return parts.join('  ·  ');
 }
 
+function weatherCompactSummary(w, withSun=false) {
+  w = normalizeCallSheetWeather(w);
+  if (!w) return '';
+  const parts = [];
+  if (w.conditions) parts.push(w.conditions);
+  if (w.high || w.low) parts.push(`${w.high || '-'} / ${w.low || '-'}`);
+  if (w.precip) parts.push(w.precip);
+  if (w.wind) parts.push(w.wind);
+  if (withSun && (w.sunrise || w.sunset)) parts.push(`${w.sunrise || '-'} / ${w.sunset || '-'}`);
+  return parts.join(' · ');
+}
+
 // The active call sheet's weather object (used to auto-fill the safety plan).
 function activeCallSheetWeather(data) {
   const sheets = getCallSheets(data);
@@ -12849,7 +12870,47 @@ function safetyPlanWeatherAutoText(data) {
   const sheetWeather = activeCallSheetWeather(data);
   const sheetText = typeof sheetWeather === 'string' ? sheetWeather : '';
   const topText = typeof data?.weather === 'string' ? data.weather : '';
-  return weatherCuteSummary(sheetWeather) || sheetText || weatherCuteSummary(data?.weather) || topText || '';
+  return weatherCompactSummary(sheetWeather) || sheetText || weatherCompactSummary(data?.weather) || topText || '';
+}
+
+function safetyPlanWeatherSource(data) {
+  return normalizeCallSheetWeather(activeCallSheetWeather(data)) || normalizeCallSheetWeather(data?.weather);
+}
+
+function weatherChipHTML(symbol, label) {
+  if (!label) return '';
+  return `<span class="sp-weather-part">${sfIcon(symbol)}<span>${esc(label)}</span></span>`;
+}
+
+function safetyPlanWeatherSymbolHTML(w) {
+  w = normalizeCallSheetWeather(w);
+  if (!w) return '';
+  const parts = [];
+  if (w.conditions || w.symbol) parts.push(weatherChipHTML(weatherSymbolFor(w), w.conditions || 'Weather'));
+  if (w.high || w.low) parts.push(weatherChipHTML('weather.temp', `${w.high || '-'} / ${w.low || '-'}`));
+  if (w.precip) parts.push(weatherChipHTML('weather.precip', w.precip));
+  if (w.wind) parts.push(weatherChipHTML('weather.wind', w.wind));
+  return parts.filter(Boolean).join('<span class="sp-weather-sep" aria-hidden="true">·</span>');
+}
+
+function renderSafetyPlanWeatherSymbols(data=loadPreProData()) {
+  const host = document.getElementById('sp-weather-symbols');
+  const input = document.getElementById('sp-weather');
+  if (!host || !input) return;
+  const auto = safetyPlanWeatherAutoText(data);
+  const current = input.value.trim();
+  const sourceHtml = safetyPlanWeatherSymbolHTML(safetyPlanWeatherSource(data));
+  const useSource = Boolean(sourceHtml && (!current || current === auto));
+  const html = useSource ? sourceHtml : (current ? weatherChipHTML(weatherSymbolFor({ conditions: current }), current) : '');
+  host.innerHTML = html;
+  host.hidden = !html;
+  host.setAttribute('aria-label', useSource ? auto : current);
+  host.parentElement?.classList.toggle('has-weather-summary', Boolean(html));
+}
+
+function safetySecurityValue(value) {
+  const v = String(value || '').trim();
+  return v === '8822' ? '' : v;
 }
 
 function setCallSheetVenue(v) {
@@ -13125,11 +13186,12 @@ function openSafetyPlan() {
   // rendered "[object Object]" and (being truthy) blocked the call-sheet auto-fill.
   const safetyWeatherNote = typeof safety.weather === 'string' ? safety.weather : '';
   document.getElementById('sp-weather').value = safetyWeatherNote || safetyPlanWeatherAutoText(data);
+  renderSafetyPlanWeatherSymbols(data);
   document.getElementById('sp-first-aid').value = safety.firstAid || '';
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
   document.getElementById('sp-nonemergency').value = safety.nonemergency || '';
-  document.getElementById('sp-security').value = safety.security || '';
+  document.getElementById('sp-security').value = safetySecurityValue(safety.security);
   document.getElementById('sp-late').value = safety.late || data.late || '';
   document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
   document.getElementById('sp-notes').value = safety.notes || '';
@@ -13153,7 +13215,7 @@ function getSafetyPlanData() {
     fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
     emergency: document.getElementById('sp-emergency')?.value?.trim() ?? existing.emergency ?? '',
     nonemergency: document.getElementById('sp-nonemergency')?.value?.trim() ?? existing.nonemergency ?? '',
-    security: document.getElementById('sp-security')?.value?.trim() ?? existing.security ?? '',
+    security: safetySecurityValue(document.getElementById('sp-security')?.value?.trim() ?? existing.security ?? ''),
     late: document.getElementById('sp-late')?.value?.trim() ?? existing.late ?? '',
     equipment: document.getElementById('sp-equipment')?.value?.trim() ?? existing.equipment ?? '',
     notes: document.getElementById('sp-notes')?.value ?? existing.notes ?? '',

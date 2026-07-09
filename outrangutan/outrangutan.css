@@ -23,8 +23,9 @@
   border-radius: var(--r-sm); padding: 7px 12px; font-size: 14px; cursor: pointer;
 }
 .og-bar .og-back:hover { background: var(--s4); }
-.og-title { font-family: var(--syne); font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
-.og-title .og-glyph { margin-right: 6px; }
+.og-title { display: inline-flex; align-items: center; gap: 8px; font-family: var(--syne); font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+.og-title .og-glyph { display: inline-grid; place-items: center; margin-right: 0; }
+.og-title .brand-ico { width: 30px; height: 30px; }
 .og-mode-badge {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
   padding: 3px 8px; border-radius: 999px; background: var(--s3); color: var(--text2);
@@ -244,7 +245,9 @@
 .og-insp-meta { font-family: var(--mono); font-size: 11px; color: var(--text3); font-variant-numeric: tabular-nums; margin: -4px 0 2px; }
 
 /* wall clock — time of day, alongside the count-out clock (HIG: quiet, mono) */
-.og-wallclock { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text2); letter-spacing: .02em; }
+.og-wallclock { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text2); letter-spacing: .02em; cursor: pointer; user-select: none; border-radius: 999px; padding: 3px 5px; margin-inline: -5px; }
+.og-wallclock:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.og-wallclock:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .og-wallclock .sf-symbol { font-size: 12px; opacity: .8; }
 
 /* cue color swatches in the inspector */
@@ -296,9 +299,9 @@
 .og-sfx-main { flex: 1 1 auto; }
 .og-sfx-side { flex: 0 0 300px; border-left: 1px solid var(--border); }
 /* Adaptive pad grid: ~4 columns on a laptop, more (never giant) on large displays. */
-.og-pad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; padding: 16px; overflow: auto; align-content: start; }
+.og-pad-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); grid-auto-rows: minmax(104px, 128px); gap: 12px; padding: 16px; overflow: auto; align-content: start; }
 .og-pad {
-  position: relative; aspect-ratio: 1.5 / 1; border-radius: var(--r); cursor: pointer;
+  position: relative; min-height: 104px; border-radius: var(--r); cursor: pointer;
   border: 1px solid var(--border); background: var(--s2); color: var(--text);
   display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; text-align: left; overflow: hidden;
 }
@@ -876,11 +879,13 @@
      pane; the monitor stays 16:9 and centers itself when height-limited. */
   .og-program-wrap { width: min(100% - 20px, calc(52cqh * 16 / 9)); margin: 8px auto 6px; }
   .og-clock {
-    flex: 1 1 auto; min-height: 88px; padding: 0;
+    flex: 0 0 96px; min-height: 88px; padding: 5px 0 6px; box-sizing: border-box;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    container-type: size;
+    container-type: inline-size;
   }
-  .og-clock-time { font-size: clamp(30px, min(16cqw, 60cqh), 240px); }
+  .og-clock-time { font-size: clamp(36px, 10cqw, 58px); }
+  .og-clock-cue { min-height: 14px; margin-top: 1px; }
+  .og-clock-elapsed { margin-top: 3px; }
 }
 
 /* ============================================================================
@@ -1020,17 +1025,52 @@
   justify-content: center;
 }
 #og-sfx-stop {
-  background: #ff453a !important;
-  border-color: #ff9f99 !important;
-  color: #fff !important;
+  background: color-mix(in srgb, var(--red) 20%, var(--s3)) !important;
+  border-color: color-mix(in srgb, var(--red) 54%, var(--border)) !important;
+  color: color-mix(in srgb, #fff 88%, var(--red)) !important;
   text-shadow: none !important;
+  box-shadow: none !important;
 }
-#og-sfx-stop:hover { filter: brightness(1.06); }
+#og-sfx-stop .sf-symbol { font-size: 19px; }
+#og-sfx-stop:hover {
+  filter: none;
+  background: color-mix(in srgb, var(--red) 27%, var(--s3)) !important;
+  border-color: color-mix(in srgb, var(--red) 70%, var(--border)) !important;
+}
 .og-pad-search {
   background: color-mix(in srgb, var(--s3) 82%, var(--accent) 6%);
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
   min-height: 38px;
   padding: 5px 10px;
+}
+.og-search-glyph {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.og-search-glyph::before {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  left: 1px;
+  top: 1px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.og-search-glyph::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 2px;
+  right: 0;
+  bottom: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
 }
 .og-pad-search .sf-symbol {
   font-size: 16px;

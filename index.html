@@ -6,7 +6,7 @@
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=20260708a">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0n">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.0p">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -75,6 +75,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #entryThemeGear.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--glass-border));background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .entry-theme-panel{position:absolute;top:calc(100% + 8px);right:50%;translate:50% 0;width:min(360px,90vw);background:color-mix(in srgb,var(--s1) 92%,transparent);border:1px solid var(--glass-border);border-radius:16px;padding:14px;box-shadow:var(--liquid-shadow-raised);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .18s ease both}
 .entry-theme-panel[hidden]{display:none}
+.entry-theme-info{margin-top:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--text) 12%,transparent);display:grid;gap:9px}
+.entry-theme-info-row{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:8px;color:var(--text2);font-size:12px;line-height:1.42}
+.entry-theme-info-row .sf-symbol{font-size:16px;color:var(--accent);margin-top:1px}
+.entry-theme-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--s2) 70%,transparent);border:1px solid color-mix(in srgb,var(--text) 10%,transparent);font:700 11px/1.25 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
+.entry-theme-meta b{color:var(--text);font-weight:800}
 .entry-theme-title{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
 .entry-theme-panel .theme-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .entry-theme-panel .theme-swatch{min-width:0;padding:8px 4px}
@@ -246,6 +251,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Filled cues carry a bold department-coloured edge, tint, and a coloured glow on hover. */
 .cue-cell-filled{display:flex;flex-direction:column;gap:4px;padding:8px 10px 8px 12px;border-radius:8px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease),transform .12s var(--ease);border:1px solid color-mix(in srgb,var(--cue-clr,var(--bord2)) 30%,var(--bord2));border-left:3px solid var(--cue-clr,var(--accent));background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 17%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 5%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 12%,transparent);min-height:40px;height:100%;position:relative}
 .cue-cell-filled:hover{border-color:color-mix(in srgb,var(--cue-clr,var(--accent)) 55%,var(--bord2));border-left-color:var(--cue-clr,var(--accent));background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--accent)) 24%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--accent)) 9%,var(--s3)));box-shadow:0 0 0 1px color-mix(in srgb,var(--cue-clr) 38%,transparent);transform:translateY(-1px)}
+.rd-table .cd-cue-cell{padding:4px 5px}
+.rd-table .cue-cell-filled{gap:3px;padding:8px 9px;border-radius:7px;background:color-mix(in srgb,var(--cue-clr,var(--s2)) 14%,var(--s2));box-shadow:none}
+.rd-table .cue-cell-filled:hover{background:color-mix(in srgb,var(--cue-clr,var(--accent)) 18%,var(--s2));box-shadow:none}
+.rd-table .cue-cell-info{font-size:12.5px;line-height:1.28}
+.rd-table .cue-cell-icon{font-size:14px}
+.rd-table .cue-add-btn{opacity:.18}
+.rd-table .cd-cue-cell:hover .cue-add-btn{opacity:.48}
 .cue-cell-filled::after{content:'EDIT';position:absolute;right:7px;top:6px;font-size:9px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;color:var(--text3);opacity:0;transition:opacity .15s var(--ease)}
 .cue-cell-filled:hover::after{opacity:.8}
 .cue-cell-icon{font-size:16px;line-height:1;display:inline-flex;align-items:center;flex-shrink:0}
@@ -868,6 +880,21 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .field-in:hover{border-color:color-mix(in srgb,var(--bord2) 60%,var(--text2))}
 .field-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--s2) 92%,var(--bg))}
 .field-in::placeholder{color:var(--text3);font-weight:400}
+.sp-weather-shell{position:relative;display:flex;align-items:center;gap:10px;min-height:47px;background:var(--s2);border:1.5px solid var(--bord2);border-radius:11px;padding:0 14px;transition:border-color .15s var(--ease),box-shadow .2s var(--ease),background .15s var(--ease)}
+.sp-weather-shell:hover{border-color:color-mix(in srgb,var(--bord2) 60%,var(--text2))}
+.sp-weather-shell:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--s2) 92%,var(--bg))}
+.sp-weather-symbols{display:inline-flex;align-items:center;gap:8px;color:var(--text2);min-width:0;flex-wrap:wrap}
+.sp-weather-symbols[hidden]{display:none}
+.sp-weather-symbols .sf-symbol{font-size:16px;color:var(--accent)}
+.sp-weather-part{display:inline-flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;color:var(--text);font-size:15px;line-height:1.35}
+.sp-weather-part:first-child .sf-symbol{color:var(--text)}
+.sp-weather-sep{color:var(--text3);font-size:13px}
+.sp-weather-entry{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--text);font-family:var(--sans);font-size:15px;letter-spacing:0;line-height:1.4;padding:12px 0}
+.sp-weather-entry::placeholder{color:var(--text3);font-weight:400}
+.sp-weather-shell.has-weather-summary .sp-weather-symbols{flex:1 1 auto;padding:11px 0}
+.sp-weather-shell.has-weather-summary .sp-weather-entry{position:absolute;inset:0;width:100%;height:100%;padding:0 14px;opacity:0;caret-color:transparent;cursor:text}
+.sp-weather-shell.has-weather-summary:focus-within .sp-weather-symbols{display:none}
+.sp-weather-shell.has-weather-summary:focus-within .sp-weather-entry{position:static;height:auto;padding:12px 0;opacity:1;caret-color:var(--accent)}
 .field-with-action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
 .field-with-action .field-in{min-width:0}
 .field-action-btn{height:100%;min-height:45px;border:1.5px solid var(--bord2);background:var(--s2);color:var(--text2);border-radius:11px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
@@ -2837,6 +2864,11 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 .pb-modal-kicker{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:3px}
 .pb-modal-header .modal-title,.paperwork-modal-head .modal-title{font-size:clamp(20px,2.4vw,28px);font-weight:800;letter-spacing:0}
 .pb-modal-sub,.paperwork-modal-head .modal-sub{font-size:13px;color:var(--ui-label-secondary);max-width:720px}
+.pb-brand-lockup{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px;min-width:0}
+.pb-brand-mark{width:58px;height:58px;display:grid;place-items:center;color:var(--text);flex:none}
+.pb-brand-mark .brand-ico{width:58px;height:58px}
+.pb-brand-copy{min-width:0}
+.pb-brand-copy .modal-title{display:block}
 .paperwork-grid{grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
 .paperwork-card{
   grid-template-columns:38px 1fr;
@@ -3306,6 +3338,11 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <button type="button" class="theme-swatch" data-theme="flamingo" onclick="pickEntryTheme('flamingo')" aria-pressed="false"><div class="ts-preview" style="background:#0e0410"></div><div class="ts-name">Flowmingo</div></button>
             <button type="button" class="theme-swatch" data-theme="outrangutan" onclick="pickEntryTheme('outrangutan')" aria-pressed="false"><div class="ts-preview" style="background:#ff6a00"></div><div class="ts-name">Outrangutan</div></button>
             <button type="button" class="theme-swatch" data-theme="prepbear" onclick="pickEntryTheme('prepbear')" aria-pressed="false"><div class="ts-preview" style="background:#080a14"></div><div class="ts-name">PrepBear</div></button>
+          </div>
+          <div class="entry-theme-info">
+            <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Front-page theme carries into the main app. Sub-app settings can still choose their own look.</span></div>
+            <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Autosave uses this browser on this device.</span></div>
+            <div class="entry-theme-meta"><span>Cueola</span><b>v1.0.0</b></div>
           </div>
         </div>
       </div>
@@ -3943,10 +3980,13 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <div class="modal-wrap" id="paperworkHubModal">
   <div class="modal pb-modal pb-hub-modal">
     <div class="pb-modal-header">
-      <div>
-        <div class="pb-modal-kicker">Pre-production workspace</div>
-        <div class="modal-title"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg> Plan<span class="brand-hi">da Bear</span></div>
-        <div class="pb-modal-sub">Six pages in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
+      <div class="pb-brand-lockup">
+        <div class="pb-brand-mark"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg></div>
+        <div class="pb-brand-copy">
+          <div class="pb-modal-kicker">Pre-production workspace</div>
+          <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
+          <div class="pb-modal-sub">Six pages in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
+        </div>
       </div>
       <div class="plandabear-tools">
       <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown"><span>Cue<span class="brand-hi">ola</span></span></button>
@@ -4116,7 +4156,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="pb-collab" data-pb-collab="safety-plan"></div>
     <div class="prepro-grid">
       <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120"></div>
-      <div class="field"><label class="field-lbl">Weather</label><input class="field-in" id="sp-weather" maxlength="120"></div>
+      <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div></div>
       <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120"></div>
       <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120"></div>
       <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
@@ -4520,8 +4560,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0m"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0g"></script>
+<script src="cueola-app.js?v=1.0.0o"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0i"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

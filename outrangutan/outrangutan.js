@@ -47,7 +47,7 @@
 
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
-    clockMode: 'remaining', multiTrigger: true, showLock: false, tab: 'play',
+    clockMode: 'remaining', wallClockMode: '24', multiTrigger: true, showLock: false, tab: 'play',
     fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false,
     layout: { wCuelist: 300, wInspector: 300, hEdit: 200 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
@@ -147,7 +147,11 @@
   }
   function setCueolaThemeFromOutrangutan(name) {
     if (!THEME_ORDER.includes(name)) return;
-    if (typeof window.selectTheme === 'function') window.selectTheme(name);
+    if (typeof window.pickEntryTheme === 'function') window.pickEntryTheme(name);
+    else if (typeof window.selectTheme === 'function') {
+      window.selectTheme(name);
+      try { localStorage.setItem('cueola_theme', name); } catch (e) {}
+    }
     else {
       document.documentElement.setAttribute('data-theme', name);
       try { localStorage.setItem('cueola_theme', name); } catch (e) {}
@@ -1561,6 +1565,30 @@
     if (!active && !preInfo) stopTicker();
   }
 
+  function formatWallClock(d) {
+    const pad2 = n => String(n).padStart(2, '0');
+    if (settings.wallClockMode === '12') {
+      const h = d.getHours();
+      const hr = h % 12 || 12;
+      return hr + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + ' ' + (h >= 12 ? 'PM' : 'AM');
+    }
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function renderWallClock() {
+    const t = $('og-wallclock-t'), wrap = $('og-wallclock');
+    if (!t || !wrap || !isOpen()) return;
+    t.textContent = formatWallClock(new Date());
+    wrap.setAttribute('aria-label', 'Time of day, ' + (settings.wallClockMode === '12' ? '12-hour' : '24-hour') + '. Click to toggle.');
+    wrap.title = settings.wallClockMode === '12' ? 'Switch to 24-hour clock' : 'Switch to 12-hour clock';
+  }
+
+  function toggleWallClockMode() {
+    settings.wallClockMode = settings.wallClockMode === '12' ? '24' : '12';
+    renderWallClock();
+    scheduleSave();
+  }
+
   // ── meters ───────────────────────────────────────────────────────────────
   function startMeterLoop() { if (meterRAF) return; const loop = () => { paintMeters(); meterRAF = requestAnimationFrame(loop); }; meterRAF = requestAnimationFrame(loop); }
   function level(an, buf) { an.getByteTimeDomainData(buf); let peak = 0, sum = 0; for (let i = 0; i < buf.length; i++) { const x = (buf[i] - 128) / 128, a = x < 0 ? -x : x; if (a > peak) peak = a; sum += x * x; } return { rms: Math.sqrt(sum / buf.length), peak }; }
@@ -2444,7 +2472,7 @@
           + '</div>'
           + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
-            + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" title="Time of day">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
+            + '<div class="og-pane-head">Program<div class="og-pane-actions"><button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + sym('action.grid') + 'Scopes</button><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill"></span><span class="og-meter-peak" id="og-master-peak"></span></span></span><span class="og-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + sym('state.timed') + '<span id="og-wallclock-t">--:--:--</span></span></div></div>'
             + '<div class="og-program-wrap"><span class="og-program-tag">PROGRAM</span><span class="og-program-status og-status-idle" id="og-program-status">IDLE</span>'
               + '<video id="og-program-a" class="og-deck front" playsinline></video><video id="og-program-b" class="og-deck" playsinline></video>'
               + '<img id="og-program-img" class="og-deck og-img-deck" alt="">'
@@ -2474,7 +2502,7 @@
         + '<div class="og-sfx">'
           + '<div class="og-toprow" id="og-sfx-toprow">'
           + '<div class="og-pane og-sfx-main">'
-            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><div class="og-pad-search"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span><input id="og-pad-search" type="search" placeholder="Search pads…" autocomplete="off"></div><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn" id="og-sfx-stop">' + sym('action.volume.mute') + 'Stop SFX</button></div></div>'
+            + '<div class="og-pane-head">SFX Board<div class="og-pane-actions"><div class="og-pad-search"><span class="og-search-glyph" aria-hidden="true"></span><input id="og-pad-search" type="search" placeholder="Search pads…" autocomplete="off"></div><label class="og-check og-check-inline"><input type="checkbox" id="og-multi"> Multi-trigger</label><button class="og-bar-btn og-sfx-stop-btn" id="og-sfx-stop">' + sym('media.stop', 'og-sfx-stop-icon') + 'Stop SFX</button></div></div>'
             + '<div class="og-bank-bar" id="og-bank-bar"></div>'
             + '<div class="og-pad-grid-wrap"><div class="og-pad-grid" id="og-pad-grid"></div><div class="og-pad-search-results" id="og-pad-search-results"></div></div>'
             + '<input type="file" id="og-pad-file" accept="audio/*,video/*" hidden>'
@@ -2549,6 +2577,8 @@
     $('og-fade').onclick = fadeStopAll;
     $('og-panic').onclick = panic;
     $('og-clock').onclick = () => { settings.clockMode = settings.clockMode === 'remaining' ? 'elapsed' : 'remaining'; renderClock(); scheduleSave(); };
+    $('og-wallclock').onclick = toggleWallClockMode;
+    $('og-wallclock').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWallClockMode(); } };
     $('og-recovery-dismiss').onclick = () => $('og-recovery').classList.remove('on');
     $('og-sfx-stop').onclick = stopAllPads;
     $('og-pad-search').oninput = (e) => { padSearch = e.target.value; renderPadSearch(); };
@@ -2594,8 +2624,8 @@
     renderTransportKeys();
     initSplitters(); applyLayout();
 
-    const pad2 = n => String(n).padStart(2, '0');
-    setInterval(() => { const t = $('og-wallclock-t'); if (!t || !isOpen()) return; const d = new Date(); t.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }, 1000);
+    renderWallClock();
+    setInterval(renderWallClock, 1000);
   }
 
   function renderTransportKeys() {
