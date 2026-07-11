@@ -8,7 +8,7 @@ mask stylesheet; source templates remain isolated from application markup.
 
 - `source/<category>/`: original Apple Template v7.0 SVG exports, preserved for
   future native or custom-symbol work.
-- `runtime/regular-small/<category>/`: compact monochrome SVGs extracted from the
+- `runtime/<weight>-small/<category>/` (currently `light-small`): compact monochrome SVGs extracted from the
   Regular-S master for later masks or inline use.
 - `catalog.json`: complete machine-readable metadata and paths.
 - `catalog.csv`: spreadsheet-friendly index.

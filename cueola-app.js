@@ -2528,8 +2528,13 @@ function openLocalPlandaBear(code='', name='You') {
     start:normalizeTimeValue(data.showStart || show.start),
   };
   hideModal('modal-prepro-join');
-  openPaperworkHub();
-  toast('Opened local Planda Bear copy. Shared sync is unavailable while offline.');
+  if (preProJoinTarget === 'notes') {
+    openProductionNotes();
+    toast('Opened local Production Notes. Shared sync is unavailable while offline.');
+  } else {
+    openPaperworkHub();
+    toast('Opened local Planda Bear copy. Shared sync is unavailable while offline.');
+  }
 }
 
 function createSession() {
@@ -2581,13 +2586,35 @@ function openJoinSession() {
   }, 60);
 }
 
-function openPlandaBearJoin() {
+// The prepro join modal serves two entry points: the Planda Bear card (land in
+// the paperwork hub) and the front-page Production Notes button (land straight
+// on the notes board). Copy and post-join destination follow the mode.
+let preProJoinTarget = 'hub';
+
+function openPreProJoinModal(target) {
+  preProJoinTarget = target === 'notes' ? 'notes' : 'hub';
+  const notes = preProJoinTarget === 'notes';
+  const modal = document.getElementById('modal-prepro-join');
+  if (modal) {
+    const title = modal.querySelector('.modal-title');
+    const sub = modal.querySelector('.modal-sub');
+    const go = modal.querySelector('.btn-primary');
+    if (title) title.innerHTML = notes ? `${sfIcon('content.note')} Production Notes` : 'Open Planda Bear';
+    if (sub) sub.textContent = notes
+      ? 'Enter the session code to open your crew’s notes board.'
+      : 'Enter the session code to work on the Planda Bear package.';
+    if (go) go.textContent = notes ? 'Open Production Notes' : 'Open Planda Bear';
+  }
   prefillJoinFields('pp-join-code', 'pp-join-name');
   showModal('modal-prepro-join');
   setTimeout(() => {
     const codeEl = document.getElementById('pp-join-code');
     (codeEl?.value ? document.getElementById('pp-join-name') : codeEl)?.focus();
   }, 60);
+}
+
+function openPlandaBearJoin() {
+  openPreProJoinModal('hub');
 }
 
 async function joinSession() {
@@ -2652,8 +2679,11 @@ async function joinPreProSession() {
     }
     rememberLastSession(code, name);
     hideModal('modal-prepro-join');
-    openPaperworkHub();
+    // joinPresence first: it SETS the whole presence entry, so the landing
+    // page's pbPage announce (issued after, same client queue) survives it.
     joinPresence();
+    if (preProJoinTarget === 'notes') openProductionNotes();
+    else openPaperworkHub();
   };
   const verify = () => {
     window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
@@ -10314,7 +10344,7 @@ function openPaperworkRelative(delta) {
 function openPaperworkHub() {
   if (!confirmSaveUnsavedPaperwork()) return;
   if (!session.code && !session.isDemo && !session.isExpert) {
-    showModal('modal-prepro-join');
+    openPreProJoinModal('hub');
     return;
   }
   applyPlandaBearTheme(plandaBearTheme);
@@ -10863,26 +10893,22 @@ const PB_AVATAR_ANIMALS = {
   cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#123a2a' },
 };
 const PB_PROFILE_KEY = 'cueola_profile';
+const pbProfileModel = CueolaAvatarProfile.createProfileModel({
+  storage: localStorage,
+  profileKey: PB_PROFILE_KEY,
+  approvedAnimals: PB_AVATAR_ANIMALS,
+});
 
 function pbGetProfile() {
-  try {
-    const p = JSON.parse(localStorage.getItem(PB_PROFILE_KEY) || 'null');
-    return pbNormalizeAvatar(p && p.avatar) ? { avatar: pbNormalizeAvatar(p.avatar) } : { avatar: { type: 'initials' } };
-  } catch { return { avatar: { type: 'initials' } }; }
+  return pbProfileModel.getProfile();
 }
 function pbSetProfileAvatar(avatar) {
-  const a = pbNormalizeAvatar(avatar) || { type: 'initials' };
-  try { localStorage.setItem(PB_PROFILE_KEY, JSON.stringify({ avatar: a })); } catch {}
-  return a;
+  return pbProfileModel.setAvatar(avatar);
 }
 
 // Coerce any avatar blob to a safe shape: an approved animal key, a data:image URL, else initials.
 function pbNormalizeAvatar(a) {
-  if (!a || typeof a !== 'object') return null;
-  if (a.type === 'animal' && PB_AVATAR_ANIMALS[a.value]) return { type: 'animal', value: a.value };
-  if (a.type === 'image' && typeof a.value === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(a.value) && a.value.length < 60000) return { type: 'image', value: a.value };
-  if (a.type === 'initials') return { type: 'initials' };
-  return null;
+  return CueolaAvatarProfile.normalizeAvatar(a, PB_AVATAR_ANIMALS);
 }
 
 // The avatar chip's inner content for a note/reply author (falls back to initials).
@@ -11107,11 +11133,12 @@ function pbNoteInputKeydown(e) {
 }
 
 // Front-page shortcut: jump straight to the notes board. Notes are session-scoped,
-// so with no session we route through the same join prompt the paperwork hub uses.
+// so with no session we route through the join prompt in notes mode — Production
+// Notes copy, and a successful join lands directly on the board, never the hub.
 function openProductionNotesShortcut(e) {
   e?.stopPropagation?.();
   if (session.code || session.isDemo || session.isExpert) { openProductionNotes(); return; }
-  showModal('modal-prepro-join');
+  openPreProJoinModal('notes');
 }
 
 // The board is a clip container — its children (threads) scroll, it never does.
@@ -11128,6 +11155,7 @@ function pbPinBoardScroll() {
 
 function openProductionNotes() {
   activePaperworkItemId = 'production-notes';
+  pbSetPresencePage('production-notes');   // direct entries (front page, toolbar bell) skip openPaperworkItem
   pbPinBoardScroll();
   hideModal('paperworkHubModal');
   pbEditingNoteId = null;
@@ -12245,17 +12273,6 @@ function pbThreadHTML(t) {
 
 function pbToggleCollapse(id) {
   if (pbCollapsed.has(id)) pbCollapsed.delete(id); else pbCollapsed.add(id);
-  renderPlandaBearNotes();
-}
-
-// Bulk collapse/expand from the toolbar — toggles based on whether anything is open.
-function pbToggleCollapseAll() {
-  const threads = pbBuildThreads();
-  const anyOpen = threads.some(t => !pbCollapsed.has(t.root.id));
-  if (anyOpen) threads.forEach(t => pbCollapsed.add(t.root.id));
-  else pbCollapsed.clear();
-  const btn = document.getElementById('pbCollapseAllBtn');
-  if (btn) btn.querySelector('span:last-child').textContent = anyOpen ? 'Expand' : 'Collapse';
   renderPlandaBearNotes();
 }
 

@@ -55,6 +55,22 @@ FALLBACK_CATEGORY_LABELS = {
 TOKEN_RE = re.compile(r"[A-Za-z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?")
 NUMBERED_COPY_RE = re.compile(r"^(?P<base>.+)_\d+$")
 
+# SF weight axis. Templates carry three point-compatible masters; every other
+# weight is a linear interpolation of path coordinates between the adjacent
+# masters — the same derivation Apple's variable templates use.
+WEIGHT_AXIS = {
+    "ultralight": 100.0,
+    "thin": 200.0,
+    "light": 300.0,
+    "regular": 400.0,
+    "medium": 500.0,
+    "semibold": 600.0,
+    "bold": 700.0,
+    "heavy": 800.0,
+    "black": 900.0,
+}
+MASTER_IDS = {"ultralight": "Ultralight-S", "regular": "Regular-S", "black": "Black-S"}
+
 
 @dataclass
 class SourceAsset:
@@ -83,6 +99,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--fresh", action="store_true", help="replace rather than merge the catalog"
+    )
+    parser.add_argument(
+        "--weight",
+        choices=sorted(WEIGHT_AXIS, key=WEIGHT_AXIS.get),
+        default="regular",
+        help="stroke weight for the extracted runtime set (default: regular)",
     )
     return parser.parse_args()
 
@@ -356,16 +378,53 @@ def format_number(value: float) -> str:
     return "0" if rounded in {"-0", ""} else rounded
 
 
-def extract_runtime(data: bytes, symbol_name: str) -> tuple[bytes, str, int]:
-    root = xml_root(data)
-    master = find_by_id(root, "Regular-S")
+def master_path_data(root: ET.Element, master_id: str, symbol_name: str) -> list[str]:
+    master = find_by_id(root, master_id)
     if master is None:
-        raise ValueError(f"{symbol_name}: missing Regular-S master")
-    paths = list(master.findall(".//svg:path", NS))
-    if not paths:
-        raise ValueError(f"{symbol_name}: Regular-S has no paths")
+        raise ValueError(f"{symbol_name}: missing {master_id} master")
+    data = [path.get("d", "") for path in master.findall(".//svg:path", NS)]
+    if not data:
+        raise ValueError(f"{symbol_name}: {master_id} has no paths")
+    return data
 
-    bounds = [path_bounds(path.get("d", "")) for path in paths]
+
+def interpolate_path(d_lo: str, d_hi: str, t: float, symbol_name: str) -> str:
+    lo, hi = tokenize_path(d_lo), tokenize_path(d_hi)
+    if len(lo) != len(hi):
+        raise ValueError(f"{symbol_name}: masters are not point-compatible")
+    out = []
+    for a, b in zip(lo, hi):
+        if a.isalpha() or b.isalpha():
+            if a != b:
+                raise ValueError(f"{symbol_name}: master commands diverge ({a!r} vs {b!r})")
+            out.append(a)
+        else:
+            out.append(format_number(float(a) + (float(b) - float(a)) * t))
+    return " ".join(out)
+
+
+def weight_path_data(root: ET.Element, weight: str, symbol_name: str) -> tuple[list[str], str]:
+    """Path data for the requested weight, plus a note describing its derivation."""
+    if weight in MASTER_IDS:
+        master_id = MASTER_IDS[weight]
+        return master_path_data(root, master_id, symbol_name), master_id
+    position = WEIGHT_AXIS[weight]
+    lo_key, hi_key = ("ultralight", "regular") if position < WEIGHT_AXIS["regular"] else ("regular", "black")
+    lo_id, hi_id = MASTER_IDS[lo_key], MASTER_IDS[hi_key]
+    t = (position - WEIGHT_AXIS[lo_key]) / (WEIGHT_AXIS[hi_key] - WEIGHT_AXIS[lo_key])
+    lo = master_path_data(root, lo_id, symbol_name)
+    hi = master_path_data(root, hi_id, symbol_name)
+    if len(lo) != len(hi):
+        raise ValueError(f"{symbol_name}: {lo_id} and {hi_id} path counts differ")
+    derived = [interpolate_path(a, b, t, symbol_name) for a, b in zip(lo, hi)]
+    return derived, f"{lo_id}→{hi_id} @ t={t:.3f}"
+
+
+def extract_runtime(data: bytes, symbol_name: str, weight: str = "regular") -> tuple[bytes, str, int, str]:
+    root = xml_root(data)
+    path_data, master_note = weight_path_data(root, weight, symbol_name)
+
+    bounds = [path_bounds(d) for d in path_data]
     min_x = min(item[0] for item in bounds)
     min_y = min(item[1] for item in bounds)
     max_x = max(item[2] for item in bounds)
@@ -382,8 +441,8 @@ def extract_runtime(data: bytes, symbol_name: str) -> tuple[bytes, str, int]:
     )
 
     path_lines = []
-    for path in paths:
-        path_lines.append(f'  <path d="{html.escape(path.get("d", ""), quote=True)}"/>')
+    for d in path_data:
+        path_lines.append(f'  <path d="{html.escape(d, quote=True)}"/>')
     output = (
         f'<svg xmlns="{SVG_NS}" viewBox="{view_box}" aria-hidden="true" '
         f'data-sf-symbol="{html.escape(symbol_name, quote=True)}">\n'
@@ -391,7 +450,7 @@ def extract_runtime(data: bytes, symbol_name: str) -> tuple[bytes, str, int]:
         + "\n".join(path_lines)
         + "\n </g>\n</svg>\n"
     )
-    return output.encode("utf-8"), view_box, len(paths)
+    return output.encode("utf-8"), view_box, len(path_data), master_note
 
 
 def fallback_categories(name: str) -> list[str]:
@@ -517,7 +576,27 @@ def main() -> int:
         if semantic_map_path.exists()
         else {}
     )
-    missing_semantic_targets = sorted(set(semantic_map.values()) - set(inventory))
+
+    # Runtime-only symbols: catalog entries with no Apple template in source/
+    # (hand-built runtime SVGs, e.g. the owner-supplied profile glyph). They
+    # cannot be re-extracted at a new weight, so carry their current runtime
+    # bytes and catalog entries through instead of silently dropping them.
+    runtime_only: list[dict] = []
+    if not args.fresh:
+        catalog_path = output / "catalog.json"
+        previous = (
+            json.loads(catalog_path.read_text()).get("symbols", [])
+            if catalog_path.exists()
+            else []
+        )
+        for old in previous:
+            if old["name"] in inventory:
+                continue
+            if (output / old["runtimePath"]).exists():
+                runtime_only.append(old)
+
+    known_names = set(inventory) | {old["name"] for old in runtime_only}
+    missing_semantic_targets = sorted(set(semantic_map.values()) - known_names)
     if missing_semantic_targets:
         raise ValueError(
             "semantic-map.json references missing symbols: "
@@ -535,9 +614,11 @@ def main() -> int:
             if category not in categories:
                 categories.append(category)
         primary = choose_primary(name, categories, category_order)
-        runtime, runtime_view_box, path_count = extract_runtime(asset.data, name)
+        runtime, runtime_view_box, path_count, master_note = extract_runtime(
+            asset.data, name, args.weight
+        )
         source_path = f"source/{primary}/{name}.svg"
-        runtime_path = f"runtime/regular-small/{primary}/{name}.svg"
+        runtime_path = f"runtime/{args.weight}-small/{primary}/{name}.svg"
         generated_sources[source_path] = asset.data
         generated_runtime[runtime_path] = runtime
         symbol_aliases = sorted(alias for alias, target in aliases.items() if target == name)
@@ -562,13 +643,49 @@ def main() -> int:
                 "aliases": symbol_aliases,
                 "template": meta,
                 "runtime": {
-                    "master": "Regular-S",
+                    "weight": args.weight,
+                    "master": master_note,
                     "viewBox": runtime_view_box,
                     "pathCount": path_count,
                     "rendering": "monochrome-mask",
                 },
                 "distributionStatus": "review-required",
             }
+        )
+
+    carried_names = []
+    for old in runtime_only:
+        data = (output / old["runtimePath"]).read_bytes()
+        new_runtime_path = (
+            f"runtime/{args.weight}-small/{old['primaryCategory']}/{old['name']}.svg"
+        )
+        generated_runtime[new_runtime_path] = data
+        entry = dict(old)
+        entry["runtimePath"] = new_runtime_path
+        # Hand-patched entries can miss schema keys the CSV/HTML writers expect.
+        entry.setdefault("displayName", title_from_name(old["name"]))
+        entry.setdefault("appleCategories", [])
+        entry.setdefault("keywords", [])
+        entry.setdefault("cueolaTags", [])
+        entry.setdefault(
+            "semanticNames",
+            sorted(s for s, target in semantic_map.items() if target == old["name"]),
+        )
+        entry.setdefault("availability", None)
+        entry.setdefault("sourcePath", "")
+        entry.setdefault("aliases", [])
+        entry.setdefault("distributionStatus", "review-required")
+        runtime_meta = dict(entry.get("runtime") or {})
+        runtime_meta.setdefault("weight", "regular")
+        runtime_meta["carriedThrough"] = True
+        entry["runtime"] = runtime_meta
+        entries.append(entry)
+        carried_names.append(old["name"])
+    entries.sort(key=lambda item: item["name"])
+    if carried_names:
+        print(
+            "carried runtime-only symbols (no template, bytes kept as-is): "
+            + ", ".join(carried_names)
         )
 
     output.mkdir(parents=True, exist_ok=True)
@@ -586,7 +703,7 @@ def main() -> int:
         "generator": "scripts/import_sf_symbols.py",
         "imports": imports,
         "metadataSource": apple["source"],
-        "runtimePreset": "Regular-S monochrome with 2.5% optical padding",
+        "runtimePreset": f"{args.weight.capitalize()}-S monochrome with 2.5% optical padding",
         "categoryLabels": category_labels,
         "symbolCount": len(entries),
         "aliasCount": len(aliases),

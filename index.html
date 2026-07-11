@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711d">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711e">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1b">
 <style>
 :root {
@@ -806,7 +806,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .chip:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .chip.sel{border-color:transparent;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .chip.suggested-label{position:relative;display:inline-flex;align-items:center;gap:6px;padding-right:9px}
-.chip.suggested-label::before{content:'';order:2;width:14px;height:14px;flex:0 0 auto;background:currentColor;-webkit-mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg") center/contain no-repeat;mask:url("design-system/apple/symbols/runtime/regular-small/objectsandtools/info.circle.svg") center/contain no-repeat;opacity:.55;text-transform:none}
+.chip.suggested-label::before{content:'';order:2;width:14px;height:14px;flex:0 0 auto;background:currentColor;-webkit-mask:url("design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg") center/contain no-repeat;mask:url("design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg") center/contain no-repeat;opacity:.55;text-transform:none}
 .chip.suggested-label:hover::before,.chip.suggested-label:focus-visible::before{opacity:1}
 .chip.suggested-label::after{content:attr(data-tip);position:absolute;left:0;bottom:calc(100% + 8px);width:min(300px,78vw);padding:9px 10px;border-radius:8px;background:var(--s4);border:1px solid var(--bord2);box-shadow:0 10px 24px rgba(0,0,0,.35);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.45;white-space:normal;text-align:left;letter-spacing:0;opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity .12s,transform .12s;z-index:900}
 .chip.suggested-label:hover::after,.chip.suggested-label:focus-visible::after{opacity:1;transform:translateY(0)}
@@ -1476,9 +1476,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-thread{position:relative;border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:none}
 .pb-thread.pinned{border-color:color-mix(in srgb,var(--yellow) 45%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s2))}
 /* Collapse toggle (top-right chevron) + collapsed one-line row */
-.pb-collapse-btn{position:absolute;top:10px;right:10px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;transition:background .12s,color .12s}
+/* The one collapse affordance per note — visible at rest, no hover needed. */
+.pb-collapse-btn{position:absolute;top:9px;right:9px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--s3) 55%,transparent);color:var(--text2);cursor:pointer;font-size:14px;transition:background .12s,color .12s}
 .pb-collapse-btn:hover{background:var(--s3);color:var(--text)}
-.pb-thread .pb-note-head{padding-right:30px}
+.pb-thread .pb-note-head{padding-right:38px}
 .pb-thread.collapsed{padding:0}
 .pb-collapsed-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 12px;border:0;background:transparent;color:var(--text2);cursor:pointer;text-align:left;border-radius:13px;min-width:0}
 .pb-collapsed-row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
@@ -1488,7 +1489,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-collapsed-gist{font-size:12.5px;color:var(--text3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb-collapsed-replies{font-size:10.5px;font-family:var(--mono);color:var(--text3);display:inline-flex;align-items:center;gap:3px;flex:none}
 .pb-collapse-chev{color:var(--text3);font-size:12px;flex:none}
-.pb-collapse-all{margin-left:auto}
 .pb-pin-flag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
 .pb-pin-flag .sf-symbol{font-size:11px}
 .pb-note-head{display:flex;align-items:center;gap:10px;min-width:0}
@@ -1691,7 +1691,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
   /* Mention menu + portal fit phone width */
   .pb-mention-menu{left:8px!important;right:8px;max-width:none;width:auto}
   .pb-av-grid{grid-template-columns:repeat(3,1fr);gap:8px}
-  .pb-collapse-btn{top:8px;right:8px}
+  .pb-collapse-btn{top:7px;right:7px;width:34px;height:34px}
   /* keep the step nav inside the modal on phones so it never covers the board */
   #productionNotesModal .modal{padding-bottom:14px!important;gap:10px}
   #pbNavNotes{position:static;transform:none;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:10px 0 0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
@@ -4572,7 +4572,6 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <div class="pb-filter-pop" id="pbNotesFilters" hidden></div>
           </div>
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
-          <button type="button" class="pb-chat-tool" id="pbCollapseAllBtn" onclick="pbToggleCollapseAll()" title="Collapse or expand every note"><span class="sf-symbol" data-symbol="action.collapse" aria-hidden="true"></span><span>Collapse</span></button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
           <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
@@ -4887,7 +4886,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0z"></script>
+<script src="cueola-avatar-profile.js?v=20260711a"></script>
+<script src="cueola-app.js?v=1.0.1c"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0t"></script>
 
 <script type="module">
