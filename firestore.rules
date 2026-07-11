@@ -1,56 +1,198 @@
 rules_version = '2';
 
-// Cueola Firestore security rules.
-//
-// READ THIS BEFORE TRUSTING THESE RULES.
-// This app has no user accounts: talent, operators, and collaborators all share
-// a short session code and NO Firebase Auth is loaded, so `request.auth` is
-// always null. Rules therefore cannot tell a real user apart from an attacker
-// running curl/Burp. Anyone who knows the project id can read, list, overwrite,
-// or delete any session. (Prompt-Up-The-Jam also reads this same project's
-// `sessions`, so keep session reads working.)
-//
-// The real protection for an app with no logins is Firebase App Check (enable
-// and ENFORCE it on Firestore in the console — it needs no user accounts). To
-// lock data down per-user, add Anonymous/Email Auth and gate on request.auth.
-//
-// NOTE: validate these in the Rules Playground / emulator before publishing.
-
+// Cueola deliberately has no username/password authentication. App Check is the
+// perimeter control; these rules validate paths and document shapes so an
+// accepted client cannot create arbitrary collections or unbounded structures.
+// They do not identify a person or prove an instructor role.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Shared show sessions, keyed by the short code (e.g. "2605K").
-    // Holds the rundown, prompter.text, prompter.control, prompter.talentHeartbeat,
-    // prompter.controlAck, presence, etc. Read covers both single-doc get and the
-    // dashboard's full-collection list query. Left open (no auth to gate on);
-    // App Check is what keeps non-app clients out.
+    function shortString(value, limit) {
+      return value is string && value.size() > 0 && value.size() <= limit;
+    }
+
+    function optionalShortString(data, key, limit) {
+      return !data.keys().hasAny([key]) || shortString(data[key], limit);
+    }
+
+    function validSessionId(code) {
+      // Includes ordinary session codes and the legacy pbfile_* sibling docs.
+      return code.matches('^[A-Za-z0-9_.-]{1,160}$');
+    }
+
+    function validSessionDocument(code, data) {
+      // Session docs are intentionally extensible: Cueola, Flowmingo,
+      // Outrangutan, QLab, dashboard, and Prompt-Up share this document.
+      return data is map
+        && (!data.keys().hasAny(['code']) || data.code == code)
+        && optionalShortString(data, 'showName', 200)
+        && optionalShortString(data, 'createdBy', 120)
+        && (!data.keys().hasAny(['beats']) || data.beats is list)
+        && (!data.keys().hasAny(['cues']) || data.cues is list)
+        && (!data.keys().hasAny(['participants']) || data.participants is list)
+        && (!data.keys().hasAny(['presence']) || data.presence is map)
+        && (!data.keys().hasAny(['prompter']) || data.prompter is map)
+        && (!data.keys().hasAny(['outrangutan']) || data.outrangutan is map);
+    }
+
+    function validAdminsDocument(data) {
+      return data is map
+        && data.keys().hasOnly(['list'])
+        && data.list is list
+        && data.list.size() <= 200;
+    }
+
+    function validFileDocument(code, fileId, data) {
+      return fileId.matches('^[A-Za-z0-9_.-]{1,160}$')
+        && data is map
+        && data.keys().hasOnly([
+          'kind', 'fileId', 'parentFileId', 'session', 'name', 'type', 'size',
+          'chunkCount', 'data', 'at', 'chunkIndex'
+        ])
+        && shortString(data.kind, 40)
+        && data.kind in ['pbNoteFile', 'pbNoteFileChunk']
+        && (!data.keys().hasAny(['fileId']) || data.fileId == fileId)
+        && (!data.keys().hasAny(['parentFileId']) || data.parentFileId.matches('^[A-Za-z0-9_.-]{1,160}$'))
+        && (!data.keys().hasAny(['session']) || data.session == code)
+        && optionalShortString(data, 'name', 240)
+        && optionalShortString(data, 'type', 160)
+        && (!data.keys().hasAny(['size']) || (data.size is int && data.size >= 0 && data.size <= 10485760))
+        && (!data.keys().hasAny(['chunkCount']) || (data.chunkCount is int && data.chunkCount >= 1 && data.chunkCount <= 8))
+        && (!data.keys().hasAny(['chunkIndex']) || (data.chunkIndex is int && data.chunkIndex >= 1 && data.chunkIndex < 8))
+        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 800000));
+    }
+
+    function validAccessCode(data) {
+      return data is map
+        && data.keys().hasAll(['role', 'label', 'active', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['role', 'label', 'active', 'createdBy', 'createdAt', 'revokedAt', 'revokedBy'])
+        && data.role in ['student', 'admin']
+        && shortString(data.label, 160)
+        && data.active is bool
+        && shortString(data.createdBy, 120)
+        && optionalShortString(data, 'revokedBy', 120);
+    }
+
+    function validUsername(username) {
+      return username.matches('^[a-z0-9][a-z0-9._-]{2,39}$');
+    }
+
+    function validProfile(username, data) {
+      return validUsername(username)
+        && data is map
+        && data.keys().hasAll([
+          'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
+          'codeUsed', 'createdAt', 'lastSeen'
+        ])
+        && data.keys().hasOnly([
+          'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
+          'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto'
+        ])
+        && data.username.lower() == username
+        && shortString(data.username, 40)
+        && shortString(data.fullName, 120)
+        && data.role in ['student', 'admin']
+        && data.avatar is map
+        && shortString(data.theme, 40)
+        && data.sessions is list
+        && data.sessions.size() <= 100
+        && shortString(data.codeUsed, 80)
+        && (!data.keys().hasAny(['active']) || data.active is bool)
+        && optionalShortString(data, 'renamedTo', 40)
+        && optionalShortString(data, 'mergedInto', 40);
+    }
+
+    function activeCodeForProfile(data) {
+      let path = /databases/$(database)/documents/accessCodes/$(data.codeUsed);
+      return exists(path)
+        && get(path).data.active == true
+        && get(path).data.role == data.role;
+    }
+
+    function immutableProfileIdentity() {
+      return request.resource.data.username == resource.data.username
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.codeUsed == resource.data.codeUsed
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validNote(noteId, data) {
+      return noteId.matches('^[A-Za-z0-9_.-]{1,160}$')
+        && data is map
+        && data.keys().hasOnly([
+          'id', 'text', 'by', 'role', 'tag', 'assignee', 'done', 'doneBy',
+          'doneAt', 'at', 'clientId', 'replyTo', 'editedAt', 'pinned', 'avatar',
+          'likes', 'mentions', 'checklist', 'attachments', 'replies', 'seenBy'
+        ])
+        && (!data.keys().hasAny(['id']) || data.id == noteId)
+        && optionalShortString(data, 'text', 20000)
+        && optionalShortString(data, 'by', 120)
+        && (!data.keys().hasAny(['role']) || data.role in ['student', 'instructor', 'admin'])
+        && optionalShortString(data, 'tag', 40)
+        && optionalShortString(data, 'assignee', 120)
+        && (!data.keys().hasAny(['likes']) || (data.likes is list && data.likes.size() <= 500))
+        && (!data.keys().hasAny(['mentions']) || (data.mentions is list && data.mentions.size() <= 100))
+        && (!data.keys().hasAny(['checklist']) || (data.checklist is list && data.checklist.size() <= 100))
+        && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 40))
+        && (!data.keys().hasAny(['replies']) || (data.replies is list && data.replies.size() <= 500))
+        && (!data.keys().hasAny(['seenBy']) || data.seenBy is map);
+    }
+
+    // Shared show state. App Check enforcement in Firebase Console is the only
+    // current way to distinguish Cueola clients from arbitrary callers.
     match /sessions/{code} {
-      allow read, write: if true;
+      allow get: if validSessionId(code);
+      allow list: if true;
+      allow create, update: if validSessionId(code) && validSessionDocument(code, request.resource.data);
+      allow delete: if validSessionId(code);
+
+      // Phase 1 item 3 target. Reads/writes are shape-limited now so the rules
+      // can be deployed before the client migration without reopening rules.
+      match /files/{fileId} {
+        allow get, delete: if validSessionId(code) && fileId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow list: if validSessionId(code);
+        allow create, update: if validSessionId(code) && validFileDocument(code, fileId, request.resource.data);
+      }
+
+      // Phase 4 per-note target.
+      match /notes/{noteId} {
+        allow get, delete: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow list: if validSessionId(code);
+        allow create, update: if validSessionId(code) && validNote(noteId, request.resource.data);
+      }
     }
 
-    // Admin roster — a single document at admins/global, written as { list: [...] }.
-    // Still publicly writable (no auth), but pin the shape so it can't be stuffed
-    // with arbitrary fields or an oversized roster. REAL FIX: Firebase Auth.
     match /admins/{docId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasOnly(['list'])
-                     && request.resource.data.list is list
-                     && request.resource.data.list.size() <= 200;
+      allow read: if docId == 'global';
+      allow create, update: if docId == 'global' && validAdminsDocument(request.resource.data);
+      allow delete: if false;
     }
 
-    // Account entitlement — one doc per account at accounts/{accountId}. The client
-    // READS this to learn its tier/limits (entitlement is SERVER-AUTHORITATIVE), but
-    // must NEVER write it: grants come only from the server (Cloud Functions / Admin
-    // SDK, which bypasses these rules) after a verified Apple IAP, web webhook, or edu
-    // grant. So: public read (no auth to gate on; entitlement holds no secrets — just
-    // tier/limits), writes fully denied to every client. Harden read later with App
-    // Check + Firebase Auth (gate on request.auth.uid == accountId).
+    // Entitlements are server-authoritative. Admin SDK/server writes bypass rules.
     match /accounts/{accountId} {
-      allow read: if true;
+      allow read: if accountId.matches('^[A-Za-z0-9_.-]{1,160}$');
       allow write: if false;
     }
 
-    // Lock down everything else.
+    // Phase 3 identity layer. This is consistency, not authentication: without
+    // Firebase Auth an accepted client can still mint an access-code document.
+    match /accessCodes/{code} {
+      allow get: if code.matches('^[A-Za-z0-9_-]{4,80}$');
+      allow list: if true;
+      allow create, update: if code.matches('^[A-Za-z0-9_-]{4,80}$') && validAccessCode(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /profiles/{username} {
+      allow get: if validUsername(username);
+      allow list: if true;
+      allow create: if validProfile(username, request.resource.data)
+                    && activeCodeForProfile(request.resource.data);
+      allow update: if validProfile(username, request.resource.data)
+                    && immutableProfileIdentity();
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

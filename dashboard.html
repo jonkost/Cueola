@@ -792,7 +792,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="modal-sub">This will permanently remove the session and all its cues. Anyone with the code will no longer be able to join.</div>
     <div class="confirm-name" id="delete-code-display">—</div>
     <div style="font-size:12px;color:var(--red);text-align:center">This cannot be undone.</div>
-    <button class="btn-full btn-danger" onclick="deleteSession()">Yes, Delete Session</button>
+    <button class="btn-full btn-danger" id="confirmDeleteBtn" onclick="deleteSession()">Yes, Delete Session</button>
     <button class="btn-full btn-secondary" onclick="hideModal('modal-delete')" style="margin-top:4px">Cancel</button>
   </div>
 </div>
@@ -1026,6 +1026,7 @@ function restoreSavedAdminSession() {
 // ── STATE ─────────────────────────────────────────────────────
 let adminSession = null; // { id, name, level }
 let sessions     = [];
+let legacyFileDocIdsBySession = new Map();
 let activeCode   = null;
 let createdCode  = null;
 const LEARNER_POSITIONS = ['PM','ENG Lead','Show Caller','Camera','Audio','GFX','Playback','Lighting','Stream','Stage Manager','Talent','Safety Lead'];
@@ -1178,10 +1179,20 @@ async function loadSessions() {
     const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const snap = await getDocs(collection(db(), 'sessions'));
     sessions = [];
+    legacyFileDocIdsBySession = new Map();
     snap.forEach(doc => {
       const data = doc.data() || {};
-      // Skip Planda Bear note-attachment payload docs that live alongside sessions
-      if (data.kind === 'pbNoteFile' || data.kind === 'pbNoteFileChunk') return;
+      // One-release migration fallback: hide legacy sibling attachment docs and
+      // remember them so deleting their session also removes the old payloads.
+      if (data.kind === 'pbNoteFile' || data.kind === 'pbNoteFileChunk') {
+        const code = String(data.session || '');
+        if (code) {
+          const ids = legacyFileDocIdsBySession.get(code) || [];
+          ids.push(doc.id);
+          legacyFileDocIdsBySession.set(code, ids);
+        }
+        return;
+      }
       sessions.push({ id:doc.id, ...data });
     });
     sessions.sort((a,b)=>{
@@ -1952,15 +1963,30 @@ function confirmDelete() {
 
 async function deleteSession() {
   if (!activeCode) return;
+  const code = activeCode;
+  const btn = document.getElementById('confirmDeleteBtn');
+  const originalLabel = btn?.textContent || 'Yes, Delete Session';
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting attachments…'; }
   try {
-    const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    await deleteDoc(doc(db(), 'sessions', activeCode));
+    const { collection, deleteDoc, doc, getDocs, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const fileSnap = await getDocs(collection(db(), 'sessions', code, 'files'));
+    const refs = fileSnap.docs.map(file => file.ref);
+    for (const legacyId of legacyFileDocIdsBySession.get(code) || []) refs.push(doc(db(), 'sessions', legacyId));
+    for (let offset = 0; offset < refs.length; offset += 450) {
+      const batch = writeBatch(db());
+      refs.slice(offset, offset + 450).forEach(ref => batch.delete(ref));
+      await batch.commit();
+    }
+    if (btn) btn.textContent = 'Deleting session…';
+    await deleteDoc(doc(db(), 'sessions', code));
     hideModal('modal-delete');
-    showToast(`Session ${activeCode} deleted`);
+    showToast(`Session ${code} and ${refs.length} attachment file${refs.length === 1 ? '' : 's'} deleted`);
     await loadSessions();
     activeCode = null;
   } catch(e) {
     showToast('Delete failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
   }
 }
 
@@ -2066,9 +2092,10 @@ window.addEventListener('load', ()=>{
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
+  const APP_CHECK_ENABLED = false;
   const APP_CHECK_DEBUG_LOCAL = false;
 
   const app = initializeApp({
@@ -2081,10 +2108,14 @@ window.addEventListener('load', ()=>{
   });
   function initializeCueolaAppCheck(firebaseApp) {
     const siteKey = APP_CHECK_RECAPTCHA_V3_SITE_KEY.trim();
-    window._appCheckConfigured = Boolean(siteKey);
+    window._appCheckConfigured = APP_CHECK_ENABLED && Boolean(siteKey);
     window._appCheckReady = false;
+    if (!APP_CHECK_ENABLED) {
+      console.info('Firebase App Check is staged but disabled. Enable it only after following docs/app-check-rollout.md.');
+      return null;
+    }
     if (!siteKey) {
-      console.warn('Firebase App Check is not configured. Add the reCAPTCHA v3 site key before enabling Firestore enforcement.');
+      console.error('Firebase App Check is enabled without a reCAPTCHA v3 site key. Keep Firestore enforcement off.');
       return null;
     }
     if (APP_CHECK_DEBUG_LOCAL && ['localhost','127.0.0.1','::1'].includes(location.hostname)) {
@@ -2117,6 +2148,12 @@ window.addEventListener('load', ()=>{
   } catch (err) {
     console.warn('Persistent Firestore cache unavailable — falling back to memory cache.', err);
     db = getFirestore(app);
+  }
+  const useFirestoreEmulator = ['localhost','127.0.0.1','::1'].includes(location.hostname)
+    && new URLSearchParams(location.search).get('firestoreEmulator') === '1';
+  if (useFirestoreEmulator) {
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    console.info('Firestore emulator connected · 127.0.0.1:8080');
   }
   window._db = db;
   window._doc = doc;

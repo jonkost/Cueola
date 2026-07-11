@@ -11219,11 +11219,23 @@ function pbCloseComposer() {
 }
 
 /* ── Attachments: images get compressed, documents are size-capped, and the
-   payload is chunked into `pbfile_*` docs inside the sessions collection so
-   the existing security rules cover them. ── */
+   payload is chunked into `sessions/{code}/files/*`. Legacy `pbfile_*` sibling
+   docs remain readable for one migration window. ── */
 function pbFileDocId(fileId, chunk=0) {
   const base = `pbfile_${session.code || 'local'}_${fileId}`;
   return chunk ? `${base}_c${chunk}` : base;
+}
+
+function pbStoredFileDocId(fileId, chunk=0) {
+  return chunk ? `${fileId}.chunk.${chunk}` : fileId;
+}
+
+function pbStoredFileRef(fileId, chunk=0) {
+  return window._doc(window._db, 'sessions', session.code, 'files', pbStoredFileDocId(fileId, chunk));
+}
+
+function pbLegacyFileRef(fileId, chunk=0) {
+  return window._doc(window._db, 'sessions', pbFileDocId(fileId, chunk));
 }
 
 function pbLocalFileKey(fileId) {
@@ -11365,13 +11377,15 @@ async function pbSaveNoteFile(att) {
   if (window._firebaseReady && window._setDoc && session.code && !session.isDemo && !session.isExpert) {
     const chunks = [];
     for (let i = 0; i < att.dataUrl.length; i += PB_FILE_CHUNK_CHARS) chunks.push(att.dataUrl.slice(i, i + PB_FILE_CHUNK_CHARS));
-    await window._setDoc(window._doc(window._db, 'sessions', pbFileDocId(att.fileId)), {
-      kind: 'pbNoteFile', session: session.code, name: att.name, type: att.type,
+    await window._setDoc(pbStoredFileRef(att.fileId), {
+      kind: 'pbNoteFile', fileId: att.fileId, session: session.code, name: att.name, type: att.type,
       size: att.size, chunkCount: chunks.length, data: chunks[0] || '', at: Date.now(),
     });
     for (let i = 1; i < chunks.length; i++) {
-      await window._setDoc(window._doc(window._db, 'sessions', pbFileDocId(att.fileId, i)), {
-        kind: 'pbNoteFileChunk', session: session.code, data: chunks[i],
+      const chunkDocId = pbStoredFileDocId(att.fileId, i);
+      await window._setDoc(pbStoredFileRef(att.fileId, i), {
+        kind: 'pbNoteFileChunk', fileId: chunkDocId, parentFileId: att.fileId,
+        session: session.code, chunkIndex: i, data: chunks[i],
       });
     }
     return;
@@ -11388,18 +11402,34 @@ async function pbLoadNoteFile(fileId) {
     if (local) { pbNoteFileCache.set(fileId, local); return local; }
   } catch {}
   if (!window._firebaseReady || !session.code || session.isDemo) return '';
-  try {
-    const snap = await window._getDoc(window._doc(window._db, 'sessions', pbFileDocId(fileId)));
-    if (!snap.exists()) return '';
+  const readChunks = async refForChunk => {
+    const snap = await window._getDoc(refForChunk(0));
+    if (!snap.exists()) return null;
     const d = snap.data() || {};
     let dataUrl = d.data || '';
-    for (let i = 1; i < (Number(d.chunkCount) || 1); i++) {
-      const c = await window._getDoc(window._doc(window._db, 'sessions', pbFileDocId(fileId, i)));
-      dataUrl += c.exists() ? (c.data().data || '') : '';
+    const chunkCount = Math.max(1, Math.min(8, Number(d.chunkCount) || 1));
+    for (let i = 1; i < chunkCount; i++) {
+      const chunk = await window._getDoc(refForChunk(i));
+      if (!chunk.exists()) return null;
+      dataUrl += chunk.data().data || '';
     }
-    pbNoteFileCache.set(fileId, dataUrl);
     return dataUrl;
-  } catch { return ''; }
+  };
+  try {
+    const current = await readChunks(chunk => pbStoredFileRef(fileId, chunk));
+    if (current !== null) {
+      pbNoteFileCache.set(fileId, current);
+      return current;
+    }
+  } catch {}
+  try {
+    const legacy = await readChunks(chunk => pbLegacyFileRef(fileId, chunk));
+    if (legacy !== null) {
+      pbNoteFileCache.set(fileId, legacy);
+      return legacy;
+    }
+  } catch {}
+  return '';
 }
 
 function pbDeleteNoteFiles(note) {
@@ -11407,9 +11437,10 @@ function pbDeleteNoteFiles(note) {
     pbNoteFileCache.delete(att.fileId);
     try { localStorage.removeItem(pbLocalFileKey(att.fileId)); } catch {}
     if (window._firebaseReady && window._deleteDoc && session.code && !session.isDemo && !session.isExpert) {
-      // chunkCount may be unknown here — sweep the base doc plus possible chunks
+      // chunkCount may be unknown here — sweep both current and legacy layouts.
       for (let i = 0; i < 8; i++) {
-        window._deleteDoc(window._doc(window._db, 'sessions', pbFileDocId(att.fileId, i))).catch(()=>{});
+        window._deleteDoc(pbStoredFileRef(att.fileId, i)).catch(()=>{});
+        window._deleteDoc(pbLegacyFileRef(att.fileId, i)).catch(()=>{});
       }
     }
   });

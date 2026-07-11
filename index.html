@@ -4887,15 +4887,16 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
 <script src="cueola-avatar-profile.js?v=20260711a"></script>
-<script src="cueola-app.js?v=1.0.1d"></script>
+<script src="cueola-app.js?v=1.0.1e"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0t"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, disableNetwork, enableNetwork }
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, disableNetwork, enableNetwork }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
+const APP_CHECK_ENABLED = false;
 const APP_CHECK_DEBUG_LOCAL = false;
 const firebaseConfig = {
   apiKey: "AIzaSyCr5ZuIB1kjPRxdDd2X2-FnFef-r1ZUFIA",
@@ -4908,10 +4909,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 function initializeCueolaAppCheck(firebaseApp) {
   const siteKey = APP_CHECK_RECAPTCHA_V3_SITE_KEY.trim();
-  window._appCheckConfigured = Boolean(siteKey);
+  window._appCheckConfigured = APP_CHECK_ENABLED && Boolean(siteKey);
   window._appCheckReady = false;
+  if (!APP_CHECK_ENABLED) {
+    console.info('Firebase App Check is staged but disabled. Enable it only after following docs/app-check-rollout.md.');
+    return null;
+  }
   if (!siteKey) {
-    console.warn('Firebase App Check is not configured. Add the reCAPTCHA v3 site key before enabling Firestore enforcement.');
+    console.error('Firebase App Check is enabled without a reCAPTCHA v3 site key. Keep Firestore enforcement off.');
     return null;
   }
   if (APP_CHECK_DEBUG_LOCAL && ['localhost','127.0.0.1','::1'].includes(location.hostname)) {
@@ -4943,6 +4948,12 @@ try {
 } catch (err) {
   console.warn('Persistent Firestore cache unavailable — falling back to memory cache.', err);
   db = getFirestore(app);
+}
+const useFirestoreEmulator = ['localhost','127.0.0.1','::1'].includes(location.hostname)
+  && new URLSearchParams(location.search).get('firestoreEmulator') === '1';
+if (useFirestoreEmulator) {
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  console.info('Firestore emulator connected · 127.0.0.1:8080');
 }
 window._db=db; window._doc=doc; window._setDoc=setDoc; window._getDoc=getDoc;
 window._onSnapshot=onSnapshot; window._updateDoc=updateDoc; window._deleteDoc=deleteDoc;

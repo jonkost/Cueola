@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .DS_Store
 test-media/
+firebase-debug.log
+firestore-debug.log
+firepit-log.txt
