@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711c">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711d">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1b">
 <style>
 :root {
@@ -1434,8 +1434,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-fab svg{width:24px;height:24px;display:block}
 .pb-board.composing .pb-fab{opacity:0;transform:scale(.5);pointer-events:none}
 /* Compose sheet — slides up from the bottom of the board */
-.pb-compose-sheet{position:absolute;left:0;right:0;bottom:0;z-index:26;padding:0 12px 12px;transform:translateY(110%);transition:transform .26s var(--ease);pointer-events:none}
+.pb-compose-sheet{position:absolute;left:0;right:0;bottom:0;z-index:26;padding:0 12px 12px;transform:translateY(110%);transition:transform .26s var(--ease);pointer-events:none;max-height:calc(100% - 10px);display:flex;flex-direction:column}
 .pb-board.composing .pb-compose-sheet{transform:none;pointer-events:auto}
+/* a tall composer (long note + checklist) scrolls itself — it must never force the board to scroll */
+.pb-compose-sheet .pb-compose-card{min-height:0;overflow-y:auto}
 .pb-compose-backdrop{position:absolute;inset:0;z-index:25;background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:blur(1px);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
 .pb-board.composing .pb-compose-backdrop{opacity:1;pointer-events:auto}
 .pb-compose-card{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--bord2));border-radius:18px;background:color-mix(in srgb,var(--s2) 98%,transparent)}
@@ -1541,7 +1543,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-mention{color:var(--accent);font-weight:700;background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:5px;padding:0 4px}
 .pb-mention.me{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 18%,transparent)}
 /* @mention autocomplete popover */
-.pb-mention-menu{position:fixed;z-index:120;max-width:300px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--bord2);border-radius:12px;background:var(--s2);box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.pb-mention-menu{position:fixed;z-index:460;max-width:300px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--bord2);border-radius:12px;background:var(--s2);box-shadow:0 18px 48px rgba(0,0,0,.5)}
 .pb-mention-menu[hidden]{display:none}
 .pb-mention-item{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;color:var(--text2);border-radius:8px;padding:7px 9px;font-size:13px;font-weight:700;cursor:pointer;text-align:left}
 .pb-mention-item.sel,.pb-mention-item:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text)}
@@ -3609,6 +3611,9 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <div class="notif-center entry-notif" id="notifCenter">
         <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="openProductionNotesShortcut(event)" title="Production Notes" aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
       </div>
+      <div class="entry-notif">
+        <button class="tbtn tbtn-ghost icon-only" id="entryProfileBtn" onclick="openUserPortal()" title="Your profile" aria-label="Your profile"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span></button>
+      </div>
       <div class="entry-theme-center">
         <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
         <div class="entry-theme-panel" id="entryThemePanel" hidden>
@@ -4882,7 +4887,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0y"></script>
+<script src="cueola-app.js?v=1.0.0z"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0t"></script>
 
 <script type="module">

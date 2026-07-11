@@ -97,6 +97,7 @@
     "action.pin": "pin.fill",
     "info.bug": "ladybug.fill",
     "media.playpause": "playpause.circle.fill",
-    "content.question": "questionmark.circle.fill"
+    "content.question": "questionmark.circle.fill",
+    "action.profile": "person.crop.circle.fill"
   }
 }

@@ -4039,6 +4039,32 @@
    "distributionStatus": "review-required"
   },
   {
+   "name": "person.crop.circle.fill",
+   "displayName": "Person Crop Circle Fill",
+   "primaryCategory": "human",
+   "appleCategories": [
+    "human"
+   ],
+   "keywords": [
+    "profile",
+    "user",
+    "account",
+    "person",
+    "avatar"
+   ],
+   "cueolaTags": [
+    "action:profile"
+   ],
+   "semanticNames": [
+    "action.profile"
+   ],
+   "availability": "2019",
+   "directionalCandidate": false,
+   "sourcePath": "source/human/person.crop.circle.fill.svg",
+   "runtimePath": "runtime/regular-small/human/person.crop.circle.fill.svg",
+   "sha256": "37c93d72c1dc8e995476b130e6acbed2985b272394d86923461a6f5f56cef4a6"
+  },
+  {
    "name": "person.fill.questionmark",
    "displayName": "Person Fill Questionmark",
    "primaryCategory": "human",

@@ -11114,8 +11114,21 @@ function openProductionNotesShortcut(e) {
   showModal('modal-prepro-join');
 }
 
+// The board is a clip container — its children (threads) scroll, it never does.
+// Browsers still scroll overflow:hidden ancestors on focus/scrollIntoView, which
+// shoved the toolbar out of view; pin it so any such scroll self-heals.
+let _pbBoardScrollPinned = false;
+function pbPinBoardScroll() {
+  if (_pbBoardScrollPinned) return;
+  const board = document.getElementById('pbBoard');
+  if (!board) return;
+  _pbBoardScrollPinned = true;
+  board.addEventListener('scroll', () => { if (board.scrollTop || board.scrollLeft) { board.scrollTop = 0; board.scrollLeft = 0; } });
+}
+
 function openProductionNotes() {
   activePaperworkItemId = 'production-notes';
+  pbPinBoardScroll();
   hideModal('paperworkHubModal');
   pbEditingNoteId = null;
   pbReplyTargetId = null;
@@ -11150,7 +11163,7 @@ function pbOpenComposer() {
   board.classList.add('composing');
   const input = document.getElementById('pbNoteInput');
   if (input) {
-    requestAnimationFrame(() => { pbAutosizeNoteInput(input); input.focus(); });
+    requestAnimationFrame(() => { pbAutosizeNoteInput(input); input.focus({ preventScroll: true }); });
   }
 }
 
@@ -11734,16 +11747,16 @@ function pbToggleChecklistBuilder() {
   pbChecklistOpen = !pbChecklistOpen;
   if (pbChecklistOpen && !pbComposerChecklist.length) pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false });
   pbRenderComposerChecklist();
-  if (pbChecklistOpen) setTimeout(() => document.querySelector('.pb-cl-input')?.focus(), 0);
+  if (pbChecklistOpen) setTimeout(() => document.querySelector('.pb-cl-input')?.focus({ preventScroll: true }), 0);
 }
 
 function pbNewChecklistId() { return `ci_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
-function pbChecklistAdd() { pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false }); pbRenderComposerChecklist(); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[rows.length - 1]?.focus(); }, 0); }
+function pbChecklistAdd() { pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false }); pbRenderComposerChecklist(); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[rows.length - 1]?.focus({ preventScroll: true }); }, 0); }
 function pbChecklistEdit(i, val) { if (pbComposerChecklist[i]) pbComposerChecklist[i].text = val; }
 function pbChecklistRemove(i) { pbComposerChecklist.splice(i, 1); if (!pbComposerChecklist.length) pbChecklistOpen = false; pbRenderComposerChecklist(); }
 function pbChecklistKeydown(e, i) {
   if (e.key === 'Enter') { e.preventDefault(); if ((pbComposerChecklist[i]?.text || '').trim()) pbChecklistAdd(); }
-  else if (e.key === 'Backspace' && !pbComposerChecklist[i]?.text && pbComposerChecklist.length > 1) { e.preventDefault(); pbChecklistRemove(i); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[Math.max(0, i - 1)]?.focus(); }, 0); }
+  else if (e.key === 'Backspace' && !pbComposerChecklist[i]?.text && pbComposerChecklist.length > 1) { e.preventDefault(); pbChecklistRemove(i); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[Math.max(0, i - 1)]?.focus({ preventScroll: true }); }, 0); }
 }
 function pbResetComposerChecklist() { pbComposerChecklist = []; pbChecklistOpen = false; pbRenderComposerChecklist(); }
 
