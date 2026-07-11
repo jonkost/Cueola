@@ -821,8 +821,18 @@ function setCloudSyncState(state='synced', detail='') {
 }
 
 function reportCloudWriteFailure(context='Cloud save', err=null) {
+  // An unreachable backend is no longer a failure: plain writes queue in the
+  // persistent cache and the transactional writers (rundown batches, notes)
+  // keep their own retry queues. Show the quiet reconnecting state instead of
+  // an error dot + toast; the next server snapshot clears it.
+  const code = err?.code || '';
+  if (code === 'unavailable' || code === 'deadline-exceeded' || !navigator.onLine) {
+    if (!_syncReconnState) logShow('sync', context + ' queued — cloud unreachable' + (code ? ' (' + code + ')' : ''));
+    setSyncReconnecting(true);
+    return;
+  }
   console.warn(`${context} failed.`, err);
-  logShow('sync', context + ' failed — local draft kept' + (err?.code ? ' (' + err.code + ')' : ''));
+  logShow('sync', context + ' failed — local draft kept' + (code ? ' (' + code + ')' : ''));
   setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
   const now = Date.now();
   if (now - _lastCloudErrorToastAt > 8000) {
@@ -3089,9 +3099,18 @@ function setupFirestore() {
       }).catch(err => reportCloudWriteFailure('Session cloud setup', err));
     }
 
-    firestoreUnsub = window._onSnapshot(ref, snap => {
+    // includeMetadataChanges: with the persistent cache, coming back online can
+    // deliver a metadata-only transition (fromCache→server, ack of a queued
+    // write) with no data change — without it the RECONNECTING chip never
+    // clears after an idle offline stretch.
+    firestoreUnsub = window._onSnapshot(ref, { includeMetadataChanges: true }, snap => {
       if (!snap.exists()) return;
-      setCloudSyncState(rundownPendingBatches.length ? 'saving' : 'synced', rundownPendingBatches.length ? 'Cloud sync saving changes...' : `Cloud sync connected · ${session.code}`);
+      // Only a server-confirmed snapshot may claim "connected"; a cached one
+      // while offline keeps the reconnecting state (set by noteSnapshotArrived
+      // below). Queued/in-flight local writes show as saving.
+      const snapMeta = snap.metadata || {};
+      if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Cloud sync saving changes...');
+      else if (!snapMeta.fromCache) setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
       const d = snap.data();
       // Session rescue — handle a kick or a code move before adopting any other state.
       if (d.kicked && d.kicked[presenceId]) {

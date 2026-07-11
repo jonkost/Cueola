@@ -2066,7 +2066,7 @@ window.addEventListener('load', ()=>{
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
   const APP_CHECK_DEBUG_LOCAL = false;
@@ -2106,7 +2106,18 @@ window.addEventListener('load', ()=>{
   }
   initializeCueolaAppCheck(app);
 
-  const db = getFirestore(app);
+  // Same persistent multi-tab cache as the main app, so a dashboard tab open
+  // beside the rundown/output tabs shares one IndexedDB store instead of
+  // fighting over persistence ownership.
+  let db;
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch (err) {
+    console.warn('Persistent Firestore cache unavailable — falling back to memory cache.', err);
+    db = getFirestore(app);
+  }
   window._db = db;
   window._doc = doc;
   window._setDoc = setDoc;

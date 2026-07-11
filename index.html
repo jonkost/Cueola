@@ -4887,13 +4887,13 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
 <script src="cueola-avatar-profile.js?v=20260711a"></script>
-<script src="cueola-app.js?v=1.0.1c"></script>
+<script src="cueola-app.js?v=1.0.1d"></script>
 <script src="outrangutan/outrangutan.js?v=1.0.0t"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction }
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, disableNetwork, enableNetwork }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
 const APP_CHECK_DEBUG_LOCAL = false;
@@ -4932,12 +4932,26 @@ function initializeCueolaAppCheck(firebaseApp) {
   }
 }
 initializeCueolaAppCheck(app);
-const db  = getFirestore(app);
+// Persistent offline cache, multi-tab so the rundown, Outrangutan output, and
+// dashboard tabs share one IndexedDB store. Offline writes queue and survive a
+// reload; snapshots serve from cache while the venue Wi-Fi is down.
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch (err) {
+  console.warn('Persistent Firestore cache unavailable — falling back to memory cache.', err);
+  db = getFirestore(app);
+}
 window._db=db; window._doc=doc; window._setDoc=setDoc; window._getDoc=getDoc;
 window._onSnapshot=onSnapshot; window._updateDoc=updateDoc; window._deleteDoc=deleteDoc;
 window._serverTimestamp=serverTimestamp; window._deleteField=deleteField;
 window._arrayUnion=arrayUnion; window._arrayRemove=arrayRemove;
 window._runTransaction=runTransaction;
+// Rehearsal drill hooks: simulate venue-Wi-Fi loss from the console.
+window._disableNetwork=() => disableNetwork(db);
+window._enableNetwork=() => enableNetwork(db);
 window._firebaseReady=true;
 window.dispatchEvent(new Event('firebaseReady'));
 </script>
