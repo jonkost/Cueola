@@ -96,6 +96,7 @@
     "nature.tree": "tree",
     "action.pin": "pin.fill",
     "info.bug": "ladybug.fill",
-    "media.playpause": "playpause.circle.fill"
+    "media.playpause": "playpause.circle.fill",
+    "content.question": "questionmark.circle.fill"
   }
 }

@@ -4616,6 +4616,31 @@
    "distributionStatus": "review-required"
   },
   {
+   "name": "questionmark.circle.fill",
+   "displayName": "Questionmark Circle Fill",
+   "primaryCategory": "communication",
+   "appleCategories": [
+    "communication"
+   ],
+   "keywords": [
+    "question",
+    "ask",
+    "help",
+    "query"
+   ],
+   "cueolaTags": [
+    "content:question"
+   ],
+   "semanticNames": [
+    "content.question"
+   ],
+   "availability": "2019",
+   "directionalCandidate": false,
+   "sourcePath": "source/communication/questionmark.circle.fill.svg",
+   "runtimePath": "runtime/regular-small/communication/questionmark.circle.fill.svg",
+   "sha256": "ef79d6875570f0606684cdcf7d253e27bafe049a853066890951d135969e5a15"
+  },
+  {
    "name": "questionmark.folder",
    "displayName": "Questionmark Folder",
    "primaryCategory": "objectsandtools",

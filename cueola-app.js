@@ -10644,6 +10644,7 @@ let pbNotesFilterTag = 'all';    // active tag filter chip
 let pbNotesSearch = '';          // live search query
 let pbNotesNewestFirst = true;   // thread sort direction
 let pbComposerTag = 'general';   // tag selected in the composer
+const pbCollapsed = new Set();    // note ids whose thread is collapsed to a one-line summary
 const pbNoteFileCache = new Map(); // fileId -> dataURL
 
 const PB_NOTE_TAGS = {
@@ -10653,6 +10654,7 @@ const PB_NOTE_TAGS = {
   lighting: { label:'Lighting', symbol:'department.lighting' },
   content:  { label:'Content',  symbol:'content.script' },
   gfx:      { label:'GFX',      symbol:'department.graphics' },
+  question: { label:'Question', symbol:'content.question' },
   todo:     { label:'To-Do',    symbol:'content.checklist' },
 };
 
@@ -10678,6 +10680,7 @@ function pbNormalizeNoteAttachment(a) {
     type: String(a?.type || ''),
     size: Number(a?.size) || 0,
     isImage: Boolean(a?.isImage),
+    isAudio: Boolean(a?.isAudio) || /^audio\//i.test(String(a?.type || '')),
     w: Number(a?.w) || 0,
     h: Number(a?.h) || 0,
   };
@@ -10701,13 +10704,29 @@ function normalizePlandaBearNote(n) {
     replyTo: typeof n?.replyTo === 'string' ? n.replyTo : '',
     editedAt: Number(n?.editedAt) || 0,
     pinned: Boolean(n?.pinned),
+    avatar: pbNormalizeAvatar(n?.avatar) || { type: 'initials' },
     likes: Array.isArray(n?.likes) ? Array.from(new Set(n.likes.filter(x => typeof x === 'string'))) : [],
+    mentions: Array.isArray(n?.mentions) ? n.mentions.filter(x => typeof x === 'string').map(s => s.slice(0, 60)).slice(0, 30) : [],
+    checklist: Array.isArray(n?.checklist) ? n.checklist.map(pbNormalizeChecklistItem).filter(Boolean).slice(0, 40) : [],
     attachments: Array.isArray(n?.attachments) ? n.attachments.map(pbNormalizeNoteAttachment).filter(a => a.fileId) : [],
   };
 }
 
+// A single To-Do checklist item inside a note (a post can carry several).
+function pbNormalizeChecklistItem(it) {
+  const text = String(it?.text || '').trim().slice(0, 300);
+  if (!text) return null;
+  return {
+    id: String(it?.id || '').replace(/[^\w.-]/g, '') || `ci_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    text,
+    done: Boolean(it?.done),
+    doneBy: String(it?.doneBy || '').slice(0, 60),
+    doneAt: Number(it?.doneAt) || 0,
+  };
+}
+
 function pbNoteHasContent(n) {
-  return Boolean(n && (n.text || (n.attachments && n.attachments.length)));
+  return Boolean(n && (n.text || (n.attachments && n.attachments.length) || (n.checklist && n.checklist.length)));
 }
 
 function localPlandaBearNotes() {
@@ -10834,6 +10853,133 @@ function pbInitials(name) {
   return (parts.map(p => p[0] || '').join('').toUpperCase()) || '?';
 }
 
+/* ── User portal: pick your avatar (initials · brand animal · uploaded photo) ──
+   Stored per device in cueola_profile and stamped onto each note/reply you post,
+   so the whole crew sees your chosen avatar (live and in history). ── */
+const PB_AVATAR_ANIMALS = {
+  plandabear:  { label: 'Planda Bear', src: 'assets/Brand/Planda_Bear_icon.svg', bg: '#1b1b1b' },
+  flowmingo:   { label: 'Flowmingo',   src: 'assets/Brand/Flowmingo_Icon.svg',   bg: '#3a0f1e' },
+  outrangutan: { label: 'Outrangutan', src: 'assets/Brand/Outrangutan_icon.svg', bg: '#1a1817' },
+  cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#123a2a' },
+};
+const PB_PROFILE_KEY = 'cueola_profile';
+
+function pbGetProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PB_PROFILE_KEY) || 'null');
+    return pbNormalizeAvatar(p && p.avatar) ? { avatar: pbNormalizeAvatar(p.avatar) } : { avatar: { type: 'initials' } };
+  } catch { return { avatar: { type: 'initials' } }; }
+}
+function pbSetProfileAvatar(avatar) {
+  const a = pbNormalizeAvatar(avatar) || { type: 'initials' };
+  try { localStorage.setItem(PB_PROFILE_KEY, JSON.stringify({ avatar: a })); } catch {}
+  return a;
+}
+
+// Coerce any avatar blob to a safe shape: an approved animal key, a data:image URL, else initials.
+function pbNormalizeAvatar(a) {
+  if (!a || typeof a !== 'object') return null;
+  if (a.type === 'animal' && PB_AVATAR_ANIMALS[a.value]) return { type: 'animal', value: a.value };
+  if (a.type === 'image' && typeof a.value === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(a.value) && a.value.length < 60000) return { type: 'image', value: a.value };
+  if (a.type === 'initials') return { type: 'initials' };
+  return null;
+}
+
+// The avatar chip's inner content for a note/reply author (falls back to initials).
+function pbAvatarInner(note) {
+  const a = pbNormalizeAvatar(note && note.avatar);
+  if (a && a.type === 'animal') { const an = PB_AVATAR_ANIMALS[a.value]; return `<img class="pb-av-img" src="${an.src}" alt="" draggable="false">`; }
+  if (a && a.type === 'image') return `<img class="pb-av-img" src="${esc(a.value)}" alt="" draggable="false">`;
+  return esc(pbInitials(note && note.by));
+}
+// Background for the avatar chip: brand bg for animals, transparent for photos, else the hashed color.
+function pbAvatarBg(note) {
+  const a = pbNormalizeAvatar(note && note.avatar);
+  if (a && a.type === 'animal') return PB_AVATAR_ANIMALS[a.value].bg;
+  if (a && a.type === 'image') return 'transparent';
+  return pbAvatarColor(note);
+}
+// My own avatar object for stamping onto a new note/reply.
+function pbMyAvatar() { return pbGetProfile().avatar; }
+
+/* ── The portal modal ── */
+let _pbPortalDraft = null;   // avatar being previewed in the open portal
+function openUserPortal() {
+  _pbPortalDraft = pbNormalizeAvatar(pbMyAvatar()) || { type: 'initials' };
+  pbRenderUserPortal();
+  showModal('userPortalModal');
+}
+function pbPortalPick(type, value) {
+  _pbPortalDraft = pbNormalizeAvatar({ type, value }) || { type: 'initials' };
+  pbRenderUserPortal();
+}
+function pbPortalUpload(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { toast('Pick an image file.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      // square-crop + downscale to a tiny avatar so it stays small enough to sync on every note
+      const S = 96, c = document.createElement('canvas'); c.width = S; c.height = S;
+      const ctx = c.getContext('2d');
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
+      const dataUrl = c.toDataURL('image/jpeg', 0.72);
+      if (dataUrl.length > 60000) { toast('That image is too large after compression — try a simpler one.'); return; }
+      _pbPortalDraft = { type: 'image', value: dataUrl };
+      pbRenderUserPortal();
+    };
+    img.onerror = () => toast('Could not read that image.');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+function pbRenderUserPortal() {
+  const slot = document.getElementById('userPortalBody');
+  if (!slot) return;
+  const me = { by: session.userName || 'You', clientId: CLIENT_ID, avatar: _pbPortalDraft };
+  const sel = t => (_pbPortalDraft && _pbPortalDraft.type === t);
+  const animalBtns = Object.entries(PB_AVATAR_ANIMALS).map(([k, v]) =>
+    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'animal' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('animal','${k}')" title="${esc(v.label)}">
+      <span class="pb-av-chip" style="background:${v.bg}"><img class="pb-av-img" src="${v.src}" alt=""></span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
+    </button>`).join('');
+  slot.innerHTML = `
+    <div class="pb-portal-preview">
+      <span class="pb-note-avatar pb-av-lg" style="background:${pbAvatarBg(me)}">${pbAvatarInner(me)}</span>
+      <div class="pb-portal-who"><b>${esc(session.userName || 'You')}</b><span>This is how you appear on the notes board.</span></div>
+    </div>
+    <div class="pb-portal-label">Choose your look</div>
+    <div class="pb-av-grid">
+      <button type="button" class="pb-av-choice${sel('initials') ? ' sel' : ''}" onclick="pbPortalPick('initials')">
+        <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${esc(pbInitials(session.userName))}</span><span class="pb-av-choice-lbl">Initials</span>
+      </button>
+      ${animalBtns}
+      <label class="pb-av-choice pb-av-upload${sel('image') ? ' sel' : ''}">
+        <span class="pb-av-chip">${sel('image') ? `<img class="pb-av-img" src="${esc(_pbPortalDraft.value)}" alt="">` : sfIcon('action.attach')}</span>
+        <span class="pb-av-choice-lbl">${sel('image') ? 'Change photo' : 'Upload'}</span>
+        <input type="file" accept="image/*" hidden onchange="pbPortalUpload(this)">
+      </label>
+    </div>`;
+}
+function pbSaveUserPortal() {
+  pbSetProfileAvatar(_pbPortalDraft || { type: 'initials' });
+  hideModal('userPortalModal');
+  toast('Profile updated.');
+  // Reflect the new avatar immediately on the board + the header chip.
+  if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes();
+  pbRenderPortalChip();
+}
+// The small "you" chip in the notes toolbar that opens the portal.
+function pbRenderPortalChip() {
+  const chip = document.getElementById('pbPortalChip');
+  if (!chip) return;
+  const me = { by: session.userName || 'You', clientId: CLIENT_ID, avatar: pbMyAvatar() };
+  chip.innerHTML = `<span class="pb-note-avatar pb-av-sm" style="background:${pbAvatarBg(me)}">${pbAvatarInner(me)}</span>`;
+}
+
 /* ── Composer: draft, autosize, keyboard ── */
 function saveProductionNoteDraft() {
   const input = document.getElementById('pbNoteInput');
@@ -10890,7 +11036,7 @@ function pbRenderRichText(raw) {
     }
   }
   closeList();
-  return html;
+  return pbApplyMentionChips(html);
 }
 
 // Plain-text fallback for the jsPDF package export (no HTML there).
@@ -10952,11 +11098,20 @@ async function pbExportDraftPDF() {
 }
 
 function pbNoteInputKeydown(e) {
+  if (pbMentionKeydown(e)) return;   // mention autocomplete owns keys while open
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key === 'Enter') { e.preventDefault(); publishPlandaBearNote(); return; }
   if (mod && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); pbFmtWrap('**', '**'); return; }
   if (mod && (e.key === 'i' || e.key === 'I')) { e.preventDefault(); pbFmtWrap('*', '*'); return; }
   // plain Enter inserts a new line (default textarea behavior)
+}
+
+// Front-page shortcut: jump straight to the notes board. Notes are session-scoped,
+// so with no session we route through the same join prompt the paperwork hub uses.
+function openProductionNotesShortcut(e) {
+  e?.stopPropagation?.();
+  if (session.code || session.isDemo || session.isExpert) { openProductionNotes(); return; }
+  showModal('modal-prepro-join');
 }
 
 function openProductionNotes() {
@@ -10975,6 +11130,7 @@ function openProductionNotes() {
   if (search) search.value = '';
   pbRenderAttachTray('main');
   pbRenderComposerTags();
+  pbRenderPortalChip();
   pbUpdateBellBtn();
   renderProductionNotesGuide();
   renderPaperworkNav('production-notes');
@@ -10990,6 +11146,7 @@ function pbOpenComposer() {
   const board = document.getElementById('pbBoard');
   if (!board) return;
   pbCloseFilterMenu();
+  pbRenderComposerChecklist();
   board.classList.add('composing');
   const input = document.getElementById('pbNoteInput');
   if (input) {
@@ -11068,7 +11225,8 @@ async function pbPrepareNoteAttachment(file) {
     };
   }
   const dataUrl = await pbReadFileAsDataURL(file);
-  return { fileId, name: file.name || 'file', type: file.type || '', size: file.size || 0, isImage: false, w: 0, h: 0, dataUrl };
+  const isAudio = /^audio\//i.test(file.type || '') || /\.(mp3|wav|m4a|aac|ogg|opus|weba)$/i.test(file.name || '');
+  return { fileId, name: file.name || 'file', type: file.type || '', size: file.size || 0, isImage: false, isAudio, w: 0, h: 0, dataUrl };
 }
 
 function pbAttachListFor(scope) {
@@ -11122,7 +11280,7 @@ function pbComposerDrop(e) {
 function pbAttachChipsHTML(list, scope) {
   return list.map(a => `
     <div class="pb-attach-chip">
-      ${a.isImage ? `<img src="${a.dataUrl}" alt="">` : `<span class="pb-file-ico">${sfIcon(pbFileSymbol(a))}</span>`}
+      ${a.isImage ? `<img src="${a.dataUrl}" alt="">` : `<span class="pb-file-ico">${sfIcon(a.isAudio ? 'department.audio' : pbFileSymbol(a))}</span>`}
       <span class="pb-attach-meta"><span class="pb-attach-name">${esc(a.name)}</span><span class="pb-attach-size">${esc(pbFileSize(a.size))}</span></span>
       <button type="button" class="pb-attach-x" onclick="pbRemovePendingAttachment('${a.fileId}','${scope}')" title="Remove attachment">×</button>
     </div>`).join('');
@@ -11389,6 +11547,8 @@ function pbRenderNoteFilters(threads) {
 
 /* ── Composer tag picker ── */
 let pbComposerAssignee = '';   // who a new To-Do is assigned to
+let pbComposerChecklist = [];  // [{id,text,done:false}] checklist items staged for a new post
+let pbChecklistOpen = false;   // is the composer's checklist builder revealed
 
 // Names we can assign a To-Do to: everyone present + everyone on the roster.
 function pbAssigneeOptions() {
@@ -11398,6 +11558,124 @@ function pbAssigneeOptions() {
   const me = (session.userName || '').trim();
   if (me) names.add(me);
   return Array.from(names).filter(Boolean);
+}
+
+/* ── @mentions ──────────────────────────────────────────────────────────────
+   Type "@" in a note or reply → an autocomplete of everyone who has entered the
+   session. Picking one inserts @Name; on post it's stored in the note's
+   `mentions` and the mentioned person gets a notification and a badge. ── */
+const _escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Everyone who has entered this session (present + roster + me) — the mention pool.
+function pbMentionNames() { return pbAssigneeOptions(); }
+
+// Which known names are @-mentioned in this text (longest-first so "Sam Lee" wins over "Sam").
+function pbExtractMentions(text) {
+  const t = String(text || '');
+  const found = [];
+  for (const name of pbMentionNames().sort((a, b) => b.length - a.length)) {
+    const re = new RegExp('(^|[^\\w@])@' + _escRe(name) + '(?![\\w])', 'i');
+    if (re.test(t)) found.push(name);
+  }
+  return Array.from(new Set(found));
+}
+
+// Wrap @Name tokens (known session names) in a highlight chip. Runs on already-
+// escaped HTML, matching the same-escaped name, longest-first to avoid partials.
+function pbApplyMentionChips(html) {
+  const names = pbMentionNames().sort((a, b) => b.length - a.length);
+  const me = (session.userName || '').trim().toLowerCase();
+  for (const name of names) {
+    const e = esc(name);
+    const re = new RegExp('@' + _escRe(e) + '(?![\\w])', 'g');
+    const mineCls = name.trim().toLowerCase() === me ? ' me' : '';
+    html = html.replace(re, `<span class="pb-mention${mineCls}">@${e}</span>`);
+  }
+  return html;
+}
+
+// ── autocomplete popover, shared by the main composer + reply inputs ──
+let _pbMention = null;   // { el, field, start, query, items, sel }
+
+function pbMentionMenuEl() {
+  let el = document.getElementById('pbMentionMenu');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pbMentionMenu';
+    el.className = 'pb-mention-menu';
+    el.hidden = true;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function pbMentionClose() {
+  _pbMention = null;
+  const el = document.getElementById('pbMentionMenu');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+}
+
+// Detect an "@query" token immediately before the caret and open/refresh the menu.
+function pbMentionOnInput(el, field) {
+  if (!el) return;
+  const caret = el.selectionStart;
+  const before = el.value.slice(0, caret);
+  const m = before.match(/(^|\s)@([^\s@]{0,40})$/);
+  if (!m) { pbMentionClose(); return; }
+  const query = m[2];
+  const start = caret - query.length - 1;   // index of '@'
+  const q = query.toLowerCase();
+  const items = pbMentionNames()
+    .filter(n => !q || n.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const as = a.toLowerCase().startsWith(q) ? 0 : 1, bs = b.toLowerCase().startsWith(q) ? 0 : 1;
+      return as - bs || a.localeCompare(b);
+    })
+    .slice(0, 6);
+  if (!items.length) { pbMentionClose(); return; }
+  _pbMention = { el, field, start, query, items, sel: 0 };
+  pbMentionRender();
+}
+
+function pbMentionRender() {
+  if (!_pbMention) return;
+  const menu = pbMentionMenuEl();
+  menu.innerHTML = _pbMention.items.map((n, i) =>
+    `<button type="button" class="pb-mention-item${i === _pbMention.sel ? ' sel' : ''}" data-i="${i}" onmousedown="event.preventDefault();pbMentionPick(${i})">
+      <span class="pb-mention-av">${esc(pbInitials(n))}</span><span class="pb-mention-name">${esc(n)}</span>
+    </button>`).join('');
+  menu.hidden = false;
+  // Position just below the textarea, left-aligned to it.
+  const r = _pbMention.el.getBoundingClientRect();
+  menu.style.left = Math.round(r.left) + 'px';
+  menu.style.top = Math.round(Math.min(r.bottom + 4, window.innerHeight - 12)) + 'px';
+  menu.style.minWidth = Math.round(Math.min(r.width, 280)) + 'px';
+}
+
+function pbMentionPick(i) {
+  if (!_pbMention) return;
+  const { el, start, query } = _pbMention;
+  const name = _pbMention.items[i];
+  if (name == null) return;
+  const caret = start + 1 + query.length;
+  const insert = '@' + name + ' ';
+  el.value = el.value.slice(0, start) + insert + el.value.slice(caret);
+  const pos = start + insert.length;
+  el.focus();
+  el.setSelectionRange(pos, pos);
+  pbMentionClose();
+  pbAutosizeNoteInput(el);
+  if (el.id === 'pbNoteInput') saveProductionNoteDraft();
+}
+
+// Called first from the textareas' keydown; returns true if it consumed the key.
+function pbMentionKeydown(e) {
+  if (!_pbMention) return false;
+  if (e.key === 'ArrowDown') { e.preventDefault(); _pbMention.sel = (_pbMention.sel + 1) % _pbMention.items.length; pbMentionRender(); return true; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); _pbMention.sel = (_pbMention.sel - 1 + _pbMention.items.length) % _pbMention.items.length; pbMentionRender(); return true; }
+  if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pbMentionPick(_pbMention.sel); return true; }
+  if (e.key === 'Escape') { e.preventDefault(); pbMentionClose(); return true; }
+  return false;
 }
 
 function pbRenderComposerTags() {
@@ -11423,8 +11701,51 @@ function pbSetComposerAssignee(v) {
 function pbSelectComposerTag(tag) {
   pbComposerTag = PB_NOTE_TAGS[tag] ? tag : 'general';
   if (pbComposerTag !== 'todo') pbComposerAssignee = '';
+  // Picking To-Do reveals the multi-item checklist builder with a first row ready.
+  if (pbComposerTag === 'todo' && !pbChecklistOpen && !pbComposerChecklist.length) {
+    pbChecklistOpen = true;
+    pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false });
+  }
   pbRenderComposerTags();
+  pbRenderComposerChecklist();
 }
+
+/* ── Composer checklist builder (multiple to-do items in one post) ── */
+function pbRenderComposerChecklist() {
+  const slot = document.getElementById('pbChecklistBuilder');
+  if (!slot) return;
+  if (!pbChecklistOpen && !pbComposerChecklist.length) {
+    slot.innerHTML = `<button type="button" class="pb-checklist-add-toggle" onclick="pbToggleChecklistBuilder()">${sfIcon('content.checklist')} Add a checklist</button>`;
+    return;
+  }
+  const rows = pbComposerChecklist.map((it, i) => `
+    <div class="pb-cl-row">
+      <span class="pb-cl-box" aria-hidden="true"></span>
+      <input class="pb-cl-input" type="text" value="${esc(it.text)}" placeholder="To-do item ${i + 1}" oninput="pbChecklistEdit(${i}, this.value)" onkeydown="pbChecklistKeydown(event, ${i})" aria-label="Checklist item ${i + 1}">
+      <button type="button" class="pb-cl-del" onclick="pbChecklistRemove(${i})" title="Remove item" aria-label="Remove item">${sfIcon('action.close')}</button>
+    </div>`).join('');
+  slot.innerHTML = `
+    <div class="pb-checklist-head"><span>${sfIcon('content.checklist')} Checklist</span><span class="pb-cl-count">${pbComposerChecklist.length} item${pbComposerChecklist.length === 1 ? '' : 's'}</span></div>
+    <div class="pb-cl-rows">${rows}</div>
+    <button type="button" class="pb-cl-add" onclick="pbChecklistAdd()">${sfIcon('action.add')} Add item</button>`;
+}
+
+function pbToggleChecklistBuilder() {
+  pbChecklistOpen = !pbChecklistOpen;
+  if (pbChecklistOpen && !pbComposerChecklist.length) pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false });
+  pbRenderComposerChecklist();
+  if (pbChecklistOpen) setTimeout(() => document.querySelector('.pb-cl-input')?.focus(), 0);
+}
+
+function pbNewChecklistId() { return `ci_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
+function pbChecklistAdd() { pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false }); pbRenderComposerChecklist(); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[rows.length - 1]?.focus(); }, 0); }
+function pbChecklistEdit(i, val) { if (pbComposerChecklist[i]) pbComposerChecklist[i].text = val; }
+function pbChecklistRemove(i) { pbComposerChecklist.splice(i, 1); if (!pbComposerChecklist.length) pbChecklistOpen = false; pbRenderComposerChecklist(); }
+function pbChecklistKeydown(e, i) {
+  if (e.key === 'Enter') { e.preventDefault(); if ((pbComposerChecklist[i]?.text || '').trim()) pbChecklistAdd(); }
+  else if (e.key === 'Backspace' && !pbComposerChecklist[i]?.text && pbComposerChecklist.length > 1) { e.preventDefault(); pbChecklistRemove(i); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[Math.max(0, i - 1)]?.focus(); }, 0); }
+}
+function pbResetComposerChecklist() { pbComposerChecklist = []; pbChecklistOpen = false; pbRenderComposerChecklist(); }
 
 /* ── Replies: an inline composer inside the thread card ── */
 function pbOpenReply(id) {
@@ -11446,6 +11767,7 @@ function pbCancelReply() {
 }
 
 function pbReplyKeydown(e, rootId) {
+  if (pbMentionKeydown(e)) return;   // mention autocomplete owns keys while open
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); pbPostReply(rootId); }
   else if (e.key === 'Escape') pbCancelReply();
 }
@@ -11461,6 +11783,8 @@ async function pbPostReply(rootId) {
   const reply = normalizePlandaBearNote({
     text, by: preProActor(), role: pbNoteActorRole(),
     at: Date.now(), clientId: CLIENT_ID, replyTo: rootId,
+    avatar: pbMyAvatar(),
+    mentions: pbExtractMentions(text),
     attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
   });
   pbReplyTargetId = null;
@@ -11547,7 +11871,8 @@ async function publishPlandaBearNote() {
   const input = document.getElementById('pbNoteInput');
   const text = input?.value.trim() || '';
   const atts = pbPendingAttachments.slice();
-  if (!text && !atts.length) { input?.focus(); toast('Type a note or attach a file first.'); return; }
+  const hasChecklist = pbComposerChecklist.some(it => (it.text || '').trim());
+  if (!text && !atts.length && !hasChecklist) { input?.focus(); toast('Type a note, add a checklist, or attach a file first.'); return; }
   const sendBtn = document.getElementById('pbNoteSendBtn');
   if (sendBtn) sendBtn.disabled = true;
   try {
@@ -11562,6 +11887,9 @@ async function publishPlandaBearNote() {
       assignee: pbComposerTag === 'todo' ? pbComposerAssignee : '',
       at: Date.now(),
       clientId: CLIENT_ID,
+      avatar: pbMyAvatar(),
+      mentions: pbExtractMentions(text),
+      checklist: pbComposerChecklist.slice(),
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
     });
     await writePlandaBearNotes([...plandaBearNotes, note], pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
@@ -11570,6 +11898,7 @@ async function publishPlandaBearNote() {
     pbRenderAttachTray('main');
     pbComposerTag = 'general';
     pbComposerAssignee = '';
+    pbResetComposerChecklist();
     pbRenderComposerTags();
     try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
     pbCloseComposer();
@@ -11624,11 +11953,80 @@ function pbAttachmentHTML(att) {
   if (att.isImage) {
     return `<div class="pb-msg-img" data-pb-img="${att.fileId}" onclick="pbOpenLightbox('${att.fileId}')" title="Click to enlarge"><div class="pb-img-loading">Loading image…</div></div>`;
   }
+  if (att.isAudio) {
+    const argName = JSON.stringify(att.name || 'audio').replace(/"/g, '&quot;');
+    return `<div class="pb-msg-audio" data-pb-audio="${att.fileId}">
+      <div class="pb-audio-head"><span class="pb-file-ico">${sfIcon('department.audio')}</span><span class="pb-file-name">${esc(att.name)}</span>
+        <button type="button" class="pb-audio-og" onclick="pbSendAudioToOutrangutan('${att.fileId}',${argName})" title="Download & send to the Outrangutan SFX board">${sfIcon('action.forward')} SFX</button>
+        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" title="Download">${sfIcon('action.download')}</button></div>
+      <div class="pb-audio-slot"><div class="pb-audio-loading">Loading audio…</div></div>
+    </div>`;
+  }
   return `<button type="button" class="pb-file-chip" onclick="pbDownloadNoteFile('${att.fileId}')" title="Download this file">
     <span class="pb-file-ico">${sfIcon(pbFileSymbol(att))}</span>
     <span class="pb-file-meta"><span class="pb-file-name">${esc(att.name)}</span><span class="pb-file-size">${esc(pbFileSize(att.size))}</span></span>
     <span class="pb-file-dl">${sfIcon('action.download')}</span>
   </button>`;
+}
+
+function pbDataURLtoBlob(dataUrl) {
+  const [head, b64] = String(dataUrl || '').split(',');
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+  const bin = atob(b64 || '');
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// Send a note's audio to Outrangutan's SFX board. Per the safe hand-off design:
+// download a local copy to the device first, then — if Outrangutan is already
+// open in this tab — drop it straight onto the SFX board as a pad. Writing into
+// Outrangutan's saved show while it's closed would risk clobbering it, so when
+// it's not open we stop at the download and tell the operator how to import it.
+async function pbSendAudioToOutrangutan(fileId, name) {
+  const fname = name || 'audio';
+  let dataUrl;
+  try { dataUrl = await pbLoadNoteFile(fileId); } catch { dataUrl = null; }
+  if (!dataUrl || !/^data:audio\//i.test(dataUrl)) { toast('That audio isn’t ready yet — try again in a moment.'); return; }
+  let blob;
+  try { blob = pbDataURLtoBlob(dataUrl); } catch { toast('Could not read that audio file.'); return; }
+  // 1) Always download a local copy — the safe, universal hand-off path.
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch {}
+  // 2) If Outrangutan is open right here, also add it as a pad immediately.
+  const OG = window.Outrangutan;
+  if (OG && typeof OG.isReady === 'function' && OG.isReady() && typeof OG.addAudioPad === 'function') {
+    try {
+      const file = new File([blob], fname, { type: blob.type || 'audio/mpeg' });
+      const res = await OG.addAudioPad(file);
+      if (res && res.ok) { toast(`Downloaded “${fname}” and added it to Outrangutan’s SFX board.`); return; }
+    } catch {}
+  }
+  toast(`Downloaded “${fname}”. Open Outrangutan → SFX Board and add it to a pad.`);
+}
+
+// Audio attachments hydrate into a native <audio> player once their payload loads.
+function pbHydrateNoteAudio(scope) {
+  const slots = Array.from((scope || document).querySelectorAll('[data-pb-audio]'));
+  slots.forEach(el => {
+    if (el._pbAudioLoaded) return;
+    el._pbAudioLoaded = true;
+    const fileId = el.getAttribute('data-pb-audio');
+    pbLoadNoteFile(fileId).then(dataUrl => {
+      if (!el.isConnected) return;
+      const slot = el.querySelector('.pb-audio-slot');
+      if (!slot) return;
+      if (!dataUrl || !/^data:audio\//i.test(dataUrl)) { slot.innerHTML = `<div class="pb-img-missing">${sfIcon('state.warning')} Audio unavailable</div>`; return; }
+      const audio = document.createElement('audio');
+      audio.controls = true; audio.preload = 'metadata'; audio.src = dataUrl; audio.className = 'pb-audio-el';
+      slot.innerHTML = '';
+      slot.appendChild(audio);
+    });
+  });
 }
 
 function pbTodoCheckHTML(note) {
@@ -11661,7 +12059,7 @@ function pbNoteHeadHTML(note) {
         : (note.assignee ? `<span class="pb-note-assign" title="Assigned to">→ ${esc(note.assignee)}</span>` : ''))
     : '';
   return `<header class="pb-note-head">
-    <span class="pb-note-avatar" style="background:${pbAvatarColor(note)}">${esc(pbInitials(note.by))}</span>
+    <span class="pb-note-avatar" style="background:${pbAvatarBg(note)}">${pbAvatarInner(note)}</span>
     <div class="pb-note-who">
       <div class="pb-note-byline">
         <span class="pb-note-author">${esc(note.by)}</span>
@@ -11674,14 +12072,52 @@ function pbNoteHeadHTML(note) {
   </header>`;
 }
 
+// Multi-item checklist inside a post: each item is individually checkable, with a
+// progress bar. Anyone who can manage the note (author or instructor) can tick items.
+function pbChecklistHTML(note) {
+  const items = note.checklist || [];
+  if (!items.length) return '';
+  const done = items.filter(it => it.done).length;
+  const canManage = pbCanManageNote(note);
+  const pct = Math.round((done / items.length) * 100);
+  const rows = items.map(it => {
+    const box = canManage
+      ? `<button type="button" class="pb-clitem-check${it.done ? ' done' : ''}" onclick="pbToggleChecklistItem('${note.id}','${it.id}')" title="${it.done ? 'Reopen' : 'Mark done'}" aria-pressed="${it.done}">${it.done ? '✓' : ''}</button>`
+      : `<span class="pb-clitem-check static${it.done ? ' done' : ''}">${it.done ? '✓' : ''}</span>`;
+    const meta = it.done && it.doneBy ? `<span class="pb-clitem-by">${esc(it.doneBy)}</span>` : '';
+    return `<li class="pb-clitem${it.done ? ' done' : ''}">${box}<span class="pb-clitem-text">${esc(it.text)}</span>${meta}</li>`;
+  }).join('');
+  return `<div class="pb-checklist${done === items.length ? ' complete' : ''}">
+    <div class="pb-checklist-bar"><div class="pb-checklist-fill" style="width:${pct}%"></div></div>
+    <div class="pb-checklist-count">${done}/${items.length} done</div>
+    <ul class="pb-checklist-items">${rows}</ul>
+  </div>`;
+}
+
 function pbNoteBodyHTML(note) {
   if (note.id === pbEditingNoteId) return `<div class="pb-note-body">${pbEditBoxHTML(note)}</div>`;
   const check = note.tag === 'todo' ? pbTodoCheckHTML(note) : '';
   const text = note.text ? `<div class="pb-note-text">${pbRenderRichText(note.text)}</div>` : '';
+  const checklist = pbChecklistHTML(note);
   const atts = (note.attachments || []).length
     ? `<div class="pb-note-attachments">${note.attachments.map(pbAttachmentHTML).join('')}</div>`
     : '';
-  return `<div class="pb-note-body">${check}<div class="pb-note-main">${text}${atts}</div></div>`;
+  return `<div class="pb-note-body">${check}<div class="pb-note-main">${text}${checklist}${atts}</div></div>`;
+}
+
+async function pbToggleChecklistItem(noteId, itemId) {
+  await loadPlandaBearNotes();
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  if (!note) return;
+  if (!pbCanManageNote(note)) { toast('Only instructors or the author can check off items.'); return; }
+  const next = plandaBearNotes.map(n => {
+    if (n.id !== noteId) return n;
+    return { ...n, checklist: (n.checklist || []).map(it => it.id === itemId
+      ? { ...it, done: !it.done, doneBy: !it.done ? preProActor() : '', doneAt: !it.done ? Date.now() : 0 }
+      : it) };
+  });
+  await writePlandaBearNotes(next, 'Checklist Updated');
+  renderPlandaBearNotes();
 }
 
 function pbLikeButtonHTML(note) {
@@ -11706,7 +12142,7 @@ function pbNoteFootHTML(note, replyCount) {
 
 function pbReplyHTML(reply) {
   const mine = reply.clientId && reply.clientId === CLIENT_ID;
-  const avatar = `<span class="pb-reply-avatar" style="background:${pbAvatarColor(reply)}">${esc(pbInitials(reply.by))}</span>`;
+  const avatar = `<span class="pb-reply-avatar" style="background:${pbAvatarBg(reply)}">${pbAvatarInner(reply)}</span>`;
   if (reply.id === pbEditingNoteId) {
     return `<div class="pb-reply" data-note-id="${reply.id}">${avatar}${pbEditBoxHTML(reply)}</div>`;
   }
@@ -11740,28 +12176,74 @@ function pbReplyComposerHTML(root) {
   return `<div class="pb-reply-compose">
     <div class="pb-attach-tray" id="pbReplyAttachTray" hidden></div>
     <div class="pb-reply-compose-row">
-      <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}…" oninput="pbAutosizeNoteInput(this)" onkeydown="pbReplyKeydown(event,'${root.id}')" onpaste="pbNotePaste(event,'reply')"></textarea>
+      <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}… — @ to mention" oninput="pbAutosizeNoteInput(this);pbMentionOnInput(this,'reply')" onkeydown="pbReplyKeydown(event,'${root.id}')" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'reply')"></textarea>
       <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" title="Attach to reply" aria-label="Attach to reply">${sfIcon('action.attach')}</button>
-      <input type="file" id="pbReplyFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'reply')">
+      <input type="file" id="pbReplyFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'reply')">
       <button type="button" class="pb-post-btn small" onclick="pbPostReply('${root.id}')"><span>Reply</span>${sfIcon('action.forward')}</button>
       <button type="button" class="pb-note-act" onclick="pbCancelReply()">Cancel</button>
     </div>
   </div>`;
 }
 
+// One-line gist of a note for the collapsed state: first line of text, else a file/photo hint.
+function pbNoteSummary(note) {
+  const firstLine = String(note.text || '').split('\n').map(s => s.trim()).find(Boolean) || '';
+  const plain = pbStripMarkdown(firstLine).replace(/\s+/g, ' ').trim();
+  if (plain) return plain.length > 120 ? plain.slice(0, 118) + '…' : plain;
+  const cl = note.checklist || [];
+  if (cl.length) return `Checklist · ${cl.filter(i => i.done).length}/${cl.length} done`;
+  const atts = note.attachments || [];
+  if (atts.length) { const img = atts.filter(a => a.isImage).length; return img ? `${img} photo${img === 1 ? '' : 's'}` : `${atts.length} file${atts.length === 1 ? '' : 's'}`; }
+  return 'Empty note';
+}
+
 function pbThreadHTML(t) {
   const root = t.root;
+  const collapsed = pbCollapsed.has(root.id);
   const repliesOpen = t.replies.length || pbReplyTargetId === root.id;
   const classes = ['pb-thread'];
   if (root.pinned) classes.push('pinned');
   if (root.tag === 'todo' && root.done) classes.push('done');
+  if (collapsed) classes.push('collapsed');
+  const replyCount = t.replies.length;
+  const collapseBtn = `<button type="button" class="pb-collapse-btn" onclick="pbToggleCollapse('${root.id}')" title="Collapse note" aria-expanded="true" aria-label="Collapse note">${sfIcon('action.expand')}</button>`;
+  if (collapsed) {
+    return `<article class="${classes.join(' ')}" data-note-id="${root.id}">
+      ${root.pinned ? `<div class="pb-pin-flag">${sfIcon('action.pin')} Pinned</div>` : ''}
+      <button type="button" class="pb-collapsed-row" onclick="pbToggleCollapse('${root.id}')" aria-label="Expand note">
+        <span class="pb-note-avatar sm" style="background:${pbAvatarBg(root)}">${pbAvatarInner(root)}</span>
+        <span class="pb-collapsed-author">${esc(root.by)}</span>
+        ${root.tag !== 'general' ? `<span class="pb-note-tag t-${root.tag}${root.tag === 'todo' && root.done ? ' done' : ''}">${sfIcon((PB_NOTE_TAGS[root.tag] || PB_NOTE_TAGS.general).symbol)}</span>` : ''}
+        <span class="pb-collapsed-gist">${esc(pbNoteSummary(root))}</span>
+        ${replyCount ? `<span class="pb-collapsed-replies">${sfIcon('content.note')} ${replyCount}</span>` : ''}
+        <span class="pb-collapse-chev">${sfIcon('action.collapse')}</span>
+      </button>
+    </article>`;
+  }
   return `<article class="${classes.join(' ')}" data-note-id="${root.id}">
     ${root.pinned ? `<div class="pb-pin-flag">${sfIcon('action.pin')} Pinned</div>` : ''}
+    ${collapseBtn}
     ${pbNoteHeadHTML(root)}
     ${pbNoteBodyHTML(root)}
     ${pbNoteFootHTML(root, t.replies.length)}
     ${repliesOpen ? `<div class="pb-replies">${t.replies.map(pbReplyHTML).join('')}${pbReplyComposerHTML(root)}</div>` : ''}
   </article>`;
+}
+
+function pbToggleCollapse(id) {
+  if (pbCollapsed.has(id)) pbCollapsed.delete(id); else pbCollapsed.add(id);
+  renderPlandaBearNotes();
+}
+
+// Bulk collapse/expand from the toolbar — toggles based on whether anything is open.
+function pbToggleCollapseAll() {
+  const threads = pbBuildThreads();
+  const anyOpen = threads.some(t => !pbCollapsed.has(t.root.id));
+  if (anyOpen) threads.forEach(t => pbCollapsed.add(t.root.id));
+  else pbCollapsed.clear();
+  const btn = document.getElementById('pbCollapseAllBtn');
+  if (btn) btn.querySelector('span:last-child').textContent = anyOpen ? 'Expand' : 'Collapse';
+  renderPlandaBearNotes();
 }
 
 function renderPlandaBearNotes(slotId='pbNotesThread') {
@@ -11815,6 +12297,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   }
 
   pbHydrateNoteImages(slot);
+  pbHydrateNoteAudio(slot);
   annotatePlandaBearNoteCards();
   pbApplyPendingFlash();
 }
@@ -12015,10 +12498,18 @@ function pbApplyPendingFlash() {
   pbFlashClearT = setTimeout(() => { pbPendingFlashId = null; }, 1900);
 }
 
+// Does this note @-mention me?
+function pbMentionsMe(note) {
+  const me = (session.userName || '').trim().toLowerCase();
+  if (!me) return false;
+  return (note.mentions || []).some(n => String(n).trim().toLowerCase() === me);
+}
+
 function pbNoteNotifyText(note) {
   const who = note.by || 'Someone';
   const snippet = pbStripMarkdown(note.text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const tail = snippet ? `: “${snippet}”` : '';
+  if (pbMentionsMe(note)) return `${who} mentioned you${tail}`;
   const repliesToMine = note.replyTo && plandaBearNotes.some(p => p.id === note.replyTo && pbIsMine(p));
   if (repliesToMine) return `${who} replied to your note${tail}`;
   if (note.replyTo) return `${who} replied in Production Notes${tail}`;
@@ -12029,8 +12520,10 @@ function pbNoteNotifyText(note) {
 
 function pbFireNoteNotifications(fresh) {
   if (!fresh.length || pbNotesBoardOpen()) return;
+  // A direct @mention or a reply to my note leads the notification — it's the most personal.
+  const mentionsMe = fresh.find(pbMentionsMe);
   const replyToYou = fresh.find(n => n.replyTo && plandaBearNotes.some(p => p.id === n.replyTo && pbIsMine(p)));
-  const lead = replyToYou || fresh[fresh.length - 1];
+  const lead = mentionsMe || replyToYou || fresh[fresh.length - 1];
   const extra = fresh.length - 1;
   const msg = extra > 0 ? `${pbNoteNotifyText(lead)}  ·  +${extra} more` : pbNoteNotifyText(lead);
   pbShowNotifyToast(msg);
@@ -13653,13 +14146,21 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
 }
 
+// Production Notes are a working discussion board, not deliverable paperwork —
+// so they're EXCLUDED from the exported package unless the user opts in here.
+let pbPackageIncludeNotes = false;
 function showPreProPackagePreview() {
   loadPlandaBearNotes().then(() => {
     showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export PDF Package', 'exportPreProPackagePDF()', null);
   });
 }
+function pbTogglePackageNotes(on) {
+  pbPackageIncludeNotes = !!on;
+  const body = document.getElementById('paperPreviewBody');
+  if (body) body.innerHTML = preProPackageHTML();
+}
 
-function preProPackageHTML() {
+function preProPackageHTML(forExport=false) {
   const data = loadPreProData();
   const safety = data.safety || {};
   const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
@@ -13668,7 +14169,17 @@ function preProPackageHTML() {
     ${i > 0 ? '<div class="paper-page-break"></div>' : ''}
     <section>${callSheetPreviewHTML(sheet)}</section>
   `).join('');
+  const noteCount = plandaBearNotes.length;
+  const notesToggle = forExport ? '' : `
+    <label class="pb-pkg-optin no-print">
+      <input type="checkbox" ${pbPackageIncludeNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
+      <span>Include Production Notes in this package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
+    </label>`;
+  const notesSection = pbPackageIncludeNotes
+    ? `<div class="paper-page-break"></div><section>${productionNotesThreadHTML()}</section>`
+    : '';
   return `
+    ${notesToggle}
     ${callSheetSections}
     <div class="paper-page-break"></div>
     <section>${productionScheduleHTML(schedule)}</section>
@@ -13691,8 +14202,7 @@ function preProPackageHTML() {
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
     </section>
-    <div class="paper-page-break"></div>
-    <section>${productionNotesThreadHTML()}</section>
+    ${notesSection}
   `;
 }
 
@@ -14092,7 +14602,7 @@ async function exportPreProPackagePDF() {
     const dataForName = loadPreProData();
     const cleanPreviewName = (dataForName.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
     try {
-      await exportPaperHTMLAsPDF(preProPackageHTML(), `${cleanPreviewName}-plandabear-package.pdf`);
+      await exportPaperHTMLAsPDF(preProPackageHTML(true), `${cleanPreviewName}-plandabear-package.pdf`);
       toast('Planda Bear package PDF downloaded.');
       return;
     } catch (htmlErr) {

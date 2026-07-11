@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711a">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711c">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1b">
 <style>
 :root {
@@ -1382,7 +1382,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── Production Notes — shared discussion board ── */
 #productionNotesModal .modal{height:92vh;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;gap:14px}
 .pb-board{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--s1) 72%,transparent);overflow:hidden}
-.pb-board-toolbar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s2) 70%,transparent);flex-wrap:wrap}
+.pb-board-toolbar{position:relative;z-index:40;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s2) 70%,transparent);flex-wrap:wrap}
 .pb-note-count{font-size:10px;font-family:var(--mono);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);border-radius:999px;padding:4px 8px;white-space:nowrap}
 .pb-board-search{flex:1;min-width:130px;max-width:260px;background:var(--s2);border:1px solid var(--bord2);border-radius:9px;color:var(--text);font-family:var(--sans);font-size:12px;padding:6px 10px;outline:0}
 .pb-board-search:focus{border-color:color-mix(in srgb,var(--accent) 60%,var(--bord2))}
@@ -1404,11 +1404,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .t-lighting{--tagc:var(--yellow)}
 .t-content{--tagc:var(--purple)}
 .t-gfx{--tagc:#e05fa9}
+.t-question{--tagc:#4aa3ff}
 .t-todo{--tagc:var(--orange)}
 /* Filter button + popover */
 .pb-filter-wrap{position:relative;display:inline-flex}
 .pb-chat-tool .pb-tool-count{font-family:var(--mono);font-size:9px;font-weight:800;margin-left:4px;color:var(--accent)}
-.pb-filter-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:30;width:210px;display:flex;flex-direction:column;gap:3px;padding:7px;border:1px solid var(--bord2);border-radius:12px;background:color-mix(in srgb,var(--s2) 97%,transparent);box-shadow:0 16px 44px rgba(0,0,0,.4)}
+.pb-filter-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;width:210px;display:flex;flex-direction:column;gap:3px;padding:7px;border:1px solid var(--bord2);border-radius:12px;background:var(--s2);box-shadow:0 16px 44px rgba(0,0,0,.5)}
 .pb-filter-pop[hidden]{display:none}
 .pb-filter-chip{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text2);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:left;width:100%}
 .pb-filter-chip .pb-filter-dot{width:9px;height:9px;border-radius:50%;background:var(--tagc,var(--accent));flex:none}
@@ -1470,12 +1471,47 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-attach-x{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;border:0;background:var(--s4);color:var(--text2);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .pb-attach-x:hover{background:var(--red);color:#fff}
 .pb-board-threads{position:relative;flex:1;min-height:0;overflow-y:auto;padding:14px 14px 88px;display:flex;flex-direction:column;gap:12px}
-.pb-thread{border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:none}
+.pb-thread{position:relative;border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:none}
 .pb-thread.pinned{border-color:color-mix(in srgb,var(--yellow) 45%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s2))}
+/* Collapse toggle (top-right chevron) + collapsed one-line row */
+.pb-collapse-btn{position:absolute;top:10px;right:10px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;transition:background .12s,color .12s}
+.pb-collapse-btn:hover{background:var(--s3);color:var(--text)}
+.pb-thread .pb-note-head{padding-right:30px}
+.pb-thread.collapsed{padding:0}
+.pb-collapsed-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 12px;border:0;background:transparent;color:var(--text2);cursor:pointer;text-align:left;border-radius:13px;min-width:0}
+.pb-collapsed-row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.pb-note-avatar.sm{width:24px;height:24px;font-size:10px}
+.pb-collapsed-author{font-size:12.5px;font-weight:800;color:var(--text);flex:none;white-space:nowrap}
+.pb-collapsed-row .pb-note-tag{padding:2px 5px}
+.pb-collapsed-gist{font-size:12.5px;color:var(--text3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb-collapsed-replies{font-size:10.5px;font-family:var(--mono);color:var(--text3);display:inline-flex;align-items:center;gap:3px;flex:none}
+.pb-collapse-chev{color:var(--text3);font-size:12px;flex:none}
+.pb-collapse-all{margin-left:auto}
 .pb-pin-flag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
 .pb-pin-flag .sf-symbol{font-size:11px}
 .pb-note-head{display:flex;align-items:center;gap:10px;min-width:0}
-.pb-note-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);flex:none;user-select:none}
+.pb-note-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);flex:none;user-select:none;overflow:hidden}
+.pb-av-img{width:100%;height:100%;object-fit:cover;display:block}
+.pb-note-avatar.pb-av-lg{width:56px;height:56px;font-size:19px}
+.pb-note-avatar.pb-av-sm{width:26px;height:26px;font-size:10px}
+/* Portal chip in the toolbar */
+.pb-portal-chip{display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;cursor:pointer;border-radius:50%;flex:none}
+.pb-portal-chip:hover{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
+/* Portal modal */
+.pb-portal-body{display:flex;flex-direction:column;gap:14px;margin:6px 0 14px}
+.pb-portal-preview{display:flex;align-items:center;gap:13px}
+.pb-portal-who{display:flex;flex-direction:column;gap:2px}
+.pb-portal-who b{font-size:15px;color:var(--text)}
+.pb-portal-who span{font-size:12px;color:var(--text3)}
+.pb-portal-label{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+.pb-av-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pb-av-choice{display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border:1.5px solid var(--border);border-radius:13px;background:var(--s2);color:var(--text2);cursor:pointer;font-size:11.5px;font-weight:700}
+.pb-av-choice:hover{border-color:var(--bord2);color:var(--text)}
+.pb-av-choice.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--s2));color:var(--text)}
+.pb-av-chip{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:15px;font-weight:800;color:#fff;background:var(--s4)}
+.pb-av-chip .sf-symbol{color:var(--text2);font-size:18px}
+.pb-av-choice-lbl{white-space:nowrap}
+.pb-av-upload{position:relative}
 .pb-note-who{display:flex;flex-direction:column;gap:1px;min-width:0}
 .pb-note-byline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .pb-note-author{font-size:13.5px;font-weight:800;color:var(--text)}
@@ -1494,10 +1530,53 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-note-text em{font-style:italic}
 .pb-note-text del{opacity:.65}
 .pb-note-text code{font-family:var(--mono);font-size:.9em;background:var(--s3);border:1px solid var(--bord2);padding:1px 5px;border-radius:5px}
-.pb-note-text .pb-rt-list{margin:5px 0;padding-left:22px;display:flex;flex-direction:column;gap:3px}
-.pb-note-text li{line-height:1.5}
+.pb-note-text .pb-rt-list{margin:6px 0;padding-left:24px}
+.pb-note-text ul.pb-rt-list{list-style:disc outside}
+.pb-note-text ol.pb-rt-list{list-style:decimal outside}
+.pb-note-text li{line-height:1.5;margin:3px 0;padding-left:3px}
+.pb-note-text li::marker{color:var(--tagc,var(--accent));font-weight:700}
 .pb-note-text>div:empty{display:none}
 .pb-thread.done>.pb-note-body .pb-note-text{text-decoration:line-through;color:var(--text2)}
+/* @mention chips inside note text */
+.pb-mention{color:var(--accent);font-weight:700;background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:5px;padding:0 4px}
+.pb-mention.me{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 18%,transparent)}
+/* @mention autocomplete popover */
+.pb-mention-menu{position:fixed;z-index:120;max-width:300px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--bord2);border-radius:12px;background:var(--s2);box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.pb-mention-menu[hidden]{display:none}
+.pb-mention-item{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;color:var(--text2);border-radius:8px;padding:7px 9px;font-size:13px;font-weight:700;cursor:pointer;text-align:left}
+.pb-mention-item.sel,.pb-mention-item:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text)}
+.pb-mention-av{width:24px;height:24px;border-radius:50%;background:var(--s4);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--text);flex:none}
+.pb-mention-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Composer checklist builder */
+.pb-checklist-builder{display:flex;flex-direction:column;gap:8px}
+.pb-checklist-add-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--text2);background:transparent;border:1px dashed var(--bord2);border-radius:9px;padding:7px 11px;cursor:pointer}
+.pb-checklist-add-toggle:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,var(--bord2))}
+.pb-checklist-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--text3)}
+.pb-checklist-head .sf-symbol{color:var(--orange)}
+.pb-cl-count{font-family:var(--mono);color:var(--text3)}
+.pb-cl-rows{display:flex;flex-direction:column;gap:6px}
+.pb-cl-row{display:flex;align-items:center;gap:8px}
+.pb-cl-box{width:18px;height:18px;flex:none;border-radius:6px;border:2px solid color-mix(in srgb,var(--orange) 55%,var(--bord2))}
+.pb-cl-input{flex:1;min-width:0;background:var(--s3);border:1px solid var(--bord2);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px}
+.pb-cl-input:focus{outline:none;border-color:var(--accent)}
+.pb-cl-del{width:28px;height:28px;flex:none;border:0;background:transparent;color:var(--text3);border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pb-cl-del:hover{background:var(--s3);color:var(--red)}
+.pb-cl-add{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--accent);background:transparent;border:0;cursor:pointer;padding:2px 0}
+/* Checklist display on posted notes */
+.pb-checklist{margin-top:8px;border:1px solid var(--border);border-radius:11px;padding:10px 12px;background:color-mix(in srgb,var(--s1) 60%,transparent);display:flex;flex-direction:column;gap:8px}
+.pb-checklist-bar{height:5px;border-radius:999px;background:var(--s3);overflow:hidden}
+.pb-checklist-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--orange),var(--green));transition:width .25s ease}
+.pb-checklist.complete .pb-checklist-fill{background:var(--green)}
+.pb-checklist-count{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+.pb-checklist-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pb-clitem{display:flex;align-items:center;gap:9px;min-width:0}
+.pb-clitem-check{width:20px;height:20px;flex:none;border-radius:6px;border:2px solid color-mix(in srgb,var(--orange) 60%,var(--bord2));background:transparent;color:transparent;font-size:12px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+button.pb-clitem-check:hover{border-color:var(--green)}
+.pb-clitem-check.done{background:var(--green);border-color:var(--green);color:#04130d}
+.pb-clitem-check.static{cursor:default}
+.pb-clitem-text{font-size:13px;color:var(--text);min-width:0;word-break:break-word}
+.pb-clitem.done .pb-clitem-text{text-decoration:line-through;color:var(--text3)}
+.pb-clitem-by{font-size:9px;font-family:var(--mono);color:var(--text3);margin-left:auto;flex:none}
 .pb-todo-check{width:21px;height:21px;flex:none;margin-top:2px;border-radius:7px;border:2px solid color-mix(in srgb,var(--orange) 60%,var(--bord2));background:transparent;color:transparent;font-size:13px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 button.pb-todo-check:hover{border-color:var(--green)}
 .pb-todo-check.done{background:var(--green);border-color:var(--green);color:var(--bg)}
@@ -1508,6 +1587,19 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-img-loading,.pb-img-missing{display:flex;align-items:center;justify-content:center;width:220px;height:120px;font-size:11px;font-family:var(--mono);color:var(--text3)}
 .pb-file-chip{display:flex;align-items:center;gap:10px;border:1px solid var(--bord2);background:var(--s2);border-radius:10px;padding:8px 12px;cursor:pointer;max-width:100%;text-align:left}
 .pb-file-chip:hover{border-color:var(--accent)}
+/* inline audio attachment player */
+.pb-msg-audio{border:1px solid var(--bord2);background:var(--s2);border-radius:10px;padding:9px 11px;max-width:min(360px,100%);display:flex;flex-direction:column;gap:7px}
+.pb-audio-head{display:flex;align-items:center;gap:8px;min-width:0}
+.pb-audio-head .pb-file-ico{color:var(--green);flex:none}
+.pb-audio-head .pb-file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:700;color:var(--text)}
+.pb-audio-dl{border:0;background:transparent;color:var(--text3);cursor:pointer;padding:3px;border-radius:6px;flex:none;display:flex}
+.pb-audio-dl:hover{color:var(--accent);background:var(--s3)}
+.pb-audio-og{display:inline-flex;align-items:center;gap:4px;flex:none;border:1px solid color-mix(in srgb,#ff6a00 45%,var(--bord2));background:color-mix(in srgb,#ff6a00 12%,transparent);color:#ff8a3d;border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.03em;cursor:pointer}
+.pb-audio-og .sf-symbol{font-size:11px}
+.pb-audio-og:hover{background:color-mix(in srgb,#ff6a00 22%,transparent);color:#ffa566}
+.pb-audio-slot{min-height:34px}
+.pb-audio-el{width:100%;height:34px;display:block}
+.pb-audio-loading{font-size:11px;font-family:var(--mono);color:var(--text3);padding:8px 0}
 .pb-file-ico{font-size:20px;flex:none}
 .pb-file-meta{display:flex;flex-direction:column;gap:1px;min-width:0}
 .pb-file-name{font-size:12.5px;font-weight:700;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
@@ -1579,6 +1671,25 @@ button.pb-todo-check:hover{border-color:var(--green)}
   /* tag picker scrolls sideways on phones instead of stacking */
   .pb-tag-picker{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .pb-tag-picker::-webkit-scrollbar{display:none}
+  /* Students live in the notes on phones — give it room and keep the composer usable */
+  .pb-builder-modal .paperwork-modal-head .modal-sub{font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .pb-board-toolbar{gap:7px;padding:9px 11px}
+  .pb-board-search{order:3;flex:1 0 100%}
+  .pb-thread{padding:12px 13px}
+  .pb-note-text{font-size:14px}
+  /* Composer becomes a proper bottom sheet that never clips the Post button */
+  .pb-compose-sheet{padding:0 8px 8px;max-height:88vh}
+  .pb-compose-card{max-height:86vh;overflow-y:auto;padding:15px;-webkit-overflow-scrolling:touch}
+  .pb-compose-card textarea#pbNoteInput{min-height:96px}
+  .pb-compose-actions{position:sticky;bottom:0;background:var(--s2);padding-top:8px;margin:0 -3px -3px;z-index:1}
+  .pb-post-btn{min-height:44px}
+  /* Bigger tap targets for checkable items */
+  .pb-clitem-check,.pb-todo-check{width:24px;height:24px}
+  .pb-cl-input{padding:10px 12px}
+  /* Mention menu + portal fit phone width */
+  .pb-mention-menu{left:8px!important;right:8px;max-width:none;width:auto}
+  .pb-av-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  .pb-collapse-btn{top:8px;right:8px}
   /* keep the step nav inside the modal on phones so it never covers the board */
   #productionNotesModal .modal{padding-bottom:14px!important;gap:10px}
   #pbNavNotes{position:static;transform:none;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:10px 0 0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
@@ -1588,6 +1699,8 @@ button.pb-todo-check:hover{border-color:var(--green)}
 }
 .paper-preview .paper-note-body{font-size:13px;line-height:1.6;white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:6px;background:#fafafa}
 .paper-preview{background:#fff;color:#111;border-radius:8px;padding:28px;font-family:Helvetica,Arial,sans-serif;max-height:58vh;overflow:auto;letter-spacing:0;font-kerning:normal;text-rendering:geometricPrecision}
+.paper-preview .pb-pkg-optin{display:flex;align-items:center;gap:9px;margin:0 0 18px;padding:11px 14px;border:1px solid #d4d9e6;border-radius:9px;background:#f4f6fb;font-family:-apple-system,system-ui,sans-serif;font-size:13.5px;font-weight:600;color:#31384a;cursor:pointer}
+.paper-preview .pb-pkg-optin input{width:17px;height:17px;accent-color:#5b6ef5;cursor:pointer}
 .paper-preview *{letter-spacing:0;font-kerning:normal}
 .paper-preview h1{font-size:22px;margin:0 0 4px}
 .paper-preview h2{font-size:14px;margin:18px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}
@@ -1725,6 +1838,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-card-tag.t-lighting{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
 .pn-card-tag.t-content{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
 .pn-card-tag.t-gfx{color:#e05fa9;background:color-mix(in srgb,#e05fa9 9%,transparent)}
+.pn-card-tag.t-question{color:#4aa3ff;background:color-mix(in srgb,#4aa3ff 9%,transparent)}
 .pn-card-tag.t-todo{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 9%,transparent)}
 .pn-card-by{font-size:11px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pn-card-time{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0}
@@ -3493,11 +3607,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 	    <div class="entry-actions">
 	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> New here? Start the guide</button>
       <div class="notif-center entry-notif" id="notifCenter">
-        <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="toggleNotifCenter(event)" title="Message center" aria-label="Message center"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
-        <div class="notif-panel" id="notifPanel" hidden>
-          <div class="notif-head"><span class="notif-title"><span class="sf-symbol" data-symbol="notification.default" aria-hidden="true"></span> Message Center</span><button type="button" class="notif-readall" onclick="markAllNotifsRead()">Mark all read</button></div>
-          <div class="notif-list" id="notifList"></div>
-        </div>
+        <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="openProductionNotesShortcut(event)" title="Production Notes" aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
       </div>
       <div class="entry-theme-center">
         <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
@@ -4448,6 +4558,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
     <div class="pb-board" id="pbBoard">
       <div class="pb-board-toolbar">
+        <button type="button" class="pb-portal-chip" id="pbPortalChip" onclick="openUserPortal()" title="Your profile — change your avatar" aria-label="Your profile"></button>
         <span class="pb-note-count" id="pbNotesCount">0 notes</span>
         <input type="search" class="pb-board-search" id="pbNotesSearch" placeholder="Search notes &amp; authors…" oninput="pbSetNotesSearch(this.value)">
         <div class="pb-board-tools">
@@ -4456,6 +4567,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <div class="pb-filter-pop" id="pbNotesFilters" hidden></div>
           </div>
           <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
+          <button type="button" class="pb-chat-tool" id="pbCollapseAllBtn" onclick="pbToggleCollapseAll()" title="Collapse or expand every note"><span class="sf-symbol" data-symbol="action.collapse" aria-hidden="true"></span><span>Collapse</span></button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
           <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
@@ -4483,16 +4595,17 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(false)" title="Bulleted list">•&nbsp;List</button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(true)" title="Numbered list">1.&nbsp;List</button>
           </div>
-          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew" oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this)" onkeydown="pbNoteInputKeydown(event)" onpaste="pbNotePaste(event,'main')"></textarea>
+          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew — type @ to mention someone" oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
+          <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
           <div>
             <div class="pb-compose-label">Tag for</div>
             <div class="pb-tag-picker" id="pbTagPicker"></div>
           </div>
           <div class="pb-compose-actions">
-            <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
+            <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" title="Attach images, audio, or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
             <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
-            <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
+            <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
             <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
             <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
           </div>
@@ -4531,6 +4644,17 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="modal-err" id="pp-join-err">Please fill in both fields.</div>
     <button class="btn-primary" onclick="joinPreProSession()">Open Planda Bear</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
+  </div>
+</div>
+
+<!-- User portal: pick your notes-board avatar -->
+<div class="modal-wrap" id="userPortalModal">
+  <div class="modal">
+    <div class="modal-title"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span> Your profile</div>
+    <div class="modal-sub">Pick how you show up on the Production Notes board. Just for this device.</div>
+    <div class="pb-portal-body" id="userPortalBody"></div>
+    <button class="btn-primary" onclick="pbSaveUserPortal()">Save</button>
+    <button class="btn-secondary" onclick="hideModal('userPortalModal')">Cancel</button>
   </div>
 </div>
 
@@ -4758,8 +4882,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0s"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0s"></script>
+<script src="cueola-app.js?v=1.0.0y"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0t"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

@@ -66,6 +66,7 @@
 
   // ── state ──────────────────────────────────────────────────────────────
   let built = false;
+  let showLoaded = false;         // true once applyShow() has hydrated state from IndexedDB — until then, writing a pad would clobber the saved show
   let mode = 'standalone';
   let sessionCode = null;
   let sessionUserName = '';       // name entered on the join splash (parity with other modules)
@@ -2868,6 +2869,24 @@
     if (s) showRecovery(s); else $('og-recovery').classList.remove('on');
     setModeBadge();
     if (mode === 'session' && sessionCode) subscribeSession(); else unsubscribeSession();
+    showLoaded = true;   // state is now hydrated — safe for an external add (e.g. a Cueola audio note → SFX pad)
+  }
+
+  // External hand-off: add an audio File as an SFX pad. Cueola's Production Notes
+  // call this when the operator sends a note's audio to the board. Guarded — it
+  // only writes when the show is loaded, so it can never clobber the saved show.
+  async function addAudioPad(file) {
+    if (!built || !showLoaded) return { ok: false, reason: 'not-open' };
+    if (!file) return { ok: false, reason: 'no-file' };
+    try {
+      ensureBanks();
+      let slot = -1;
+      for (let i = 0; i < PAD_COUNT; i++) { const p = padBySlot(i); if (!p || !p.mediaId) { slot = i; break; } }
+      if (slot < 0) { addBank(); slot = 0; }   // current bank full → start a fresh one
+      await assignPad(slot, file);
+      setTab('sfx');
+      return { ok: true };
+    } catch (e) { return { ok: false, reason: 'error' }; }
   }
   async function enterOutrangutan(m) {
     build(); ensureChannel(); showScreen();
@@ -2967,6 +2986,9 @@
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
     preflight: preflightReport,                     // P7: deep media/SFX check for the Cueola preflight panel
     saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
+    isReady: () => built && showLoaded && isOpen(),  // safe to receive an external SFX pad right now?
+    addAudioPad,                                    // Cueola audio note → SFX pad hand-off
+    goToSfx: () => { if (built) { showScreen(); setTab('sfx'); } },
     _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     // P4: same-page fast path — when Cueola and Outrangutan share this tab (the

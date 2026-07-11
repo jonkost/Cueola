@@ -108,6 +108,7 @@
 .sf-symbol[data-symbol="action.pin"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/objectsandtools/pin.fill.svg");}
 .sf-symbol[data-symbol="info.bug"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/nature/ladybug.fill.svg");}
 .sf-symbol[data-symbol="media.playpause"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/media/playpause.circle.fill.svg");}
+.sf-symbol[data-symbol="content.question"] {--sf-symbol:url("../design-system/apple/symbols/runtime/regular-small/communication/questionmark.circle.fill.svg");}
 
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }
