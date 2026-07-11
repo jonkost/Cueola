@@ -180,14 +180,17 @@
   }
   function keyOff() { keycv.classList.remove('on'); if (keyRAF) { cancelAnimationFrame(keyRAF); keyRAF = null; } }
 
+  function applyTransform(d, m) { d.el.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')'; }
   async function doPlay(m) {
     const d = other(front);
     const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
     if (!ok) return;
     if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+    applyTransform(d, m);
     d.el.volume = (m.fadeIn > 0) ? 0 : (typeof m.volume === 'number' ? m.volume : 1);
     bringFront(d);
     try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
+    if (m.paused) { try { d.el.pause(); } catch (e) {} }   // controller is paused: show the frame, don't roll
     clearImage(m.fadeIn || 0, m.curve);
     const prev = other(d);
     if (m.fadeIn > 0) { d.el.style.opacity = 0; runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * (m.volume == null ? 1 : m.volume); }, 0, 1, m.fadeIn, m.curve, () => stopDeck(prev)); }
@@ -198,13 +201,15 @@
     const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
     if (!ok) return doPlay(m);
     if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+    applyTransform(d, m);
     d.el.volume = 0; d.el.style.opacity = 0;
     bringFront(d);
     try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
     clearImage(m.ms, m.curve);
     const vol = (m.volume == null ? 1 : m.volume);
+    const pv0 = prev.el.volume || vol;   // capture once — reading it back each frame compounds the decay
     runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * vol; }, 0, 1, m.ms, m.curve);
-    runFade('out', v => { prev.el.volume = v * (prev.el.volume || vol); }, 1, 0, m.ms, m.curve, () => stopDeck(prev));
+    runFade('out', v => { prev.el.volume = v * pv0; }, 1, 0, m.ms, m.curve, () => stopDeck(prev));
   }
 
   async function handle(m) {
@@ -218,8 +223,8 @@
       case 'seek': try { front.el.currentTime = m.at; } catch (e) {} break;
       case 'volume': front.el.volume = Math.max(0, Math.min(1, m.v)); break;
       case 'fit': front.el.style.objectFit = m.fit || 'contain'; break;
-      case 'fade': { clearImage(m.ms, m.curve); const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); waiting.style.display = 'grid'; } }); break; }
-      case 'black': { clearImage(m.ms || 0, m.curve); const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); }); break; }
+      case 'fade': { clearImage(m.ms, m.curve); const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; } }); break; }
+      case 'black': { clearImage(m.ms || 0, m.curve); const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); keyOff(); }); break; }
       case 'stop': clearImage(0); stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; break;
       case 'holdLast': try { front.el.pause(); } catch (e) {} break;
       case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || ('Output ' + MY_ID); break;
@@ -234,12 +239,12 @@
       if (on && m.sinkId && d.el.setSinkId) { try { await d.el.setSinkId(m.sinkId); } catch (e) {} }
     }
   }
-  function reply(msg) { const out = Object.assign({ _from: 'output', id: MY_ID }, msg); if (bc) bc.postMessage(out); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, out), '*'); } catch (e) {} }
+  function reply(msg) { const out = Object.assign({ _from: 'output', id: MY_ID }, msg); if (bc) bc.postMessage(out); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, out), location.origin); } catch (e) {} }
 
   // act only on broadcast (target null) or messages addressed to this output
   function forMe(d) { return d && d._from !== 'output' && (d.target == null || d.target === MY_ID); }
   if (bc) bc.onmessage = (e) => { if (forMe(e.data)) handle(e.data); };
-  window.addEventListener('message', (e) => { if (e.data && e.data._og && forMe(e.data)) handle(e.data); });
+  window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data && e.data._og && forMe(e.data)) handle(e.data); });
 
   decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
   decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });

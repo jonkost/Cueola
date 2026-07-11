@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260709b">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1a">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711a">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1b">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -1742,6 +1742,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* ── PRINT ── */
 @media print {
   .screen{display:none!important}
+  /* On-screen chrome must never print over the paperwork. */
+  .modal-wrap,.overlay,.km-ov,.pn-panel,#toast,.topbar{display:none!important}
   #printArea{display:block!important}
   body{background:#fff;color:#000;overflow:auto}
   #printArea{font-family:Helvetica,Arial,sans-serif;font-size:12px;padding:20px;letter-spacing:0;font-kerning:normal}
@@ -2609,29 +2611,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 /* Keep the drawer the single scroll region and reachable to the very bottom */
 .ls-sidebar-head,.ls-editor-actions{flex:0 0 auto}
 .ls-operator-drawer{flex:1 1 auto;min-height:0;overflow-y:auto;padding-bottom:26px}
-/* Pop out: float the whole Script Op panel into a movable/resizable window.
-   We restyle the sidebar in place (rather than moving its DOM) so every
-   .ls-sidebar-scoped control rule keeps applying and the layout stays intact. */
-.ls-sidebar.is-popped{
-  position:fixed;z-index:600;
-  top:80px;right:36px;left:auto;
-  width:min(820px,92vw);height:min(660px,82vh);
-  max-width:none;
-  border:1px solid var(--liquid-edge);border-radius:18px;
-  box-shadow:0 36px 90px rgba(0,0,0,.55),inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent);
-  resize:both;overflow:hidden;
-}
-.ls-sidebar.is-popped .ls-sidebar-head{cursor:move;touch-action:none}
-.ls-body:has(.ls-sidebar.is-popped) .ls-resizer{display:none}
 .ls-popout-btn.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,var(--liquid-edge));background:color-mix(in srgb,var(--accent) 12%,var(--s2))}
-/* With the extra width, flow the control groups into responsive columns.
-   align-items:start + min-content rows let each card take its natural height
-   (no equal-row clipping); the drawer itself scrolls if it overflows. */
-/* Popped-out floating panel keeps the same single-page inspector flow. */
-.ls-sidebar.is-popped .ls-operator-drawer{display:flex;flex-direction:column}
-@media(max-width:600px){
-  .ls-sidebar.is-popped{top:10px;right:10px;left:10px;width:auto;height:88vh}
-}
 
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -3539,7 +3519,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
           <div class="entry-theme-info">
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Front-page theme carries into the main app. Sub-app settings can still choose their own look.</span></div>
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Autosave uses this browser on this device.</span></div>
-            <a class="entry-theme-info-row entry-contact-row" href="mailto:support@cueola.live?subject=Cueola%20support"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span><b>Support</b> — bugs, questions &amp; help<em>support@cueola.live</em></span></a>
+            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live?subject=Cueola%20support"><span class="sf-symbol" data-symbol="info.bug" aria-hidden="true"></span><span><b>Support</b> — bugs, questions &amp; help<em>support@cueola.live</em></span></a>
             <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span><span><b>Say hello</b> — info &amp; everything else<em>hello@cueola.live</em></span></a>
             <details class="themes-submenu license-submenu">
               <summary class="themes-row"><span class="sf-symbol tr-license-ico" data-symbol="content.script" aria-hidden="true"></span><span class="tr-lbl">License</span><span class="tr-val">BY-NC-ND<span class="tr-chev" aria-hidden="true">›</span></span></summary>
@@ -3734,7 +3714,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="ls-main" id="lsBody"></div>
     <div class="ls-resizer" id="lsResizer" onpointerdown="startLivePanelResize(event)"></div>
     <div class="ls-sidebar" id="lsSidebar">
-      <div class="ls-sidebar-head" id="lsSidebarHead" onpointerdown="startScriptOpPopoutDrag(event)">
+      <div class="ls-sidebar-head" id="lsSidebarHead">
         <div class="ls-sidebar-head-row">
           <div class="ls-sidebar-title">Script Op</div>
           <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
@@ -4778,8 +4758,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-app.js?v=1.0.0q"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0r"></script>
+<script src="cueola-app.js?v=1.0.0s"></script>
+<script src="outrangutan/outrangutan.js?v=1.0.0s"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

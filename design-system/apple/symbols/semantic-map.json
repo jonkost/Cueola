@@ -94,6 +94,8 @@
     "geo.location": "location",
     "time.clock": "clock",
     "nature.tree": "tree",
-    "action.pin": "pin.fill"
+    "action.pin": "pin.fill",
+    "info.bug": "ladybug.fill",
+    "media.playpause": "playpause.circle.fill"
   }
 }

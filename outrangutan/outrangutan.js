@@ -408,6 +408,27 @@
     if (added) { if (!selectedId) selectedId = cues[0].id; renumber(); renderAll(); scheduleSave(); toast(added + ' cue' + (added > 1 ? 's' : '') + ' added.'); }
   }
 
+  // Colors/thumbs from an imported .ogshow are attacker-controllable — a crafted
+  // file could stuff a style attribute with an image-onerror payload. Whitelist
+  // the shapes we actually emit (hex, rgb/hsl, var(--token)); anything else falls
+  // back to a safe default. Thumbs must be a data:image/ URL.
+  function safeColor(v, fallback) {
+    const s = String(v == null ? '' : v).trim();
+    if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+    if (/^(rgb|hsl)a?\([\d.,%\s/]+\)$/.test(s)) return s;
+    if (/^var\(--[\w-]+\)$/.test(s)) return s;
+    return fallback || 'var(--video)';
+  }
+  function safeThumb(v) {
+    const s = String(v == null ? '' : v);
+    return /^data:image\/(png|jpe?g|webp|gif);base64,[a-zA-Z0-9+/=]+$/.test(s) ? s : null;
+  }
+  function sanitizeImportedShow(s) {
+    if (Array.isArray(s.cues)) s.cues.forEach(c => { if (c) { c.color = safeColor(c.color); c.thumb = safeThumb(c.thumb); if (c.key) { c.key.color = safeColor(c.key.color, '#00b140'); c.key.bg = safeColor(c.key.bg, '#000000'); } } });
+    if (Array.isArray(s.pads)) s.pads.forEach(p => { if (p) { p.color = safeColor(p.color, 'var(--accent)'); p.emoji = typeof p.emoji === 'string' ? p.emoji.slice(0, 4) : ''; } });
+    return s;
+  }
+
   function makeCue(o) {
     return {
       id: rid('c_'), num: 0, name: o.name || 'Untitled', type: o.type || 'video',
@@ -538,16 +559,17 @@
 
   function openOutput(id) {
     ensureChannel();
-    const o = outputById(id) || outputs[0]; if (!o) return;
+    const o = outputById(id) || outputs[0]; if (!o) return null;
     let feats = 'width=1280,height=720';
     const scr = (o.screenId != null && screensCache) ? screensCache.find(s => s.id === o.screenId) : null;
     if (scr) feats = 'left=' + scr.availLeft + ',top=' + scr.availTop + ',width=' + scr.availWidth + ',height=' + scr.availHeight;
     const win = window.open('outrangutan/output.html#out=' + o.id, 'outrangutanOutput' + o.id, feats);
-    if (!win) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return; }
+    if (!win) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return null; }
     outputWins.set(o.id, { win, alive: false, identify: false });
     toast(scr ? ('Opened ' + o.label + ' on ' + scr.label + '.') : ('Opened ' + o.label + '. Drag it to a display, then fullscreen it.'));
     setTimeout(() => { sendOut({ t: 'ping' }, o.id); if (scr) tryFullscreen(win); }, 600);
     updateOutputUI();
+    return win;
   }
   function tryFullscreen(win) { try { const d = win.document.documentElement; if (d && d.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch (e) {} }
   function focusOrOpenOutput(id) { const r = outputWins.get(id); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
@@ -555,10 +577,10 @@
     if (!active || active.cue.output !== id) return;
     if (active.kind === 'image') { sendOut({ t: 'image', mediaId: active.cue.mediaId, fadeIn: 0, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0 }, id); return; }
     if (active.kind !== 'video') return;
-    sendOut({ t: 'play', mediaId: active.cue.mediaId, at: active.el.currentTime, loop: active.cue.loop, volume: active.cue.volume, fit: active.cue.fit }, id);
+    sendOut({ t: 'play', mediaId: active.cue.mediaId, at: active.el.currentTime, loop: active.cue.loop, volume: active.cue.volume, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0, paused: !!(active.el && active.el.paused) }, id);
   }
   function identifyOutput(id, on) {
-    if (!isOutputAlive(id)) { openOutput(id); setTimeout(() => identifyOutput(id, on), 700); return; }
+    if (!isOutputAlive(id)) { if (!openOutput(id)) return; setTimeout(() => identifyOutput(id, on), 700); return; }   // blocked pop-up: stop, don't retry-loop
     const rec = outputWins.get(id); if (rec) rec.identify = on;
     const o = outputById(id);
     sendOut({ t: 'identify', on: on, label: o ? o.label : ('Output ' + id) }, id);
@@ -1248,7 +1270,7 @@
   function stopAllDecks(opts) { clearImageTimer(); clearPreload(); ['a', 'b', 'audio', 'img'].forEach(k => stopDeck(decks[k], opts)); active = null; }
 
   function isActivePaused() {
-    if (!active || preInfo) return false;
+    if (!active || preInfo || active.held) return false;   // held = finished, frame parked; GO fires the next cue
     return active.kind === 'image' ? !!active.paused : !!(active.el && active.el.paused);
   }
   // GO doubles as RESUME while the program is paused — the AVT-lab fix:
@@ -1269,7 +1291,7 @@
   // so the shortcut and the button behave identically.
   function goPauseButton() {
     if (preInfo) return;              // mid pre-wait: ignore taps, let it count in
-    if (active) { pauseResume(); return; }
+    if (active && !active.held) { pauseResume(); return; }
     go();
   }
   // Keep the big transport button honest about what it will do: pause glyph while
@@ -1277,12 +1299,12 @@
   function syncGoButton() {
     const b = $('og-go'); if (!b) return;
     const paused = isActivePaused();
-    const playing = !!active && !preInfo && !paused;
+    const playing = !!active && !preInfo && !paused && !active.held;
     const state = playing ? 'playing' : paused ? 'paused' : 'idle';
     if (b._goState === state) return;
     b._goState = state;
     const keyTxt = ($('og-k-go') && $('og-k-go').textContent) || '';
-    const icon = playing ? sym('media.pause') : sym('media.play');
+    const icon = sym('media.playpause');   // playpause.circle.fill — one glyph for the toggle; label + color carry the state
     const label = paused ? 'Resume' : 'Play / Pause';
     b.innerHTML = icon + label + '<span class="og-tbtn-key" id="og-k-go">' + esc(keyTxt) + '</span>';
   }
@@ -1332,8 +1354,17 @@
     try { deck.el.currentTime = startAt; } catch (e) {}
     if (!isAudio) showDeck(deck);
     try { await deck.el.play(); } catch (e) {
-      if (e && e.name === 'NotAllowedError') { toast('Playback blocked by the browser — press GO again.'); }
-      else { failLive(cue, deck, e); return; }
+      if (e && e.name === 'NotAllowedError') {
+        // Autoplay blocked: nothing is on air — do NOT report ON AIR, notify the
+        // output, or advance. Re-arm this cue so GO genuinely retries it.
+        toast('Playback blocked by the browser — press GO again.');
+        active = prev;
+        if (!isAudio && prev && prev.kind === 'video') showDeck(deckOf(prev));
+        selectedId = cue.id;
+        renderCueList(); renderInspector(); renderEditArea();
+        return;
+      }
+      failLive(cue, deck, e); return;
     }
 
     const curve = fadeCurveOf(cue);
@@ -1357,8 +1388,8 @@
     const out = cue.output || 1;
     const sameOut = prevOut === out;
     if (!isAudio) {
-      if (crossing && xf > 0 && sameOut) sendOut({ t: 'xfade', mediaId: cue.mediaId, at: cue.trimIn || 0, ms: xf * 1000, curve, volume: cue.volume, loop: cue.loop, fit: cue.fit }, out);
-      else sendOut({ t: 'play', mediaId: cue.mediaId, at: cue.trimIn || 0, loop: cue.loop, volume: cue.volume, fadeIn: (cue.fadeIn || 0) * 1000, curve, fit: cue.fit }, out);
+      if (crossing && xf > 0 && sameOut) sendOut({ t: 'xfade', mediaId: cue.mediaId, at: cue.trimIn || 0, ms: xf * 1000, curve, volume: cue.volume, loop: cue.loop, fit: cue.fit, scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0 }, out);
+      else sendOut({ t: 'play', mediaId: cue.mediaId, at: cue.trimIn || 0, loop: cue.loop, volume: cue.volume, fadeIn: (cue.fadeIn || 0) * 1000, curve, fit: cue.fit, scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0 }, out);
       if (prevOut != null && !sameOut) sendOut({ t: 'stop' }, prevOut);   // clear the output we left
     } else if (prevOut != null) {
       sendOut({ t: 'black', ms: (cue.fadeIn || 0) * 1000 }, prevOut);     // program became audio → clear that picture
@@ -1416,7 +1447,7 @@
     if (active && active.kind === 'image') clearImageTimer();
     cue.broken = true;
     if (deck) stopDeck(deck);
-    if (active && active.cue && active.cue.id === cue.id) active = null;
+    if (active && active.cue && active.cue.id === cue.id) { active = null; stopKeyLoop(); }
     setStatus('idle');
     if (cue.type === 'video' || cue.type === 'image') sendOut({ t: 'black', ms: 0 }, cue.output || 1);
     renderCueList(); scheduleSave();
@@ -1474,9 +1505,11 @@
     // end action for the picture/audio (output messages only for picture cues — audio never touches one)
     const deck = active ? deckOf(active) : null;
     const hasPicture = cue.type === 'video' || cue.type === 'image', out = cue.output || 1;
-    if (deck && cue.endAction === 'hold') { try { if (deck.el.pause) deck.el.pause(); } catch (e) {} setStatus('idle'); if (cue.type === 'video') sendOut({ t: 'holdLast' }, out); renderCueList(); return; }
-    if (deck && cue.endAction === 'black') { runFade('out-' + deck.id, v => { deckGain(deck, v); deckOpacity(deck, v); }, 1, 0, 600, fadeCurveOf(cue), () => stopDeck(deck)); active = null; if (hasPicture) sendOut({ t: 'black', ms: 600 }, out); setStatus('idle'); renderCueList(); return; }
-    if (deck) stopDeck(deck); active = null;
+    // hold-last-frame: keep the frame up but mark the cue finished — GO must fire
+    // the NEXT cue, never resume this one from 0:00 (play() on ended media rewinds)
+    if (deck && cue.endAction === 'hold') { try { if (deck.el.pause) deck.el.pause(); } catch (e) {} if (active) active.held = true; setStatus('idle'); if (cue.type === 'video') sendOut({ t: 'holdLast' }, out); renderCueList(); return; }
+    if (deck && cue.endAction === 'black') { runFade('out-' + deck.id, v => { deckGain(deck, v); deckOpacity(deck, v); }, 1, 0, 600, fadeCurveOf(cue), () => stopDeck(deck)); active = null; stopKeyLoop(); if (hasPicture) sendOut({ t: 'black', ms: 600 }, out); setStatus('idle'); renderCueList(); return; }
+    if (deck) stopDeck(deck); active = null; stopKeyLoop();
     setStatus('idle'); if (hasPicture) sendOut({ t: 'stop' }, out); renderCueList();
   }
 
@@ -1496,6 +1529,7 @@
     toast('PANIC — all stopped.');
   }
   function pauseResume() {
+    if (active && active.held) return;   // a held-last-frame cue is finished — nothing to pause or resume
     if (active && active.kind === 'image') {
       if (active.paused) { active.paused = false; if (active.remainMs > 0) armImageTimer(); setStatus('play'); }
       else {
@@ -1512,6 +1546,7 @@
     renderCueList();
   }
   function fadeStopAll() {
+    clearPre();   // a pending pre-wait cue must never fire on air after the operator stopped everything
     const ms = 800, curve = settings.fadeCurve;
     clearImageTimer();
     sendOut({ t: 'fade', to: 0, ms });
@@ -1521,7 +1556,8 @@
       if (d._url && !d.el.paused) { any = true; runFade('out-' + d.id, v => { deckGain(d, v); deckOpacity(d, v); }, 1, 0, ms, curve, () => stopDeck(d)); }
     });
     padRT.forEach((rt, id) => { const p = padById(id); if (p && rt.voices.length) { any = true; runFade('padin-' + id, v => { rt.ch.gain.gain.value = v * (p.gain == null ? 1 : p.gain); }, 1, 0, ms, curve, () => stopPad(p)); } });
-    if (any) { toast('Fading out…'); setTimeout(() => { active = null; setStatus('idle'); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); renderPads(); }, ms + 30); }
+    const wasActive = active;   // if a new cue fires during the fade, this reset must not clobber it
+    if (any) { toast('Fading out…'); setTimeout(() => { if (active !== wasActive) return; active = null; stopKeyLoop(); setStatus('idle'); cueToTop(); renderCueList(); renderInspector(); renderEditArea(); renderPads(); }, ms + 30); }
     else stopAll();
   }
 
@@ -2406,7 +2442,7 @@
         if (!m || !m.blob) continue;
         const data = await blobToDataURL(m.blob);
         if (!data) continue;
-        media[id] = { name: m.name || '', mime: m.mime || '', kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, data };
+        media[id] = { name: m.name || '', mime: m.mime || '', kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0, data };
       }
       const payload = { kind: 'outrangutan-show', app: 'outrangutan', schema: SCHEMA, exportedAt: Date.now(),
         show: { cues, pads, banks, currentBankId, outputs, selectedId, settings }, media };
@@ -2468,10 +2504,10 @@
       for (const id of Object.keys(media)) {
         const m = media[id]; if (!m || !m.data) continue;
         let blob; try { blob = await (await fetch(m.data)).blob(); } catch (e) { continue; }
-        await idbPut(MEDIA_STORE, id, { blob, name: m.name || '', mime: m.mime || blob.type, kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null });
+        await idbPut(MEDIA_STORE, id, { blob, name: m.name || '', mime: m.mime || blob.type, kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0 });
       }
       bufferCache.clear(); decodeJobs.clear(); filmstripCache.clear(); filmstripJobs.clear();
-      const s = payload.show;
+      const s = sanitizeImportedShow(payload.show);
       await idbPut(SHOW_STORE, showKey(), { schema: payload.schema || SCHEMA, savedAt: Date.now(), activeCueId: null,
         cues: s.cues, pads: s.pads || [], banks: s.banks || [], currentBankId: s.currentBankId || null,
         outputs: s.outputs || defaultOutputs(), selectedId: s.selectedId || null, settings: s.settings || DEFAULT_SETTINGS() });
@@ -2519,7 +2555,7 @@
     if (typingTarget(e)) return;
     const sc = settings.shortcuts, k = e.key;
     const match = (bound) => bound && (bound.length === 1 ? k.toLowerCase() === bound.toLowerCase() : k === bound);
-    if (k === sc.panic) { e.preventDefault(); panic(); return; }
+    if (match(sc.panic)) { e.preventDefault(); panic(); return; }
     if (match(sc.go)) { e.preventDefault(); if (!e.repeat) goPauseButton(); return; }
     if (e.repeat) return;
     if (match(sc.stop)) { e.preventDefault(); stopAll(); return; }
@@ -2630,7 +2666,7 @@
             + '<div class="og-transport">'
               + '<div class="og-transport-group">'
                 + '<button class="og-tbtn" id="og-prev">' + sym('media.backward.circle') + 'Previous Cue<span class="og-tbtn-key">↑</span></button>'
-                + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.play') + 'Play / Pause<span class="og-tbtn-key" id="og-k-go"></span></button>'
+                + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.playpause') + 'Play / Pause<span class="og-tbtn-key" id="og-k-go"></span></button>'
                 + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
                 + '<button class="og-tbtn" id="og-next">' + sym('media.forward.circle') + 'Next Cue<span class="og-tbtn-key">↓</span></button>'
               + '</div>'
@@ -2771,8 +2807,6 @@
     }, true);
 
     const fileInput = $('og-file-input');
-    const addBtn = $('og-add-btn');
-    if (addBtn) addBtn.onclick = () => fileInput.click();
     $('og-cue-add').onclick = () => fileInput.click();
     fileInput.onchange = () => { importFiles(fileInput.files); fileInput.value = ''; };
     const padFile = $('og-pad-file');

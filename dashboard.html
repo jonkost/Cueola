@@ -533,7 +533,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <div class="tb-right">
     <div class="admin-name" id="topAdminName">Signed in as <strong id="topAdminNameVal">—</strong></div>
     <div class="admin-badge" id="topAdminBadge">—</div>
-    <a class="btn-sm btn-ghost btn-icon" id="systemSettingsBtn" href="#modal-system-settings" title="System Settings" aria-label="System Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></a>
+    <button type="button" class="btn-sm btn-ghost btn-icon" id="systemSettingsBtn" onclick="openSystemSettings()" title="System Settings" aria-label="System Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
     <button class="btn-sm btn-ghost" id="switchBtn" onclick="switchAdmin()" style="display:none">Sign Out</button>
     <button class="btn-sm btn-accent" id="newSessionBtn" onclick="openNewSession()" style="display:none">+ New Session</button>
   </div>
@@ -833,6 +833,7 @@ const DASHBOARD_THEMES = [
   { key:'koala', label:'Koala', bg:'#1f1f1e', border:'#494949', dot:'#ffffff' },
   { key:'panda', label:'Planda Bear', bg:'#000000', border:'#3a3a3a', dot:'#ffffff' },
   { key:'flamingo', label:'Flowmingo', bg:'#330512', border:'#5e2c64', dot:'#de4b9a' },
+  { key:'outrangutan', label:'Outrangutan', bg:'#1a1817', border:'#3a352f', dot:'#ff6a00' },
   { key:'prepbear', label:'PrepBear', bg:'#080912', border:'#2f357c', dot:'#eeca57' },
 ];
 function normalizeDashboardTheme(t) {
@@ -901,19 +902,21 @@ function saveAdmins(list) {
 }
 
 function normalizeAdmins(list) {
-  const byName = new Map();
+  // Identity is the id — two different people may legitimately share a name and
+  // level. name|level is only the fallback for legacy entries that predate ids.
+  const byKey = new Map();
   (list || []).filter(Boolean).forEach(a => {
-    const key = `${(a.name||'').trim().toLowerCase()}|${a.level||'standard'}`;
-    const existing = byName.get(key);
+    const key = a.id ? `id|${a.id}` : `${(a.name||'').trim().toLowerCase()}|${a.level||'standard'}`;
+    const existing = byKey.get(key);
     if (!existing) {
-      byName.set(key, a);
+      byKey.set(key, a);
       return;
     }
     const existingScore = existing.createdBy ? 2 : 1;
     const nextScore = a.createdBy ? 2 : 1;
-    if (nextScore > existingScore) byName.set(key, a);
+    if (nextScore > existingScore) byKey.set(key, a);
   });
-  return [...byName.values()];
+  return [...byKey.values()];
 }
 
 function hasSuperAdmin() { return _adminsCache.some(a=>a.level==='super'); }
@@ -1115,6 +1118,7 @@ function checkFirstTime() {
 }
 
 function onLoggedIn() {
+  hideModal('modal-login');   // markup ships with the modal open; a restored session must dismiss it
   // Topbar
   const nameEl  = document.getElementById('topAdminName');
   const badgeEl = document.getElementById('topAdminBadge');
@@ -1236,18 +1240,20 @@ function renderSessions() {
     // Collect unique cue types present in this session
     const typeSet = new Set(beats.map(b=>b.type).filter(Boolean));
     const typeDots = [...typeSet].map(t =>
-      `<div class="ct-dot" title="${t}" style="background:${CUE_COLORS[t]||'#666'}"></div>`
+      `<div class="ct-dot" title="${escapeHtml(t)}" style="background:${CUE_COLORS[t]||'#666'}"></div>`
     ).join('');
 
     const card = document.createElement('div');
     card.className = 'session-card';
     card.style.setProperty('--sc-color', color);
     card.style.animationDelay = `${i * 0.06}s`;
+    // session docs are writable by anyone who knows the code — escape everything
+    const codeArg = JSON.stringify(String(s.code || s.id)).replace(/"/g, '&quot;');
     card.innerHTML = `
       <div class="sc-left">
         <div class="sc-top">
-          <div class="sc-code">${s.code || s.id}</div>
-          <div class="sc-showname">${s.showName || 'Untitled Show'}</div>
+          <div class="sc-code">${escapeHtml(s.code || s.id)}</div>
+          <div class="sc-showname">${escapeHtml(s.showName || 'Untitled Show')}</div>
           <span class="sc-pill ${isActive?'active':'idle'}">${isActive?'● ACTIVE':'IDLE'}</span>
         </div>
         <div class="sc-meta">
@@ -1262,10 +1268,10 @@ function renderSessions() {
         </div>
       </div>
       <div class="sc-right">
-        <button class="sc-btn sc-btn-copy" onclick="copySessionCode('${s.code||s.id}',event)">Copy Code</button>
-        <button class="sc-btn sc-btn-copy" onclick="openPrePro('${s.code||s.id}',event)"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> Planda Bear</button>
-        <button class="sc-btn sc-btn-open" onclick="openSession('${s.code||s.id}')">Open →</button>
-        <button class="sc-btn sc-btn-muted" onclick="showDetail('${s.code||s.id}',event)">Session Setup ⚙</button>
+        <button class="sc-btn sc-btn-copy" onclick="copySessionCode(${codeArg},event)">Copy Code</button>
+        <button class="sc-btn sc-btn-copy" onclick="openPrePro(${codeArg},event)"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> Planda Bear</button>
+        <button class="sc-btn sc-btn-open" onclick="openSession(${codeArg})">Open →</button>
+        <button class="sc-btn sc-btn-muted" onclick="showDetail(${codeArg},event)">Session Setup ⚙</button>
       </div>
     `;
     area.appendChild(card);
@@ -1359,6 +1365,7 @@ function addDashboardAdmin() {
   const code = document.getElementById('newAdminCode').value;
   const level = document.getElementById('newAdminLevel').value || 'standard';
   if (!name || !code) { showToast('Name and code are required.'); return; }
+  if (getAdmins().some(a => a.codeHash === hashStr(code))) { showToast('That code is already used by another admin — pick a different one.'); return; }
   const list = [...getAdmins(), { id:'adm_'+Date.now().toString(36), name, codeHash:hashStr(code), level, createdBy:adminSession.id }];
   saveAdmins(list);
   document.getElementById('newAdminName').value = '';
@@ -1436,6 +1443,14 @@ async function createNewSession() {
   const code       = customCode || genCode();
 
   try {
+    // Never silently wipe an existing session that already uses this code.
+    const { getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const existing = await getDoc(window._doc(db(), 'sessions', code));
+    if (existing.exists()) {
+      showErr('new-err', `Code ${code} is already in use — pick a different code or delete that session first.`);
+      btn.textContent = 'Create Session →'; btn.disabled = false;
+      return;
+    }
     await window._setDoc(window._doc(db(), 'sessions', code), {
       code,
       showName,
@@ -1953,10 +1968,10 @@ async function deleteSession() {
 function launchRundown(code) {
   localStorage.setItem('cueola_session', JSON.stringify({
     code,
-    role: 'admin',
+    role: 'instructor',   // the only privileged role the main app recognizes
     userName: adminSession.name,
   }));
-  window.location.href = `index.html?code=${code}`;
+  window.location.href = `index.html?code=${encodeURIComponent(code)}`;
 }
 
 // ── COPY ─────────────────────────────────────────────────────

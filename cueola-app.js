@@ -540,6 +540,7 @@ function leaveSessionForFrontPage() {
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   clearResumeState();   // P7: intentional leave — never offer to resume it (Decisions #14)
   stopTimer();
+  leavePresence();      // drop our presence entry + stop the heartbeat — no ghost participants
   if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
   document.getElementById('rundown')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('on');
@@ -1096,8 +1097,10 @@ function setTTSDot(state) {
 }
 
 async function loadLocalNarrationManifest() {
-  if (cueolaTTS.localManifestLoaded) return cueolaTTS.localAssetRefs;
+  // Promise check first — localManifestLoaded flips synchronously below, so a
+  // caller arriving mid-fetch must get the pending promise, not the empty set.
   if (cueolaTTS.localManifestPromise) return cueolaTTS.localManifestPromise;
+  if (cueolaTTS.localManifestLoaded) return cueolaTTS.localAssetRefs;
   cueolaTTS.localManifestPromise = (async () => {
     cueolaTTS.localManifestLoaded = true;
     setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Checking Heart voice files...');
@@ -1753,7 +1756,7 @@ function renderAdminBody() {
           ${isSuper && !isMe && a.level==='standard' ? `<button class="admin-act-btn" onclick="promoteToFull('${a.id}')">→ Full</button>` : ''}
           ${isSuper && !isMe && a.level==='full' ? `<button class="admin-act-btn" onclick="promoteToSuper('${a.id}')">→ Super</button><button class="admin-act-btn" onclick="demoteToStandard('${a.id}')">→ Standard</button>` : ''}
           ${isSuper && !isMe && a.level==='super' ? `<button class="admin-act-btn" onclick="demoteToFull('${a.id}')">→ Full</button>` : ''}
-          ${canRemove ? `<button class="admin-act-btn danger" onclick="confirmRemoveAdmin('${a.id}','${esc(a.name)}')">Remove</button>` : ''}
+          ${canRemove ? `<button class="admin-act-btn danger" onclick="confirmRemoveAdmin('${a.id}',${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Remove</button>` : ''}
         </div>
       </div>`;
     });
@@ -2765,6 +2768,9 @@ function enterRundown() {
   pushSessionHistoryState('build');
   // P8 (dress-rehearsal find): without this, a stale 'live' from a previous
   // session leaks into the resume record and the banner claims the wrong screen.
+  // Capture first — a same-tab reload mid-show must still restore the live screen
+  // below (leaving a session clears the key, so a previous session can't leak in).
+  const resumeScreen = sessionStorage.getItem('cueola_screen');
   sessionStorage.setItem('cueola_screen', 'build');
   loadShowLog();   // P7: pick up this session's persisted log before anything writes to it
   logShow('session', 'Entered session' + (session?.code ? ' ' + session.code : '') + (session?.isDemo ? ' (demo)' : '') + (session?.userName ? ' as ' + session.userName : ''));
@@ -2801,7 +2807,7 @@ function enterRundown() {
   renderRundown();
   joinPresence();
   // Restore last screen
-  if (sessionStorage.getItem('cueola_screen') === 'live') setTimeout(goLive, 300);
+  if (resumeScreen === 'live') setTimeout(goLive, 300);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3039,12 +3045,18 @@ function setupFirestore() {
     const ref = window._doc(window._db,'sessions',session.code);
 
     if (session.role==='instructor') {
-      window._setDoc(ref,{
-        code:session.code, createdBy:session.userName,
-        showName:show.name, startTime:normalizeTimeValue(show.start),
-        freeMode:freeTextMode,
-        createdAt:window._serverTimestamp()
-      },{merge:true}).catch(err => reportCloudWriteFailure('Session cloud setup', err));
+      // Seed the session doc only when it doesn't exist yet — an instructor
+      // REJOINING must never overwrite the live showName/startTime/freeMode
+      // with this device's boot defaults (the snapshot below adopts cloud state).
+      window._getDoc(ref).then(snap => {
+        if (snap.exists()) return;
+        return window._setDoc(ref,{
+          code:session.code, createdBy:session.userName,
+          showName:show.name, startTime:normalizeTimeValue(show.start),
+          freeMode:freeTextMode,
+          createdAt:window._serverTimestamp()
+        },{merge:true});
+      }).catch(err => reportCloudWriteFailure('Session cloud setup', err));
     }
 
     firestoreUnsub = window._onSnapshot(ref, snap => {
@@ -3197,6 +3209,9 @@ function renderRundownIfChanged(d) {
   _rundownSnapFp = fp;
   if (document.getElementById('rundown')?.classList.contains('on')) { renderRundown(); _rundownSnapDirty = false; }
   else _rundownSnapDirty = true;   // render once when the screen next becomes visible
+  // A live operator must see collaborators' edits too — refresh the NOW/NEXT
+  // cards when the live screen is up (gated by the same fingerprint above).
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
 }
 // Flush the deferred render the moment the rundown screen is shown again.
 (() => {
@@ -3281,8 +3296,10 @@ async function joinPresence() {
       const existing = snap.data().participants || [];
       const alreadyIn = existing.some(p => p.name === name);
       if (!alreadyIn) {
+        // arrayUnion, not a whole-array overwrite — two devices joining at the
+        // same moment must both survive (the loser used to vanish from the list).
         await window._updateDoc(window._doc(window._db,'sessions',session.code), {
-          participants: [...existing, { name, role:session.role, joinedAt: Date.now() }]
+          participants: window._arrayUnion({ name, role:session.role, joinedAt: Date.now() })
         });
       }
     }
@@ -3542,7 +3559,19 @@ function keymapDispatch(e, phase) {
     return true;
   }
   if (typeof jogScrubHandleKey === 'function' && jogScrubHandleKey(e, phase)) return true;
-  if (isTextEditingTarget(e.target)) return false;   // typing suppresses everything (Esc keeps browser default)
+  if (isTextEditingTarget(e.target)) {
+    // Releasing a held key while focus sits in a text field must still send the
+    // stop control — otherwise the prompter stays braked/boosted until blur.
+    if (phase === 'up' && _keymapHolds.size) {
+      for (const action of KEYMAP) {
+        if (!action.hold || !_keymapHolds.has(action.id)) continue;
+        if (!keymapBindings(action).some(b => keymapMatches(e, b))) continue;
+        sendPrompterControl(_keymapHolds.get(action.id));
+        _keymapHolds.delete(action.id);
+      }
+    }
+    return false;   // typing suppresses everything else (Esc keeps browser default)
+  }
   for (const action of KEYMAP) {
     if (action.scope !== scope) continue;
     if (!keymapBindings(action).some(b => keymapMatches(e, b))) continue;
@@ -3860,9 +3889,9 @@ function renderRundown() {
       const cc = segChildCounts[b.id] || 0;
       const editActions = editMode ? `
         <div class="row-edit-actions">
-          <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
-          <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
-          <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
+          <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
         </div>` : '';
       html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
         <td class="seg-td" colspan="${colOrder.length + 4}">
@@ -4214,14 +4243,15 @@ function openCueConfig(beatId, type) {
   _pOnAction='';_pOffHow='';_pOffRet='';
   _gOnType='';_gOnSrc='';_gOnTrans='';_gOffType='';_gOffHow='';
   _lOnAction='';_lOnFix='';_lOnSpecial='';_lOffFix='';_lOffHow='';_lOffSpecial='';
-  _sOnType='Script';_sOnSrc='';_sOffSrc='';_sOffHow='';
+  _sOnType='Script';_sOnSrc='';
   _sOnTags = [...(beats.find(x=>x.id===beatId)?.cues?.script?.scriptTags||[])];
   const b = beats.find(x=>x.id===beatId); if (!b) return;
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
   document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
   const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
-  document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing);
+  document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing) + qlabCueFields(type, existing);
+  updateQlabFireBtn();
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
   setRundownPresence(beatId);
@@ -4255,9 +4285,11 @@ function buildFreeTextCueFields(type, d) {
 
 function ccChips(chips, fn) {
   return chips.map(c => {
-    const val = (c.v !== undefined ? c.v : c).toString().replace(/'/g, "\\'");
-    const lbl = c.label || c;
-    return `<button type="button" class="cc-chip" onclick="${fn}('${val}')">${lbl}</button>`;
+    // JSON-stringify the JS argument, then HTML-escape the whole attribute —
+    // chip values/labels include custom source names synced from other devices.
+    const val = esc(JSON.stringify((c.v !== undefined ? c.v : c).toString()));
+    const lbl = esc((c.label || c).toString());
+    return `<button type="button" class="cc-chip" onclick="${fn}(${val})">${lbl}</button>`;
   }).join('');
 }
 function ccTabHint(icon, text) {
@@ -4949,20 +4981,6 @@ function _ccSOnBuild(){
   el.value=src?`${src} — Begin`:'Begin';
 }
 
-// ══ SCRIPT Off helpers ══════════════════════════════
-let _sOffSrc='',_sOffHow='';
-function ccSOffSrc(v){
-  _sOffSrc=v; ccSelChip('sOff-src',v);
-  _ccSOffBuild();
-}
-function ccSOffHow(v){ _sOffHow=v; ccSelChip('sOff-how',v); _ccSOffBuild(); }
-function _ccSOffBuild(){
-  const src=document.getElementById('cc-s-off-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-s-off-custom')?.value||_sOffSrc) : _sOffSrc;
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  const parts=[src,_sOffHow].filter(Boolean);
-  el.value=parts.join(' — ')||_sOffHow;
-}
 
 function saveCueConfig() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
@@ -5024,6 +5042,13 @@ function saveCueConfig() {
     if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; }
     else { delete d.outPadId; delete d.outPadAuto; }
   }
+  // QLab trigger — kept only when there's a real target (a cue number, or GO which needs none)
+  const qlabCue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
+  const qlabAction = document.getElementById('cc-qlab-action')?.value || 'start';
+  if (qlabCue || qlabAction === 'go') {
+    d.qlabCue = qlabCue; d.qlabAction = qlabAction;
+    d.qlabAuto = document.getElementById('cc-qlab-auto')?.checked || false;
+  } else { delete d.qlabCue; delete d.qlabAction; delete d.qlabAuto; }
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
   setRundownPresence(null);
@@ -5199,8 +5224,6 @@ function fireQlabAutoForBeat(beat) {
   if (cues.length) fireQlabCommand(cues);
 }
 
-function updateLiveCueQButton() {}
-
 // Does this cue cell have a QLab target worth showing a GO button for?
 function qlabCellHasTarget(d) {
   return !!d && (String(d.qlabCue || '').trim() || d.qlabAction === 'go');
@@ -5311,7 +5334,7 @@ function outrangutanCueOptions(cur) {
   const map = outrangutanState.cues || {};
   const ids = Object.keys(map).sort((a, b) => (map[a].num || 0) - (map[b].num || 0));
   let html = `<option value="">— none —</option>`;
-  for (const id of ids) html += `<option value="${esc(id)}" ${cur === id ? 'selected' : ''}>#${map[id].num} ${esc(map[id].name || 'Cue')}</option>`;
+  for (const id of ids) html += `<option value="${esc(id)}" ${cur === id ? 'selected' : ''}>#${esc(String(map[id].num ?? ''))} ${esc(map[id].name || 'Cue')}</option>`;
   if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked cue (offline)</option>`;
   return html;
 }
@@ -5508,39 +5531,6 @@ async function loadScriptFile(input, targetId) {
   reader.readAsText(file);
 }
 
-function chipField(id, label, options, allowCustom=false) {
-  const opts = options.map(o=>`<button class="chip" onclick="chipSel('${id}',this,'${esc(o)}')">${esc(o)}</button>`).join('');
-  const custom = allowCustom ? `<button class="chip" onclick="chipCustom('${id}',this)">+ Custom</button>` : '';
-  return `<div class="field" style="margin-bottom:10px">
-    <label class="field-lbl">${label}</label>
-    <input type="hidden" id="${id}-val">
-    <div class="chip-grid">${opts}${custom}</div>
-  </div>`;
-}
-
-function chipSel(id, el, val) {
-  el.closest('.chip-grid').querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
-  el.classList.add('sel');
-  document.getElementById(`${id}-val`).value = val;
-  if (id==='cc-l-action') {
-    const wrap = document.getElementById('cc-l-int-wrap');
-    if (wrap) wrap.style.display = val==='At' ? '' : 'none';
-  }
-}
-
-function chipCustom(id, el) {
-  const val = prompt('Enter custom value:');
-  if (!val||!val.trim()) return;
-  el.closest('.chip-grid').querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
-  // Create temp chip
-  const tmp = document.createElement('button');
-  tmp.className='chip sel';
-  tmp.textContent=val.trim();
-  tmp.onclick=()=>chipSel(id,tmp,val.trim());
-  el.closest('.chip-grid').insertBefore(tmp, el);
-  document.getElementById(`${id}-val`).value = val.trim();
-}
-
 // loadScriptFile defined above (async, supports PDF)
 
 // ─────────────────────────────────────────────────────────────
@@ -5583,12 +5573,6 @@ function edSetStyle(s, el) {
   el.classList.add('sel');
 }
 
-function edChipField(id, label, options, current, allowCustom=false) {
-  const opts = options.map(o=>`<button class="chip ${o===current?'sel':''}" onclick="chipSel('${id}',this,'${esc(o)}')">${esc(o)}</button>`).join('');
-  const custom = allowCustom ? `<button class="chip ${!options.includes(current)&&current?'sel':''}" onclick="chipCustom('${id}',this)">${!options.includes(current)&&current ? esc(current) : '+ Custom'}</button>` : '';
-  return `<div class="field" style="margin-bottom:10px"><label class="field-lbl">${label}</label><input type="hidden" id="${id}-val" value="${esc(current||'')}"><div class="chip-grid">${opts}${custom}</div></div>`;
-}
-
 function closeEdit(e) {
   if (e && e.target!==document.getElementById('editOv')) return;
   hideOverlay('editOv');
@@ -5617,13 +5601,6 @@ function deleteCue() {
   hideOverlay('editOv');
   setRundownPresence(null);
   renderRundown(); syncToFirestore(); toast('Row removed.');
-}
-
-function _removedLoadEditScriptFile(input) {
-  const file = input.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => { const ta=document.getElementById('ed-s-text'); if(ta) ta.value=e.target.result; };
-  reader.readAsText(file);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -6005,6 +5982,9 @@ function restartShowClock() {
   elapsedSecs = 0;
   liveTimerStartMs = null;
   lsIdx = beats.length ? 0 : -1;
+  // Same as goLive: never park the live position on a leading segment marker
+  while (lsIdx >= 0 && lsIdx < beats.length && beats[lsIdx]?.style === 'segment') lsIdx++;
+  if (lsIdx >= beats.length) lsIdx = beats.length ? beats.length - 1 : -1;
   const t = document.getElementById('ls-timer');
   if (t) { t.textContent = fmtProductionClock(0); t.classList.remove('warn'); }
   updateBotBar();
@@ -6522,21 +6502,6 @@ function renderLive() {
   renderLivePrompterControls();
 }
 
-function liveQuick(b, type) {
-  const d = b.cues?.[type];
-  if (!d) return '<span style="color:var(--text3);font-size:10px">—</span>';
-  const tc = CT[type];
-  let s = '';
-  switch(type) {
-    case 'video':    s=d.state||d.source||''; break;
-    case 'audio':    s=d.action||d.source||''; break;
-    case 'playback': s=d.state||d.clipName||''; break;
-    case 'gfx':      s=d.gfxType||d.source||''; break;
-    case 'lighting': s=d.action||d.fixture||''; break;
-  }
-  return `<div class="ltr-cue-quick" style="border-left-color:${tc.color};color:${tc.color}">${esc(s)}</div>`;
-}
-
 function openLiveScript(beatIdx) {
   const b = beats[beatIdx]; if (!b) return;
   liveScriptEditIdx = beatIdx;
@@ -6712,6 +6677,7 @@ function lsNext() {
     lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     fireOutrangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outrangutan playback cue
+    fireQlabAutoForBeat(beats[lsIdx]);         // auto-fire any QLab triggers programmed on the row
     logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     syncLiveIdx();
@@ -7230,35 +7196,6 @@ function dockScriptOpPopout() {
   if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Pop out'); btn.classList.remove('active'); }
 }
 
-let _soPopoutDrag = null;
-function startScriptOpPopoutDrag(e) {
-  const sidebar = document.getElementById('lsSidebar');
-  // Only drag when popped out, and never when starting on an interactive control.
-  if (!sidebar || !sidebar.classList.contains('is-popped')) return;
-  if (e.target.closest && e.target.closest('button,input,textarea,select,a')) return;
-  const r = sidebar.getBoundingClientRect();
-  _soPopoutDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-  sidebar.style.left = r.left + 'px';
-  sidebar.style.top  = r.top + 'px';
-  sidebar.style.right = 'auto';
-  window.addEventListener('pointermove', _soPopoutMove);
-  window.addEventListener('pointerup', _soPopoutEnd);
-  e.preventDefault();
-}
-function _soPopoutMove(e) {
-  const sidebar = document.getElementById('lsSidebar');
-  if (!sidebar || !_soPopoutDrag) return;
-  const x = Math.max(6, Math.min(window.innerWidth  - 80, e.clientX - _soPopoutDrag.dx));
-  const y = Math.max(6, Math.min(window.innerHeight - 56, e.clientY - _soPopoutDrag.dy));
-  sidebar.style.left = x + 'px';
-  sidebar.style.top  = y + 'px';
-}
-function _soPopoutEnd() {
-  _soPopoutDrag = null;
-  window.removeEventListener('pointermove', _soPopoutMove);
-  window.removeEventListener('pointerup', _soPopoutEnd);
-}
-
 // Drag the divider under the script to grow/shrink the "Live Flowmingo script"
 // editor — drag down to reveal more of the script (the controls drawer takes the rest).
 let _scriptHeightDrag = null;
@@ -7452,7 +7389,7 @@ let ptKeyupHandler = null;
 let ptReceiverChannels = [];
 let ptReceiverStorageHandler = null;
 let _seenPrompterMsgIds = [];   // dedup messages delivered via both BroadcastChannel and localStorage
-let _lastAppliedControlSig = ''; // dedup the same control across every transport (BC, storage, Firestore)
+const _appliedControlSigs = new Set(); // dedup the same control across every transport (BC, storage, Firestore) — a small FIFO of recent signatures so a lagging transport can't re-apply an older control that a faster one already delivered
 let ptLinkedCueolaCode = '';
 let ptSeenPauseMarkers = new Set();
 let livePrompterDraftTimer = null;
@@ -7478,8 +7415,10 @@ let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
 // Operator-entered clock inputs — persisted so a panel re-render doesn't wipe the
 // typed duration / count-to time (which broke "change duration" + "countdown to time").
 let flowClockDurationMin = 5;
+let flowWrapCustomMin = 3;   // custom "Wrap in (min)" — survives control-panel re-renders
 let flowClockCountTime = '';
 function setFlowClockDuration(v) { const n = parseInt(v, 10); if (!isNaN(n)) flowClockDurationMin = Math.max(1, Math.min(999, n)); }
+function setFlowWrapCustomMin(v) { const n = parseInt(v, 10); if (!isNaN(n)) flowWrapCustomMin = Math.max(1, Math.min(999, n)); }
 function setFlowClockCountTime(v) { flowClockCountTime = (v || '').trim(); }
 let ptClockInterval = null;
 const FLOWMINGO_AUTO_PAUSE_RE = /\[(?:BREAK|AUTO PAUSE|PAUSE|STOP HERE|HOLD|TECHNICAL DIFFICULTIES)(?:[^\]]*)\]/i;
@@ -7606,6 +7545,9 @@ function ptLoadSavedOrDefault() {
 // Firestore prompter.talentHeartbeat for cross-device).
 let ptHeartbeatInterval = null;
 function ptTalentHeartbeat() {
+  // Publish "talent online" only while the talent screen is actually up —
+  // otherwise operators see a phantom talent long after this tab left the screen.
+  if (!document.getElementById('promptypus')?.classList.contains('on')) return;
   ptPostPing('heartbeat');
   if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
     try {
@@ -8687,8 +8629,9 @@ function applyRemoteControlOnce(action, ts, sender, controlId='') {
   if (!action) return false;
   if (isPrompterSelfSender(sender)) return false;
   const sig = controlId || `${sender || ''}:${ts || 0}:${action}`;
-  if (sig === _lastAppliedControlSig) return false;
-  _lastAppliedControlSig = sig;
+  if (_appliedControlSigs.has(sig)) return false;
+  _appliedControlSigs.add(sig);
+  if (_appliedControlSigs.size > 64) _appliedControlSigs.delete(_appliedControlSigs.values().next().value);
   ptHandleRemoteControl(action);
   ptPostControlAck(controlId, action, ts, sender);
   return true;
@@ -8966,7 +8909,7 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
         ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
         ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
       </div>
-      <label class="flow-wrap-custom flow-wrap-custom-row"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="3" aria-label="Custom wrap minutes"${dis}></label>
+      <label class="flow-wrap-custom flow-wrap-custom-row"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="${flowWrapCustomMin}" oninput="setFlowWrapCustomMin(this.value)" aria-label="Custom wrap minutes"${dis}></label>
     </div>
     <div class="flow-control-section flow-alert-section">
       <div class="flow-control-title">Alerts</div>
@@ -10728,7 +10671,9 @@ function productionNoteDraftKey() {
 
 function pbNormalizeNoteAttachment(a) {
   return {
-    fileId: String(a?.fileId || ''),
+    // ids are generated tokens — whitelist the charset so a crafted remote id
+    // can never break out of the onclick/data- attributes it gets rendered into
+    fileId: String(a?.fileId || '').replace(/[^\w.-]/g, ''),
     name: String(a?.name || 'file').slice(0, 120),
     type: String(a?.type || ''),
     size: Number(a?.size) || 0,
@@ -10742,7 +10687,7 @@ function normalizePlandaBearNote(n) {
   // `kind:'todo'` is the legacy field from the chat-style log — map it to a tag.
   const tag = PB_NOTE_TAGS[n?.tag] ? n.tag : (n?.kind === 'todo' ? 'todo' : 'general');
   return {
-    id: n?.id || `pbn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    id: String(n?.id || '').replace(/[^\w.-]/g, '') || `pbn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
     text: String(n?.text || '').trim(),
     by: n?.by || 'Someone',
     role: n?.role === 'instructor' ? 'instructor' : 'student',
@@ -10787,18 +10732,57 @@ async function loadPlandaBearNotes() {
     const raw = snap.exists() && Array.isArray(snap.data().preProNotes) ? snap.data().preProNotes : [];
     plandaBearNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
     saveLocalPlandaBearNotes(plandaBearNotes);
+    _pbNotesBaseline = new Set(plandaBearNotes.map(n => n.id));   // ids present when we loaded — used to tell my adds/deletes from a collaborator's
   } catch {
     plandaBearNotes = localPlandaBearNotes();
   }
   return plandaBearNotes;
 }
+let _pbNotesBaseline = new Set();
+
+// Reconcile my intended note list against whatever is on the server RIGHT NOW,
+// so two people editing at once don't clobber each other:
+//  • a note the server has that I never saw (not in my baseline) → a collaborator
+//    just added it → keep it.
+//  • a note in my baseline but not in my new list → I deleted it → drop it.
+//  • everything in my list → my adds/edits win.
+function pbReconcileNotes(serverRaw, intended) {
+  const serverList = (Array.isArray(serverRaw) ? serverRaw : []).map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  const mine = new Map(intended.map(n => [n.id, n]));
+  const out = [];
+  const emitted = new Set();
+  for (const s of serverList) {
+    if (mine.has(s.id)) { out.push(mine.get(s.id)); emitted.add(s.id); }        // my edit wins
+    else if (!_pbNotesBaseline.has(s.id)) { out.push(s); }                      // collaborator's new note — keep
+    // else: I deleted it since load — drop
+  }
+  for (const n of intended) if (!emitted.has(n.id)) out.push(n);               // my brand-new notes
+  return out;
+}
 
 async function writePlandaBearNotes(notes, activitySection='Production Note') {
-  plandaBearNotes = notes.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  const intended = notes.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  plandaBearNotes = intended;
   saveLocalPlandaBearNotes(plandaBearNotes);
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db, 'sessions', session.code);
-  window._updateDoc(ref, { preProNotes: plandaBearNotes }).catch(err => reportCloudWriteFailure('Production notes cloud save', err));
+  try {
+    if (window._runTransaction) {
+      await window._runTransaction(window._db, async (tx) => {
+        const snap = await tx.get(ref);
+        const merged = pbReconcileNotes(snap.exists() ? snap.data().preProNotes : [], intended);
+        tx.set(ref, { preProNotes: merged }, { merge: true });
+        plandaBearNotes = merged;
+      });
+      saveLocalPlandaBearNotes(plandaBearNotes);
+      _pbNotesBaseline = new Set(plandaBearNotes.map(n => n.id));
+      renderPlandaBearNotes();
+    } else {
+      await window._updateDoc(ref, { preProNotes: intended });
+    }
+  } catch (err) {
+    reportCloudWriteFailure('Production notes cloud save', err);
+  }
   if (activitySection && window._arrayUnion) {
     const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
     window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
@@ -11590,6 +11574,10 @@ async function publishPlandaBearNote() {
     try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
     pbCloseComposer();
     renderPlandaBearNotes();
+  } catch (err) {
+    // Upload or write failed — keep the composer contents so nothing is lost, but say so.
+    console.warn('[plandabear] note publish failed', err);
+    toast('⚠ Could not post the note — check your connection and try again.');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -11868,6 +11856,7 @@ function annotatePlandaBearNoteCards() {
    Notes you wrote yourself never notify you. ── */
 let pbNotifySeeded = false;          // first snapshot only seeds known ids (no toast for history)
 const pbKnownNoteIds = new Set();    // note ids already processed for notifications
+let pbNotifySessionCode = null;      // reseed on session switch — B's history must not toast after leaving A
 let notifPanelSince = 0;             // lastRead captured when the panel was opened (keeps unread highlight stable)
 let pbPendingFlashId = null;         // note to scroll-to + flash on the next board render
 let pbFlashClearT = null;            // clears the pending flash once it has settled
@@ -11995,7 +11984,8 @@ function closeNotifCenter() {
 
 function markAllNotifsRead() {
   pbMarkNotesRead();
-  renderNotifCenter(Date.now());
+  notifPanelSince = Date.now();   // a live update re-renders with this cutoff — keep "read" items read
+  renderNotifCenter(notifPanelSince);
 }
 
 function openNoteFromNotif(id) {
@@ -12128,6 +12118,11 @@ function pbToggleBrowserNotify() {
 // in-progress reply text is preserved by renderPlandaBearNotes.
 function onRemoteProductionNotes(raw) {
   if (!Array.isArray(raw)) return;
+  if (pbNotifySessionCode !== (session?.code || null)) {
+    pbNotifySessionCode = session?.code || null;
+    pbNotifySeeded = false;
+    pbKnownNoteIds.clear();
+  }
   plandaBearNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
   saveLocalPlandaBearNotes(plandaBearNotes);
   annotatePlandaBearNoteCards();
@@ -12181,7 +12176,9 @@ function pbAttachmentsPaperHTML(note) {
   if (!atts.length) return '';
   return atts.map(a => {
     if (a.isImage) {
-      const dataUrl = pbNoteFileCache.get(a.fileId) || '';
+      // synced payloads are attacker-writable: only a real data:image URL may enter the markup
+      const raw = pbNoteFileCache.get(a.fileId) || '';
+      const dataUrl = /^data:image\//i.test(raw) ? esc(raw) : '';
       return dataUrl
         ? `<div style="margin-top:10px"><img src="${dataUrl}" style="max-width:420px;max-height:320px;border:1px solid #ccc;border-radius:6px"><div style="font-size:10px;color:#777;margin-top:3px">${esc(a.name)}</div></div>`
         : `<div style="font-size:11px;color:#777;margin-top:6px">📷 Image attachment: ${esc(a.name)}</div>`;
@@ -13306,12 +13303,6 @@ function productionScheduleWithCallSheet(schedule={}, callSheet=loadPreProData()
   };
 }
 
-function productionChecklistGuideOptions() {
-  return PRODUCTION_CHECKLIST_GUIDES
-    .map(row => `<option value="${esc(row.area)}">${esc(row.area)}</option>`)
-    .join('');
-}
-
 function guideForProductionArea(area) {
   const needle = String(area || '').trim().toLowerCase();
   return PRODUCTION_CHECKLIST_GUIDES.find(row => row.area.toLowerCase() === needle);
@@ -13407,17 +13398,6 @@ function onProductionChecklistToggle(cb) {
   }
   saveProductionSchedule(false);                                  // persist + broadcast to the session
   renderProductionChecklist(getProductionScheduleData().checklist); // show the sign-off line
-}
-
-function addProductionChecklistGuidedRow() {
-  const current = getProductionScheduleData();
-  const selected = document.getElementById('ps-guide-select')?.value || '';
-  const used = new Set((current.checklist || []).map(row => String(row.area || '').toLowerCase()));
-  const guide = guideForProductionArea(selected) ||
-    PRODUCTION_CHECKLIST_GUIDES.find(row => !used.has(row.area.toLowerCase())) ||
-    PRODUCTION_CHECKLIST_GUIDES[0];
-  current.checklist.push({ area:guide.area, item:'', hint:guide.hint, done:false });
-  renderProductionChecklist(current.checklist);
 }
 
 function removeProductionChecklistRow(idx) {
@@ -13587,8 +13567,6 @@ function openPatchSheetEditor(kind) {
   const isVideo = kind === 'video';
   document.getElementById('patchSheetTitle').textContent = isVideo ? 'Video Patch Sheet' : 'Audio and Comms Patch Sheets';
   document.getElementById('patchSheetSub').textContent = 'Add rows manually or upload a CSV/TSV. Imported columns fill left to right.';
-  const saveBtn = document.getElementById('patchSheetSaveBtn');
-  if (saveBtn) saveBtn.textContent = isVideo ? 'Save Video Patch Sheet' : 'Save Audio and Comms Patch Sheets';
   document.getElementById('patchSheetBody').innerHTML = isVideo
     ? renderPatchTable('video', 'Video Patch Sheet')
     : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
@@ -13631,6 +13609,12 @@ function importPatchRows(kind, input) {
   const reader = new FileReader();
   reader.onload = () => {
     const lines = String(reader.result || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    // Drop a header row if the first line's first cell is a known column name.
+    if (lines.length) {
+      const first = (lines[0].split(/[\t,]/)[0] || '').trim().toLowerCase();
+      const headerCells = kind === 'comms' ? ['position','pos'] : ['label','name'];
+      if (headerCells.includes(first)) lines.shift();
+    }
     const rows = lines.map(line => {
       const cols = line.includes('\t') ? line.split('\t') : line.split(',');
       if (kind === 'comms') return { position:cols[0]||'', out:cols[1]||'', gear:cols[2]||'', notes:cols.slice(3).join(', ')||'' };
@@ -14027,9 +14011,11 @@ function addCallSheetPerson() {
 }
 
 function removeCallSheetPerson(idx) {
-  syncCallSheetPeopleFromDOM();
-  callSheetPeople.splice(idx, 1);
-  if (!callSheetPeople.length) callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:'' });
+  // Read rows unfiltered in DOM order — syncCallSheetPeopleFromDOM drops blank
+  // rows, which shifts indices and would delete the wrong person.
+  const rows = readCallPeopleRows();
+  rows.splice(idx, 1);
+  callSheetPeople = rows.length ? rows : [{ name:'', position:'', email:'', phone:'', call:'' }];
   renderCallSheetPeople();
 }
 
@@ -14365,7 +14351,7 @@ async function exportPDF() {
 // ─────────────────────────────────────────────────────────────
 function esc(s) {
   if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ─────────────────────────────────────────────────────────────
