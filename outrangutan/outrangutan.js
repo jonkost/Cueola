@@ -549,7 +549,32 @@
     bc.onmessage = (e) => {
       const m = e.data; if (!m || m._from !== 'output') return;
       const id = m.id || 1, rec = outputWins.get(id);
-      if (m.t === 'ready' || m.t === 'pong') { if (rec) rec.alive = true; updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id); }
+      // 'ready' = a fresh window that needs full state. A plain beat/pong must
+      // NOT re-push (a 2s heartbeat re-sending 'play' would glitch the video);
+      // it only re-syncs when it revives an output the watchdog declared dead.
+      if (m.t === 'ready') {
+        if (rec) { rec.alive = true; rec.lastBeat = Date.now(); rec.painting = true; }
+        updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id);
+      }
+      if (m.t === 'pong' || m.t === 'beat') {
+        if (rec) {
+          const wasDead = rec.alive === false;
+          rec.lastBeat = Date.now();
+          rec.alive = true;
+          const painting = (m.raf !== false);
+          if (!painting && rec.painting && active && active.kind === 'video' && active.cue.output === id) {
+            slog('error', 'Output ' + id + ' event loop is alive but frames are not painting.');
+          }
+          rec.painting = painting;
+          if (wasDead) {
+            const o = outputById(id);
+            slog('output', (o ? o.label : 'Output ' + id) + ' recovered — re-syncing its program state.');
+            toast('✓ ' + (o ? o.label : 'Output ' + id) + ' recovered — re-synced.');
+            resendActiveToOutput(id); applyOutputSink(id);
+            updateOutputUI();
+          }
+        }
+      }
       if (m.t === 'closed') { if (rec) rec.alive = false; updateOutputUI(); }
       if (m.t === 'error') toast('⚠ Output ' + id + ' could not play the media — black slate on that output.');
     };
@@ -557,6 +582,30 @@
   function sendOut(msg, target) { ensureChannel(); if (bc) bc.postMessage(Object.assign({ _from: 'control', target: (target == null ? null : target) }, msg)); }
   function outputById(id) { return outputs.find(o => o.id === id) || null; }
   function isOutputAlive(id) { const r = outputWins.get(id); return !!(r && r.win && !r.win.closed); }
+  // Healthy = window open AND the watchdog has heard a beat recently. A frozen
+  // renderer keeps win.closed === false forever — only the heartbeat catches it.
+  function isOutputHealthy(id) { const r = outputWins.get(id); return !!(r && r.win && !r.win.closed && r.alive); }
+
+  // ── watchdog: ping every WATCHDOG_MS, two missed beats = dead ──
+  const WATCHDOG_MS = 2000, WATCHDOG_DEAD_MS = 5000;
+  let watchdogTimer = null;
+  function ensureWatchdog() {
+    if (watchdogTimer) return;
+    watchdogTimer = setInterval(() => {
+      const now = Date.now();
+      outputWins.forEach((rec, id) => {
+        if (!rec.win || rec.win.closed) { if (rec.alive) { rec.alive = false; updateOutputUI(); } return; }
+        sendOut({ t: 'ping' }, id);
+        if (rec.alive && rec.lastBeat && now - rec.lastBeat > WATCHDOG_DEAD_MS) {
+          rec.alive = false;
+          const o = outputById(id);
+          slog('error', (o ? o.label : 'Output ' + id) + ' stopped responding — the window may be frozen. It re-syncs automatically if it comes back.');
+          toast('⚠ ' + (o ? o.label : 'Output ' + id) + ' stopped responding.');
+          updateOutputUI();
+        }
+      });
+    }, WATCHDOG_MS);
+  }
 
   function openOutput(id) {
     ensureChannel();
@@ -566,7 +615,9 @@
     if (scr) feats = 'left=' + scr.availLeft + ',top=' + scr.availTop + ',width=' + scr.availWidth + ',height=' + scr.availHeight;
     const win = window.open('outrangutan/output.html#out=' + o.id, 'outrangutanOutput' + o.id, feats);
     if (!win) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return null; }
-    outputWins.set(o.id, { win, alive: false, identify: false });
+    // lastBeat seeded at open so a slow first load gets the full grace window.
+    outputWins.set(o.id, { win, alive: false, identify: false, lastBeat: Date.now(), painting: true });
+    ensureWatchdog();
     toast(scr ? ('Opened ' + o.label + ' on ' + scr.label + '.') : ('Opened ' + o.label + '. Drag it to a display, then fullscreen it.'));
     setTimeout(() => { sendOut({ t: 'ping' }, o.id); if (scr) tryFullscreen(win); }, 600);
     updateOutputUI();
@@ -579,6 +630,8 @@
     if (active.kind === 'image') { sendOut({ t: 'image', mediaId: active.cue.mediaId, fadeIn: 0, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0 }, id); return; }
     if (active.kind !== 'video') return;
     sendOut({ t: 'play', mediaId: active.cue.mediaId, at: active.el.currentTime, loop: active.cue.loop, volume: active.cue.volume, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0, paused: !!(active.el && active.el.paused) }, id);
+    // Keyer re-push: a rebooted/recovered output loses its WebGL key state.
+    sendOut({ t: 'key', key: active.cue.key || { mode: 'off' } }, id);
   }
   function identifyOutput(id, on) {
     if (!isOutputAlive(id)) { if (!openOutput(id)) return; setTimeout(() => identifyOutput(id, on), 700); return; }   // blocked pop-up: stop, don't retry-loop
@@ -620,8 +673,24 @@
   }
 
   function updateOutputUI() {
-    const b = $('og-output-btn'); if (b) b.classList.toggle('on', outputs.some(o => isOutputAlive(o.id)));
+    const b = $('og-output-btn');
+    if (b) {
+      b.classList.toggle('on', outputs.some(o => isOutputHealthy(o.id)));
+      b.classList.toggle('dead', outputs.some(o => isOutputAlive(o.id) && !isOutputHealthy(o.id)));
+    }
     if ($('og-outputs') && $('og-outputs').classList.contains('on')) renderOutputs();
+  }
+
+  // Preflight bridge: Cueola's go-live panel asks how the outputs are doing.
+  function outputHealth() {
+    let open = 0, healthy = 0; const dead = [];
+    outputs.forEach(o => {
+      if (!isOutputAlive(o.id)) return;
+      open++;
+      if (isOutputHealthy(o.id)) healthy++;
+      else dead.push(o.label || ('Output ' + o.id));
+    });
+    return { open, healthy, dead };
   }
 
   // ── Stream Deck (WebHID, Phase 3) ────────────────────────────────────────
@@ -721,14 +790,16 @@
         + '<button class="og-bar-btn" id="og-out-detect">' + sym('content.display') + ' Detect displays</button>'
         + '<div class="og-field og-out-mastersink"><label>Master audio output (control)</label><select id="og-master-sink">' + devOptions(settings.masterSinkId) + '</select></div></div>'
       + outputs.map(o => {
-        const live = isOutputAlive(o.id);
+        const open = isOutputAlive(o.id);
+        const live = isOutputHealthy(o.id);
+        const dead = open && !live;   // window exists but the heartbeat stopped
         const screenSel = screensCache
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
           : '<span class="og-out-note">Detect displays to place this on a screen</span>';
         return '<div class="og-out-row">'
-          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : '') + '"></span>'
+          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' title="Not responding — the window may be frozen"' : '') + '></span>'
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
-            + '<button class="og-bar-btn og-out-open" data-o="' + o.id + '">' + (live ? 'Focus' : 'Open') + '</button>'
+            + '<button class="og-bar-btn og-out-open" data-o="' + o.id + '">' + (open ? 'Focus' : 'Open') + '</button>'
             + '<button class="og-bar-btn og-out-id" data-o="' + o.id + '">Identify</button>'
             + (outputs.length > 1 ? '<button class="og-bar-btn danger og-out-del" data-o="' + o.id + '">' + sym('action.delete') + '</button>' : '')
           + '</div>'
@@ -2985,6 +3056,7 @@
   window.exitOutrangutan = exitOutrangutan;
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
     preflight: preflightReport,                     // P7: deep media/SFX check for the Cueola preflight panel
+    outputHealth,                                   // watchdog status for the preflight "Playout outputs" row
     saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
     isReady: () => built && showLoaded && isOpen(),  // safe to receive an external SFX pad right now?
     addAudioPad,                                    // Cueola audio note → SFX pad hand-off

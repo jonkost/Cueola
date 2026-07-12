@@ -680,6 +680,10 @@
 .og-out-main { display: flex; align-items: center; gap: 8px; }
 .og-out-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); flex: 0 0 auto; }
 .og-out-dot.live { background: var(--green); box-shadow: none; }
+/* window open but the heartbeat stopped — frozen or crashed renderer */
+.og-out-dot.dead { background: var(--red); animation: og-dot-pulse 1s ease-in-out infinite; }
+@keyframes og-dot-pulse { 50% { opacity: .35; } }
+#og-output-btn.dead { color: var(--red); border-color: color-mix(in srgb, var(--red) 55%, transparent); }
 .og-out-label { flex: 1 1 auto; min-width: 80px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 13.5px; font-weight: 600; padding: 7px 10px; }
 .og-out-cfg { display: grid; grid-template-columns: 1.4fr 1fr 1.4fr; gap: 10px; align-items: center; margin-top: 10px; }
 .og-out-cfg .og-field label { font-size: 10px; }

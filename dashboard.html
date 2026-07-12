@@ -160,6 +160,24 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── SECTION HEADER ── */
 .sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
 .sec-title{font-family:var(--syne);font-size:18px;font-weight:700;letter-spacing:0}
+.sec-tools{display:flex;align-items:center;gap:10px}
+/* Mine / All scope segment */
+.scope-seg{display:inline-flex;border:1.5px solid var(--bord2);border-radius:9px;overflow:hidden}
+.scope-btn{padding:7px 16px;border:0;background:transparent;color:var(--text3);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.scope-btn+.scope-btn{border-left:1.5px solid var(--bord2)}
+.scope-btn:hover{color:var(--text)}
+.scope-btn.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text)}
+/* Recently deleted */
+.deleted-head{margin-top:34px}
+.deleted-window-note{font-size:12px;color:var(--text3)}
+.deleted-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border:1.5px dashed var(--bord2);border-radius:12px;margin-bottom:8px;background:color-mix(in srgb,var(--red) 3%,transparent)}
+.deleted-row .dr-code{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.08em}
+.deleted-row .dr-name{font-size:13px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deleted-row .dr-meta{font-size:11.5px;color:var(--text3);white-space:nowrap}
+.deleted-row .dr-actions{display:flex;gap:8px;flex-shrink:0}
+.btn-danger-ghost{background:transparent;color:var(--red);border:1.5px solid color-mix(in srgb,var(--red) 45%,transparent)}
+.btn-danger-ghost:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}
+@media(max-width:640px){.deleted-row{flex-wrap:wrap}.deleted-row .dr-name{flex-basis:100%;order:1;white-space:normal}.deleted-row .dr-meta{order:2}.deleted-row .dr-actions{width:100%;justify-content:flex-end;order:3}}
 .sec-title span{color:var(--accent)}
 
 /* ── NEW SESSION CARD ── */
@@ -253,6 +271,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn-secondary{background:transparent;border:1.5px solid var(--bord2);color:var(--text2)}
 .btn-secondary:hover{border-color:var(--text2);color:var(--text)}
 .btn-danger{background:rgba(240,82,82,.1);border:1px solid rgba(240,82,82,.3);color:var(--red)}
+.btn-danger:disabled{opacity:.45;cursor:not-allowed}
 .btn-danger:hover{background:rgba(240,82,82,.18)}
 /* standard project-wide theme selector */
 .theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;justify-items:center}
@@ -581,7 +600,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <!-- Sessions -->
   <div class="sec-head" id="sessionsHead" style="display:none">
     <div class="sec-title">Your <span>Sessions</span></div>
-    <button class="btn-sm btn-ghost" onclick="refreshSessions()">↻ Refresh</button>
+    <div class="sec-tools">
+      <div class="scope-seg" id="scopeSeg" role="group" aria-label="Which sessions to show">
+        <button type="button" class="scope-btn" id="scope-mine" onclick="setSessionScope('mine')" aria-pressed="false">Mine</button>
+        <button type="button" class="scope-btn" id="scope-all" onclick="setSessionScope('all')" aria-pressed="false">All</button>
+      </div>
+      <button class="btn-sm btn-ghost" onclick="refreshSessions()">↻ Refresh</button>
+    </div>
   </div>
 
   <!-- New session CTA -->
@@ -595,6 +620,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
   <!-- Session list -->
   <div id="sessionArea"></div>
+
+  <!-- Recently deleted (30-day restore window) -->
+  <div class="sec-head deleted-head" id="deletedHead" style="display:none">
+    <div class="sec-title">Recently <span>Deleted</span></div>
+    <div class="deleted-window-note">Kept for 30 days, then removed for good.</div>
+  </div>
+  <div id="deletedArea"></div>
 
   <div class="accounts-page" id="accountsPage" hidden>
     <div class="accounts-head">
@@ -788,10 +820,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- ── MODAL: CONFIRM DELETE ── -->
 <div class="modal-wrap" id="modal-delete">
   <div class="modal">
-    <div class="modal-title">Delete Session?</div>
-    <div class="modal-sub">This will permanently remove the session and all its cues. Anyone with the code will no longer be able to join.</div>
+    <div class="modal-title" id="delete-modal-title">Delete Session?</div>
+    <div class="modal-sub" id="delete-modal-sub">The session moves to Recently Deleted and stops accepting joins. You can restore it for 30 days.</div>
     <div class="confirm-name" id="delete-code-display">—</div>
-    <div style="font-size:12px;color:var(--red);text-align:center">This cannot be undone.</div>
+    <div style="font-size:12px;color:var(--red);text-align:center" id="delete-modal-warning">New joins are blocked immediately.</div>
     <button class="btn-full btn-danger" id="confirmDeleteBtn" onclick="deleteSession()">Yes, Delete Session</button>
     <button class="btn-full btn-secondary" onclick="hideModal('modal-delete')" style="margin-top:4px">Cancel</button>
   </div>
@@ -1026,9 +1058,13 @@ function restoreSavedAdminSession() {
 // ── STATE ─────────────────────────────────────────────────────
 let adminSession = null; // { id, name, level }
 let sessions     = [];
-let legacyFileDocIdsBySession = new Map();
+let deletedSessions = [];        // soft-deleted, inside the 30-day window
+let sessionScope = 'all';        // 'mine' | 'all' — standard admins default to 'mine'
+let deleteMode   = 'soft';       // what the confirm modal will do: 'soft' | 'purge'
 let activeCode   = null;
 let createdCode  = null;
+const DELETED_KEEP_MS = 30 * 24 * 3600 * 1000;
+const SCOPE_KEY = id => `cueola_scope_${id}`;
 const LEARNER_POSITIONS = ['PM','ENG Lead','Show Caller','Camera','Audio','GFX','Playback','Lighting','Stream','Stage Manager','Talent','Safety Lead'];
 
 function db(){ return window._db; }
@@ -1138,7 +1174,7 @@ function onLoggedIn() {
   document.getElementById('newSessionBtn').style.display = '';
   document.getElementById('sessionsHead').style.display = '';
   document.getElementById('newSessionCard').style.display = '';
-  document.querySelector('#sessionsHead .sec-title').innerHTML = 'All <span>Sessions</span>';
+  initSessionScope();
 
   // Hero
   document.querySelector('.hero-greeting').textContent = adminSession.level === 'super' ? 'Super Admin Dashboard' : 'Instructor Dashboard';
@@ -1149,6 +1185,44 @@ function onLoggedIn() {
 
   loadSessions();
   if (location.hash === '#accounts' && adminSession.level === 'super') setTimeout(openAccountsPage, 0);
+}
+
+// ── SCOPE (Mine / All) ────────────────────────────────────────
+function initSessionScope() {
+  let saved = null;
+  try { saved = localStorage.getItem(SCOPE_KEY(adminSession.id)); } catch {}
+  sessionScope = (saved === 'mine' || saved === 'all') ? saved
+    : (adminSession.level === 'super' ? 'all' : 'mine');
+  reflectSessionScope();
+}
+
+function setSessionScope(scope) {
+  sessionScope = scope === 'mine' ? 'mine' : 'all';
+  try { localStorage.setItem(SCOPE_KEY(adminSession.id), sessionScope); } catch {}
+  reflectSessionScope();
+  renderSessions();
+  updateStats();
+  renderDeletedSessions();
+}
+
+function reflectSessionScope() {
+  const mine = sessionScope === 'mine';
+  document.getElementById('scope-mine')?.classList.toggle('on', mine);
+  document.getElementById('scope-all')?.classList.toggle('on', !mine);
+  document.getElementById('scope-mine')?.setAttribute('aria-pressed', String(mine));
+  document.getElementById('scope-all')?.setAttribute('aria-pressed', String(!mine));
+  const title = document.querySelector('#sessionsHead .sec-title');
+  if (title) title.innerHTML = mine ? 'Your <span>Sessions</span>' : 'All <span>Sessions</span>';
+}
+
+function scopedSessions(list) {
+  return sessionScope === 'mine' ? list.filter(isSessionOwnedBySignedInAdmin) : list;
+}
+
+// Delete/restore stay with the session owner or a super admin. Client-side
+// honor system until the rules deploy — prevents accidents, not attacks.
+function canDeleteSession(s) {
+  return !!adminSession && (adminSession.level === 'super' || isSessionOwnedBySignedInAdmin(s));
 }
 
 // ── LOAD SESSIONS ─────────────────────────────────────────────
@@ -1176,24 +1250,25 @@ async function loadSessions() {
   }
 
   try {
-    const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const snap = await getDocs(collection(db(), 'sessions'));
+    const { collection, getDocs, query, where } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    // Range-filter on `code` so legacy pbfile_* sibling attachment docs (which
+    // carry no `code` field) are never fetched — listing sessions used to
+    // download every attachment byte. Every real session doc writes `code`
+    // (verified against production 2026-07-11). deleteSession finds legacy
+    // attachment docs with its own live query at delete time.
+    const snap = await getDocs(query(collection(db(), 'sessions'), where('code', '>=', '')));
     sessions = [];
-    legacyFileDocIdsBySession = new Map();
+    deletedSessions = [];
+    const expired = [];
+    const now = Date.now();
     snap.forEach(doc => {
-      const data = doc.data() || {};
-      // One-release migration fallback: hide legacy sibling attachment docs and
-      // remember them so deleting their session also removes the old payloads.
-      if (data.kind === 'pbNoteFile' || data.kind === 'pbNoteFileChunk') {
-        const code = String(data.session || '');
-        if (code) {
-          const ids = legacyFileDocIdsBySession.get(code) || [];
-          ids.push(doc.id);
-          legacyFileDocIdsBySession.set(code, ids);
-        }
+      const s = { id:doc.id, ...(doc.data() || {}) };
+      if (s.deletedAt) {
+        if (now - Number(s.deletedAt) > DELETED_KEEP_MS) expired.push(s);
+        else deletedSessions.push(s);
         return;
       }
-      sessions.push({ id:doc.id, ...data });
+      sessions.push(s);
     });
     sessions.sort((a,b)=>{
       if (adminSession.level !== 'super') {
@@ -1202,9 +1277,16 @@ async function loadSessions() {
       }
       return sessionCreatedSeconds(b) - sessionCreatedSeconds(a);
     });
+    deletedSessions.sort((a,b) => Number(b.deletedAt) - Number(a.deletedAt));
     renderSessions();
     updateStats();
     renderSuperOverview();
+    renderDeletedSessions();
+    // Lazy 30-day purge: super admins clean out expired soft-deletes on load.
+    if (expired.length && adminSession.level === 'super') {
+      for (const s of expired) { try { await purgeSessionDocs(s.code || s.id); } catch (e) { console.warn('expired purge failed', s.id, e); } }
+      showToast(`${expired.length} expired deleted session${expired.length===1?'':'s'} removed (30-day window passed)`);
+    }
   } catch(e) {
     area.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load sessions</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -1224,18 +1306,22 @@ const CARD_PALETTE = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316
 
 function renderSessions() {
   const area = document.getElementById('sessionArea');
-  if (!sessions.length) {
+  const visible = scopedSessions(sessions);
+  if (!visible.length) {
+    const mineEmpty = sessionScope === 'mine' && sessions.length;
     area.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span></div>
-        <div class="empty-title">No sessions yet</div>
-        <div class="empty-sub">Create your first session and share its code —<br>that's how your crew joins.</div>
+        <div class="empty-title">${mineEmpty ? 'No sessions of yours yet' : 'No sessions yet'}</div>
+        <div class="empty-sub">${mineEmpty
+          ? `Sessions you create appear here.<br>Switch to <b>All</b> to see the other ${sessions.length} session${sessions.length===1?'':'s'}.`
+          : `Create your first session and share its code —<br>that's how your crew joins.`}</div>
       </div>`;
     return;
   }
 
   area.innerHTML = '';
-  sessions.forEach((s, i) => {
+  visible.forEach((s, i) => {
     const color    = CARD_PALETTE[i % CARD_PALETTE.length];
     const beats    = s.beats || s.cues || [];
     const cueCount = beats.length;
@@ -1290,10 +1376,71 @@ function renderSessions() {
 }
 
 function updateStats() {
-  document.getElementById('stat-sessions').textContent = sessions.length;
-  const totalCues = sessions.reduce((a,s)=>a+((s.beats||s.cues||[]).length),0);
+  const visible = scopedSessions(sessions);
+  document.getElementById('stat-sessions').textContent = visible.length;
+  const totalCues = visible.reduce((a,s)=>a+((s.beats||s.cues||[]).length),0);
   document.getElementById('stat-cues').textContent = totalCues;
-  document.getElementById('stat-active').textContent = sessions.filter(s=>s.status==='active').length;
+  document.getElementById('stat-active').textContent = visible.filter(s=>s.status==='active').length;
+}
+
+// ── RECENTLY DELETED (30-day restore window) ──────────────────
+function renderDeletedSessions() {
+  const head = document.getElementById('deletedHead');
+  const area = document.getElementById('deletedArea');
+  if (!head || !area) return;
+  const visible = scopedSessions(deletedSessions);
+  head.style.display = visible.length ? '' : 'none';
+  area.innerHTML = '';
+  visible.forEach(s => {
+    const code = String(s.code || s.id);
+    const codeArg = JSON.stringify(code).replace(/"/g, '&quot;');
+    const daysLeft = Math.max(0, Math.ceil((Number(s.deletedAt) + DELETED_KEEP_MS - Date.now()) / 86400000));
+    const when = new Date(Number(s.deletedAt)).toLocaleDateString([], { month:'short', day:'numeric' });
+    const manageable = canDeleteSession(s);
+    const row = document.createElement('div');
+    row.className = 'deleted-row';
+    row.innerHTML = `
+      <div class="dr-code">${escapeHtml(code)}</div>
+      <div class="dr-name">${escapeHtml(s.showName || 'Untitled Show')}</div>
+      <div class="dr-meta">Deleted ${when}${s.deletedBy ? ' by ' + escapeHtml(s.deletedBy) : ''} · ${daysLeft} day${daysLeft===1?'':'s'} left</div>
+      <div class="dr-actions">
+        ${manageable
+          ? `<button class="btn-sm btn-ghost" onclick="restoreSession(${codeArg})">Restore</button>
+             <button class="btn-sm btn-danger-ghost" onclick="confirmPurgeDeleted(${codeArg})">Delete Forever</button>`
+          : `<span class="dr-meta">Owner or super admin only</span>`}
+      </div>`;
+    area.appendChild(row);
+  });
+}
+
+async function restoreSession(code) {
+  const s = deletedSessions.find(x => (x.code || x.id) === code);
+  if (!s) return;
+  if (!canDeleteSession(s)) { showToast('Only the session owner or a super admin can restore this session.'); return; }
+  try {
+    const { deleteField } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    await window._updateDoc(window._doc(db(), 'sessions', code), {
+      deletedAt: deleteField(), deletedBy: deleteField(),
+    });
+    showToast(`Session ${code} restored`);
+    await loadSessions();
+  } catch (e) {
+    showToast('Restore failed: ' + e.message);
+  }
+}
+
+function confirmPurgeDeleted(code) {
+  const s = deletedSessions.find(x => (x.code || x.id) === code);
+  if (!s) return;
+  if (!canDeleteSession(s)) { showToast('Only the session owner or a super admin can delete this session.'); return; }
+  activeCode = code;
+  deleteMode = 'purge';
+  document.getElementById('delete-modal-title').textContent = 'Delete Forever?';
+  document.getElementById('delete-modal-sub').textContent = 'This permanently removes the session, its cues, and every attachment. Anyone with the code will no longer be able to join.';
+  document.getElementById('delete-modal-warning').textContent = 'This cannot be undone.';
+  document.getElementById('confirmDeleteBtn').textContent = 'Yes, Delete Forever';
+  document.getElementById('delete-code-display').textContent = code;
+  showModal('modal-delete');
 }
 
 function renderSuperOverview() {
@@ -1515,6 +1662,17 @@ async function showDetail(code, e) {
   document.getElementById('detail-start').textContent      = s.startTime ? formatTime12(s.startTime) : 'Not set';
   document.getElementById('detail-cues').textContent       = cueCount + ' cue' + (cueCount!==1?'s':'');
   document.getElementById('detail-created-by').textContent = s.createdBy || '—';
+  // Ownership gate: delete stays with the session owner or a super admin.
+  const deletable = canDeleteSession(s);
+  const delBtn = document.getElementById('detail-delete-btn');
+  if (delBtn) {
+    delBtn.disabled = !deletable;
+    delBtn.title = deletable ? '' : 'Only the session owner or a super admin can delete this session.';
+  }
+  const dangerCopy = document.querySelector('.detail-danger-copy');
+  if (dangerCopy) dangerCopy.textContent = deletable
+    ? 'Delete moves this session to Recently Deleted for 30 days, then it is gone for good.'
+    : 'Only the session owner or a super admin can delete this session.';
   document.getElementById('detail-created').textContent    = s.createdAt?.seconds
     ? new Date(s.createdAt.seconds*1000).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
     : 'Unknown';
@@ -1955,38 +2113,85 @@ function openPrePro(code, e) {
 }
 
 // ── DELETE ─────────────────────────────────────────────────────
+// Default path is a SOFT delete: stamp {deletedAt, deletedBy}, keep every doc.
+// Hard removal (attachments cascade + doc delete) only runs from "Delete
+// Forever" in Recently Deleted or the lazy 30-day purge.
 function confirmDelete() {
+  const s = sessions.find(x => (x.code || x.id) === activeCode);
+  if (s && !canDeleteSession(s)) {
+    showToast('Only the session owner or a super admin can delete this session.');
+    return;
+  }
   hideModal('modal-detail');
+  deleteMode = 'soft';
+  document.getElementById('delete-modal-title').textContent = 'Delete Session?';
+  document.getElementById('delete-modal-sub').textContent = 'The session moves to Recently Deleted and stops accepting joins. You can restore it for 30 days.';
+  document.getElementById('delete-modal-warning').textContent = 'New joins are blocked immediately.';
+  document.getElementById('confirmDeleteBtn').textContent = 'Yes, Delete Session';
   document.getElementById('delete-code-display').textContent = activeCode;
   showModal('modal-delete');
+}
+
+// Hard-delete a session doc plus all its attachment docs (subcollection +
+// legacy siblings). Shared by Delete Forever and the 30-day lazy purge.
+async function purgeSessionDocs(code) {
+  const { collection, deleteDoc, doc, getDocs, writeBatch, query, where } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  const refs = [];
+  // Attachment subcollection sweep. Tolerate permission-denied: the deployed
+  // rules can predate the files subcollection (the staged firestore.rules
+  // add it) — the session delete must not fail because of that.
+  try {
+    const fileSnap = await getDocs(collection(db(), 'sessions', code, 'files'));
+    fileSnap.docs.forEach(file => refs.push(file.ref));
+  } catch (e) {
+    if (e?.code !== 'permission-denied') throw e;
+    console.warn('files subcollection sweep denied by deployed rules — deploy the staged firestore.rules', e);
+  }
+  // Legacy sibling attachment docs, queried live so ones created after the
+  // dashboard loaded (or by the client fallback) are swept too. Only pbfile
+  // docs carry a `session` field.
+  const legacySnap = await getDocs(query(collection(db(), 'sessions'), where('session', '==', code)));
+  legacySnap.docs.forEach(file => refs.push(file.ref));
+  for (let offset = 0; offset < refs.length; offset += 450) {
+    const batch = writeBatch(db());
+    refs.slice(offset, offset + 450).forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
+  await deleteDoc(doc(db(), 'sessions', code));
+  return refs.length;
 }
 
 async function deleteSession() {
   if (!activeCode) return;
   const code = activeCode;
+  const target = sessions.find(x => (x.code || x.id) === code) || deletedSessions.find(x => (x.code || x.id) === code);
+  if (target && !canDeleteSession(target)) {
+    hideModal('modal-delete');
+    showToast('Only the session owner or a super admin can delete this session.');
+    return;
+  }
   const btn = document.getElementById('confirmDeleteBtn');
   const originalLabel = btn?.textContent || 'Yes, Delete Session';
-  if (btn) { btn.disabled = true; btn.textContent = 'Deleting attachments…'; }
+  if (btn) { btn.disabled = true; btn.textContent = deleteMode === 'purge' ? 'Deleting attachments…' : 'Deleting…'; }
   try {
-    const { collection, deleteDoc, doc, getDocs, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const fileSnap = await getDocs(collection(db(), 'sessions', code, 'files'));
-    const refs = fileSnap.docs.map(file => file.ref);
-    for (const legacyId of legacyFileDocIdsBySession.get(code) || []) refs.push(doc(db(), 'sessions', legacyId));
-    for (let offset = 0; offset < refs.length; offset += 450) {
-      const batch = writeBatch(db());
-      refs.slice(offset, offset + 450).forEach(ref => batch.delete(ref));
-      await batch.commit();
+    if (deleteMode === 'purge') {
+      const swept = await purgeSessionDocs(code);
+      showToast(`Session ${code} and ${swept} attachment file${swept === 1 ? '' : 's'} deleted forever`);
+    } else {
+      await window._updateDoc(window._doc(db(), 'sessions', code), {
+        deletedAt: Date.now(),
+        deletedBy: adminSession?.name || 'Unknown admin',
+      });
+      showToast(`Session ${code} moved to Recently Deleted — restore within 30 days`);
     }
-    if (btn) btn.textContent = 'Deleting session…';
-    await deleteDoc(doc(db(), 'sessions', code));
     hideModal('modal-delete');
-    showToast(`Session ${code} and ${refs.length} attachment file${refs.length === 1 ? '' : 's'} deleted`);
     await loadSessions();
     activeCode = null;
   } catch(e) {
     showToast('Delete failed: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+    deleteMode = 'soft';
   }
 }
 

@@ -32,7 +32,10 @@ service cloud.firestore {
         && (!data.keys().hasAny(['participants']) || data.participants is list)
         && (!data.keys().hasAny(['presence']) || data.presence is map)
         && (!data.keys().hasAny(['prompter']) || data.prompter is map)
-        && (!data.keys().hasAny(['outrangutan']) || data.outrangutan is map);
+        && (!data.keys().hasAny(['outrangutan']) || data.outrangutan is map)
+        // Dashboard soft-delete stamp (Phase 1 item 4): restore removes both keys.
+        && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is int)
+        && optionalShortString(data, 'deletedBy', 120);
     }
 
     function validAdminsDocument(data) {

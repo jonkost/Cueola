@@ -1,0 +1,9 @@
+{
+  "_comment": "Known-legacy DOM references check-contracts.mjs must tolerate. Every entry is tech debt — remove the dead code, then the entry. Do not add new entries to silence a failure you caused.",
+  "missing-id": [
+    "cc-v-custom",
+    "cc-a-custom",
+    "cc-s-custom"
+  ],
+  "missing-handler": []
+}

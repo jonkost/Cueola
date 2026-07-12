@@ -248,6 +248,16 @@
 
   decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
   decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });
+
+  // ── watchdog heartbeat ──
+  // The controller must see a beat every ~2s or it declares this output dead.
+  // The rAF stamp rides the render loop, so the beat carries whether frames
+  // are actually painting (raf:false = event loop alive but rendering stalled
+  // or throttled). A fully frozen window emits nothing — that is the signal.
+  let lastFrameAt = performance.now();
+  (function frameStamp() { lastFrameAt = performance.now(); requestAnimationFrame(frameStamp); })();
+  setInterval(() => reply({ t: 'beat', raf: (performance.now() - lastFrameAt) < 1500 }), 2000);
+
   reply({ t: 'ready' });
   window.addEventListener('beforeunload', () => reply({ t: 'closed' }));
 })();

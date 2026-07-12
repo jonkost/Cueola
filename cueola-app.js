@@ -2645,7 +2645,8 @@ async function joinSession() {
   const verify = () => {
     window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
       if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
-      if (!snap.exists()) {
+      // A soft-deleted session (dashboard Recently Deleted) reads as gone.
+      if (!snap.exists() || snap.data()?.deletedAt) {
         errEl.textContent = 'Session not found. Check the code and try again.';
         errEl.classList.add('on');
         return;
@@ -2697,7 +2698,8 @@ async function joinPreProSession() {
   };
   const verify = () => {
     window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
-      if (!snap.exists()) {
+      // A soft-deleted session (dashboard Recently Deleted) reads as gone.
+      if (!snap.exists() || snap.data()?.deletedAt) {
         errEl.textContent = 'Session not found. Check the code and try again.';
         errEl.classList.add('on');
         return;
@@ -3783,7 +3785,6 @@ document.addEventListener('keydown', e => {
     if (open) { d.closeFn(el); e.preventDefault(); return; }
   }
 });
-uiDismissRegister(() => document.getElementById('notifPanel'), () => closeNotifCenter(), { ignore: ['#notifBellBtn'] });
 uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeEntryThemes(), { isOpen: el => !el.hasAttribute('hidden'), ignore: ['#entryThemeGear'] });
 
 // Owns ALL keys while open (called first from keymapDispatch).
@@ -4152,7 +4153,6 @@ function openAddRow() {
   if (durWrap) durWrap.style.display = '';
   document.getElementById('ar-step-1').classList.add('on');
   document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-3')?.classList.remove('on');
   buildArContext();
   showOverlay('addRowOv');
   setTimeout(()=>nameIn?.focus(), 80);
@@ -4182,7 +4182,6 @@ function arGoStep2() {
   }).join('');
   document.getElementById('ar-next-2').disabled = true;
   document.getElementById('ar-step-1').classList.remove('on');
-  document.getElementById('ar-step-3')?.classList.remove('on');
   document.getElementById('ar-step-2').classList.add('on');
 }
 
@@ -4229,7 +4228,6 @@ function arGoStep3() {
 
 function arGoStep1() {
   document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-3')?.classList.remove('on');
   document.getElementById('ar-step-1').classList.add('on');
 }
 
@@ -5768,6 +5766,7 @@ function runPreflight(reviewOnly) {
   if (links.cues.length || links.pads.length) addPreflightRow({ key: 'Playout links', state: 'pend', detail: 'Checking ' + (links.cues.length + links.pads.length) + ' linked cue/pad reference' + (links.cues.length + links.pads.length === 1 ? '' : 's') + '…' });
   addPreflightRow({ key: 'Playout media', state: 'pend', detail: 'Checking the Outrangutan library…' });
   addPreflightRow({ key: 'SFX banks', state: 'pend', detail: 'Checking pads…' });
+  if (window.Outrangutan?.outputHealth) addPreflightRow({ key: 'Playout outputs', state: 'pend', detail: 'Checking output windows…' });
   if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
     addPreflightRow({ key: 'Cloud round-trip', state: 'pend', detail: 'Writing a ping and waiting for the server echo…' });
   }
@@ -5834,6 +5833,22 @@ async function runPreflightAsync(run, links) {
     setPreflightRow('SFX banks', { state: 'ok', detail: Object.keys(pubPads).length + ' pads published from the playout machine' });
   } else {
     setPreflightRow('SFX banks', { state: 'ok', detail: 'No SFX pads in this show' });
+  }
+
+  // Playout outputs — the watchdog's live view of every output window.
+  if (window.Outrangutan?.outputHealth) {
+    let oh = null;
+    try { oh = window.Outrangutan.outputHealth(); } catch (e) { oh = null; }
+    if (!oh) {
+      setPreflightRow('Playout outputs', { state: 'warn', detail: 'Could not read output status' });
+    } else if (oh.dead.length) {
+      setPreflightRow('Playout outputs', { state: 'fail', detail: oh.dead.join(', ') + ' not responding — the window may be frozen. Close and reopen it.' });
+    } else if (oh.open === 0) {
+      const showHasVideo = links.cues.length > 0 || hasLocal && deep.cues.length > 0;
+      setPreflightRow('Playout outputs', { state: showHasVideo ? 'warn' : 'ok', detail: showHasVideo ? 'No output window open — open one before doors if this show plays video' : 'No output windows open' });
+    } else {
+      setPreflightRow('Playout outputs', { state: 'ok', detail: oh.healthy + ' of ' + oh.open + ' output window' + (oh.open === 1 ? '' : 's') + ' responding to the heartbeat' });
+    }
   }
   renderPreflightRows();
 
@@ -11288,17 +11303,20 @@ async function pbPrepareNoteAttachment(file) {
     return null;
   }
   const fileId = `pbf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+  // firestore.rules caps file-doc names at 240 chars — trim pathological
+  // filenames here instead of letting the cloud write bounce.
+  const safeName = raw => String(raw || '').slice(0, 240);
   if (isImage) {
     const img = await pbCompressNoteImage(file);
     return {
-      fileId, name: file.name || 'image', type: img.type,
+      fileId, name: safeName(file.name) || 'image', type: img.type,
       size: Math.round(img.dataUrl.length * 0.75), isImage: true,
       w: img.w, h: img.h, dataUrl: img.dataUrl,
     };
   }
   const dataUrl = await pbReadFileAsDataURL(file);
   const isAudio = /^audio\//i.test(file.type || '') || /\.(mp3|wav|m4a|aac|ogg|opus|weba)$/i.test(file.name || '');
-  return { fileId, name: file.name || 'file', type: file.type || '', size: file.size || 0, isImage: false, isAudio, w: 0, h: 0, dataUrl };
+  return { fileId, name: safeName(file.name) || 'file', type: (file.type || '').slice(0, 160), size: file.size || 0, isImage: false, isAudio, w: 0, h: 0, dataUrl };
 }
 
 function pbAttachListFor(scope) {
@@ -11377,16 +11395,28 @@ async function pbSaveNoteFile(att) {
   if (window._firebaseReady && window._setDoc && session.code && !session.isDemo && !session.isExpert) {
     const chunks = [];
     for (let i = 0; i < att.dataUrl.length; i += PB_FILE_CHUNK_CHARS) chunks.push(att.dataUrl.slice(i, i + PB_FILE_CHUNK_CHARS));
-    await window._setDoc(pbStoredFileRef(att.fileId), {
-      kind: 'pbNoteFile', fileId: att.fileId, session: session.code, name: att.name, type: att.type,
-      size: att.size, chunkCount: chunks.length, data: chunks[0] || '', at: Date.now(),
-    });
-    for (let i = 1; i < chunks.length; i++) {
-      const chunkDocId = pbStoredFileDocId(att.fileId, i);
-      await window._setDoc(pbStoredFileRef(att.fileId, i), {
-        kind: 'pbNoteFileChunk', fileId: chunkDocId, parentFileId: att.fileId,
-        session: session.code, chunkIndex: i, data: chunks[i],
+    const writeAll = async (makeRef, makeId) => {
+      await window._setDoc(makeRef(att.fileId), {
+        kind: 'pbNoteFile', fileId: att.fileId, session: session.code, name: att.name, type: att.type,
+        size: att.size, chunkCount: chunks.length, data: chunks[0] || '', at: Date.now(),
       });
+      for (let i = 1; i < chunks.length; i++) {
+        await window._setDoc(makeRef(att.fileId, i), {
+          kind: 'pbNoteFileChunk', fileId: makeId(att.fileId, i), parentFileId: att.fileId,
+          session: session.code, chunkIndex: i, data: chunks[i],
+        });
+      }
+    };
+    try {
+      await writeAll(pbStoredFileRef, pbStoredFileDocId);
+    } catch (err) {
+      // The deployed rules can predate the files subcollection (the staged
+      // firestore.rules add it). Fall back to the legacy sibling docs so
+      // attachments keep working; this branch self-retires once the staged
+      // rules are deployed and the subcollection write succeeds again.
+      if (err?.code !== 'permission-denied') throw err;
+      logShow('sync', 'Attachment stored via legacy path — deploy the staged firestore.rules to finish the files migration');
+      await writeAll(pbLegacyFileRef, pbFileDocId);
     }
     return;
   }
@@ -12420,8 +12450,8 @@ function annotatePlandaBearNoteCards() {
 let pbNotifySeeded = false;          // first snapshot only seeds known ids (no toast for history)
 const pbKnownNoteIds = new Set();    // note ids already processed for notifications
 let pbNotifySessionCode = null;      // reseed on session switch — B's history must not toast after leaving A
-let notifPanelSince = 0;             // lastRead captured when the panel was opened (keeps unread highlight stable)
 let pbPendingFlashId = null;         // note to scroll-to + flash on the next board render
+let pbNotifyLeadId = null;           // note the visible notify toast is about — clicking it flashes that note
 let pbFlashClearT = null;            // clears the pending flash once it has settled
 
 function pbLastReadKey() { return `cueola_pb_lastread_${session.code || session.userName || 'local'}`; }
@@ -12460,102 +12490,6 @@ function pbMarkNotesRead() {
   pbUpdatePlandaBearBadge();
 }
 
-/* ── Notification center (bell dropdown / message inbox) ── */
-function notifItems() {
-  return plandaBearNotes
-    .filter(n => !pbIsMine(n))
-    .slice()
-    .sort((a, b) => (b.at || 0) - (a.at || 0))
-    .slice(0, 30);
-}
-
-function renderNotifCenter(unreadSince) {
-  const list = document.getElementById('notifList');
-  if (!list) return;
-  const since = unreadSince == null ? pbGetLastRead() : unreadSince;
-  const items = notifItems();
-  if (!items.length) {
-    list.innerHTML = `<div class="notif-empty">No messages yet.<br>When a teammate posts or replies in Production Notes, it shows up here.</div>`;
-    return;
-  }
-  list.innerHTML = items.map(n => {
-    const unread = (n.at || 0) > since;
-    const repliesToMine = n.replyTo && plandaBearNotes.some(p => p.id === n.replyTo && pbIsMine(p));
-    const tag = PB_NOTE_TAGS[n.tag];
-    const action = repliesToMine ? 'replied to your note'
-      : n.replyTo ? 'replied'
-      : (tag && n.tag !== 'general' ? `posted a ${tag.label} note` : 'posted');
-    const snippet = esc(pbStripMarkdown(n.text || '').replace(/\s+/g, ' ').trim().slice(0, 90))
-      || ((n.attachments || []).length ? 'Attachment' : '');
-    return `<button type="button" class="notif-item${unread ? ' unread' : ''}" onclick="openNoteFromNotif('${n.id}')">
-      <span class="notif-avatar" style="background:${pbAvatarColor(n)}">${esc(pbInitials(n.by))}</span>
-      <span class="notif-body">
-        <span class="notif-line"><b>${esc(n.by)}</b> ${action}</span>
-        ${snippet ? `<span class="notif-snip">${snippet}</span>` : ''}
-        <span class="notif-time">${pbAgo(n.at)}</span>
-      </span>
-      ${unread ? '<span class="notif-dot"></span>' : ''}
-    </button>`;
-  }).join('');
-}
-
-function positionNotifPanel() {
-  const panel = document.getElementById('notifPanel');
-  const bell = document.getElementById('notifBellBtn');
-  if (!panel || !bell || panel.hidden) return;
-  const gutter = 10;
-  const r = bell.getBoundingClientRect();
-  const anchor = panel.offsetParent || document.body;
-  const base = anchor.getBoundingClientRect();
-  const panelW = Math.min(360, Math.max(280, window.innerWidth - (gutter * 2)));
-  panel.style.width = `${panelW}px`;
-  panel.style.right = 'auto';
-  panel.style.bottom = 'auto';
-  const left = Math.max(gutter, Math.min(window.innerWidth - panelW - gutter, r.left + (r.width / 2) - (panelW / 2)));
-  const top = Math.round(r.bottom + 10);
-  panel.style.left = `${Math.round(left - base.left)}px`;
-  panel.style.top = `${Math.round(top - base.top)}px`;
-  panel.style.maxHeight = `${Math.max(180, window.innerHeight - top - gutter)}px`;
-}
-
-function toggleNotifCenter(e) {
-  e?.stopPropagation?.();
-  const panel = document.getElementById('notifPanel');
-  if (!panel) return;
-  if (panel.hidden) {
-    notifPanelSince = pbGetLastRead();      // freeze the unread cutoff while the panel is open
-    renderNotifCenter(notifPanelSince);     // highlight what was unread before this open
-    panel.hidden = false;
-    positionNotifPanel();
-    window.addEventListener('resize', positionNotifPanel);
-    window.addEventListener('scroll', positionNotifPanel, true);
-    document.getElementById('notifBellBtn')?.classList.add('on');
-    pbMarkNotesRead();                       // clears the badge (panel keeps its highlight)
-    // dismissal handled by the shared uiDismissRegister utility (P6)
-  } else {
-    closeNotifCenter();
-  }
-}
-
-function closeNotifCenter() {
-  const panel = document.getElementById('notifPanel');
-  if (panel) panel.hidden = true;
-  window.removeEventListener('resize', positionNotifPanel);
-  window.removeEventListener('scroll', positionNotifPanel, true);
-  document.getElementById('notifBellBtn')?.classList.remove('on');
-}
-
-function markAllNotifsRead() {
-  pbMarkNotesRead();
-  notifPanelSince = Date.now();   // a live update re-renders with this cutoff — keep "read" items read
-  renderNotifCenter(notifPanelSince);
-}
-
-function openNoteFromNotif(id) {
-  closeNotifCenter();
-  pbPendingFlashId = id;        // applied by renderPlandaBearNotes once the board paints
-  openProductionNotes();
-}
 
 // Highlight + scroll to a note after the board renders (survives the async
 // load → re-render, since it runs at the end of every render until consumed).
@@ -12606,6 +12540,7 @@ function pbFireNoteNotifications(fresh) {
   const lead = mentionsMe || replyToYou || fresh[fresh.length - 1];
   const extra = fresh.length - 1;
   const msg = extra > 0 ? `${pbNoteNotifyText(lead)}  ·  +${extra} more` : pbNoteNotifyText(lead);
+  pbNotifyLeadId = lead.id;
   pbShowNotifyToast(msg);
   if (pbBrowserNotifyEnabled() && document.hidden) {
     try {
@@ -12639,6 +12574,7 @@ function pbDismissNotifyToast() {
 
 function pbOpenFromNotify() {
   pbDismissNotifyToast();
+  if (pbNotifyLeadId) { pbPendingFlashId = pbNotifyLeadId; pbNotifyLeadId = null; }
   openProductionNotes();
 }
 
@@ -12709,8 +12645,6 @@ function onRemoteProductionNotes(raw) {
     if (fresh.length) pbFireNoteNotifications(fresh);
   }
   if (pbNotesBoardOpen()) pbMarkNotesRead(); else pbUpdatePlandaBearBadge();
-  const panel = document.getElementById('notifPanel');
-  if (panel && !panel.hidden) renderNotifCenter(notifPanelSince);
 
   if (pbEditingNoteId) return;
   if (pbNotesBoardOpen()) renderPlandaBearNotes();

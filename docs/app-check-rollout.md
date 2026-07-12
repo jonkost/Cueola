@@ -5,6 +5,23 @@ Firebase App Check bootstrap in both `index.html` and `dashboard.html`. Nothing
 in this runbook is deployed automatically. The owner controls every Firebase
 Console and deploy action.
 
+## ⚠ Deploy sooner rather than later (verified 2026-07-11)
+
+Production probes show the CURRENTLY DEPLOYED rules are an older hardened
+revision: `sessions/{code}` works, but `sessions/{code}/files`,
+`sessions/{code}/notes`, `accessCodes`, `profiles`, and even `accounts/{id}`
+READS are all denied. Two live consequences until the staged rules deploy:
+
+- **Note attachments** could not post at all (the client writes the files
+  subcollection). The client now falls back to the legacy `pbfile_*` sibling
+  docs when it sees `permission-denied` — attachments work again, but land in
+  the legacy location and keep bloating the sessions collection. The fallback
+  self-retires once the staged rules are live.
+- **Entitlement reads** (`accounts/{id}`) fail quietly; the client uses its
+  local default (currently full-function, so no user-visible impact).
+
+Deploying the staged `firestore.rules` (section 2) resolves both.
+
 ## What this protects—and what it does not
 
 - The rules allow only Cueola's known top-level collections and validate paths,
@@ -30,10 +47,15 @@ firebase emulators:exec --project cueola-rules-test --only firestore \
   "node scripts/test-rules.mjs"
 ```
 
-The suite covers main-app session create/read/update, dashboard list/delete and
-admin roster, Flowmingo/Prompt-Up prompter updates, Outrangutan updates, legacy
-attachment documents, read-only entitlements, deny-by-default behavior, and the
-future files/notes/accessCodes/profiles shapes.
+The suite covers main-app session create/read/update, the highest-frequency
+live writes verbatim (presence maps, Planda Bear notes/activity, preflight
+pings, rundown transaction batches), dashboard list/delete and admin roster,
+Flowmingo/Prompt-Up prompter updates, Outrangutan updates, legacy attachment
+documents, read-only entitlements, deny-by-default behavior, type/bound
+denials (list/map types, showName bounds, attachment chunk caps, unknown
+keys), and the future files/notes/accessCodes/profiles shapes including code
+revocation and profile identity immutability. It refuses to run against a
+non-local FIRESTORE_EMULATOR_HOST.
 
 For an operator-style browser rehearsal against those staged rules, start the
 Firestore emulator and open either localhost entry point with
