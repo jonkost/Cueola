@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=20260711e">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=1.0.1c">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#080b12">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=127986b7a0">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=24804b1147">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -69,6 +71,9 @@
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;letter-spacing:0;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow:hidden;scroll-behavior:smooth}
 .screen{display:none;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 .screen.on{display:flex}
+.app-update-banner{position:fixed;left:50%;bottom:18px;z-index:410;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:min(620px,calc(100vw - 28px));padding:10px 12px 10px 15px;border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-group);background:var(--glass-bg-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));box-shadow:var(--liquid-shadow-raised);color:var(--text);font-size:12.5px}
+.app-update-banner[hidden]{display:none}.app-update-copy{flex:1;min-width:0}.app-update-copy b{display:block;font-family:var(--syne);font-size:13px}.app-update-copy span{color:var(--text2)}.app-update-banner button{width:auto;flex:none;padding:8px 12px}.app-update-dismiss{background:transparent;border:0;color:var(--text2);cursor:pointer;padding:8px!important}
+@media(max-width:560px){.app-update-banner{align-items:flex-start;flex-wrap:wrap}.app-update-copy{flex-basis:100%}}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bord2);border-radius:2px}
 button,input,select,textarea{font:inherit}
 button{color:inherit}
@@ -1806,6 +1811,12 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .slog-cat{font-family:var(--mono);color:var(--text3);flex:none;width:62px;text-transform:uppercase;font-size:9.5px;letter-spacing:.04em}
 .slog-msg{color:var(--text2);word-break:break-word}
 .slog-empty{padding:22px 16px;text-align:center;color:var(--text3);font-size:12.5px}
+.snap-list{max-height:48vh;overflow-y:auto;margin-top:10px;border-top:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
+.snap-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 2px;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent);align-items:center}
+.snap-main{min-width:0}.snap-time{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700}.snap-reason{margin-left:7px;color:var(--accent);font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+.snap-summary{color:var(--text2);font-size:12px;line-height:1.45;margin-top:4px}.snap-actions{display:flex;gap:7px}.snap-actions button{width:auto;padding:7px 11px;font-size:11px}
+.snap-empty{padding:28px 12px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.5}
+@media(max-width:560px){.snap-row{grid-template-columns:1fr}.snap-actions{justify-content:flex-end}}
 .precheck-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
 .precheck-actions .btn-primary,.precheck-actions .btn-secondary{width:auto;flex:0 0 auto;padding:11px 18px}
 
@@ -4833,6 +4844,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" title="Save this rundown as a .cueola show file (Cmd+S re-saves it in place)"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openRundownFilePicker()" title="Open a saved .cueola show file (legacy .json still opens)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Open File</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openSessionHistory()" title="Browse locally saved recovery snapshots"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>History</span></button>
 	      </div>
 	    </div>
 	    <div class="settings-section" style="margin-top:12px">
@@ -4875,6 +4887,18 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
   </div>
 </div>
 
+<div class="modal-wrap" id="modal-session-history">
+  <div class="modal settings-sheet slog-modal">
+    <div class="modal-title">Session History</div>
+    <div class="modal-sub" id="sessionHistorySub">Local recovery snapshots for this session.</div>
+    <div class="snap-list" id="sessionHistoryList" aria-live="polite"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary export-action" id="sessionHistoryExportAll" onclick="exportAllSessionSnapshots()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export All</span></button>
+      <button class="btn-primary" onclick="hideModal('modal-session-history')">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Print area -->
 <div id="printArea"></div>
 
@@ -4882,13 +4906,18 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <div class="screen" id="outrangutan"></div>
 
 <!-- Toast -->
+<div class="app-update-banner" id="appUpdateBanner" role="status" hidden>
+  <div class="app-update-copy"><b>Cueola update ready</b><span>Reload when the operator is at a safe stopping point.</span></div>
+  <button class="btn-primary" type="button" onclick="applyCueolaUpdate()">Reload</button>
+  <button class="app-update-dismiss" type="button" onclick="dismissCueolaUpdate()" aria-label="Dismiss update notice">Later</button>
+</div>
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-<script src="cueola-entitlements.js?v=20260621c"></script>
-<script src="cueola-avatar-profile.js?v=20260711a"></script>
-<script src="cueola-app.js?v=1.0.1i"></script>
-<script src="outrangutan/outrangutan.js?v=1.0.0u"></script>
+<script src="cueola-entitlements.js?v=746c10a762"></script>
+<script src="cueola-avatar-profile.js?v=943c230239"></script>
+<script src="cueola-app.js?v=d92f9114d2"></script>
+<script src="outrangutan/outrangutan.js?v=7e7c8bd44a"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

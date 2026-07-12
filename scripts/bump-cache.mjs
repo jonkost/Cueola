@@ -25,7 +25,9 @@ export const ASSETS = [
   'outrangutan/outrangutan.css',
   'assets/sf-symbols.css',
 ];
-export const PAGES = ['index.html', 'dashboard.html'];
+// sw.js repeats the explicit versioned shell URLs. Rewriting it from the same
+// hashes makes the service-worker cache name change mechanically with assets.
+export const PAGES = ['index.html', 'dashboard.html', 'sw.js'];
 
 const VERSIONED_REF_RE = /["'(]([\w./-]+\.(?:js|css))\?v=([\w.-]+)/g;
 

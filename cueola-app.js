@@ -179,6 +179,204 @@ function restoreLocalDraft() {
   }
 }
 
+// ── Local session snapshot history ────────────────────────────────────────
+// Recovery copies stay on this device. They deliberately include the session
+// document but restore only operator-owned content; presence, clocks, commands,
+// and device heartbeats must never be rewound.
+const SESSION_HISTORY_DB = 'cueola-session-history';
+const SESSION_HISTORY_STORE = 'snapshots';
+const SESSION_HISTORY_LIMIT = 20;
+const SESSION_HISTORY_INTERVAL_MS = 120000;
+const SESSION_RESTORABLE_FIELDS = ['customSources','prePro','preProNotes','roleAssignments','cues'];
+let sessionSnapshotLatestDoc = null;
+let sessionSnapshotLastAt = 0;
+let sessionSnapshotCaptureRunning = false;
+let sessionSnapshotPendingForceReason = '';
+
+function openSessionHistoryDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SESSION_HISTORY_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(SESSION_HISTORY_STORE)) {
+        const store = db.createObjectStore(SESSION_HISTORY_STORE, { keyPath:'id' });
+        store.createIndex('sessionCode', 'sessionCode', { unique:false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function sessionHistoryList(code=session.code) {
+  if (!code || !window.indexedDB) return [];
+  const db = await openSessionHistoryDB();
+  return new Promise(resolve => {
+    const request = db.transaction(SESSION_HISTORY_STORE, 'readonly').objectStore(SESSION_HISTORY_STORE).index('sessionCode').getAll(code);
+    request.onsuccess = () => resolve((request.result || []).sort((a,b) => b.createdAt - a.createdAt));
+    request.onerror = () => resolve([]);
+  });
+}
+
+async function sessionHistoryPut(record) {
+  const db = await openSessionHistoryDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(SESSION_HISTORY_STORE, 'readwrite');
+    tx.objectStore(SESSION_HISTORY_STORE).put(record);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  const records = await sessionHistoryList(record.sessionCode);
+  if (records.length <= SESSION_HISTORY_LIMIT) return;
+  await new Promise(resolve => {
+    const tx = db.transaction(SESSION_HISTORY_STORE, 'readwrite');
+    records.slice(SESSION_HISTORY_LIMIT).forEach(item => tx.objectStore(SESSION_HISTORY_STORE).delete(item.id));
+    tx.oncomplete = resolve;
+    tx.onerror = resolve;
+  });
+}
+
+async function encodeSessionSnapshot(doc) {
+  const json = JSON.stringify(doc);
+  if (typeof CompressionStream === 'undefined') return { encoding:'json', data:json, bytes:new Blob([json]).size };
+  const blob = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
+  return { encoding:'gzip', data:blob, bytes:blob.size };
+}
+
+async function decodeSessionSnapshot(record) {
+  if (record.encoding !== 'gzip') return JSON.parse(record.data);
+  const json = await new Response(record.data.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(json);
+}
+
+function sessionSnapshotSummary(doc, previousDoc) {
+  const current = Array.isArray(doc?.beats) ? doc.beats : [];
+  const previous = Array.isArray(previousDoc?.beats) ? previousDoc.beats : [];
+  const before = new Map(previous.map(beat => [String(beat.id), beat]));
+  const after = new Map(current.map(beat => [String(beat.id), beat]));
+  let added = 0, removed = 0, changed = 0;
+  after.forEach((beat,id) => { if (!before.has(id)) added++; else if (stableStringify(before.get(id)) !== stableStringify(beat)) changed++; });
+  before.forEach((beat,id) => { if (!after.has(id)) removed++; });
+  const parts = [`${current.length} row${current.length === 1 ? '' : 's'}`];
+  if (added) parts.push(`+${added} added`);
+  if (removed) parts.push(`−${removed} removed`);
+  if (changed) parts.push(`${changed} changed`);
+  if (previousDoc && (doc.showName !== previousDoc.showName || doc.startTime !== previousDoc.startTime || Boolean(doc.freeMode) !== Boolean(previousDoc.freeMode))) parts.push('show settings changed');
+  const notes = Array.isArray(doc?.preProNotes) ? doc.preProNotes.length : 0;
+  if (notes) parts.push(`${notes} production note${notes === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
+async function captureSessionSnapshot(reason='interval', force=false) {
+  if (!window.indexedDB || !session.code || session.isDemo || session.isExpert || !sessionSnapshotLatestDoc) return;
+  if (sessionSnapshotCaptureRunning) {
+    if (force) sessionSnapshotPendingForceReason = reason;
+    return;
+  }
+  const targetSessionCode = session.code;
+  const now = Date.now();
+  if (!force && now - sessionSnapshotLastAt < SESSION_HISTORY_INTERVAL_MS) return;
+  sessionSnapshotCaptureRunning = true;
+  try {
+    const existing = await sessionHistoryList(targetSessionCode);
+    const latest = existing[0];
+    const doc = cloneRundownValue(sessionSnapshotLatestDoc);
+    const fingerprint = stableStringify(doc);
+    if (!force && latest?.fingerprint === fingerprint) { sessionSnapshotLastAt = now; return; }
+    const previousDoc = latest ? await decodeSessionSnapshot(latest) : null;
+    const encoded = await encodeSessionSnapshot(doc);
+    await sessionHistoryPut({
+      id:`${targetSessionCode}_${now}_${Math.random().toString(36).slice(2,7)}`,
+      sessionCode:targetSessionCode, createdAt:now, reason, fingerprint,
+      summary:sessionSnapshotSummary(doc, previousDoc), ...encoded,
+    });
+    sessionSnapshotLastAt = now;
+  } catch (err) {
+    console.warn('Session history snapshot unavailable', err);
+  } finally {
+    sessionSnapshotCaptureRunning = false;
+    if (sessionSnapshotPendingForceReason) {
+      const pendingReason = sessionSnapshotPendingForceReason;
+      sessionSnapshotPendingForceReason = '';
+      queueMicrotask(() => captureSessionSnapshot(pendingReason, true));
+    }
+  }
+}
+
+function sessionSnapshotReasonLabel(reason) {
+  return ({ joined:'Joined', interval:'Auto', live:'Go Live', leave:'Leave', restored:'Restored' })[reason] || reason;
+}
+
+async function openSessionHistory() {
+  showModal('modal-session-history');
+  const list = document.getElementById('sessionHistoryList');
+  const sub = document.getElementById('sessionHistorySub');
+  list.innerHTML = '<div class="snap-empty">Loading local recovery snapshots…</div>';
+  const records = await sessionHistoryList();
+  sub.textContent = `${records.length} of ${SESSION_HISTORY_LIMIT} local recovery snapshots · newest first`;
+  document.getElementById('sessionHistoryExportAll').disabled = !records.length;
+  list.innerHTML = records.length ? records.map(record => `
+    <div class="snap-row">
+      <div class="snap-main"><div><span class="snap-time">${esc(new Date(record.createdAt).toLocaleString())}</span><span class="snap-reason">${esc(sessionSnapshotReasonLabel(record.reason))}</span></div><div class="snap-summary">${esc(record.summary || 'Session recovery snapshot')}</div></div>
+      <div class="snap-actions"><button class="btn-secondary export-action" onclick="exportSessionSnapshot('${record.id}')">Export</button><button class="btn-secondary" onclick="restoreSessionSnapshot('${record.id}')">Restore</button></div>
+    </div>`).join('') : '<div class="snap-empty">No snapshots yet. Cueola saves one when you join, every two minutes while the session changes, when you go live, and when you leave.</div>';
+}
+
+async function getSessionSnapshotRecord(id) {
+  const db = await openSessionHistoryDB();
+  return new Promise(resolve => {
+    const request = db.transaction(SESSION_HISTORY_STORE, 'readonly').objectStore(SESSION_HISTORY_STORE).get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => resolve(null);
+  });
+}
+
+function downloadSessionHistoryJSON(value, filename) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type:'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportSessionSnapshot(id) {
+  const record = await getSessionSnapshotRecord(id);
+  if (!record) { toast('Snapshot not found.'); return; }
+  const doc = await decodeSessionSnapshot(record);
+  downloadSessionHistoryJSON({ sessionCode:record.sessionCode, createdAt:record.createdAt, reason:record.reason, summary:record.summary, session:doc }, `Cueola Snapshot ${record.sessionCode} ${new Date(record.createdAt).toISOString().replace(/[:.]/g,'-')}.json`);
+  toast('Snapshot exported.');
+}
+
+async function exportAllSessionSnapshots() {
+  const records = await sessionHistoryList();
+  const snapshots = await Promise.all(records.map(async record => ({ createdAt:record.createdAt, reason:record.reason, summary:record.summary, session:await decodeSessionSnapshot(record) })));
+  downloadSessionHistoryJSON({ sessionCode:session.code, exportedAt:Date.now(), snapshots }, `Cueola History ${session.code} ${new Date().toISOString().slice(0,10)}.json`);
+  toast('Session history exported.');
+}
+
+async function restoreSessionSnapshot(id) {
+  const record = await getSessionSnapshotRecord(id);
+  if (!record) { toast('Snapshot not found.'); return; }
+  if (!confirm(`Restore the ${new Date(record.createdAt).toLocaleString()} snapshot?\n\nCurrent rundown content will be replaced through normal cloud sync. A recovery copy of the current session will be saved first.`)) return;
+  await captureSessionSnapshot('interval', true);
+  const doc = await decodeSessionSnapshot(record);
+  beats = (Array.isArray(doc.beats) ? doc.beats : []).map(migrateBeat);
+  show.name = doc.showName || 'Untitled Show';
+  show.start = normalizeTimeValue(doc.startTime);
+  freeTextMode = Boolean(doc.freeMode);
+  sessionCustomSources = doc.customSources || {};
+  renderRundown();
+  syncToFirestore();
+  if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
+    const updates = {};
+    SESSION_RESTORABLE_FIELDS.forEach(field => { updates[field] = doc[field] === undefined ? window._deleteField() : cloneRundownValue(doc[field]); });
+    try { await window._updateDoc(window._doc(window._db,'sessions',session.code), updates); }
+    catch (err) { reportCloudWriteFailure('Snapshot restore', err); return; }
+  }
+  hideModal('modal-session-history');
+  sessionSnapshotLatestDoc = { ...(sessionSnapshotLatestDoc || {}), ...cloneRundownValue(doc) };
+  await captureSessionSnapshot('restored', true);
+  toast(`Restored snapshot from ${new Date(record.createdAt).toLocaleTimeString()}.`);
+}
+
 // Save / open a rundown as a file on the user's computer (portable backup).
 // P7: branded ".cueola" show files. Chrome/Edge get the File System Access
 // picker (a named "Cueola Show" type) and save-in-place — Cmd+S re-saves the
@@ -537,6 +735,7 @@ function pushSessionHistoryState(screen) {
 }
 
 function leaveSessionForFrontPage() {
+  captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   clearResumeState();   // P7: intentional leave — never offer to resume it (Decisions #14)
   stopTimer();
@@ -641,6 +840,58 @@ function toast(msg, dur=2500) {
   clearTimeout(el._t);
   el._t = setTimeout(() => el.style.display='none', dur);
 }
+
+// ── Offline shell + operator-controlled updates ───────────────────────────
+let cueolaWaitingWorker = null;
+let cueolaUpdateApplying = false;
+
+function showCueolaUpdate(worker) {
+  cueolaWaitingWorker = worker;
+  const banner = document.getElementById('appUpdateBanner');
+  if (banner) banner.hidden = false;
+  document.documentElement.dataset.swState = 'update-ready';
+}
+
+function dismissCueolaUpdate() {
+  const banner = document.getElementById('appUpdateBanner');
+  if (banner) banner.hidden = true;
+}
+
+function applyCueolaUpdate() {
+  if (!cueolaWaitingWorker) { location.reload(); return; }
+  cueolaUpdateApplying = true;
+  document.documentElement.dataset.swState = 'updating';
+  cueolaWaitingWorker.postMessage({ type:'SKIP_WAITING' });
+}
+
+function watchCueolaWorker(registration) {
+  if (registration.waiting && navigator.serviceWorker.controller) showCueolaUpdate(registration.waiting);
+  registration.addEventListener('updatefound', () => {
+    const worker = registration.installing;
+    if (!worker) return;
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) showCueolaUpdate(worker);
+    });
+  });
+}
+
+function initCueolaServiceWorker() {
+  if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (cueolaUpdateApplying) location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js', { scope:'./' }).then(registration => {
+    watchCueolaWorker(registration);
+    return navigator.serviceWorker.ready;
+  }).then(() => {
+    if (document.documentElement.dataset.swState !== 'update-ready') document.documentElement.dataset.swState = 'offline-ready';
+  }).catch(err => {
+    document.documentElement.dataset.swState = 'unavailable';
+    console.warn('Cueola offline shell unavailable', err);
+  });
+}
+
+window.addEventListener('load', initCueolaServiceWorker, { once:true });
 
 const DIALOG_FOCUSABLE = [
   'a[href]',
@@ -2481,6 +2732,13 @@ let rundownPendingBatches = [];
 let rundownSyncRunning = false;
 let rundownSyncRetryTimer = null;
 let beatIdSequence = 0;
+const RUNDOWN_HISTORY_LIMIT = 50;
+let rundownUndoStack = [];
+let rundownRedoStack = [];
+const rundownLocalBatchIds = new Set();
+let rundownLastSeenBatchId = '';
+let rundownHistoryReplay = false;
+let rundownHistorySessionCode = '';
 
 function genCode() {
   const d = new Date();
@@ -2953,6 +3211,68 @@ function rundownBatchHasChanges(batch) {
   return Boolean(batch.additions.length || batch.patches.length || batch.removals.length || batch.order || Object.keys(batch.showPatch).length);
 }
 
+function rundownBatchTouchedIds(batch) {
+  return new Set([
+    ...(batch.additions || []).map(beat => String(beat.id)),
+    ...(batch.patches || []).map(item => String(item.id)),
+    ...(batch.removals || []).map(String),
+    ...(batch.order || []).map(String),
+  ]);
+}
+
+function rundownBatchLabel(batch) {
+  if (batch.additions.length) return batch.additions.length === 1 ? 'Add rundown row' : `Add ${batch.additions.length} rundown rows`;
+  if (batch.removals.length) return batch.removals.length === 1 ? 'Delete rundown row' : `Delete ${batch.removals.length} rundown rows`;
+  if (batch.order) return 'Reorder rundown rows';
+  if (batch.patches.length) return batch.patches.length === 1 ? 'Edit rundown row' : `Edit ${batch.patches.length} rundown rows`;
+  return 'Edit show settings';
+}
+
+function rememberRundownHistory(forward, inverse) {
+  rundownUndoStack.push({ forward, inverse, label:rundownBatchLabel(forward), touchedIds:rundownBatchTouchedIds(forward) });
+  if (rundownUndoStack.length > RUNDOWN_HISTORY_LIMIT) rundownUndoStack.shift();
+  rundownRedoStack = [];
+}
+
+function invalidateConflictingRundownHistory(remoteBatch) {
+  const touched = rundownBatchTouchedIds(remoteBatch);
+  if (!touched.size) return;
+  const keep = entry => ![...entry.touchedIds].some(id => touched.has(id));
+  const before = rundownUndoStack.length + rundownRedoStack.length;
+  rundownUndoStack = rundownUndoStack.filter(keep);
+  rundownRedoStack = rundownRedoStack.filter(keep);
+  if (before !== rundownUndoStack.length + rundownRedoStack.length) {
+    toast('Undo history updated after a collaborator edited the same row.');
+  }
+}
+
+function applyRundownHistoryBatch(batch) {
+  beats = applyRundownBatch(beats, batch, rundownAliases);
+  if (batch.showPatch.showName !== undefined) show.name = batch.showPatch.showName;
+  if (batch.showPatch.startTime !== undefined) show.start = normalizeTimeValue(batch.showPatch.startTime);
+  if (batch.showPatch.freeMode !== undefined) freeTextMode = Boolean(batch.showPatch.freeMode);
+  renderRundown();
+  rundownHistoryReplay = true;
+  syncToFirestore();
+  rundownHistoryReplay = false;
+}
+
+function undoRundownEdit() {
+  const entry = rundownUndoStack.pop();
+  if (!entry) { toast('Nothing to undo.'); return; }
+  applyRundownHistoryBatch(entry.inverse);
+  rundownRedoStack.push(entry);
+  toast(`Undid: ${entry.label}`);
+}
+
+function redoRundownEdit() {
+  const entry = rundownRedoStack.pop();
+  if (!entry) { toast('Nothing to redo.'); return; }
+  applyRundownHistoryBatch(entry.forward);
+  rundownUndoStack.push(entry);
+  toast(`Redid: ${entry.label}`);
+}
+
 function applyBeatPatch(beat, patch) {
   const next = { ...beat };
   Object.entries(patch || {}).forEach(([key, value]) => {
@@ -3053,6 +3373,7 @@ async function flushRundownSyncQueue() {
         ...batch.showPatch,
         rundownUpdatedAt: Date.now(),
         rundownUpdatedBy: batch.by,
+        rundownBatchId: batch.id,
       };
       if (snap.exists()) transaction.update(ref, update);
       else transaction.set(ref, { code:targetSessionCode, ...update }, { merge:true });
@@ -3083,6 +3404,16 @@ async function flushRundownSyncQueue() {
 
 function setupFirestore() {
   const init = () => {
+    if (rundownHistorySessionCode !== session.code) {
+      rundownHistorySessionCode = session.code;
+      rundownUndoStack = [];
+      rundownRedoStack = [];
+      rundownLocalBatchIds.clear();
+      rundownLastSeenBatchId = '';
+      sessionSnapshotLastAt = 0;
+      sessionSnapshotLatestDoc = null;
+      sessionSnapshotPendingForceReason = '';
+    }
     if (firestoreUnsub) firestoreUnsub();
     const ref = window._doc(window._db,'sessions',session.code);
 
@@ -3114,6 +3445,12 @@ function setupFirestore() {
       if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Cloud sync saving changes...');
       else if (!snapMeta.fromCache) setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
       const d = snap.data();
+      try {
+        sessionSnapshotLatestDoc = JSON.parse(JSON.stringify(d));
+        captureSessionSnapshot(sessionSnapshotLastAt ? 'interval' : 'joined');
+      } catch (err) {
+        console.warn('Session history could not read this snapshot', err);
+      }
       // Session rescue — handle a kick or a code move before adopting any other state.
       if (d.kicked && d.kicked[presenceId]) {
         if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
@@ -3126,6 +3463,12 @@ function setupFirestore() {
         followSessionMove(d.movedTo.code);
         return;
       }
+      const incomingBatchId = typeof d.rundownBatchId === 'string' ? d.rundownBatchId : '';
+      if (incomingBatchId && incomingBatchId !== rundownLastSeenBatchId && !rundownLocalBatchIds.has(incomingBatchId) && Array.isArray(d.beats)) {
+        const remoteBatch = buildRundownBatch(rundownCloudBeats, d.beats.map(migrateBeat), rundownShadowShow, rundownShadowShow);
+        invalidateConflictingRundownHistory(remoteBatch);
+      }
+      if (incomingBatchId) rundownLastSeenBatchId = incomingBatchId;
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
       if (d.beats && Array.isArray(d.beats)) {
         rundownCloudBeats = d.beats.map(migrateBeat);
@@ -3296,16 +3639,22 @@ window.addEventListener('online', () => { /* chip clears on the next server snap
 
 function syncToFirestore() {
   saveLocalDraft();
-  if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) {
-    if (!session.isDemo) setCloudSyncState(session.isExpert ? 'local' : 'local', session.isExpert ? 'Local-only workspace. Saved in this browser.' : 'Saved locally. Cloud sync unavailable.');
-    return;
-  }
   const currentShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
   const batch = buildRundownBatch(rundownShadowBeats, beats, rundownShadowShow, currentShow);
   if (!rundownBatchHasChanges(batch)) return;
-  rundownPendingBatches.push(batch);
+  if (!rundownHistoryReplay) {
+    const inverse = buildRundownBatch(beats, rundownShadowBeats, currentShow, rundownShadowShow);
+    rememberRundownHistory(batch, inverse);
+  }
   rundownShadowBeats = cloneRundownValue(beats);
   rundownShadowShow = currentShow;
+  if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) {
+    if (!session.isDemo) setCloudSyncState('local', session.isExpert ? 'Local-only workspace. Saved in this browser.' : 'Saved locally. Cloud sync unavailable.');
+    return;
+  }
+  rundownLocalBatchIds.add(batch.id);
+  if (rundownLocalBatchIds.size > 100) rundownLocalBatchIds.delete(rundownLocalBatchIds.values().next().value);
+  rundownPendingBatches.push(batch);
   setCloudSyncState('saving', 'Cloud sync saving changes...');
   flushRundownSyncQueue();
 }
@@ -3601,6 +3950,12 @@ const _keymapHolds = new Map();   // action.id → stop control while a hold key
 function keymapDispatch(e, phase) {
   const scope = keymapScopeNow();
   if (!scope) return false;
+  if (scope === 'build' && phase === 'down' && !e.repeat && !isTextEditingTarget(e.target) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+    consumeRemoteKey(e);
+    if (e.shiftKey) redoRundownEdit();
+    else undoRundownEdit();
+    return true;
+  }
   // Overlays own their keys before the map runs.
   if (document.getElementById('lsRowPreviewOv')?.classList.contains('on')) {
     if (phase !== 'down' || isTextEditingTarget(e.target)) return false;
@@ -5926,6 +6281,7 @@ function confirmedGoLive() {
 }
 
 function goLive() {
+  captureSessionSnapshot('live', true);
   if (lsIdx<0) lsIdx=0;
   // skip past any leading segment markers so lsIdx starts on a real cue
   while (lsIdx < beats.length && beats[lsIdx]?.style === 'segment') lsIdx++;
@@ -7476,6 +7832,10 @@ let ptQuestionOn = false;
 let flowOpQuestionOn = false;
 let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
 let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
+let flowOpSessionRenderFingerprint = '';
+let flowOpControlsRenderFingerprint = '';
+let flowOpDeferredControlsDisabled = null;
+let flowOpControlsRenderCount = 0;
 // Operator-entered clock inputs — persisted so a panel re-render doesn't wipe the
 // typed duration / count-to time (which broke "change duration" + "countdown to time").
 let flowClockDurationMin = 5;
@@ -8895,6 +9255,7 @@ function flowOpApplyControlPreview(action, quiet=false) {
     }
   }
   flowOpSyncControls();
+  if (flowOpCode) flowOpRenderControls(false);
   if (!quiet && !action.endsWith('_stop') && !action.includes('_set_')) {
     flowOpSetStatus(`${flowOpControlLabel(action)} sent`);
   }
@@ -9014,13 +9375,13 @@ function flowOpControlsHTML(disabled=false) {
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed</span>
         <button class="pt-btn" onclick="flowOpSendControl('speed_down')"${dis}>−</button>
-        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true)"${dis}>
+        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
         <button class="pt-btn" onclick="flowOpSendControl('speed_up')"${dis}>+</button>
       </div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Size</span>
         <button class="pt-btn" onclick="flowOpSendControl('size_down')"${dis}>−</button>
-        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true)"${dis}>
+        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
         <button class="pt-btn" onclick="flowOpSendControl('size_up')"${dis}>+</button>
       </div>
       <div class="pt-ctrl-group flow-control-segment">
@@ -9058,9 +9419,38 @@ function flowOpControlsHTML(disabled=false) {
 
 function flowOpRenderControls(disabled=false) {
   const el = flowOpEl('flowOpControls');
-  if (el) el.innerHTML = flowOpControlsHTML(disabled);
+  if (!el) return false;
+  const fingerprint = stableStringify({
+    disabled:Boolean(disabled),
+    question:flowOpQuestionOn,
+    clockMode:flowOpClockState?.mode || 'off',
+    clockSize:flowOpClockState?.size ?? 1,
+  });
+  if (fingerprint === flowOpControlsRenderFingerprint) {
+    flowOpSyncControls();
+    return false;
+  }
+  // A focused control owns its DOM until blur. This protects keyboard focus,
+  // typed clock values, and a range thumb that is currently being dragged.
+  if (el.contains(document.activeElement)) {
+    flowOpDeferredControlsDisabled = disabled;
+    el.onfocusout = () => queueMicrotask(() => {
+      if (!el.contains(document.activeElement) && flowOpDeferredControlsDisabled !== null) {
+        const pending = flowOpDeferredControlsDisabled;
+        flowOpDeferredControlsDisabled = null;
+        flowOpRenderControls(pending);
+      }
+    });
+    flowOpSyncControls();
+    return false;
+  }
+  el.innerHTML = flowOpControlsHTML(disabled);
+  flowOpControlsRenderFingerprint = fingerprint;
+  flowOpControlsRenderCount += 1;
+  el.dataset.renderCount = String(flowOpControlsRenderCount);
   opInspRestoreTab('flow');   // keep the remembered inspector tab active across re-renders
   flowOpSyncControls();
+  return true;
 }
 
 function flowOpSyncControls() {
@@ -9071,9 +9461,9 @@ function flowOpSyncControls() {
     playBtn.setAttribute('onclick', `flowOpSendControl('${flowOpPlaying ? 'pause' : 'resume'}')`);
   }
   const speed = flowOpEl('flowOpSpeedRange');
-  if (speed) speed.value = ptTargetSpeed;
+  if (speed && document.activeElement !== speed && !speed.dataset.controlDragging) speed.value = ptTargetSpeed;
   const size = flowOpEl('flowOpSizeRange');
-  if (size) size.value = ptFontSize;
+  if (size && document.activeElement !== size && !size.dataset.controlDragging) size.value = ptFontSize;
   document.querySelectorAll('[data-flowop-align]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
   });
@@ -9088,11 +9478,21 @@ function flowOpRenderSession(data=null) {
   const titleEl = flowOpEl('flowOpTitle');
   const meta = flowOpEl('flowOpSessionMeta');
   const preview = flowOpEl('flowOpScriptPreview');
+  const fingerprint = data ? stableStringify({
+    showName:data.show?.name || data.showName || data.name || '',
+    beats:Array.isArray(data.beats) ? data.beats : [],
+    prompterText:typeof data.prompter?.text === 'string' ? data.prompter.text : null,
+    activeIdx:data.prompter?.activeIdx,
+    currentRow:data.prompter?.currentRow || null,
+    nextRow:data.prompter?.nextRow || null,
+  }) : 'empty';
+  if (fingerprint === flowOpSessionRenderFingerprint) return false;
+  flowOpSessionRenderFingerprint = fingerprint;
   if (!data) {
     if (titleEl) titleEl.textContent = 'Flowmingo Op';
     if (meta) meta.innerHTML = `<div class="flowop-session-title">No session loaded</div><div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>`;
     if (preview) preview.innerHTML = `<div class="flowop-empty">Load a session code to control Flowmingo remotely.</div>`;
-    return;
+    return true;
   }
   const showName = data.show?.name || data.showName || data.name || 'Untitled Show';
   const beatsInSession = Array.isArray(data.beats) ? data.beats.map(migrateBeat) : [];
@@ -9116,6 +9516,7 @@ function flowOpRenderSession(data=null) {
         <div class="flowop-meta-item"><div class="flowop-meta-label">Next</div><div class="flowop-meta-value">${esc(next?.name || next?.info || '—')}</div></div>
       </div>`;
   }
+  return true;
 }
 
 function flowOpLoadSession(codeOverride='') {
@@ -9130,6 +9531,9 @@ function flowOpLoadSession(codeOverride='') {
   if (input) input.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   flowOpCode = '';
+  flowOpSessionRenderFingerprint = '';
+  flowOpControlsRenderFingerprint = '';
+  flowOpDeferredControlsDisabled = null;
   flowOpRenderControls(true);
   flowOpSetStatus('Loading...');
   _ensurePrompterOperatorBridge(true);
