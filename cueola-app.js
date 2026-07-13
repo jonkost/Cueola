@@ -14015,8 +14015,8 @@ function weatherSymbolFor(w) {
   if (/drizzle/.test(text)) return 'weather.drizzle';
   if (/rain|wet/.test(text)) return 'weather.rain';
   if (/fog|mist|haze/.test(text)) return 'weather.fog';
+  if (/partly|mostly clear|partial/.test(text)) return 'weather.partly-cloudy'; // before the generic cloudy test — "partly cloudy" is not overcast
   if (/overcast|cloudy|clouds/.test(text)) return 'weather.overcast';
-  if (/partly|mostly clear|partial/.test(text)) return 'weather.partly-cloudy';
   if (/clear|sunny|sun\b|fair/.test(text)) return 'weather.clear';
   if (/wind|breez|gust/.test(text)) return 'weather.wind';
   return 'weather.default';
@@ -14175,7 +14175,13 @@ function renderCallSheetWeatherCard() {
   const icoEl = document.getElementById('pp-weather-ico');
   if (icoEl) icoEl.innerHTML = sfIcon(weatherSymbolFor(w));
   if (w.updatedAt) {
-    setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
+    // An auto forecast fetched for a different date than the current shoot date
+    // is stale — say so loudly instead of quietly showing the wrong day's weather.
+    if (w.source === 'auto' && w.forecastDate && date && w.forecastDate !== date) {
+      setWeatherStatus(`This forecast is for ${callSheetDayLabel(w.forecastDate) || w.forecastDate} — tap Get forecast to refresh it for the new shoot date.`, true);
+    } else {
+      setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
+    }
   } else {
     setWeatherStatus('Auto-fills from your location and shoot date. You can edit anything below.');
   }
@@ -14206,9 +14212,13 @@ function weatherGeoQueries(...sources) {
     const s = String(src || '').trim();
     if (!s) return;
     push(s);
-    const zip = s.match(/\b\d{5}(?:-\d{4})?\b/);
-    if (zip) push(zip[0]);
     const segs = s.split(',').map(x => x.trim()).filter(Boolean);
+    // A zip is a 5-digit group at the END of a comma segment ("PA 19530",
+    // "…, 62704") — never a leading street number ("15200 Kutztown Rd" once
+    // geocoded 15200 as a French postal code and forecast the wrong country).
+    const zipSeg = [...segs].reverse().find(seg => /\d{5}(?:-\d{4})?$/.test(seg));
+    const zip = zipSeg ? zipSeg.match(/(\d{5})(?:-\d{4})?$/)[1] : '';
+    if (zip) push(zip);
     for (let i = 1; i < segs.length; i++) push(segs.slice(i).join(', '));
     segs.forEach(seg => {
       push(seg);
@@ -14218,6 +14228,17 @@ function weatherGeoQueries(...sources) {
     });
   });
   return out.slice(0, 10);
+}
+
+// When the location/address clearly names a US state ("…, PA 19530",
+// "Austin, TX"), only a US geocode result is acceptable — postal-code and
+// fuzzy name matches otherwise land in other countries (a 5-digit street
+// number once forecast a French village). No state named → no restriction.
+const US_STATE_ABBRS = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','PR']);
+function weatherCountryHint(...sources) {
+  const s = sources.map(x => String(x || '')).join(', ');
+  const m = s.match(/\b([A-Z]{2})\.?\s+\d{5}(?:-\d{4})?\b/) || s.match(/,\s*([A-Z]{2})\.?\s*(?:,|$)/);
+  return m && US_STATE_ABBRS.has(m[1]) ? 'US' : '';
 }
 
 async function fetchCallSheetWeather() {
@@ -14231,11 +14252,13 @@ async function fetchCallSheetWeather() {
   setWeatherStatus('Finding location…');
   try {
     const geoQueries = weatherGeoQueries(location, address);
+    const countryHint = weatherCountryHint(location, address);
     let place = null;
     for (const q of geoQueries) {
-      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=${countryHint ? 5 : 1}&language=en&format=json`);
       if (!geoRes.ok) throw new Error('geo');
-      place = (await geoRes.json())?.results?.[0];
+      const results = (await geoRes.json())?.results || [];
+      place = countryHint ? (results.find(r => r.country_code === countryHint) || null) : (results[0] || null);
       if (place) break;
     }
     if (!place) { setWeatherStatus(`Couldn't find "${location || address}". Try just a city name (e.g. "Boston"), or enter weather manually below.`, true); return; }
