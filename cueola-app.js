@@ -9893,11 +9893,13 @@ function enterPrompter() {
   const stage = ptEl('pt-stage');
   if (stage && !stage._ptTouch) {
     stage._ptTouch = true;
-    let _tY = 0, _tT = 0, _tDrag = false;
+    let _tY = 0, _tT = 0, _tDrag = false, _tControl = false;
     stage.addEventListener('touchstart', e => {
       _tY = e.touches[0].clientY; _tT = Date.now(); _tDrag = false;
+      _tControl = !!e.target.closest('button, input, select, textarea, a, label, [role="button"]');
     }, { passive: true });
     stage.addEventListener('touchmove', e => {
+      if (_tControl) return;
       const dy = e.touches[0].clientY - _tY;
       if (dy > 20) { ptBraking = true; ptBoosting = false; _tDrag = true; }
       else if (dy < -20) { ptBoosting = true; ptBraking = false; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); _tDrag = true; }
@@ -9906,8 +9908,8 @@ function enterPrompter() {
     stage.addEventListener('touchend', e => {
       ptBraking = false; ptBoosting = false;
       const dy = e.changedTouches[0].clientY - _tY;
-      if (!_tDrag && Date.now() - _tT < 300 && Math.abs(dy) < 18) ptTogglePlay();
-      _tDrag = false;
+      if (!_tControl && !_tDrag && Date.now() - _tT < 300 && Math.abs(dy) < 18) ptTogglePlay();
+      _tDrag = false; _tControl = false;
     }, { passive: true });
   }
   const fileInput = ptEl('pt-file-input');
