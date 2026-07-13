@@ -146,6 +146,34 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .roster-check{width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto}
 .roster-empty{font-size:12px;color:var(--text3);padding:12px}
 @media(max-width:600px){.roster-row{flex-wrap:wrap}.roster-actions{width:100%;justify-content:flex-end}}
+/* Phase 4 item 5: live presence strip on session cards */
+.sc-live{display:flex;align-items:center;gap:6px;margin-top:8px}
+.sc-live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,211,160,.55);animation:scLivePulse 2s infinite}
+@keyframes scLivePulse{0%{box-shadow:0 0 0 0 rgba(34,211,160,.45)}70%{box-shadow:0 0 0 7px rgba(34,211,160,0)}100%{box-shadow:0 0 0 0 rgba(34,211,160,0)}}
+.sc-live-count{font-size:10.5px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;color:var(--green);text-transform:uppercase;margin-right:2px}
+.sc-live-ava{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;background:var(--green);border:1.5px solid var(--bg);margin-left:-4px;cursor:default}
+.sc-live-ava:first-of-type{margin-left:0}
+.sc-live-ava.inst{background:var(--accent)}
+.sc-live-extra{font-size:10px;font-family:var(--mono);color:var(--text3);margin-left:3px}
+/* Phase 4 item 5: read-only rundown peek */
+.peek-modal{max-width:640px;width:min(640px,94vw)}
+.peek-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.peek-show{font-size:14px;font-weight:800}
+.peek-start{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.peek-body{display:flex;flex-direction:column;gap:10px;max-height:min(56vh,520px);overflow-y:auto}
+.peek-rows{display:flex;flex-direction:column;gap:5px}
+.peek-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--border);border-radius:10px;background:var(--s2);min-width:0}
+.peek-row.now{border-color:color-mix(in srgb,var(--green) 55%,transparent);background:color-mix(in srgb,var(--green) 9%,var(--s2));box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 30%,transparent)}
+.peek-row.next{border-style:dashed}
+.peek-idx{font-size:10px;font-family:var(--mono);color:var(--text3);width:20px;flex:none;text-align:right}
+.peek-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.peek-name{font-size:12.5px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.peek-pill{font-size:8.5px;font-family:var(--mono);font-weight:800;letter-spacing:.1em;border-radius:5px;padding:2px 6px;flex:none}
+.peek-pill.now{color:var(--green);border:1px solid color-mix(in srgb,var(--green) 55%,transparent)}
+.peek-pill.next{color:var(--text3);border:1px solid var(--bord2)}
+.peek-dur{font-size:10.5px;font-family:var(--mono);color:var(--text3);flex:none}
+.peek-empty{font-size:12.5px;color:var(--text3);padding:16px;text-align:center}
+.peek-live-row{display:flex;align-items:center;gap:6px;min-height:24px}
 .admin-control-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:10px}
 .admin-control-form-title{grid-column:1/-1;font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
 .admin-mini-in{background:var(--s3);border:1px solid var(--bord2);border-radius:7px;color:var(--text);font-size:12px;padding:9px 10px;outline:none;width:100%}
@@ -740,6 +768,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   </div>
 </div>
 
+<!-- ── MODAL: READ-ONLY RUNDOWN PEEK (Phase 4 item 5) ── -->
+<div class="modal-wrap" id="modal-peek">
+  <div class="modal peek-modal">
+    <div class="modal-title">Rundown — <span id="peekTitle" style="font-family:var(--mono);letter-spacing:.08em"></span></div>
+    <div class="modal-sub">Read-only live view. The highlighted row is where the show is right now.</div>
+    <div class="peek-body" id="peekBody"></div>
+    <button class="btn-full btn-secondary" onclick="closeRundownPeek()" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
 <!-- ── MODAL: SESSION CREATED ── -->
 <div class="modal-wrap" id="modal-created">
   <div class="modal">
@@ -1287,9 +1325,11 @@ function sessionCreatedSeconds(s) {
   return s.createdAt?.seconds || s.updatedAt?.seconds || 0;
 }
 
-async function loadSessions() {
+async function loadSessions(quiet) {
   const area = document.getElementById('sessionArea');
-  area.innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Loading sessions…</div></div>`;
+  // quiet === true is the background presence refresh — no spinner, no flash.
+  // (Comparing to true matters: the firebaseReady retry passes an Event here.)
+  if (quiet !== true) area.innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Loading sessions…</div></div>`;
 
   if (!window._firebaseReady) {
     window.addEventListener('firebaseReady', loadSessions, {once:true});
@@ -1351,6 +1391,107 @@ const CUE_COLORS = {
 };
 const CARD_PALETTE = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316','#ec4899'];
 
+/* ── Phase 4 item 5: live presence on cards + read-only rundown peek ──
+ * Pure reads of fields the session doc already carries (presence map,
+ * prePro.roleAssignments for positions, beats + activeIdx) — no rules change. */
+const PRESENCE_LIVE_MS = 90000;
+
+function initialsOf(n) {
+  const parts = String(n || '?').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return String(n || '?').slice(0, 2).toUpperCase();
+}
+
+// Live people on a session doc, deduped by name (a person can hold several
+// presence entries), with their crew position off prePro.roleAssignments —
+// the roster the app itself maintains (top-level roleAssignments is a copy).
+function sessionLivePeople(s) {
+  const now = Date.now();
+  const byName = new Map();
+  Object.values(s.presence || {}).forEach(p => {
+    if (!p || !p.name || (now - Number(p.lastSeen || 0)) > PRESENCE_LIVE_MS) return;
+    const k = String(p.name).trim().toLowerCase();
+    const prev = byName.get(k);
+    if (!prev || Number(p.lastSeen || 0) > Number(prev.lastSeen || 0)) byName.set(k, p);
+  });
+  const roster = (s.prePro && Array.isArray(s.prePro.roleAssignments)) ? s.prePro.roleAssignments : [];
+  const posFor = name => {
+    const key = String(name || '').trim().toLowerCase();
+    const row = roster.find(r => r && String(r.person || r.name || '').trim().toLowerCase() === key);
+    return row ? String(row.position || row.role || '').trim() : '';
+  };
+  return [...byName.values()].map(p => ({ name: p.name, role: p.role, position: posFor(p.name) }));
+}
+
+function presenceStripHTML(s) {
+  const live = sessionLivePeople(s);
+  if (!live.length) return '';
+  const chips = live.slice(0, 5).map(p => {
+    const tip = `${p.name} · ${p.role === 'instructor' ? 'Instructor' : 'Student'}${p.position ? ` · ${p.position}` : ''}`;
+    return `<span class="sc-live-ava ${p.role === 'instructor' ? 'inst' : 'stud'}" title="${escapeHtml(tip)}">${escapeHtml(initialsOf(p.name))}</span>`;
+  }).join('');
+  const extra = live.length > 5 ? `<span class="sc-live-extra">+${live.length - 5}</span>` : '';
+  return `<div class="sc-live"><span class="sc-live-dot"></span><span class="sc-live-count">${live.length} live now</span>${chips}${extra}</div>`;
+}
+
+let peekUnsub = null;
+function openRundownPeek(code) {
+  document.getElementById('peekTitle').textContent = code;
+  document.getElementById('peekBody').innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Connecting…</div></div>`;
+  showModal('modal-peek');
+  try { if (peekUnsub) peekUnsub(); } catch {}
+  peekUnsub = window._onSnapshot(window._doc(db(), 'sessions', code), snap => {
+    if (!document.getElementById('modal-peek').classList.contains('on')) return;
+    if (!snap.exists() || snap.data()?.deletedAt) {
+      document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Session not found.</div>`;
+      return;
+    }
+    renderRundownPeek(snap.data() || {});
+  }, () => {
+    document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Live view unavailable — check the connection.</div>`;
+  });
+}
+
+function closeRundownPeek() {
+  try { if (peekUnsub) peekUnsub(); } catch {}
+  peekUnsub = null;
+  hideModal('modal-peek');
+}
+
+function renderRundownPeek(s) {
+  const beats = Array.isArray(s.beats) && s.beats.length ? s.beats : (Array.isArray(s.cues) ? s.cues : []);
+  const active = Number.isFinite(s.activeIdx) ? s.activeIdx : -1;
+  const isActive = s.status === 'active';
+  const pad2 = n => String(n || 0).padStart(2, '0');
+  const dur = b => (b && (b.min || b.sec)) ? `${pad2(b.min)}:${pad2(b.sec)}` : '—';
+  const rows = beats.length ? beats.map((b, i) => `
+    <div class="peek-row${i === active ? ' now' : ''}${i === active + 1 ? ' next' : ''}">
+      <span class="peek-idx">${i + 1}</span>
+      <span class="peek-dot" style="background:${CUE_COLORS[b?.type] || 'var(--bord2)'}"></span>
+      <span class="peek-name">${escapeHtml(b?.name || b?.title || 'Untitled row')}</span>
+      ${i === active ? '<span class="peek-pill now">NOW</span>' : i === active + 1 ? '<span class="peek-pill next">NEXT</span>' : ''}
+      <span class="peek-dur">${dur(b)}</span>
+    </div>`).join('')
+    : `<div class="peek-empty">No rundown rows yet.</div>`;
+  document.getElementById('peekBody').innerHTML = `
+    <div class="peek-head">
+      <span class="peek-show">${escapeHtml(s.showName || 'Untitled Show')}</span>
+      <span class="sc-pill ${isActive ? 'active' : 'idle'}">${isActive ? '● ACTIVE' : 'IDLE'}</span>
+      ${s.startTime ? `<span class="peek-start">Starts ${escapeHtml(formatTime12(s.startTime))}</span>` : ''}
+    </div>
+    <div class="peek-live-row">${presenceStripHTML(s) || '<span class="peek-empty" style="padding:0">No one is live right now.</span>'}</div>
+    <div class="peek-rows">${rows}</div>`;
+}
+
+// Quiet card refresh so the presence strips stay honest without the operator
+// touching anything — skipped while hidden, in Accounts, or under any modal.
+setInterval(() => {
+  if (document.hidden || !adminSession || !window._firebaseReady) return;
+  if (document.querySelector('.modal-wrap.on')) return;
+  if (document.getElementById('accountsPage')?.classList.contains('on')) return;
+  loadSessions(true);
+}, 60000);
+
 function renderSessions() {
   const area = document.getElementById('sessionArea');
   const visible = scopedSessions(sessions);
@@ -1410,10 +1551,12 @@ function renderSessions() {
           <div class="sc-m">🎯 ${assignedCount} assigned</div>
           ${pbContributors ? `<div class="sc-m"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> ${pbContributors} on Planda Bear</div>` : ''}
         </div>
+        ${presenceStripHTML(s)}
       </div>
       <div class="sc-right">
         <button class="sc-btn sc-btn-copy" onclick="copySessionCode(${codeArg},event)">Copy Code</button>
         <button class="sc-btn sc-btn-copy" onclick="openPrePro(${codeArg},event)"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> Planda Bear</button>
+        <button class="sc-btn sc-btn-muted" onclick="openRundownPeek(${codeArg})">Rundown ▸</button>
         <button class="sc-btn sc-btn-open" onclick="openSession(${codeArg})">Open →</button>
         <button class="sc-btn sc-btn-muted" onclick="showDetail(${codeArg},event)">Session Setup ⚙</button>
       </div>

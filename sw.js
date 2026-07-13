@@ -18,7 +18,10 @@ const versionSignature = SHELL_ASSETS
   .map(path => new URL(path, self.location.href).searchParams.get('v'))
   .filter(Boolean)
   .join('-');
-const WORKER_SCHEMA = '1'; // bump only when cache behavior changes, not for assets
+// Bumped for cache-policy OR page-HTML-only releases: the shell caches
+// index.html/dashboard.html, whose content never feeds versionSignature —
+// an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
+const WORKER_SCHEMA = '2';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
