@@ -1,0 +1,3 @@
+Cueola color foundations: eight product themes plus department and semantic color tokens.
+
+Set `data-product-theme` (cool, warm, white, green, koala, panda, flamingo, prepbear) on the root element; every token below re-resolves per theme. Surfaces use `--ui-background` / `--ui-content`; text uses `--ui-label` and its secondary/tertiary variants. Department colors are meaning-bearing and must stay consistent: `--video` video, `--green` audio, `--red` playback, `--yellow` graphics, `--purple` lighting, `--cyan` script. Semantic states: `--ui-accent`, `--ui-success`, `--ui-warning`, `--ui-destructive`, `--ui-live`.

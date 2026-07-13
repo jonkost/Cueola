@@ -51,7 +51,56 @@ let colDragSrc = null;
 let beats = [];
 let show  = { name:'Untitled Show', start:'' };
 let session = { code:'', role:'', userName:'', isDemo:false, isExpert:false };
-let lsIdx = -1;
+let lsIdx = -1; // compatibility projection of liveSessionController.selectedCueIndex
+const liveSessionController = window.CueolaLiveSession.createController({
+  onEnter: enterLiveSessionScreen,
+  onLeave: leaveLiveSessionScreen,
+  onStateChange: projectLiveSessionState,
+  onError: (label, error) => containError(label, error),
+});
+window.CueolaLiveController = liveSessionController;
+
+function projectLiveSessionState(state) {
+  const live = document.getElementById('liveshow');
+  if (!live) return;
+  live.dataset.liveSessionState = state.lifecycle;
+  Object.entries(state.subsystems).forEach(([name, record]) => {
+    live.dataset[`${name}Status`] = record.status;
+  });
+}
+
+function liveSessionState() {
+  return liveSessionController.getState();
+}
+
+function setLiveSelectedCue(index, options={}) {
+  const activate = options.activate === true;
+  if (activate) liveSessionController.setActiveCue(index, { select:true, reason:options.reason || 'local-cue' });
+  else liveSessionController.setSelectedCue(index, { reason:options.reason || 'selected-cue' });
+  lsIdx = liveSessionState().selectedCueIndex;
+  return lsIdx;
+}
+
+function adoptLiveActiveCue(index, options={}) {
+  liveSessionController.setActiveCue(index, {
+    select: options.select === true,
+    reason: options.reason || 'authoritative-cue',
+  });
+  if (options.select === true) lsIdx = liveSessionState().selectedCueIndex;
+  return liveSessionState().activeCueIndex;
+}
+
+function canOwnLiveActiveCue() {
+  return session.role !== 'student' && isFollowingSelf();
+}
+
+function setOperatorLiveCue(index, reason) {
+  return setLiveSelectedCue(index, { activate:canOwnLiveActiveCue(), reason });
+}
+
+function setLiveSubsystemStatus(name, status, detail='') {
+  return liveSessionController.setSubsystemStatus(name, status, detail);
+}
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
 let followTargetId = '';    // presence id keeps duplicate/stale display names from hijacking follow
@@ -635,7 +684,7 @@ function resumeLastSession() {
   session = { code: r.code, role: r.role || 'instructor', userName: r.name || '', isDemo: false, isExpert: false };
   freeTextMode = false;
   rememberLastSession(r.code, r.name);
-  if (Number.isFinite(r.lsIdx)) lsIdx = r.lsIdx;
+  if (Number.isFinite(r.lsIdx)) setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue' });
   // The rundown arrives async (cloud snapshot / local draft) — goLive()'s clamp
   // would zero the restored row on a still-empty list. Re-assert it once the
   // beats land (give up quietly after ~6 s; the operator is already back live).
@@ -647,7 +696,7 @@ function resumeLastSession() {
       if (beats.length > r.lsIdx) {
         clearInterval(t);
         if (lsIdx !== r.lsIdx) {
-          lsIdx = r.lsIdx;
+          setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue-reassert' });
           if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
           syncLiveIdx();
         }
@@ -737,8 +786,12 @@ function pushSessionHistoryState(screen) {
 function leaveSessionForFrontPage() {
   captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
+  try { liveSessionController.leave({ reason:'session-leave' }); }
+  catch (error) { containError('Live session leave', error); }
   clearResumeState();   // P7: intentional leave — never offer to resume it (Decisions #14)
   stopTimer();
+  liveSessionController.reset('session-left');
+  setLiveSelectedCue(-1, { reason:'session-left' });
   leavePresence();      // drop our presence entry + stop the heartbeat — no ghost participants
   if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
   pbStopNotesListener();
@@ -3580,6 +3633,11 @@ function setupFirestore() {
         try { mergePreProFromCloud(d.prePro); } catch {}
       }
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
+      // The shared show cue is authoritative independently of this device's
+      // local/followed selection. Older code folded both values into lsIdx.
+      if (Number.isFinite(d.activeIdx)) {
+        adoptLiveActiveCue(d.activeIdx, { select:false, reason:'firestore-active-cue' });
+      }
       // Following: mirror the position of whoever I follow (their broadcast
       // presence.idx). Browsing self keeps my own position. A student who hasn't
       // chosen mirrors the show caller (first instructor).
@@ -3587,7 +3645,7 @@ function setupFirestore() {
         const followedIdx = resolveFollowedIdx(d.presence, { followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName });
         const targetIdx = followedIdx != null ? followedIdx : (session.role === 'student' && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
         if (targetIdx != null && targetIdx !== lsIdx) {
-          lsIdx = targetIdx;
+          setLiveSelectedCue(targetIdx, { reason:'followed-cue' });
           if (document.getElementById('liveshow').classList.contains('on')) renderLive();
         }
       }
@@ -3739,14 +3797,18 @@ function syncToFirestore() {
 function syncLiveIdx() {
   markResumeState();   // P7: live position rides the resume record (Decisions #14)
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
+  const liveState = liveSessionState();
+  const selectedIdx = liveState.selectedCueIndex;
   // Broadcast my own position into my presence record so anyone following me
   // mirrors it. (Your navigation only moves your followers, not the whole room.)
-  // Keep the legacy global activeIdx for back-compat with older clients/dashboard.
-  window._updateDoc(window._doc(window._db,'sessions',session.code), {
-    activeIdx: lsIdx,
-    [`presence.${presenceId}.idx`]: lsIdx,
+  // Only an instructor driving their own position publishes the shared active
+  // cue. A follower/student browsing locally must never overwrite show state.
+  const update = {
+    [`presence.${presenceId}.idx`]: selectedIdx,
     [`presence.${presenceId}.lastSeen`]: Date.now(),
-  }).catch(()=>{});
+  };
+  if (canOwnLiveActiveCue()) update.activeIdx = liveState.activeCueIndex;
+  window._updateDoc(window._doc(window._db,'sessions',session.code), update).catch(()=>{});
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3785,8 +3847,9 @@ async function joinPresence() {
 }
 
 async function leavePresence() {
-  if (!session.code||!window._firebaseReady) return;
   clearInterval(presenceInterval);
+  presenceInterval = null;
+  if (!session.code||!window._firebaseReady) return;
   try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}`]:window._deleteField()}); } catch {}
 }
 
@@ -5562,6 +5625,17 @@ let outrangutanState = { cues: {}, pads: {}, live: null };
 let _outCmdSeq = 0;
 let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out-of-order packets (P3)
 
+function syncOutrangutanControllerStatus(og=outrangutanState) {
+  const transport = og?.live?.status || '';
+  const cueCount = Object.keys(og?.cues || {}).length;
+  if (transport === 'play') setLiveSubsystemStatus('playback', 'active', og.live?.name || 'Media playing');
+  else if (transport === 'pause') setLiveSubsystemStatus('playback', 'paused', og.live?.name || 'Media paused');
+  else if (transport === 'pre') setLiveSubsystemStatus('playback', 'ready', og.live?.name || 'Media in preview');
+  else if (transport === 'error') setLiveSubsystemStatus('playback', 'error', og.live?.name || 'Playback error');
+  else if (cueCount || window.Outrangutan?.isReady?.()) setLiveSubsystemStatus('playback', 'ready', cueCount ? `${cueCount} media cues available` : 'Local playout ready');
+  else setLiveSubsystemStatus('playback', 'closed', 'No playout connected');
+}
+
 // Snapshot → local state. Structural changes (the cue set) re-render the visible
 // screen; live-status changes only patch the rundown badges IN PLACE — the live
 // grid shows no continuous playout state, so it must never rebuild for one. (P3:
@@ -5591,6 +5665,7 @@ function applyOutrangutanState(og) {
     if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
   }
+  syncOutrangutanControllerStatus(outrangutanState);
 }
 
 // P4: SFX fire → transient chip in the live overview (Decisions #7). Stale/dup
@@ -6179,11 +6254,20 @@ function confirmedGoLive() {
 }
 
 function goLive() {
+  const current = liveSessionState();
+  return liveSessionController.enter({
+    reason:'operator-enter-live',
+    cues:beats,
+    selectedCueIndex:lsIdx,
+    activeCueIndex:current.activeCueIndex,
+  });
+}
+
+function enterLiveSessionScreen(liveState) {
   captureSessionSnapshot('live', true);
-  if (lsIdx<0) lsIdx=0;
-  // skip past any leading segment markers so lsIdx starts on a real cue
-  while (lsIdx < beats.length && beats[lsIdx]?.style === 'segment') lsIdx++;
-  if (lsIdx >= beats.length) lsIdx = Math.max(0, beats.length - 1);
+  lsIdx = liveState.selectedCueIndex;
+  liveSessionController.registerCleanup('live-clock', () => stopTimer(false));
+  liveSessionController.registerCleanup('prompter-operator', stopPrompterOperatorRuntime);
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
@@ -6196,6 +6280,8 @@ function goLive() {
   markResumeState();
   buildPromptFromRundown();
   initPrompter();
+  syncOutrangutanControllerStatus();
+  setLiveSubsystemStatus('scriptOperator', _scriptOpWin && !_scriptOpWin.closed ? 'connecting' : 'closed', _scriptOpWin && !_scriptOpWin.closed ? 'Window open; awaiting Phase 4 heartbeat' : 'Script Operator window closed');
   sendToPrompter(true);
   renderLive();
   syncLiveIdx();
@@ -6207,6 +6293,10 @@ function goLive() {
 }
 
 function showRundown() {
+  return liveSessionController.leave({ reason:'operator-leave-live' });
+}
+
+function leaveLiveSessionScreen() {
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
@@ -6216,9 +6306,6 @@ function showRundown() {
   pushSessionHistoryState('build');
   logShow('session', 'Left live → build screen');
   markResumeState();
-  stopTimer();
-  liveClockRunning = false;
-  updateLiveClockButton();
 }
 
 function isFollowingSelf() {
@@ -6299,10 +6386,11 @@ function restartShowClock() {
   liveClockRunning = false;
   elapsedSecs = 0;
   liveTimerStartMs = null;
-  lsIdx = beats.length ? 0 : -1;
+  let restartIdx = beats.length ? 0 : -1;
   // Same as goLive: never park the live position on a leading segment marker
-  while (lsIdx >= 0 && lsIdx < beats.length && beats[lsIdx]?.style === 'segment') lsIdx++;
-  if (lsIdx >= beats.length) lsIdx = beats.length ? beats.length - 1 : -1;
+  while (restartIdx >= 0 && restartIdx < beats.length && beats[restartIdx]?.style === 'segment') restartIdx++;
+  if (restartIdx >= beats.length) restartIdx = beats.length ? beats.length - 1 : -1;
+  setOperatorLiveCue(restartIdx, 'restart-show');
   const t = document.getElementById('ls-timer');
   if (t) { t.textContent = fmtProductionClock(0); t.classList.remove('warn'); }
   updateBotBar();
@@ -6975,7 +7063,7 @@ function saveLiveScript() {
 function jumpToLsCue(i) {
   if (session.role==='student') return;
   if (isStandardShowCaller()) return; // standard show callers may only advance sequentially
-  lsIdx = i;
+  setOperatorLiveCue(i, 'jump-cue');
   renderLive();
   sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
   syncLiveIdx();
@@ -6998,7 +7086,7 @@ function lsNext() {
   let ni = lsIdx;
   do { ni++; } while (ni < beats.length && beats[ni]?.style === 'segment');
   if (ni < beats.length) {
-    lsIdx = ni;
+    setOperatorLiveCue(ni, 'advance-cue');
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     fireOutrangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outrangutan playback cue
     logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
@@ -7017,7 +7105,7 @@ function lsPrev() {
   let ni = lsIdx;
   do { ni--; } while (ni >= 0 && beats[ni]?.style === 'segment');
   if (ni >= 0) {
-    lsIdx = ni;
+    setOperatorLiveCue(ni, 'previous-cue');
     logShow('cue', 'Back → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
@@ -7123,7 +7211,7 @@ function followPerson(el, legacyName='', legacyId='') {
   const target = (id && currentPresence?.[id]) ||
     activePresenceEntries(currentPresence).find(([, p]) => sameParticipantName(p?.name, name))?.[1];
   if (target && Number.isFinite(target.idx)) {
-    lsIdx = target.idx;
+    setLiveSelectedCue(target.idx, { reason:'follow-person' });
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
   }
 }
@@ -7138,7 +7226,7 @@ function forceFollowPerson(name, presence) {
   renderFollowChips();
   updateFollowInPresence(name, followTargetId);
   const target = targetEntry?.[1];
-  if (target && Number.isFinite(target.idx)) lsIdx = target.idx;
+  if (target && Number.isFinite(target.idx)) setLiveSelectedCue(target.idx, { reason:'forced-follow' });
   if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
 }
 
@@ -7155,7 +7243,7 @@ function returnToOwnLivePosition() {
   browsingSelf = true;
   followTarget = '';
   followTargetId = '';
-  if (Number.isFinite(ownIdx)) lsIdx = ownIdx;
+  if (Number.isFinite(ownIdx)) setOperatorLiveCue(ownIdx, 'return-to-own-cue');
   renderFollowChips();
   updateFollowInPresence(session.userName);
   renderLive();
@@ -7194,6 +7282,7 @@ function buildPromptFromRundown() {
 
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
+let _prompterOperatorRuntimeActive = false;
 let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
 let _lastSeenTalentHeartbeatTs = 0; // dedup: last Firestore heartbeat ts we counted
 let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
@@ -7233,6 +7322,7 @@ function _prompterHasRecentTalent() {
 
 function _notePrompterTalentSeen(msg={}) {
   if (isPrompterSelfSender(msg.sender)) return false;
+  if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
   _setPrompterStatus(true);
@@ -7258,6 +7348,9 @@ function adoptPrompterTalentState(state={}) {
     ptPlaying = state.playing;
     flowOpPlaying = state.playing;
     ptSyncPlayIcons(ptPlaying);
+    if (_prompterHasRecentTalent()) {
+      setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', ptPlaying ? 'Talent scrolling' : 'Talent paused');
+    }
   }
   if (Number.isFinite(Number(state.speed))) {
     ptTargetSpeed = Math.max(5, Math.min(200, Number(state.speed)));
@@ -7359,9 +7452,37 @@ function startTalentWatchdog() {
 }
 
 function initPrompter() {
+  _prompterOperatorRuntimeActive = true;
+  setLiveSubsystemStatus('prompter', _prompterHasRecentTalent() ? (ptPlaying ? 'active' : 'paused') : 'connecting', _prompterHasRecentTalent() ? 'Talent heartbeat received' : 'Waiting for talent heartbeat');
   startTalentWatchdog();
   _ensurePrompterOperatorBridge(true);
   _setPrompterStatus(_prompterHasRecentTalent());
+}
+
+function stopPrompterOperatorRuntime() {
+  _prompterOperatorRuntimeActive = false;
+  clearInterval(_prompterPingInterval);
+  _prompterPingInterval = null;
+  clearInterval(_talentWatchdog);
+  _talentWatchdog = null;
+  if (_prompterStorageHandler) {
+    window.removeEventListener('storage', _prompterStorageHandler);
+    _prompterStorageHandler = null;
+  }
+  Object.values(_pendingPrompterControls).forEach(pending => {
+    clearTimeout(pending?.waitTimer);
+    clearTimeout(pending?.failTimer);
+  });
+  _pendingPrompterControls = {};
+  [prompterChannel, prompterLegacyChannel].forEach(channel => {
+    try { channel?.close(); } catch (error) { containError('Flowmingo channel cleanup', error); }
+  });
+  prompterChannel = null;
+  prompterLegacyChannel = null;
+  lastTalentPingTs = 0;
+  _lastSeenTalentHeartbeatTs = 0;
+  _lastTalentInitSendBySender = {};
+  setLiveSubsystemStatus('prompter', 'closed', 'Live operator bridge closed');
 }
 
 function _setPrompterStatus(connected, unavailable=false) {
@@ -7369,16 +7490,19 @@ function _setPrompterStatus(connected, unavailable=false) {
   const txt = document.getElementById('prompterStatusTxt');
   const stat = document.getElementById('ls-stat-prompter');
   if (unavailable) {
+    setLiveSubsystemStatus('prompter', 'closed', 'Flowmingo unavailable');
     if (dot) dot.className='ls-prompter-dot off';
     if (txt) txt.textContent='Not available';
     if (stat) { stat.textContent='FLOWMINGO OFF'; stat.title='Flowmingo offline'; stat.classList.remove('connected'); }
     return;
   }
   if (connected) {
+    setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', 'Talent heartbeat received');
     if (dot) dot.className='ls-prompter-dot';
     if (txt) txt.textContent='Connected';
     if (stat) { stat.textContent='FLOWMINGO ON'; stat.title='Flowmingo connected and functioning'; stat.classList.add('connected'); }
   } else {
+    setLiveSubsystemStatus('prompter', lastTalentPingTs ? 'disconnected' : 'connecting', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for talent heartbeat');
     if (dot) dot.className='ls-prompter-dot off';
     if (txt) txt.textContent='Waiting for Flowmingo…';
     if (stat) { stat.textContent='FLOWMINGO WAIT'; stat.title='Flowmingo waiting'; stat.classList.remove('connected'); }
@@ -7500,13 +7624,23 @@ function openScriptOpPopout() {
   if (document.body.classList.contains('scriptop-popout')) return; // already inside a pop-out window
   const code = (session.code || '').trim();
   if (!code || session.isDemo) { toast('Script Op pop-out needs a live (non-demo) session.'); return; }
-  if (_scriptOpWin && !_scriptOpWin.closed) { _scriptOpWin.focus(); return; }
+  if (_scriptOpWin && !_scriptOpWin.closed) {
+    setLiveSubsystemStatus('scriptOperator', 'connecting', 'Window open; awaiting Phase 4 heartbeat');
+    _scriptOpWin.focus();
+    return;
+  }
+  setLiveSubsystemStatus('scriptOperator', 'opening', 'Opening Script Operator window');
   const url = location.origin + location.pathname + '?scriptop=' + encodeURIComponent(code)
     + (session.userName ? '&name=' + encodeURIComponent(session.userName) : '');
   const w = Math.min(560, (screen.availWidth || 1280) - 40);
   const h = Math.min(940, (screen.availHeight || 900) - 40);
   _scriptOpWin = window.open(url, 'cueolaScriptOp_' + code, `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`);
-  if (!_scriptOpWin) { toast('Pop-out blocked — allow pop-ups for Cueola.'); return; }
+  if (!_scriptOpWin) {
+    setLiveSubsystemStatus('scriptOperator', 'error', 'Popup blocked');
+    toast('Pop-out blocked — allow pop-ups for Cueola.');
+    return;
+  }
+  setLiveSubsystemStatus('scriptOperator', 'connecting', 'Window open; awaiting Phase 4 heartbeat');
   const btn = document.getElementById('lsPopoutBtn');
   if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Script Op window'); btn.classList.add('active'); }
   toast('Script Op opened in a new window — drag it to another monitor.');
@@ -7515,6 +7649,7 @@ function openScriptOpPopout() {
 function dockScriptOpPopout() {
   if (_scriptOpWin && !_scriptOpWin.closed) { try { _scriptOpWin.close(); } catch (e) {} }
   _scriptOpWin = null;
+  setLiveSubsystemStatus('scriptOperator', 'closed', 'Script Operator window closed');
   const btn = document.getElementById('lsPopoutBtn');
   if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Pop out'); btn.classList.remove('active'); }
 }
@@ -10086,11 +10221,7 @@ function stopTimer(stopPrompter=true) {
   liveClockRunning = false;
   updateLiveClockButton();
   if (!stopPrompter) return;
-  clearInterval(_prompterPingInterval); _prompterPingInterval=null;
-  if (_prompterStorageHandler) {
-    window.removeEventListener('storage', _prompterStorageHandler);
-    _prompterStorageHandler = null;
-  }
+  stopPrompterOperatorRuntime();
 }
 
 // ─────────────────────────────────────────────────────────────

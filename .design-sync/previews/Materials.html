@@ -1,0 +1,50 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html data-product-theme="cool"><head><meta charset="utf-8">
+<title>Cueola — Materials</title>
+<link rel="stylesheet" href="../../../styles.css">
+<style>
+  body{margin:0;padding:24px;background:var(--ui-background);color:var(--ui-label);font-family:var(--ui-font)}
+  h2{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ui-label-secondary);margin:24px 0 10px}
+  h2:first-child{margin-top:0}
+  .stage{position:relative;border-radius:var(--ui-radius-panel);overflow:hidden;border:1px solid var(--ui-separator);
+    background:linear-gradient(135deg,#16204a 0%,#0a0d18 45%,#241338 100%);padding:64px 18px 18px}
+  .stage .bgrow{height:12px;border-radius:6px;margin:10px 6px;background:color-mix(in srgb,var(--ui-label) 9%,transparent)}
+  .stage .bgrow:nth-child(odd){width:72%}
+  .toolbar{position:absolute;top:10px;left:10px;right:10px;display:flex;align-items:center;gap:12px;
+    min-height:52px;padding:8px 8px 8px 16px;border-radius:var(--ui-radius-group)}
+  .brand{font-size:16px;font-weight:750;letter-spacing:-.03em}.brand i{color:var(--ui-accent);font-style:normal}
+  .grow{flex:1}
+  .control{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:var(--ui-control-height-compact);
+    padding:0 12px;border:1px solid transparent;border-radius:var(--ui-radius-control);
+    background:color-mix(in srgb,var(--ui-label) 6%,transparent);color:var(--ui-label);font-weight:620;font-size:13px}
+  .control.live{background:var(--ui-live);color:#fff}
+  .clearchip{position:absolute;left:18px;bottom:64px;display:inline-flex;align-items:center;gap:8px;
+    padding:8px 14px;border-radius:var(--ui-radius-control);font-size:12px;font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .content-card{border-radius:var(--ui-radius-group);padding:14px}
+  .content-card h3{margin:0 0 4px;font-size:14px}
+  .content-card p{margin:0;font-size:12px;color:var(--ui-label-secondary)}
+</style></head><body>
+
+<h2>Glass belongs on the functional layer — content stays opaque</h2>
+<div class="stage">
+  <div class="toolbar material-glass-regular">
+    <div class="brand">Cue<i>ola</i></div>
+    <div class="grow"></div>
+    <button class="control"><span class="symbol icon-action-share"></span>Export</button>
+    <button class="control"><span class="symbol icon-action-settings"></span></button>
+    <button class="control live"><span class="symbol icon-marker-go"></span>Go Live</button>
+  </div>
+  <div class="bgrow"></div><div class="bgrow"></div><div class="bgrow"></div><div class="bgrow"></div><div class="bgrow"></div>
+  <div class="clearchip material-glass-clear"><span class="symbol icon-media-play"></span>Now playing — Open sting</div>
+</div>
+
+<h2>Content surfaces — <code>.material-content</code></h2>
+<div class="cards">
+  <div class="content-card material-content"><h3>Cold Open</h3><p>Wide camera · Host at desk · 00:45</p></div>
+  <div class="content-card material-content"><h3>Headlines</h3><p>Camera 2 · Two shot · 03:30</p></div>
+  <div class="content-card material-content"><h3>Package A</h3><p>Roll from server · 02:10</p></div>
+</div>
+
+</body></html>

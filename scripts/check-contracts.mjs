@@ -158,7 +158,7 @@ export function checkContracts(pages, allowlist = {}) {
 
 /* Which scripts serve which page. Outrangutan rides index.html. */
 export const PAGE_CONFIG = [
-  { name: 'index', html: ['index.html'], js: ['cueola-app.js', 'cueola-entitlements.js', 'cueola-avatar-profile.js', 'cueola-identity.js', 'outrangutan/outrangutan.js'] },
+  { name: 'index', html: ['index.html'], js: ['cueola-app.js', 'cueola-live-session.js', 'cueola-entitlements.js', 'cueola-avatar-profile.js', 'cueola-identity.js', 'outrangutan/outrangutan.js'] },
   { name: 'dashboard', html: ['dashboard.html'], js: [] },
 ];
 

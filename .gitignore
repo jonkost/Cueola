@@ -6,3 +6,5 @@ test-media/
 firebase-debug.log
 firestore-debug.log
 firepit-log.txt
+ds-bundle/
+.design-sync/.cache/

@@ -1,0 +1,56 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html data-product-theme="cool"><head><meta charset="utf-8">
+<title>Cueola — Colors &amp; Themes</title>
+<link rel="stylesheet" href="../../../styles.css">
+<style>
+  body{margin:0;padding:24px;background:var(--ui-background);color:var(--ui-label);font-family:var(--ui-font)}
+  h2{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ui-label-secondary);margin:24px 0 10px}
+  h2:first-child{margin-top:0}
+  .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+  .tile{border-radius:14px;padding:12px;background:var(--ui-background);color:var(--ui-label);border:1px solid var(--ui-separator-strong)}
+  .tile-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+  .dot{width:12px;height:12px;border-radius:50%;background:var(--ui-accent);flex:none}
+  .panel{background:var(--ui-content);border:1px solid var(--ui-separator);border-radius:9px;padding:8px 10px;margin-top:9px;font-size:11px}
+  .panel .sub{color:var(--ui-label-secondary);margin-top:2px}
+  .panel .ter{color:var(--ui-label-tertiary)}
+  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .chip{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--ui-separator);border-radius:10px;background:var(--ui-content)}
+  .sw{width:18px;height:18px;border-radius:6px;background:var(--c);flex:none}
+  .chip b{font-size:12px;font-weight:600;display:block}
+  .chip code{font-size:10px;color:var(--ui-label-secondary);font-family:var(--ui-mono)}
+</style></head><body>
+
+<h2>Product themes — set <code>data-product-theme</code> on the root</h2>
+<div class="themes">
+  <div class="tile" data-product-theme="cool"><div class="tile-head"><span class="dot"></span>cool</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="warm"><div class="tile-head"><span class="dot"></span>warm</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="white"><div class="tile-head"><span class="dot"></span>white</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="green"><div class="tile-head"><span class="dot"></span>green</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="koala"><div class="tile-head"><span class="dot"></span>koala</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="panda"><div class="tile-head"><span class="dot"></span>panda</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="flamingo"><div class="tile-head"><span class="dot"></span>flamingo</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+  <div class="tile" data-product-theme="prepbear"><div class="tile-head"><span class="dot"></span>prepbear</div><div class="panel">Friday Studio Show<div class="sub">Rundown · 12 rows</div><div class="ter">Updated 14:02</div></div></div>
+</div>
+
+<h2>Department colors — a department keeps its color everywhere</h2>
+<div class="chips">
+  <div class="chip" style="--c:var(--video)"><span class="sw"></span><span><b>Video</b><code>--video</code></span></div>
+  <div class="chip" style="--c:var(--green)"><span class="sw"></span><span><b>Audio</b><code>--green</code></span></div>
+  <div class="chip" style="--c:var(--red)"><span class="sw"></span><span><b>Playback</b><code>--red</code></span></div>
+  <div class="chip" style="--c:var(--yellow)"><span class="sw"></span><span><b>Graphics</b><code>--yellow</code></span></div>
+  <div class="chip" style="--c:var(--purple)"><span class="sw"></span><span><b>Lighting</b><code>--purple</code></span></div>
+  <div class="chip" style="--c:var(--cyan)"><span class="sw"></span><span><b>Script</b><code>--cyan</code></span></div>
+  <div class="chip" style="--c:var(--orange)"><span class="sw"></span><span><b>Warnings</b><code>--orange</code></span></div>
+</div>
+
+<h2>Semantic colors</h2>
+<div class="chips">
+  <div class="chip" style="--c:var(--ui-accent)"><span class="sw"></span><span><b>Accent</b><code>--ui-accent</code></span></div>
+  <div class="chip" style="--c:var(--ui-success)"><span class="sw"></span><span><b>Success</b><code>--ui-success</code></span></div>
+  <div class="chip" style="--c:var(--ui-warning)"><span class="sw"></span><span><b>Warning</b><code>--ui-warning</code></span></div>
+  <div class="chip" style="--c:var(--ui-destructive)"><span class="sw"></span><span><b>Destructive</b><code>--ui-destructive</code></span></div>
+  <div class="chip" style="--c:var(--ui-live)"><span class="sw"></span><span><b>Live / On air</b><code>--ui-live</code></span></div>
+</div>
+
+</body></html>

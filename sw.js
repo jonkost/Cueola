@@ -10,7 +10,8 @@ const SHELL_ASSETS = [
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
   'cueola-identity.js?v=ba84a5c741',
-  'cueola-app.js?v=28e0ae4e0b',
+  'cueola-live-session.js?v=2762fa1f8a',
+  'cueola-app.js?v=2fdc0e32be',
   'outrangutan/outrangutan.css?v=d494ffcdbd',
   'outrangutan/outrangutan.js?v=42007fb466',
 ];

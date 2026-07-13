@@ -1,0 +1,50 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html data-product-theme="cool"><head><meta charset="utf-8">
+<title>Cueola — Type</title>
+<link rel="stylesheet" href="../../../styles.css">
+<style>
+  body{margin:0;padding:24px;background:var(--ui-background);color:var(--ui-label);font-family:var(--ui-font)}
+  h2{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ui-label-secondary);margin:24px 0 10px}
+  h2:first-child{margin-top:0}
+  .spec{font-size:10px;font-family:var(--ui-mono);color:var(--ui-label-tertiary);margin-left:10px}
+  .row{margin:6px 0}
+  .lg{font-size:28px;font-weight:700;letter-spacing:-.02em}
+  .hd{font-size:17px;font-weight:600}
+  .bd{font-size:14px}
+  .sec{font-size:13px;color:var(--ui-label-secondary)}
+  .ter{font-size:12px;color:var(--ui-label-tertiary)}
+  .clock{font-family:var(--ui-mono);font-variant-numeric:tabular-nums;font-size:44px;font-weight:600;letter-spacing:.01em}
+  .durs{display:flex;gap:18px;font-family:var(--ui-mono);font-variant-numeric:tabular-nums;font-size:15px;color:var(--ui-label-secondary)}
+  .weights{display:flex;gap:22px;font-size:16px;align-items:baseline}
+  .cuelabel{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--ui-separator);background:var(--ui-content);margin-right:8px}
+  .cuelabel i{width:9px;height:9px;border-radius:3px;background:var(--c);font-style:normal}
+</style></head><body>
+
+<h2>System stack — <code>--ui-font</code></h2>
+<div class="row lg">Friday Studio Show<span class="spec">28 / 700</span></div>
+<div class="row hd">Guest Interview — Studio B<span class="spec">17 / 600</span></div>
+<div class="row bd">Roll package from server, then camera two for the two-shot.<span class="spec">14 / 400</span></div>
+<div class="row sec">Wide camera, host at desk. Lower thirds ready.<span class="spec">13 / secondary</span></div>
+<div class="row ter">Updated 14:02 · synced<span class="spec">12 / tertiary</span></div>
+
+<h2>Weights</h2>
+<div class="weights">
+  <span style="font-weight:400">Regular 400</span>
+  <span style="font-weight:500">Medium 500</span>
+  <span style="font-weight:600">Semibold 600</span>
+  <span style="font-weight:700">Bold 700</span>
+</div>
+
+<h2>Production numerals — <code>--ui-mono</code>, tabular</h2>
+<div class="clock">00:42:17</div>
+<div class="durs"><span>Start 14:00:00</span><span>Dur 03:30</span><span>Rem −00:45</span></div>
+
+<h2>Department labels stay legible at operator distance</h2>
+<div>
+  <span class="cuelabel" style="--c:var(--green)"><i></i>AUDIO — Host mic live</span>
+  <span class="cuelabel" style="--c:var(--red)"><i></i>PLAYBACK — PKG_A_FINAL</span>
+  <span class="cuelabel" style="--c:var(--yellow)"><i></i>GFX — Title animate</span>
+</div>
+
+</body></html>
