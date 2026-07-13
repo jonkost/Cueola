@@ -1950,3 +1950,17 @@
 @media (max-width: 720px) {
   .og-settings-pop .og-themes-submenu .og-theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Waveform peaks in the trim editors (V2 Phase 5 item 3) */
+.og-wave { position: absolute; inset: 0; width: 100%; height: 100%; color: color-mix(in srgb, var(--green) 75%, transparent); pointer-events: none; }
+.og-track-thumb.og-track-audio:has(.og-wave) { background: none; opacity: .9; }
+.og-wave-host { position: relative; }
+.og-wave-host .og-wave { opacity: .55; }
+
+/* Web MIDI learn-mode mapping (V2 Phase 5 item 4) */
+.og-midi-rows { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+.og-midi-row { display: flex; align-items: center; gap: 9px; }
+.og-midi-key { font-family: var(--og-mono, monospace); font-size: 11px; letter-spacing: .05em; min-width: 92px; color: var(--og-text2, #aab); }
+.og-midi-actions { display: flex; align-items: center; gap: 10px; }
+.og-midi-status { font-size: 11px; font-family: var(--og-mono, monospace); color: var(--green, #22d3a0); }
+.og-midi-del { flex: none; }

@@ -17,7 +17,6 @@ files as of this audit.
 | Cache busting | Manual `?v=YYYYMMDDx` query strings on `<script>`/`<link>` tags in index.html. |
 | Run (dev) | Any static server. Repo convention: `python3 -m http.server 3001` (see `.claude/launch.json`). No console errors expected at boot beyond known entitlement/App Check notices. |
 | Deploy | `firebase deploy` (hosting + rules). No build artifacts — the repo root *is* the site. |
-| Companion (optional) | `qlab-agent/` — local Node/Python OSC bridge to QLab. Not part of the web app or hosting. |
 | Target platform | Desktop browser (Chrome/Edge recommended for Outrangutan). No Electron/native shell. |
 
 ## 2. The four surfaces

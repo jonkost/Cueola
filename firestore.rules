@@ -22,7 +22,7 @@ service cloud.firestore {
 
     function validSessionDocument(code, data) {
       // Session docs are intentionally extensible: Cueola, Flowmingo,
-      // Outrangutan, QLab, dashboard, and Prompt-Up share this document.
+      // Outrangutan, dashboard, and Prompt-Up share this document.
       return data is map
         && (!data.keys().hasAny(['code']) || data.code == code)
         && optionalShortString(data, 'showName', 200)

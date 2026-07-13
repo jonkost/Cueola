@@ -48,7 +48,7 @@
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
     clockMode: 'remaining', wallClockMode: '24', multiTrigger: true, showLock: false, tab: 'play',
-    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, transcode: false,
+    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, midiMap: {}, transcode: false,
     layout: { wCuelist: 280, wInspector: 280, hEdit: 150 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
@@ -350,6 +350,94 @@
       im.src = url;
     });
   }
+  // ── Waveform peaks (V2 Phase 5 item 3) ──
+  // Pads: peaks come straight off the live AudioBuffer already in bufferCache.
+  // Clips: a one-time OfflineAudioContext decode of the media's audio track;
+  // the resulting peak strip (600 bytes) is persisted onto the media record in
+  // IndexedDB, so every later open paints synchronously. Media ids are
+  // immutable (new file = new id), so cached peaks never need invalidating.
+  const WAVE_BUCKETS = 600;
+  const peaksCache = new Map();   // mediaId -> Uint8Array — sync repaints during trim drags
+  const peakJobs = new Map();     // mediaId -> Promise — dedupe concurrent builds
+  function peaksFromAudioBuffer(buf, buckets) {
+    const out = new Uint8Array(buckets);
+    const chans = Math.min(buf.numberOfChannels || 1, 2);
+    const len = buf.length;
+    if (!len) return out;
+    const per = len / buckets;
+    for (let ch = 0; ch < chans; ch++) {
+      const data = buf.getChannelData(ch);
+      for (let b = 0; b < buckets; b++) {
+        const start = Math.floor(b * per), end = Math.min(len, Math.ceil((b + 1) * per));
+        let peak = 0;
+        // sample within the bucket (stride keeps huge files cheap; ≥1 sample/bucket)
+        const stride = Math.max(1, Math.floor((end - start) / 64));
+        for (let i = start; i < end; i += stride) { const a = Math.abs(data[i]); if (a > peak) peak = a; }
+        const v = Math.min(255, Math.round(peak * 255));
+        if (v > out[b]) out[b] = v;
+      }
+    }
+    return out;
+  }
+  function getWaveformPeaks(mediaId) {
+    if (!mediaId) return Promise.resolve(null);
+    if (peaksCache.has(mediaId)) return Promise.resolve(peaksCache.get(mediaId));
+    if (peakJobs.has(mediaId)) return peakJobs.get(mediaId);
+    const job = (async () => {
+      try {
+        const live = bufferCache.get(mediaId);   // pads: the playback buffer is already decoded
+        if (live) {
+          const peaks = peaksFromAudioBuffer(live, WAVE_BUCKETS);
+          peaksCache.set(mediaId, peaks);
+          idbGet(MEDIA_STORE, mediaId).then(m => { if (m && !m.peaks) idbPut(MEDIA_STORE, mediaId, { ...m, peaks }); }).catch(() => {});
+          return peaks;
+        }
+        const m = await idbGet(MEDIA_STORE, mediaId);
+        if (!m || !m.blob) return null;
+        if (m.peaks && m.peaks.length) { peaksCache.set(mediaId, m.peaks); return m.peaks; }
+        const raw = await m.blob.arrayBuffer();
+        const octx = new OfflineAudioContext(1, 1, 44100);
+        const buf = await octx.decodeAudioData(raw);   // one-time decode; buffer is NOT kept
+        const peaks = peaksFromAudioBuffer(buf, WAVE_BUCKETS);
+        peaksCache.set(mediaId, peaks);
+        await idbPut(MEDIA_STORE, mediaId, { ...m, peaks }).catch?.(() => {});
+        return peaks;
+      } catch (e) { return null; }                     // no audio track / undecodable → no wave, no error
+      finally { peakJobs.delete(mediaId); }
+    })();
+    peakJobs.set(mediaId, job);
+    return job;
+  }
+  function paintWaveform(canvas, peaks) {
+    if (!canvas || !peaks || !peaks.length) return;
+    const W = canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1) || peaks.length;
+    const H = canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1) || 48;
+    const cx = canvas.getContext('2d');
+    cx.clearRect(0, 0, W, H);
+    const css = getComputedStyle(canvas);
+    cx.fillStyle = css.color || 'rgba(34,211,160,.8)';
+    const mid = H / 2;
+    const barW = W / peaks.length;
+    for (let i = 0; i < peaks.length; i++) {
+      const h = Math.max(1, (peaks[i] / 255) * (H * 0.94) / 2);
+      cx.fillRect(i * barW, mid - h, Math.max(1, barW * 0.8), h * 2);   // mirrored bars
+    }
+  }
+  // Paint (sync when cached) into a host element; async build fills in later.
+  function mountWaveInto(host, mediaId) {
+    if (!host || !mediaId) return;
+    let canvas = host.querySelector('canvas.og-wave');
+    if (!canvas) { canvas = document.createElement('canvas'); canvas.className = 'og-wave'; host.appendChild(canvas); }
+    const cached = peaksCache.get(mediaId);
+    if (cached) { paintWaveform(canvas, cached); return; }
+    getWaveformPeaks(mediaId).then(peaks => {
+      if (!peaks) { canvas.remove(); return; }
+      // the editor may have re-rendered — repaint whatever canvas is live now
+      const liveCanvas = host.isConnected ? canvas : document.querySelector('.og-wave');
+      if (liveCanvas && liveCanvas.isConnected) paintWaveform(liveCanvas, peaks);
+    });
+  }
+
   // Build a filmstrip (row of frames) for a video clip — sampled across its duration.
   // Cached per mediaId; generated on demand the first time a video cue opens in the Clip Editor.
   function buildFilmstrip(mediaId, frames) {
@@ -704,8 +792,10 @@
     if (m.action === 'pad') { const p = padById(m.ref); return p ? (p.name || 'PAD') : 'PAD ?'; }
     return (SD_ACTIONS[m.action] || m.action).toUpperCase();
   }
-  function sdFireKey(i) {
-    const m = sdMap[i]; if (!m || !m.action) return;
+  // One action switch for every control surface (Stream Deck keys, MIDI pads,
+  // keyboard-shortcut parity) — V2 Phase 5 item 4 hangs Web MIDI off this too.
+  function fireSurfaceAction(m) {
+    if (!m || !m.action) return;
     if (m.action === 'go') go();
     else if (m.action === 'stop') stopAll();
     else if (m.action === 'pause') pauseResume();
@@ -713,6 +803,93 @@
     else if (m.action === 'panic') panic();
     else if (m.action === 'cue') { const c = cueById(m.ref); if (c) { selectedId = c.id; go(); } }
     else if (m.action === 'pad') { const p = padById(m.ref); if (p) firePad(p); }
+  }
+  function sdFireKey(i) { fireSurfaceAction(sdMap[i]); }
+
+  // ── Web MIDI control surfaces with learn-mode mapping (V2 Phase 5 item 4) ──
+  // Any pad/fader box: arm Learn, touch a control, pick its action. Notes and
+  // CC buttons fire through fireSurfaceAction (rising-edge for CC); a CC mapped
+  // to "Master level" rides the fader straight into setMasterGain.
+  let midi = null;          // MIDIAccess once connected
+  let midiMap = {};         // 'n|cc:<channel>:<number>' -> { action, ref } (persisted in settings)
+  let midiLearn = false;    // learn armed: next control touched becomes a mapping
+  const midiCcEdge = {};    // last CC value per key — buttons fire on the rising edge
+  const MIDI_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  function midiKeyOf(status, d1) {
+    const type = (status & 0xF0) === 0xB0 ? 'cc' : 'n';
+    return type + ':' + (status & 0x0F) + ':' + d1;
+  }
+  function midiKeyLabel(key) {
+    const [t, ch, n] = key.split(':');
+    const num = Number(n);
+    return (t === 'cc' ? 'CC ' + num : MIDI_NOTE_NAMES[num % 12] + (Math.floor(num / 12) - 1)) + ' · ch ' + (Number(ch) + 1);
+  }
+  async function midiConnect() {
+    if (!('requestMIDIAccess' in navigator)) { toast('Web MIDI needs Chrome/Edge.'); return; }
+    try { midi = await navigator.requestMIDIAccess({ sysex: false }); }
+    catch (e) { toast('MIDI access was blocked — allow it in the site settings.'); return; }
+    const hook = () => { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); };
+    midi.onstatechange = () => { hook(); renderMidi(); };   // hot-plug: new boxes just work
+    hook();
+    renderMidi();
+    toast('MIDI connected — ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.');
+  }
+  function onMidiMessage(e) {
+    const [status, d1, d2] = e.data;
+    const type = status & 0xF0;
+    if (type !== 0x90 && type !== 0x80 && type !== 0xB0) return;
+    const key = midiKeyOf(status, d1);
+    if (midiLearn) {
+      if (type === 0x80 || (type === 0x90 && !d2)) return;        // ignore releases while learning
+      if (!midiMap[key]) midiMap[key] = { action: type === 0xB0 ? 'master' : 'go' };
+      settings.midiMap = midiMap;
+      midiLearn = false;
+      renderMidi(); scheduleSave();
+      toast('Learned ' + midiKeyLabel(key) + ' — pick its action below.');
+      return;
+    }
+    const m = midiMap[key];
+    if (!m || !m.action) return;
+    if (type === 0xB0) {
+      if (m.action === 'master') { setMasterGain(d2 / 127); return; }   // continuous fader
+      const was = (midiCcEdge[key] || 0) > 63, is = d2 > 63;
+      midiCcEdge[key] = d2;
+      if (is && !was) fireSurfaceAction(m);
+      return;
+    }
+    if (type === 0x90 && d2 > 0) fireSurfaceAction(m);               // note-on = press
+  }
+  function openMidiPanel() { $('og-midi').classList.add('on'); renderMidi(); }
+  function closeMidiPanel() { midiLearn = false; $('og-midi').classList.remove('on'); }
+  function renderMidi() {
+    const body = $('og-midi-body'); if (!body) return;
+    const hasApi = 'requestMIDIAccess' in navigator;
+    const keys = Object.keys(midiMap);
+    const rows = keys.map(key => {
+      const m = midiMap[key] || {};
+      const isCc = key.indexOf('cc:') === 0;
+      const acts = Object.assign({}, SD_ACTIONS, isCc ? { master: 'Master level' } : {});
+      const actSel = '<select class="og-sd-act og-midi-act" data-mk="' + esc(key) + '">' + Object.keys(acts).map(a => opt(a, acts[a], m.action || '')).join('') + '</select>';
+      let refSel = '';
+      if (m.action === 'cue') refSel = '<select class="og-sd-ref og-midi-ref" data-mk="' + esc(key) + '"><option value="">Pick cue…</option>' + cues.map(c => '<option value="' + c.id + '"' + (m.ref === c.id ? ' selected' : '') + '>#' + c.num + ' ' + esc(c.name) + '</option>').join('') + '</select>';
+      if (m.action === 'pad') refSel = '<select class="og-sd-ref og-midi-ref" data-mk="' + esc(key) + '"><option value="">Pick pad…</option>' + pads.map(p => '<option value="' + p.id + '"' + (m.ref === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
+      return '<div class="og-midi-row"><span class="og-midi-key">' + esc(midiKeyLabel(key)) + '</span>' + actSel + refSel
+        + '<button class="og-sheet-x og-midi-del" data-mk="' + esc(key) + '" title="Remove mapping">✕</button></div>';
+    }).join('');
+    body.innerHTML =
+      (hasApi ? '' : '<div class="og-edit-empty">Web MIDI needs Chrome or Edge.</div>')
+      + '<div class="og-midi-rows">' + (rows || '<div class="og-edit-empty">No mappings yet — connect a box and learn its controls.</div>') + '</div>'
+      + '<div class="og-midi-actions">'
+      + (midi ? '<span class="og-midi-status">● ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '</span>'
+              : '<button class="og-bar-btn" id="og-midi-conn"' + (hasApi ? '' : ' disabled') + '>Connect MIDI</button>')
+      + '<button class="og-bar-btn' + (midiLearn ? ' danger' : '') + '" id="og-midi-learn">'
+      + (midiLearn ? 'Waiting — touch a control…' : '+ Learn a control') + '</button>'
+      + '</div>';
+    if ($('og-midi-conn')) $('og-midi-conn').onclick = midiConnect;
+    if ($('og-midi-learn')) $('og-midi-learn').onclick = () => { midiLearn = !midiLearn; renderMidi(); };
+    Array.prototype.forEach.call(body.querySelectorAll('.og-midi-act'), s => { s.onchange = e => { const k = s.getAttribute('data-mk'); midiMap[k] = Object.assign({}, midiMap[k], { action: e.target.value }); if (e.target.value !== 'cue' && e.target.value !== 'pad') delete midiMap[k].ref; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-midi-ref'), s => { s.onchange = e => { const k = s.getAttribute('data-mk'); midiMap[k] = Object.assign({}, midiMap[k], { ref: e.target.value }); settings.midiMap = midiMap; scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-midi-del'), b => { b.onclick = () => { delete midiMap[b.getAttribute('data-mk')]; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
   }
   async function sdConnect() {
     if (!('hid' in navigator)) { toast('WebHID needs Chrome/Edge — Stream Deck control is Chromium-only.'); return; }
@@ -2111,7 +2288,14 @@
     strip.classList.remove('loading');
   }
   function mountFilmstrip(c) {
-    const strip = $('og-trk-strip'); if (!strip || c.type !== 'video' || !c.mediaId) return;
+    if (!c.mediaId) return;
+    if (c.type !== 'video') {
+      // audio clips render og-track-thumb, not a strip — waveform goes there
+      // (one-time OfflineAudioContext decode, peaks cached on the media record)
+      mountWaveInto(document.querySelector('#og-track .og-track-thumb'), c.mediaId);
+      return;
+    }
+    const strip = $('og-trk-strip'); if (!strip) return;
     const cached = filmstripCache.get(c.mediaId);
     if (cached) { paintFilmstrip(strip, cached); return; }
     strip.classList.add('loading');
@@ -2156,6 +2340,8 @@
         + field('Loop', '<select id="og-sfx-loop">' + opt('0', 'No', p.loop ? '1' : '0') + opt('1', 'Yes', p.loop ? '1' : '0') + '</select>')
       + '</div>';
     const track = $('og-sfx-track');
+    // live AudioBuffer → peaks; cached peaks repaint synchronously through drag re-renders
+    mountWaveInto(track ? track.querySelector('.og-track-thumb') : null, p.mediaId);
     const setIn = (v) => { p.trimIn = clamp(v, 0, (p.trimOut == null ? dur : p.trimOut) - 0.05); renderPadEditArea(); renderPadInspector(); scheduleSave(); };
     const setOut = (v) => { p.trimOut = clamp(v, (p.trimIn || 0) + 0.05, dur || v); renderPadEditArea(); renderPadInspector(); scheduleSave(); };
     const tFromX = (x) => { const r = track.getBoundingClientRect(); return clamp((x - r.left) / r.width, 0, 1) * dur; };
@@ -2490,47 +2676,200 @@
     settings = Object.assign(DEFAULT_SETTINGS(), s.settings || {});
     settings.shortcuts = Object.assign({}, DEFAULT_SHORTCUTS, settings.shortcuts || {});
     sdMap = settings.sdMap = settings.sdMap || {};
+    midiMap = settings.midiMap = settings.midiMap || {};
     renumber();
     pads.forEach(p => { if (p.mediaId) decodeBuffer(p.mediaId); });   // warm pad buffers for instant trigger
     return s;
   }
   // ── Save / open a show file (a portable backup that includes the media) ────
-  // P7: branded ".ogshow" files. Chrome/Edge get the File System Access picker
-  // (a named "Outrangutan Show" type) and save-in-place — Cmd+S re-saves the
-  // opened/saved file; other browsers fall back to a download. Legacy ".json"
-  // files still open; validation stays schema-header-based (`kind` check).
+  // P7 + V2 Phase 5: branded ".ogshow" files. Since 2026-07-13 the container is
+  // a plain STORE zip — show.json (manifest, no media bytes) + media/<id> raw
+  // blobs. The old format base64'd every blob into ONE JSON string, and V8's
+  // string ceiling silently broke big-show exports; a zip built from Blob
+  // parts never materializes the media in memory at all (the original blobs
+  // ride into the output Blob by reference; only the CRC pass reads them, in
+  // bounded chunks). Legacy JSON .ogshow/.json files still import.
   let showFileHandle = null;   // FileSystemFileHandle → Cmd+S saves back into the same file
-  function blobToDataURL(blob) { return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob); }); }
   function showFileName() { return 'Outrangutan Show ' + new Date().toISOString().slice(0, 10) + '.ogshow'; }
+
+  // ── minimal zip (STORE) writer/reader — no deps, ~4GB classic-zip bounds ──
+  const _crcTable = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+    return t;
+  })();
+  async function blobCrc32(blob) {
+    let crc = 0xFFFFFFFF;
+    const CHUNK = 4 * 1024 * 1024;   // CRC reads in 4MB slices so memory stays flat
+    for (let off = 0; off < blob.size; off += CHUNK) {
+      const buf = new Uint8Array(await blob.slice(off, Math.min(off + CHUNK, blob.size)).arrayBuffer());
+      for (let i = 0; i < buf.length; i++) crc = _crcTable[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function dosDateTime(ts) {
+    const d = new Date(ts || Date.now());
+    return {
+      time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+      date: (((d.getFullYear() - 1980) & 0x7F) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+    };
+  }
+  async function buildZipBlob(entries) {   // entries: [{ name (ascii), blob }]
+    const parts = [], central = [];
+    const { time, date } = dosDateTime(Date.now());
+    const te = new TextEncoder();
+    let offset = 0;
+    for (const e of entries) {
+      const nameBytes = te.encode(e.name);
+      const crc = await blobCrc32(e.blob);
+      const size = e.blob.size;
+      if (size > 0xFFFFFFFE || offset + size > 0xFFFFFFFE) throw new Error('over 4GB — too large for the .ogshow container');
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);                       // version needed to extract
+      lh.setUint16(8, 0, true);                        // method 0 = STORE
+      lh.setUint16(10, time, true); lh.setUint16(12, date, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+      lh.setUint16(26, nameBytes.length, true);
+      parts.push(lh.buffer, nameBytes, e.blob);        // the blob itself — no copy
+      central.push({ nameBytes, crc, size, offset });
+      offset += 30 + nameBytes.length + size;
+    }
+    const cdStart = offset;
+    for (const c of central) {
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(12, time, true); ch.setUint16(14, date, true);
+      ch.setUint32(16, c.crc, true);
+      ch.setUint32(20, c.size, true); ch.setUint32(24, c.size, true);
+      ch.setUint16(28, c.nameBytes.length, true);
+      ch.setUint32(42, c.offset, true);
+      parts.push(ch.buffer, c.nameBytes);
+      offset += 46 + c.nameBytes.length;
+    }
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(8, central.length, true); eocd.setUint16(10, central.length, true);
+    eocd.setUint32(12, offset - cdStart, true);
+    eocd.setUint32(16, cdStart, true);
+    parts.push(eocd.buffer);
+    return new Blob(parts, { type: 'application/zip' });
+  }
+  async function readZipEntries(file) {
+    const tailSize = Math.min(file.size, 65558);       // EOCD + max comment
+    const tail = new DataView(await file.slice(file.size - tailSize).arrayBuffer());
+    let eocd = -1;
+    for (let i = tail.byteLength - 22; i >= 0; i--) { if (tail.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+    if (eocd < 0) throw new Error('no zip directory');
+    const count = tail.getUint16(eocd + 10, true);
+    const cdSize = tail.getUint32(eocd + 12, true);
+    const cdStart = tail.getUint32(eocd + 16, true);
+    const cd = new DataView(await file.slice(cdStart, cdStart + cdSize).arrayBuffer());
+    const td = new TextDecoder();
+    const entries = new Map();
+    let p = 0;
+    for (let n = 0; n < count && p + 46 <= cd.byteLength; n++) {
+      if (cd.getUint32(p, true) !== 0x02014b50) break;
+      const method = cd.getUint16(p + 10, true);
+      const compSize = cd.getUint32(p + 20, true);
+      const nameLen = cd.getUint16(p + 28, true), extraLen = cd.getUint16(p + 30, true), cmtLen = cd.getUint16(p + 32, true);
+      const lhOff = cd.getUint32(p + 42, true);
+      const name = td.decode(new Uint8Array(cd.buffer, p + 46, nameLen));
+      entries.set(name, { method, compSize, lhOff });
+      p += 46 + nameLen + extraLen + cmtLen;
+    }
+    return {
+      async blobFor(name, mime) {
+        const e = entries.get(name); if (!e) return null;
+        const lh = new DataView(await file.slice(e.lhOff, e.lhOff + 30).arrayBuffer());
+        if (lh.getUint32(0, true) !== 0x04034b50) return null;
+        const dataOff = e.lhOff + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+        const comp = file.slice(dataOff, dataOff + e.compSize, mime || '');
+        if (e.method === 0) return comp;               // STORE: a lazy slice, zero copy
+        if (e.method === 8 && typeof DecompressionStream === 'function') {
+          // tolerate a user re-zipping the show with real compression
+          return await new Response(comp.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+        }
+        return null;
+      },
+    };
+  }
+
+  // ── Printable show-day pack (V2 Phase 5 item 5): cue sheet + pad map ──
+  // Rides Cueola's exportPaperHTMLAsPDF pipeline (same page, same look as the
+  // rundown/call-sheet paperwork).
+  async function printShowPack() {
+    if (!cues.length && !pads.length) { toast('Nothing to print yet — add a cue or pad first.'); return; }
+    if (typeof window.exportPaperHTMLAsPDF !== 'function') { toast('The print pipeline is not available here.'); return; }
+    const contLabel = c => c.continueMode === 'auto_follow' ? 'Follow' : c.continueMode === 'auto_continue' ? 'Continue' : 'Manual';
+    const trimLabel = c => (c.trimIn || c.trimOut != null) ? fmtClock(c.trimIn || 0) + ' → ' + (c.trimOut == null ? 'end' : fmtClock(c.trimOut)) : '—';
+    const cueRows = cues.map((c, i) => `<tr>
+        <td>${i + 1}</td><td><strong>${esc(c.name || 'Untitled')}</strong></td>
+        <td>${esc(c.type || '—')}</td><td>${c.dur ? fmtClock(c.dur) : '—'}</td>
+        <td>${trimLabel(c)}</td><td>${contLabel(c)}</td><td>${c.loop ? 'Loop' : ''}</td>
+      </tr>`).join('');
+    const cueSheet = cues.length ? `
+      <h2>Cue Sheet — ${cues.length} cue${cues.length === 1 ? '' : 's'}</h2>
+      <table><thead><tr><th>#</th><th>Cue</th><th>Type</th><th>Duration</th><th>Trim</th><th>Continue</th><th></th></tr></thead>
+      <tbody>${cueRows}</tbody></table>` : '';
+    const padSections = banks.map(bank => {
+      const bp = pads.filter(p => p.bank === bank.id).sort((a, b) => (a.slot || 0) - (b.slot || 0));
+      if (!bp.length) return '';
+      const rows = bp.map(p => `<tr>
+          <td>${(p.slot || 0) + 1}</td><td>${p.emoji ? esc(p.emoji) + ' ' : ''}<strong>${esc(p.name || 'Pad')}</strong></td>
+          <td>${p.key ? esc(String(p.key).toUpperCase()) : '—'}</td>
+          <td>${p.loop ? 'Loop' : ''}${p.trimIn || p.trimOut != null ? (p.loop ? ' · ' : '') + 'trimmed' : ''}</td>
+        </tr>`).join('');
+      return `<h3>${esc(bank.name || 'Bank')}</h3>
+        <table><thead><tr><th>Pad</th><th>Sound</th><th>Hotkey</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    }).join('');
+    const padMap = pads.length ? `<h2>SFX Pad Map — ${pads.length} pad${pads.length === 1 ? '' : 's'}</h2>${padSections}` : '';
+    const title = mode === 'session' && sessionCode ? 'Session ' + sessionCode : 'Standalone show';
+    try {
+      await window.exportPaperHTMLAsPDF(`
+        <h1>Outrangutan Show Pack</h1>
+        <div>${esc(title)} · printed ${esc(new Date().toLocaleString())}</div>
+        ${cueSheet}
+        ${padMap}
+      `, 'outrangutan-show-pack.pdf', { orientation: 'portrait', margin: 24 });
+      slog('session', 'Show pack printed — ' + cues.length + ' cues · ' + pads.length + ' pads');
+      toast('Show pack PDF downloaded.');
+    } catch (e) { toast('Could not build the show pack PDF.'); }
+  }
+
   async function exportShowFile() {
     try {
       if (!cues.length && !pads.length) { toast('Nothing to save yet — add a cue or pad first.'); return; }
       const ids = new Set();
       cues.forEach(c => { if (c.mediaId) ids.add(c.mediaId); });
       pads.forEach(p => { if (p.mediaId) ids.add(p.mediaId); });
-      const media = {};
+      const mediaIndex = {};
+      const zipEntries = [];
       for (const id of ids) {
         const m = await idbGet(MEDIA_STORE, id);
         if (!m || !m.blob) continue;
-        const data = await blobToDataURL(m.blob);
-        if (!data) continue;
-        media[id] = { name: m.name || '', mime: m.mime || '', kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0, data };
+        const entryName = 'media/' + String(id).replace(/[^\w.-]/g, '_');
+        mediaIndex[id] = { name: m.name || '', mime: m.mime || '', kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0, file: entryName };
+        zipEntries.push({ name: entryName, blob: m.blob });
       }
-      const payload = { kind: 'outrangutan-show', app: 'outrangutan', schema: SCHEMA, exportedAt: Date.now(),
-        show: { cues, pads, banks, currentBankId, outputs, selectedId, settings }, media };
-      const json = JSON.stringify(payload);
-      const nMedia = Object.keys(media).length;
+      const payload = { kind: 'outrangutan-show', app: 'outrangutan', schema: SCHEMA, container: 'zip', exportedAt: Date.now(),
+        show: { cues, pads, banks, currentBankId, outputs, selectedId, settings }, mediaIndex };
+      zipEntries.unshift({ name: 'show.json', blob: new Blob([JSON.stringify(payload)], { type: 'application/json' }) });
+      const showBlob = await buildZipBlob(zipEntries);
+      const nMedia = Object.keys(mediaIndex).length;
       const summary = cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + (nMedia ? ' · ' + nMedia + ' media' : '');
       if (window.showSaveFilePicker) {
         try {
           if (!showFileHandle) {
             showFileHandle = await window.showSaveFilePicker({
               suggestedName: showFileName(),
-              types: [{ description: 'Outrangutan Show', accept: { 'application/json': ['.ogshow'] } }],
+              types: [{ description: 'Outrangutan Show', accept: { 'application/zip': ['.ogshow'] } }],
             });
           }
           const w = await showFileHandle.createWritable();
-          await w.write(json);
+          await w.write(showBlob);
           await w.close();
           slog('session', 'Show saved → ' + showFileHandle.name + ' (' + summary + ')');
           toast('Saved — ' + showFileHandle.name);
@@ -2540,21 +2879,20 @@
           showFileHandle = null;                      // stale or denied handle → plain download below
         }
       }
-      const blob = new Blob([json], { type: 'application/json' });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      a.href = URL.createObjectURL(showBlob);
       a.download = showFileName();
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       slog('session', 'Show downloaded → ' + showFileName() + ' (' + summary + ')');
       toast('Show saved — ' + summary + '.');
-    } catch (e) { toast('Could not save the show file.'); }
+    } catch (e) { toast(e && /4GB/.test(String(e.message)) ? 'Too big: the .ogshow container caps at 4 GB.' : 'Could not save the show file.'); }
   }
   async function openShowFilePicker() {
     if (window.showOpenFilePicker) {
       try {
         const [h] = await window.showOpenFilePicker({
-          types: [{ description: 'Outrangutan Show', accept: { 'application/json': ['.ogshow', '.json'] } }],
+          types: [{ description: 'Outrangutan Show', accept: { 'application/zip': ['.ogshow'], 'application/json': ['.json'] } }],
         });
         const ok = await importShowFile(await h.getFile());
         if (ok) showFileHandle = h;   // Cmd+S now saves back into the opened file
@@ -2564,12 +2902,68 @@
     const input = $('og-showfile-input');
     if (input) input.click();
   }
+  // Container sniff: zip magic → the new raw-media path; anything else falls
+  // back to the legacy base64-in-JSON format (still openable forever).
   async function importShowFile(file) {
+    let head;
+    try { head = new Uint8Array(await file.slice(0, 4).arrayBuffer()); } catch (e) { toast('Could not read that file.'); return false; }
+    if (head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04) return importShowZip(file);
+    return importShowLegacyJson(file);
+  }
+
+  function validShowPayload(payload) {
+    return payload && payload.kind === 'outrangutan-show' && payload.show && Array.isArray(payload.show.cues);
+  }
+  function confirmShowReplace(payload) {
+    const sc = payload.show.cues.length, sp = Array.isArray(payload.show.pads) ? payload.show.pads.length : 0;
+    if (!(cues.length || pads.length)) return true;
+    return dangerOK('Open this show? It replaces the current ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + ' / ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') + ' with ' + sc + ' / ' + sp + '.');
+  }
+  // Shared tail for both containers: media is already in IndexedDB by now.
+  async function finishShowImport(payload) {
+    bufferCache.clear(); decodeJobs.clear(); filmstripCache.clear(); filmstripJobs.clear();
+    const s = sanitizeImportedShow(payload.show);
+    await idbPut(SHOW_STORE, showKey(), { schema: payload.schema || SCHEMA, savedAt: Date.now(), activeCueId: null,
+      cues: s.cues, pads: s.pads || [], banks: s.banks || [], currentBankId: s.currentBankId || null,
+      outputs: s.outputs || defaultOutputs(), selectedId: s.selectedId || null, settings: s.settings || DEFAULT_SETTINGS() });
+    active = null;
+    await loadShow();
+    renderAll();
+    scheduleSave();
+    slog('session', 'Show opened from file — ' + cues.length + ' cues · ' + pads.length + ' pads');
+    toast('Show opened — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
+    return true;
+  }
+
+  async function importShowZip(file) {
+    let payload, zip;
+    try {
+      zip = await readZipEntries(file);
+      const manifest = await zip.blobFor('show.json', 'application/json');
+      if (!manifest) { toast('That show file is missing its manifest.'); return false; }
+      payload = JSON.parse(await manifest.text());
+    } catch (e) { toast('That file isn’t a valid show file.'); return false; }
+    if (!validShowPayload(payload)) { toast('That isn’t an Outrangutan show file.'); return false; }
+    if (!confirmShowReplace(payload)) return false;
+    try {
+      try { stopAll({ silent: true }); } catch (e) {}
+      const mediaIndex = payload.mediaIndex || {};
+      for (const id of Object.keys(mediaIndex)) {
+        const m = mediaIndex[id] || {};
+        if (!m.file) continue;
+        const blob = await zip.blobFor(m.file, m.mime || '');
+        if (!blob) continue;
+        await idbPut(MEDIA_STORE, id, { blob, name: m.name || '', mime: m.mime || blob.type, kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0 });
+      }
+      return await finishShowImport(payload);
+    } catch (e) { toast('Could not open the show file.'); return false; }
+  }
+
+  async function importShowLegacyJson(file) {
     let payload;
     try { payload = JSON.parse(await file.text()); } catch (e) { toast('That file isn’t a valid show file.'); return false; }
-    if (!payload || payload.kind !== 'outrangutan-show' || !payload.show || !Array.isArray(payload.show.cues)) { toast('That isn’t an Outrangutan show file.'); return false; }
-    const sc = payload.show.cues.length, sp = Array.isArray(payload.show.pads) ? payload.show.pads.length : 0;
-    if ((cues.length || pads.length) && !dangerOK('Open this show? It replaces the current ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + ' / ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') + ' with ' + sc + ' / ' + sp + '.')) return false;
+    if (!validShowPayload(payload)) { toast('That isn’t an Outrangutan show file.'); return false; }
+    if (!confirmShowReplace(payload)) return false;
     try {
       try { stopAll({ silent: true }); } catch (e) {}
       const media = payload.media || {};
@@ -2578,18 +2972,7 @@
         let blob; try { blob = await (await fetch(m.data)).blob(); } catch (e) { continue; }
         await idbPut(MEDIA_STORE, id, { blob, name: m.name || '', mime: m.mime || blob.type, kind: m.kind || 'video', duration: m.duration || 0, thumb: m.thumb || null, width: m.width || 0, height: m.height || 0 });
       }
-      bufferCache.clear(); decodeJobs.clear(); filmstripCache.clear(); filmstripJobs.clear();
-      const s = sanitizeImportedShow(payload.show);
-      await idbPut(SHOW_STORE, showKey(), { schema: payload.schema || SCHEMA, savedAt: Date.now(), activeCueId: null,
-        cues: s.cues, pads: s.pads || [], banks: s.banks || [], currentBankId: s.currentBankId || null,
-        outputs: s.outputs || defaultOutputs(), selectedId: s.selectedId || null, settings: s.settings || DEFAULT_SETTINGS() });
-      active = null;
-      await loadShow();
-      renderAll();
-      scheduleSave();
-      slog('session', 'Show opened from file — ' + cues.length + ' cues · ' + pads.length + ' pads');
-      toast('Show opened — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
-      return true;
+      return await finishShowImport(payload);
     } catch (e) { toast('Could not open the show file.'); return false; }
   }
   function showRecovery(s) {
@@ -2699,6 +3082,8 @@
             + '<button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + assetIcon('scope') + '<span>Scopes</span></button>'
             + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
             + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
+            + '<button class="og-bar-btn" id="og-midi-btn" title="MIDI control surfaces (Web MIDI)">' + sym('action.grid') + 'MIDI</button>'
+            + '<button class="og-bar-btn" id="og-print-btn" title="Print the show-day pack — cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
             + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
             + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
@@ -2796,6 +3181,7 @@
         + '<button class="og-help-close" id="og-help-close">Done</button></div></div>'
       + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="og-sheet-x" id="og-midi-x">Done</button></div><div id="og-midi-body"></div></div></div>'
       + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
@@ -2824,6 +3210,9 @@
     $('og-bottom-tab-edit').onclick = () => setBottomTab('edit');
     $('og-output-btn').onclick = openOutputsPanel;
     $('og-sd-btn').onclick = openSdPanel;
+    $('og-midi-btn').onclick = openMidiPanel;
+    $('og-midi-x').onclick = closeMidiPanel;
+    $('og-print-btn').onclick = printShowPack;
     $('og-pro-btn').onclick = openIntegrations;
     $('og-scopes-btn').onclick = toggleScopes;
     $('og-lock-btn').onclick = toggleLock;
@@ -3061,6 +3450,9 @@
     isReady: () => built && showLoaded && isOpen(),  // safe to receive an external SFX pad right now?
     addAudioPad,                                    // Cueola audio note → SFX pad hand-off
     goToSfx: () => { if (built) { showScreen(); setTab('sfx'); } },
+    // Console rehearsal hook: test MIDI mappings (incl. learn mode) without a
+    // box plugged in — Outrangutan.midiInject(0x90, 60, 127) is a C4 note-on.
+    midiInject: (status, d1, d2) => onMidiMessage({ data: [status, d1, d2 || 0] }),
     _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     // P4: same-page fast path — when Cueola and Outrangutan share this tab (the

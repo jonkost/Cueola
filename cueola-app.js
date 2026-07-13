@@ -1175,28 +1175,28 @@ const LEARNING_LESSONS = [
     id:'plandabear',
     area:'Planda Bear',
     title:'Prep The Show Package',
-    time:'6 min',
-    intro:'Planda Bear keeps the production paperwork in the same workspace as the rundown so the team is not chasing separate files.',
+    time:'7 min',
+    intro:'Planda Bear keeps the production paperwork and the crew conversation in the same workspace as the rundown — and with a profile, everything that needs you follows you.',
     navigation:[
-      'Open Planda Bear from the home screen card or the topbar button.',
-      'Move through Call Sheet, Schedule, Safety Plan, patch sheets, comments, and export from the paperwork hub.',
-      'Return to Cueola when the paperwork is set so the rundown and package stay tied to the same session code.'
+      'Enter with your profile: tap the profile button on the front page, sign in with your username (no password — your class login code created it), and open a session from your list.',
+      'Open Planda Bear from the home screen card or the topbar button; the notes button on the front page goes straight to the Production Notes board.',
+      'Move through Call Sheet, Schedule, Safety Plan, patch sheets, comments, and export from the paperwork hub.'
     ],
     steps:[
-      'Open Planda Bear from the home screen or the topbar.',
+      'First visit? Create your profile with the login code your instructor gave the class — pick a username, look, and theme. After that, entering any app is just your username.',
       'Start with the Call Sheet: production name, date, call time, location, contacts, access, crew, and talent.',
-      'Fill the Production Schedule and readiness checklist so setup, rehearsal, show, and wrap are clear.',
-      'Add Safety Plan details before the room gets busy.',
-      'Use Video Patch, Audio Patch, and Comms Patch sheets to document routing.',
-      'Open Production Notes so everyone on the session can post to the discussion board, tag notes by department, reply in threads, and export a single note or the whole board.',
+      'Fill the Production Schedule, Safety Plan, and the patch sheets before the room gets busy.',
+      'Open Production Notes: post what changed, tag the department, and reply in threads. @-mention someone and they get notified; their position chip shows beside their name.',
+      'Post a To-Do with an assignee, or add a checklist to one note and assign each item — assigned items land on that person’s profile portal, and instructors can open "Open items" to see who owes what.',
+      'Pinned notes show instructors who has not read them yet — "Seen by" on every note tracks reads across devices.',
       'Preview or export the PDF package when the paperwork is ready to share.'
     ],
     callouts:[
-      ['Comments','Instructors can leave Planda Bear comments without overwriting student work.'],
-      ['Production Notes','A shared discussion board: everyone posts, notes carry department tags and threaded replies, and the whole board joins the PDF package.'],
+      ['Profiles','One profile per person, created with a class login code — no passwords. Your portal lists your sessions, your position, open to-dos, and unseen notes.'],
+      ['Notes that assign work','Department tags, threaded replies, likes, @mentions, per-item checklist owners, and read receipts — the board is the crew’s single source of truth.'],
       ['One package','Export PDF Package gathers the paperwork, production notes, and rendered rundown into one shareable file.']
     ],
-    checks:['I can open Planda Bear.','I know which paperwork page to fill first.','I know where PDF export lives.'],
+    checks:['I can enter with my username.','I can post a note with a tagged department and an assigned checklist item.','I know where my open to-dos show up.'],
     actions:[['Open Planda Bear','plandabear']]
   },
   {
@@ -1248,6 +1248,34 @@ const LEARNING_LESSONS = [
     ],
     checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
     actions:[['Open Remote Op','remote']]
+  },
+  {
+    id:'outrangutan',
+    area:'Outrangutan',
+    title:'Cue And Play Media',
+    time:'6 min',
+    intro:'Outrangutan is the playback deck: video and sound cues in a list, an SFX pad board, and an output window for the program display. It runs local-first — media lives on this machine, so dead venue Wi-Fi cannot stop playback.',
+    navigation:[
+      'Open Outrangutan from the home screen card — Session mode ties it to the rundown’s code, Standalone runs it alone.',
+      'Playback tab is the cue list and transport; SFX Board is the pad grid; the gear opens outputs and settings.',
+      'From the Cueola live screen you can drive it without switching: G / P / S and the pads keep working.'
+    ],
+    steps:[
+      'Drop video, audio, or stills into the cue list — each file becomes a cue. Trim with the clip editor; audio shows its waveform so you can see where the hit lands.',
+      'Set each cue’s Continue mode: Manual waits for GO, Continue rolls into the next cue, Follow starts it alongside.',
+      'Build the SFX board: drop sounds on pads, name them, give them hotkeys. Trim a pad in its editor — the waveform shows there too.',
+      'Open the output window onto the program display and use Identify to confirm the screen. If an output ever freezes, Cueola’s watchdog flags it and re-syncs it when it comes back.',
+      'Link rundown rows to cues and pads in Cueola’s cue editor, with auto-fire when the row advances — the printed rundown shows those links in its Outrangutan column.',
+      'Hook up a control surface: Stream Deck over WebHID, or any MIDI pad/fader box — arm “+ Learn a control”, touch the control, pick its action. A fader mapped to Master level rides the master gain.',
+      'Save the show as an .ogshow (Cmd+S saves in place) and print the show pack — cue sheet plus pad map — before doors.'
+    ],
+    callouts:[
+      ['PANIC','Esc on the Outrangutan screen (Shift+Esc from Cueola live) stops everything, instantly. It is always safe to hit.'],
+      ['.ogshow files','One file carries the whole show — cues, pads, and the media itself — so it opens on any machine. Old .ogshow files still open.'],
+      ['No hardware handy?','Outrangutan.midiInject(0x90, 60, 127) in the console fires a mapped control — rehearse the mapping before the box arrives.']
+    ],
+    checks:['I can add a cue and trim it.','I can fire a pad from its hotkey.','I know what PANIC does and where the output window lives.'],
+    actions:[['Open Outrangutan','outrangutan']]
   },
   {
     id:'support',
@@ -1688,6 +1716,7 @@ function openGuideAction(action) {
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
   else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
+  else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
 }
 
 function markPaperworkDirty() {
@@ -3563,9 +3592,6 @@ function setupFirestore() {
         _lastSeenTalentHeartbeatTs = _hb.ts;
         _notePrompterTalentSeen(_hb);
       }
-      // QLab agent presence + cue-fire acks (Cueola → QLab integration).
-      if (d.qlab?.agentHeartbeat?.ts) noteQlabAgentBeat(d.qlab.agentHeartbeat);
-      if (d.qlab?.lastAck) handleQlabAck(d.qlab.lastAck);
       // Outrangutan playback module — cue list + live status published back to us.
       if (d.outrangutan) applyOutrangutanState(d.outrangutan);
       // Handle force commands
@@ -4678,8 +4704,7 @@ function openCueConfig(beatId, type) {
   const tc = CT[type];
   document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
   const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
-  document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing) + qlabCueFields(type, existing);
-  updateQlabFireBtn();
+  document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing);
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
   showModal('cueConfigModal');
   setRundownPresence(beatId);
@@ -5470,13 +5495,9 @@ function saveCueConfig() {
     if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; }
     else { delete d.outPadId; delete d.outPadAuto; }
   }
-  // QLab trigger — kept only when there's a real target (a cue number, or GO which needs none)
-  const qlabCue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
-  const qlabAction = document.getElementById('cc-qlab-action')?.value || 'start';
-  if (qlabCue || qlabAction === 'go') {
-    d.qlabCue = qlabCue; d.qlabAction = qlabAction;
-    d.qlabAuto = document.getElementById('cc-qlab-auto')?.checked || false;
-  } else { delete d.qlabCue; delete d.qlabAction; delete d.qlabAuto; }
+  // QLab integration removed 2026-07-13 (owner decision) — stale qlabCue/
+  // qlabAction/qlabAuto fields on old rows are dropped whenever a cue is re-saved.
+  delete d.qlabCue; delete d.qlabAction; delete d.qlabAuto;
   b.cues[cueConfigType] = d;
   hideModal('cueConfigModal');
   setRundownPresence(null);
@@ -5494,197 +5515,12 @@ function removeCueCfg() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// QLAB INTEGRATION (Cueola → QLab)
-// Cueola is the master: firing a cue writes a command to Firestore
-// (sessions/<code>.qlab.command). A small local QLab Agent (see /qlab-agent)
-// listens to that doc and sends OSC to QLab. This mirrors the prompter-control
-// transport: a single command object, deduped by commandId on the agent side.
-// ─────────────────────────────────────────────────────────────
-let qlabAgentLastBeat = 0;   // ts of the most recent agent heartbeat we've seen
-let qlabAgentInfo = null;    // { host, port } reported by the agent
-let qlabLastAckTs = 0;       // dedup acks (every doc write re-fires the snapshot)
-let _qlabCmdSeq = 0;
-
-// Actions Cueola can ask QLab to perform. 'go' advances the QLab playhead and
-// needs no cue number; the rest are cue-scoped (/cue/<n>/<action>).
-const QLAB_ACTIONS = [
-  ['start',  'Start'],
-  ['stop',   'Stop'],
-  ['pause',  'Pause'],
-  ['resume', 'Resume'],
-  ['load',   'Load'],
-  ['panic',  'Panic'],
-  ['go',     'GO (playhead)'],
-];
-
-function nextQlabCommandId() {
-  _qlabCmdSeq += 1;
-  return `qlab_${CLIENT_ID}_${Date.now().toString(36)}_${_qlabCmdSeq}`;
-}
-
-// 'go' is the only action that doesn't require a cue number.
-function qlabCueRequiresNumber(action) { return action !== 'go'; }
-
-function qlabAgentOnline() {
-  return !!qlabAgentLastBeat && (Date.now() - qlabAgentLastBeat) < 15000;
-}
-
-function noteQlabAgentBeat(hb) {
-  qlabAgentLastBeat = hb.ts || Date.now();
-  qlabAgentInfo = { host: hb.host || '', port: hb.port || '' };
-  refreshQlabStatusBadges();
-}
-
-function handleQlabAck(ack) {
-  if (!ack || !ack.ts || ack.ts === qlabLastAckTs) return;
-  qlabLastAckTs = ack.ts;
-  // Only surface acks for commands we just sent, and only recent ones.
-  if (Date.now() - ack.ts > 8000) return;
-  if (ack.ok && ack.sentCount) {
-    toast(`QLab fired ${ack.sentCount} cue${ack.sentCount > 1 ? 's' : ''}.`);
-  } else if (ack.ok && !ack.sentCount && ack.cueCount) {
-    toast('QLab got the command but sent nothing — check cue numbers.');
-  }
-}
-
-function qlabAgentStatusHTML() {
-  const online = qlabAgentOnline();
-  const dot = `<span class="qlab-dot ${online ? 'on' : 'off'}"></span>`;
-  return `${dot}${online ? 'QLab Connected' : 'QLab Agent offline'}`;
-}
-
-function refreshQlabStatusBadges() {
-  document.querySelectorAll('[data-qlab-status]').forEach(n => { n.innerHTML = qlabAgentStatusHTML(); });
-}
-
-// Optional QLab trigger block, appended to every cue-config modal.
-function qlabCueFields(type, d) {
-  d = d || {};
-  const cueVal = esc(d.qlabCue || '');
-  const action = d.qlabAction || 'start';
-  const auto   = d.qlabAuto ? 'checked' : '';
-  const opts = QLAB_ACTIONS.map(([v, l]) => `<option value="${v}" ${v === action ? 'selected' : ''}>${l}</option>`).join('');
-  return `
-    <div class="field cc-qlab">
-      <div class="cc-section-lbl cc-qlab-head">
-        ${sfIcon('action.forward')} QLab trigger <span class="cc-qlab-optional">— optional</span>
-        <span class="cc-qlab-status" data-qlab-status>${qlabAgentStatusHTML()}</span>
-      </div>
-      <div class="cc-qlab-row">
-        <div class="cc-qlab-cue-field">
-          <label class="field-lbl">QLab cue number / ID</label>
-          <input class="field-in" id="cc-qlab-cue" value="${cueVal}" placeholder="e.g. 14.5" maxlength="60" autocomplete="off" oninput="updateQlabFireBtn()">
-        </div>
-        <div class="cc-qlab-action-field">
-          <label class="field-lbl">Action</label>
-          <select class="field-in" id="cc-qlab-action" onchange="updateQlabFireBtn()">${opts}</select>
-        </div>
-      </div>
-      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-qlab-auto" ${auto}> Auto-fire when this row advances live</label>
-      <div class="cc-qlab-actions">
-        <button type="button" class="cc-qlab-fire" id="cc-qlab-fire" onclick="fireQlabFromModal()">${sfIcon('action.forward')} Fire in QLab now</button>
-      </div>
-    </div>`;
-}
-
-// Keep the "Fire now" button disabled until there's a valid target.
-function updateQlabFireBtn() {
-  const btn = document.getElementById('cc-qlab-fire');
-  if (!btn) return;
-  const cue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
-  const action = document.getElementById('cc-qlab-action')?.value || 'start';
-  btn.disabled = qlabCueRequiresNumber(action) && !cue;
-}
-
-// Core writer: push a fire command to Firestore for the agent. cues is an array
-// of { cue, action } so a single row can batch several QLab actions in one write
-// (avoids a race where rapid overwrites drop commands).
-function fireQlabCommand(cues) {
-  const list = (cues || [])
-    .map(c => ({ cue: String(c.cue || '').trim(), action: c.action || 'start' }))
-    .filter(c => c.cue || !qlabCueRequiresNumber(c.action));
-  if (!list.length) return false;
-  if (!(window._firebaseReady && session.code && !session.isDemo)) {
-    toast('QLab needs a live (non-demo) session.');
-    return false;
-  }
-  const command = {
-    commandId: nextQlabCommandId(),
-    ts: Date.now(),
-    by: session.userName || '',
-    sender: FLOWMINGO_ENDPOINT_ID,
-    cues: list,
-  };
-  window._updateDoc(window._doc(window._db, 'sessions', session.code), {
-    'qlab.command': command,
-  }).catch(err => toast(firebaseConnectionLabel(err, 'QLab command failed')));
-  return true;
-}
-
-// Manual GO from the cue-config modal — also doubles as a test trigger.
-function fireQlabFromModal() {
-  const cue = (document.getElementById('cc-qlab-cue')?.value || '').trim();
-  const action = document.getElementById('cc-qlab-action')?.value || 'start';
-  if (qlabCueRequiresNumber(action) && !cue) { toast('Enter a QLab cue number first.'); return; }
-  if (fireQlabCommand([{ cue, action }])) {
-    if (!qlabAgentOnline()) toast('Sent — but the QLab Agent looks offline.');
-  }
-}
-
-// Collect every auto-fire QLab target programmed on a row.
-function collectAutoQlabCues(beat) {
-  if (!beat || !beat.cues) return [];
-  const out = [];
-  for (const type of COL_DEFAULTS) {
-    const d = beat.cues[type];
-    if (!d || !d.qlabAuto) continue;
-    const cue = String(d.qlabCue || '').trim();
-    const action = d.qlabAction || 'start';
-    if (cue || !qlabCueRequiresNumber(action)) out.push({ cue, action });
-  }
-  return out;
-}
-
-// Fire a row's auto-cues. Called only from lsNext (a deliberate forward advance);
-// scrubbing/jumping/going back never auto-fires, matching show-control norms.
-function fireQlabAutoForBeat(beat) {
-  const cues = collectAutoQlabCues(beat);
-  if (cues.length) fireQlabCommand(cues);
-}
-
-// Does this cue cell have a QLab target worth showing a GO button for?
-function qlabCellHasTarget(d) {
-  return !!d && (String(d.qlabCue || '').trim() || d.qlabAction === 'go');
-}
-
-// Manual GO straight from a live cue card — fire one cell's QLab action.
-function fireQlabCueCell(beatId, type) {
-  const d = beats.find(x => x.id === beatId)?.cues?.[type];
-  if (!qlabCellHasTarget(d)) { toast('No QLab cue on this cell.'); return; }
-  const cue = String(d.qlabCue || '').trim();
-  const action = d.qlabAction || 'start';
-  if (fireQlabCommand([{ cue, action }])) {
-    const what = action === 'start' ? `cue ${cue}` : (action === 'go' ? 'GO' : `${action} cue ${cue}`);
-    toast(qlabAgentOnline() ? `QLab: ${what} sent.` : `QLab Agent offline — ${what} not delivered.`);
-  }
-}
-
-// GO button markup for a live cue card (only when the cell has a QLab target).
-function qlabGoBtnHTML(beatId, type, d) {
-  if (!qlabCellHasTarget(d)) return '';
-  const action = d.qlabAction || 'start';
-  const label = (action === 'start' || action === 'go') ? 'GO' : action.toUpperCase();
-  const tip = action === 'go' ? 'Fire QLab GO (playhead)' : `Fire QLab ${action} · cue ${esc(d.qlabCue || '')}`;
-  return `<button type="button" class="lf-qlab-go" title="${tip}" onclick="event.stopPropagation();fireQlabCueCell('${beatId}','${type}')">${sfIcon('action.forward')} ${label}</button>`;
-}
-
-// ─────────────────────────────────────────────────────────────
 // OUTRANGUTAN INTEGRATION (Cueola rundown ⇄ Outrangutan playback)
 // A rundown `playback` cue can link to an Outrangutan cue. Firing it (manual GO
 // or auto on live advance) writes sessions/<code>.outrangutan.command; the
 // Outrangutan module (subscribed to the same session) plays it locally and
 // publishes back sessions/<code>.outrangutan.{cues,live}, which we render into
-// the cell. Mirrors the QLab transport: one command object, deduped by id.
+// the cell. Transport: one command object, deduped by id on the receiver.
 // ─────────────────────────────────────────────────────────────
 let outrangutanState = { cues: {}, pads: {}, live: null };
 let _outCmdSeq = 0;
@@ -5788,31 +5624,31 @@ function outrangutanCueFields(type, d) {
   const emptyCues = !Object.keys(outrangutanState.cues || {}).length;
   const emptyPads = !Object.keys(outrangutanState.pads || {}).length;
   const cuePart = type !== 'playback' ? '' : `
-      <div class="cc-qlab-row">
-        <div class="cc-qlab-cue-field" style="flex:1">
+      <div class="cc-trigger-row">
+        <div class="cc-trigger-cue-field" style="flex:1">
           <label class="field-lbl">Link to an Outrangutan cue</label>
           <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '')}</select>
           ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>`;
   const sfxPart = `
-      <div class="cc-qlab-row">
-        <div class="cc-qlab-cue-field" style="flex:1">
+      <div class="cc-trigger-row">
+        <div class="cc-trigger-cue-field" style="flex:1">
           <label class="field-lbl">SFX pad</label>
           <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '')}</select>
           ${emptyPads ? `<div class="cc-out-hint">Assign pads on Outrangutan's SFX board to list them here.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-qlab-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
   return `
-    <div class="field cc-qlab cc-outrangutan">
-      <div class="cc-section-lbl cc-qlab-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-qlab-optional">— optional</span></div>
+    <div class="field cc-trigger cc-outrangutan">
+      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">— optional</span></div>
       ${cuePart}
       ${sfxPart}
-      <div class="cc-qlab-actions">
-        ${type === 'playback' ? `<button type="button" class="cc-qlab-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
-        <button type="button" class="cc-qlab-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
+      <div class="cc-trigger-actions">
+        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
+        <button type="button" class="cc-trigger-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
       </div>
     </div>`;
 }
@@ -5888,7 +5724,7 @@ function outrangutanSfxBadge(d) {
 // Manual SFX trigger button for the live focus view (P4).
 function outrangutanSfxGoBtnHTML(beatId, type, d) {
   if (!d || !d.outPadId) return '';
-  return `<button type="button" class="lf-qlab-go lf-out-go lf-sfx-go" title="Fire the linked SFX pad" onclick="event.stopPropagation();fireOutrangutanSfxCell('${beatId}','${type}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> SFX</button>`;
+  return `<button type="button" class="lf-trigger-go lf-out-go lf-sfx-go" title="Fire the linked SFX pad" onclick="event.stopPropagation();fireOutrangutanSfxCell('${beatId}','${type}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> SFX</button>`;
 }
 
 // Manual GO from a live cue card.
@@ -5901,7 +5737,7 @@ function fireOutrangutanCueCell(beatId) {
 // GO button for a live cue card (playback cells linked to an Outrangutan cue).
 function outrangutanGoBtnHTML(beatId, d) {
   if (!outrangutanCellLinked(d)) return '';
-  return `<button type="button" class="lf-qlab-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
+  return `<button type="button" class="lf-trigger-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
 }
 
 // Auto-fire linked Outrangutan cues/SFX when a row advances live (lsNext only).
@@ -7123,7 +6959,6 @@ function lsNext() {
     lsIdx = ni;
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     fireOutrangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outrangutan playback cue
-    fireQlabAutoForBeat(beats[lsIdx]);         // auto-fire any QLab triggers programmed on the row
     logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     syncLiveIdx();
@@ -13940,6 +13775,19 @@ function showRundownPaperPreview() {
   `, 'Download Rundown PDF', 'exportPDF()', 'rundown');
 }
 
+// Every Outrangutan link programmed on a row, for the printed rundown's
+// Outrangutan column (V2 Phase 5 item 5). Names resolve from the live state
+// the Outrangutan module publishes; ids print as-is when it isn't open.
+function outrangutanRowSummary(b) {
+  const parts = [];
+  for (const type of Object.keys(b.cues || {})) {
+    const d = b.cues[type];
+    if (d?.outCueId) { const c = outrangutanState.cues?.[d.outCueId]; parts.push(`▶ ${c?.name || d.outCueId}${d.outAuto ? ' · auto' : ''}`); }
+    if (d?.outPadId) { const p = outrangutanState.pads?.[d.outPadId]; parts.push(`SFX ${p?.name || d.outPadId}${d.outPadAuto ? ' · auto' : ''}`); }
+  }
+  return parts;
+}
+
 function rundownPreviewTableHTML() {
   let offsetSecs = 0;
   const cellFor = (b, type) => {
@@ -13954,9 +13802,10 @@ function rundownPreviewTableHTML() {
     const start = show.start ? clock(show.start, offsetSecs) : '-';
     offsetSecs += (b.min||0)*60+(b.sec||0);
     if (b.style === 'segment') {
-      return `<tr><td colspan="10" style="background:rgba(200,200,200,.12);font-weight:800;padding:8px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;border-left:3px solid currentColor">§ ${esc(b.info||'Segment')}</td></tr>`;
+      return `<tr><td colspan="11" style="background:rgba(200,200,200,.12);font-weight:800;padding:8px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;border-left:3px solid currentColor">§ ${esc(b.info||'Segment')}</td></tr>`;
     }
     pdfCueNum++;
+    const og = outrangutanRowSummary(b);
     return `<tr>
       <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
@@ -13968,9 +13817,10 @@ function rundownPreviewTableHTML() {
       <td class="cue-gfx">${cellFor(b,'gfx')}</td>
       <td class="cue-lighting">${cellFor(b,'lighting')}</td>
       <td class="cue-script">${cellFor(b,'script')}</td>
+      <td class="cue-playback">${og.length ? og.map(esc).join('<br>') : '<span class="cue-muted">-</span>'}</td>
     </tr>`;
   }).join('');
-  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th></tr></thead><tbody>${rows || '<tr><td colspan="10">No rows yet.</td></tr>'}</tbody></table></div>`;
+  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th><th class="cue-playback">Outrangutan</th></tr></thead><tbody>${rows || '<tr><td colspan="11">No rows yet.</td></tr>'}</tbody></table></div>`;
 }
 
 function showCallSheetPreview() {
@@ -15660,6 +15510,7 @@ async function exportPDF() {
       { key:'start', label:'Start', w:52 },
       { key:'dur', label:'Dur', w:42 },
       ...COL_DEFAULTS.map(t => ({ key:t, label:CT[t].label, w:t==='script'?118:96 })),
+      { key:'outrangutan', label:'Outrangutan', w:84 },
     ];
     const tableW = columns.reduce((sum,c)=>sum+c.w,0);
     const scale = Math.min(1, (pageW - margin*2) / tableW);
@@ -15703,6 +15554,7 @@ async function exportPDF() {
         dur:fmtDur(b),
       };
       COL_DEFAULTS.forEach(type => { values[type] = cueText(b,type); });
+      values.outrangutan = outrangutanRowSummary(b).join('\n') || '-';
       const lineSets = columns.map(c => doc.splitTextToSize(String(values[c.key] || '-'), c.sw - 8));
       const rowH = Math.max(28, ...lineSets.map(lines => lines.length * 8 + 10));
       if (y + rowH > pageH - margin) {

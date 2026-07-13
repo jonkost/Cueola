@@ -26,7 +26,7 @@ Deploying the staged `firestore.rules` (section 2) resolves both.
 
 - The rules allow only Cueola's known top-level collections and validate paths,
   bounded lists, and important document fields.
-- Current Cueola, dashboard, Flowmingo, Outrangutan, QLab, and Prompt-Up session
+- Current Cueola, dashboard, Flowmingo, Outrangutan, and Prompt-Up session
   reads/writes remain compatible.
 - Forward-compatible rules are staged for `sessions/{code}/files`,
   `sessions/{code}/notes`, `accessCodes`, and `profiles` so later migrations do
@@ -82,7 +82,7 @@ local Java runtime; install/enable that outside this repository if necessary.
    ```
 
 5. Before enabling App Check enforcement, smoke-test Cueola, dashboard,
-   Flowmingo, Outrangutan session linking, QLab if available, and Prompt-Up.
+   Flowmingo, Outrangutan session linking, and Prompt-Up.
 6. Keep the previous rules text available for immediate rollback.
 
 ## 3. Register App Check
@@ -112,7 +112,7 @@ With enforcement still off:
 4. Inspect the console: there must be no App Check or Firestore permission
    errors.
 5. In Firebase Console App Check metrics, wait until Cueola and dashboard
-   requests appear as verified. Also verify Prompt-Up and the QLab bridge path;
+   requests appear as verified. Also verify Prompt-Up;
    server/Admin SDK traffic has different handling and must not be guessed.
 
 ## 5. Local debug-token rehearsal

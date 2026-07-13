@@ -9,9 +9,9 @@ const SHELL_ASSETS = [
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
   'cueola-identity.js?v=ba84a5c741',
-  'cueola-app.js?v=8ca44830dd',
-  'outrangutan/outrangutan.css?v=24804b1147',
-  'outrangutan/outrangutan.js?v=7e7c8bd44a',
+  'cueola-app.js?v=9e9db855b2',
+  'outrangutan/outrangutan.css?v=fd22b394a5',
+  'outrangutan/outrangutan.js?v=071d918794',
 ];
 
 const versionSignature = SHELL_ASSETS
