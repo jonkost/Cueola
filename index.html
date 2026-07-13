@@ -4733,7 +4733,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="pp-join-err">Please fill in both fields.</div>
-    <button class="btn-primary" onclick="joinPreProSession()">Open Planda Bear</button>
+    <button class="btn-primary" id="pp-join-btn" onclick="joinPreProSession()">Open Planda Bear</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
   </div>
 </div>
@@ -4800,7 +4800,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
       <input class="field-in" id="adminCodeIn" type="password" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')submitAdminLogin()">
     </div>
     <div class="modal-err" id="adminLoginErr">Incorrect code. Try again.</div>
-    <button class="btn-primary" onclick="submitAdminLogin()">Log In</button>
+    <button class="btn-primary" id="admin-login-btn" onclick="submitAdminLogin()">Log In</button>
     <button class="btn-secondary" onclick="hideModal('adminLoginModal')">Cancel</button>
     <div id="adminSetupHint" style="font-size:12px;color:var(--text3);text-align:center;display:none">No admin set up yet. <button onclick="openAdminSetup()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;text-decoration:underline">Set up now</button></div>
   </div>
@@ -5015,7 +5015,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <script src="cueola-entitlements.js?v=746c10a762"></script>
 <script src="cueola-avatar-profile.js?v=943c230239"></script>
 <script src="cueola-identity.js?v=ba84a5c741"></script>
-<script src="cueola-app.js?v=93cbf6a619"></script>
+<script src="cueola-app.js?v=860884623e"></script>
 <script src="outrangutan/outrangutan.js?v=42007fb466"></script>
 
 <script type="module">

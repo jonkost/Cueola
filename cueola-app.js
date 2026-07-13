@@ -1775,6 +1775,19 @@ let _adminsCache = [];      // in-memory list, always current
 let _adminsCacheReady = false; // true once Firestore (or fallback) has loaded
 let _adminsUnsub = null;    // Firestore onSnapshot unsubscribe
 
+function waitForAdminsReady(timeoutMs=8000) {
+  if (_adminsCacheReady) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (_adminsCacheReady || Date.now() - started >= timeoutMs) {
+        clearInterval(timer);
+        resolve(_adminsCacheReady);
+      }
+    }, 100);
+  });
+}
+
 const SESSION_SOURCE_DEFAULTS = {
   video: ['CAM 1','CAM 2','CAM 3','CAM 4','CPU','PLBK','GFX','ME 1'],
   audio: ['Host','Guest 1','Guest 2','CPU','PLBK','VOU','SFX','Music','Mains'],
@@ -1848,7 +1861,6 @@ function loginAdmin(code) {
       try { renderPresence(currentPresence); } catch {}
       return adminSession;
     }
-    toast('Admin data loading — try again in a moment.');
     return null;
   }
   const h = hashStr(code);
@@ -1941,9 +1953,24 @@ function openAdminLogin() {
   setTimeout(()=>document.getElementById('adminCodeIn').focus(),100);
 }
 
-function submitAdminLogin() {
+async function submitAdminLogin() {
   const code = document.getElementById('adminCodeIn').value.trim();
   if (!code) return;
+  const err = document.getElementById('adminLoginErr');
+  const btn = document.getElementById('admin-login-btn');
+  err.classList.remove('on');
+  if (!_adminsCacheReady) {
+    err.textContent = 'Loading admin access…';
+    err.classList.add('on');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+    const ready = await waitForAdminsReady();
+    if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
+    if (!ready) {
+      err.textContent = 'Admin access could not load. Check the connection and try again; your code was kept.';
+      document.getElementById('adminCodeIn').focus();
+      return;
+    }
+  }
   const result = loginAdmin(code);
   if (result) {
     hideModal('adminLoginModal');
@@ -1951,7 +1978,8 @@ function submitAdminLogin() {
     toast(`Welcome, ${result.name}`);
     if (document.getElementById('rundown').classList.contains('on')) openAdminPanel();
   } else {
-    document.getElementById('adminLoginErr').classList.add('on');
+    err.textContent = 'Incorrect code. Try again.';
+    err.classList.add('on');
     document.getElementById('adminCodeIn').value='';
     document.getElementById('adminCodeIn').focus();
   }
@@ -2927,14 +2955,13 @@ async function joinSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking...'; }
   const ready = await waitForFirebaseReady();
   if (!ready) {
+    errEl.textContent = 'Cueola cloud did not finish loading. Check the connection, then try again.';
+    errEl.classList.add('on');
     if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
-    hideModal('modal-stud');
-    openLocalSession(code, name, 'instructor');
     return;
   }
-  const verify = () => {
-    window._getDoc(window._doc(window._db,'sessions',code)).then(async snap => {
-      if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
+  try {
+      const snap = await window._getDoc(window._doc(window._db,'sessions',code));
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
         errEl.textContent = 'Session not found. Check the code and try again.';
@@ -2963,13 +2990,12 @@ async function joinSession() {
       hideModal('modal-stud');
       enterRundown();
       window.CueolaIdentity?.noteJoin(code, name);
-    }).catch(() => {
-      if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
-      hideModal('modal-stud');
-      openLocalSession(code, name, 'instructor');
-    });
-  };
-  verify();
+  } catch (joinErr) {
+    errEl.textContent = `${firebaseConnectionLabel(joinErr, 'Could not load session')}. Check the connection and try again.`;
+    errEl.classList.add('on');
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
+  }
 }
 
 async function joinPreProSession() {
@@ -2978,16 +3004,17 @@ async function joinPreProSession() {
   const errEl = document.getElementById('pp-join-err');
   if (!code || !name) { errEl.textContent='Code and name required.'; errEl.classList.add('on'); return; }
   errEl.classList.remove('on');
+  const btn = document.getElementById('pp-join-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Checking…'; }
   const openLocal = snap => {
     const d = snap.data() || {};
     session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
-    // Seed local Planda Bear cache with any shared work already saved to the session.
-    if (d.prePro && typeof d.prePro === 'object') {
-      try { localStorage.setItem(preProKey(), JSON.stringify(d.prePro)); } catch {}
-    }
+    // Merge shared work and recover any newer draft still on this device without
+    // replacing unrelated cloud sections.
+    mergePreProFromCloud(d.prePro && typeof d.prePro === 'object' ? d.prePro : {}, true);
     rememberLastSession(code, name);
     hideModal('modal-prepro-join');
     // joinPresence first: it SETS the whole presence entry, so the landing
@@ -2997,8 +3024,15 @@ async function joinPreProSession() {
     else openPaperworkHub();
     window.CueolaIdentity?.noteJoin(code, name);
   };
-  const verify = () => {
-    window._getDoc(window._doc(window._db,'sessions',code)).then(async snap => {
+  const ready = await waitForFirebaseReady();
+  if (!ready) {
+    errEl.textContent = 'Cueola cloud did not finish loading. Check the connection, then try again.';
+    errEl.classList.add('on');
+    if (btn) { btn.disabled=false; btn.textContent=preProJoinTarget === 'notes' ? 'Open Production Notes' : 'Open Planda Bear'; }
+    return;
+  }
+  try {
+      const snap = await window._getDoc(window._doc(window._db,'sessions',code));
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
         errEl.textContent = 'Session not found. Check the code and try again.';
@@ -3014,13 +3048,12 @@ async function joinPreProSession() {
         return;
       }
       openLocal(snap);
-    }).catch(() => {
-      openLocalPlandaBear(code, name);
-    });
-  };
-  const ready = await waitForFirebaseReady();
-  if (!ready) return openLocalPlandaBear(code, name);
-  verify();
+  } catch (joinErr) {
+    errEl.textContent = `${firebaseConnectionLabel(joinErr, 'Could not load session')}. Check the connection and try again.`;
+    errEl.classList.add('on');
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent=preProJoinTarget === 'notes' ? 'Open Production Notes' : 'Open Planda Bear'; }
+  }
 }
 
 function loadExpert() {
@@ -3544,12 +3577,7 @@ function setupFirestore() {
       }
       if (d.customSources) sessionCustomSources = d.customSources;
       if (d.prePro && typeof d.prePro === 'object') {
-        try {
-          const local = loadPreProData();
-          if (!local.updatedAt || (d.prePro.updatedAt || 0) > (local.updatedAt || 0)) {
-            localStorage.setItem(preProKey(), JSON.stringify(d.prePro));
-          }
-        } catch {}
+        try { mergePreProFromCloud(d.prePro); } catch {}
       }
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
       // Following: mirror the position of whoever I follow (their broadcast
@@ -10229,6 +10257,20 @@ function preProKey() {
   return `cueola_prepro_${session.code || session.userName || 'local'}`;
 }
 
+function activeCallSheetKey() {
+  return `cueola_call_sheet_index_${session.code || session.userName || 'local'}`;
+}
+
+function loadActiveCallSheetIndex() {
+  try { return Math.max(0, Number(localStorage.getItem(activeCallSheetKey())) || 0); } catch { return 0; }
+}
+
+function storeActiveCallSheetIndex(index) {
+  activeCallSheetIndex = Math.max(0, Number(index) || 0);
+  try { localStorage.setItem(activeCallSheetKey(), String(activeCallSheetIndex)); } catch {}
+  return activeCallSheetIndex;
+}
+
 function loadPreProData() {
   try { return JSON.parse(localStorage.getItem(preProKey()) || '{}') || {}; } catch { return {}; }
 }
@@ -10239,22 +10281,95 @@ function preProActor() {
   return session.role === 'instructor' ? 'Instructor' : 'Someone';
 }
 
+const _pbPendingCloudKeys = new Set();
+
+function preProValuesEqual(a, b) {
+  if (a === b) return true;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+
 function persistPreProData(patch, section) {
-  const next = { ...loadPreProData(), ...patch, updatedAt: Date.now() };
+  const previous = loadPreProData();
+  const now = Date.now();
+  const changed = {};
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (key === 'updatedAt' || key === '_fieldUpdatedAt' || key === 'activeCallSheetIndex') continue;
+    if (!preProValuesEqual(previous[key], value)) changed[key] = value;
+  }
+  const fieldUpdatedAt = { ...(previous._fieldUpdatedAt || {}) };
+  const baseline = Number(previous.updatedAt) || 0;
+  for (const key of Object.keys(previous)) {
+    if (key !== 'updatedAt' && key !== '_fieldUpdatedAt' && key !== 'activeCallSheetIndex' && fieldUpdatedAt[key] == null) {
+      fieldUpdatedAt[key] = baseline;
+    }
+  }
+  for (const key of Object.keys(changed)) fieldUpdatedAt[key] = now;
+  const next = { ...previous, ...(patch || {}), _fieldUpdatedAt:fieldUpdatedAt, updatedAt:now };
+  delete next.activeCallSheetIndex; // selected sheet is device-local, never shared
   try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
-  syncPreProToFirestore(next, section);
+  syncPreProToFirestore(changed, section, now);
   return next;
 }
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
-function syncPreProToFirestore(data=loadPreProData(), section) {
+function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db,'sessions',session.code);
-  window._updateDoc(ref, { prePro:data }).catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
+  const changedKeys = Object.keys(changed);
+  if (changedKeys.length) {
+    const updates = { 'prePro.updatedAt':updatedAt };
+    for (const key of changedKeys) {
+      // All current Planda Bear top-level keys are Firestore-safe identifiers.
+      // Field-path writes prevent one stale section from replacing the package.
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      updates[`prePro.${key}`] = changed[key];
+      updates[`prePro._fieldUpdatedAt.${key}`] = updatedAt;
+      _pbPendingCloudKeys.add(key);
+    }
+    window._updateDoc(ref, updates).then(() => {
+      changedKeys.forEach(key => _pbPendingCloudKeys.delete(key));
+    }).catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
+  }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
     window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
+}
+
+function mergePreProFromCloud(server, recoverNewerLocal=false) {
+  if (!server || typeof server !== 'object') return loadPreProData();
+  const local = loadPreProData();
+  const localTimes = local._fieldUpdatedAt || {};
+  const serverTimes = server._fieldUpdatedAt || {};
+  const merged = { ...local };
+  const recoveryPatch = {};
+  const keys = new Set([...Object.keys(local), ...Object.keys(server)]);
+  keys.delete('updatedAt');
+  keys.delete('_fieldUpdatedAt');
+  keys.delete('activeCallSheetIndex');
+  for (const key of keys) {
+    if (_pbPendingCloudKeys.has(key) && Object.prototype.hasOwnProperty.call(local, key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(server, key)) {
+      if (recoverNewerLocal && Object.prototype.hasOwnProperty.call(local, key)) recoveryPatch[key] = local[key];
+      continue;
+    }
+    const localAt = Number(localTimes[key] ?? local.updatedAt) || 0;
+    const serverAt = Number(serverTimes[key] ?? server.updatedAt) || 0;
+    if (!Object.prototype.hasOwnProperty.call(local, key) || serverAt >= localAt) merged[key] = server[key];
+    else if (recoverNewerLocal) recoveryPatch[key] = local[key];
+  }
+  merged._fieldUpdatedAt = { ...localTimes };
+  for (const [key, value] of Object.entries(serverTimes)) {
+    if ((Number(value) || 0) >= (Number(merged._fieldUpdatedAt[key]) || 0)) merged._fieldUpdatedAt[key] = value;
+  }
+  merged.updatedAt = Math.max(Number(local.updatedAt) || 0, Number(server.updatedAt) || 0);
+  delete merged.activeCallSheetIndex;
+  try { localStorage.setItem(preProKey(), JSON.stringify(merged)); } catch {}
+  if (recoverNewerLocal && Object.keys(recoveryPatch).length) {
+    syncPreProToFirestore(recoveryPatch, null, Date.now());
+    logShow('sync', `Recovering ${Object.keys(recoveryPatch).length} newer Planda Bear draft field(s) from this device`);
+  }
+  return merged;
 }
 
 // Pull shared Planda Bear work saved by others (cloud → local) so every
@@ -10266,10 +10381,7 @@ async function hydratePreProFromFirestore() {
     if (!snap.exists()) return;
     const server = snap.data().prePro;
     if (!server || typeof server !== 'object') return;
-    const local = loadPreProData();
-    if (!local.updatedAt || (server.updatedAt || 0) > (local.updatedAt || 0)) {
-      localStorage.setItem(preProKey(), JSON.stringify(server));
-    }
+    mergePreProFromCloud(server);
   } catch {}
 }
 
@@ -13839,8 +13951,7 @@ function rundownPreviewTableHTML() {
 }
 
 function showCallSheetPreview() {
-  const data = getPreProData();
-  saveCallSheet(false);
+  const data = saveCallSheet(false);
   showPaperPreview('Call Sheet Preview', `
     ${callSheetPreviewHTML(data)}
   `, 'Export Call Sheet PDF', 'downloadCallSheetPDF()', 'call-sheet');
@@ -14099,7 +14210,7 @@ function weatherCompactSummary(w, withSun=false) {
 // The active call sheet's weather object (used to auto-fill the safety plan).
 function activeCallSheetWeather(data) {
   const sheets = getCallSheets(data);
-  const idx = Math.max(0, Math.min(Number(data?.activeCallSheetIndex ?? activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
   return sheets[idx]?.weather || null;
 }
 
@@ -14322,9 +14433,7 @@ function switchCallSheet(index) {
   if (!Number.isFinite(nextIndex)) return;
   const data = saveCallSheetStateLocally(false);
   const sheets = getCallSheets(data);
-  activeCallSheetIndex = Math.max(0, Math.min(nextIndex, sheets.length - 1));
-  const next = { ...data, activeCallSheetIndex };
-  try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
+  storeActiveCallSheetIndex(Math.max(0, Math.min(nextIndex, sheets.length - 1)));
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(sheets[activeCallSheetIndex]);
 }
@@ -14349,8 +14458,8 @@ function addAnotherCallSheet() {
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
   }, sheets.length);
   sheets.push(nextSheet);
-  activeCallSheetIndex = sheets.length - 1;
-  const next = { ...data, callSheets:sheets, activeCallSheetIndex, updatedAt:Date.now() };
+  storeActiveCallSheetIndex(sheets.length - 1);
+  const next = { ...data, ...nextSheet, callSheets:sheets, updatedAt:Date.now() };
   persistPreProData(next, 'Call Sheet');
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(nextSheet);
@@ -14375,13 +14484,11 @@ function callSheetTitle(data={}) {
 
 function getCallSheetExportData() {
   if (document.getElementById('preProModal')?.classList.contains('on')) {
-    const data = getPreProData();
-    persistPreProData(data, 'Call Sheet');
-    return data;
+    return saveCallSheet(false);
   }
   const data = loadPreProData();
   const sheets = getCallSheets(data);
-  const idx = Math.max(0, Math.min(Number(data.activeCallSheetIndex ?? activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
   return normalizeCallSheet(sheets[idx], idx);
 }
 
@@ -14398,7 +14505,7 @@ function callSheetPreviewHTML(data) {
     <table><tbody>
       <tr><th>Production</th><td>${esc(data.production || show.name || '')}</td></tr>
       <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
-      <tr><th>Call Time</th><td>${esc(data.call || show.start || '')}</td></tr>
+      <tr><th>Call Time</th><td>${esc(data.call || '')}</td></tr>
       <tr><th>Doors Open</th><td>${esc(data.doors || '')}</td></tr>
       <tr><th>Show Start</th><td>${esc(data.showStart || '')}</td></tr>
       <tr><th>Estimated Wrap</th><td>${esc(data.wrap || '')}</td></tr>
@@ -15047,7 +15154,7 @@ function openPrePro() {
   hideModal('paperworkHubModal');
   const data = loadPreProData();
   const sheets = getCallSheets(data);
-  activeCallSheetIndex = Math.max(0, Math.min(Number(data.activeCallSheetIndex ?? activeCallSheetIndex) || 0, sheets.length - 1));
+  storeActiveCallSheetIndex(Math.max(0, Math.min(loadActiveCallSheetIndex(), sheets.length - 1)));
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(sheets[activeCallSheetIndex]);
   renderPaperworkNav('call-sheet');
@@ -15149,15 +15256,17 @@ function getPreProData() {
   return {
     ...active,
     callSheets: sheets,
-    activeCallSheetIndex,
     updatedAt: Date.now(),
   };
 }
 
 function saveCallSheet(showToastOnSave=true) {
-  persistPreProData(getPreProData(), 'Call Sheet');
+  const saved = persistPreProData(getPreProData(), 'Call Sheet');
   applyPlandaShowStartToRundown();
   if (showToastOnSave) toast('Call sheet saved.');
+  const sheets = getCallSheets(saved);
+  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  return normalizeCallSheet(sheets[idx], idx);
 }
 
 // Planda Bear's Call Sheet "Show Start" is the source of truth for the rundown
