@@ -4409,13 +4409,21 @@ function renderAddRowBtn(tbody) {
 
 function getCueOn(d)  { return d?.on  || d?.take  || ''; }   // new format, fallback legacy
 function getCueOff(d) { return d?.off || d?.ready || ''; }   // new format, fallback legacy
+// Dialogue cues intentionally store a short rundown note instead of verbatim
+// copy. Treat that note as script content everywhere the Script Op/Flowmingo
+// feed asks whether a row has something to show.
+function scriptCueText(d) {
+  if (d?.scriptType === 'Dialogue') return cleanPrompterText(d.dialogueNote || d.text || '');
+  return cleanPrompterText(d?.text || d?.dialogueNote || '');
+}
 
 function getCueCell(b, type) {
   const tc = CT[type];
   const d = b.cues?.[type];
   const on  = getCueOn(d);
   const off = getCueOff(d);
-  const isEmpty = !on && !off && (type !== 'script' || !d?.text) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
+  const scriptText = type === 'script' ? scriptCueText(d) : '';
+  const isEmpty = !on && !off && (type !== 'script' || !scriptText) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
   if (isEmpty) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
@@ -4423,8 +4431,8 @@ function getCueCell(b, type) {
     on  ? `<div class="cue-on-line"><span class="cue-on-dot">${sfIcon('marker.go')}</span>${esc(on)}</div>`  : '',
     off ? `<div class="cue-off-line"><span class="cue-off-dot">${sfIcon('marker.stop')}</span>${esc(off)}</div>` : '',
   ].filter(Boolean).join('');
-  const scriptMeta = type === 'script' && d?.text
-    ? `<div class="script-present-line">Script · ${scriptLineLabel(d.text)}</div>`
+  const scriptMeta = scriptText
+    ? `<div class="script-present-line">${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} · ${scriptLineLabel(scriptText)}</div>`
     : '';
   const outBadge = (type === 'playback' ? outrangutanCellBadge(d, b.id) : '') + ((type === 'playback' || type === 'audio') ? outrangutanSfxBadge(d) : '');
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
@@ -5873,7 +5881,7 @@ function deleteCue() {
 // Pre-Live Check — derives a snapshot of show readiness so the Go Live
 // confirmation can tell the user exactly what's set and what isn't.
 function preLiveCheck() {
-  const cuesWithScript = beats.filter(b => b?.cues?.script?.text?.trim()).length;
+  const cuesWithScript = beats.filter(b => scriptCueText(b?.cues?.script)).length;
   const totalRows = beats.length;
   const scriptOk = totalRows > 0 && cuesWithScript > 0;
   const scriptLabel = !totalRows
@@ -6374,13 +6382,15 @@ function scriptSpeakerLabel(d) {
 function assemblePrompterScriptFromBeats(list=beats) {
   const scripts = (Array.isArray(list) ? list : [])
     .map((b, rowIdx) => ({ b, rowIdx }))
-    .filter(({ b }) => b?.cues?.script?.text);
+    .filter(({ b }) => scriptCueText(b?.cues?.script));
   return cleanPrompterText(scripts.map(({ b, rowIdx }) => {
     const d = b.cues.script;
+    const copy = scriptCueText(d);
     const rowNum = rowIdx + 1;
     const header = b.info ? `\n[${rowNum}] ${b.info}\n` : `\n[${rowNum}]\n`;
     const speaker = scriptSpeakerLabel(d);
-    return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + (d.text || '');
+    const dialogue = d.scriptType === 'Dialogue' ? '[DIALOGUE]\n' : '';
+    return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
   }).join('\n\n'));
 }
 
@@ -6514,7 +6524,7 @@ function renderLiveCurrent(b, i) {
       <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtProductionSecs(liveRemainingSecs()):'—'}</div></div>
     </div>
     ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
-    ${sd?.text?`<div class="lv-cur-script">${esc(sd.text)}</div>`:''}
+    ${scriptCueText(sd)?`<div class="lv-cur-script">${esc(scriptCueText(sd))}</div>`:''}
     ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">${sfIcon('action.edit')} Edit &amp; Push</button>`:''}
   </div>`;
 }
@@ -6560,7 +6570,7 @@ function liveRowPreview(idx) {
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${on  ? `<div style="font-size:14px;color:var(--text2);margin-bottom:2px">○ ${esc(on)}</div>`  : ''}
       ${off ? `<div style="font-size:15px;font-weight:700;color:${tc.color}">▶ ${esc(off)}</div>` : ''}
-      ${t==='script'&&d.text?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(d.text)}</div>`:''}
+      ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
   if (!types.length) html = '<div style="color:var(--text3);text-align:center;padding:20px">No cues configured.</div>';
@@ -6588,7 +6598,8 @@ function liveCellForBeat(b, type, beatIdx) {
   const on = getCueOn(d);
   const off = getCueOff(d);
   const isScript = type === 'script';
-  const scriptMeta = isScript && d.text ? `<div class="live-script-action">${scriptLineLabel(d.text)} · tap to open</div>` : '';
+  const scriptText = isScript ? scriptCueText(d) : '';
+  const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
   if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
@@ -6603,7 +6614,7 @@ function liveCellForBeat(b, type, beatIdx) {
 function focusCuesForBeat(b) {
   const filled = colOrder.filter(type => {
     const d = b.cues?.[type];
-    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && d.text));
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)));
   });
   if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
   return `<div class="lf-cues">` + filled.map(type => {
@@ -6611,7 +6622,8 @@ function focusCuesForBeat(b) {
     const on = getCueOn(d), off = getCueOff(d);
     let lines = '';
     if (type === 'script') {
-      lines = `<div class="lf-cue-take">${sfIcon('content.script')} Script ready · ${scriptLineLabel(d.text)}</div>`;
+      const text = scriptCueText(d);
+      lines = `<div class="lf-cue-take">${sfIcon('content.script')} ${d.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ready · ${scriptLineLabel(text)}</div>`;
     } else {
       // The "take" (on) cue is the action to call now — make it the big line.
       // If there's no take, the "ready"/off cue becomes the prominent one.
@@ -6717,7 +6729,7 @@ function renderLive() {
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
   // Only show department columns actually used in this show — no empty lanes.
-  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&d.text)); }));
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))); }));
   const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">
@@ -6789,7 +6801,7 @@ function openLiveScript(beatIdx) {
   liveScriptEditIdx = beatIdx;
   const d = b.cues?.script||{};
   document.getElementById('lsScriptEditTitle').textContent = `Script • ${b.info||`Row ${beatIdx+1}`}`;
-  document.getElementById('lsScriptEditText').value = d.text||'';
+  document.getElementById('lsScriptEditText').value = scriptCueText(d);
   showOverlay('lsScriptEditOv');
   setTimeout(()=>document.getElementById('lsScriptEditText')?.focus(),80);
 }
@@ -6922,7 +6934,9 @@ function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
   if (!b.cues.script) b.cues.script={ready:'',take:''};
-  b.cues.script.text = cleanPrompterText(document.getElementById('lsScriptEditText').value);
+  const edited = cleanPrompterText(document.getElementById('lsScriptEditText').value);
+  if (b.cues.script.scriptType === 'Dialogue') b.cues.script.dialogueNote = edited;
+  else b.cues.script.text = edited;
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
   livePrompterDraftDirty = false;
   sendToPrompter();
@@ -9917,7 +9931,7 @@ function renderLivePromptOp() {
   const cur  = beats[lsIdx] || null;
   const next = beats[lsIdx + 1] || null;
   const sd   = cur?.cues?.script;
-  const script = cleanPrompterText((prompterText && prompterText.trim()) || sd?.text || '');
+  const script = cleanPrompterText((prompterText && prompterText.trim()) || scriptCueText(sd));
   body.innerHTML = `<div class="prompt-op-stage" tabindex="0" aria-label="Flowmingo operator controls">
     <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
@@ -13793,7 +13807,8 @@ function rundownPreviewTableHTML() {
   const cellFor = (b, type) => {
     const d = b.cues?.[type];
     const on = getCueOn(d), off = getCueOff(d);
-    const script = type === 'script' && d?.text ? `Script ${scriptLineLabel(d.text)}` : '';
+    const scriptText = type === 'script' ? scriptCueText(d) : '';
+    const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ${scriptLineLabel(scriptText)}` : '';
     const parts = [on && `<span class="cue-type">ON</span> ${esc(on)}`, off && `<span class="cue-type">OFF</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
@@ -15457,7 +15472,7 @@ async function exportPreProPackagePDF() {
       COL_DEFAULTS.forEach(type => {
         const d = b.cues?.[type];
         const on = getCueOn(d), off = getCueOff(d);
-        const script = type === 'script' && d?.text ? cleanPrompterText(d.text) : '';
+        const script = type === 'script' ? scriptCueText(d) : '';
         if (!on && !off && !script) return;
         line(`${CT[type].label}: ${[on ? `ON ${on}` : '', off ? `OFF ${off}` : ''].filter(Boolean).join(' | ')}`, 8, true, [45,75,110]);
         if (script) line(script, 8);
@@ -15562,7 +15577,8 @@ async function exportPDF() {
     const cueText = (b, type) => {
       const d = b.cues?.[type];
       const on = getCueOn(d), off = getCueOff(d);
-      const script = type === 'script' && d?.text ? `Script: ${cleanPrompterText(d.text).slice(0, 220)}` : '';
+      const scriptText = type === 'script' ? scriptCueText(d) : '';
+      const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'}: ${scriptText.slice(0, 220)}` : '';
       return [on ? `ON ${on}` : '', off ? `OFF ${off}` : '', script].filter(Boolean).join('\n') || '-';
     };
     title();
