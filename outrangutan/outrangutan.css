@@ -40,6 +40,9 @@
 .og-bar-btn:hover { background: var(--s4); }
 .og-bar-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .og-bar-btn.danger { color: var(--red); background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: color-mix(in srgb, var(--red) 12%, transparent); }
+.og-program-popout { white-space: nowrap; font-weight: 750; }
+.og-program-popout.on { background: color-mix(in srgb, var(--green) 18%, var(--s3)); border-color: color-mix(in srgb, var(--green) 55%, var(--border)); color: var(--green); }
+.og-program-popout.dead { background: color-mix(in srgb, var(--red) 14%, var(--s3)); border-color: color-mix(in srgb, var(--red) 55%, var(--border)); color: var(--red); }
 
 /* show-mode lock dims edit affordances */
 #outrangutan.locked .og-cue-add, #outrangutan.locked .og-inspector input,
@@ -717,6 +720,7 @@
 .lf-out-go:hover { background: color-mix(in srgb, #5b8df8 40%, transparent) !important; border-color: transparent !important; }
 
 @media (max-width: 760px) {
+  .og-program-popout span:not(.sf-symbol) { display: none; }
   .og-bar {
     flex-wrap: wrap;
     align-content: flex-start;

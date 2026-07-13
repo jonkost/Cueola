@@ -3,6 +3,7 @@ const SHELL_ASSETS = [
   './',
   './index.html',
   './dashboard.html',
+  './outrangutan/output.html',
   './manifest.webmanifest',
   './assets/Brand/Cueola_Icon.svg',
   'assets/sf-symbols.css?v=127986b7a0',
@@ -10,8 +11,8 @@ const SHELL_ASSETS = [
   'cueola-avatar-profile.js?v=943c230239',
   'cueola-identity.js?v=ba84a5c741',
   'cueola-app.js?v=9e9db855b2',
-  'outrangutan/outrangutan.css?v=fd22b394a5',
-  'outrangutan/outrangutan.js?v=071d918794',
+  'outrangutan/outrangutan.css?v=d494ffcdbd',
+  'outrangutan/outrangutan.js?v=42007fb466',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -52,7 +53,11 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     if (request.mode === 'navigate') {
-      const shellPage = url.pathname.endsWith('/dashboard.html') ? './dashboard.html' : './index.html';
+      const shellPage = url.pathname.endsWith('/dashboard.html')
+        ? './dashboard.html'
+        : url.pathname.endsWith('/outrangutan/output.html')
+          ? './outrangutan/output.html'
+          : './index.html';
       return (await cache.match(shellPage)) || fetch(request);
     }
     const cached = await cache.match(request);

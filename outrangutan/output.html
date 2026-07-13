@@ -45,6 +45,8 @@
   const idLabel = document.getElementById('idlabel');
   const waiting = document.getElementById('waiting');
   const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outrangutan-output') : null;
+  let messageSeq = 0;
+  const messageIds = new Set();
   // this output's id (controller addresses messages with `target`; null = broadcast)
   const MY_ID = (parseInt((location.hash.match(/out=(\d+)/) || [])[1], 10) || 1);
   document.title = 'Outrangutan Output ' + MY_ID;
@@ -239,12 +241,25 @@
       if (on && m.sinkId && d.el.setSinkId) { try { await d.el.setSinkId(m.sinkId); } catch (e) {} }
     }
   }
-  function reply(msg) { const out = Object.assign({ _from: 'output', id: MY_ID }, msg); if (bc) bc.postMessage(out); if (window.opener) try { window.opener.postMessage(Object.assign({ _og: true }, out), location.origin); } catch (e) {} }
+  function reply(msg) {
+    const out = Object.assign({ _og: true, _from: 'output', id: MY_ID, _mid: 'o' + MY_ID + '-' + Date.now().toString(36) + '-' + (++messageSeq).toString(36) }, msg);
+    if (bc) bc.postMessage(out);
+    if (window.opener) try { window.opener.postMessage(out, location.origin); } catch (e) {}
+  }
 
   // act only on broadcast (target null) or messages addressed to this output
   function forMe(d) { return d && d._from !== 'output' && (d.target == null || d.target === MY_ID); }
-  if (bc) bc.onmessage = (e) => { if (forMe(e.data)) handle(e.data); };
-  window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data && e.data._og && forMe(e.data)) handle(e.data); });
+  function receive(d) {
+    if (!forMe(d)) return;
+    if (d._mid) {
+      if (messageIds.has(d._mid)) return;
+      messageIds.add(d._mid);
+      if (messageIds.size > 300) messageIds.delete(messageIds.values().next().value);
+    }
+    handle(d);
+  }
+  if (bc) bc.onmessage = (e) => receive(e.data);
+  window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data && e.data._og) receive(e.data); });
 
   decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
   decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });

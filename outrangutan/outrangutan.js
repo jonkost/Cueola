@@ -89,6 +89,9 @@
 
   // ── multi-output (Phase 3) ───────────────────────────────────────────────
   let bc = null;
+  let outputMessageSeq = 0;
+  let outputWindowListenerReady = false;
+  const outputMessageIds = new Set();
   let outputs = defaultOutputs();// persisted: [{ id, label, screenId, sinkId, audioOn }]
   const outputWins = new Map();  // id -> { win, alive, identify }
   let screensCache = null;       // ScreenDetails.screens (Window Management API)
@@ -628,46 +631,71 @@
   function stopAllPads() { padRT.forEach((rt, id) => { cancelFade('padin-' + id); stopVoices(rt); }); renderPads(); }
 
   // ── multi-output manager (Phase 3) ───────────────────────────────────────
-  // One BroadcastChannel, addressed messages: every output filters on `target`
-  // (null = broadcast). Each output window opens with #out=<id> and reports its
-  // id back on ready/pong/closed so the controller tracks liveness per output.
-  function ensureChannel() {
-    if (bc || !('BroadcastChannel' in window)) return;
-    bc = new BroadcastChannel(OUTPUT_CHANNEL);
-    bc.onmessage = (e) => {
-      const m = e.data; if (!m || m._from !== 'output') return;
-      const id = m.id || 1, rec = outputWins.get(id);
-      // 'ready' = a fresh window that needs full state. A plain beat/pong must
-      // NOT re-push (a 2s heartbeat re-sending 'play' would glitch the video);
-      // it only re-syncs when it revives an output the watchdog declared dead.
-      if (m.t === 'ready') {
-        if (rec) { rec.alive = true; rec.lastBeat = Date.now(); rec.painting = true; }
-        updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id);
-      }
-      if (m.t === 'pong' || m.t === 'beat') {
-        if (rec) {
-          const wasDead = rec.alive === false;
-          rec.lastBeat = Date.now();
-          rec.alive = true;
-          const painting = (m.raf !== false);
-          if (!painting && rec.painting && active && active.kind === 'video' && active.cue.output === id) {
-            slog('error', 'Output ' + id + ' event loop is alive but frames are not painting.');
-          }
-          rec.painting = painting;
-          if (wasDead) {
-            const o = outputById(id);
-            slog('output', (o ? o.label : 'Output ' + id) + ' recovered — re-syncing its program state.');
-            toast('✓ ' + (o ? o.label : 'Output ' + id) + ' recovered — re-synced.');
-            resendActiveToOutput(id); applyOutputSink(id);
-            updateOutputUI();
-          }
+  // BroadcastChannel is the primary bus, with direct postMessage mirrored to
+  // every window as a show-safe fallback. Message ids make the dual path safe:
+  // a play/seek command is applied once even when both transports deliver it.
+  function seenOutputMessage(m) {
+    if (!m || !m._mid) return false;
+    if (outputMessageIds.has(m._mid)) return true;
+    outputMessageIds.add(m._mid);
+    if (outputMessageIds.size > 300) outputMessageIds.delete(outputMessageIds.values().next().value);
+    return false;
+  }
+  function handleOutputMessage(m) {
+    if (!m || m._from !== 'output' || seenOutputMessage(m)) return;
+    const id = m.id || 1, rec = outputWins.get(id);
+    // 'ready' = a fresh window that needs full state. A plain beat/pong must
+    // NOT re-push (a 2s heartbeat re-sending 'play' would glitch the video);
+    // it only re-syncs when it revives an output the watchdog declared dead.
+    if (m.t === 'ready') {
+      if (rec) { rec.alive = true; rec.lastBeat = Date.now(); rec.painting = true; }
+      updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id);
+    }
+    if (m.t === 'pong' || m.t === 'beat') {
+      if (rec) {
+        const wasDead = rec.alive === false;
+        rec.lastBeat = Date.now();
+        rec.alive = true;
+        const painting = (m.raf !== false);
+        if (!painting && rec.painting && active && active.kind === 'video' && active.cue.output === id) {
+          slog('error', 'Output ' + id + ' event loop is alive but frames are not painting.');
+        }
+        rec.painting = painting;
+        if (wasDead) {
+          const o = outputById(id);
+          slog('output', (o ? o.label : 'Output ' + id) + ' recovered — re-syncing its program state.');
+          toast('✓ ' + (o ? o.label : 'Output ' + id) + ' recovered — re-synced.');
+          resendActiveToOutput(id); applyOutputSink(id);
+          updateOutputUI();
         }
       }
-      if (m.t === 'closed') { if (rec) rec.alive = false; updateOutputUI(); }
-      if (m.t === 'error') toast('⚠ Output ' + id + ' could not play the media — black slate on that output.');
-    };
+    }
+    if (m.t === 'closed') { if (rec) rec.alive = false; updateOutputUI(); }
+    if (m.t === 'error') toast('⚠ Output ' + id + ' could not play the media — black slate on that output.');
   }
-  function sendOut(msg, target) { ensureChannel(); if (bc) bc.postMessage(Object.assign({ _from: 'control', target: (target == null ? null : target) }, msg)); }
+  function ensureChannel() {
+    if (!outputWindowListenerReady) {
+      window.addEventListener('message', e => {
+        if (e.origin !== location.origin || !e.data || !e.data._og) return;
+        handleOutputMessage(e.data);
+      });
+      outputWindowListenerReady = true;
+    }
+    if (!bc && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel(OUTPUT_CHANNEL);
+      bc.onmessage = e => handleOutputMessage(e.data);
+    }
+  }
+  function sendOut(msg, target) {
+    ensureChannel();
+    const out = Object.assign({ _og: true, _from: 'control', target: (target == null ? null : target), _mid: 'c' + Date.now().toString(36) + '-' + (++outputMessageSeq).toString(36) }, msg);
+    if (bc) bc.postMessage(out);
+    outputWins.forEach((rec, id) => {
+      if (target != null && id !== target) return;
+      if (!rec.win || rec.win.closed) return;
+      try { rec.win.postMessage(out, location.origin); } catch (e) {}
+    });
+  }
   function outputById(id) { return outputs.find(o => o.id === id) || null; }
   function isOutputAlive(id) { const r = outputWins.get(id); return !!(r && r.win && !r.win.closed); }
   // Healthy = window open AND the watchdog has heard a beat recently. A frozen
@@ -713,6 +741,10 @@
   }
   function tryFullscreen(win) { try { const d = win.document.documentElement; if (d && d.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch (e) {} }
   function focusOrOpenOutput(id) { const r = outputWins.get(id); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
+  function popOutProgram() {
+    const o = outputs[0] || { id: 1 };
+    focusOrOpenOutput(o.id);
+  }
   function resendActiveToOutput(id) {
     if (!active || active.cue.output !== id) return;
     if (active.kind === 'image') { sendOut({ t: 'image', mediaId: active.cue.mediaId, fadeIn: 0, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0 }, id); return; }
@@ -765,6 +797,12 @@
     if (b) {
       b.classList.toggle('on', outputs.some(o => isOutputHealthy(o.id)));
       b.classList.toggle('dead', outputs.some(o => isOutputAlive(o.id) && !isOutputHealthy(o.id)));
+    }
+    const pop = $('og-program-popout');
+    if (pop) {
+      pop.classList.toggle('on', outputs.some(o => isOutputHealthy(o.id)));
+      pop.classList.toggle('dead', outputs.some(o => isOutputAlive(o.id) && !isOutputHealthy(o.id)));
+      pop.setAttribute('aria-pressed', outputs.some(o => isOutputAlive(o.id)) ? 'true' : 'false');
     }
     if ($('og-outputs') && $('og-outputs').classList.contains('on')) renderOutputs();
   }
@@ -3072,6 +3110,7 @@
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
         + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
+        + '<button class="og-bar-btn og-program-popout" id="og-program-popout" title="Pop the program output into a movable window for another display" aria-label="Pop out program window" aria-pressed="false">' + sym('action.fullscreen') + '<span>Pop out program</span></button>'
         + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary title="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
           + '<details class="og-themes-submenu"><summary class="og-themes-row"><span class="og-tr-ico" aria-hidden="true"></span><span class="og-tr-lbl">Themes</span><span class="og-tr-val">Choose<span class="og-tr-chev" aria-hidden="true">›</span></span></summary>'
             + '<div class="og-theme-grid" id="og-theme-options"></div>'
@@ -3208,6 +3247,7 @@
     $('og-tab-sfx').onclick = () => setTab('sfx');
     $('og-bottom-tab-insp').onclick = () => setBottomTab('insp');
     $('og-bottom-tab-edit').onclick = () => setBottomTab('edit');
+    $('og-program-popout').onclick = popOutProgram;
     $('og-output-btn').onclick = openOutputsPanel;
     $('og-sd-btn').onclick = openSdPanel;
     $('og-midi-btn').onclick = openMidiPanel;
