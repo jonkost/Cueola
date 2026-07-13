@@ -1512,6 +1512,55 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-portal-who span{font-size:12px;color:var(--text3)}
 .pb-portal-label{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
 .pb-av-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+/* ── Identity layer (profiles + login codes) ── */
+.join-identity-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:12.5px;color:var(--text2)}
+.join-identity-strip[hidden],.join-entrycode[hidden]{display:none!important}
+.jis-codes{flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap}
+.jis-code{border:1px solid var(--border);background:var(--s2);color:var(--text2);font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:4px 10px;border-radius:8px;cursor:pointer}
+.jis-code:hover{border-color:var(--accent);color:var(--text)}
+.jis-hint{color:var(--text3)}
+.jis-who .jis-user{font-family:var(--mono);font-size:11px;color:var(--text3);margin-left:4px}
+.jis-btn{border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
+.jis-btn:hover{border-color:var(--accent)}
+.id-modal{max-width:520px;width:min(520px,92vw)}
+.id-body{display:flex;flex-direction:column;gap:12px;min-height:120px}
+.id-choice-grid{display:flex;flex-direction:column;gap:10px}
+.id-choice{display:flex;flex-direction:column;gap:3px;text-align:left;padding:14px 16px;border:1px solid var(--border);border-radius:13px;background:var(--s2);color:var(--text);cursor:pointer;transition:border-color .15s var(--ease)}
+.id-choice:hover{border-color:var(--accent)}
+.id-choice.ghost{background:transparent}
+.id-choice-title{font-size:14.5px;font-weight:800}
+.id-choice-sub{font-size:12px;color:var(--text3)}
+.id-steps{display:flex;gap:6px;flex-wrap:wrap}
+.id-step{font-size:10px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:4px 8px;border-radius:7px;border:1px solid var(--border)}
+.id-step.on{color:var(--text);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.id-step.done{color:var(--green)}
+.id-field-hint{font-size:11px;color:var(--text3);margin-top:5px}
+.id-code-in{font-family:var(--mono);letter-spacing:.15em;text-transform:uppercase}
+.id-av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px}
+.id-av{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border:1px solid var(--border);border-radius:11px;background:var(--s2);color:var(--text2);font-size:11px;cursor:pointer}
+.id-av.sel{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.id-av-chip{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;background:var(--s3);color:#fff;overflow:hidden}
+.id-av-chip img{width:70%;height:70%;object-fit:contain}
+.id-portal-cards{display:flex;flex-direction:column;gap:10px;max-height:min(44vh,380px);overflow-y:auto}
+.id-portal-loading,.id-portal-empty{font-size:12.5px;color:var(--text3);padding:14px;text-align:center}
+.id-card{border:1px solid var(--border);border-radius:13px;background:var(--s2);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.id-card.gone{opacity:.55}
+.id-card-head{display:flex;align-items:baseline;gap:10px;min-width:0}
+.id-card-code{font-family:var(--mono);font-weight:800;font-size:13px;letter-spacing:.08em}
+.id-card-name{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.id-card-badges{display:flex;gap:6px;flex-wrap:wrap}
+.id-badge{font-size:10.5px;font-family:var(--mono);padding:3px 8px;border-radius:7px;border:1px solid var(--border);color:var(--text2)}
+.id-badge.pos{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.id-badge.todo{color:var(--yellow);border-color:color-mix(in srgb,var(--yellow) 45%,transparent)}
+.id-badge.unseen{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 45%,transparent)}
+.id-badge.paper{color:var(--text3)}
+.id-badge.quiet{color:var(--text3);border-style:dashed}
+.id-card-actions{display:flex;gap:8px}
+.id-addcode-row{display:flex;gap:8px;align-items:center}
+.id-addcode-row .field-in{flex:1;text-transform:uppercase;font-family:var(--mono)}
+.id-portal-foot{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.id-portal-foot .btn-secondary{flex:1;min-width:140px}
+@media(max-width:680px){.id-av-grid{grid-template-columns:repeat(3,1fr)}.id-card-actions .jis-btn{flex:1}}
 .pb-av-choice{display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border:1.5px solid var(--border);border-radius:13px;background:var(--s2);color:var(--text2);cursor:pointer;font-size:11.5px;font-weight:700}
 .pb-av-choice:hover{border-color:var(--bord2);color:var(--text)}
 .pb-av-choice.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--s2));color:var(--text)}
@@ -3623,7 +3672,7 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
         <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="openProductionNotesShortcut(event)" title="Production Notes" aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
       </div>
       <div class="entry-notif">
-        <button class="tbtn tbtn-ghost icon-only" id="entryProfileBtn" onclick="openUserPortal()" title="Your profile" aria-label="Your profile"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span></button>
+        <button class="tbtn tbtn-ghost icon-only" id="entryProfileBtn" onclick="CueolaIdentity.openHub()" title="Your profile" aria-label="Your profile"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span></button>
       </div>
       <div class="entry-theme-center">
         <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" title="Theme" aria-label="Theme"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
@@ -4654,8 +4703,10 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
   <div class="modal">
     <div class="modal-title">Open Planda Bear</div>
     <div class="modal-sub">Enter the session code to work on the Planda Bear package.</div>
+    <div class="join-identity-strip" id="pp-identity-strip" hidden></div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="pp-join-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
+    <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="pp-join-err">Please fill in both fields.</div>
     <button class="btn-primary" onclick="joinPreProSession()">Open Planda Bear</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
@@ -4670,6 +4721,16 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
     <div class="pb-portal-body" id="userPortalBody"></div>
     <button class="btn-primary" onclick="pbSaveUserPortal()">Save</button>
     <button class="btn-secondary" onclick="hideModal('userPortalModal')">Cancel</button>
+  </div>
+</div>
+
+<!-- Identity layer: profile hub / sign-in / create wizard / portal (cueola-identity.js) -->
+<div class="modal-wrap" id="identityModal">
+  <div class="modal id-modal">
+    <div class="modal-title"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span> <span id="identityTitle">Your Cueola profile</span></div>
+    <div class="modal-sub" id="identitySub"></div>
+    <div class="id-body" id="identityBody"></div>
+    <button class="btn-secondary" onclick="hideModal('identityModal')">Close</button>
   </div>
 </div>
 
@@ -4783,8 +4844,10 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
   <div class="modal">
     <div class="modal-title">Join a Session</div>
     <div class="modal-sub">Enter the session code your director gave you.</div>
+    <div class="join-identity-strip" id="stud-identity-strip" hidden></div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="stud-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
+    <div class="field join-entrycode" id="stud-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="stud-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="stud-err">Please fill in both fields.</div>
     <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join Session</button>
     <button class="btn-secondary" onclick="hideModal('modal-stud')">Cancel</button>
@@ -4916,7 +4979,8 @@ body.scriptop-popout .ls-sidebar-head{cursor:default}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=746c10a762"></script>
 <script src="cueola-avatar-profile.js?v=943c230239"></script>
-<script src="cueola-app.js?v=d92f9114d2"></script>
+<script src="cueola-identity.js?v=cdbcf0c796"></script>
+<script src="cueola-app.js?v=31687e1dd4"></script>
 <script src="outrangutan/outrangutan.js?v=7e7c8bd44a"></script>
 
 <script type="module">

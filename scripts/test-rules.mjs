@@ -86,6 +86,11 @@ allowed(await write('sessions/RULES1', {
   rundownAliases: {}, rundownUpdatedAt: 2, rundownUpdatedBy: 'QA', showName: 'Rules rehearsal 2',
 }, ['beats', 'rundownAliases', 'rundownUpdatedAt', 'rundownUpdatedBy', 'showName']), 'rundown transaction batch shape');
 
+// Phase 3 per-session entry toggle.
+allowed(await write('sessions/RULES1', { requireLoginCode: true }, ['requireLoginCode']), 'admin flips require-login-code on');
+allowed(await write('sessions/RULES1', { requireLoginCode: false }, ['requireLoginCode']), 'admin flips require-login-code off');
+denied(await write('sessions/RULES1', { requireLoginCode: 'yes' }, ['requireLoginCode']), 'require-login-code must be a bool');
+
 // Dashboard soft-delete lifecycle (Phase 1 item 4).
 allowed(await write('sessions/RULES1', { deletedAt: 1, deletedBy: 'QA Admin' }, ['deletedAt', 'deletedBy']), 'dashboard soft-delete stamp');
 allowed(await write('sessions/RULES1', {}, ['deletedAt', 'deletedBy']), 'restore clears the soft-delete stamp');
@@ -129,6 +134,13 @@ denied(await write('accessCodes/CLASS2026BAD', { role: 'student', active: true, 
 denied(await remove('accessCodes/CLASS2026'), 'access-code delete denied (revoke = active:false)');
 allowed(await write('accessCodes/REVOKED1', { ...accessCode, label: 'Spring 2025', active: false }), 'revoking a code by deactivating it');
 
+// Phase 3 dashboard lifecycle verbatim: revoke patch, reactivate patch, type bounds.
+allowed(await write('accessCodes/CLASS2026', { active: false, revokedAt: 5, revokedBy: 'Instructor' },
+  ['active', 'revokedAt', 'revokedBy']), 'dashboard revoke patch (active/revokedAt/revokedBy)');
+denied(await write('accessCodes/CLASS2026', { active: false, revokedAt: 'yesterday' },
+  ['active', 'revokedAt']), 'revokedAt must be an int');
+allowed(await write('accessCodes/CLASS2026', { active: true }, ['active']), 'dashboard reactivate patch');
+
 const profile = {
   username: 'alex.smith', fullName: 'Alex Smith', role: 'student', avatar: { type: 'initials' },
   theme: 'cool', sessions: ['RULES1'], codeUsed: 'CLASS2026', createdAt: 1, lastSeen: 1,
@@ -141,6 +153,27 @@ denied(await write('profiles/alex.smith', { ...profile, codeUsed: 'REVOKED1', la
 allowed(await write('profiles/alex.smith', { ...profile, lastSeen: 2 }), 'profile mutable fields update');
 denied(await write('profiles/ab', { ...profile, username: 'ab' }), 'username shorter than 3 chars');
 denied(await remove('profiles/alex.smith'), 'profile delete denied (deactivate instead)');
+
+// Phase 3 client/dashboard patches verbatim (masked updates merge, rules see the whole doc).
+allowed(await write('profiles/alex.smith', { avatar: { type: 'animal', value: 'koala' }, lastSeen: 3 },
+  ['avatar', 'lastSeen']), 'device avatar save syncs onto the profile');
+allowed(await write('profiles/alex.smith', { sessions: ['RULES1', 'SHOW42'], lastSeen: 4 },
+  ['sessions', 'lastSeen']), 'attach a session code to the profile');
+allowed(await write('profiles/alex.smith', { lastSeen: 5 }, ['lastSeen']), 'sign-in lastSeen bump');
+allowed(await write('profiles/alex.smith', { active: false }, ['active']), 'roster deactivate');
+allowed(await write('profiles/alex.smith', { active: true }, ['active']), 'roster reactivate');
+denied(await write('profiles/alex.smith', { role: 'admin' }, ['role']), 'masked role elevation still denied');
+denied(await write('profiles/alex.smith', { sessions: Array.from({ length: 101 }, (_, i) => `S${i}`) },
+  ['sessions']), 'profile sessions list over the 100 cap');
+denied(await write('profiles/mismatch.role', { ...profile, username: 'mismatch.role', role: 'admin' }),
+  'create with role not matching the code doc');
+
+// Rename = new doc under the (still active) code, then tombstone the old name.
+allowed(await write('profiles/alexs.new', { ...profile, username: 'alexs.new' }), 'rename creates the new doc');
+allowed(await write('profiles/alex.smith', { active: false, renamedTo: 'alexs.new' },
+  ['active', 'renamedTo']), 'rename tombstones the old doc');
+allowed(await write('profiles/alexs.new', { active: false, mergedInto: 'alex.smith' },
+  ['active', 'mergedInto']), 'merge tombstone points at the target');
 
 const note = { id: 'note1', text: 'Check camera two', by: 'Alex Smith', role: 'student', likes: [], checklist: [], attachments: [] };
 allowed(await write('sessions/RULES1/notes/note1', note), 'future note subcollection write');

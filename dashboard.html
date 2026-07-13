@@ -131,6 +131,21 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .overview-row-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .overview-row-meta{font-size:11px;color:var(--text2);font-family:var(--mono);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .overview-chip{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:999px;background:var(--s3);border:1px solid var(--bord2);color:var(--text2);white-space:nowrap}
+/* Phase 3: login codes + class roster rows */
+.roster-row{display:flex;align-items:center;gap:12px}
+.roster-row.inactive{opacity:.55}
+.roster-code{font-family:var(--mono);font-weight:800;letter-spacing:.12em;font-size:13px;flex:0 0 auto}
+.roster-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.roster-user{font-family:var(--mono);font-size:11px;color:var(--text3);margin-left:4px}
+.roster-sub{font-size:11px;color:var(--text3)}
+.roster-sessions{display:flex;gap:5px;flex-wrap:wrap}
+.roster-pill{font-size:9.5px;font-family:var(--mono);letter-spacing:.1em;padding:3px 8px;border-radius:999px;flex:0 0 auto}
+.roster-pill.ok{color:var(--green);border:1px solid color-mix(in srgb,var(--green) 45%,transparent)}
+.roster-pill.off{color:var(--red);border:1px solid color-mix(in srgb,var(--red) 45%,transparent)}
+.roster-actions{display:flex;gap:6px;flex:0 0 auto}
+.roster-check{width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto}
+.roster-empty{font-size:12px;color:var(--text3);padding:12px}
+@media(max-width:600px){.roster-row{flex-wrap:wrap}.roster-actions{width:100%;justify-content:flex-end}}
 .admin-control-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:10px}
 .admin-control-form-title{grid-column:1/-1;font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
 .admin-mini-in{background:var(--s3);border:1px solid var(--bord2);border-radius:7px;color:var(--text);font-size:12px;padding:9px 10px;outline:none;width:100%}
@@ -650,6 +665,31 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       </div>
       <div class="overview-list" id="adminOverviewList"></div>
     </div>
+
+    <!-- Phase 3: class login codes — students register profiles with these -->
+    <div class="overview-panel">
+      <div class="admin-control-form accounts-form">
+        <div class="admin-control-form-title">Class Login Codes</div>
+        <input class="admin-mini-in" id="newLoginCodeLabel" placeholder='Label, e.g. "Fall 2026 TV Production"'>
+        <select class="admin-mini-in" id="newLoginCodeRole">
+          <option value="student">Student code</option>
+          <option value="admin">Admin code</option>
+        </select>
+        <button class="admin-mini-btn primary" onclick="mintLoginCode()">Mint Code</button>
+      </div>
+      <div class="overview-list" id="loginCodesList"><div class="roster-empty">Loading login codes…</div></div>
+    </div>
+
+    <!-- Phase 3: class roster — every registered profile in one screen -->
+    <div class="overview-panel">
+      <div class="admin-control-form accounts-form">
+        <div class="admin-control-form-title">Class Roster</div>
+        <input class="admin-mini-in" id="rosterBulkCodes" placeholder="Session code(s), comma-separated">
+        <button class="admin-mini-btn primary" onclick="rosterBulkAttach()">Attach to selected</button>
+        <button class="admin-mini-btn" onclick="loadIdentityAdminData()">↻ Refresh</button>
+      </div>
+      <div class="overview-list" id="rosterList"><div class="roster-empty">Loading roster…</div></div>
+    </div>
   </div>
 
 </div>
@@ -765,6 +805,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
                 <select class="field-in" id="detail-status-input">
                   <option value="idle">Idle</option>
                   <option value="active">Active</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-lbl">Entry Requirement</label>
+                <select class="field-in" id="detail-entrycode-input">
+                  <option value="off">Session code only</option>
+                  <option value="on">Also require class login code</option>
                 </select>
               </div>
             </div>
@@ -1470,7 +1517,214 @@ function openAccountsPage() {
     page.classList.add('on');
   }
   renderAdminOverview();
+  loadIdentityAdminData();
   history.replaceState(null, '', location.pathname + location.search + '#accounts');
+}
+
+/* ── Phase 3 identity administration: login codes + class roster ──────────
+ * accessCodes/{CODE} docs mint/revoke class login codes; profiles/{username}
+ * docs are the roster. Everything an owner needs lives on this one page:
+ * mint/revoke codes, see who registered on which code, rename/merge/
+ * deactivate users, and attach sessions in bulk. */
+let identityCodes = [];      // [{id, role, label, active, createdBy, createdAt, ...}]
+let identityProfiles = [];   // [{id, username, fullName, role, sessions, codeUsed, active, ...}]
+
+async function loadIdentityAdminData() {
+  if (!window._firebaseReady) { await waitForFirebase(); }
+  try {
+    const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const [codesSnap, profilesSnap] = await Promise.all([
+      getDocs(collection(db(), 'accessCodes')),
+      getDocs(collection(db(), 'profiles')),
+    ]);
+    identityCodes = codesSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    identityProfiles = profilesSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }))
+      .sort((a, b) => String(a.username || a.id).localeCompare(String(b.username || b.id)));
+  } catch (e) {
+    identityCodes = []; identityProfiles = [];
+    const el = document.getElementById('loginCodesList');
+    if (el) el.innerHTML = `<div class="roster-empty">Could not load: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  renderLoginCodes();
+  renderRoster();
+}
+
+function genLoginCode() {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  const rand = new Uint32Array(6);
+  crypto.getRandomValues(rand);
+  for (let i = 0; i < 6; i++) code += alphabet[rand[i] % alphabet.length];
+  return code;
+}
+
+async function mintLoginCode() {
+  const label = document.getElementById('newLoginCodeLabel').value.trim();
+  const role = document.getElementById('newLoginCodeRole').value === 'admin' ? 'admin' : 'student';
+  if (!label) { showToast('Give the code a label — e.g. the class name.'); return; }
+  const code = genLoginCode();
+  try {
+    await window._setDoc(window._doc(db(), 'accessCodes', code), {
+      role, label, active: true, createdBy: adminSession.name, createdAt: Date.now(),
+    });
+  } catch (e) { showToast('Mint failed: ' + e.message); return; }
+  document.getElementById('newLoginCodeLabel').value = '';
+  showToast(`Login code ${code} minted — share it with the class.`);
+  await loadIdentityAdminData();
+}
+
+async function toggleLoginCode(code) {
+  const entry = identityCodes.find(c => c.id === code);
+  if (!entry) return;
+  const makeActive = entry.active !== true;
+  try {
+    const patch = makeActive
+      ? { active: true }
+      : { active: false, revokedAt: Date.now(), revokedBy: adminSession.name };
+    await window._updateDoc(window._doc(db(), 'accessCodes', code), patch);
+  } catch (e) { showToast('Update failed: ' + e.message); return; }
+  showToast(makeActive ? `${code} reactivated.` : `${code} revoked — existing profiles keep working; new sign-ups stop.`);
+  await loadIdentityAdminData();
+}
+
+function copyLoginCode(code) {
+  navigator.clipboard?.writeText(code).then(
+    () => showToast(`${code} copied.`),
+    () => prompt('Login code', code)
+  );
+}
+
+function renderLoginCodes() {
+  const el = document.getElementById('loginCodesList');
+  if (!el) return;
+  if (!identityCodes.length) {
+    el.innerHTML = '<div class="roster-empty">No login codes yet — mint one and share it with the class.</div>';
+    return;
+  }
+  el.innerHTML = identityCodes.map(c => {
+    // Live profiles only — rename/merge tombstones keep codeUsed but are not people.
+    const registered = identityProfiles.filter(p => p.codeUsed === c.id && !p.renamedTo && !p.mergedInto).length;
+    const codeArg = JSON.stringify(String(c.id)).replace(/"/g, '&quot;');
+    const active = c.active === true;
+    return `<div class="overview-row roster-row${active ? '' : ' inactive'}">
+      <span class="roster-code">${escapeHtml(c.id)}</span>
+      <span class="roster-main"><b>${escapeHtml(c.label || '—')}</b>
+        <span class="roster-sub">${c.role === 'admin' ? 'Admin code' : 'Student code'} · ${registered} registered${c.createdBy ? ' · by ' + escapeHtml(c.createdBy) : ''}</span></span>
+      <span class="roster-pill ${active ? 'ok' : 'off'}">${active ? 'ACTIVE' : 'REVOKED'}</span>
+      <span class="roster-actions">
+        <button class="admin-mini-btn" onclick="copyLoginCode(${codeArg})">Copy</button>
+        <button class="admin-mini-btn ${active ? 'danger' : 'primary'}" onclick="toggleLoginCode(${codeArg})">${active ? 'Revoke' : 'Reactivate'}</button>
+      </span></div>`;
+  }).join('');
+}
+
+function rosterAgo(ts) {
+  if (!ts) return 'never';
+  const d = Date.now() - Number(ts);
+  if (d < 90000) return 'just now';
+  if (d < 3600000) return Math.round(d / 60000) + 'm ago';
+  if (d < 86400000) return Math.round(d / 3600000) + 'h ago';
+  return Math.round(d / 86400000) + 'd ago';
+}
+
+function renderRoster() {
+  const el = document.getElementById('rosterList');
+  if (!el) return;
+  const live = identityProfiles.filter(p => !p.renamedTo && !p.mergedInto);
+  if (!live.length) {
+    el.innerHTML = '<div class="roster-empty">No profiles yet — students appear here once they register with a login code.</div>';
+    return;
+  }
+  el.innerHTML = live.map(p => {
+    const u = String(p.username || p.id);
+    const uArg = JSON.stringify(u).replace(/"/g, '&quot;');
+    const active = p.active !== false;
+    const sessions = (p.sessions || []).map(s => `<span class="overview-chip">${escapeHtml(s)}</span>`).join('') || '<span class="roster-sub">no sessions</span>';
+    return `<div class="overview-row roster-row${active ? '' : ' inactive'}">
+      <input type="checkbox" class="roster-check" data-roster-user="${escapeHtml(u)}" aria-label="Select ${escapeHtml(u)}">
+      <span class="roster-main"><b>${escapeHtml(p.fullName || u)}</b> <span class="roster-user">@${escapeHtml(u)}</span>
+        <span class="roster-sub">${p.role === 'admin' ? 'admin · ' : ''}code ${escapeHtml(p.codeUsed || '—')} · seen ${rosterAgo(p.lastSeen)}</span>
+        <span class="roster-sessions">${sessions}</span></span>
+      <span class="roster-pill ${active ? 'ok' : 'off'}">${active ? 'ACTIVE' : 'OFF'}</span>
+      <span class="roster-actions">
+        <button class="admin-mini-btn" onclick="rosterRename(${uArg})">Rename</button>
+        <button class="admin-mini-btn" onclick="rosterMerge(${uArg})">Merge</button>
+        <button class="admin-mini-btn ${active ? 'danger' : 'primary'}" onclick="rosterToggleActive(${uArg})">${active ? 'Deactivate' : 'Reactivate'}</button>
+      </span></div>`;
+  }).join('');
+}
+
+function rosterProfile(username) { return identityProfiles.find(p => String(p.username || p.id) === username); }
+
+async function rosterToggleActive(username) {
+  const p = rosterProfile(username); if (!p) return;
+  const makeActive = p.active === false;
+  try {
+    await window._updateDoc(window._doc(db(), 'profiles', username), { active: makeActive });
+  } catch (e) { showToast('Update failed: ' + e.message); return; }
+  showToast(makeActive ? `@${username} reactivated.` : `@${username} deactivated — they can no longer sign in.`);
+  await loadIdentityAdminData();
+}
+
+async function rosterRename(username) {
+  const p = rosterProfile(username); if (!p) return;
+  const next = prompt(`New username for ${p.fullName || username} (the old one becomes a pointer):`, username);
+  if (!next || next === username) return;
+  const clean = String(next).trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(clean)) { showToast('Usernames are 3–40 chars: lowercase letters, numbers, dots, dashes.'); return; }
+  if (rosterProfile(clean)) { showToast(`@${clean} is already taken.`); return; }
+  try {
+    // New doc first (rules re-check the login code is active), then tombstone.
+    const fresh = { username: clean, fullName: p.fullName, role: p.role, avatar: p.avatar || { type: 'initials' },
+      theme: p.theme || 'cool', sessions: p.sessions || [], codeUsed: p.codeUsed,
+      createdAt: Date.now(), lastSeen: p.lastSeen || Date.now() };
+    await window._setDoc(window._doc(db(), 'profiles', clean), fresh);
+    await window._updateDoc(window._doc(db(), 'profiles', username), { active: false, renamedTo: clean });
+  } catch (e) {
+    showToast(e.code === 'permission-denied'
+      ? 'Rename blocked — their login code is revoked. Reactivate it first.' : 'Rename failed: ' + e.message);
+    return;
+  }
+  showToast(`@${username} → @${clean}. Their next sign-in points them to the new name.`);
+  await loadIdentityAdminData();
+}
+
+async function rosterMerge(username) {
+  const src = rosterProfile(username); if (!src) return;
+  const target = prompt(`Merge @${username} INTO which username? (keeps the target, points this one at it)`);
+  if (!target) return;
+  const clean = String(target).trim().toLowerCase();
+  const dst = rosterProfile(clean);
+  if (!dst || clean === username) { showToast('Enter a different, existing username to merge into.'); return; }
+  if (!confirm(`Merge @${username} into @${clean}? Sessions are combined; @${username} stops signing in.`)) return;
+  try {
+    const merged = [...new Set([...(dst.sessions || []), ...(src.sessions || [])])].slice(0, 100);
+    await window._updateDoc(window._doc(db(), 'profiles', clean), { sessions: merged });
+    await window._updateDoc(window._doc(db(), 'profiles', username), { active: false, mergedInto: clean });
+  } catch (e) { showToast('Merge failed: ' + e.message); return; }
+  showToast(`@${username} merged into @${clean}.`);
+  await loadIdentityAdminData();
+}
+
+async function rosterBulkAttach() {
+  const raw = document.getElementById('rosterBulkCodes').value;
+  const codes = raw.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(s => /^[A-Za-z0-9_.-]{1,160}$/.test(s));
+  const picked = [...document.querySelectorAll('.roster-check:checked')].map(el => el.dataset.rosterUser);
+  if (!codes.length) { showToast('Enter one or more session codes.'); return; }
+  if (!picked.length) { showToast('Tick the roster rows to attach the code(s) to.'); return; }
+  let done = 0;
+  for (const u of picked) {
+    const p = rosterProfile(u); if (!p) continue;
+    const merged = [...new Set([...(p.sessions || []), ...codes])].slice(0, 100);
+    try {
+      await window._updateDoc(window._doc(db(), 'profiles', u), { sessions: merged });
+      done++;
+    } catch (e) { console.warn('bulk attach failed for', u, e); }
+  }
+  showToast(`Attached ${codes.join(', ')} to ${done} profile${done === 1 ? '' : 's'}.`);
+  await loadIdentityAdminData();
 }
 
 function closeAccountsPage() {
@@ -1659,6 +1913,7 @@ async function showDetail(code, e) {
   document.getElementById('detail-start-input').value      = normalizeTimeValue(s.startTime);
   document.getElementById('detail-owner-input').value      = s.createdBy || '';
   document.getElementById('detail-status-input').value     = s.status || 'idle';
+  document.getElementById('detail-entrycode-input').value  = s.requireLoginCode === true ? 'on' : 'off';
   document.getElementById('detail-start').textContent      = s.startTime ? formatTime12(s.startTime) : 'Not set';
   document.getElementById('detail-cues').textContent       = cueCount + ' cue' + (cueCount!==1?'s':'');
   document.getElementById('detail-created-by').textContent = s.createdBy || '—';
@@ -1986,7 +2241,8 @@ async function saveDetailMetadata(showToastOnSave=true) {
   const nextStart = normalizeTimeValue(document.getElementById('detail-start-input').value);
   const nextOwner = document.getElementById('detail-owner-input').value.trim();
   const nextStatus = document.getElementById('detail-status-input').value || 'idle';
-  const patch = { showName: nextTitle, startTime: nextStart, status: nextStatus };
+  const requireLoginCode = document.getElementById('detail-entrycode-input')?.value === 'on';
+  const patch = { showName: nextTitle, startTime: nextStart, status: nextStatus, requireLoginCode };
   if (adminSession?.level === 'super') patch.createdBy = nextOwner || adminSession.name;
   try {
     await window._updateDoc(window._doc(db(), 'sessions', activeCode), patch);

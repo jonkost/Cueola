@@ -20,6 +20,7 @@
 export const ASSETS = [
   'cueola-entitlements.js',
   'cueola-avatar-profile.js',
+  'cueola-identity.js',
   'cueola-app.js',
   'outrangutan/outrangutan.js',
   'outrangutan/outrangutan.css',

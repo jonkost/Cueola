@@ -2847,6 +2847,7 @@ function prefillJoinFields(codeId, nameId) {
 
 function openJoinSession() {
   prefillJoinFields('stud-code', 'stud-name');
+  window.CueolaIdentity?.decorateJoin('stud');
   showModal('modal-stud');
   setTimeout(() => {
     const codeEl = document.getElementById('stud-code');
@@ -2874,6 +2875,7 @@ function openPreProJoinModal(target) {
     if (go) go.textContent = notes ? 'Open Production Notes' : 'Open Planda Bear';
   }
   prefillJoinFields('pp-join-code', 'pp-join-name');
+  window.CueolaIdentity?.decorateJoin('pp');
   showModal('modal-prepro-join');
   setTimeout(() => {
     const codeEl = document.getElementById('pp-join-code');
@@ -2901,7 +2903,7 @@ async function joinSession() {
     return;
   }
   const verify = () => {
-    window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
+    window._getDoc(window._doc(window._db,'sessions',code)).then(async snap => {
       if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
@@ -2910,6 +2912,15 @@ async function joinSession() {
         return;
       }
       const d = snap.data() || {};
+      // Per-session admin toggle: entry may require an active class login code
+      // (profiles whose own code is still active pass without extra friction).
+      const gate = window.CueolaIdentity ? await CueolaIdentity.entrySatisfied(d, 'stud-entry-code') : { pass: true };
+      if (!gate.pass) {
+        if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('stud-entrycode-row');
+        errEl.textContent = gate.msg || 'This session requires a class login code.';
+        errEl.classList.add('on');
+        return;
+      }
       session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
       show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
       beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
@@ -2921,6 +2932,7 @@ async function joinSession() {
       rememberLastSession(code, name);
       hideModal('modal-stud');
       enterRundown();
+      window.CueolaIdentity?.noteJoin(code, name);
     }).catch(() => {
       if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
       hideModal('modal-stud');
@@ -2953,12 +2965,21 @@ async function joinPreProSession() {
     joinPresence();
     if (preProJoinTarget === 'notes') openProductionNotes();
     else openPaperworkHub();
+    window.CueolaIdentity?.noteJoin(code, name);
   };
   const verify = () => {
-    window._getDoc(window._doc(window._db,'sessions',code)).then(snap => {
+    window._getDoc(window._doc(window._db,'sessions',code)).then(async snap => {
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
         errEl.textContent = 'Session not found. Check the code and try again.';
+        errEl.classList.add('on');
+        return;
+      }
+      // Per-session admin toggle: entry may require an active class login code.
+      const gate = window.CueolaIdentity ? await CueolaIdentity.entrySatisfied(snap.data() || {}, 'pp-entry-code') : { pass: true };
+      if (!gate.pass) {
+        if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('pp-entrycode-row');
+        errEl.textContent = gate.msg || 'This session requires a class login code.';
         errEl.classList.add('on');
         return;
       }
@@ -11435,6 +11456,8 @@ function pbSaveUserPortal() {
   // Reflect the new avatar immediately on the board + the header chip.
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes();
   pbRenderPortalChip();
+  // A signed-in profile carries its look to every device.
+  window.CueolaIdentity?.onDeviceAvatarSaved?.(_pbPortalDraft || { type: 'initials' });
 }
 // The small "you" chip in the notes toolbar that opens the portal.
 function pbRenderPortalChip() {
