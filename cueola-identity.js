@@ -514,16 +514,31 @@
     }
     return [];
   }
-  function summarizeSession(code, doc, fullName) {
-    var notes = Array.isArray(doc.preProNotes) ? doc.preProNotes : [];
+  function summarizeSession(code, doc, fullName, notesOverride) {
+    var notes = Array.isArray(notesOverride) ? notesOverride
+      : Array.isArray(doc.preProNotes) ? doc.preProNotes : [];
     var todos = 0, mentions = 0, unseen = 0;
     var lastRead = pbLastReadFor(code);
     notes.forEach(function (n) {
       if (!n) return;
       var tag = n.tag || (n.kind === 'todo' ? 'todo' : 'general');
-      if (tag === 'todo' && !n.done && n.assignee && sameName(n.assignee, fullName)) todos++;
+      var checklist = Array.isArray(n.checklist) ? n.checklist : [];
+      // A todo-tagged note that carries a checklist delegates to its items
+      // (mirrors the board's who-owes-what view — no double counting).
+      if (tag === 'todo' && !n.done && !checklist.length && n.assignee && sameName(n.assignee, fullName)) todos++;
+      checklist.forEach(function (it) {
+        if (it && !it.done && it.assignee && sameName(it.assignee, fullName)) todos++;
+      });
       var mine = sameName(n.by, fullName);
-      if (!mine && (n.at || 0) > lastRead) {
+      // Cloud read receipts win over the device-local lastRead heuristic —
+      // reading the board on ANY device clears the note here (Phase 4 item 3).
+      var seenByMe = false;
+      if (n.seenBy && typeof n.seenBy === 'object') {
+        for (var sk in n.seenBy) {
+          if (n.seenBy[sk] && sameName(n.seenBy[sk].name, fullName)) { seenByMe = true; break; }
+        }
+      }
+      if (!mine && !seenByMe && (n.at || 0) > lastRead) {
         unseen++;
         if (Array.isArray(n.mentions) && n.mentions.some(function (m) { return sameName(m, fullName); })) mentions++;
       }
@@ -567,8 +582,21 @@
 
     var w = fb(); if (!w) return;
     var docs = await Promise.all(codes.map(function (code) {
-      return w._getDoc(w._doc(w._db, 'sessions', code)).then(function (s) { return { code: code, doc: s.exists() ? s.data() : null }; })
-        .catch(function () { return { code: code, doc: null }; });
+      return w._getDoc(w._doc(w._db, 'sessions', code)).then(function (s) {
+        var entry = { code: code, doc: s.exists() ? s.data() : null, notes: null };
+        if (!entry.doc || !w._getDocs || !w._collection) return entry;
+        // Phase 4: notes live in the per-note subcollection — merge it over the
+        // legacy array copy (a denied read falls back to the array alone).
+        return w._getDocs(w._collection(w._db, 'sessions', code, 'notes')).then(function (sub) {
+          var byId = {};
+          (Array.isArray(entry.doc.preProNotes) ? entry.doc.preProNotes : []).forEach(function (n) {
+            if (n && n.id) byId[n.id] = n;
+          });
+          sub.forEach(function (d) { var n = d.data(); if (n && n.id) byId[n.id] = n; });
+          entry.notes = Object.keys(byId).map(function (k) { return byId[k]; });
+          return entry;
+        }).catch(function () { return entry; });
+      }).catch(function () { return { code: code, doc: null, notes: null }; });
     }));
     var wrap = document.getElementById('id-portal-cards');
     if (!wrap) return;
@@ -577,7 +605,7 @@
         return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
           '<span class="id-card-name">Session not available</span></div></div>';
       }
-      var s = summarizeSession(entry.code, entry.doc, cachedProfile.fullName);
+      var s = summarizeSession(entry.code, entry.doc, cachedProfile.fullName, entry.notes);
       var codeArg = JSON.stringify(entry.code).replace(/"/g, '&quot;');
       var badges = '';
       if (s.position) badges += '<span class="id-badge pos">' + esc(s.position) + '</span>';

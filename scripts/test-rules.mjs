@@ -181,6 +181,26 @@ allowed(await request('sessions/RULES1/notes?pageSize=20'), 'future note subcoll
 denied(await write('sessions/RULES1/notes/note1', { ...note, id: 'note2' }), 'note id mismatch');
 denied(await write('sessions/RULES1/notes/note2', { ...note, id: 'note2', payload: 'evil' }), 'unknown key on note doc');
 denied(await write('sessions/RULES1/notes/note3', { ...note, id: 'note3', text: 'x'.repeat(20001) }), 'note text over 20000 chars');
+
+// Phase 4 per-note migration: the live client's compact docs + masked patches verbatim
+// (a masked patch merges server-side, so writing the merged result emulates arrayUnion).
+const compactNote = { id: 'note9', text: 'Board migration note', by: 'Alex Smith', role: 'student', tag: 'todo',
+  assignee: 'Casey Kim', at: 5, clientId: 'client_abc', likes: ['client_abc'] };
+allowed(await write('sessions/RULES1/notes/note9', compactNote), 'compact per-note post');
+allowed(await write('sessions/RULES1/notes/note9', { likes: ['client_abc', 'client_xyz'] }, ['likes']), 'like patch result');
+allowed(await write('sessions/RULES1/notes/note9', { done: true, doneBy: 'Casey Kim', doneAt: 6 }, ['done', 'doneBy', 'doneAt']), 'to-do done patch');
+allowed(await write('sessions/RULES1/notes/note9', { text: 'Edited text', editedAt: 7 }, ['text', 'editedAt']), 'note edit patch');
+allowed(await write('sessions/RULES1/notes/note9', { pinned: true }, ['pinned']), 'pin patch');
+allowed(await write('sessions/RULES1/notes/note9', { checklist: [{ id: 'ci1', text: 'Reset the set', done: true, doneBy: 'Alex', doneAt: 8 }] }, ['checklist']), 'checklist field patch');
+allowed(await write('sessions/RULES1/notes/note9', { checklist: [{ id: 'ci1', text: 'Reset the set', assignee: 'Casey Kim' }] }, ['checklist']), 'checklist item carries an assignee');
+allowed(await write('sessions/RULES1/notes/note9', { seenBy: { casey_kim: { name: 'Casey Kim', at: 9 } } },
+  ['seenBy.casey_kim']), 'read receipt as a masked field-path patch');
+denied(await write('sessions/RULES1/notes/note9', { seenBy: ['casey_kim'] }, ['seenBy']), 'seenBy must be a map');
+denied(await write('sessions/RULES1/notes/note9', { done: 'yes' }, ['done']), 'note done must be a bool');
+denied(await write('sessions/RULES1/notes/note9', { pinned: 1 }, ['pinned']), 'note pinned must be a bool');
+denied(await write('sessions/RULES1/notes/note9', { at: 'now' }, ['at']), 'note timestamp must be an int');
+denied(await write('sessions/RULES1/notes/note9', { assignee: '' }, ['assignee']), 'empty-string field must be deleted, not written');
+allowed(await remove('sessions/RULES1/notes/note9'), 'per-note delete');
 denied(await write('unknown/doc', { anything: true }), 'unknown collection locked down');
 denied(await request('unknown/doc'), 'unknown collection read locked down');
 

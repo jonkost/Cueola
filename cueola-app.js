@@ -741,6 +741,7 @@ function leaveSessionForFrontPage() {
   stopTimer();
   leavePresence();      // drop our presence entry + stop the heartbeat — no ghost participants
   if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
+  pbStopNotesListener();
   document.getElementById('rundown')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('prompt-op-active');
@@ -3436,6 +3437,7 @@ function setupFirestore() {
       sessionSnapshotPendingForceReason = '';
     }
     if (firestoreUnsub) firestoreUnsub();
+    pbStartNotesListener();   // per-note live push (resets itself on session change)
     const ref = window._doc(window._db,'sessions',session.code);
 
     if (session.role==='instructor') {
@@ -3698,6 +3700,7 @@ function syncLiveIdx() {
 // ─────────────────────────────────────────────────────────────
 async function joinPresence() {
   if (!session.code||session.isDemo||session.isExpert||!window._firebaseReady) return;
+  pbStartNotesListener();   // hub/notes-only joins never run setupFirestore — this is their live push
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
@@ -3773,7 +3776,8 @@ function renderPresence(map) {
   const canInspect = Boolean(adminSession);   // admins can click a badge for that person's session work
   document.getElementById('presenceAvatars').innerHTML =
     shown.map(p=>{
-      const tip = `${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}${canInspect?' · click for info':''}`;
+      const pos = pbPositionFor(p.name);
+      const tip = `${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}${pos?` · ${esc(pos)}`:''}${canInspect?' · click for info':''}`;
       const click = canInspect ? ` onclick="openPersonInfo(${JSON.stringify(p.name).replace(/"/g,'&quot;')})"` : '';
       return `<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}${canInspect?' pi-click':''}" data-fullname="${tip}"${click}>${initials(p.name)}</div>`;
     }).join('')+
@@ -3782,7 +3786,8 @@ function renderPresence(map) {
     `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
     active.map(p=>{
       const col=p.role==='instructor'?'var(--accent)':'var(--green)';
-      return `<div class="p-tip-row" title="${esc(p.name)}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span><span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+      const pos = pbPositionFor(p.name);
+      return `<div class="p-tip-row" title="${esc(p.name)}${pos?` — ${esc(pos)}`:''}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span>${pos?`<span class="p-tip-pos">${esc(pos)}</span>`:''}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
   refreshAdminBodyForSessionPeople();
 }
@@ -11198,16 +11203,45 @@ function normalizePlandaBearNote(n) {
     mentions: Array.isArray(n?.mentions) ? n.mentions.filter(x => typeof x === 'string').map(s => s.slice(0, 60)).slice(0, 30) : [],
     checklist: Array.isArray(n?.checklist) ? n.checklist.map(pbNormalizeChecklistItem).filter(Boolean).slice(0, 40) : [],
     attachments: Array.isArray(n?.attachments) ? n.attachments.map(pbNormalizeNoteAttachment).filter(a => a.fileId) : [],
+    seenBy: pbNormalizeSeenBy(n?.seenBy),
   };
 }
 
+// Read receipts (Phase 4 item 3): { [sanitizedKey]: { name, at } } on the note
+// doc. Keys are dot-free so a receipt is one masked field-path patch — two
+// people opening the board at once never clobber each other's map entries.
+function pbNormalizeSeenBy(m) {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return {};
+  const out = {};
+  for (const k of Object.keys(m).slice(0, 200)) {
+    const v = m[k];
+    const name = String(v?.name || '').trim().slice(0, 60);
+    const key = String(k).replace(/[^\w-]/g, '').slice(0, 48);
+    if (!name || !key) continue;
+    out[key] = { name, at: Number(v?.at) || 0 };
+  }
+  return out;
+}
+
+// Receipt keys must be valid unquoted field-path segments ([a-zA-Z_][a-zA-Z_0-9]*)
+// so `seenBy.<key>` works as a masked updateDoc path — no dots, no hyphens,
+// and never starting with a digit.
+function pbSeenKey(name) {
+  const base = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48);
+  if (!base) return '';
+  return /^[a-z_]/.test(base) ? base : 'u_' + base;
+}
+
 // A single To-Do checklist item inside a note (a post can carry several).
+// `assignee` (Phase 4 item 2) is the crew member who owes it — same name pool
+// as @mentions, so portal aggregation keys off the profile's full name.
 function pbNormalizeChecklistItem(it) {
   const text = String(it?.text || '').trim().slice(0, 300);
   if (!text) return null;
   return {
     id: String(it?.id || '').replace(/[^\w.-]/g, '') || `ci_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
     text,
+    assignee: String(it?.assignee || '').slice(0, 60),
     done: Boolean(it?.done),
     doneBy: String(it?.doneBy || '').slice(0, 60),
     doneAt: Number(it?.doneAt) || 0,
@@ -11230,15 +11264,143 @@ function saveLocalPlandaBearNotes(notes=plandaBearNotes) {
   try { localStorage.setItem(pbNotesKey(), JSON.stringify(notes)); } catch {}
 }
 
+/* ── Per-note subcollection store (Phase 4 item 1) ──
+ * Primary store: sessions/{code}/notes/{noteId} — one doc per note, so a like
+ * or checkbox tick writes one small doc instead of rewriting the whole board
+ * array against the session doc's 1 MiB ceiling. Plain per-note writes also
+ * queue offline, which the old whole-array transaction never could.
+ * The DEPLOYED production rules may predate the subcollection: the first
+ * permission-denied drops this session to 'legacy' mode (the original
+ * whole-array pipeline below, kept intact as the fallback), and the next
+ * page load probes again — the owner's staged-rules deploy upgrades every
+ * client with no further code change.
+ * Read-both window (this release): loads merge the legacy preProNotes array
+ * with the subcollection (subcollection wins per id); legacy-only notes are
+ * lazily backfilled into the subcollection, idempotently by note id. The
+ * array itself is left in place for not-yet-reloaded clients. */
+let pbNotesMode = 'probe';        // 'probe' | 'sub' | 'legacy' — resolved per session
+let pbNotesSessionCode = null;    // which session the mode + caches belong to
+let pbNotesUnsub = null;          // subcollection listener teardown
+let _pbSubNotes = new Map();      // noteId -> normalized note (subcollection copy)
+let _pbLegacyNotes = [];          // normalized notes from the legacy array
+let _pbBackfilledIds = new Set(); // legacy ids this client already backfilled
+let _pbEverInSub = new Set();     // ids ever observed in the subcollection — an id
+                                  // that WAS here and is gone was deleted; the
+                                  // backfill must never resurrect it from a stale
+                                  // legacy-array copy (own-listener races included)
+let _pbSeenMarkedIds = new Set(); // note ids whose read receipt is written (or in flight)
+
+function pbNotesCloudSession() {
+  return Boolean(window._firebaseReady && session.code && !session.isDemo && !session.isExpert);
+}
+
+function pbNotesResetForSession() {
+  if (pbNotesSessionCode === (session.code || null)) return;
+  pbNotesSessionCode = session.code || null;
+  pbNotesMode = 'probe';
+  _pbSubNotes = new Map();
+  _pbLegacyNotes = [];
+  _pbBackfilledIds = new Set();
+  _pbEverInSub = new Set();
+  _pbSeenMarkedIds = new Set();
+  pbStopNotesListener();
+}
+
+function pbNoteDocRef(id) {
+  return window._doc(window._db, 'sessions', session.code, 'notes', id);
+}
+
+function pbNotesCollectionRef() {
+  return window._collection(window._db, 'sessions', session.code, 'notes');
+}
+
+function pbIsPermissionDenied(err) {
+  return Boolean(err && (err.code === 'permission-denied' || /insufficient permission/i.test(String(err.message || ''))));
+}
+
+function pbDropToLegacyNotes(err, what) {
+  if (pbNotesMode === 'legacy') return;
+  pbNotesMode = 'legacy';
+  pbStopNotesListener();
+  console.info(`[notes] ${what}: per-note store denied by the deployed rules — using the legacy array path this session.`, err?.code || err);
+}
+
+// The board the operator sees: legacy array ∪ subcollection, subcollection
+// winning per id (a per-note edit is always newer than its array-era copy).
+function pbMergedNotes() {
+  if (pbNotesMode !== 'sub') return _pbLegacyNotes.slice();
+  const out = new Map(_pbLegacyNotes.map(n => [n.id, n]));
+  for (const [id, n] of _pbSubNotes) out.set(id, n);
+  return [...out.values()];
+}
+
+// The wire format: empty-string/default fields are omitted from the cloud doc
+// (the staged rules treat a PRESENT string as meaningful — '' is invalid) and
+// normalizePlandaBearNote re-defaults them on read. Keeps note docs small too.
+function pbCompactNote(n) {
+  const out = { id: n.id, by: n.by, role: n.role, tag: n.tag, at: n.at };
+  if (n.text) out.text = n.text;
+  if (n.assignee) out.assignee = n.assignee;
+  if (n.done) out.done = true;
+  if (n.doneBy) out.doneBy = n.doneBy;
+  if (n.doneAt) out.doneAt = n.doneAt;
+  if (n.clientId) out.clientId = n.clientId;
+  if (n.replyTo) out.replyTo = n.replyTo;
+  if (n.editedAt) out.editedAt = n.editedAt;
+  if (n.pinned) out.pinned = true;
+  if (n.avatar && n.avatar.type !== 'initials') out.avatar = n.avatar;
+  if (n.likes && n.likes.length) out.likes = n.likes;
+  if (n.mentions && n.mentions.length) out.mentions = n.mentions;
+  if (n.checklist && n.checklist.length) out.checklist = n.checklist;
+  if (n.attachments && n.attachments.length) out.attachments = n.attachments;
+  if (n.seenBy && Object.keys(n.seenBy).length) out.seenBy = n.seenBy;   // a full-doc rewrite must never wipe receipts
+  return out;
+}
+
+// Lazy idempotent migration: copy legacy-array notes the subcollection doesn't
+// have yet. Same id + same content, so any number of clients can race this.
+function pbBackfillLegacyNotes() {
+  if (pbNotesMode !== 'sub' || !pbNotesCloudSession()) return;
+  for (const n of _pbLegacyNotes) {
+    // _pbEverInSub, not _pbSubNotes: an id that was in the subcollection and
+    // vanished was DELETED — a stale array copy must not bring it back.
+    if (_pbEverInSub.has(n.id) || _pbBackfilledIds.has(n.id)) continue;
+    _pbBackfilledIds.add(n.id);
+    _pbEverInSub.add(n.id);
+    window._setDoc(pbNoteDocRef(n.id), pbCompactNote(n)).catch(err => {
+      _pbBackfilledIds.delete(n.id);
+      if (pbIsPermissionDenied(err)) pbDropToLegacyNotes(err, 'backfill');
+    });
+  }
+}
+
 async function loadPlandaBearNotes() {
-  if (!session.code || session.isDemo || session.isExpert || !window._firebaseReady) {
+  pbNotesResetForSession();
+  if (!pbNotesCloudSession()) {
     plandaBearNotes = localPlandaBearNotes();
     return plandaBearNotes;
   }
   try {
     const snap = await window._getDoc(window._doc(window._db, 'sessions', session.code));
     const raw = snap.exists() && Array.isArray(snap.data().preProNotes) ? snap.data().preProNotes : [];
-    plandaBearNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+    _pbLegacyNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+    if (pbNotesMode !== 'legacy' && window._getDocs && window._collection) {
+      try {
+        const subSnap = await window._getDocs(pbNotesCollectionRef());
+        const fresh = new Map();
+        subSnap.forEach(docSnap => {
+          const n = normalizePlandaBearNote(docSnap.data());
+          if (pbNoteHasContent(n)) { fresh.set(n.id, n); _pbEverInSub.add(n.id); }
+        });
+        _pbSubNotes = fresh;
+        pbNotesMode = 'sub';
+        pbBackfillLegacyNotes();
+      } catch (err) {
+        if (pbIsPermissionDenied(err)) pbDropToLegacyNotes(err, 'load');
+        else throw err;
+      }
+    }
+    plandaBearNotes = pbMergedNotes();
     saveLocalPlandaBearNotes(plandaBearNotes);
     _pbNotesBaseline = new Set(plandaBearNotes.map(n => n.id));   // ids present when we loaded — used to tell my adds/deletes from a collaborator's
   } catch {
@@ -11291,10 +11453,138 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
   } catch (err) {
     reportCloudWriteFailure('Production notes cloud save', err);
   }
-  if (activitySection && window._arrayUnion) {
-    const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+  pbNotesActivity(activitySection);
+}
+
+function pbNotesActivity(section) {
+  if (!section || !window._arrayUnion || !pbNotesCloudSession()) return;
+  const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { preProActivity: window._arrayUnion(entry) })
+    .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+}
+
+/* Every board mutation funnels through here. `next` is the full intended list
+ * (exactly what the legacy path always took); `change` names the one per-note
+ * operation so 'sub' mode writes a single small doc instead:
+ *   { set: note }                         — post / reply (full doc)
+ *   { like: { id, add } }                 — arrayUnion/arrayRemove of CLIENT_ID
+ *   { patch: { id, fields } }             — masked field update (pin/edit/done/checklist)
+ *   { remove: [ids] }                     — delete a thread
+ * A permission-denied mid-flight drops to legacy and REPLAYS the same intent
+ * through the old transaction, so the operator's action never gets lost. */
+async function pbApplyNoteMutation(next, change, activitySection) {
+  const intended = next.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  if (pbNotesMode !== 'sub' || !pbNotesCloudSession()) {
+    return writePlandaBearNotes(intended, activitySection);
   }
+  plandaBearNotes = intended;
+  saveLocalPlandaBearNotes(plandaBearNotes);
+  _pbNotesBaseline = new Set(plandaBearNotes.map(n => n.id));
+  try {
+    if (change.set) {
+      const clean = normalizePlandaBearNote(change.set);
+      _pbEverInSub.add(clean.id);
+      await window._setDoc(pbNoteDocRef(clean.id), pbCompactNote(clean));
+      _pbSubNotes.set(clean.id, clean);
+    } else if (change.like) {
+      const op = change.like.add ? window._arrayUnion(CLIENT_ID) : window._arrayRemove(CLIENT_ID);
+      await pbPatchNoteDocOrUpsert(change.like.id, { likes: op }, intended);
+    } else if (change.patch) {
+      await pbPatchNoteDocOrUpsert(change.patch.id, change.patch.fields, intended);
+    } else if (change.remove) {
+      const drop = new Set(change.remove);
+      // Bookkeeping BEFORE the awaits: our own listener snapshot fires mid-await
+      // (latency compensation) and runs the backfill — the legacy cache must
+      // already be filtered or it would resurrect the note we are deleting.
+      const hadLegacyCopies = _pbLegacyNotes.some(n => drop.has(n.id));
+      _pbLegacyNotes = _pbLegacyNotes.filter(n => !drop.has(n.id));
+      await Promise.all(change.remove.map(id =>
+        window._deleteDoc(pbNoteDocRef(id)).then(() => { _pbSubNotes.delete(id); })));
+      // Purge the same ids from the legacy array too — otherwise the read-both
+      // merge (and any not-yet-upgraded client) resurrects the deleted thread.
+      if (hadLegacyCopies) await pbPurgeLegacyArray(drop);
+    }
+  } catch (err) {
+    if (pbIsPermissionDenied(err)) {
+      pbDropToLegacyNotes(err, 'mutation');
+      return writePlandaBearNotes(intended, activitySection);
+    }
+    // Transient (offline/unavailable): the plain per-note write is queued by
+    // the persistent cache and flushes on reconnect — no legacy double-write.
+    reportCloudWriteFailure('Production note cloud save', err);
+  }
+  pbNotesActivity(activitySection);
+}
+
+// Masked patch with upsert: the note doc may not exist yet if the backfill
+// hasn't landed — fall back to writing the full local copy. Empty strings in
+// a patch become field deletes (the rules treat '' as invalid; absent = default).
+async function pbPatchNoteDocOrUpsert(id, fields, intended) {
+  const local = intended.find(n => n.id === id);
+  const patch = {};
+  for (const key of Object.keys(fields)) {
+    patch[key] = (fields[key] === '' && window._deleteField) ? window._deleteField() : fields[key];
+  }
+  try {
+    await window._updateDoc(pbNoteDocRef(id), patch);
+  } catch (err) {
+    if (err?.code === 'not-found') {
+      if (local) {
+        _pbEverInSub.add(id);
+        await window._setDoc(pbNoteDocRef(id), pbCompactNote(normalizePlandaBearNote(local)));
+      }
+      return;
+    }
+    throw err;
+  }
+  if (local) { _pbSubNotes.set(id, normalizePlandaBearNote(local)); _pbEverInSub.add(id); }
+}
+
+async function pbPurgeLegacyArray(dropIds) {
+  if (!window._runTransaction) return;
+  const ref = window._doc(window._db, 'sessions', session.code);
+  try {
+    await window._runTransaction(window._db, async (tx) => {
+      const snap = await tx.get(ref);
+      const raw = snap.exists() && Array.isArray(snap.data().preProNotes) ? snap.data().preProNotes : [];
+      const kept = raw.filter(n => !dropIds.has(String(n?.id || '')));
+      if (kept.length !== raw.length) tx.set(ref, { preProNotes: kept }, { merge: true });
+    });
+  } catch (err) {
+    reportCloudWriteFailure('Legacy note cleanup', err);
+  }
+}
+
+/* Live push for the whole crew — including hub/notes-only joins, which never
+ * run setupFirestore's session listener. Attached optimistically; the error
+ * callback downgrades to legacy mode (where the session-doc listener, when
+ * present, keeps feeding the board exactly as before this migration). */
+function pbStartNotesListener() {
+  pbNotesResetForSession();
+  if (!pbNotesCloudSession() || pbNotesUnsub || pbNotesMode === 'legacy') return;
+  if (!window._collection || !window._onSnapshot) return;
+  const listenerCode = session.code;
+  try {
+    pbNotesUnsub = window._onSnapshot(pbNotesCollectionRef(), (snap) => {
+      if (session.code !== listenerCode) return;
+      pbNotesMode = 'sub';
+      const fresh = new Map();
+      snap.forEach(docSnap => {
+        const n = normalizePlandaBearNote(docSnap.data());
+        if (pbNoteHasContent(n)) { fresh.set(n.id, n); _pbEverInSub.add(n.id); }
+      });
+      _pbSubNotes = fresh;
+      pbBackfillLegacyNotes();   // the array may still carry notes we haven't copied
+      pbIngestRemoteNotes();
+    }, (err) => {
+      pbNotesUnsub = null;
+      if (pbIsPermissionDenied(err)) pbDropToLegacyNotes(err, 'listener');
+    });
+  } catch {}
+}
+
+function pbStopNotesListener() {
+  if (pbNotesUnsub) { try { pbNotesUnsub(); } catch {} pbNotesUnsub = null; }
 }
 
 function pbNoteActorRole() {
@@ -11617,6 +11907,8 @@ function pbPinBoardScroll() {
 function openProductionNotes() {
   activePaperworkItemId = 'production-notes';
   pbSetPresencePage('production-notes');   // direct entries (front page, toolbar bell) skip openPaperworkItem
+  const owesBtn = document.getElementById('pbOwesBtn');
+  if (owesBtn) owesBtn.hidden = !pbIsInstructor();   // "who owes what" is an instructor tool
   pbPinBoardScroll();
   hideModal('paperworkHubModal');
   pbEditingNoteId = null;
@@ -12103,9 +12395,29 @@ function pbAssigneeOptions() {
   const names = new Set();
   try { getActivePresencePeople().forEach(p => p?.name && names.add(p.name.trim())); } catch {}
   (sessionParticipantNames || []).forEach(n => n && names.add(String(n).trim()));
+  // Role-assignment people too — post-Phase 3 these are the profile-fed crew
+  // roster, so checklist owners resolve even before someone has entered today.
+  try { getRoleAssignments().forEach(r => r?.person && names.add(r.person.trim())); } catch {}
   const me = (session.userName || '').trim();
   if (me) names.add(me);
   return Array.from(names).filter(Boolean);
+}
+
+/* ── Position chips (Phase 4 item 4) ──
+ * A person's crew position from the roster (prePro.roleAssignments). Rendered
+ * as a muted chip beside authors, in mention rows (disambiguates two Sams),
+ * and in presence tooltips — read-only garnish, so '' simply renders nothing. */
+function pbPositionFor(name) {
+  if (!name) return '';
+  try {
+    const row = getRoleAssignments().find(r => r.person && sameParticipantName(r.person, name));
+    return row ? String(row.position || '').trim() : '';
+  } catch { return ''; }
+}
+
+function pbPositionChipHTML(name) {
+  const pos = pbPositionFor(name);
+  return pos ? `<span class="pb-note-pos" title="Crew position">${esc(pos)}</span>` : '';
 }
 
 /* ── @mentions ──────────────────────────────────────────────────────────────
@@ -12188,10 +12500,12 @@ function pbMentionOnInput(el, field) {
 function pbMentionRender() {
   if (!_pbMention) return;
   const menu = pbMentionMenuEl();
-  menu.innerHTML = _pbMention.items.map((n, i) =>
-    `<button type="button" class="pb-mention-item${i === _pbMention.sel ? ' sel' : ''}" data-i="${i}" onmousedown="event.preventDefault();pbMentionPick(${i})">
-      <span class="pb-mention-av">${esc(pbInitials(n))}</span><span class="pb-mention-name">${esc(n)}</span>
-    </button>`).join('');
+  menu.innerHTML = _pbMention.items.map((n, i) => {
+    const pos = pbPositionFor(n);
+    return `<button type="button" class="pb-mention-item${i === _pbMention.sel ? ' sel' : ''}" data-i="${i}" onmousedown="event.preventDefault();pbMentionPick(${i})">
+      <span class="pb-mention-av">${esc(pbInitials(n))}</span><span class="pb-mention-name">${esc(n)}</span>${pos ? `<span class="pb-mention-pos">${esc(pos)}</span>` : ''}
+    </button>`;
+  }).join('');
   menu.hidden = false;
   // Position just below the textarea, left-aligned to it.
   const r = _pbMention.el.getBoundingClientRect();
@@ -12252,7 +12566,7 @@ function pbSelectComposerTag(tag) {
   // Picking To-Do reveals the multi-item checklist builder with a first row ready.
   if (pbComposerTag === 'todo' && !pbChecklistOpen && !pbComposerChecklist.length) {
     pbChecklistOpen = true;
-    pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false });
+    pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false, assignee: '' });
   }
   pbRenderComposerTags();
   pbRenderComposerChecklist();
@@ -12266,12 +12580,20 @@ function pbRenderComposerChecklist() {
     slot.innerHTML = `<button type="button" class="pb-checklist-add-toggle" onclick="pbToggleChecklistBuilder()">${sfIcon('content.checklist')} Add a checklist</button>`;
     return;
   }
-  const rows = pbComposerChecklist.map((it, i) => `
+  const people = pbAssigneeOptions();
+  const rows = pbComposerChecklist.map((it, i) => {
+    const opts = people.includes(it.assignee) || !it.assignee ? people : [it.assignee, ...people];
+    return `
     <div class="pb-cl-row">
       <span class="pb-cl-box" aria-hidden="true"></span>
       <input class="pb-cl-input" type="text" value="${esc(it.text)}" placeholder="To-do item ${i + 1}" oninput="pbChecklistEdit(${i}, this.value)" onkeydown="pbChecklistKeydown(event, ${i})" aria-label="Checklist item ${i + 1}">
+      <select class="pb-cl-assign" onchange="pbChecklistAssign(${i}, this.value)" title="Who owes this item" aria-label="Assign checklist item ${i + 1}">
+        <option value="">Anyone</option>
+        ${opts.map(n => `<option value="${esc(n)}"${it.assignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+      </select>
       <button type="button" class="pb-cl-del" onclick="pbChecklistRemove(${i})" title="Remove item" aria-label="Remove item">${sfIcon('action.close')}</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   slot.innerHTML = `
     <div class="pb-checklist-head"><span>${sfIcon('content.checklist')} Checklist</span><span class="pb-cl-count">${pbComposerChecklist.length} item${pbComposerChecklist.length === 1 ? '' : 's'}</span></div>
     <div class="pb-cl-rows">${rows}</div>
@@ -12280,14 +12602,15 @@ function pbRenderComposerChecklist() {
 
 function pbToggleChecklistBuilder() {
   pbChecklistOpen = !pbChecklistOpen;
-  if (pbChecklistOpen && !pbComposerChecklist.length) pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false });
+  if (pbChecklistOpen && !pbComposerChecklist.length) pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false, assignee: '' });
   pbRenderComposerChecklist();
   if (pbChecklistOpen) setTimeout(() => document.querySelector('.pb-cl-input')?.focus({ preventScroll: true }), 0);
 }
 
 function pbNewChecklistId() { return `ci_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
-function pbChecklistAdd() { pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false }); pbRenderComposerChecklist(); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[rows.length - 1]?.focus({ preventScroll: true }); }, 0); }
+function pbChecklistAdd() { pbComposerChecklist.push({ id: pbNewChecklistId(), text: '', done: false, assignee: '' }); pbRenderComposerChecklist(); setTimeout(() => { const rows = document.querySelectorAll('.pb-cl-input'); rows[rows.length - 1]?.focus({ preventScroll: true }); }, 0); }
 function pbChecklistEdit(i, val) { if (pbComposerChecklist[i]) pbComposerChecklist[i].text = val; }
+function pbChecklistAssign(i, val) { if (pbComposerChecklist[i]) pbComposerChecklist[i].assignee = val || ''; }
 function pbChecklistRemove(i) { pbComposerChecklist.splice(i, 1); if (!pbComposerChecklist.length) pbChecklistOpen = false; pbRenderComposerChecklist(); }
 function pbChecklistKeydown(e, i) {
   if (e.key === 'Enter') { e.preventDefault(); if ((pbComposerChecklist[i]?.text || '').trim()) pbChecklistAdd(); }
@@ -12337,7 +12660,7 @@ async function pbPostReply(rootId) {
   });
   pbReplyTargetId = null;
   pbReplyPendingAttachments = [];
-  await writePlandaBearNotes([...plandaBearNotes, reply], 'Production Note Reply');
+  await pbApplyNoteMutation([...plandaBearNotes, reply], { set: reply }, 'Production Note Reply');
   renderPlandaBearNotes();
 }
 
@@ -12360,7 +12683,8 @@ async function pbToggleLike(id) {
   const next = plandaBearNotes.map(n => n.id === id
     ? { ...n, likes: liked ? n.likes.filter(c => c !== CLIENT_ID) : [...n.likes, CLIENT_ID] }
     : n);
-  await writePlandaBearNotes(next, null); // likes don't need their own activity entry
+  // likes ride arrayUnion/arrayRemove so two hearts at once never clobber; no activity entry
+  await pbApplyNoteMutation(next, { like: { id, add: !liked } }, null);
   renderPlandaBearNotes();
 }
 
@@ -12371,7 +12695,7 @@ async function pbTogglePin(id) {
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
   const next = plandaBearNotes.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n);
-  await writePlandaBearNotes(next, note.pinned ? 'Note Unpinned' : 'Note Pinned');
+  await pbApplyNoteMutation(next, { patch: { id, fields: { pinned: !note.pinned } } }, note.pinned ? 'Note Unpinned' : 'Note Pinned');
   renderPlandaBearNotes();
 }
 
@@ -12406,11 +12730,10 @@ async function pbSaveEditNote(id) {
   const original = plandaBearNotes.find(n => n.id === id);
   if (!original) { pbCancelEditNote(); return; }
   if (!text && !(original.attachments || []).length) { toast('A note needs some text — or delete it instead.'); return; }
-  const next = plandaBearNotes.map(n => n.id === id
-    ? { ...n, text, editedAt: text !== original.text ? Date.now() : n.editedAt }
-    : n);
+  const editedAt = text !== original.text ? Date.now() : original.editedAt;
+  const next = plandaBearNotes.map(n => n.id === id ? { ...n, text, editedAt } : n);
   pbEditingNoteId = null;
-  await writePlandaBearNotes(next, 'Production Note Edited');
+  await pbApplyNoteMutation(next, { patch: { id, fields: { text, editedAt } } }, 'Production Note Edited');
   renderPlandaBearNotes();
 }
 
@@ -12440,7 +12763,7 @@ async function publishPlandaBearNote() {
       checklist: pbComposerChecklist.slice(),
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
     });
-    await writePlandaBearNotes([...plandaBearNotes, note], pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
+    await pbApplyNoteMutation([...plandaBearNotes, note], { set: note }, pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
     if (input) { input.value = ''; pbAutosizeNoteInput(input); }
     pbPendingAttachments = [];
     pbRenderAttachTray('main');
@@ -12465,13 +12788,11 @@ async function toggleProductionNotesTodo(id) {
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
   if (!pbCanManageNote(note)) { toast('Only instructors or the author can check off this to-do.'); return; }
-  const next = plandaBearNotes.map(n => {
-    if (n.id !== id) return n;
-    const done = !n.done;
-    // Record who completed it and when (accountability), cleared if reopened.
-    return { ...n, done, doneBy: done ? preProActor() : '', doneAt: done ? Date.now() : 0 };
-  });
-  await writePlandaBearNotes(next, 'To-Do Updated');
+  const done = !note.done;
+  // Record who completed it and when (accountability), cleared if reopened.
+  const fields = { done, doneBy: done ? preProActor() : '', doneAt: done ? Date.now() : 0 };
+  const next = plandaBearNotes.map(n => n.id === id ? { ...n, ...fields } : n);
+  await pbApplyNoteMutation(next, { patch: { id, fields } }, 'To-Do Updated');
   renderPlandaBearNotes();
 }
 
@@ -12491,7 +12812,7 @@ async function deletePlandaBearNote(id) {
   plandaBearNotes.filter(n => ids.has(n.id)).forEach(pbDeleteNoteFiles);
   if (pbReplyTargetId && ids.has(pbReplyTargetId)) pbReplyTargetId = null;
   if (pbEditingNoteId && ids.has(pbEditingNoteId)) pbEditingNoteId = null;
-  await writePlandaBearNotes(plandaBearNotes.filter(n => !ids.has(n.id)), 'Production Note Removed');
+  await pbApplyNoteMutation(plandaBearNotes.filter(n => !ids.has(n.id)), { remove: [...ids] }, 'Production Note Removed');
   toast('Note removed.');
   renderPlandaBearNotes();
 }
@@ -12612,6 +12933,7 @@ function pbNoteHeadHTML(note) {
       <div class="pb-note-byline">
         <span class="pb-note-author">${esc(note.by)}</span>
         ${note.role === 'instructor' ? '<span class="pb-note-role">Instructor</span>' : ''}
+        ${pbPositionChipHTML(note.by)}
         ${tagChip}
         ${assignChip}
       </div>
@@ -12628,12 +12950,16 @@ function pbChecklistHTML(note) {
   const done = items.filter(it => it.done).length;
   const canManage = pbCanManageNote(note);
   const pct = Math.round((done / items.length) * 100);
+  const me = (session.userName || '').trim();
   const rows = items.map(it => {
     const box = canManage
       ? `<button type="button" class="pb-clitem-check${it.done ? ' done' : ''}" onclick="pbToggleChecklistItem('${note.id}','${it.id}')" title="${it.done ? 'Reopen' : 'Mark done'}" aria-pressed="${it.done}">${it.done ? '✓' : ''}</button>`
       : `<span class="pb-clitem-check static${it.done ? ' done' : ''}">${it.done ? '✓' : ''}</span>`;
+    const mine = !it.done && it.assignee && me && sameParticipantName(it.assignee, me);
+    const owner = !it.done && it.assignee
+      ? `<span class="pb-clitem-assign${mine ? ' mine' : ''}" title="Assigned to">→ ${esc(it.assignee)}</span>` : '';
     const meta = it.done && it.doneBy ? `<span class="pb-clitem-by">${esc(it.doneBy)}</span>` : '';
-    return `<li class="pb-clitem${it.done ? ' done' : ''}">${box}<span class="pb-clitem-text">${esc(it.text)}</span>${meta}</li>`;
+    return `<li class="pb-clitem${it.done ? ' done' : ''}${mine ? ' mine' : ''}">${box}<span class="pb-clitem-text">${esc(it.text)}</span>${owner}${meta}</li>`;
   }).join('');
   return `<div class="pb-checklist${done === items.length ? ' complete' : ''}">
     <div class="pb-checklist-bar"><div class="pb-checklist-fill" style="width:${pct}%"></div></div>
@@ -12658,14 +12984,70 @@ async function pbToggleChecklistItem(noteId, itemId) {
   const note = plandaBearNotes.find(n => n.id === noteId);
   if (!note) return;
   if (!pbCanManageNote(note)) { toast('Only instructors or the author can check off items.'); return; }
-  const next = plandaBearNotes.map(n => {
-    if (n.id !== noteId) return n;
-    return { ...n, checklist: (n.checklist || []).map(it => it.id === itemId
-      ? { ...it, done: !it.done, doneBy: !it.done ? preProActor() : '', doneAt: !it.done ? Date.now() : 0 }
-      : it) };
-  });
-  await writePlandaBearNotes(next, 'Checklist Updated');
+  const checklist = (note.checklist || []).map(it => it.id === itemId
+    ? { ...it, done: !it.done, doneBy: !it.done ? preProActor() : '', doneAt: !it.done ? Date.now() : 0 }
+    : it);
+  const next = plandaBearNotes.map(n => n.id === noteId ? { ...n, checklist } : n);
+  await pbApplyNoteMutation(next, { patch: { id: noteId, fields: { checklist } } }, 'Checklist Updated');
   renderPlandaBearNotes();
+}
+
+/* ── Who owes what (Phase 4 item 2): instructors' per-person open-items view ──
+ * One screen answering "who still owes something": every open single to-do and
+ * every open checklist item, grouped by assignee, biggest debtors first, with
+ * an Unassigned bucket at the bottom. Rows jump to (and flash) the note. */
+function pbCollectOpenItems() {
+  const buckets = new Map();   // lowercased name -> { name, items: [{noteId, text}] }
+  const add = (rawName, noteId, text) => {
+    const name = String(rawName || '').trim();
+    const key = name ? name.toLowerCase() : '·unassigned';
+    if (!buckets.has(key)) buckets.set(key, { name: name || 'Unassigned', items: [] });
+    buckets.get(key).items.push({ noteId, text: String(text || '').trim() || 'To-do' });
+  };
+  for (const n of plandaBearNotes) {
+    // A todo-tagged note that carries a checklist delegates to its items.
+    if (n.tag === 'todo' && !n.done && !(n.checklist || []).length) add(n.assignee, n.id, n.text);
+    (n.checklist || []).forEach(it => { if (!it.done) add(it.assignee, n.id, it.text); });
+  }
+  return [...buckets.values()].sort((a, b) => {
+    if (a.name === 'Unassigned') return 1;
+    if (b.name === 'Unassigned') return -1;
+    return b.items.length - a.items.length || a.name.localeCompare(b.name);
+  });
+}
+
+function pbOpenOwes() {
+  if (!pbIsInstructor()) { toast('Only instructors can open the who-owes-what view.'); return; }
+  showModal('pbOwesModal');
+  pbRenderOwes();                                   // instant, from local state
+  loadPlandaBearNotes().then(pbRenderOwes);         // then refreshed from the cloud
+}
+
+function pbRenderOwes() {
+  const slot = document.getElementById('pbOwesList');
+  if (!slot || !document.getElementById('pbOwesModal')?.classList.contains('on')) return;
+  const rows = pbCollectOpenItems();
+  if (!rows.length) {
+    slot.innerHTML = '<div class="pb-owes-empty">Nothing open — every to-do and checklist item is checked off.</div>';
+    return;
+  }
+  slot.innerHTML = rows.map(r => `
+    <div class="pb-owes-person">
+      <div class="pb-owes-head">
+        <span class="pb-owes-ava${r.name === 'Unassigned' ? ' unassigned' : ''}">${esc(pbInitials(r.name))}</span>
+        <span class="pb-owes-name">${esc(r.name)}</span>
+        <span class="pb-owes-count">${r.items.length} open</span>
+      </div>
+      <ul class="pb-owes-items">${r.items.map(it => `
+        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" title="Jump to this note">${esc(it.text.slice(0, 120))}</button></li>`).join('')}</ul>
+    </div>`).join('');
+}
+
+function pbOwesJump(noteId) {
+  hideModal('pbOwesModal');
+  pbPendingFlashId = noteId;
+  if (pbNotesBoardOpen()) renderPlandaBearNotes();
+  else openProductionNotes();
 }
 
 function pbLikeButtonHTML(note) {
@@ -12676,15 +13058,38 @@ function pbLikeButtonHTML(note) {
   </button>`;
 }
 
+// "Seen by N" — quiet count on the right of the footer; the names live in the
+// tooltip so the row stays calm (Clarity/Deference: detail on demand).
+function pbSeenByHTML(note) {
+  const names = Object.values(note.seenBy || {}).map(e => e && e.name).filter(Boolean);
+  if (!names.length) return '';
+  return `<span class="pb-note-seen" title="${esc('Seen by ' + names.join(', '))}">Seen by ${names.length}</span>`;
+}
+
+// On a pinned note, instructors see who on the crew roster HASN'T read it yet
+// — the whole point of pinning is that everyone sees it.
+function pbUnseenByHTML(note) {
+  if (!note.pinned || !pbIsInstructor()) return '';
+  let roster = [];
+  try { roster = getRoleAssignments().map(r => r.person).filter(Boolean); } catch {}
+  if (!roster.length) return '';
+  const seenNames = Object.values(note.seenBy || {}).map(e => e && e.name).filter(Boolean);
+  const missing = roster.filter(p =>
+    !sameParticipantName(p, note.by) && !seenNames.some(s => sameParticipantName(s, p)));
+  if (!missing.length) return `<div class="pb-note-unseen all">${sfIcon('state.success')} Everyone on the roster has seen this.</div>`;
+  return `<div class="pb-note-unseen">${sfIcon('notification.unread')} Hasn't seen this yet: ${missing.map(esc).join(', ')}</div>`;
+}
+
 function pbNoteFootHTML(note, replyCount) {
   const mine = note.clientId && note.clientId === CLIENT_ID;
-  return `<footer class="pb-note-foot">
+  return `${pbUnseenByHTML(note)}<footer class="pb-note-foot">
     ${pbLikeButtonHTML(note)}
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${sfIcon('action.pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
     <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
+    ${pbSeenByHTML(note)}
   </footer>`;
 }
 
@@ -12707,6 +13112,7 @@ function pbReplyHTML(reply) {
       <div class="pb-reply-head">
         <span class="pb-reply-author">${esc(reply.by)}</span>
         ${reply.role === 'instructor' ? '<span class="pb-note-role">Instructor</span>' : ''}
+        ${pbPositionChipHTML(reply.by)}
         <span class="pb-note-time">${esc(pbNoteTime(reply.at))}${reply.editedAt ? ' · edited' : ''}</span>
       </div>
       <div class="pb-reply-body">${check}<div class="pb-note-main">${text}${atts}</div></div>
@@ -12915,6 +13321,31 @@ function pbUpdatePlandaBearBadge() {
 function pbMarkNotesRead() {
   pbSetLastRead(Date.now());
   pbUpdatePlandaBearBadge();
+  pbMarkNotesSeen();   // board open = eyes on the board → cloud read receipts
+}
+
+/* Read receipts: one masked field-path patch per note the operator has now
+ * seen (sub mode only — receipts activate with the rules deploy, like every
+ * other per-note write). Own notes are skipped; a receipt that fails stays
+ * unmarked and retries on the next board-open. */
+function pbMarkNotesSeen() {
+  if (pbNotesMode !== 'sub' || !pbNotesCloudSession()) return;
+  const me = (session.userName || '').trim();
+  const key = pbSeenKey(me);
+  if (!me || !key) return;
+  for (const n of plandaBearNotes) {
+    if (pbIsMine(n) || _pbSeenMarkedIds.has(n.id)) continue;
+    if (n.seenBy && n.seenBy[key]) { _pbSeenMarkedIds.add(n.id); continue; }
+    _pbSeenMarkedIds.add(n.id);
+    const receipt = { name: me, at: Date.now() };
+    n.seenBy = { ...(n.seenBy || {}), [key]: receipt };
+    const sub = _pbSubNotes.get(n.id);
+    if (sub) sub.seenBy = n.seenBy;
+    window._updateDoc(pbNoteDocRef(n.id), { [`seenBy.${key}`]: receipt }).catch(err => {
+      _pbSeenMarkedIds.delete(n.id);
+      if (pbIsPermissionDenied(err)) pbDropToLegacyNotes(err, 'seen-by');
+    });
+  }
 }
 
 
@@ -13054,12 +13485,22 @@ function pbToggleBrowserNotify() {
 // in-progress reply text is preserved by renderPlandaBearNotes.
 function onRemoteProductionNotes(raw) {
   if (!Array.isArray(raw)) return;
+  pbNotesResetForSession();
+  _pbLegacyNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  if (pbNotesMode === 'sub') pbBackfillLegacyNotes();   // an old client may have posted into the array
+  pbIngestRemoteNotes();
+}
+
+// Shared tail for both live sources (subcollection listener + legacy array
+// pushes): merge, notify once per note id, refresh whatever surface is open.
+// The first delivery per session only seeds known ids — history must not toast.
+function pbIngestRemoteNotes() {
   if (pbNotifySessionCode !== (session?.code || null)) {
     pbNotifySessionCode = session?.code || null;
     pbNotifySeeded = false;
     pbKnownNoteIds.clear();
   }
-  plandaBearNotes = raw.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  plandaBearNotes = pbMergedNotes();
   saveLocalPlandaBearNotes(plandaBearNotes);
   annotatePlandaBearNoteCards();
 

@@ -8,8 +8,8 @@ const SHELL_ASSETS = [
   'assets/sf-symbols.css?v=127986b7a0',
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
-  'cueola-identity.js?v=cdbcf0c796',
-  'cueola-app.js?v=31687e1dd4',
+  'cueola-identity.js?v=ba84a5c741',
+  'cueola-app.js?v=8ca44830dd',
   'outrangutan/outrangutan.css?v=24804b1147',
   'outrangutan/outrangutan.js?v=7e7c8bd44a',
 ];

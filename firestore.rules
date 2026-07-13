@@ -136,12 +136,22 @@ service cloud.firestore {
         && (!data.keys().hasAny(['role']) || data.role in ['student', 'instructor', 'admin'])
         && optionalShortString(data, 'tag', 40)
         && optionalShortString(data, 'assignee', 120)
+        // Phase 4 per-note migration: the client writes these fields verbatim.
+        && (!data.keys().hasAny(['done']) || data.done is bool)
+        && (!data.keys().hasAny(['pinned']) || data.pinned is bool)
+        && (!data.keys().hasAny(['at']) || data.at is int)
+        && (!data.keys().hasAny(['doneAt']) || data.doneAt is int)
+        && (!data.keys().hasAny(['editedAt']) || data.editedAt is int)
+        && optionalShortString(data, 'doneBy', 120)
+        && optionalShortString(data, 'clientId', 120)
+        && (!data.keys().hasAny(['replyTo']) || data.replyTo is string && data.replyTo.size() <= 160)
+        && (!data.keys().hasAny(['avatar']) || data.avatar is map)
         && (!data.keys().hasAny(['likes']) || (data.likes is list && data.likes.size() <= 500))
         && (!data.keys().hasAny(['mentions']) || (data.mentions is list && data.mentions.size() <= 100))
         && (!data.keys().hasAny(['checklist']) || (data.checklist is list && data.checklist.size() <= 100))
         && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 40))
         && (!data.keys().hasAny(['replies']) || (data.replies is list && data.replies.size() <= 500))
-        && (!data.keys().hasAny(['seenBy']) || data.seenBy is map);
+        && (!data.keys().hasAny(['seenBy']) || (data.seenBy is map && data.seenBy.size() <= 200));
     }
 
     // Shared show state. App Check enforcement in Firebase Console is the only
