@@ -668,6 +668,15 @@
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.55; margin: 14px 0 0; }
 .og-sheet-note code { font-family: var(--mono-num, monospace); background: var(--s3); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 
+/* New Matte sheet — preset swatches plus a native custom picker */
+.og-matte-card { max-width: 420px; }
+.og-matte-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 12px; }
+.og-matte-swatch { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--s2); color: var(--text); font: 600 12px var(--sans, inherit); cursor: pointer; }
+.og-matte-swatch:hover { border-color: var(--accent); background: var(--s3); }
+.og-matte-chip { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
+.og-matte-custom { position: relative; }
+.og-matte-custom input[type="color"] { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); border-radius: 6px; background: none; cursor: pointer; }
+
 /* outputs */
 .og-out-tools { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
 .og-out-mastersink { flex: 1 1 220px; min-width: 200px; }

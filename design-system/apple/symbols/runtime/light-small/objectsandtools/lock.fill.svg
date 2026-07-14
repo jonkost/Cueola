@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 70" aria-hidden="true" data-sf-symbol="lock.fill">
+ <g fill="black">
+  <path d="M14 30 L14 24 A14 14 0 0 1 42 24 L42 30 L36.8 30 L36.8 24 A8.8 8.8 0 0 0 19.2 24 L19.2 30 Z"/>
+  <path d="M12 30 L44 30 A6 6 0 0 1 50 36 L50 62 A6 6 0 0 1 44 68 L12 68 A6 6 0 0 1 6 62 L6 36 A6 6 0 0 1 12 30 Z"/>
+ </g>
+</svg>

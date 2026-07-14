@@ -98,6 +98,15 @@
     "info.bug": "ladybug.fill",
     "media.playpause": "playpause.circle.fill",
     "content.question": "questionmark.circle.fill",
-    "action.profile": "person.crop.circle.fill"
+    "action.profile": "person.crop.circle.fill",
+    "chevron.left": "chevron.left",
+    "chevron.right": "chevron.right",
+    "chevron.up": "chevron.up",
+    "chevron.down": "chevron.down",
+    "media.previous": "chevron.left",
+    "media.next": "chevron.right",
+    "media.backward": "chevron.left",
+    "media.forward": "chevron.right",
+    "action.lock": "lock.fill"
   }
 }

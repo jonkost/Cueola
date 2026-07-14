@@ -515,6 +515,27 @@
     if (added) { if (!selectedId) selectedId = cues[0].id; renumber(); renderAll(); scheduleSave(); toast(added + ' cue' + (added > 1 ? 's' : '') + ' added.'); }
   }
 
+  // ── Mattes ── A matte is a full-frame solid-color still. It is stored as a
+  // real 1920×1080 PNG in the media store, so every existing layer — cue list,
+  // preload, the output protocol, .ogshow export, thumbnails, fades — treats
+  // it exactly like any other image cue; no new wire type exists to break.
+  async function createMatteCue(hex) {
+    const color = /^#[0-9a-fA-F]{6}$/.test(String(hex || '')) ? hex : '#000000';
+    const paint = (w, h) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.fillStyle = color; cx.fillRect(0, 0, w, h); return cv; };
+    const blob = await new Promise(res => paint(1920, 1080).toBlob(res, 'image/png'));
+    if (!blob) { toast('Could not create the matte.'); return; }
+    const thumb = paint(96, 54).toDataURL('image/png');
+    const name = 'Matte ' + color.toUpperCase();
+    const mediaId = rid('m_');
+    await idbPut(MEDIA_STORE, mediaId, { blob, name: name + '.png', mime: 'image/png', kind: 'image', duration: 0, thumb, width: 1920, height: 1080 });
+    const cue = makeCue({ name, type: 'image', mediaId, duration: 0, thumb, srcW: 1920, srcH: 1080 });
+    cue.fit = 'cover';          // a matte always fills the frame
+    cues.push(cue);
+    selectedId = cue.id;
+    renumber(); renderAll(); scheduleSave();
+    toast('Matte added — holds a full-screen ' + color.toUpperCase() + ' until advanced.');
+  }
+
   // Colors/thumbs from an imported .ogshow are attacker-controllable — a crafted
   // file could stuff a style attribute with an image-onerror payload. Whitelist
   // the shapes we actually emit (hex, rgb/hsl, var(--token)); anything else falls
@@ -1537,10 +1558,17 @@
     const num = Number(n);
     return (t === 'cc' ? 'CC ' + num : MIDI_NOTE_NAMES[num % 12] + (Math.floor(num / 12) - 1)) + ' · ch ' + (Number(ch) + 1);
   }
+  let midiConnecting = false;
   async function midiConnect() {
     if (!('requestMIDIAccess' in navigator)) { toast('Web MIDI needs Chrome/Edge.'); return; }
+    // One MIDIAccess only — a second connect would create parallel MIDIInput
+    // objects that each dispatch onMidiMessage, firing every action twice.
+    if (midi) { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); renderMidi(); toast('MIDI already connected — ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.'); return; }
+    if (midiConnecting) return;
+    midiConnecting = true;
     try { midi = await navigator.requestMIDIAccess({ sysex: false }); }
     catch (e) { toast('MIDI access was blocked — allow it in the site settings.'); return; }
+    finally { midiConnecting = false; }
     const hook = () => { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); };
     midi.onstatechange = () => { hook(); renderMidi(); };   // hot-plug: new boxes just work
     hook();
@@ -1553,8 +1581,11 @@
     if (type !== 0x90 && type !== 0x80 && type !== 0xB0) return;
     const key = midiKeyOf(status, d1);
     if (midiLearn) {
-      if (type === 0x80 || (type === 0x90 && !d2)) return;        // ignore releases while learning
-      if (!midiMap[key]) midiMap[key] = { action: type === 0xB0 ? 'master' : 'go' };
+      if (type === 0x80 || (!d2 && (type === 0x90 || type === 0xB0))) return;   // learn on presses only — a note-off or CC-0 release can never learn
+      // A fresh mapping stays inert (pending) until its control is released:
+      // without this, the release/next tick of the very gesture that learned a
+      // CC would ride the default 'master' action and mute the show mid-setup.
+      if (!midiMap[key]) midiMap[key] = { action: type === 0xB0 ? 'master' : 'go', pending: true };
       settings.midiMap = midiMap;
       midiLearn = false;
       renderMidi(); scheduleSave();
@@ -1563,6 +1594,11 @@
     }
     const m = midiMap[key];
     if (!m || !m.action) return;
+    if (m.pending) {                                   // learned but not yet released — swallow until the gesture ends
+      if (type === 0x80 || !d2) { delete m.pending; scheduleSave(); }
+      if (type === 0xB0) midiCcEdge[key] = d2;
+      return;
+    }
     if (type === 0xB0) {
       if (m.action === 'master') { setMasterGain(d2 / 127); return; }   // continuous fader
       const was = (midiCcEdge[key] || 0) > 63, is = d2 > 63;
@@ -1600,7 +1636,7 @@
       + '</div>';
     if ($('og-midi-conn')) $('og-midi-conn').onclick = midiConnect;
     if ($('og-midi-learn')) $('og-midi-learn').onclick = () => { midiLearn = !midiLearn; renderMidi(); };
-    Array.prototype.forEach.call(body.querySelectorAll('.og-midi-act'), s => { s.onchange = e => { const k = s.getAttribute('data-mk'); midiMap[k] = Object.assign({}, midiMap[k], { action: e.target.value }); if (e.target.value !== 'cue' && e.target.value !== 'pad') delete midiMap[k].ref; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-midi-act'), s => { s.onchange = e => { const k = s.getAttribute('data-mk'); midiMap[k] = Object.assign({}, midiMap[k], { action: e.target.value }); delete midiMap[k].pending; if (e.target.value !== 'cue' && e.target.value !== 'pad') delete midiMap[k].ref; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
     Array.prototype.forEach.call(body.querySelectorAll('.og-midi-ref'), s => { s.onchange = e => { const k = s.getAttribute('data-mk'); midiMap[k] = Object.assign({}, midiMap[k], { ref: e.target.value }); settings.midiMap = midiMap; scheduleSave(); }; });
     Array.prototype.forEach.call(body.querySelectorAll('.og-midi-del'), b => { b.onclick = () => { delete midiMap[b.getAttribute('data-mk')]; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
   }
@@ -3611,6 +3647,7 @@
     settings.shortcuts = Object.assign({}, DEFAULT_SHORTCUTS, settings.shortcuts || {});
     sdMap = settings.sdMap = settings.sdMap || {};
     midiMap = settings.midiMap = settings.midiMap || {};
+    Object.values(midiMap).forEach(m => { if (m) delete m.pending; });   // a persisted pending flag must not survive a reload
     renumber();
     pads.forEach(p => { if (p.mediaId) decodeBuffer(p.mediaId); });   // warm pad buffers for instant trigger
     return s;
@@ -3762,7 +3799,7 @@
     const trimLabel = c => (c.trimIn || c.trimOut != null) ? fmtClock(c.trimIn || 0) + ' to ' + (c.trimOut == null ? 'end' : fmtClock(c.trimOut)) : 'None';
     const cueRows = snapshot.cues.map((c, i) => `<tr>
         <td>${i + 1}</td><td><strong>${esc(c.name || 'Untitled')}</strong></td>
-        <td>${esc(c.type || 'Not set')}</td><td>${c.dur ? fmtClock(c.dur) : 'Not set'}</td>
+        <td>${esc(c.type || 'Not set')}</td><td>${c.duration ? fmtClock(c.duration) : (c.type === 'image' ? 'HOLD' : 'Not set')}</td>
         <td>${trimLabel(c)}</td><td>${contLabel(c)}</td><td>${c.loop ? 'Loop' : ''}</td>
       </tr>`).join('');
     const cueSheet = snapshot.cues.length ? `
@@ -4078,7 +4115,7 @@
         + '<div class="og-main">'
           + '<div class="og-toprow" id="og-toprow">'
           + '<div class="og-pane og-cuelist-pane">'
-            + '<div class="og-pane-head">Cue List</div>'
+            + '<div class="og-pane-head">Cue List<div class="og-pane-actions"><button class="og-bar-btn" id="og-matte-add" title="Add a full-screen solid-color matte cue">' + sym('content.image') + ' Matte</button></div></div>'
             + '<div class="og-cuelist" id="og-cuelist"></div>'
             + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
@@ -4100,10 +4137,10 @@
             + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><button type="button" class="og-clock-dir" id="og-clock-dir" title="Toggle count direction (elapsed / remaining)" aria-label="Toggle count direction">' + sym('media.forward') + '</button><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div></div>'
             + '<div class="og-transport">'
               + '<div class="og-transport-group">'
-                + '<button class="og-tbtn" id="og-prev">' + sym('media.backward.circle') + 'Previous Cue<span class="og-tbtn-key">↑</span></button>'
+                + '<button class="og-tbtn" id="og-prev">' + sym('chevron.left') + 'Previous Cue<span class="og-tbtn-key">↑</span></button>'
                 + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.playpause') + 'Play / Pause<span class="og-tbtn-key" id="og-k-go"></span></button>'
                 + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
-                + '<button class="og-tbtn" id="og-next">' + sym('media.forward.circle') + 'Next Cue<span class="og-tbtn-key">↓</span></button>'
+                + '<button class="og-tbtn" id="og-next">' + sym('chevron.right') + 'Next Cue<span class="og-tbtn-key">↓</span></button>'
               + '</div>'
               + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'Panic<span class="og-tbtn-key" id="og-k-panic"></span></button>'
             + '</div>'
@@ -4161,6 +4198,13 @@
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
       + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="og-sheet-x" id="og-midi-x">Done</button></div><div id="og-midi-body"></div></div></div>'
       + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-matte"><div class="og-sheet-card og-matte-card"><div class="og-sheet-head"><h3>' + sym('content.image') + ' New Matte</h3><button class="og-sheet-x" id="og-matte-x">Done</button></div>'
+        + '<div class="og-matte-swatches" id="og-matte-swatches">'
+          + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" title="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
+          + '<label class="og-matte-swatch og-matte-custom" title="Custom color"><input type="color" id="og-matte-color" value="#1e3a8a"><span>Custom…</span></label>'
+        + '</div>'
+        + '<p class="og-sheet-note">A matte is a full-screen solid color that holds until you advance — use it for blackouts, backgrounds, and key fills. It becomes a normal still cue: set duration, fades, or an output in the Inspector.</p>'
+      + '</div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
         + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
@@ -4262,6 +4306,15 @@
     const fileInput = $('og-file-input');
     $('og-cue-add').onclick = () => fileInput.click();
     fileInput.onchange = () => { importFiles(fileInput.files); fileInput.value = ''; };
+    $('og-matte-add').onclick = () => $('og-matte').classList.add('on');
+    $('og-matte-x').onclick = () => $('og-matte').classList.remove('on');
+    $('og-matte-swatches').addEventListener('click', e => {
+      const sw = e.target.closest('[data-matte]');
+      if (!sw) return;
+      $('og-matte').classList.remove('on');
+      createMatteCue(sw.getAttribute('data-matte'));
+    });
+    $('og-matte-color').onchange = () => { $('og-matte').classList.remove('on'); createMatteCue($('og-matte-color').value); };
     const padFile = $('og-pad-file');
     padFile.onchange = () => { if (padFile.files[0]) assignPad(padSlotForFile, padFile.files[0]); padFile.value = ''; };
 

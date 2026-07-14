@@ -110,6 +110,15 @@
 .sf-symbol[data-symbol="media.playpause"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/media/playpause.circle.fill.svg");}
 .sf-symbol[data-symbol="content.question"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/communication/questionmark.circle.fill.svg");}
 .sf-symbol[data-symbol="action.profile"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/human/person.crop.circle.fill.svg");}
+.sf-symbol[data-symbol="chevron.left"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.left.svg");}
+.sf-symbol[data-symbol="chevron.right"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.right.svg");}
+.sf-symbol[data-symbol="chevron.up"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.up.svg");}
+.sf-symbol[data-symbol="chevron.down"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.down.svg");}
+.sf-symbol[data-symbol="media.previous"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.left.svg");}
+.sf-symbol[data-symbol="media.next"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.right.svg");}
+.sf-symbol[data-symbol="media.backward"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.left.svg");}
+.sf-symbol[data-symbol="media.forward"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/chevron.right.svg");}
+.sf-symbol[data-symbol="action.lock"] {--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/objectsandtools/lock.fill.svg");}
 
 @media (forced-colors: active) {
   .sf-symbol { background: ButtonText; }

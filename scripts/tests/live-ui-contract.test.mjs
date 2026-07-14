@@ -23,19 +23,25 @@ test('Live exposes one dominant, explicitly named GO control', () => {
   );
 });
 
-test('selected and active are independent text states', () => {
-  assert.match(app, /ACTIVE<\/span>/);
-  assert.match(app, /SELECTED<\/span>/);
+test('selected and active are independent states with visible affordances', () => {
+  // Active is announced with the original On Air pill; selection is a row-level
+  // affordance (aria-selected + .live-row-selected styling), never a second pill
+  // and never an alias for activation.
+  assert.match(app, /On Air<\/span>/);
+  assert.match(app, /aria-selected="\$\{i === selectedIdx \? 'true' : 'false'\}"/);
   assert.match(app, /setLiveSelectedCue\(i, \{ reason:'live-row-selection' \}\)/);
   assert.match(app, /activateLiveRundownRow\(event,\$\{i\}\)/);
-  assert.match(html, /\.live-status\.selected/);
-  assert.match(html, /\.live-status\.active/);
+  assert.match(html, /\.live-row-selected td/);
+  assert.match(html, /\.live-status\.now/);
 });
 
 test('every execution history state has a model and a visible text style', () => {
-  for (const state of ['upcoming', 'completed', 'skipped', 'failed', 'disabled']) {
+  // Controller states keep their model names; presentation uses the original
+  // show vocabulary (upcoming rows read Next/Later, completed reads Done).
+  const presentation = { upcoming:['next','later'], completed:['done'], skipped:['skipped'], failed:['failed'], disabled:['disabled'] };
+  for (const [state, classes] of Object.entries(presentation)) {
     assert.match(liveController, new RegExp(`['"]${state}['"]`));
-    assert.match(html, new RegExp(`\\.live-status\\.${state}`));
+    for (const cls of classes) assert.match(html, new RegExp(`\\.live-status\\.${cls}`));
   }
   assert.match(app, /recoverLiveCueFailure/);
 });

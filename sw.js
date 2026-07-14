@@ -31,7 +31,7 @@ const SHELL_ASSETS = [
   './design-system/apple/symbols/runtime/light-small/time/timer.svg',
   './design-system/apple/symbols/runtime/light-small/privacyandsecurity/exclamationmark.triangle.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/clock.svg',
-  'assets/sf-symbols.css?v=127986b7a0',
+  'assets/sf-symbols.css?v=4adcd0fd7c',
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
   'cueola-assignment-model.js?v=d81e0cf353',
@@ -45,9 +45,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=808880c00b',
-  'outrangutan/outrangutan.css?v=900667494a',
-  'outrangutan/outrangutan.js?v=f642cd1375',
+  'cueola-app.js?v=555eaa6d24',
+  'outrangutan/outrangutan.css?v=6cad33dc00',
+  'outrangutan/outrangutan.js?v=378ae59215',
 ];
 
 const versionSignature = SHELL_ASSETS

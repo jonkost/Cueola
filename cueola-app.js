@@ -8188,7 +8188,9 @@ const LIVE_CUE_OPERATION = Object.freeze({
 function liveCueOperationLine(operation, text, className='', style='') {
   if (!text) return '';
   const meta = LIVE_CUE_OPERATION[operation] || LIVE_CUE_OPERATION.ready;
-  return `<div class="${className}"${style ? ` style="${style}"` : ''} title="${meta.title}" aria-label="${meta.label}: ${esc(text)}"><span class="live-cue-verb">${meta.label}</span><span>${esc(text)}</span></div>`;
+  // Quiet marker icons (the original cue-line look) carry the READY/TAKE
+  // vocabulary in the title/aria label instead of a boxed verb chip.
+  return `<div class="${className}"${style ? ` style="${style}"` : ''} title="${meta.title}" aria-label="${meta.label}: ${esc(text)}">${sfIcon(operation === 'take' ? 'marker.go' : 'marker.ready')} <span>${esc(text)}</span></div>`;
 }
 
 // Clean cue chips for the Focus view — only the row's programmed departments.
@@ -8223,21 +8225,29 @@ function focusCuesForBeat(b) {
 }
 
 const LIVE_ROW_STATE_LABEL = Object.freeze({
-  upcoming:'UPCOMING', completed:'COMPLETED', skipped:'SKIPPED',
-  failed:'FAILED', disabled:'DISABLED',
+  completed:'Done', skipped:'Skipped', failed:'Failed', disabled:'Disabled',
 });
 
+// One quiet pill per row, in the original show vocabulary: the active row is
+// On Air, the next playable row is Next, everything else Later — with the run
+// ledger's terminal states (Done / Skipped / Failed / Disabled) kept intact.
+// Selection stays a row-level highlight (aria-selected + .live-row-selected),
+// not a second chip.
 function liveRowStateChips(index, options={}) {
   const state = liveSessionState();
   const execution = liveCueExecution(index);
   const chips = [];
   const isActive = index === state.activeCueIndex;
-  if (isActive) chips.push('<span class="live-status active">ACTIVE</span>');
-  if (index === state.selectedCueIndex) chips.push('<span class="live-status selected">SELECTED</span>');
-  const executionLabel = LIVE_ROW_STATE_LABEL[execution.status] || String(execution.status || 'upcoming').toUpperCase();
   const failureTitle = execution.failure ? ` title="${esc(execution.failure)}"` : '';
-  if (!(isActive && execution.status === 'upcoming')) {
-    chips.push(`<span class="live-status ${execution.status}"${failureTitle}>${executionLabel}</span>`);
+  if (isActive) {
+    chips.push('<span class="live-status now">On Air</span>');
+  } else if (LIVE_ROW_STATE_LABEL[execution.status]) {
+    const cls = execution.status === 'completed' ? 'done' : execution.status;
+    chips.push(`<span class="live-status ${cls}"${failureTitle}>${LIVE_ROW_STATE_LABEL[execution.status]}</span>`);
+  } else if (index === liveNextPlayableCueIndex(state.activeCueIndex)) {
+    chips.push('<span class="live-status next">Next</span>');
+  } else {
+    chips.push('<span class="live-status later">Later</span>');
   }
   if (execution.status === 'failed' && options.recovery !== false) {
     chips.push(`<button type="button" class="live-row-recover" onclick="recoverLiveCueFailure(event,${index})" title="Recover row ${index + 1}" aria-label="Recover failed row ${index + 1}">Recover</button>`);
@@ -8279,7 +8289,7 @@ function renderLiveFocus() {
   let html = `<div class="lf-wrap">
     <div class="lf-now" onclick="liveRowPreview(${curIdx})">
       <div class="lf-now-head">
-        <span class="lf-now-badge"><span class="lf-dot"></span> ACTIVE</span>
+        <span class="lf-now-badge"><span class="lf-dot"></span> ON AIR</span>
         <span class="lf-now-meta">Row ${curIdx + 1} of ${total} · ${fmtSecs(remainSecs)} left</span>
       </div>
       <div class="lf-now-title">
@@ -8294,7 +8304,7 @@ function renderLiveFocus() {
 
   if (next) {
     html += `<div class="lf-next" onclick="liveRowPreview(${nextBeatIdx})">
-      <span class="lf-next-badge">UPCOMING</span>
+      <span class="lf-next-badge">NEXT</span>
       <span class="lf-next-name">${esc(next.info || '—')}</span>
       <span class="lf-next-time">${fmtDur(next)}</span>
     </div>`;
@@ -15666,22 +15676,79 @@ async function pbToggleChecklistItem(noteId, itemId) {
  * an Unassigned bucket at the bottom. Rows jump to (and flash) the note. */
 function pbCollectOpenItems() {
   const buckets = new Map();   // lowercased name -> { name, items: [{noteId, text}] }
-  const add = (rawName, noteId, text) => {
+  const add = (rawName, noteId, text, itemId) => {
     const name = String(rawName || '').trim();
     const key = name ? name.toLowerCase() : '·unassigned';
     if (!buckets.has(key)) buckets.set(key, { name: name || 'Unassigned', items: [] });
-    buckets.get(key).items.push({ noteId, text: String(text || '').trim() || 'To-do' });
+    buckets.get(key).items.push({ noteId, itemId: itemId || '', text: String(text || '').trim() || 'To-do' });
   };
   for (const n of plandaBearNotes) {
     // A todo-tagged note that carries a checklist delegates to its items.
     if (n.tag === 'todo' && !n.done && !(n.checklist || []).length) add(n.assignee, n.id, n.text);
-    (n.checklist || []).forEach(it => { if (!it.done) add(it.assignee, n.id, it.text); });
+    (n.checklist || []).forEach(it => { if (!it.done) add(it.assignee, n.id, it.text, it.id); });
   }
   return [...buckets.values()].sort((a, b) => {
     if (a.name === 'Unassigned') return 1;
     if (b.name === 'Unassigned') return -1;
     return b.items.length - a.items.length || a.name.localeCompare(b.name);
   });
+}
+
+/* ── Push a to-do onto the Production Schedule ──
+ * Appends an open to-do (a todo note or one checklist item) to the schedule's
+ * "Ready Before Show" checklist at the data level, so it works whether or not
+ * the Production Schedule modal is open. Duplicate items (same text) are
+ * skipped, so pushing twice is safe. */
+function pushTodoToProductionSchedule(itemText, sourceName) {
+  const item = String(itemText || '').trim();
+  if (!item) { toast('Nothing to add — the to-do has no text.'); return false; }
+  const data = loadPreProData();
+  const raw = { ...(data.productionSchedule || {}) };
+  const rows = (Array.isArray(raw.checklist) && raw.checklist.length ? raw.checklist : defaultProductionSchedule().checklist)
+    .map(normalizeProductionChecklistRow);
+  if (rows.some(r => r.item.trim().toLowerCase() === item.toLowerCase())) {
+    toast('Already on the Ready Before Show checklist.');
+    return false;
+  }
+  rows.push(normalizeProductionChecklistRow({
+    area: 'Production Notes',
+    item,
+    hint: sourceName ? `From a Production Notes to-do assigned to ${sourceName}.` : 'From a Production Notes to-do.',
+    done: false,
+  }));
+  raw.checklist = rows;
+  persistPreProData({ productionSchedule: raw }, 'Production Schedule');
+  if (document.getElementById('productionScheduleModal')?.classList.contains('on')) renderProductionChecklist(rows);
+  toast('Added to the Production Schedule — Ready Before Show.');
+  return true;
+}
+
+// Who-owes rows carry ids only (never raw text in onclick), so quoting is safe.
+function pbPushOwesItem(noteId, itemId) {
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  if (!note) { toast('That note is no longer on the board.'); return; }
+  if (itemId) {
+    const it = (note.checklist || []).find(x => x.id === itemId);
+    if (!it) { toast('That checklist item is gone.'); return; }
+    pushTodoToProductionSchedule(it.text, it.assignee);
+  } else {
+    pushTodoToProductionSchedule(note.text, note.assignee);
+  }
+}
+
+// Footer action: push a todo note (or every open item of its checklist) onto
+// the schedule in one tap. Instructor-only — they own the schedule.
+function pbPushNoteToSchedule(noteId) {
+  const note = plandaBearNotes.find(n => n.id === noteId);
+  if (!note) return;
+  const open = (note.checklist || []).filter(it => !it.done);
+  if (open.length) {
+    let added = 0;
+    open.forEach(it => { if (pushTodoToProductionSchedule(it.text, it.assignee)) added++; });
+    if (added > 1) toast(`${added} items added to Ready Before Show.`);
+  } else {
+    pushTodoToProductionSchedule(note.text, note.assignee);
+  }
 }
 
 function pbOpenOwes() {
@@ -15707,7 +15774,7 @@ function pbRenderOwes() {
         <span class="pb-owes-count">${r.items.length} open</span>
       </div>
       <ul class="pb-owes-items">${r.items.map(it => `
-        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" title="Jump to this note">${esc(it.text.slice(0, 120))}</button></li>`).join('')}</ul>
+        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" title="Jump to this note">${esc(it.text.slice(0, 120))}</button><button type="button" class="pb-owes-push" onclick="pbPushOwesItem('${it.noteId}','${it.itemId}')" title="Add to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button></li>`).join('')}</ul>
     </div>`).join('');
 }
 
@@ -15755,6 +15822,7 @@ function pbNoteFootHTML(note, replyCount) {
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${sfIcon('action.pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
+    ${pbIsInstructor() && ((note.tag === 'todo' && !note.done) || (note.checklist || []).some(it => !it.done)) ? `<button type="button" class="pb-note-act" onclick="pbPushNoteToSchedule('${note.id}')" title="Add the open to-dos to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button>` : ''}
     <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
     ${pbSeenByHTML(note)}
