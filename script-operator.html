@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en" data-theme="cool">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Cueola · Script Operator</title>
+  <link rel="stylesheet" href="assets/sf-symbols.css?v=127986b7a0">
+  <link rel="stylesheet" href="script-operator.css?v=78d9e27bef">
+  <script src="cueola-script-operator-protocol.js?v=209555b4d7" defer></script>
+  <script src="script-operator.js?v=a0e270f8e1" defer></script>
+</head>
+<body>
+  <main class="script-operator" id="scriptOperatorRoot" data-render-count="1">
+    <header class="operator-bar">
+      <div class="operator-identity">
+        <div class="operator-brand" aria-label="Cueola Script Operator">Cu<span>e</span>ola</div>
+        <div class="operator-title">Script Operator</div>
+      </div>
+      <div class="operator-bar-actions">
+        <div class="connection-status" id="connectionStatus" role="status" aria-live="polite" data-state="connecting">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connectionStatusText">Connecting…</span>
+        </div>
+        <button class="icon-button" id="closeWindowButton" type="button" title="Close Script Operator" aria-label="Close Script Operator">
+          <span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+
+    <section class="connection-banner" id="connectionBanner" role="alert" hidden>
+      <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span>
+      <div>
+        <strong>Script Operator disconnected</strong>
+        <span id="connectionDetail">The Cueola Live window is not responding. Controls are paused.</span>
+      </div>
+      <button class="quiet-button" id="reconnectButton" type="button">
+        <span class="sf-symbol" data-symbol="action.repeat" aria-hidden="true"></span>
+        <span>Reconnect</span>
+      </button>
+    </section>
+
+    <div class="operator-scroll" id="scriptOperatorControls" data-render-count="1">
+      <section class="script-workspace" aria-labelledby="scriptHeading">
+        <div class="section-heading-row">
+          <div>
+            <div class="eyebrow">Live Flowmingo script</div>
+            <h1 id="scriptHeading">Script</h1>
+          </div>
+          <span class="draft-status" id="draftStatus" role="status" aria-live="polite">Waiting for state</span>
+        </div>
+        <textarea class="script-editor" id="scriptEditor" spellcheck="true" aria-label="Live Flowmingo script" placeholder="The live Flowmingo script appears here." data-requires-state></textarea>
+        <div class="script-actions" aria-label="Script actions">
+          <button class="quiet-button icon-only" type="button" data-command-kind="edit-script" title="Edit cue script" aria-label="Edit cue script" data-requires-state>
+            <span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span>
+          </button>
+          <button class="quiet-button icon-only danger-button" type="button" data-command-kind="clear" title="Clear script" aria-label="Clear script" data-requires-state>
+            <span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span>
+          </button>
+          <button class="primary-button" type="button" data-command-kind="push" data-include-draft data-requires-state>
+            <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span>
+            <span>Push to Flowmingo</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="inspector" aria-label="Script Operator controls">
+        <div class="inspector-head">
+          <div class="inspector-tabs" role="tablist" aria-label="Script Operator control groups">
+            <button class="inspector-tab is-active" id="tab-prompter" type="button" role="tab" aria-selected="true" aria-controls="pane-prompter" data-tab="prompter" title="Prompter">
+              <span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
+              <span class="visually-hidden">Prompter</span>
+            </button>
+            <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" title="Cue &amp; On Air">
+              <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
+              <span class="visually-hidden">Cue &amp; On Air</span>
+            </button>
+            <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" title="Clocks &amp; Alerts">
+              <span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span>
+              <span class="visually-hidden">Clocks &amp; Alerts</span>
+            </button>
+            <button class="inspector-tab" id="tab-formatting" type="button" role="tab" aria-selected="false" aria-controls="pane-formatting" data-tab="formatting" title="Formatting &amp; Markers">
+              <span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span>
+              <span class="visually-hidden">Formatting &amp; Markers</span>
+            </button>
+          </div>
+          <div class="inspector-caption" id="inspectorCaption">Prompter</div>
+        </div>
+
+        <div class="inspector-pane is-active" id="pane-prompter" role="tabpanel" aria-labelledby="tab-prompter" data-pane="prompter">
+          <section class="control-section">
+            <h2>Transport</h2>
+            <div class="control-grid one-column">
+              <button class="control-button play-button" id="playButton" type="button" data-command-kind="control" data-action="resume" aria-pressed="false" data-requires-state>
+                <span class="sf-symbol" id="playButtonSymbol" data-symbol="media.play" aria-hidden="true"></span>
+                <span id="playButtonLabel">Play</span>
+              </button>
+            </div>
+            <div class="control-grid four-column">
+              <button class="control-button" type="button" data-hold-start="brake_start" data-hold-stop="brake_stop" aria-pressed="false" data-requires-state>Brake</button>
+              <button class="control-button" type="button" data-hold-start="boost_start" data-hold-stop="boost_stop" aria-pressed="false" data-requires-state>Boost</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="direction_reverse" data-state-button="reversing" data-requires-state>Reverse</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="direction_forward" data-state-button="forward" data-requires-state>Forward</button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Display</h2>
+            <div class="slider-row">
+              <label for="speedRange">Speed <output id="speedValue" for="speedRange">50</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_down" aria-label="Decrease speed" data-requires-state>−</button>
+              <input id="speedRange" type="range" min="5" max="200" value="50" data-preview-prefix="speed_set_" aria-label="Prompter speed" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_up" aria-label="Increase speed" data-requires-state>+</button>
+            </div>
+            <div class="slider-row">
+              <label for="sizeRange">Size <output id="sizeValue" for="sizeRange">48</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_down" aria-label="Decrease text size" data-requires-state>−</button>
+              <input id="sizeRange" type="range" min="24" max="120" value="48" data-preview-prefix="size_set_" aria-label="Prompter text size" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_up" aria-label="Increase text size" data-requires-state>+</button>
+            </div>
+            <div class="segmented-row">
+              <span>Align</span>
+              <div class="segmented-control" role="group" aria-label="Text alignment">
+                <button type="button" data-command-kind="control" data-action="align_left" data-align="left" data-requires-state>Left</button>
+                <button type="button" data-command-kind="control" data-action="align_center" data-align="center" data-requires-state>Center</button>
+                <button type="button" data-command-kind="control" data-action="align_right" data-align="right" data-requires-state>Right</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Theme</h2>
+            <div class="theme-grid" role="group" aria-label="Flowmingo theme">
+              <button class="theme-tile" type="button" data-theme-choice="cool" data-command-kind="control" data-action="theme_cool" aria-pressed="false" data-requires-state><span class="theme-preview preview-cool"></span><span>Glacier</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="warm" data-command-kind="control" data-action="theme_warm" aria-pressed="false" data-requires-state><span class="theme-preview preview-warm"></span><span>Honey</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="white" data-command-kind="control" data-action="theme_white" aria-pressed="false" data-requires-state><span class="theme-preview preview-white"></span><span>Polar Bear</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="green" data-command-kind="control" data-action="theme_green" aria-pressed="false" data-requires-state><span class="theme-preview preview-green"></span><span>Eucalyptus</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="koala" data-command-kind="control" data-action="theme_koala" aria-pressed="false" data-requires-state><span class="theme-preview preview-koala"></span><span>Koala</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="panda" data-command-kind="control" data-action="theme_panda" aria-pressed="false" data-requires-state><span class="theme-preview preview-panda"></span><span>Planda Bear</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="flamingo" data-command-kind="control" data-action="theme_flamingo" aria-pressed="false" data-requires-state><span class="theme-preview preview-flamingo"></span><span>Flowmingo</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="outrangutan" data-command-kind="control" data-action="theme_outrangutan" aria-pressed="false" data-requires-state><span class="theme-preview preview-outrangutan"></span><span>Outrangutan</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="prepbear" data-command-kind="control" data-action="theme_prepbear" aria-pressed="false" data-requires-state><span class="theme-preview preview-prepbear"></span><span>PrepBear</span></button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Screen</h2>
+            <div class="control-grid four-column">
+              <button class="control-button" type="button" data-command-kind="control" data-action="reset" data-requires-state>Reset</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="hide_interface" data-requires-state>Hide UI</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="mirror" data-state-button="mirrored" data-requires-state>Mirror</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="fullscreen" data-requires-state>Full</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="inspector-pane" id="pane-live" role="tabpanel" aria-labelledby="tab-live" data-pane="live" hidden>
+          <section class="control-section">
+            <h2>Cue</h2>
+            <div class="control-grid two-column">
+              <button class="control-button" id="cueNowButton" type="button" data-command-kind="control" data-dynamic-action="cue-now" data-requires-state>
+                <span class="sf-symbol" data-symbol="marker.active" aria-hidden="true"></span><span>Cue Now</span>
+              </button>
+              <button class="control-button" id="cueNextButton" type="button" data-command-kind="control" data-dynamic-action="cue-next" data-requires-state>
+                <span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span><span>Cue Next</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>On Air</h2>
+            <div class="control-grid two-column">
+              <button class="control-button" id="techButton" type="button" data-command-kind="control" data-action="slate_tech_on" aria-pressed="false" data-requires-state>
+                <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span id="techButtonLabel">Tech Difficulty</span>
+              </button>
+              <button class="control-button" id="barsButton" type="button" data-command-kind="control" data-action="slate_bars_on" aria-pressed="false" data-requires-state>
+                <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span id="barsButtonLabel">NTSC Bars</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Scrub</h2>
+            <div class="cue-slider-row">
+              <button class="step-button" type="button" data-nudge="-3" aria-label="Cue prompter back" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.back" aria-hidden="true"></span></button>
+              <input id="seekRange" type="range" min="0" max="100" value="0" data-preview-prefix="seek_set_" aria-label="Cue prompter position" data-requires-state>
+              <button class="step-button" type="button" data-nudge="3" aria-label="Cue prompter forward" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.forward" aria-hidden="true"></span></button>
+              <button class="step-button punch-button" type="button" data-punch aria-label="Punch in from this position" data-requires-state><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
+            </div>
+            <output class="cue-position" id="seekValue" for="seekRange">0%</output>
+          </section>
+        </div>
+
+        <div class="inspector-pane" id="pane-clocks" role="tabpanel" aria-labelledby="tab-clocks" data-pane="clocks" hidden>
+          <section class="control-section">
+            <div class="clock-preview" id="clockPreview" aria-label="Clock and alert preview">
+              <span id="clockPreviewLabel">Clock</span>
+              <strong id="clockPreviewValue">Off</strong>
+              <em id="questionPreview" hidden>Question in chat</em>
+            </div>
+            <h2>Clock</h2>
+            <div class="control-grid four-column">
+              <button class="control-button" type="button" data-command-kind="control" data-action="clock_timeofday" data-clock-mode="timeofday" data-requires-state><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span>Time</span></button>
+              <button class="control-button" type="button" data-clock-duration data-clock-mode="duration" data-requires-state><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span>Duration</span></button>
+              <button class="control-button" type="button" data-clock-count-to data-clock-mode="countdown" data-requires-state><span class="sf-symbol" data-symbol="time.clock" aria-hidden="true"></span><span>To Time</span></button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="clock_off" data-requires-state><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Hide</span></button>
+            </div>
+            <div class="field-grid">
+              <label><span>Duration (min)</span><input id="durationMinutes" type="number" min="1" max="999" value="5" inputmode="numeric" data-requires-state></label>
+              <label><span>Count to</span><input id="countToTime" type="time" data-requires-state></label>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Wrap Up</h2>
+            <div class="control-grid three-column">
+              <button class="control-button warning-button" type="button" data-wrap-minutes="10" data-requires-state><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span>Wrap 10</span></button>
+              <button class="control-button warning-button" type="button" data-wrap-minutes="5" data-requires-state><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span>Wrap 5</span></button>
+              <button class="control-button" type="button" data-wrap-custom data-requires-state><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span><span>Send</span></button>
+            </div>
+            <label class="single-field"><span>Wrap in (min)</span><input id="wrapMinutes" type="number" min="1" max="999" value="5" inputmode="numeric" data-requires-state></label>
+          </section>
+
+          <section class="control-section">
+            <h2>Alerts</h2>
+            <button class="control-button full-width" id="questionButton" type="button" data-command-kind="control" data-action="question_on" aria-pressed="false" data-requires-state>
+              <span class="sf-symbol" id="questionButtonSymbol" data-symbol="notification.default" aria-hidden="true"></span><span id="questionButtonLabel">Question</span>
+            </button>
+            <div class="stepper-row">
+              <span>Overlay size</span>
+              <div class="stepper">
+                <button type="button" data-command-kind="control" data-action="clock_size_down" aria-label="Make overlay smaller" data-requires-state>−</button>
+                <output id="overlaySizeValue">M</output>
+                <button type="button" data-command-kind="control" data-action="clock_size_up" aria-label="Make overlay larger" data-requires-state>+</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="inspector-pane" id="pane-formatting" role="tabpanel" aria-labelledby="tab-formatting" data-pane="formatting" hidden>
+          <section class="control-section">
+            <h2>Formatting &amp; Markers</h2>
+            <p class="section-help">Formatting is inserted into the script at the current selection.</p>
+            <div class="format-actions">
+              <button class="format-button text-format" type="button" data-wrap-before="**" data-wrap-after="**" aria-label="Bold" title="Bold (⌘B)" data-requires-state><strong>B</strong></button>
+              <button class="format-button text-format" type="button" data-wrap-before="*" data-wrap-after="*" aria-label="Italic" title="Italic (⌘I)" data-requires-state><em>I</em></button>
+              <button class="format-button" type="button" data-insert="[UPDATE] " data-requires-state><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
+              <button class="format-button" type="button" data-insert="[BREAK - AUTO PAUSE] " data-requires-state><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
+              <button class="format-button" type="button" data-insert="[STOP HERE] " data-requires-state><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
+              <button class="format-button" type="button" data-insert="&#10;&#10;" title="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
+              <button class="format-button" type="button" data-paste data-requires-state><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
+              <button class="format-button" type="button" data-paste-push data-requires-state><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

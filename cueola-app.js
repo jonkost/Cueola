@@ -50,8 +50,18 @@ let colDragSrc = null;
 // ─────────────────────────────────────────────────────────────
 let beats = [];
 let show  = { name:'Untitled Show', start:'' };
-let session = { code:'', role:'', userName:'', isDemo:false, isExpert:false };
+let session = { code:'', role:'', userName:'', profileId:'', username:'', profileAliases:[], isDemo:false, isExpert:false };
 let lsIdx = -1; // compatibility projection of liveSessionController.selectedCueIndex
+let lastLiveStatusAnnouncement = '';
+let cloudSyncProjection = { state:'off', detail:'No shared session code.' };
+
+const LIVE_STATUS_SURFACES = Object.freeze({
+  prompter:{ id:'ls-status-flowmingo', actions:'ls-status-flowmingo-actions', label:'Flowmingo' },
+  playback:{ id:'ls-status-playback', actions:'ls-status-playback-actions', label:'Playback' },
+  scriptOperator:{ id:'ls-status-script', actions:'ls-status-script-actions', label:'Script Operator' },
+  sync:{ id:'ls-status-sync', actions:'ls-status-sync-actions', label:'Cloud sync' },
+});
+
 const liveSessionController = window.CueolaLiveSession.createController({
   onEnter: enterLiveSessionScreen,
   onLeave: leaveLiveSessionScreen,
@@ -60,17 +70,185 @@ const liveSessionController = window.CueolaLiveSession.createController({
 });
 window.CueolaLiveController = liveSessionController;
 
+function signedInProfileForName(name='') {
+  const profile = window.CueolaIdentity?.profile?.();
+  if (!profile?.fullName) return null;
+  return sameParticipantName(profile.fullName, name || profile.fullName) ? profile : null;
+}
+
+function sessionWithProfileIdentity(base, name='') {
+  const profile = signedInProfileForName(name);
+  if (!profile) return {
+    ...base,
+    profileId: base.profileId || '',
+    username: base.username || '',
+    profileAliases: Array.isArray(base.profileAliases) ? base.profileAliases.slice() : [],
+  };
+  const model = window.CueolaAssignmentModel;
+  const profileId = model?.profileIdFor?.(profile) || profile.profileId || '';
+  const profileAliases = model?.profileIdentityIds?.(profile)?.filter(id => id !== profileId)
+    || (Array.isArray(profile.profileAliases) ? profile.profileAliases.slice() : []);
+  return {
+    ...base,
+    userName: profile.fullName,
+    profileId,
+    username: profile.username || '',
+    profileAliases,
+  };
+}
+
 function projectLiveSessionState(state) {
   const live = document.getElementById('liveshow');
   if (!live) return;
   live.dataset.liveSessionState = state.lifecycle;
+  live.classList.toggle('live-transitioning', !['builder','live'].includes(state.lifecycle));
+  const returnButton = document.getElementById('liveReturnToRundownBtn');
+  if (returnButton) {
+    returnButton.disabled = state.lifecycle !== 'live';
+    returnButton.setAttribute('aria-disabled', state.lifecycle === 'live' ? 'false' : 'true');
+  }
   Object.entries(state.subsystems).forEach(([name, record]) => {
     live.dataset[`${name}Status`] = record.status;
   });
+  renderLiveStatusRail(state);
+  updateLiveGoControl(state);
+}
+
+function liveStatusNeedsRecovery(status) {
+  return ['stalled','disconnected','error'].includes(status);
+}
+
+function liveStatusIsBusy(status) {
+  return ['opening','connecting','recovering'].includes(status);
+}
+
+function liveStatusActionLabel(name, status) {
+  if (name === 'sync') return liveStatusNeedsRecovery(status) || status === 'recovering' ? 'Retry cloud sync' : '';
+  if (name === 'prompter') {
+    if (liveStatusNeedsRecovery(status) || status === 'recovering') return 'Recover Flowmingo';
+    return status === 'closed' ? 'Open Flowmingo' : '';
+  }
+  if (liveStatusIsBusy(status)) return '';
+  if (name === 'playback') return liveStatusNeedsRecovery(status) ? 'Recover Playback' : status === 'closed' ? 'Open Playback' : '';
+  if (name === 'scriptOperator') {
+    if (session.isDemo || session.isExpert || !session.code) return '';
+    return liveStatusNeedsRecovery(status) ? 'Recover Script Operator' : status === 'closed' ? 'Open Script Operator' : '';
+  }
+  return '';
+}
+
+function renderLiveStatusItem(name, record) {
+  const surface = LIVE_STATUS_SURFACES[name];
+  if (!surface) return;
+  const item = document.getElementById(surface.id);
+  if (!item) return;
+  const status = String(record?.status || 'closed');
+  const detail = String(record?.detail || (status === 'closed' ? `${surface.label} closed` : status));
+  item.dataset.state = status;
+  item.setAttribute('aria-label', `${surface.label}: ${detail}`);
+  const detailEl = document.getElementById(`${surface.id}-detail`);
+  if (detailEl) detailEl.textContent = detail;
+  if (name === 'scriptOperator') {
+    const overview = document.getElementById('ls-stat-script');
+    if (overview) {
+      const label = { active:'ACTIVE', ready:'READY', opening:'OPENING', connecting:'CONNECTING', recovering:'RECOVERING', disconnected:'DISCONNECTED', stalled:'STALLED', error:'ERROR', closed:'CLOSED' }[status] || status.toUpperCase();
+      overview.textContent = `SCRIPT OP ${label}`;
+      overview.title = detail;
+      overview.classList.toggle('connected', ['active','ready'].includes(status));
+      overview.classList.toggle('recovering', liveStatusIsBusy(status));
+      overview.classList.toggle('error', liveStatusNeedsRecovery(status));
+    }
+  }
+  const actions = document.getElementById(surface.actions);
+  if (!actions) return;
+  const actionLabel = liveStatusActionLabel(name, status);
+  actions.hidden = !actionLabel;
+  const existing = actions.querySelector('button');
+  if (!actionLabel) {
+    if (existing) actions.replaceChildren();
+    return;
+  }
+  if (existing?.dataset.actionLabel === actionLabel) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'ls-status-recovery';
+  button.dataset.actionLabel = actionLabel;
+  button.textContent = actionLabel;
+  button.title = actionLabel;
+  button.setAttribute('aria-label', actionLabel);
+  button.addEventListener('click', () => recoverLiveSubsystem(name));
+  actions.replaceChildren(button);
+}
+
+function liveSyncStatusRecord() {
+  const reconnecting = document.getElementById('ls-stat-sync')?.hidden === false;
+  if (reconnecting || navigator.onLine === false) {
+    return {
+      status:navigator.onLine === false ? 'disconnected' : 'recovering',
+      detail:navigator.onLine === false ? 'Network offline — saved state is retained locally' : 'Reconnecting — showing the last confirmed state',
+    };
+  }
+  if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'Local workspace' };
+  const state = cloudSyncProjection.state;
+  const detail = cloudSyncProjection.detail;
+  if (state === 'synced') return { status:'ready', detail:detail || 'Cloud synchronized' };
+  if (state === 'saving') return { status:'connecting', detail:detail || 'Cloud sync saving changes...' };
+  if (state === 'error') return { status:'error', detail:detail || 'Cloud sync failed' };
+  if (state === 'local') return { status:'disconnected', detail:detail || 'Cloud sync unavailable; saved locally' };
+  return { status:'disconnected', detail:detail || 'Cloud sync is not connected' };
+}
+
+function renderLiveStatusRail(state=liveSessionController?.getState?.()) {
+  if (!state) return;
+  Object.entries(state.subsystems || {}).forEach(([name, record]) => renderLiveStatusItem(name, record));
+  const syncRecord = liveSyncStatusRecord();
+  renderLiveStatusItem('sync', syncRecord);
+  const problems = [
+    ...Object.entries(state.subsystems || {}),
+    ['sync', syncRecord],
+  ].filter(([, record]) => liveStatusNeedsRecovery(record?.status));
+  const announcement = problems.map(([name, record]) => `${LIVE_STATUS_SURFACES[name]?.label || name}: ${record.detail || record.status}`).join('. ');
+  if (announcement && announcement !== lastLiveStatusAnnouncement) {
+    const liveRegion = document.getElementById('lsStatusAnnouncement');
+    if (liveRegion) liveRegion.textContent = announcement;
+  }
+  lastLiveStatusAnnouncement = announcement;
+}
+
+async function recoverLiveSubsystem(name) {
+  if (name === 'prompter') {
+    projectPrompterSessionStatus('recovering', 'Opening a fresh Flowmingo output');
+    return openFlowmingoTalentWindow({ replace:true });
+  }
+  if (name === 'playback') {
+    setLiveSubsystemStatus('playback', 'recovering', 'Opening Playback controls');
+    return window.Outrangutan?.enter?.(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
+  }
+  if (name === 'scriptOperator') return openScriptOpPopout();
+  if (name === 'sync') {
+    setSyncReconnecting(true);
+    try {
+      if (typeof window._enableNetwork === 'function') await window._enableNetwork();
+      syncToFirestore();
+    } catch (error) {
+      setCloudSyncState('error', firebaseConnectionLabel(error, 'Cloud sync recovery failed'));
+      containError('Cloud sync recovery', error);
+    }
+    renderLiveStatusRail();
+  }
 }
 
 function liveSessionState() {
   return liveSessionController.getState();
+}
+
+function liveActiveCueIndex() {
+  const state = liveSessionState();
+  return state.activeCueIndex >= 0 ? state.activeCueIndex : state.selectedCueIndex;
+}
+
+function liveSelectedCueIndex() {
+  return liveSessionState().selectedCueIndex;
 }
 
 function setLiveSelectedCue(index, options={}) {
@@ -96,6 +274,74 @@ function canOwnLiveActiveCue() {
 
 function setOperatorLiveCue(index, reason) {
   return setLiveSelectedCue(index, { activate:canOwnLiveActiveCue(), reason });
+}
+
+function liveBeatKey(beat, index) {
+  return String(beat?.rowKey || beat?.id || `index:${index}`);
+}
+
+function ensureLiveRunLedger() {
+  const state = liveSessionState();
+  if (state.lifecycle === 'builder') return state.runLedger || {};
+  const expected = beats.map(liveBeatKey);
+  const configured = state.runOrder || [];
+  const changed = expected.length !== configured.length || expected.some((key, index) => key !== configured[index]);
+  if (changed) return liveSessionController.configureRunRows(beats, { preserve:true });
+  return state.runLedger || {};
+}
+
+function liveCueExecution(index) {
+  try { return liveSessionController.getCueExecution(index); }
+  catch {
+    const disabled = beats[index]?.disabled === true || beats[index]?.executionState === 'disabled' || beats[index]?.style === 'segment';
+    return Object.freeze({ key:liveBeatKey(beats[index], index), index, status:disabled ? 'disabled' : 'upcoming', failure:null });
+  }
+}
+
+function liveCueExecutionStatus(index) {
+  return liveCueExecution(index).status;
+}
+
+function liveCueIsDisabled(index) {
+  return liveCueExecutionStatus(index) === 'disabled';
+}
+
+function liveNextPlayableCueIndex(fromIndex) {
+  let index = Number.isFinite(fromIndex) ? fromIndex + 1 : 0;
+  while (index < beats.length && (beats[index]?.style === 'segment' || liveCueIsDisabled(index))) index += 1;
+  return index < beats.length ? index : -1;
+}
+
+function livePreviousPlayableCueIndex(fromIndex) {
+  let index = Number.isFinite(fromIndex) ? fromIndex - 1 : beats.length - 1;
+  while (index >= 0 && (beats[index]?.style === 'segment' || liveCueIsDisabled(index))) index -= 1;
+  return index;
+}
+
+function markLiveCueFailure(index, error, reason='live-cue-operation-failed') {
+  try {
+    liveSessionController.recordCueFailure(index, error, { reason });
+    renderLive();
+    return true;
+  } catch (ledgerError) {
+    containError('Live cue failure record', ledgerError);
+    return false;
+  }
+}
+
+function recoverLiveCueFailure(event, index) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  try {
+    liveSessionController.recoverCueFailure(index, { status:'upcoming', reason:'operator-recover-cue' });
+    setLiveSelectedCue(index, { reason:'operator-recover-cue-selection' });
+    renderLive();
+    return true;
+  } catch (error) {
+    containError('Live cue recovery', error);
+    toast(String(error?.message || error));
+    return false;
+  }
 }
 
 function setLiveSubsystemStatus(name, status, detail='') {
@@ -134,6 +380,42 @@ const FLOWMINGO_ENDPOINT_ID = (() => {
     return 'fm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
   }
 })();
+const IS_PROMPTER_OUTPUT_BOOT = new URLSearchParams(location.search).get('prompter') === '1';
+const prompterSessionController = window.CueolaPrompterSession.createController({
+  instanceId: FLOWMINGO_ENDPOINT_ID,
+  productionCode: session.code,
+});
+window.CueolaPrompterController = prompterSessionController;
+
+function ensurePrompterProtocolIdentity(options={}) {
+  const code = String(options.productionCode || session.code || '').trim().toUpperCase();
+  const current = prompterSessionController.getState();
+  let sessionId = options.sessionId || (current.productionCode === code ? current.sessionId : '');
+  if (!sessionId && code && !IS_PROMPTER_OUTPUT_BOOT) {
+    sessionId = `prompter_${code}_${Date.now().toString(36)}_${CLIENT_ID.slice(-8)}`;
+  }
+  const activeIndex = liveActiveCueIndex();
+  const activeBeat = beats[activeIndex] || null;
+  const scriptId = options.scriptId || `script_${Math.max(0, Number(prompterVersion) || 0)}`;
+  return prompterSessionController.setIdentity({
+    sessionId,
+    productionCode:code,
+    scriptId,
+    activeCueId:activeBeat?.id == null ? '' : String(activeBeat.id),
+  });
+}
+
+function currentPrompterSessionState() {
+  ensurePrompterProtocolIdentity();
+  return prompterSessionController.setTransport({
+    running:ptPlaying,
+    position:ptOffset,
+    targetSpeed:ptTargetSpeed,
+    effectiveSpeed:ptLiveSpeed,
+    lastCommandId:prompterSessionController.getState().lastCommandId,
+    status:ptPlaying ? 'running' : 'paused',
+  });
+}
 let _prompterMsgSeq = 0;
 function nextPrompterMsgId(kind='msg') {
   _prompterMsgSeq += 1;
@@ -144,10 +426,13 @@ function isPrompterSelfSender(sender) {
 }
 function withPrompterEnvelope(payload={}) {
   const ts = payload.ts || Date.now();
+  ensurePrompterProtocolIdentity({ sessionId:payload.sessionId, productionCode:payload.productionCode || payload.sessionCode });
   return {
+    ...prompterSessionController.envelope(payload.type || 'message', payload),
     ...payload,
     ts,
     sender: FLOWMINGO_ENDPOINT_ID,
+    senderInstanceId: FLOWMINGO_ENDPOINT_ID,
     senderClient: CLIENT_ID,
     mid: payload.mid || nextPrompterMsgId(payload.type || 'msg')
   };
@@ -353,7 +638,10 @@ async function captureSessionSnapshot(reason='interval', force=false) {
 }
 
 function sessionSnapshotReasonLabel(reason) {
-  return ({ joined:'Joined', interval:'Auto', live:'Go Live', leave:'Leave', restored:'Restored' })[reason] || reason;
+  return ({
+    joined:'Joined', interval:'Auto', live:'Go Live', leave:'Leave',
+    'live-exit':'Live Exit', 'live-recovery':'Live Recovery', restored:'Restored'
+  })[reason] || reason;
 }
 
 async function openSessionHistory() {
@@ -644,6 +932,8 @@ function markResumeState() {
   try {
     localStorage.setItem(RESUME_KEY, JSON.stringify({
       code: session.code, name: session.userName || '', role: session.role || 'instructor',
+      profileId: session.profileId || '', username: session.username || '',
+      profileAliases: Array.isArray(session.profileAliases) ? session.profileAliases : [],
       showName: show?.name || '',
       screen: sessionStorage.getItem('cueola_screen') || 'build',
       scriptOp: !!livePrompterOpen, lsIdx, ts: Date.now(),
@@ -681,7 +971,12 @@ function resumeLastSession() {
   if (!r) { clearResumeState(); return; }
   const banner = document.getElementById('resumeBanner');
   if (banner) banner.hidden = true;
-  session = { code: r.code, role: r.role || 'instructor', userName: r.name || '', isDemo: false, isExpert: false };
+  session = {
+    code: r.code, role: r.role || 'instructor', userName: r.name || '',
+    profileId: r.profileId || '', username: r.username || '',
+    profileAliases: Array.isArray(r.profileAliases) ? r.profileAliases : [],
+    isDemo: false, isExpert: false,
+  };
   freeTextMode = false;
   rememberLastSession(r.code, r.name);
   if (Number.isFinite(r.lsIdx)) setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue' });
@@ -1114,15 +1409,18 @@ function dangerConfirm(message, detail='', opts={}) {
 }
 
 function setCloudSyncState(state='synced', detail='') {
+  cloudSyncProjection = { state, detail };
   const dot = document.getElementById('syncDot');
   const badge = document.getElementById('topSessionBadge');
-  if (!dot) return;
-  dot.classList.remove('saving', 'error', 'off', 'local');
-  if (state === 'saving') dot.classList.add('saving');
-  else if (state === 'error') dot.classList.add('error');
-  else if (state === 'local') dot.classList.add('local');
-  else if (state === 'off') dot.classList.add('off');
-  if (badge && detail) badge.title = detail;
+  if (dot) {
+    dot.classList.remove('saving', 'error', 'off', 'local');
+    if (state === 'saving') dot.classList.add('saving');
+    else if (state === 'error') dot.classList.add('error');
+    else if (state === 'local') dot.classList.add('local');
+    else if (state === 'off') dot.classList.add('off');
+  }
+  if (badge) badge.title = detail;
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLiveStatusRail();
 }
 
 function reportCloudWriteFailure(context='Cloud save', err=null) {
@@ -2077,6 +2375,7 @@ function openAdminPanel() {
   chip.className = `admin-level-chip alc-${adminSession.level}`;
   renderAdminBody();
   showOverlay('adminPanel');
+  hydrateRoleAssignments({ force:true });
 }
 
 function closeAdminPanel(e) {
@@ -2187,7 +2486,8 @@ function renderAdminBody() {
     const positionOptions = getRolePositionOptions();
     html += `<div class="admin-section">
       <div class="admin-section-label">Role and Planda Bear Assignments</div>
-      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-bottom:8px">Changes save automatically and show on the Planda Bear hub for everyone in the session.</div>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-bottom:8px">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save Assignments</b>.</div>
+      <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
       <div class="admin-src-row" style="margin-bottom:10px">
         <span class="admin-src-label">Positions</span>
         <div class="admin-src-chips">
@@ -2195,7 +2495,7 @@ function renderAdminBody() {
           <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
         </div>
       </div>
-      <div id="adminRoleAssignments" onchange="autoSaveRoleAssignments()">${renderRoleAssignmentRows(pendingAssignments?.length ? pendingAssignments : undefined)}</div>
+      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(pendingAssignments?.length ? pendingAssignments : undefined)}</div>
       <div class="admin-assignment-actions">
         <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add Person</button>
         <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save Assignments</button>
@@ -2264,6 +2564,73 @@ const ROLE_POSITION_OPTIONS = [
   'Crew',
 ];
 
+let assignmentProfiles = [];
+let canonicalRoleAssignments = [];
+let confirmedRoleAssignmentRows = [];
+let assignmentRevision = 0;
+let assignmentSaveState = 'loading';
+let assignmentSaveDetail = 'Loading saved profiles and assignments…';
+let assignmentHydratePromise = null;
+let assignmentFromCache = false;
+
+function assignmentModel() {
+  return window.CueolaAssignmentModel || null;
+}
+
+function assignmentSaveStateHTML() {
+  const state = assignmentSaveState || 'unsaved';
+  const labels = { loading:'Loading', unsaved:'Unsaved', saving:'Saving', saved:'Saved', failed:'Failed', conflict:'Conflict' };
+  const actions = state === 'failed'
+    ? assignmentFromCache
+      ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="retryRoleAssignmentLoad()">Retry connection</button></span>`
+      : `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="saveRoleAssignmentsFromAdmin()">Retry</button><button class="admin-act-btn" onclick="revertRoleAssignments()">Revert draft</button></span>`
+    : state === 'conflict'
+      ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="reloadRoleAssignmentsAfterConflict()">Load server copy</button></span>`
+      : '';
+  return `<div class="admin-assignment-state is-${state}" role="status" aria-live="polite" data-assignment-save-state="${state}">
+    <span class="admin-assignment-state-pill">${labels[state] || 'Unsaved'}</span>
+    <span class="admin-assignment-state-detail">${esc(assignmentSaveDetail || '')}</span>${actions}
+  </div>`;
+}
+
+function setAssignmentSaveState(state, detail='') {
+  assignmentSaveState = state;
+  assignmentSaveDetail = detail;
+  const wrap = document.getElementById('adminAssignmentSaveState');
+  if (wrap) wrap.innerHTML = assignmentSaveStateHTML();
+}
+
+function assignmentProfileById(profileId) {
+  const model = assignmentModel();
+  return assignmentProfiles.find(profile => model?.profileIdentityIds?.(profile)?.includes(profileId)
+    || profile.profileId === profileId) || null;
+}
+
+function assignmentProfileOptions(selectedId='', legacyName='') {
+  const model = assignmentModel();
+  const options = assignmentProfiles.map(profile => {
+    const id = model?.profileIdFor?.(profile) || profile.profileId || '';
+    const selected = id && id === selectedId;
+    const suffix = profile.username ? ` @${profile.username}` : '';
+    return `<option value="${esc(id)}" ${selected ? 'selected' : ''}>${esc(profile.fullName || profile.username || id)}${esc(suffix)}</option>`;
+  }).join('');
+  const unresolved = legacyName && !selectedId
+    ? `<option value="" selected>Unlinked legacy name: ${esc(legacyName)}</option>`
+    : '<option value="">Select saved profile</option>';
+  return unresolved + options;
+}
+
+function assignmentActor() {
+  const profile = window.CueolaIdentity?.profile?.();
+  const model = assignmentModel();
+  if (profile) return {
+    id: model?.profileIdFor?.(profile) || profile.profileId || `profile_${profile.username || 'unknown'}`,
+    label: profile.fullName || profile.username || 'Instructor',
+  };
+  if (adminSession?.id) return { id:`admin_${String(adminSession.id).replace(/[^A-Za-z0-9_.-]/g, '_')}`, label:adminSession.name || 'Admin' };
+  return { id:`session_${String(presenceId || CLIENT_ID).replace(/[^A-Za-z0-9_.-]/g, '_')}`, label:session.userName || 'Instructor' };
+}
+
 function defaultRoleAssignments() {
   return [{ person:'', position:'', paperwork:[] }];
 }
@@ -2298,33 +2665,46 @@ function getAssignmentPeople(savedRows=[]) {
   ]);
 }
 
-function basePlandaBearAssignmentOptions(data=loadPreProData()) {
-  const sheets = getCallSheets(data);
-  const callSheets = sheets.map((sheet, i) => `Call Sheet: ${callSheetDisplayName(sheet, i)}`);
-  return cleanUniqueStrings([
-    ...callSheets,
-    'Production Schedule',
-    'Safety Plan',
-    'Rundown',
-    'Flowmingo Script',
-    'Video Patch Sheet',
-    'Audio & Comms Patch Sheet',
-    'Tech Checklist',
-  ]);
+function paperworkIdForLabel(label='') {
+  const positionId = assignmentModel()?.positionIdFor?.(label) || String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `paperwork_${String(positionId).replace(/^position_/, '').replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160);
 }
 
-function plandaBearAssignmentOptions(data=loadPreProData()) {
-  const options = basePlandaBearAssignmentOptions(data);
+function plandaBearAssignmentCatalog(data=loadPreProData()) {
+  const sheets = getCallSheets(data);
+  const catalog = sheets.map((sheet, i) => ({
+    id: `paperwork_${String(sheet.id || `call_sheet_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160),
+    label: `Call Sheet: ${callSheetDisplayName(sheet, i)}`,
+  }));
+  catalog.push(
+    { id:'paperwork_production_schedule', label:'Production Schedule' },
+    { id:'paperwork_safety_plan', label:'Safety Plan' },
+    { id:'paperwork_rundown', label:'Rundown' },
+    { id:'paperwork_flowmingo_script', label:'Flowmingo Script' },
+    { id:'paperwork_video_patch', label:'Video Patch Sheet' },
+    { id:'paperwork_audio_comms_patch', label:'Audio & Comms Patch Sheet' },
+    { id:'paperwork_tech_checklist', label:'Tech Checklist' },
+  );
   if (Array.isArray(data.roleAssignments)) {
     data.roleAssignments.forEach(row => {
       const saved = row?.paperwork || row?.paperworkItems;
       if (Array.isArray(saved)) saved.forEach(item => {
         const label = String(item || '').trim();
-        if (label && !options.some(opt => opt.toLowerCase() === label.toLowerCase())) options.push(label);
+        if (label && !catalog.some(opt => opt.label.toLowerCase() === label.toLowerCase())) {
+          catalog.push({ id:paperworkIdForLabel(label), label });
+        }
       });
     });
   }
-  return options;
+  return catalog;
+}
+
+function basePlandaBearAssignmentOptions(data=loadPreProData()) {
+  return plandaBearAssignmentCatalog(data).map(option => option.label);
+}
+
+function plandaBearAssignmentOptions(data=loadPreProData()) {
+  return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
 function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOptions()) {
@@ -2358,26 +2738,48 @@ function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOpt
 }
 
 function normalizeRoleAssignment(row={}, options=plandaBearAssignmentOptions()) {
+  const model = assignmentModel();
+  const person = String(row.person || row.displayName || row.name || '').trim();
+  let profileId = String(row.profileId || row.studentProfileId || '').trim();
+  if (!profileId && person) {
+    const matches = assignmentProfiles.filter(profile => sameParticipantName(profile.fullName, person));
+    if (matches.length === 1) profileId = model?.profileIdFor?.(matches[0]) || matches[0].profileId || '';
+  }
+  const profile = assignmentProfileById(profileId);
+  const position = String(row.position || row.positionLabel || row.role || '').trim();
+  const positionId = String(row.positionId || (position ? model?.positionIdFor?.(position) : '') || '').trim();
+  const paperwork = normalizePaperworkSelections(row.paperworkLabels || row.paperwork || row.paperworkItems || row.file, options);
+  const catalog = plandaBearAssignmentCatalog();
+  const rowIds = Array.isArray(row.paperworkIds) ? row.paperworkIds.map(String) : [];
+  const paperworkIds = paperwork.map((label, index) => rowIds[index]
+    || catalog.find(option => option.label.toLowerCase() === label.toLowerCase())?.id
+    || paperworkIdForLabel(label));
   return {
-    person: String(row.person || row.name || '').trim(),
-    position: String(row.position || row.role || '').trim(),
-    paperwork: normalizePaperworkSelections(row.paperwork || row.paperworkItems || row.file, options),
+    assignmentId: String(row.assignmentId || (profileId && positionId ? model?.assignmentIdFor?.(profileId, positionId) : '') || ''),
+    profileId,
+    username: String(row.username || profile?.username || '').trim(),
+    person: String(profile?.fullName || person).trim(),
+    positionId,
+    position,
+    paperworkIds,
+    paperwork,
+    status: row.status === 'completed' ? 'completed' : 'assigned',
+    assignedBy: String(row.assignedBy || ''),
+    assignedByLabel: String(row.assignedByLabel || ''),
+    createdAt: Number(row.createdAt) || 0,
+    updatedAt: Number(row.updatedAt) || 0,
+    revision: Math.max(0, Number(row.revision) || 0),
   };
 }
 
 function getRoleAssignments() {
+  if (canonicalRoleAssignments.length) {
+    return canonicalRoleAssignments.map(record => normalizeRoleAssignment(record));
+  }
   const data = loadPreProData();
   const options = plandaBearAssignmentOptions(data);
   const saved = Array.isArray(data.roleAssignments) ? data.roleAssignments.map(row => normalizeRoleAssignment(row, options)) : [];
   const rows = saved.filter(row => row.person || row.position || row.paperwork.length);
-  const seen = new Set(rows.map(row => row.person.trim().toLowerCase()).filter(Boolean));
-  getAssignmentPeople(rows).forEach(name => {
-    const key = name.trim().toLowerCase();
-    if (!seen.has(key)) {
-      rows.push({ person:name, position:'', paperwork:[] });
-      seen.add(key);
-    }
-  });
   return rows.length ? rows : defaultRoleAssignments();
 }
 
@@ -2428,55 +2830,78 @@ function removePositionOption(name) {
   toast(`Position "${name}" removed. Anyone already assigned to it keeps it.`);
 }
 
-function rolePositionOptionsHTML(selected='') {
+function rolePositionOptionsHTML(selected='', selectedId='') {
   const chosen = String(selected || '').trim();
   // Keep the chosen value selectable even if it was removed from this
   // production's list — an existing assignment must never silently change.
   const options = cleanUniqueStrings([...getRolePositionOptions(), chosen])
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' }));
-  return `<option value="">Select position</option>` + options.map(opt => `<option value="${esc(opt)}" ${opt.toLowerCase() === chosen.toLowerCase() ? 'selected' : ''}>${esc(opt)}</option>`).join('');
+  return `<option value="">Select position</option>` + options.map(opt => {
+    const id = assignmentModel()?.positionIdFor?.(opt) || paperworkIdForLabel(opt).replace(/^paperwork_/, 'position_');
+    return `<option value="${esc(id)}" data-position-label="${esc(opt)}" ${(selectedId && id === selectedId) || (!selectedId && opt.toLowerCase() === chosen.toLowerCase()) ? 'selected' : ''}>${esc(opt)}</option>`;
+  }).join('');
 }
 
 function renderRoleAssignmentRows(rows=getRoleAssignments()) {
   const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row));
-  const people = getAssignmentPeople(normalizedRows);
-  const peopleOptions = people.map(name => `<option value="${esc(name)}"></option>`).join('');
-  const paperworkOptions = plandaBearAssignmentOptions();
+  const paperworkOptions = plandaBearAssignmentCatalog();
   return `<div class="admin-assignment-list">
     ${normalizedRows.map((row,i)=>{
-      const selectedPaperwork = new Set(row.paperwork.map(item => item.toLowerCase()));
-      return `<div class="admin-assignment-row" data-role-assignment-row="${i}">
+      const selectedPaperwork = new Set(row.paperworkIds);
+      const profile = assignmentProfileById(row.profileId);
+      const profileMeta = row.profileId
+        ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
+        : 'Choose a saved profile; display names are not identity.';
+      const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
+      const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
+      return `<div class="admin-assignment-row" data-role-assignment-row="${i}"
+        data-assignment-id="${esc(row.assignmentId)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
+        data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
         <div class="admin-assignment-top">
           <div class="field">
-            <label class="admin-add-label">Student</label>
-            <input class="admin-in" data-role-field="person" value="${esc(row.person)}" list="adminAssignmentPeople" placeholder="Name">
+            <label class="admin-add-label">Student profile</label>
+            <select class="admin-in" data-role-field="profileId">${assignmentProfileOptions(row.profileId, row.person)}</select>
+            <div class="admin-assignment-profile-id">${esc(profileMeta)}</div>
           </div>
           <div class="field">
             <label class="admin-add-label">Position</label>
-            <select class="admin-in" data-role-field="position">${rolePositionOptionsHTML(row.position)}</select>
+            <select class="admin-in" data-role-field="positionId">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
           </div>
           <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" title="Remove assignment">x</button>
         </div>
         <div class="field">
           <label class="admin-add-label">Planda Bear Paperwork</label>
           <div class="admin-paperwork-checks">
-            ${paperworkOptions.map(option => `<label class="admin-paperwork-pill"><input type="checkbox" data-role-field="paperwork" value="${esc(option)}" ${selectedPaperwork.has(option.toLowerCase()) ? 'checked' : ''}>${esc(option)}</label>`).join('')}
+            ${paperworkOptions.map(option => `<label class="admin-paperwork-pill"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) ? 'checked' : ''}>${esc(option.label)}</label>`).join('')}
           </div>
         </div>
+        <div class="admin-assignment-verify"><span>${esc(updated)}</span><span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? `<span>By ${esc(row.assignedByLabel)}</span>` : ''}</div>
       </div>`;
     }).join('')}
-    <datalist id="adminAssignmentPeople">${peopleOptions}</datalist>
   </div>`;
 }
 
 function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
   const rows = Array.from(document.querySelectorAll('[data-role-assignment-row]')).map(rowEl => {
-    const person = rowEl.querySelector('[data-role-field="person"]')?.value?.trim() || '';
-    const position = rowEl.querySelector('[data-role-field="position"]')?.value?.trim() || '';
-    const paperwork = Array.from(rowEl.querySelectorAll('[data-role-field="paperwork"]:checked')).map(input => input.value);
-    return { person, position, paperwork };
+    const profileId = rowEl.querySelector('[data-role-field="profileId"]')?.value?.trim() || '';
+    const profile = assignmentProfileById(profileId);
+    const positionSelect = rowEl.querySelector('[data-role-field="positionId"]');
+    const positionId = positionSelect?.value?.trim() || '';
+    const position = positionSelect?.selectedOptions?.[0]?.dataset?.positionLabel || positionSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
+    const paperworkInputs = Array.from(rowEl.querySelectorAll('[data-role-field="paperwork"]:checked'));
+    const paperworkIds = paperworkInputs.map(input => input.value);
+    const paperwork = paperworkInputs.map(input => input.dataset.paperworkLabel || input.value);
+    return {
+      assignmentId:rowEl.dataset.assignmentId || '', profileId,
+      username:profile?.username || '', person:profile?.fullName || '',
+      positionId, position, paperworkIds, paperwork,
+      status:rowEl.dataset.status || 'assigned',
+      assignedBy:rowEl.dataset.assignedBy || '', assignedByLabel:rowEl.dataset.assignedByLabel || '',
+      createdAt:Number(rowEl.dataset.createdAt) || 0, updatedAt:Number(rowEl.dataset.updatedAt) || 0,
+      revision:Number(rowEl.dataset.recordRevision) || 0,
+    };
   });
-  return includeBlank ? rows : rows.filter(row => row.person || row.position || row.paperwork.length);
+  return includeBlank ? rows : rows.filter(row => row.profileId || row.positionId || row.paperworkIds.length);
 }
 
 function rerenderRoleAssignments(rows) {
@@ -2486,36 +2911,312 @@ function rerenderRoleAssignments(rows) {
 
 function addRoleAssignmentRow() {
   const rows = getRoleAssignmentsFromAdminDOM(true);
-  rows.push({ person:'', position:'', paperwork:[] });
+  rows.push({ profileId:'', person:'', positionId:'', position:'', paperworkIds:[], paperwork:[] });
   rerenderRoleAssignments(rows);
+  markRoleAssignmentsUnsaved();
 }
 
 function removeRoleAssignmentRow(index) {
   const rows = getRoleAssignmentsFromAdminDOM(true);
   rows.splice(index, 1);
   rerenderRoleAssignments(rows);
+  markRoleAssignmentsUnsaved();
 }
 
-function saveRoleAssignmentsFromAdmin() {
-  clearTimeout(_assignmentAutoSaveTimer);
-  const rows = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
-  persistPreProData({ roleAssignments: rows }, 'Role Assignments');
-  rerenderRoleAssignments(rows);
-  renderPlandaBearAssignmentsCard();
-  toast('Role assignments saved.');
+function legacyAssignmentRowsFromSession(data={}) {
+  const preProRows = data.prePro && Array.isArray(data.prePro.roleAssignments)
+    ? data.prePro.roleAssignments : null;
+  const topRows = Array.isArray(data.roleAssignments) ? data.roleAssignments : null;
+  const rows = (preProRows !== null ? preProRows : (topRows || [])).map(row => ({ ...row }));
+  const legacyMap = data.assignments && typeof data.assignments === 'object' ? data.assignments : {};
+  for (const [person, position] of Object.entries(legacyMap)) {
+    const existing = rows.find(row => sameParticipantName(row.person || row.name, person));
+    if (existing) {
+      if (!existing.position && !existing.role) existing.position = position;
+    } else if (position) {
+      rows.push({ person, position, paperwork:[] });
+    }
+  }
+  return rows;
 }
 
-// Every change (position picked, paperwork checked, name entered) saves right
-// away — a presence-driven panel rebuild must never eat an unsaved assignment.
-let _assignmentAutoSaveTimer = null;
-function autoSaveRoleAssignments() {
-  clearTimeout(_assignmentAutoSaveTimer);
-  _assignmentAutoSaveTimer = setTimeout(() => {
-    const rows = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
-    persistPreProData({ roleAssignments: rows });   // no section → no activity-log spam per click
+function assignmentProfilesForSession(profiles, records, legacyRows) {
+  const model = assignmentModel();
+  const recordIds = new Set(records.map(record => record.profileId));
+  const legacyNames = legacyRows.map(row => String(row.person || row.name || '').trim()).filter(Boolean);
+  return profiles.filter(profile => {
+    if (!profile || profile.renamedTo || profile.mergedInto || profile.active === false) return false;
+    const ids = model?.profileIdentityIds?.(profile) || [profile.profileId];
+    return (Array.isArray(profile.sessions) && profile.sessions.includes(session.code))
+      || ids.some(id => recordIds.has(id))
+      || legacyNames.some(name => sameParticipantName(name, profile.fullName));
+  }).sort((a, b) => String(a.fullName || a.username || '').localeCompare(String(b.fullName || b.username || ''), undefined, { sensitivity:'base' }));
+}
+
+async function loadAssignmentSnapshots(sessionRef, profileRef, assignmentRef) {
+  const network = Promise.all([
+    window._getDoc(sessionRef), window._getDocs(profileRef), window._getDocs(assignmentRef),
+  ]).then(snapshots => ({ snapshots, forcedCache:false }));
+  if (!window._getDocFromCache || !window._getDocsFromCache) return network;
+  const timeoutToken = Symbol('assignment-load-timeout');
+  let timer = 0;
+  const first = await Promise.race([
+    network,
+    new Promise(resolve => { timer = setTimeout(() => resolve(timeoutToken), 4500); }),
+  ]);
+  clearTimeout(timer);
+  if (first !== timeoutToken) return first;
+  try {
+    const snapshots = await Promise.all([
+      window._getDocFromCache(sessionRef),
+      window._getDocsFromCache(profileRef),
+      window._getDocsFromCache(assignmentRef),
+    ]);
+    return { snapshots, forcedCache:true };
+  } catch (cacheError) {
+    const error = new Error('Firestore did not respond and no complete cached assignment copy is available.');
+    error.code = 'unavailable';
+    throw error;
+  }
+}
+
+async function hydrateRoleAssignments({ force=false }={}) {
+  if (assignmentHydratePromise && !force) return assignmentHydratePromise;
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert || !assignmentModel()) {
+    setAssignmentSaveState('failed', 'Canonical assignments need a shared session, Firebase, and the assignment model.');
+    return null;
+  }
+  setAssignmentSaveState('loading', 'Loading saved profiles and assignments…');
+  assignmentHydratePromise = (async () => {
+    try {
+      const sessionRef = window._doc(window._db, 'sessions', session.code);
+      const profileRef = window._collection(window._db, 'profiles');
+      const assignmentRef = window._collection(window._db, 'sessions', session.code, 'assignments');
+      const loaded = await loadAssignmentSnapshots(sessionRef, profileRef, assignmentRef);
+      const [sessionSnap, profileSnap, assignmentSnap] = loaded.snapshots;
+      if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
+      const sessionData = sessionSnap.data() || {};
+      const fromCache = Boolean(loaded.forcedCache || sessionSnap.metadata?.fromCache
+        || profileSnap.metadata?.fromCache || assignmentSnap.metadata?.fromCache);
+      const records = [];
+      assignmentSnap.forEach(docSnap => {
+        const record = assignmentModel().normalizeAssignmentRecord({ assignmentId:docSnap.id, ...(docSnap.data() || {}) });
+        if (record.productionSession === session.code) records.push(record);
+      });
+      const profiles = [];
+      profileSnap.forEach(docSnap => profiles.push({ id:docSnap.id, ...(docSnap.data() || {}) }));
+      const legacyRows = legacyAssignmentRowsFromSession(sessionData);
+      assignmentProfiles = assignmentProfilesForSession(profiles, records, legacyRows);
+      canonicalRoleAssignments = records;
+      assignmentRevision = Math.max(0, Number(sessionData.assignmentRevision) || 0);
+      assignmentFromCache = fromCache;
+
+      let rows;
+      if (records.length) {
+        rows = records.map(record => normalizeRoleAssignment(record));
+        confirmedRoleAssignmentRows = rows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
+        setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
+          ? `${records.length} cached assignment record${records.length === 1 ? '' : 's'} shown. Reconnect before saving; cached data is not a Firestore confirmation.`
+          : `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+      } else if (legacyRows.length) {
+        rows = legacyRows.map(row => normalizeRoleAssignment(row));
+        confirmedRoleAssignmentRows = [];
+        const unresolved = rows.filter(row => !row.profileId || !row.positionId).length;
+        setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
+          ? 'Cached legacy assignments are shown, but cloud availability was not confirmed. Reconnect before migration.'
+          : unresolved
+            ? `${unresolved} legacy row${unresolved === 1 ? '' : 's'} cannot be linked uniquely to a saved profile and position.`
+            : `${rows.length} legacy assignment${rows.length === 1 ? '' : 's'} linked. Review and save once to migrate them canonically.`);
+      } else {
+        rows = defaultRoleAssignments();
+        confirmedRoleAssignmentRows = [];
+        setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
+          ? 'The cached assignment set is empty, but Firestore could not confirm that it is current.'
+          : 'No assignments saved yet.');
+      }
+      rerenderRoleAssignments(rows);
+      renderPlandaBearAssignmentsCard();
+      return rows;
+    } catch (error) {
+      assignmentFromCache = false;
+      const denied = error?.code === 'permission-denied';
+      setAssignmentSaveState('failed', denied
+        ? 'Firestore denied profiles or assignments. The staged rules need an owner deploy before production can use this workflow.'
+        : `${firebaseConnectionLabel(error, 'Could not load assignments')}. Existing local rows were not treated as confirmed.`);
+      console.warn('Assignment hydration failed.', error);
+      return null;
+    } finally {
+      assignmentHydratePromise = null;
+    }
+  })();
+  return assignmentHydratePromise;
+}
+
+function markRoleAssignmentsUnsaved() {
+  if (assignmentSaveState === 'saving') return;
+  setAssignmentSaveState('unsaved', 'Draft changed. Save Assignments to confirm it in Firestore.');
+}
+
+function localizeConfirmedAssignmentProjection(rows, updatedAt) {
+  const local = loadPreProData();
+  const fieldTimes = { ...(local._fieldUpdatedAt || {}), roleAssignments:updatedAt };
+  const next = { ...local, roleAssignments:rows, _fieldUpdatedAt:fieldTimes, updatedAt:Math.max(Number(local.updatedAt) || 0, updatedAt) };
+  try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
+}
+
+async function saveRoleAssignmentsFromAdmin() {
+  if (assignmentSaveState === 'saving') return;
+  const model = assignmentModel();
+  if (!model || !window._runTransaction || !window._getDocs || !session.code || session.isDemo || session.isExpert) {
+    setAssignmentSaveState('failed', 'Canonical cloud saving is unavailable in this workspace.');
+    return false;
+  }
+  if (assignmentFromCache) {
+    setAssignmentSaveState('failed', 'Assignments were loaded from offline cache. Reconnect and reload the server copy before saving; the draft remains unchanged.');
+    return false;
+  }
+  const draft = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
+  const incomplete = draft.find(row => !row.profileId || !row.positionId || !row.person || !row.position);
+  if (incomplete) {
+    setAssignmentSaveState('failed', 'Every assignment needs a saved student profile and a position.');
+    return false;
+  }
+  const pairs = new Set();
+  for (const row of draft) {
+    const key = `${row.profileId}|${row.positionId}`;
+    if (pairs.has(key)) {
+      setAssignmentSaveState('failed', `${row.person} already has ${row.position}. Add a different position or edit the existing row.`);
+      return false;
+    }
+    pairs.add(key);
+  }
+
+  setAssignmentSaveState('saving', 'Saving the canonical records and compatibility projection atomically…');
+  const actor = assignmentActor();
+  const now = Date.now();
+  try {
+    const collectionRef = window._collection(window._db, 'sessions', session.code, 'assignments');
+    const existingSnap = await window._getDocs(collectionRef);
+    const existingRecords = new Map();
+    const existingDocIds = [];
+    existingSnap.forEach(docSnap => {
+      existingDocIds.push(docSnap.id);
+      const record = model.normalizeAssignmentRecord({ assignmentId:docSnap.id, ...(docSnap.data() || {}) });
+      existingRecords.set(record.assignmentId, record);
+    });
+    const records = draft.map(row => {
+      const assignmentId = model.assignmentIdFor(row.profileId, row.positionId);
+      return model.createAssignmentRecord({
+        assignmentId,
+        productionSession:session.code,
+        profileId:row.profileId,
+        displayName:row.person,
+        positionId:row.positionId,
+        positionLabel:row.position,
+        paperworkIds:row.paperworkIds,
+        paperworkLabels:row.paperwork,
+        status:row.status || 'assigned',
+        assignedBy:actor.id,
+        assignedByLabel:actor.label,
+      }, existingRecords.get(assignmentId) || null, now);
+    });
+    const recordIds = new Set(records.map(record => record.assignmentId));
+    const compatibility = model.compatibilityRows(records).map((row, index) => ({
+      ...row,
+      assignmentId:records[index].assignmentId,
+      profileId:records[index].profileId,
+      positionId:records[index].positionId,
+      paperworkIds:records[index].paperworkIds.slice(),
+      status:records[index].status,
+      assignedBy:records[index].assignedBy,
+      assignedByLabel:records[index].assignedByLabel,
+      createdAt:records[index].createdAt,
+      updatedAt:records[index].updatedAt,
+      revision:records[index].revision,
+    }));
+    const legacyPositionMap = {};
+    records.forEach(record => { if (!legacyPositionMap[record.displayName]) legacyPositionMap[record.displayName] = record.positionLabel; });
+    const expectedRevision = assignmentRevision;
+    const sessionRef = window._doc(window._db, 'sessions', session.code);
+    await window._runTransaction(window._db, async tx => {
+      const sessionSnap = await tx.get(sessionRef);
+      if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
+      const actualRevision = Math.max(0, Number(sessionSnap.data().assignmentRevision) || 0);
+      if (model.hasRevisionConflict(expectedRevision, actualRevision)) {
+        const conflict = new Error(`Assignments changed on another device (server revision ${actualRevision}, editor revision ${expectedRevision}).`);
+        conflict.code = 'assignment-conflict';
+        throw conflict;
+      }
+      existingDocIds.forEach(id => {
+        if (!recordIds.has(id)) tx.delete(window._doc(window._db, 'sessions', session.code, 'assignments', id));
+      });
+      records.forEach(record => tx.set(window._doc(window._db, 'sessions', session.code, 'assignments', record.assignmentId), record));
+      tx.update(sessionRef, {
+        assignmentRevision:actualRevision + 1,
+        assignmentUpdatedAt:now,
+        assignmentUpdatedBy:actor.id,
+        assignments:legacyPositionMap,
+        roleAssignments:compatibility,
+        'prePro.roleAssignments':compatibility,
+        'prePro._fieldUpdatedAt.roleAssignments':now,
+        'prePro.updatedAt':now,
+        preProActivity:window._arrayUnion({ section:'Role Assignments', by:actor.label, clientId:CLIENT_ID, at:now }),
+      });
+    });
+
+    assignmentRevision = expectedRevision + 1;
+    assignmentFromCache = false;
+    canonicalRoleAssignments = records;
+    confirmedRoleAssignmentRows = records.map(record => normalizeRoleAssignment(record));
+    localizeConfirmedAssignmentProjection(compatibility, now);
+    rerenderRoleAssignments(confirmedRoleAssignmentRows);
     renderPlandaBearAssignmentsCard();
-  }, 400);
+    setAssignmentSaveState('saved', `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+    toast('Assignments saved to Firestore.');
+    return true;
+  } catch (error) {
+    if (error?.code === 'assignment-conflict') {
+      setAssignmentSaveState('conflict', `${error.message} Your draft is still here; load the server copy before deciding what to reapply.`);
+    } else if (error?.code === 'permission-denied') {
+      setAssignmentSaveState('failed', 'Firestore denied the assignment write. Nothing was labeled Saved; the draft remains for retry or revert.');
+    } else {
+      setAssignmentSaveState('failed', `${firebaseConnectionLabel(error, 'Assignment save failed')}. Nothing was labeled Saved; the draft remains for retry or revert.`);
+    }
+    console.warn('Assignment save failed.', error);
+    return false;
+  }
 }
+
+function revertRoleAssignments() {
+  rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
+  setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
+    ? 'Reverted to the cached assignment copy. Reconnect before treating it as confirmed.'
+    : confirmedRoleAssignmentRows.length
+      ? `Reverted to ${confirmedRoleAssignmentRows.length} server-confirmed assignment record${confirmedRoleAssignmentRows.length === 1 ? '' : 's'}.`
+      : 'Reverted to the confirmed empty assignment set.');
+}
+
+async function retryRoleAssignmentLoad() {
+  return hydrateRoleAssignments({ force:true });
+}
+
+async function reloadRoleAssignmentsAfterConflict() {
+  if (!confirm('Load the server assignment copy and discard this local draft?')) return false;
+  return hydrateRoleAssignments({ force:true });
+}
+
+function onAssignmentRevisionSnapshot(data={}) {
+  const incoming = Math.max(0, Number(data.assignmentRevision) || 0);
+  if (incoming === assignmentRevision || assignmentSaveState === 'loading' || assignmentSaveState === 'saving') return;
+  if (['unsaved','failed','conflict'].includes(assignmentSaveState)) {
+    setAssignmentSaveState('conflict', `Another device saved assignment revision ${incoming} while this draft was open. Load the server copy before saving.`);
+    return;
+  }
+  hydrateRoleAssignments({ force:true });
+}
+
+// Compatibility alias for any cached inline handler from the pre-Phase-6 shell.
+function autoSaveRoleAssignments() { markRoleAssignmentsUnsaved(); }
 
 function renderSourcesRow(key, label) {
   const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
@@ -2886,7 +3587,7 @@ function firebaseConnectionHint(err) {
 }
 
 function openLocalSession(code='', name='You', role='instructor', showName='Untitled Show') {
-  session = { code:(code || '').trim().toUpperCase(), role, userName:name || 'You', isDemo:false, isExpert:false };
+  session = sessionWithProfileIdentity({ code:(code || '').trim().toUpperCase(), role, userName:name || 'You', isDemo:false, isExpert:false }, name);
   show = { name:showName || 'Untitled Show', start:'' };
   beats = [];
   freeTextMode = true;
@@ -2897,7 +3598,7 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
 }
 
 function openLocalPlandaBear(code='', name='You') {
-  session = { code:(code || 'LOCAL').trim().toUpperCase(), role:'instructor', userName:name || 'You', isDemo:false, isExpert:false };
+  session = sessionWithProfileIdentity({ code:(code || 'LOCAL').trim().toUpperCase(), role:'instructor', userName:name || 'You', isDemo:false, isExpert:false }, name);
   freeTextMode = true;
   rememberLastSession(session.code, session.userName);
   restoreLocalDraft();
@@ -2921,7 +3622,7 @@ function createSession() {
   const showName = document.getElementById('inst-show').value.trim();
   if (!name) { document.getElementById('inst-err').classList.add('on'); return; }
   document.getElementById('inst-err').classList.remove('on');
-  session = { code:genCode(), role:'instructor', userName:name, isDemo:false, isExpert:false };
+  session = sessionWithProfileIdentity({ code:genCode(), role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
   show.name = showName||'Untitled Show';
   freeTextMode = false;
   document.getElementById('code-display-val').textContent = session.code;
@@ -3000,7 +3701,9 @@ function openPlandaBearJoin() {
 
 async function joinSession() {
   const code = document.getElementById('stud-code').value.trim().toUpperCase();
-  const name = document.getElementById('stud-name').value.trim();
+  const typedName = document.getElementById('stud-name').value.trim();
+  const signedProfile = window.CueolaIdentity?.profile?.();
+  const name = signedProfile?.fullName || typedName;
   const errEl = document.getElementById('stud-err');
   if (!code || !name) { errEl.textContent='Code and name required.'; errEl.classList.add('on'); return; }
   errEl.classList.remove('on');
@@ -3031,7 +3734,7 @@ async function joinSession() {
         errEl.classList.add('on');
         return;
       }
-      session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+      session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
       show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
       beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
       freeTextMode = Boolean(d.freeMode);
@@ -3053,7 +3756,9 @@ async function joinSession() {
 
 async function joinPreProSession() {
   const code = document.getElementById('pp-join-code').value.trim().toUpperCase();
-  const name = document.getElementById('pp-join-name').value.trim();
+  const typedName = document.getElementById('pp-join-name').value.trim();
+  const signedProfile = window.CueolaIdentity?.profile?.();
+  const name = signedProfile?.fullName || typedName;
   const errEl = document.getElementById('pp-join-err');
   if (!code || !name) { errEl.textContent='Code and name required.'; errEl.classList.add('on'); return; }
   errEl.classList.remove('on');
@@ -3061,7 +3766,7 @@ async function joinPreProSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking…'; }
   const openLocal = snap => {
     const d = snap.data() || {};
-    session = { code, role:'student', userName:name, isDemo:false, isExpert:false };
+    session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
@@ -3110,7 +3815,7 @@ async function joinPreProSession() {
 }
 
 function loadExpert() {
-  session = { code:'', role:'instructor', userName:'You', isDemo:false, isExpert:true };
+  session = { code:'', role:'instructor', userName:'You', profileId:'', username:'', profileAliases:[], isDemo:false, isExpert:true };
   show = { name:'Untitled Show', start:'' };
   beats = [];
   freeTextMode = true;
@@ -3169,7 +3874,7 @@ async function startBlankSlate() {
       participants:[],
     });
     localStorage.setItem('cueola_last_name', name);
-    session = { code, role:'instructor', userName:name, isDemo:false, isExpert:false };
+    session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
     show = { name:showName, start:'' };
     beats = [];
     freeTextMode = true;
@@ -3184,7 +3889,7 @@ async function startBlankSlate() {
 }
 
 function loadDemo() {
-  session = { code:'DEMO1', role:'student', userName:'Demo', isDemo:true, isExpert:false };
+  session = { code:'DEMO1', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
   show = { name:'Campus News — Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
   freeTextMode = false;
@@ -3632,6 +4337,7 @@ function setupFirestore() {
       if (d.prePro && typeof d.prePro === 'object') {
         try { mergePreProFromCloud(d.prePro); } catch {}
       }
+      onAssignmentRevisionSnapshot(d);
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
       // The shared show cue is authoritative independently of this device's
       // local/followed selection. Older code folded both values into lsIdx.
@@ -3659,7 +4365,7 @@ function setupFirestore() {
           ptUpdateFromCueola(prompterText);
         }
       }
-      if (d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
+      if (isFlowmingoTalentActive() && d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
         const control = d.prompter.control;
         if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId) && control.source === 'flowmingo-op') {
           flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
@@ -3676,7 +4382,7 @@ function setupFirestore() {
       if (_hb?.ts && !isPrompterSelfSender(_hb.sender)
           && _hb.ts !== _lastSeenTalentHeartbeatTs && (Date.now() - _hb.ts) < 20000) {
         _lastSeenTalentHeartbeatTs = _hb.ts;
-        _notePrompterTalentSeen(_hb);
+        _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ..._hb });
       }
       // Outrangutan playback module — cue list + live status published back to us.
       if (d.outrangutan) applyOutrangutanState(d.outrangutan);
@@ -3768,6 +4474,7 @@ function setSyncReconnecting(on) {
     _syncReconnState = on;
     logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : 'Cloud sync restored');
   }
+  renderLiveStatusRail();
 }
 window.addEventListener('offline', () => { if (session.code && !session.isDemo && !session.isExpert) setSyncReconnecting(true); });
 window.addEventListener('online', () => { /* chip clears on the next server snapshot */ });
@@ -3818,9 +4525,14 @@ async function joinPresence() {
   if (!session.code||session.isDemo||session.isExpert||!window._firebaseReady) return;
   pbStartNotesListener();   // hub/notes-only joins never run setupFirestore — this is their live push
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
+  const identity = session.profileId ? {
+    profileId: session.profileId,
+    username: session.username || '',
+    profileAliases: Array.isArray(session.profileAliases) ? session.profileAliases : [],
+  } : {};
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
+      [`presence.${presenceId}`]:{name,role:session.role,...identity,lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
     });
     clearInterval(presenceInterval);
     presenceInterval = setInterval(async()=>{
@@ -3828,21 +4540,23 @@ async function joinPresence() {
     },30000);
   } catch {}
 
-  // Persist this participant to the dashboard-visible participants list.
-  // Uses arrayUnion so each unique name+role pair is recorded once.
+  // Persist the canonical profile identity with the dashboard-visible roster.
+  // A transaction upgrades an older name-only participant without dropping a
+  // concurrent join, and a profile id wins over mutable display-name matching.
   try {
-    const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
-    if (snap.exists()) {
-      const existing = snap.data().participants || [];
-      const alreadyIn = existing.some(p => p.name === name);
-      if (!alreadyIn) {
-        // arrayUnion, not a whole-array overwrite — two devices joining at the
-        // same moment must both survive (the loser used to vanish from the list).
-        await window._updateDoc(window._doc(window._db,'sessions',session.code), {
-          participants: window._arrayUnion({ name, role:session.role, joinedAt: Date.now() })
-        });
-      }
-    }
+    const ref = window._doc(window._db,'sessions',session.code);
+    await window._runTransaction(window._db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const existing = Array.isArray(snap.data().participants) ? snap.data().participants.slice() : [];
+      const at = existing.findIndex(p => session.profileId
+        ? p?.profileId === session.profileId || (!p?.profileId && sameParticipantName(p?.name, name))
+        : sameParticipantName(p?.name, name));
+      const participant = { ...(at >= 0 ? existing[at] : {}), name, role:session.role, ...identity, joinedAt: at >= 0 ? (existing[at]?.joinedAt || Date.now()) : Date.now() };
+      if (at >= 0) existing[at] = participant;
+      else existing.push(participant);
+      tx.update(ref, { participants: existing });
+    });
   } catch {}
 }
 
@@ -4003,12 +4717,29 @@ async function openPersonInfo(name) {
 }
 
 window.addEventListener('beforeunload', leavePresence);
+window.addEventListener('pagehide', () => {
+  if (isFlowmingoTalentActive()) stopPrompterTalentRuntime();
+});
 
 function isTextEditingTarget(target) {
   return target?.tagName === 'INPUT' ||
     target?.tagName === 'TEXTAREA' ||
     target?.isContentEditable ||
     Boolean(target?.closest?.('[contenteditable="true"]'));
+}
+
+function isInteractiveTarget(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  return Boolean(target.closest([
+    'button', 'input', 'textarea', 'select', 'option', 'a', 'label', 'summary',
+    '[role="button"]', '[role="slider"]', '[contenteditable="true"]',
+    '[data-live-interactive]', '.ls-sidebar', '.prompt-op-panel',
+    '.flowop-controls', '.modal', '.overlay', '.scrollable'
+  ].join(',')));
+}
+
+function isInteractiveEventTarget(event) {
+  return isInteractiveTarget(event?.target) || isInteractiveTarget(document.activeElement);
 }
 
 function isLiveScriptPanelTarget(target) {
@@ -4040,7 +4771,7 @@ const KEYMAP = [
   { id: 'prompter.speed.up',   scope: 'live', group: 'Prompter', keys: [']'],      label: 'Speed up',                      run: () => sendPrompterControl('speed_up') },
   { id: 'prompter.nudge.back', scope: 'live', group: 'Prompter', keys: [','],      label: 'Nudge back',                    run: () => poNudgeSeek(-3) },
   { id: 'prompter.nudge.fwd',  scope: 'live', group: 'Prompter', keys: ['.'],      label: 'Nudge forward',                 run: () => poNudgeSeek(3) },
-  { id: 'prompter.cue.current',scope: 'live', group: 'Prompter', keys: ['C'],      label: 'Cue prompter to current row',   run: () => sendPrompterControl('seek_row_' + (Math.max(lsIdx, 0) + 1)) },
+  { id: 'prompter.cue.current',scope: 'live', group: 'Prompter', keys: ['C'],      label: 'Cue prompter to current row',   run: () => sendPrompterControl('seek_row_' + (Math.max(liveActiveCueIndex(), 0) + 1)) },
   { id: 'prompter.top',        scope: 'live', group: 'Prompter', keys: ['T'],      label: 'Prompter to top',               run: () => sendPrompterControl('reset') },
   { id: 'prompter.fullscreen', scope: 'live', group: 'Prompter', keys: ['F'],      label: 'Talent fullscreen',             run: () => sendPrompterControl('fullscreen') },
   { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Reset talent screen',           run: () => sendPrompterControl('reset') },
@@ -4090,6 +4821,25 @@ function keymapScopeNow() {
   return null;
 }
 const _keymapHolds = new Map();   // action.id → stop control while a hold key is down
+
+function liveCommandDispatchAllowed(options={}) {
+  const allowed = typeof liveSessionController.canDispatch === 'function'
+    ? liveSessionController.canDispatch()
+    : liveSessionState().lifecycle === 'live';
+  if (!allowed && options.notify) {
+    const status = document.getElementById('exitLiveStatus');
+    if (status && document.getElementById('exitLiveOv')?.classList.contains('on')) {
+      status.textContent = 'Live commands are paused while Cueola returns to the rundown.';
+    }
+  }
+  return allowed;
+}
+
+function releaseLiveCommandHolds() {
+  _keymapHolds.forEach(stop => sendPrompterControl(stop));
+  _keymapHolds.clear();
+}
+
 function keymapDispatch(e, phase) {
   const scope = keymapScopeNow();
   if (!scope) return false;
@@ -4098,6 +4848,12 @@ function keymapDispatch(e, phase) {
     if (e.shiftKey) redoRundownEdit();
     else undoRundownEdit();
     return true;
+  }
+  if (scope === 'live' && !liveCommandDispatchAllowed()) {
+    if (phase === 'up') releaseLiveCommandHolds();
+    const matched = KEYMAP.some(action => action.scope === 'live' && keymapBindings(action).some(binding => keymapMatches(e, binding)));
+    if (matched) consumeRemoteKey(e);
+    return matched;
   }
   // Overlays own their keys before the map runs.
   if (document.getElementById('lsRowPreviewOv')?.classList.contains('on')) {
@@ -4108,7 +4864,7 @@ function keymapDispatch(e, phase) {
     return true;
   }
   if (typeof jogScrubHandleKey === 'function' && jogScrubHandleKey(e, phase)) return true;
-  if (isTextEditingTarget(e.target)) {
+  if (isInteractiveEventTarget(e)) {
     // Releasing a held key while focus sits in a text field must still send the
     // stop control — otherwise the prompter stays braked/boosted until blur.
     if (phase === 'up' && _keymapHolds.size) {
@@ -4119,7 +4875,7 @@ function keymapDispatch(e, phase) {
         _keymapHolds.delete(action.id);
       }
     }
-    return false;   // typing suppresses everything else (Esc keeps browser default)
+    return false;   // controls and editable surfaces own their native keys
   }
   for (const action of KEYMAP) {
     if (action.scope !== scope) continue;
@@ -4139,7 +4895,7 @@ function keymapDispatch(e, phase) {
 document.addEventListener('keydown', e => { keymapDispatch(e, 'down'); });
 document.addEventListener('keyup', e => { keymapDispatch(e, 'up'); });
 // Losing window focus mid-hold must never leave the prompter braking/boosting.
-window.addEventListener('blur', () => { _keymapHolds.forEach(stop => sendPrompterControl(stop)); _keymapHolds.clear(); });
+window.addEventListener('blur', releaseLiveCommandHolds);
 
 // ── P5: shortcut reference (?) — generated from KEYMAP so it cannot drift ────
 function toggleKeymapRef() {
@@ -5628,12 +6384,40 @@ let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out
 function syncOutrangutanControllerStatus(og=outrangutanState) {
   const transport = og?.live?.status || '';
   const cueCount = Object.keys(og?.cues || {}).length;
-  if (transport === 'play') setLiveSubsystemStatus('playback', 'active', og.live?.name || 'Media playing');
-  else if (transport === 'pause') setLiveSubsystemStatus('playback', 'paused', og.live?.name || 'Media paused');
-  else if (transport === 'pre') setLiveSubsystemStatus('playback', 'ready', og.live?.name || 'Media in preview');
-  else if (transport === 'error') setLiveSubsystemStatus('playback', 'error', og.live?.name || 'Playback error');
-  else if (cueCount || window.Outrangutan?.isReady?.()) setLiveSubsystemStatus('playback', 'ready', cueCount ? `${cueCount} media cues available` : 'Local playout ready');
-  else setLiveSubsystemStatus('playback', 'closed', 'No playout connected');
+  const output = window.Outrangutan?.outputStatus?.() || og?.live?.outputs || null;
+  const outputStatus = output?.status || '';
+  let status = 'closed';
+  let detail = 'No playout connected';
+  if (['stalled','disconnected','recovering','degraded','error'].includes(outputStatus)) {
+    status = outputStatus;
+    detail = output?.detail || 'Playback output needs recovery';
+  } else if (outputStatus === 'closed') {
+    status = transport === 'play' || transport === 'pause' ? 'disconnected' : 'closed';
+    detail = transport === 'play' || transport === 'pause' ? 'Media is active but no playback output is connected' : (output?.detail || 'No playback output connected');
+  } else if (outputStatus === 'opening' || outputStatus === 'connecting') { status = outputStatus; detail = output?.detail || 'Connecting playback output'; }
+  else if (transport === 'play') { status = 'active'; detail = og.live?.name || 'Media playing'; }
+  else if (transport === 'pause') { status = 'paused'; detail = og.live?.name || 'Media paused'; }
+  else if (transport === 'pre') { status = 'ready'; detail = og.live?.name || 'Media in preview'; }
+  else if (transport === 'error') { status = 'error'; detail = og.live?.name || 'Playback error'; }
+  else if (outputStatus === 'ready' || cueCount || window.Outrangutan?.isReady?.()) {
+    status = 'ready';
+    detail = output?.detail || (cueCount ? `${cueCount} media cues available` : 'Local playout ready');
+  }
+  // The Live controller deliberately exposes one bounded status vocabulary.
+  // A partially available output group is operationally stalled, with the
+  // detailed degradation retained beside Playback for recovery.
+  if (status === 'degraded') status = 'stalled';
+  setLiveSubsystemStatus('playback', status, detail);
+  const chip = document.getElementById('ls-stat-playback');
+  if (chip) {
+    const label = { active:'RUNNING', paused:'PAUSED', ready:'READY', opening:'OPENING', connecting:'CONNECTING', stalled:'STALLED', disconnected:'DISCONNECTED', recovering:'RECOVERING', degraded:'DEGRADED', error:'ERROR', closed:'CLOSED' }[status] || 'CLOSED';
+    chip.textContent = `PLAYOUT ${label}`;
+    chip.title = detail;
+    chip.classList.toggle('connected', ['active','paused','ready'].includes(status));
+    chip.classList.toggle('recovering', ['opening','connecting','recovering'].includes(status));
+    chip.classList.toggle('error', ['stalled','disconnected','degraded','error'].includes(status));
+    chip.dataset.playbackStatus = status;
+  }
 }
 
 // Snapshot → local state. Structural changes (the cue set) re-render the visible
@@ -5806,6 +6590,7 @@ function fireOutrangutanSfxFromModal() {
 // P5: playout transport from the live-screen keymap — same-tab fast path first,
 // session-doc command otherwise. Actions: go / pause / stop / fadeStop / panic.
 function fireOutrangutanTransport(action) {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   const local = window.Outrangutan && window.Outrangutan._local;
   if (local && local.transport && session.code && local.session() === session.code && local.transport(action)) {
     toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
@@ -5816,6 +6601,7 @@ function fireOutrangutanTransport(action) {
 
 // Manual SFX trigger on a live row (P4, Decisions #6: manual + optional auto).
 function fireOutrangutanSfxCell(beatId, type) {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   const b = beats.find(x => x.id === beatId);
   const d = b?.cues?.[type];
   if (!d || !d.outPadId) { toast('No SFX pad linked.'); return; }
@@ -5840,6 +6626,7 @@ function outrangutanSfxGoBtnHTML(beatId, type, d) {
 
 // Manual GO from a live cue card.
 function fireOutrangutanCueCell(beatId) {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   const d = beats.find(x => x.id === beatId)?.cues?.playback;
   if (!outrangutanCellLinked(d)) { toast('No Outrangutan cue linked.'); return; }
   if (fireOutrangutanCommand('cue', d.outCueId)) toast('Outrangutan: GO sent.');
@@ -5853,6 +6640,7 @@ function outrangutanGoBtnHTML(beatId, d) {
 
 // Auto-fire linked Outrangutan cues/SFX when a row advances live (lsNext only).
 function fireOutrangutanAutoForBeat(beat) {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   const d = beat?.cues?.playback;
   if (d && d.outAuto && d.outCueId) fireOutrangutanCommand('cue', d.outCueId);
   // P4: SFX auto-fire (playback + audio cells; Decisions #6)
@@ -5860,6 +6648,7 @@ function fireOutrangutanAutoForBeat(beat) {
     const c = beat?.cues?.[t];
     if (c && c.outPadAuto && c.outPadId) fireOutrangutanCommand('pad', c.outPadId);
   });
+  return true;
 }
 
 // Rundown playback-cell badge: linked cue name/dur + live status (auto-populate).
@@ -6237,7 +7026,12 @@ async function preflightThemeAssets() {
 // Jump from a failing preflight row straight to the rundown row it points at.
 function preflightJump(beatId) {
   hideOverlay('goLiveCheckOv');
-  if (!document.getElementById('rundown')?.classList.contains('on')) { showRundown(); renderRundown(); }
+  if (document.getElementById('liveshow')?.classList.contains('on')) {
+    requestExitLive();
+    toast('Return to the rundown before jumping to a preflight row.');
+    return;
+  }
+  if (!document.getElementById('rundown')?.classList.contains('on')) return;
   setTimeout(() => {   // let the screen swap paint first (not rAF — headless previews starve it)
     const row = document.querySelector(`#rdBody tr[data-id="${beatId}"]`) || document.querySelector(`tr[data-id="${beatId}"]`);
     if (!row) { toast('Row not found — it may have been deleted.'); return; }
@@ -6266,8 +7060,18 @@ function goLive() {
 function enterLiveSessionScreen(liveState) {
   captureSessionSnapshot('live', true);
   lsIdx = liveState.selectedCueIndex;
+  try {
+    const playbackAttach = window.Outrangutan?.reattachLiveControl?.();
+    if (playbackAttach && !playbackAttach.ok) {
+      setLiveSubsystemStatus('playback', 'recovering', playbackAttach.error || 'Reattaching playback control');
+    }
+  } catch (error) {
+    containError('Playback Live reattach', error);
+    setLiveSubsystemStatus('playback', 'error', String(error?.message || error));
+  }
   liveSessionController.registerCleanup('live-clock', () => stopTimer(false));
   liveSessionController.registerCleanup('prompter-operator', stopPrompterOperatorRuntime);
+  liveSessionController.registerCleanup('live-transients', clearLiveTransientRuntime);
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
@@ -6281,7 +7085,7 @@ function enterLiveSessionScreen(liveState) {
   buildPromptFromRundown();
   initPrompter();
   syncOutrangutanControllerStatus();
-  setLiveSubsystemStatus('scriptOperator', _scriptOpWin && !_scriptOpWin.closed ? 'connecting' : 'closed', _scriptOpWin && !_scriptOpWin.closed ? 'Window open; awaiting Phase 4 heartbeat' : 'Script Operator window closed');
+  syncScriptOperatorSubsystemStatus();
   sendToPrompter(true);
   renderLive();
   syncLiveIdx();
@@ -6293,10 +7097,12 @@ function enterLiveSessionScreen(liveState) {
 }
 
 function showRundown() {
-  return liveSessionController.leave({ reason:'operator-leave-live' });
+  if (liveSessionState().lifecycle === 'live') return requestExitLive();
+  return liveSessionState();
 }
 
-function leaveLiveSessionScreen() {
+function leaveLiveSessionScreen(liveState, context={}) {
+  if (context.failure) throw context.failure;
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
@@ -6324,14 +7130,243 @@ function isStandardShowCaller() {
   return isFollowingSelf() && session.role === 'instructor' && !adminSession;
 }
 
-function requestExitLive() {
-  showOverlay('exitLiveOv');
+let liveExitTransaction = null;
+
+function classifyFlowmingoLiveExit() {
+  const state = prompterSessionController.getState();
+  const windowOpen = Boolean(_prompterTalentWin && !_prompterTalentWin.closed);
+  const connected = _prompterHasRecentTalent() || ['connected','ready','running','paused','recovering'].includes(state.status);
+  const active = Boolean(state.running || ptPlaying);
+  return {
+    active,
+    open:windowOpen || connected,
+    needsDisposition:active,
+    status:state.status || (active ? 'running' : windowOpen ? 'open' : 'closed'),
+    detail:active ? 'Talent script is scrolling' : connected ? 'Talent output is connected and paused' : windowOpen ? 'Talent window is open' : 'No talent output connected',
+    outputInstanceId:_activePrompterOutputInstanceId || '',
+    windowOpen,
+  };
 }
 
-function confirmExitLive() {
-  hideOverlay('exitLiveOv');
+function classifyOutrangutanLiveExit() {
+  if (typeof window.Outrangutan?.classifyLiveExit === 'function') {
+    return window.Outrangutan.classifyLiveExit();
+  }
+  const output = window.Outrangutan?.outputStatus?.() || null;
+  const transport = outrangutanState?.live || null;
+  const active = Boolean(transport && ['play','pause','pre'].includes(transport.status));
+  return {
+    active,
+    open:Boolean(output?.open),
+    hasActiveOutputs:active,
+    hasOpenOutputs:Boolean(output?.open),
+    needsDisposition:active,
+    transport:{ active, state:transport?.status || 'idle', cueName:transport?.name || '' },
+    outputs:output || { open:0, items:[] },
+  };
+}
+
+function classifyLiveExitOutputs() {
+  const prompter = classifyFlowmingoLiveExit();
+  const playback = classifyOutrangutanLiveExit();
+  const scriptOperator = {
+    open:Boolean(_scriptOpWin && !_scriptOpWin.closed),
+    status:liveSessionState().subsystems.scriptOperator?.status || 'closed',
+  };
+  return {
+    capturedAt:Date.now(),
+    prompter,
+    playback,
+    scriptOperator,
+    needsDisposition:Boolean(prompter.needsDisposition || playback.needsDisposition || playback.hasActiveOutputs),
+  };
+}
+
+function liveExitOutputLines(outputs) {
+  const prompter = outputs.prompter;
+  const playback = outputs.playback;
+  const playbackState = playback.transport?.state || playback.transport?.status || (playback.active ? 'active' : 'idle');
+  const playbackOpen = Number(playback.outputs?.open ?? playback.open ?? 0);
+  const scriptOp = outputs.scriptOperator?.open ? 'Script Operator open (closes when Live ends)' : 'Script Operator closed';
+  return [
+    `Flowmingo: ${prompter.active ? 'scrolling' : prompter.open ? 'open and paused' : 'closed'}`,
+    `Outrangutan: ${playbackState}${playbackOpen ? ` · ${playbackOpen} output window${playbackOpen === 1 ? '' : 's'} open` : ''}`,
+    scriptOp,
+  ];
+}
+
+function renderLiveExitDecision(outputs) {
+  const activeNames = [];
+  if (outputs.prompter.active) activeNames.push('Flowmingo');
+  if (outputs.playback.needsDisposition || outputs.playback.hasActiveOutputs) activeNames.push('Outrangutan');
+  const summary = document.getElementById('exitLiveOutputSummary');
+  const details = document.getElementById('exitLiveOutputDetails');
+  const status = document.getElementById('exitLiveStatus');
+  const recovery = document.getElementById('exitLiveRecovery');
+  if (summary) summary.textContent = activeNames.length
+    ? `${activeNames.join(' and ')} ${activeNames.length === 1 ? 'has an active output' : 'have active outputs'}.`
+    : 'No active output needs a decision.';
+  if (details) details.textContent = liveExitOutputLines(outputs).join('\n');
+  if (status) status.textContent = 'Live GO and transport commands are paused until you choose.';
+  if (recovery) recovery.hidden = true;
+  liveExitDialogSetBusy(false);
+}
+
+function liveExitDialogSetBusy(busy) {
+  ['exitLiveStopBtn','exitLiveDetachBtn','exitLiveCancelBtn'].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = Boolean(busy);
+  });
+  const dialog = document.getElementById('exitLiveDialog');
+  if (dialog) dialog.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
+function presentLiveExitRecovery(message) {
+  if (!document.getElementById('exitLiveOv')?.classList.contains('on')) showOverlay('exitLiveOv');
+  const status = document.getElementById('exitLiveStatus');
+  if (status) status.textContent = `Could not confirm a safe return: ${message}`;
+  const recovery = document.getElementById('exitLiveRecovery');
+  if (recovery) recovery.hidden = false;
+  liveExitDialogSetBusy(false);
+  ['exitLiveStopBtn','exitLiveDetachBtn','exitLiveCancelBtn'].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = true;
+  });
+}
+
+function requestExitLive() {
+  if (liveSessionState().lifecycle !== 'live') return liveSessionState();
+  releaseLiveCommandHolds();
+  const outputs = classifyLiveExitOutputs();
+  liveExitTransaction = { outputs, requestedAt:Date.now(), disposition:'' };
+  const state = liveSessionController.prepareLeave({
+    reason:'operator-return-to-rundown',
+    outputSnapshot:outputs,
+  });
+  scriptOperatorPublishState(true);
+  if (!outputs.needsDisposition) {
+    return commitExitLive('detach', { automatic:true });
+  }
+  renderLiveExitDecision(outputs);
+  showOverlay('exitLiveOv');
+  return state;
+}
+
+function waitForPrompterControlAck(controlId) {
+  const pending = _pendingPrompterControls[controlId];
+  if (!pending) return Promise.resolve({ ok:false, acknowledged:false, error:'Flowmingo command was not tracked' });
+  return new Promise(resolve => { pending.settle = resolve; });
+}
+
+async function applyFlowmingoLiveExit(disposition, before) {
+  if (disposition === 'detach' || !before.active) {
+    return { ok:true, acknowledged:true, disposition, before, detached:true, paused:false };
+  }
+  const control = buildPrompterControl('pause', 'live-exit');
+  const sent = dispatchPrompterCommand(control, 'live-exit', false);
+  if (!sent) return { ok:false, acknowledged:false, disposition, before, error:'Flowmingo pause could not be sent' };
+  const ack = await waitForPrompterControlAck(control.controlId);
+  return {
+    ok:Boolean(ack.ok),
+    acknowledged:Boolean(ack.acknowledged),
+    disposition,
+    before,
+    paused:Boolean(ack.ok),
+    error:ack.error || '',
+  };
+}
+
+async function applyLiveExitOutputs(disposition, outputs) {
+  const operations = [applyFlowmingoLiveExit(disposition, outputs.prompter)];
+  if (typeof window.Outrangutan?.applyLiveExit === 'function') {
+    operations.push(window.Outrangutan.applyLiveExit(disposition));
+  }
+  const settled = await Promise.allSettled(operations);
+  const values = settled.map(result => result.status === 'fulfilled' ? result.value : ({ ok:false, error:String(result.reason?.message || result.reason) }));
+  const failures = values.filter(result => result && result.ok === false);
+  return { ok:!failures.length, disposition, values, failures };
+}
+
+function liveExitSavedStateLabel() {
+  if (session.isDemo || session.isExpert || !window._firebaseReady) return 'Saved locally';
+  const dot = document.getElementById('syncDot');
+  if (rundownPendingBatches.length || _syncReconnState || dot?.classList.contains('saving')) return 'Saved locally · cloud sync pending';
+  if (dot?.classList.contains('error') || dot?.classList.contains('off') || dot?.classList.contains('local')) return 'Saved locally · cloud sync unavailable';
+  return 'Cloud saved';
+}
+
+async function commitExitLive(disposition='stop', options={}) {
+  if (!['stop','detach'].includes(disposition)) throw new Error('Unknown Live output disposition: ' + disposition);
+  if (liveSessionState().lifecycle !== 'leaving-live') return liveSessionState();
+  const transaction = liveExitTransaction || { outputs:classifyLiveExitOutputs(), requestedAt:Date.now(), disposition:'' };
+  transaction.disposition = disposition;
+  liveExitDialogSetBusy(true);
+  const status = document.getElementById('exitLiveStatus');
+  if (status) status.textContent = disposition === 'stop' ? 'Stopping active outputs…' : 'Detaching this operator…';
+  await captureSessionSnapshot('live-exit', true);
+  const outputResult = await applyLiveExitOutputs(disposition, transaction.outputs);
+  if (!outputResult.ok) {
+    const detail = outputResult.failures.map(result => result.error || 'An output did not confirm').join(' · ');
+    const failure = new Error(detail || 'An active output did not confirm the requested exit behavior.');
+    try {
+      liveSessionController.commitLeave({ reason:'operator-return-to-rundown-failed', disposition, outputResult, failure });
+    } catch (error) {
+      containError('Return to Rundown', error);
+    }
+    presentLiveExitRecovery(failure.message);
+    return liveSessionState();
+  }
+  let state;
+  try {
+    state = liveSessionController.commitLeave({
+      reason:'operator-return-to-rundown',
+      disposition,
+      outputResult,
+    });
+  } catch (error) {
+    containError('Return to Rundown', error);
+    presentLiveExitRecovery(String(error?.message || error));
+    return liveSessionState();
+  }
   followSelf();
-  showRundown();
+  hideOverlay('exitLiveOv');
+  const saveLabel = liveExitSavedStateLabel();
+  logShow('session', `Returned to rundown · outputs ${disposition} · ${saveLabel.toLowerCase()}`);
+  toast(`Returned to rundown · ${saveLabel}`, 4200);
+  liveExitTransaction = null;
+  return state;
+}
+
+function cancelExitLive() {
+  if (liveSessionState().lifecycle !== 'leaving-live') return liveSessionState();
+  const state = liveSessionController.cancelLeave({ reason:'operator-cancel-return' });
+  liveExitTransaction = null;
+  hideOverlay('exitLiveOv');
+  scriptOperatorPublishState(true);
+  toast('Staying in Live mode.');
+  return state;
+}
+
+async function recoverLiveToBuilder() {
+  const status = document.getElementById('exitLiveStatus');
+  if (status) status.textContent = 'Preserving the production and cleaning up Live controls…';
+  liveExitDialogSetBusy(true);
+  await captureSessionSnapshot('live-recovery', true);
+  if (typeof window.Outrangutan?.applyLiveExit === 'function') {
+    try { await window.Outrangutan.applyLiveExit('detach'); }
+    catch (error) { containError('Playback recovery detach', error); }
+  }
+  const state = liveSessionController.recoverToBuilder({
+    reason:'operator-emergency-live-recovery',
+    outputSnapshot:liveExitTransaction?.outputs || classifyLiveExitOutputs(),
+  });
+  followSelf();
+  hideOverlay('exitLiveOv');
+  const saveLabel = liveExitSavedStateLabel();
+  logShow('recovery', `Emergency Live recovery → rundown · ${saveLabel.toLowerCase()}`);
+  toast(`Recovered to rundown · ${saveLabel}`, 4800);
+  liveExitTransaction = null;
+  return state;
 }
 
 function offsetBeforeIndex(idx) {
@@ -6361,6 +7396,7 @@ function canDriveShowClock() {
 }
 
 function toggleShowClock() {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!canDriveShowClock()) {
     toast('The show caller controls the clock for everyone.');
     return;
@@ -6404,8 +7440,9 @@ function restartShowClock() {
 }
 
 function getPrompterPayload(isInit=false) {
-  const cur = beats[lsIdx] || null;
-  const next = beats[lsIdx+1] || null;
+  const activeIdx = liveActiveCueIndex();
+  const cur = beats[activeIdx] || null;
+  const next = beats[activeIdx+1] || null;
   return {
     type: isInit ? 'script_init' : 'script_update',
     text: prompterText,
@@ -6413,9 +7450,9 @@ function getPrompterPayload(isInit=false) {
     source: prompterSource,
     sessionCode: session.code,
     showName: show.name || 'Untitled Show',
-    activeIdx: lsIdx,
-    currentRow: cur ? { index:lsIdx, name:cur.info||'', notes:cur.notes||'', duration:fmtDur(cur) } : null,
-    nextRow: next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null,
+    activeIdx,
+    currentRow: cur ? { index:activeIdx, name:cur.info||'', notes:cur.notes||'', duration:fmtDur(cur) } : null,
+    nextRow: next ? { index:activeIdx+1, name:next.info||'', duration:fmtDur(next) } : null,
     ts: Date.now()
   };
 }
@@ -6516,23 +7553,74 @@ function markLivePrompterStatus(text, tone='ok') {
   el.textContent = text;
   el.className = `ls-prompter-update ${tone}`;
   clearTimeout(livePrompterStatusTimer);
+  // Failures are production state, not transient feedback. They remain beside
+  // Flowmingo until a later successful controller projection replaces them.
+  if (tone === 'error') {
+    livePrompterStatusTimer = null;
+    return;
+  }
   livePrompterStatusTimer = setTimeout(() => {
-    if (el.textContent === text) el.textContent = 'Ready';
-    el.className = 'ls-prompter-update ok';
+    const status = prompterSessionController.getState().status;
+    if (el.textContent === text) el.textContent = prompterStatusLabel(status);
+    el.className = `ls-prompter-update ${status === 'error' || status === 'recovering' ? 'error' : 'ok'}`;
   }, 2200);
 }
 
+const PROMPTER_STATUS_LABELS = Object.freeze({
+  closed:'Closed', opening:'Opening', connected:'Connected', ready:'Ready',
+  running:'Running', paused:'Paused', recovering:'Recovering', error:'Error'
+});
+
+function prompterStatusLabel(status) {
+  return PROMPTER_STATUS_LABELS[status] || 'Closed';
+}
+
+function projectPrompterSessionStatus(status, detail='') {
+  if (!PROMPTER_STATUS_LABELS[status]) status = 'error';
+  const state = prompterSessionController.setStatus(status, status === 'error' ? (detail || 'Prompter error') : '');
+  const normalized = {
+    closed:'closed', opening:'opening', connected:'connecting', ready:'ready',
+    running:'active', paused:'paused', recovering:'recovering', error:'error'
+  }[status];
+  setLiveSubsystemStatus('prompter', normalized, detail || prompterStatusLabel(status));
+  const dot = document.getElementById('prompterDot');
+  const txt = document.getElementById('prompterStatusTxt');
+  const stat = document.getElementById('ls-stat-prompter');
+  const update = document.getElementById('lsPrompterUpdateStatus');
+  const healthy = ['ready','running','paused'].includes(status);
+  if (dot) dot.className = `ls-prompter-dot${healthy ? '' : ' off'}`;
+  if (txt) txt.textContent = detail || prompterStatusLabel(status);
+  if (stat) {
+    stat.textContent = `FLOWMINGO ${status === 'recovering' ? 'RECOVERING' : prompterStatusLabel(status).toUpperCase()}`;
+    stat.title = detail || `Flowmingo ${prompterStatusLabel(status).toLowerCase()}`;
+    stat.classList.toggle('connected', healthy);
+    stat.dataset.prompterStatus = status;
+  }
+  if (update && status === 'error') {
+    clearTimeout(livePrompterStatusTimer);
+    livePrompterStatusTimer = null;
+    update.textContent = detail || 'Flowmingo error';
+    update.className = 'ls-prompter-update error';
+  } else if (update && healthy && update.classList.contains('error')) {
+    update.textContent = prompterStatusLabel(status);
+    update.className = 'ls-prompter-update ok';
+  }
+  return state;
+}
+
 function updateLiveOverview() {
-  const cur = beats[lsIdx] || null;
-  const next = beats[lsIdx+1] || null;
+  const activeIdx = liveActiveCueIndex();
+  const cur = beats[activeIdx] || null;
+  const nextIdx = liveNextPlayableCueIndex(activeIdx);
+  const next = nextIdx >= 0 ? beats[nextIdx] : null;
   const total = totalSecs();
   const remain = liveRemainingSecs();
-  const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (lsIdx+1)/beats.length*100 : 0);
+  const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (activeIdx+1)/beats.length*100 : 0);
   const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   setText('ls-show-title', show.name || 'Untitled Show');
-  setText('ls-show-sub', `${beats.length ? `Row ${Math.min(lsIdx+1, beats.length)} of ${beats.length}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
-  setText('ls-stat-now', cur ? cur.info || `Row ${lsIdx+1}` : '—');
-  setText('ls-stat-next', next ? next.info || `Row ${lsIdx+2}` : 'End');
+  setText('ls-show-sub', `${beats.length ? `Row ${Math.min(activeIdx+1, beats.length)} of ${beats.length}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
+  setText('ls-stat-now', cur ? cur.info || `Row ${activeIdx+1}` : '—');
+  setText('ls-stat-next', next ? next.info || `Row ${nextIdx+1}` : 'End');
   setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   const fill = document.getElementById('ls-progress-fill');
   if (fill) fill.style.width = `${progress}%`;
@@ -6552,13 +7640,28 @@ function updateLiveRemain() {
 function applyLivePrompterPanelState() {
   const sidebar = document.getElementById('lsSidebar');
   const resizer = document.getElementById('lsResizer');
+  const scriptResizer = document.getElementById('lsScriptResizer');
+  const scrim = document.getElementById('lsSidebarScrim');
   const btn = document.getElementById('prompterPanelBtn');
+  const drawerMode = window.matchMedia?.('(max-width: 900px)')?.matches === true;
+  const drawerOpen = Boolean(livePrompterOpen && drawerMode);
   if (sidebar) {
     sidebar.classList.toggle('open', livePrompterOpen);
     sidebar.style.width = `${liveSidebarWidth}px`;
     if (livePrompterOpen) { try { const h = parseFloat(localStorage.getItem('cueola_scriptOpHeight')); if (h) applyScriptOpHeight(h); } catch (e) {} }
   }
-  if (resizer) resizer.classList.toggle('on', livePrompterOpen);
+  if (resizer) {
+    resizer.classList.toggle('on', livePrompterOpen && !drawerMode);
+    resizer.setAttribute('aria-valuenow', String(Math.round(liveSidebarWidth)));
+    resizer.tabIndex = livePrompterOpen && !drawerMode ? 0 : -1;
+  }
+  if (scriptResizer) {
+    const editorHeight = Math.round(document.getElementById('lsPrompterText')?.getBoundingClientRect?.().height || 120);
+    scriptResizer.setAttribute('aria-valuenow', String(editorHeight));
+  }
+  if (scrim) scrim.tabIndex = drawerOpen ? 0 : -1;
+  document.querySelectorAll('#liveshow > .ls-bar, #liveshow > .follow-bar, #liveshow > .ls-overview, #liveshow > .ls-status-rail, #liveshow .ls-main, #liveshow > .ls-bot')
+    .forEach(element => { element.inert = drawerOpen; });
   if (btn) {
     setSymbolButtonLabel(btn, 'content.script', livePrompterOpen ? 'Hide Script Op' : 'Script Op');
     btn.style.color = livePrompterOpen ? 'var(--cyan)' : '';
@@ -6594,11 +7697,26 @@ function toggleLivePrompterPanel() {
     renderLive();
   }
   applyLivePrompterPanelState();
+  const drawerMode = window.matchMedia?.('(max-width: 900px)')?.matches === true;
+  if (drawerMode) {
+    const focusTarget = livePrompterOpen
+      ? document.querySelector('#lsSidebar .ls-sidebar-close')
+      : document.getElementById('prompterPanelBtn');
+    setTimeout(() => focusTarget?.focus(), 0);
+  }
   markResumeState();   // P7: Script Op open/closed is part of the resume snapshot
+}
+
+let _livePanelResizeCleanup = null;
+
+function stopLivePanelResize() {
+  if (_livePanelResizeCleanup) _livePanelResizeCleanup();
+  _livePanelResizeCleanup = null;
 }
 
 function startLivePanelResize(e) {
   e.preventDefault();
+  stopLivePanelResize();
   const startX = e.clientX;
   const startW = liveSidebarWidth;
   const move = ev => {
@@ -6608,9 +7726,60 @@ function startLivePanelResize(e) {
   const up = () => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    if (_livePanelResizeCleanup === up) _livePanelResizeCleanup = null;
   };
+  _livePanelResizeCleanup = up;
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up, {once:true});
+}
+
+function resizeLivePanelByKey(event) {
+  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  event.preventDefault();
+  if (event.key === 'Home') liveSidebarWidth = 340;
+  else if (event.key === 'End') liveSidebarWidth = 620;
+  else liveSidebarWidth = Math.min(620, Math.max(340, liveSidebarWidth + (event.key === 'ArrowLeft' ? 20 : -20)));
+  applyLivePrompterPanelState();
+}
+
+function resizeLiveScriptByKey(event) {
+  if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+  const editor = document.getElementById('lsPrompterText');
+  if (!editor) return;
+  event.preventDefault();
+  const sidebar = editor.closest('.ls-sidebar');
+  const maxHeight = sidebar ? Math.max(180, sidebar.getBoundingClientRect().height - 200) : 1400;
+  const current = editor.getBoundingClientRect().height;
+  const height = event.key === 'Home' ? 120
+    : event.key === 'End' ? maxHeight
+    : Math.min(maxHeight, Math.max(120, current + (event.key === 'ArrowDown' ? 20 : -20)));
+  applyScriptOpHeight(height);
+  event.currentTarget?.setAttribute('aria-valuenow', String(Math.round(height)));
+}
+
+const liveDrawerMediaQuery = window.matchMedia?.('(max-width: 900px)');
+if (liveDrawerMediaQuery?.addEventListener) liveDrawerMediaQuery.addEventListener('change', applyLivePrompterPanelState);
+else liveDrawerMediaQuery?.addListener?.(applyLivePrompterPanelState);
+
+function clearLiveTransientRuntime() {
+  releaseLiveCommandHolds();
+  stopLivePanelResize();
+  _scriptHeightEnd();
+  closeJogScrub();
+  const keymap = document.getElementById('keymapRefOv');
+  if (keymap) keymap.hidden = true;
+  ['lsRowPreviewOv','lsScriptEditOv'].forEach(id => {
+    if (document.getElementById(id)?.classList.contains('on')) hideOverlay(id);
+  });
+  clearTimeout(livePrompterDraftTimer);
+  livePrompterDraftTimer = null;
+  clearTimeout(livePrompterStatusTimer);
+  livePrompterStatusTimer = null;
+  clearTimeout(_sfxChipTimer);
+  _sfxChipTimer = null;
+  const sfx = document.getElementById('ls-stat-sfx');
+  if (sfx) sfx.hidden = true;
+  document.body.style.userSelect = '';
 }
 
 function renderLiveCurrent(b, i) {
@@ -6625,8 +7794,8 @@ function renderLiveCurrent(b, i) {
     const off = getCueOff(d);
     return `<div class="lv-cue-block" style="border-left-color:${tc.color}">
       <div class="lv-cue-label" style="color:${tc.color}">${sfIcon(tc.symbol)} ${tc.label}</div>
-      ${on  ? `<div class="lv-cue-ready">▶ ${esc(on)}</div>`  : ''}
-      ${off ? `<div class="lv-cue-take">■ ${esc(off)}</div>` : ''}
+      ${liveCueOperationLine('ready', on, 'lv-cue-ready')}
+      ${liveCueOperationLine('take', off, 'lv-cue-take')}
     </div>`;
   }).join('');
   return `<div class="lv-cur-card">
@@ -6651,11 +7820,11 @@ function renderLiveNext(b, i, isRunner) {
     const d = b.cues[t], tc = CT[t];
     const on  = getCueOn(d);
     const off = getCueOff(d);
-    return `<span class="lv-next-cue" style="border-left-color:${tc.color}">
+    return `<div class="lv-next-cue" style="border-left-color:${tc.color}">
       <span style="color:${tc.color}">${sfIcon(tc.symbol)}</span>
-      ${on  ? `<span>▶ ${esc(on)}</span>`  : ''}
-      ${off ? `<span style="opacity:.7">■ ${esc(off)}</span>` : ''}
-    </span>`;
+      ${liveCueOperationLine('ready', on, 'lv-next-cue-line')}
+      ${liveCueOperationLine('take', off, 'lv-next-cue-line muted')}
+    </div>`;
   }).join('');
   const handler = isRunner ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
   return `<div class="lv-next-card" onclick="${handler}">
@@ -6684,8 +7853,8 @@ function liveRowPreview(idx) {
     const off = getCueOff(d);
     html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
-      ${on  ? `<div style="font-size:14px;color:var(--text2);margin-bottom:2px">○ ${esc(on)}</div>`  : ''}
-      ${off ? `<div style="font-size:15px;font-weight:700;color:${tc.color}">▶ ${esc(off)}</div>` : ''}
+      ${liveCueOperationLine('ready', on, 'live-preview-cue-line')}
+      ${liveCueOperationLine('take', off, 'live-preview-cue-line emphasized')}
       ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
@@ -6720,10 +7889,21 @@ function liveCellForBeat(b, type, beatIdx) {
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
   return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
-    ${on  ? `<div class="live-cue-rdy">${sfIcon('marker.ready')} ${esc(on)}</div>` : ''}
-    ${off ? `<div class="live-cue-go" style="color:${tc.color}">${sfIcon('marker.go')} ${esc(off)}</div>` : ''}
+    ${liveCueOperationLine('ready', on, 'live-cue-rdy')}
+    ${liveCueOperationLine('take', off, 'live-cue-go', `color:${tc.color}`)}
     ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
   </div>`;
+}
+
+const LIVE_CUE_OPERATION = Object.freeze({
+  ready:{ label:'READY', title:'Stand by this cue before taking it' },
+  take:{ label:'TAKE', title:'Execute this programmed cue' },
+});
+
+function liveCueOperationLine(operation, text, className='', style='') {
+  if (!text) return '';
+  const meta = LIVE_CUE_OPERATION[operation] || LIVE_CUE_OPERATION.ready;
+  return `<div class="${className}"${style ? ` style="${style}"` : ''} title="${meta.title}" aria-label="${meta.label}: ${esc(text)}"><span class="live-cue-verb">${meta.label}</span><span>${esc(text)}</span></div>`;
 }
 
 // Clean cue chips for the Focus view — only the row's programmed departments.
@@ -6741,10 +7921,10 @@ function focusCuesForBeat(b) {
       const text = scriptCueText(d);
       lines = `<div class="lf-cue-take">${sfIcon('content.script')} ${d.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ready · ${scriptLineLabel(text)}</div>`;
     } else {
-      // The "take" (on) cue is the action to call now — make it the big line.
-      // If there's no take, the "ready"/off cue becomes the prominent one.
-      if (on)  lines += `<div class="lf-cue-take">▶ ${esc(on)}</div>`;
-      if (off) lines += `<div class="lf-cue-${on ? 'ready' : 'take'}">■ ${esc(off)}</div>`;
+      // All Live representations use the same operation vocabulary: the `on`
+      // field is READY/standby and the `off` field is TAKE/execute.
+      if (on)  lines += liveCueOperationLine('ready', on, 'lf-cue-ready');
+      if (off) lines += liveCueOperationLine('take', off, 'lf-cue-take');
     }
     const outGo = type === 'playback' ? outrangutanGoBtnHTML(b.id, d) : '';
     const sfxGo = (type === 'playback' || type === 'audio') ? outrangutanSfxGoBtnHTML(b.id, type, d) : '';
@@ -6757,15 +7937,55 @@ function focusCuesForBeat(b) {
   }).join('') + `</div>`;
 }
 
+const LIVE_ROW_STATE_LABEL = Object.freeze({
+  upcoming:'UPCOMING', completed:'COMPLETED', skipped:'SKIPPED',
+  failed:'FAILED', disabled:'DISABLED',
+});
+
+function liveRowStateChips(index, options={}) {
+  const state = liveSessionState();
+  const execution = liveCueExecution(index);
+  const chips = [];
+  const isActive = index === state.activeCueIndex;
+  if (isActive) chips.push('<span class="live-status active">ACTIVE</span>');
+  if (index === state.selectedCueIndex) chips.push('<span class="live-status selected">SELECTED</span>');
+  const executionLabel = LIVE_ROW_STATE_LABEL[execution.status] || String(execution.status || 'upcoming').toUpperCase();
+  const failureTitle = execution.failure ? ` title="${esc(execution.failure)}"` : '';
+  if (!(isActive && execution.status === 'upcoming')) {
+    chips.push(`<span class="live-status ${execution.status}"${failureTitle}>${executionLabel}</span>`);
+  }
+  if (execution.status === 'failed' && options.recovery !== false) {
+    chips.push(`<button type="button" class="live-row-recover" onclick="recoverLiveCueFailure(event,${index})" title="Recover row ${index + 1}" aria-label="Recover failed row ${index + 1}">Recover</button>`);
+  }
+  return chips.join('');
+}
+
+function updateLiveGoControl(projectedState=null) {
+  const button = document.getElementById('lsGoBtn');
+  const label = document.getElementById('lsGoLabel');
+  if (!button || !label) return;
+  const state = projectedState || liveSessionState();
+  const activeIndex = state.activeCueIndex >= 0 ? state.activeCueIndex : state.selectedCueIndex;
+  const nextIndex = liveNextPlayableCueIndex(activeIndex);
+  const failed = nextIndex >= 0 && liveCueExecutionStatus(nextIndex) === 'failed';
+  const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && canOwnLiveActiveCue();
+  const nextBeat = nextIndex >= 0 ? beats[nextIndex] : null;
+  const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${nextIndex + 1} — ${nextBeat.info || 'Untitled cue'}` : 'End of rundown';
+  label.textContent = text;
+  button.disabled = !dispatchable;
+  button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
+  button.title = dispatchable ? `GO to ${text}` : failed ? `Recover failed row ${nextIndex + 1} before GO` : nextBeat ? 'Follow the active show caller to use GO' : 'No upcoming cue';
+  button.setAttribute('aria-label', button.title);
+}
+
 // Focus view: one dominant NOW, a clear NEXT, and a dim coming-up list.
 function renderLiveFocus() {
   const body = document.getElementById('lsBody');
-  const curIdx = Math.max(0, Math.min(lsIdx, beats.length - 1));
+  const curIdx = Math.max(0, Math.min(liveActiveCueIndex(), beats.length - 1));
   const cur = beats[curIdx];
   // find next non-segment beat
-  let nextBeatIdx = curIdx + 1;
-  while (nextBeatIdx < beats.length && beats[nextBeatIdx]?.style === 'segment') nextBeatIdx++;
-  const next = nextBeatIdx < beats.length ? beats[nextBeatIdx] : null;
+  const nextBeatIdx = liveNextPlayableCueIndex(curIdx);
+  const next = nextBeatIdx >= 0 ? beats[nextBeatIdx] : null;
   const total = beats.length;
   const remainSecs = beats.slice(curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0);
   const startStr = show.start ? clock(show.start, beats.slice(0, curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0)) : '';
@@ -6774,7 +7994,7 @@ function renderLiveFocus() {
   let html = `<div class="lf-wrap">
     <div class="lf-now" onclick="liveRowPreview(${curIdx})">
       <div class="lf-now-head">
-        <span class="lf-now-badge"><span class="lf-dot"></span> NOW</span>
+        <span class="lf-now-badge"><span class="lf-dot"></span> ACTIVE</span>
         <span class="lf-now-meta">Row ${curIdx + 1} of ${total} · ${fmtSecs(remainSecs)} left</span>
       </div>
       <div class="lf-now-title">
@@ -6783,12 +8003,13 @@ function renderLiveFocus() {
         ${startStr ? `<span class="lf-now-clock">starts ${startStr}</span>` : ''}
       </div>
       ${cur.notes ? `<div class="lf-now-note">${esc(cur.notes)}</div>` : ''}
+      <div class="lf-row-state" aria-label="Current row state">${liveRowStateChips(curIdx)}</div>
       ${focusCuesForBeat(cur)}
     </div>`;
 
   if (next) {
     html += `<div class="lf-next" onclick="liveRowPreview(${nextBeatIdx})">
-      <span class="lf-next-badge">NEXT</span>
+      <span class="lf-next-badge">UPCOMING</span>
       <span class="lf-next-name">${esc(next.info || '—')}</span>
       <span class="lf-next-time">${fmtDur(next)}</span>
     </div>`;
@@ -6796,22 +8017,26 @@ function renderLiveFocus() {
     html += `<div class="lf-next lf-next-last"><span class="lf-next-badge">END</span><span class="lf-next-name">Last row — show ends after this</span></div>`;
   }
 
-  const rest = beats.slice(nextBeatIdx + 1);
+  const restStart = nextBeatIdx >= 0 ? nextBeatIdx + 1 : beats.length;
+  const rest = beats.slice(restStart);
   if (rest.length) {
     html += `<div class="lf-up-lbl">Coming up</div><div class="lf-up">` + rest.map((b, j) => {
-      const i = nextBeatIdx + 1 + j;
+      const i = restStart + j;
       if (b.style === 'segment') {
         return `<div class="lf-up-seg">${esc(b.info || 'Segment')}</div>`;
       }
-      return `<div class="lf-up-row" onclick="${canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`}">
+      const execution = liveCueExecutionStatus(i);
+      return `<div class="lf-up-row live-row-${execution}${i === liveSelectedCueIndex() ? ' live-row-selected' : ''}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" role="button" tabindex="0" aria-label="Select row ${i + 1}; ${execution}">
         <span class="lf-up-num">${i + 1}</span>
         <span class="lf-up-name">${esc(b.info || '—')}</span>
         <span class="lf-up-time">${fmtDur(b)}</span>
+        <span class="lf-up-state">${liveRowStateChips(i)}</span>
       </div>`;
     }).join('') + `</div>`;
   }
   html += `</div>`;
   body.innerHTML = html;
+  updateLiveGoControl();
 }
 
 function updateLiveFocusToggle() {
@@ -6828,7 +8053,15 @@ function toggleLiveFocus() {
 function renderLive() {
   if (promptOpMode) { renderLivePromptOp(); return; }
   const body = document.getElementById('lsBody');
-  if (!beats.length) { body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>'; return; }
+  if (!beats.length) {
+    body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
+    updateLiveOverview();
+    updateLiveGoControl();
+    applyLivePrompterPanelState();
+    renderFollowChips();
+    return;
+  }
+  ensureLiveRunLedger();
 
   document.getElementById('liveshow')?.classList.toggle('lf-on', liveFocusMode);
   updateLiveFocusToggle();
@@ -6854,7 +8087,7 @@ function renderLive() {
       <th class="live-col-status">State</th>
       <th class="live-col-name">Row</th>
       <th class="live-col-time">Time</th>
-      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color};cursor:grab;user-select:none" draggable="true" data-col="${type}" ondragstart="colDragStart(event,'${type}')" ondragover="colDragOver(event,this)" ondrop="colDrop(event,'${type}')" ondragend="colDragEnd(event)" title="Drag to reorder">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label} ${sfIcon('action.drag','col-grip')}</th>`).join('')}
+      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
@@ -6873,16 +8106,22 @@ function renderLive() {
       return;
     }
 
-    const isCur  = i === lsIdx;
-    const isNext = i > lsIdx && beats.slice(lsIdx+1, i).every(x => x.style === 'segment');
-    const isDone = i < lsIdx;
-    const handler = canJump ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-    const statusClass = isCur ? 'now' : isNext ? 'next' : isDone ? 'done' : 'later';
-    const statusText = isCur ? 'On Air' : isNext ? 'Next' : isDone ? 'Done' : 'Later';
-    const rowClass = isCur ? 'live-row-current' : isNext ? 'live-row-next' : isDone ? 'live-row-done' : '';
-    html += `<tr class="${rowClass}" onclick="${handler}">
+    const activeIdx = liveActiveCueIndex();
+    const selectedIdx = liveSelectedCueIndex();
+    const isCur = i === activeIdx;
+    const execution = liveCueExecution(i);
+    const isDisabled = execution.status === 'disabled';
+    const rowClass = [
+      `live-row-${execution.status}`,
+      isCur ? 'live-row-active live-row-current' : '',
+      i === selectedIdx ? 'live-row-selected' : '',
+    ].filter(Boolean).join(' ');
+    const goButton = canJump && !isCur && !isDisabled && execution.status !== 'failed'
+      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" title="Activate row ${i + 1}" aria-label="GO row ${i + 1}">GO</button>`
+      : '';
+    html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${i + 1}, ${esc(b.info || 'untitled')}, ${execution.status}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
       <td><div class="live-num">${i + 1}</div></td>
-      <td><span class="live-status ${statusClass}">${statusText}</span></td>
+      <td><div class="live-row-states">${liveRowStateChips(i)}</div>${goButton}</td>
       <td>
         <div class="live-name">${esc(b.info||'—')}</div>
         ${b.notes?`<div class="live-note">${esc(b.notes)}</div>`:''}
@@ -6899,8 +8138,9 @@ function renderLive() {
   const prevScroll = body.scrollTop;
   body.innerHTML = html;
   const cur = body.querySelector('.live-row-current');
-  if (cur && _lastLiveScrollIdx !== lsIdx) {
-    _lastLiveScrollIdx = lsIdx;
+  const activeScrollIdx = liveActiveCueIndex();
+  if (cur && _lastLiveScrollIdx !== activeScrollIdx) {
+    _lastLiveScrollIdx = activeScrollIdx;
     cur.scrollIntoView({behavior:'auto', block:'center'});
   } else {
     body.scrollTop = prevScroll;
@@ -6908,6 +8148,7 @@ function renderLive() {
   applyLivePrompterPanelState();
   renderFollowChips();
   updateLiveOverview();
+  updateLiveGoControl();
   updateLsPrompter();
   renderLivePrompterControls();
 }
@@ -7061,12 +8302,51 @@ function saveLiveScript() {
 }
 
 function jumpToLsCue(i) {
-  if (session.role==='student') return;
-  if (isStandardShowCaller()) return; // standard show callers may only advance sequentially
-  setOperatorLiveCue(i, 'jump-cue');
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  if (session.role==='student') return false;
+  if (isStandardShowCaller()) return false; // standard show callers may only advance sequentially
+  if (liveCueIsDisabled(i)) {
+    toast(`Row ${i + 1} is disabled and cannot go active.`);
+    return false;
+  }
+  if (liveCueExecutionStatus(i) === 'failed') {
+    toast(`Recover failed row ${i + 1} before making it active.`);
+    return false;
+  }
+  try { setOperatorLiveCue(i, 'jump-cue'); }
+  catch (error) {
+    containError('Live row activation', error);
+    return false;
+  }
   renderLive();
   sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
   syncLiveIdx();
+  return liveActiveCueIndex() === i;
+}
+
+function selectLiveRundownRow(event, i) {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  if (event?.type === 'keydown') {
+    if (!['Enter',' '].includes(event.key)) return false;
+    event.preventDefault();
+  }
+  if (event?.target !== event?.currentTarget && isInteractiveTarget(event?.target)) {
+    const currentOwnsButtonRole = event.currentTarget?.matches?.('[role="button"]')
+      && event.target?.closest?.('[role="button"]') === event.currentTarget;
+    if (!currentOwnsButtonRole) return false;
+  }
+  if (!Number.isFinite(i) || !beats[i] || beats[i]?.style === 'segment' || liveCueIsDisabled(i)) return false;
+  setLiveSelectedCue(i, { reason:'live-row-selection' });
+  renderLive();
+  return true;
+}
+
+function activateLiveRundownRow(event, i) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  if (!Number.isFinite(i) || !beats[i] || beats[i]?.style === 'segment' || liveCueIsDisabled(i)) return false;
+  return jumpToLsCue(i);
 }
 
 // If I'm mirroring someone (or auto-following the caller), navigating on my own
@@ -7081,17 +8361,29 @@ function detachIfFollowing() {
 }
 
 function lsNext() {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   detachIfFollowing();
-  const prev = beats[lsIdx];
-  let ni = lsIdx;
-  do { ni++; } while (ni < beats.length && beats[ni]?.style === 'segment');
-  if (ni < beats.length) {
+  const activeIdx = liveActiveCueIndex();
+  const prev = beats[activeIdx];
+  const ni = liveNextPlayableCueIndex(activeIdx);
+  if (ni < 0) { updateLiveGoControl(); return false; }
+  if (liveCueExecutionStatus(ni) === 'failed') {
+    toast(`Recover failed row ${ni + 1} before GO.`);
+    updateLiveGoControl();
+    return false;
+  }
+  try {
     setOperatorLiveCue(ni, 'advance-cue');
     updatePrompterOnAdvance(prev, beats[lsIdx]);
-    fireOutrangutanAutoForBeat(beats[lsIdx]);  // auto-fire a linked Outrangutan playback cue
+    if (fireOutrangutanAutoForBeat(beats[lsIdx]) === false) throw new Error('Automatic playback dispatch was rejected');
     logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     syncLiveIdx();
+    return true;
+  } catch (error) {
+    markLiveCueFailure(ni, error, 'advance-cue-failed');
+    containError('Live GO', error);
+    return false;
   }
 }
 // P7: short human label for a row in the show log.
@@ -7101,16 +8393,19 @@ function rowLogLabel(b) {
 }
 
 function lsPrev() {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   detachIfFollowing();
-  let ni = lsIdx;
-  do { ni--; } while (ni >= 0 && beats[ni]?.style === 'segment');
+  const ni = livePreviousPlayableCueIndex(liveActiveCueIndex());
   if (ni >= 0) {
-    setOperatorLiveCue(ni, 'previous-cue');
+    try { setOperatorLiveCue(ni, 'previous-cue'); }
+    catch (error) { containError('Previous Live cue', error); return false; }
     logShow('cue', 'Back → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     sendToPrompter(false).then(pushed => { if (pushed) cuePrompterToLiveRow(); });
     syncLiveIdx();
+    return true;
   }
+  return false;
 }
 
 // Per-person following: which position should I mirror? Browsing self → null (keep
@@ -7177,10 +8472,10 @@ function renderFollowChips() {
       seenNames.add(key);
       return true;
     });
-  let html = `<div class="follow-chip follow-self ${activeName===session.userName?'active':''}" onclick="followSelf()">Myself</div>`;
+  let html = `<button type="button" class="follow-chip follow-self ${activeName===session.userName?'active':''}" onclick="followSelf()" aria-pressed="${activeName===session.userName?'true':'false'}">Myself</button>`;
   others.forEach(([id, p])=>{
     const isActive = followTargetId ? followTargetId === id : sameParticipantName(activeName, p.name);
-    html+=`<div class="follow-chip ${isActive?'active':''}" data-follow-id="${esc(id)}" data-follow-name="${esc(p.name)}" onclick="followPerson(this)">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+    html+=`<button type="button" class="follow-chip ${isActive?'active':''}" data-follow-id="${esc(id)}" data-follow-name="${esc(p.name)}" onclick="followPerson(this)" aria-pressed="${isActive?'true':'false'}">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></button>`;
   });
   chips.innerHTML = html;
   const forceBtn = document.getElementById('forceFollowBtn');
@@ -7239,6 +8534,7 @@ function updateFollowInPresence(name, targetId='') {
 }
 
 function returnToOwnLivePosition() {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
   const ownIdx = currentPresence?.[presenceId]?.idx;
   browsingSelf = true;
   followTarget = '';
@@ -7283,18 +8579,140 @@ function buildPromptFromRundown() {
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
 let _prompterOperatorRuntimeActive = false;
+let _prompterTalentWin = null;
 let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
 let _lastSeenTalentHeartbeatTs = 0; // dedup: last Firestore heartbeat ts we counted
 let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
 let _lastTalentInitSendBySender = {};
 let _pendingPrompterControls = {};
 let _lastPrompterAckId = '';
+let _seenPrompterOperatorMsgIds = [];
+let _activePrompterOutputInstanceId = '';
+let _lastAppliedPrompterSnapshotId = '';
+let _prompterHandshakeTimer = null;
+let _prompterMissCount = 0;
+let _prompterRecoveryAnnounced = false;
+const PROMPTER_HEARTBEAT_MS = 2000;
+const PROMPTER_MISS_THRESHOLD = 3;
 const PROMPTYPUS_CHANNEL = 'promptypus';
 const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
 const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
 const PROMPTYPUS_LEGACY_CHANNEL = 'prompt_up_the_jam';
 const PROMPTYPUS_LEGACY_STORAGE_MSG = 'prompt_up_the_jam_msg';
 const PROMPTYPUS_LEGACY_STORAGE_PING = 'prompt_up_the_jam_ping';
+
+function buildCompletePrompterState() {
+  const state = currentPrompterSessionState();
+  return {
+    state,
+    script: {
+      id:state.scriptId,
+      text:prompterText,
+      version:prompterVersion,
+      source:prompterSource,
+      updatedAt:prompterUpdatedAt,
+    },
+    display: {
+      size:ptFontSize,
+      align:ptAlign,
+      theme:ptThemeName,
+      mirrored:ptMirrored,
+      panelVisible:ptPanelVisible,
+    }
+  };
+}
+
+function sendPrompterStateSnapshot(outputInstanceId, reason='ready') {
+  outputInstanceId = String(outputInstanceId || _activePrompterOutputInstanceId || '').trim();
+  if (!outputInstanceId) return null;
+  _activePrompterOutputInstanceId = outputInstanceId;
+  prompterSessionController.noteOutput(outputInstanceId, 'connected');
+  const complete = buildCompletePrompterState();
+  const message = {
+    ...prompterSessionController.buildSnapshot({ outputInstanceId, state:complete.state }),
+    script:complete.script,
+    display:complete.display,
+    reason,
+  };
+  projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Output returned · restoring state' : 'Output connected · applying state');
+  _postPrompterMessage(message);
+  if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
+    window._updateDoc(window._doc(window._db, 'sessions', session.code), {
+      'prompter.stateMessage':message,
+      'prompter.protocolVersion':message.protocolVersion,
+      'prompter.sessionId':message.sessionId,
+      'prompter.snapshotId':message.snapshotId,
+      'prompter.state':message.state,
+      'prompter.updatedAt':message.ts,
+    }).catch(err => {
+      projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Flowmingo state sync failed'));
+    });
+  }
+  clearTimeout(_prompterHandshakeTimer);
+  _prompterHandshakeTimer = setTimeout(() => {
+    if (!prompterSessionController.isReady(outputInstanceId)) {
+      projectPrompterSessionStatus('recovering', 'Output did not acknowledge the state snapshot');
+    }
+  }, PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD);
+  return message;
+}
+
+function applyCompletePrompterState(message) {
+  if (!message?.state || !message.snapshotId) return false;
+  if (!prompterSessionController.accepts(message)) return false;
+  const outputId = String(message.targetOutputInstanceId || message.outputInstanceId || FLOWMINGO_ENDPOINT_ID);
+  if (message.targetOutputInstanceId && message.targetOutputInstanceId !== FLOWMINGO_ENDPOINT_ID) return false;
+  if (message.snapshotId === _lastAppliedPrompterSnapshotId) {
+    ptPostOperatorMessage(prompterSessionController.buildStateApplied(message.snapshotId));
+    return true;
+  }
+  const state = prompterSessionController.applySnapshot(message.state, outputId);
+  if (state.productionCode) {
+    ptLinkedCueolaCode = state.productionCode;
+    session.code = state.productionCode;
+    session.isDemo = false;
+    session.isExpert = false;
+  }
+  const script = message.script || {};
+  if (typeof script.text === 'string') {
+    const nextText = script.text;
+    adoptPrompterText(nextText, {
+      version:Number(script.version)||0,
+      updatedAt:Number(script.updatedAt)||Number(message.ts)||0,
+      source:script.source || 'snapshot',
+    });
+    if (nextText !== ptLastCueolaScript) {
+      const hadScript = ptHasScript();
+      ptLastCueolaScript = nextText;
+      if (hadScript) ptApplyCueolaLiveUpdate(nextText);
+      else ptSetScriptText(nextText);
+    }
+  }
+  const display = message.display || {};
+  if (Number.isFinite(Number(display.size))) ptSetSize(Number(display.size));
+  if (['left','center','right'].includes(display.align)) ptSetAlign(display.align);
+  if (display.theme && PT_THEMES[display.theme]) ptSetTheme(display.theme);
+  if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
+  if (Number.isFinite(Number(state.position))) {
+    ptOffset = Math.max(0, Number(state.position));
+    requestAnimationFrame(() => {
+      const track = ptEl('pt-track');
+      if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+      ptUpdateProgress();
+    });
+  }
+  ptTargetSpeed = state.targetSpeed;
+  ptLiveSpeed = state.effectiveSpeed;
+  if (state.running && !ptPlaying) ptStartPlay();
+  else if (!state.running && ptPlaying) ptStopPlay();
+  _lastAppliedPrompterSnapshotId = message.snapshotId;
+  ptConnState = 'connected';
+  ptConnMessage = '';
+  ptUpdateReady();
+  ptPostOperatorMessage(prompterSessionController.buildStateApplied(message.snapshotId));
+  ptTalentHeartbeat();
+  return true;
+}
 
 function _postPrompterMessage(payload) {
   // Per-window sender id matters: operator and talent windows often share one
@@ -7317,7 +8735,7 @@ function _postPrompterHello() {
 }
 
 function _prompterHasRecentTalent() {
-  return !!lastTalentPingTs && (Date.now() - lastTalentPingTs) < 14000;
+  return !!lastTalentPingTs && (Date.now() - lastTalentPingTs) < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000);
 }
 
 function _notePrompterTalentSeen(msg={}) {
@@ -7325,7 +8743,17 @@ function _notePrompterTalentSeen(msg={}) {
   if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
-  _setPrompterStatus(true);
+  _prompterMissCount = 0;
+  const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+  if (outputId && (!_activePrompterOutputInstanceId || outputId === _activePrompterOutputInstanceId)) {
+    _activePrompterOutputInstanceId = outputId;
+  }
+  if (prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    const state = msg.state || prompterSessionController.getState();
+    projectPrompterSessionStatus(state.running ? 'running' : 'paused', state.running ? 'Talent scrolling' : 'Talent paused');
+  } else {
+    projectPrompterSessionStatus('connected', 'Talent connected · applying state');
+  }
   startTalentWatchdog(); // operator side: flip the badge loudly if this talent goes silent
   return wasSilent;
 }
@@ -7344,18 +8772,21 @@ function _shouldSendInitForTalent(msg={}, wasSilent=false) {
 
 function adoptPrompterTalentState(state={}) {
   if (!state || typeof state !== 'object') return;
-  if (typeof state.playing === 'boolean') {
-    ptPlaying = state.playing;
-    flowOpPlaying = state.playing;
+  const observedPlaying = typeof state.running === 'boolean' ? state.running : state.playing;
+  if (typeof observedPlaying === 'boolean') {
+    ptPlaying = observedPlaying;
+    flowOpPlaying = observedPlaying;
     ptSyncPlayIcons(ptPlaying);
     if (_prompterHasRecentTalent()) {
       setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', ptPlaying ? 'Talent scrolling' : 'Talent paused');
     }
   }
-  if (Number.isFinite(Number(state.speed))) {
-    ptTargetSpeed = Math.max(5, Math.min(200, Number(state.speed)));
-    ptLiveSpeed = ptTargetSpeed;
+  const observedSpeed = state.targetSpeed ?? state.speed;
+  if (Number.isFinite(Number(observedSpeed))) {
+    ptTargetSpeed = Math.max(5, Math.min(200, Number(observedSpeed)));
+    ptLiveSpeed = Number.isFinite(Number(state.effectiveSpeed)) ? Number(state.effectiveSpeed) : ptTargetSpeed;
   }
+  if (Number.isFinite(Number(state.position))) ptOffset = Math.max(0, Number(state.position));
   if (Number.isFinite(Number(state.size))) {
     ptFontSize = Math.max(24, Math.min(120, Number(state.size)));
     document.documentElement.style.setProperty('--pt-size', `${ptFontSize}px`);
@@ -7374,6 +8805,14 @@ function adoptPrompterTalentState(state={}) {
     flowOpSetTheme(state.theme);
   }
   if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
+  prompterSessionController.setTransport({
+    running:ptPlaying,
+    position:ptOffset,
+    targetSpeed:ptTargetSpeed,
+    effectiveSpeed:ptLiveSpeed,
+    lastCommandId:state.lastCommandId,
+    status:ptPlaying ? 'running' : 'paused',
+  });
   flowOpSyncControls();
   renderLivePrompterControls();
 }
@@ -7386,12 +8825,16 @@ function _handlePrompterControlAck(msg) {
   if (!ackId || ackId === _lastPrompterAckId) return;
   _lastPrompterAckId = ackId;
   _notePrompterTalentSeen(msg);
-  if (msg.state) adoptPrompterTalentState(msg.state);
+  if (msg.state) {
+    adoptPrompterTalentState(msg.state);
+    projectPrompterSessionStatus(msg.state.running || msg.state.playing ? 'running' : 'paused', msg.state.running || msg.state.playing ? 'Talent scrolling' : 'Talent paused');
+  }
   const pending = _pendingPrompterControls[msg.controlId];
   if (pending) {
     clearTimeout(pending.waitTimer);
     clearTimeout(pending.failTimer);
     delete _pendingPrompterControls[msg.controlId];
+    pending.settle?.({ ok:true, acknowledged:true, state:msg.state || null });
     const label = flowOpControlLabel(pending.action);
     if (pending.origin === 'flowop') flowOpSetStatus(`${label} applied`);
     else markLivePrompterStatus(`${label} applied`, 'ok');
@@ -7400,8 +8843,64 @@ function _handlePrompterControlAck(msg) {
 
 function _handlePrompterOperatorMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
+  // Talent messages are mirrored over BroadcastChannel, legacy channel,
+  // localStorage, and sometimes Firestore. Process one logical message once;
+  // duplicate READY messages used to create several paused snapshots, one of
+  // which could arrive after a queued PLAY and stop the renderer again.
+  const messageId = msg.mid || `${msg.senderInstanceId || msg.sender || ''}:${msg.ts || 0}:${msg.type || ''}`;
+  if (_seenPrompterOperatorMsgIds.includes(messageId)) return;
+  _seenPrompterOperatorMsgIds.push(messageId);
+  if (_seenPrompterOperatorMsgIds.length > 160) _seenPrompterOperatorMsgIds = _seenPrompterOperatorMsgIds.slice(-80);
+  if (msg.type === 'PROMPTER_READY') {
+    const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+    if (!outputId) return;
+    if (_activePrompterOutputInstanceId === outputId
+        && (prompterSessionController.isReady(outputId) || _prompterHandshakeTimer)) {
+      _notePrompterTalentSeen(msg);
+      return;
+    }
+    const replacing = _activePrompterOutputInstanceId && _activePrompterOutputInstanceId !== outputId;
+    _activePrompterOutputInstanceId = outputId;
+    prompterSessionController.noteOutput(outputId, 'connected');
+    _notePrompterTalentSeen(msg);
+    sendPrompterStateSnapshot(outputId, replacing ? 'recovery' : 'ready');
+    return;
+  }
+  if (msg.type === 'PROMPTER_STATE_APPLIED') {
+    const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+    if (!outputId || outputId !== _activePrompterOutputInstanceId) return;
+    if (!prompterSessionController.markStateApplied(outputId, msg.snapshotId, msg.state)) return;
+    clearTimeout(_prompterHandshakeTimer);
+    _prompterHandshakeTimer = null;
+    _prompterRecoveryAnnounced = false;
+    _notePrompterTalentSeen(msg);
+    const state = msg.state || prompterSessionController.getState();
+    adoptPrompterTalentState(state);
+    projectPrompterSessionStatus(state.running ? 'running' : 'ready', state.running ? 'Talent scrolling' : 'Talent ready');
+    flushPrompterCommandQueue(outputId);
+    return;
+  }
+  if (msg.type === 'PROMPTER_HEARTBEAT') {
+    const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+    if (_activePrompterOutputInstanceId && outputId !== _activePrompterOutputInstanceId) return;
+    if (!_activePrompterOutputInstanceId) {
+      _activePrompterOutputInstanceId = outputId;
+      prompterSessionController.noteOutput(outputId, 'connected');
+    }
+    const wasSilent = _notePrompterTalentSeen(msg);
+    if (msg.snapshotId && prompterSessionController.markStateApplied(outputId, msg.snapshotId, msg.state)) {
+      clearTimeout(_prompterHandshakeTimer);
+      _prompterHandshakeTimer = null;
+      adoptPrompterTalentState(msg.state || {});
+      flushPrompterCommandQueue(outputId);
+    }
+    if (wasSilent) sendPrompterStateSnapshot(outputId, 'recovery');
+    return;
+  }
   if (msg.type === 'ping') {
     const wasSilent = _notePrompterTalentSeen(msg);
+    if (Number(msg.protocolVersion) >= 2) return;
     if (_shouldSendInitForTalent(msg, wasSilent)) sendToPrompter(true);
     return;
   }
@@ -7440,20 +8939,22 @@ function startTalentWatchdog() {
   _talentWatchdog = setInterval(() => {
     if (!lastTalentPingTs) return; // never seen one yet — keep "Waiting"
     const age = Date.now() - lastTalentPingTs;
-    if (age > 14000) {
-      _setPrompterStatus(false);
-      const txt = document.getElementById('prompterStatusTxt');
-      const stat = document.getElementById('ls-stat-prompter');
-      const secs = Math.floor(age / 1000);
-      if (txt)  txt.textContent  = `Talent disconnected · last seen ${secs}s ago`;
-      if (stat) { stat.textContent = 'TALENT DROPPED'; stat.title = `Last heartbeat ${secs}s ago`; stat.classList.remove('connected'); }
+    _prompterMissCount = Math.floor(age / PROMPTER_HEARTBEAT_MS);
+    if (_prompterMissCount >= PROMPTER_MISS_THRESHOLD) {
+      if (!_prompterRecoveryAnnounced) {
+        _prompterRecoveryAnnounced = true;
+        prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
+        projectPrompterSessionStatus('recovering', `Talent unresponsive · missed ${_prompterMissCount} heartbeats`);
+        console.warn('Flowmingo heartbeat missed', { outputInstanceId:_activePrompterOutputInstanceId, age });
+      }
     }
-  }, 3000);
+  }, PROMPTER_HEARTBEAT_MS);
 }
 
 function initPrompter() {
   _prompterOperatorRuntimeActive = true;
-  setLiveSubsystemStatus('prompter', _prompterHasRecentTalent() ? (ptPlaying ? 'active' : 'paused') : 'connecting', _prompterHasRecentTalent() ? 'Talent heartbeat received' : 'Waiting for talent heartbeat');
+  ensurePrompterProtocolIdentity();
+  projectPrompterSessionStatus(_prompterHasRecentTalent() ? 'connected' : 'opening', _prompterHasRecentTalent() ? 'Talent connected · applying state' : 'Waiting for Flowmingo output');
   startTalentWatchdog();
   _ensurePrompterOperatorBridge(true);
   _setPrompterStatus(_prompterHasRecentTalent());
@@ -7472,8 +8973,11 @@ function stopPrompterOperatorRuntime() {
   Object.values(_pendingPrompterControls).forEach(pending => {
     clearTimeout(pending?.waitTimer);
     clearTimeout(pending?.failTimer);
+    pending?.settle?.({ ok:false, acknowledged:false, error:'Flowmingo operator bridge closed before acknowledgement' });
   });
   _pendingPrompterControls = {};
+  clearTimeout(_prompterHandshakeTimer);
+  _prompterHandshakeTimer = null;
   [prompterChannel, prompterLegacyChannel].forEach(channel => {
     try { channel?.close(); } catch (error) { containError('Flowmingo channel cleanup', error); }
   });
@@ -7482,30 +8986,23 @@ function stopPrompterOperatorRuntime() {
   lastTalentPingTs = 0;
   _lastSeenTalentHeartbeatTs = 0;
   _lastTalentInitSendBySender = {};
-  setLiveSubsystemStatus('prompter', 'closed', 'Live operator bridge closed');
+  _seenPrompterOperatorMsgIds = [];
+  _activePrompterOutputInstanceId = '';
+  _prompterMissCount = 0;
+  _prompterRecoveryAnnounced = false;
+  projectPrompterSessionStatus('closed', 'Live operator bridge closed');
 }
 
 function _setPrompterStatus(connected, unavailable=false) {
-  const dot = document.getElementById('prompterDot');
-  const txt = document.getElementById('prompterStatusTxt');
-  const stat = document.getElementById('ls-stat-prompter');
   if (unavailable) {
-    setLiveSubsystemStatus('prompter', 'closed', 'Flowmingo unavailable');
-    if (dot) dot.className='ls-prompter-dot off';
-    if (txt) txt.textContent='Not available';
-    if (stat) { stat.textContent='FLOWMINGO OFF'; stat.title='Flowmingo offline'; stat.classList.remove('connected'); }
+    projectPrompterSessionStatus('closed', 'Flowmingo unavailable');
     return;
   }
   if (connected) {
-    setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', 'Talent heartbeat received');
-    if (dot) dot.className='ls-prompter-dot';
-    if (txt) txt.textContent='Connected';
-    if (stat) { stat.textContent='FLOWMINGO ON'; stat.title='Flowmingo connected and functioning'; stat.classList.add('connected'); }
+    const ready = prompterSessionController.isReady(_activePrompterOutputInstanceId);
+    projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', ready ? (ptPlaying ? 'Talent scrolling' : 'Talent paused') : 'Talent connected · applying state');
   } else {
-    setLiveSubsystemStatus('prompter', lastTalentPingTs ? 'disconnected' : 'connecting', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for talent heartbeat');
-    if (dot) dot.className='ls-prompter-dot off';
-    if (txt) txt.textContent='Waiting for Flowmingo…';
-    if (stat) { stat.textContent='FLOWMINGO WAIT'; stat.title='Flowmingo waiting'; stat.classList.remove('connected'); }
+    projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for Flowmingo output');
   }
 }
 
@@ -7519,7 +9016,7 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
 }
 
 function cuePrompterToLiveRow() {
-  const rowNum = lsIdx + 1;
+  const rowNum = liveActiveCueIndex() + 1;
   if (rowNum > 0) setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 120);
 }
 
@@ -7534,16 +9031,18 @@ async function sendToPrompter(isInit=false) {
   const updatedAt = prompterUpdatedAt || Date.now();
   markLivePrompterStatus('Updating...', 'busy');
   _postPrompterMessage(getPrompterPayload(isInit));
+  if (_activePrompterOutputInstanceId) sendPrompterStateSnapshot(_activePrompterOutputInstanceId, isInit ? 'initial-state' : 'update');
   // Also update the native built-in Flowmingo screen
-  if (isInit) {
-    ptInitScriptFromCueola(prompterText);
-  } else {
-    ptUpdateFromCueola(prompterText);
+  if (isFlowmingoTalentActive()) {
+    if (isInit) ptInitScriptFromCueola(prompterText);
+    else ptUpdateFromCueola(prompterText);
   }
   try {
     if (window._firebaseReady && session.code && !session.isDemo) {
-      const cur = beats[lsIdx] || null;
-      const next = beats[lsIdx+1] || null;
+      const activeIdx = liveActiveCueIndex();
+      const cur = beats[activeIdx] || null;
+      const next = beats[activeIdx+1] || null;
+      const protocolState = currentPrompterSessionState();
       await window._updateDoc(window._doc(window._db,'sessions',session.code),{
         'prompter.text':prompterText,
         'prompter.version':version,
@@ -7551,10 +9050,14 @@ async function sendToPrompter(isInit=false) {
         'prompter.source':prompterSource || 'live',
         'prompter.sender':FLOWMINGO_ENDPOINT_ID,
         'prompter.senderClient':CLIENT_ID,
+        'prompter.protocolVersion':window.CueolaPrompterSession.PROTOCOL_VERSION,
+        'prompter.sessionId':protocolState.sessionId,
+        'prompter.state':protocolState,
+        'prompter.snapshotId':protocolState.snapshotId,
         'prompter.showName':show.name||'Untitled Show',
-        'prompter.activeIdx':lsIdx,
-        'prompter.currentRow':cur ? { index:lsIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
-        'prompter.nextRow':next ? { index:lsIdx+1, name:next.info||'', duration:fmtDur(next) } : null
+        'prompter.activeIdx':activeIdx,
+        'prompter.currentRow':cur ? { index:activeIdx, name:cur.info||'', duration:fmtDur(cur) } : null,
+        'prompter.nextRow':next ? { index:activeIdx+1, name:next.info||'', duration:fmtDur(next) } : null
       });
     }
     markLivePrompterStatus('Updated', 'ok');
@@ -7593,66 +9096,557 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
+const SCRIPT_OP_REGION_VERSION = '2';
+
+function scriptOpRegionHasInteraction(region) {
+  if (!region) return false;
+  if (region.contains(document.activeElement)) return true;
+  return Boolean(region.querySelector('[data-control-dragging="1"],[data-seek-dragging="1"]'));
+}
+
+function mountScriptOpRegion(region, name, buildHTML) {
+  if (!region) return false;
+  const version = `${name}-${SCRIPT_OP_REGION_VERSION}`;
+  const needsMount = region.dataset.renderVersion !== version || !region.firstElementChild;
+  if (!needsMount || scriptOpRegionHasInteraction(region)) return false;
+  region.innerHTML = buildHTML();
+  region.dataset.renderVersion = version;
+  region.dataset.renderCount = String((parseInt(region.dataset.renderCount || '0', 10) || 0) + 1);
+  return true;
+}
+
+function scriptOpInputCanPatch(input, dragField='controlDragging') {
+  return Boolean(input && document.activeElement !== input && input.dataset[dragField] !== '1');
+}
+
+function patchScriptOpPrompterControls(region) {
+  if (!region) return;
+  patchPrompterPlayButton(region.querySelector('[data-prompter-play]'), ptPlaying);
+  const speed = region.querySelector('[data-prompter-speed]');
+  if (scriptOpInputCanPatch(speed)) speed.value = String(ptTargetSpeed);
+  const size = region.querySelector('[data-prompter-size]');
+  if (scriptOpInputCanPatch(size)) size.value = String(ptFontSize);
+  region.querySelectorAll('[data-prompter-align]').forEach(button => {
+    const active = button.dataset.prompterAlign === ptAlign;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  region.querySelectorAll('[data-prompter-theme]').forEach(button => {
+    const active = button.dataset.prompterTheme === ptThemeName;
+    button.classList.toggle('active', active);
+    button.classList.toggle('on', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function scriptOpNextCueIndex() {
+  let index = liveActiveCueIndex();
+  do { index += 1; } while (index < beats.length && beats[index]?.style === 'segment');
+  return index < beats.length ? index : -1;
+}
+
+function patchScriptOpLiveActions(region) {
+  if (!region) return;
+  const activeIndex = liveActiveCueIndex();
+  const nowButton = region.querySelector('[data-script-op-cue="now"]');
+  if (nowButton) {
+    const row = Math.max(activeIndex, 0) + 1;
+    nowButton.setAttribute('onclick', `sendPrompterControl('seek_row_${row}')`);
+    nowButton.disabled = beats.length === 0;
+  }
+  const nextButton = region.querySelector('[data-script-op-cue="next"]');
+  if (nextButton) {
+    const nextIndex = scriptOpNextCueIndex();
+    nextButton.setAttribute('onclick', `sendPrompterControl('seek_row_${nextIndex + 1}')`);
+    nextButton.disabled = nextIndex < 0;
+  }
+  const seek = region.querySelector('#lsq-seek');
+  if (scriptOpInputCanPatch(seek, 'seekDragging') && ptGetMaxScroll() > 0) {
+    seek.value = String(ptProgressPct());
+  }
+  const tech = region.querySelector('#lsq-tech-btn');
+  if (tech) tech.setAttribute('onclick', 'toggleTechDifficulty()');
+  const bars = region.querySelector('#lsq-bars-btn');
+  if (bars) bars.setAttribute('onclick', 'toggleColorBars()');
+  syncTechButtons();
+}
+
+function patchScriptOpClockControls(region) {
+  if (!region) return;
+  const state = ptClockState || {};
+  const mode = state.mode || 'off';
+  region.querySelectorAll('[data-clock-mode]').forEach(button => {
+    const active = button.dataset.clockMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  const question = region.querySelector('[data-clock-question]');
+  if (question) {
+    patchIconLabelButton(question, ptQuestionOn ? 'notification.unread' : 'notification.default', ptQuestionOn ? 'Clear question' : 'Question');
+    question.classList.toggle('active', ptQuestionOn);
+    question.setAttribute('aria-pressed', ptQuestionOn ? 'true' : 'false');
+    question.setAttribute('onclick', "toggleQuestionIndicator('lsq')");
+  }
+  const size = region.querySelector('[data-clock-size]');
+  if (size) size.textContent = ['S','M','L','XL','MAX'][Math.max(0, Math.min(4, state.size ?? 1))];
+  [
+    ['#lsq-duration-min', flowClockDurationMin],
+    ['#lsq-clock-time', flowClockCountTime],
+    ['#lsq-wrap-min', flowWrapCustomMin],
+  ].forEach(([selector, value]) => {
+    const input = region.querySelector(selector);
+    if (input && document.activeElement !== input) input.value = String(value ?? '');
+  });
+}
+
 function renderLivePrompterControls() {
-  // Live actions stay visible in the sidebar;
-  // the full transport block lives in a collapsible disclosure below.
+  // The docked Script Op structure is stable. Heartbeats and Live renders patch
+  // state in place so focus, slider capture, textarea selection, and caret survive.
   const live = document.getElementById('lsLiveActions');
-  if (live) live.innerHTML = liveActionsHTML('lsq');
   const clocks = document.getElementById('lsClockActions');
-  if (clocks) clocks.innerHTML = clockAndAlertControlsHTML('lsq');
-  else if (live) live.innerHTML += clockAndAlertControlsHTML('lsq');
-  const el = document.getElementById('lsPrompterRemote');
-  if (el) el.innerHTML = promptOpControlsHTML(false);
+  const remote = document.getElementById('lsPrompterRemote');
+  mountScriptOpRegion(live, 'live', () => liveActionsHTML('lsq'));
+  mountScriptOpRegion(clocks, 'clock', () => clockAndAlertControlsHTML('lsq'));
+  mountScriptOpRegion(remote, 'prompter', () => promptOpControlsHTML(false));
+  patchScriptOpLiveActions(live);
+  patchScriptOpClockControls(clocks);
+  patchScriptOpPrompterControls(remote);
   renderPromptOpClockPreview();
   lsInspRestoreTab();   // keep the remembered inspector tab active across re-renders
+  scriptOperatorPublishState();
 }
 
 // ── Script Op pop-out controls ─────────────────────────────────────────────
-// "Pop out" floats the whole Script Op panel into a movable, resizable window
-// so the operator keeps a lot of controls at the ready. We toggle a class on
-// the sidebar in place (no DOM moving), so every .ls-sidebar-scoped control
-// rule keeps applying and renderLivePrompterControls() still works unchanged.
-// "Pop out" now opens the Script Op controls in a REAL, scaled, resizable browser
-// window (drag it to another monitor). The new window boots the app at
-// ?scriptop=<code>, auto-joins the SAME session, goes live and opens the Script Op
-// panel — so it drives the same Flowmingo through the existing session sync (the
-// session is the bridge; no separate messaging layer needed).
+// The popout is a projection of this controller, never a second Cueola client.
+// It owns no Firebase listener or prompter protocol identity: one identified
+// host sends complete snapshots and executes allowlisted popup intents through
+// the same sendPrompterControl()/sendToPrompter() paths used by the docked UI.
+const SCRIPT_OPERATOR_CONTROLLER_ID = 'sop_' + FLOWMINGO_ENDPOINT_ID;
+const SCRIPT_OPERATOR_CONTROL_ACTIONS = new Set([
+  'pause','resume','speed_up','speed_down','size_up','size_down','reset',
+  'hide_interface','mirror','fullscreen','direction_reverse','direction_forward',
+  'brake_start','brake_stop','boost_start','boost_stop',
+  'align_left','align_center','align_right','slate_tech_on','slate_tech_off',
+  'slate_bars_on','slate_bars_off','clock_timeofday','clock_off',
+  'clock_size_up','clock_size_down','question_on','question_off'
+]);
 let _scriptOpWin = null;
+let _scriptOpHost = null;
+let _scriptOpChannel = null;
+let _scriptOpWindowMessageHandler = null;
+let _scriptOpWatchdog = null;
+let _scriptOpActiveOperatorId = '';
+let _scriptOpLastStateFingerprint = '';
+let _scriptOpDisconnectAnnounced = false;
+
 function toggleScriptOpPopout() { openScriptOpPopout(); }
 
+function scriptOperatorIdentity() {
+  const state = currentPrompterSessionState();
+  return {
+    productionCode:String(session.code || state.productionCode || '').trim().toUpperCase(),
+    sessionId:String(state.sessionId || '').trim(),
+    controllerInstanceId:SCRIPT_OPERATOR_CONTROLLER_ID,
+  };
+}
+
+function scriptOperatorNextCueIndex() {
+  let index = liveActiveCueIndex();
+  do { index += 1; } while (index < beats.length && beats[index]?.style === 'segment');
+  return index < beats.length ? index : -1;
+}
+
+function scriptOperatorSnapshot() {
+  const activeIdx = liveActiveCueIndex();
+  const nextIdx = scriptOperatorNextCueIndex();
+  const activeBeat = beats[activeIdx] || null;
+  const nextBeat = beats[nextIdx] || null;
+  // Read the controller here; do not call currentPrompterSessionState(), whose
+  // transport reconciliation intentionally advances stateVersion/timestamps.
+  // An idle Script Operator watchdog must not create new prompter state.
+  const prompterState = prompterSessionController.getState();
+  const liveState = liveSessionState();
+  let inspectorTab = 'prompter';
+  try { inspectorTab = localStorage.getItem('cueola_script_operator_tab') || 'prompter'; } catch {}
+  return {
+    productionCode:session.code,
+    showName:show.name || 'Untitled Show',
+    liveLifecycle:liveState.lifecycle,
+    controlsEnabled:liveState.lifecycle === 'live',
+    activeIdx,
+    nextRowIndex:nextIdx,
+    currentRow:activeBeat ? { index:activeIdx, id:String(activeBeat.id || ''), name:activeBeat.info || '' } : null,
+    nextRow:nextBeat ? { index:nextIdx, id:String(nextBeat.id || ''), name:nextBeat.info || '' } : null,
+    prompterText,
+    draft:{ text:prompterText, version:livePrompterDraftVersion, dirty:livePrompterDraftDirty },
+    playing:Boolean(ptPlaying),
+    running:Boolean(ptPlaying),
+    speed:Number(ptTargetSpeed),
+    targetSpeed:Number(ptTargetSpeed),
+    effectiveSpeed:Number(ptLiveSpeed),
+    size:Number(ptFontSize),
+    fontSize:Number(ptFontSize),
+    align:ptAlign,
+    progressPct:ptProgressPct(),
+    position:Number(ptOffset),
+    reversing:Boolean(ptReversing),
+    mirrored:Boolean(ptMirrored),
+    techSlateOn:Boolean(ptTechSlateOn),
+    colorBarsOn:Boolean(ptColorBarsOn),
+    questionOn:Boolean(ptQuestionOn),
+    clockState:{ ...ptClockState },
+    clockDurationMinutes:flowClockDurationMin,
+    clockCountTime:flowClockCountTime,
+    wrapMinutes:flowWrapCustomMin,
+    prompterTheme:ptThemeName,
+    uiTheme:currentTheme,
+    inspectorTab,
+    prompter:{
+      sessionId:prompterState.sessionId,
+      productionCode:prompterState.productionCode,
+      scriptId:prompterState.scriptId,
+      activeCueId:prompterState.activeCueId,
+      outputInstanceId:prompterState.outputInstanceId,
+      status:prompterState.status,
+      error:prompterState.error,
+      text:prompterText,
+      playing:Boolean(ptPlaying),
+      speed:Number(ptTargetSpeed),
+      size:Number(ptFontSize),
+      align:ptAlign,
+      progress:ptProgressPct(),
+      mirrored:Boolean(ptMirrored),
+      theme:ptThemeName,
+      techSlateOn:Boolean(ptTechSlateOn),
+      colorBarsOn:Boolean(ptColorBarsOn),
+      questionOn:Boolean(ptQuestionOn),
+      clockState:{ ...ptClockState },
+    }
+  };
+}
+
+function scriptOperatorSetButton(active, label='Pop out Script Operator') {
+  const button = document.getElementById('lsPopoutBtn');
+  if (!button) return;
+  button.classList.toggle('active', Boolean(active));
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  const icon = button.querySelector('.sf-symbol');
+  if (icon) icon.setAttribute('data-symbol', active ? 'content.display' : 'action.fullscreen');
+}
+
+function scriptOperatorSend(message) {
+  if (!message) return false;
+  let sent = false;
+  if (_scriptOpChannel) {
+    try { _scriptOpChannel.postMessage(message); sent = true; }
+    catch (error) { containError('Script Operator channel send', error); }
+  }
+  if (_scriptOpWin && !_scriptOpWin.closed) {
+    try { _scriptOpWin.postMessage(message, location.origin); sent = true; }
+    catch (error) { containError('Script Operator window send', error); }
+  }
+  return sent;
+}
+
+function scriptOperatorPublishState(force=false) {
+  if (!_scriptOpHost) return false;
+  const status = _scriptOpHost.getStatus();
+  if (!status.operatorInstanceId || !status.connected) return false;
+  const snapshot = scriptOperatorSnapshot();
+  const fingerprint = JSON.stringify(snapshot);
+  if (!force && fingerprint === _scriptOpLastStateFingerprint) {
+    return scriptOperatorSend(_scriptOpHost.buildHeartbeat());
+  }
+  _scriptOpLastStateFingerprint = fingerprint;
+  return scriptOperatorSend(_scriptOpHost.buildState(snapshot));
+}
+
+function scriptOperatorControlAllowed(action) {
+  action = String(action || '');
+  if (SCRIPT_OPERATOR_CONTROL_ACTIONS.has(action)) return true;
+  if (/^theme_(cool|warm|white|green|koala|panda|flamingo|outrangutan|prepbear)$/.test(action)) return true;
+  let match = action.match(/^(speed_set|size_set|seek_set|seek_row|clock_duration|wrapup)_(-?\d+(?:\.\d+)?)$/);
+  if (match) {
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) return false;
+    if (match[1] === 'speed_set') return value >= 5 && value <= 200;
+    if (match[1] === 'size_set') return value >= 24 && value <= 120;
+    if (match[1] === 'seek_set') return value >= 0 && value <= 100;
+    if (match[1] === 'seek_row') return Number.isInteger(value) && value >= 1 && value <= Math.max(1, beats.length);
+    return value >= 1 && value <= 999 * 60;
+  }
+  match = action.match(/^clock_until_(\d+)_label_([A-Za-z0-9%.-]{1,160})$/);
+  return Boolean(match && Number(match[1]) >= Date.now() - 60000 && Number(match[1]) <= Date.now() + 8 * 86400000);
+}
+
+function scriptOperatorApplyPreview(action) {
+  if (action.startsWith('speed_set_')) ptSetSpeed(action.slice('speed_set_'.length));
+  else if (action.startsWith('size_set_')) ptSetSize(action.slice('size_set_'.length));
+  else if (action.startsWith('seek_set_')) lsScrubPreviewScript(action.slice('seek_set_'.length));
+  return sendPrompterPreviewControl(action);
+}
+
+async function scriptOperatorExecuteCommand(command) {
+  const kind = String(command?.commandType || '');
+  const data = command?.data && typeof command.data === 'object' ? command.data : {};
+  if (liveSessionState().lifecycle !== 'live') {
+    throw new Error('Live controls are paused while Cueola changes mode.');
+  }
+  if (kind === 'control' || kind === 'preview') {
+    const action = String(data.action || '');
+    if (!scriptOperatorControlAllowed(action)) throw new Error('Rejected Script Operator action: ' + action);
+    if (kind === 'preview') {
+      const applied = scriptOperatorApplyPreview(action);
+      return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
+    }
+    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+      return { ok:false, error:'Flowmingo Op currently owns transport controls' };
+    }
+    const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
+    const wrapMatch = action.match(/^wrapup_(\d+(?:\.\d+)?)$/);
+    const countToMatch = action.match(/^clock_until_(\d+)_label_/);
+    if (durationMatch) setFlowClockDuration(Number(durationMatch[1]) / 60);
+    if (wrapMatch) setFlowWrapCustomMin(Number(wrapMatch[1]) / 60);
+    if (countToMatch) {
+      const target = new Date(Number(countToMatch[1]));
+      setFlowClockCountTime(`${String(target.getHours()).padStart(2, '0')}:${String(target.getMinutes()).padStart(2, '0')}`);
+    }
+    if (action === 'slate_tech_on' && !ptTechSlateOn) recordTechDifficultyMarker();
+    const sent = sendPrompterControl(action);
+    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : flowOpControlLabel(action) + ' sent' };
+  }
+  if (kind === 'draft') {
+    const text = String(data.text || '').slice(0, 500000);
+    livePrompterDraftDirty = true;
+    livePrompterDraftVersion += 1;
+    adoptPrompterText(text, { forceEditor:true, source:'script-op-popout' });
+    markLivePrompterStatus('Draft held', 'busy');
+    return { ok:true, detail:'Draft synchronized' };
+  }
+  if (kind === 'push') {
+    const text = String(data.text || '').slice(0, 500000);
+    livePrompterDraftDirty = true;
+    livePrompterDraftVersion += 1;
+    adoptPrompterText(text, { forceEditor:true, source:'script-op-popout' });
+    const pushed = await pushToPrompter();
+    return { ok:Boolean(pushed), detail:pushed ? 'Pushed to Flowmingo' : 'Flowmingo push failed', error:pushed ? '' : 'Flowmingo push failed' };
+  }
+  if (kind === 'clear') {
+    if (data.confirmed !== true) throw new Error('Clear requires confirmation in the Script Operator window.');
+    adoptPrompterText('', { forceEditor:true, source:'cleared' });
+    livePrompterDraftDirty = false;
+    const pushed = await sendToPrompter(true);
+    return { ok:Boolean(pushed), detail:pushed ? 'Flowmingo script cleared' : 'Clear failed', error:pushed ? '' : 'Clear failed' };
+  }
+  if (kind === 'edit-script') {
+    try { window.focus(); } catch {}
+    openLiveScript(Math.max(liveActiveCueIndex(), 0));
+    return { ok:true, detail:'Editor opened in Cueola Live' };
+  }
+  throw new Error('Rejected Script Operator command type: ' + kind);
+}
+
+function scriptOperatorFinishCommand(command, result) {
+  if (!_scriptOpHost) return;
+  const ack = _scriptOpHost.completeCommand(command, result);
+  scriptOperatorSend(ack);
+  scriptOperatorPublishState(true);
+}
+
+function scriptOperatorHandleMessage(message, source=null, origin='') {
+  if (!_scriptOpHost || !message || typeof message !== 'object') return;
+  if (origin && origin !== location.origin) return;
+  const type = String(message.type || '').toUpperCase();
+  if (type === 'READY' && !_scriptOpHost.accepts(message, { allowReplacement:true })) return;
+  if (type === 'READY' && source && source !== _scriptOpWin) {
+    if (_scriptOpWin && !_scriptOpWin.closed) { try { _scriptOpWin.close(); } catch {} }
+    _scriptOpWin = source;
+  }
+  if (type === 'READY') {
+    const previous = _scriptOpHost.getStatus().operatorInstanceId;
+    const accepted = _scriptOpHost.noteReady(message);
+    if (!accepted) return;
+    if (previous && previous !== accepted.operatorInstanceId) {
+      try { prompterSessionController.noteOperator(previous, false); } catch {}
+    }
+    _scriptOpActiveOperatorId = accepted.operatorInstanceId;
+    _scriptOpDisconnectAnnounced = false;
+    try { prompterSessionController.noteOperator(_scriptOpActiveOperatorId, true); } catch {}
+    setLiveSubsystemStatus('scriptOperator', 'connecting', 'Applying current Script Operator state');
+    scriptOperatorSetButton(true, 'Focus Script Operator window');
+    scriptOperatorPublishState(true);
+    return;
+  }
+  if (type === 'STATE_APPLIED') {
+    if (!_scriptOpHost.markStateApplied(message)) return;
+    _scriptOpDisconnectAnnounced = false;
+    setLiveSubsystemStatus('scriptOperator', 'ready', 'Script Operator synchronized');
+    scriptOperatorSetButton(true, 'Focus Script Operator window');
+    logShow('script-operator', 'Script Operator ready · ' + _scriptOpActiveOperatorId);
+    return;
+  }
+  if (type === 'HEARTBEAT') {
+    const focused = Boolean(message.payload?.focused);
+    if (!_scriptOpHost.noteHeartbeat(message)) return;
+    _scriptOpDisconnectAnnounced = false;
+    const ready = _scriptOpHost.isReady();
+    setLiveSubsystemStatus('scriptOperator', ready && focused ? 'active' : ready ? 'ready' : 'connecting', ready ? (focused ? 'Script Operator active' : 'Script Operator synchronized') : 'Restoring Script Operator state');
+    scriptOperatorSend(_scriptOpHost.buildHeartbeat());
+    return;
+  }
+  if (type === 'CLOSING') {
+    if (!_scriptOpHost.noteClosing(message)) return;
+    stopScriptOperatorHost({ reason:'operator-window-closed', closeWindow:false, clearWindow:true, notify:false });
+    return;
+  }
+  if (type === 'COMMAND') {
+    const begun = _scriptOpHost.beginCommand(message);
+    if (begun.ack) { scriptOperatorSend(begun.ack); return; }
+    if (!begun.accepted) return;
+    Promise.resolve(scriptOperatorExecuteCommand(begun.command))
+      .then(result => scriptOperatorFinishCommand(begun.command, result))
+      .catch(error => {
+        console.error('[Script Operator] Command failed', { command:begun.command, error });
+        logShow('error', 'Script Operator command failed · ' + String(error?.message || error));
+        scriptOperatorFinishCommand(begun.command, { ok:false, error:String(error?.message || error) });
+      });
+  }
+}
+
+function startScriptOperatorHost(identity) {
+  const P = window.CueolaScriptOperatorProtocol;
+  if (!P) throw new Error('Script Operator protocol is unavailable.');
+  _scriptOpHost = P.createHost(identity);
+  _scriptOpLastStateFingerprint = '';
+  _scriptOpDisconnectAnnounced = false;
+  try {
+    _scriptOpChannel = new BroadcastChannel(_scriptOpHost.channelName);
+    _scriptOpChannel.addEventListener('message', event => scriptOperatorHandleMessage(event.data));
+  } catch (error) {
+    _scriptOpChannel = null;
+    console.warn('[Script Operator] BroadcastChannel unavailable; using window messaging', error);
+  }
+  _scriptOpWindowMessageHandler = event => scriptOperatorHandleMessage(event.data, event.source, event.origin);
+  window.addEventListener('message', _scriptOpWindowMessageHandler);
+  _scriptOpWatchdog = setInterval(() => {
+    if (_scriptOpWin && _scriptOpWin.closed) {
+      stopScriptOperatorHost({ reason:'operator-window-closed', closeWindow:false, clearWindow:true, notify:false });
+      return;
+    }
+    const status = _scriptOpHost?.getStatus();
+    if (!status?.operatorInstanceId) return;
+    if (!_scriptOpHost.checkHeartbeat()) {
+      if (!_scriptOpDisconnectAnnounced) {
+        _scriptOpDisconnectAnnounced = true;
+        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator missed three heartbeats');
+        logShow('error', 'Script Operator disconnected · missed three heartbeats');
+        console.warn('[Script Operator] Heartbeat lost', status);
+      }
+      return;
+    }
+    scriptOperatorPublishState(false);
+  }, P.HEARTBEAT_INTERVAL_MS || 2000);
+  liveSessionController.registerCleanup('script-operator-popout', () => {
+    stopScriptOperatorHost({ reason:'Live mode closed', closeWindow:true, clearWindow:true, notify:true });
+  });
+}
+
+function stopScriptOperatorHost(options={}) {
+  const reason = options.reason || 'Script Operator closed';
+  if (_scriptOpHost && options.notify !== false) scriptOperatorSend(_scriptOpHost.close(reason));
+  else if (_scriptOpHost) _scriptOpHost.close(reason);
+  clearInterval(_scriptOpWatchdog);
+  _scriptOpWatchdog = null;
+  if (_scriptOpWindowMessageHandler) window.removeEventListener('message', _scriptOpWindowMessageHandler);
+  _scriptOpWindowMessageHandler = null;
+  if (_scriptOpChannel) {
+    try { _scriptOpChannel.close(); } catch (error) { containError('Script Operator channel cleanup', error); }
+  }
+  _scriptOpChannel = null;
+  if (_scriptOpActiveOperatorId) {
+    try { prompterSessionController.noteOperator(_scriptOpActiveOperatorId, false); } catch {}
+  }
+  _scriptOpActiveOperatorId = '';
+  _scriptOpHost = null;
+  _scriptOpLastStateFingerprint = '';
+  _scriptOpDisconnectAnnounced = false;
+  if (options.closeWindow && _scriptOpWin && !_scriptOpWin.closed) {
+    try { _scriptOpWin.close(); } catch (error) { containError('Script Operator window cleanup', error); }
+  }
+  if (options.clearWindow !== false) _scriptOpWin = null;
+  setLiveSubsystemStatus('scriptOperator', 'closed', reason);
+  scriptOperatorSetButton(false, 'Pop out Script Operator');
+}
+
+function syncScriptOperatorSubsystemStatus() {
+  const status = _scriptOpHost?.getStatus();
+  if (!status) {
+    setLiveSubsystemStatus('scriptOperator', 'closed', 'Script Operator window closed');
+    return;
+  }
+  if (status.timedOut) setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost');
+  else if (status.ready) setLiveSubsystemStatus('scriptOperator', 'ready', 'Script Operator synchronized');
+  else if (status.connected) setLiveSubsystemStatus('scriptOperator', 'connecting', 'Applying Script Operator state');
+  else setLiveSubsystemStatus('scriptOperator', 'opening', 'Opening Script Operator window');
+}
+
 function openScriptOpPopout() {
-  if (document.body.classList.contains('scriptop-popout')) return; // already inside a pop-out window
   const code = (session.code || '').trim();
   if (!code || session.isDemo) { toast('Script Op pop-out needs a live (non-demo) session.'); return; }
   if (_scriptOpWin && !_scriptOpWin.closed) {
-    setLiveSubsystemStatus('scriptOperator', 'connecting', 'Window open; awaiting Phase 4 heartbeat');
-    _scriptOpWin.focus();
+    if (!_scriptOpHost) {
+      try { _scriptOpWin.close(); } catch {}
+      _scriptOpWin = null;
+    } else {
+      try { _scriptOpWin.focus(); } catch {}
+      syncScriptOperatorSubsystemStatus();
+      scriptOperatorPublishState(true);
+      return _scriptOpWin;
+    }
+  }
+  const identity = scriptOperatorIdentity();
+  if (!identity.sessionId) { toast('Start the live prompter session before opening Script Op.'); return; }
+  stopScriptOperatorHost({ reason:'Replacing Script Operator host', closeWindow:false, clearWindow:false, notify:false });
+  try { startScriptOperatorHost(identity); }
+  catch (error) {
+    setLiveSubsystemStatus('scriptOperator', 'error', String(error?.message || error));
+    containError('Script Operator startup', error);
+    toast('Script Operator could not start.');
     return;
   }
   setLiveSubsystemStatus('scriptOperator', 'opening', 'Opening Script Operator window');
-  const url = location.origin + location.pathname + '?scriptop=' + encodeURIComponent(code)
-    + (session.userName ? '&name=' + encodeURIComponent(session.userName) : '');
-  const w = Math.min(560, (screen.availWidth || 1280) - 40);
+  const url = new URL('script-operator.html', location.href);
+  url.search = '';
+  url.searchParams.set('code', identity.productionCode);
+  url.searchParams.set('session', identity.sessionId);
+  url.searchParams.set('controller', identity.controllerInstanceId);
+  url.searchParams.set('theme', currentTheme);
+  url.searchParams.set('launch', Date.now().toString(36));
+  const w = Math.min(620, (screen.availWidth || 1280) - 40);
   const h = Math.min(940, (screen.availHeight || 900) - 40);
-  _scriptOpWin = window.open(url, 'cueolaScriptOp_' + code, `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`);
+  _scriptOpWin = window.open(url.toString(), 'cueolaScriptOp_' + code + '_' + SCRIPT_OPERATOR_CONTROLLER_ID, `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`);
   if (!_scriptOpWin) {
+    stopScriptOperatorHost({ reason:'Popup blocked', closeWindow:false, clearWindow:true, notify:false });
     setLiveSubsystemStatus('scriptOperator', 'error', 'Popup blocked');
     toast('Pop-out blocked — allow pop-ups for Cueola.');
     return;
   }
-  setLiveSubsystemStatus('scriptOperator', 'connecting', 'Window open; awaiting Phase 4 heartbeat');
-  const btn = document.getElementById('lsPopoutBtn');
-  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Script Op window'); btn.classList.add('active'); }
+  const button = document.getElementById('lsPopoutBtn');
+  if (button) button.dataset.popupUrl = url.toString();
+  setLiveSubsystemStatus('scriptOperator', 'connecting', 'Waiting for Script Operator ready');
+  scriptOperatorSetButton(true, 'Focus Script Operator window');
   toast('Script Op opened in a new window — drag it to another monitor.');
+  return _scriptOpWin;
 }
 
 function dockScriptOpPopout() {
-  if (_scriptOpWin && !_scriptOpWin.closed) { try { _scriptOpWin.close(); } catch (e) {} }
-  _scriptOpWin = null;
-  setLiveSubsystemStatus('scriptOperator', 'closed', 'Script Operator window closed');
-  const btn = document.getElementById('lsPopoutBtn');
-  if (btn) { setSymbolButtonLabel(btn, 'action.fullscreen', 'Pop out'); btn.classList.remove('active'); }
+  stopScriptOperatorHost({ reason:'Script Operator window closed', closeWindow:true, clearWindow:true, notify:true });
 }
+
+window.addEventListener('pagehide', () => {
+  stopScriptOperatorHost({ reason:'Main Cueola window closed', closeWindow:true, clearWindow:true, notify:true });
+});
 
 // Drag the divider under the script to grow/shrink the "Live Flowmingo script"
 // editor — drag down to reveal more of the script (the controls drawer takes the rest).
@@ -7677,7 +9671,7 @@ function _scriptHeightMove(e) {
   if (!ta || !_scriptHeightDrag) return;
   const sidebar = ta.closest('.ls-sidebar');
   const maxH = sidebar ? Math.max(180, sidebar.getBoundingClientRect().height - 200) : 1400;
-  const h = Math.max(140, Math.min(maxH, _scriptHeightDrag.startH + (e.clientY - _scriptHeightDrag.startY)));
+  const h = Math.max(120, Math.min(maxH, _scriptHeightDrag.startH + (e.clientY - _scriptHeightDrag.startY)));
   applyScriptOpHeight(h);
 }
 function _scriptHeightEnd() {
@@ -7707,6 +9701,7 @@ async function pushToPrompter() {
   if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
   if (promptOpMode) renderLivePromptOp();
   if (pushed) toast('Pushed to Flowmingo');
+  return pushed;
 }
 
 function queueLivePrompterDraftPush() {
@@ -7728,14 +9723,40 @@ function clearPrompter() {
 }
 
 function buildPrompterControl(action, source='script-op') {
-  const ts = Date.now();
+  ensurePrompterProtocolIdentity({ productionCode:source === 'flowmingo-op' ? flowOpCode : session.code });
+  const command = prompterSessionController.buildCommand(action);
   return {
-    type:'prompter_control',
-    action,
-    ts,
+    ...command,
+    type:'PROMPTER_COMMAND',
+    controlId:command.commandId,
     source,
-    controlId: nextPrompterMsgId('control')
   };
+}
+
+function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverride='') {
+  if (!control?.action) return false;
+  _postPrompterMessage(control);
+  trackPrompterControl(control, origin, quiet);
+  const code = String(codeOverride || control.productionCode || session.code || flowOpCode || '').trim().toUpperCase();
+  if (window._firebaseReady && code) {
+    window._updateDoc(window._doc(window._db, 'sessions', code), {
+      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
+      'prompter.updatedAt':control.ts,
+    }).catch(err => {
+      if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
+      else markLivePrompterStatus(firebaseConnectionLabel(err, 'Send failed'), 'error');
+    });
+  }
+  return true;
+}
+
+function flushPrompterCommandQueue(outputId) {
+  const queued = prompterSessionController.takeQueuedCommands(outputId);
+  queued.forEach(control => {
+    const origin = control.source === 'flowmingo-op' ? 'flowop' : 'live';
+    dispatchPrompterCommand(control, origin, isQuietPrompterControl(control.action), control.productionCode);
+  });
+  return queued.length;
 }
 
 function isQuietPrompterControl(action) {
@@ -7770,7 +9791,9 @@ function trackPrompterControl(control, origin='live', quiet=false) {
   }, _prompterHasRecentTalent() ? 900 : 0);
   const failTimer = setTimeout(() => {
     if (!_pendingPrompterControls[control.controlId]) return;
+    const pending = _pendingPrompterControls[control.controlId];
     delete _pendingPrompterControls[control.controlId];
+    pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
     if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
     else markLivePrompterStatus('No talent ack', 'busy');
   }, 5000);
@@ -7782,24 +9805,42 @@ function openPrompterApp() {
   enterPrompter();
 }
 
-function openFlowmingoTalentWindow() {
+function openFlowmingoTalentWindow({ replace=false }={}) {
+  if (replace) {
+    try { _prompterTalentWin?.close(); } catch {}
+    _prompterTalentWin = null;
+    clearTimeout(_prompterHandshakeTimer);
+    _prompterHandshakeTimer = null;
+    lastTalentPingTs = 0;
+    _activePrompterOutputInstanceId = '';
+    _prompterMissCount = 0;
+    _prompterRecoveryAnnounced = false;
+  }
   initPrompter(); // make sure this window answers the new tab's pings with the current script
+  if (_prompterTalentWin && !_prompterTalentWin.closed) {
+    projectPrompterSessionStatus(prompterSessionController.isReady(_activePrompterOutputInstanceId) ? 'ready' : 'connected', 'Flowmingo output window open');
+    try { _prompterTalentWin.focus(); } catch {}
+    return _prompterTalentWin;
+  }
+  projectPrompterSessionStatus('opening', 'Opening Flowmingo output');
   const url = new URL(location.href);
   url.searchParams.set('prompter', '1');
   if (session.code) url.searchParams.set('code', session.code);
   url.hash = 'flowmingo';
-  const win = window.open(url.toString(), 'cueola-flowmingo-talent');
-  if (!win) {
+  _prompterTalentWin = window.open(url.toString(), 'cueola-flowmingo-talent');
+  if (!_prompterTalentWin) {
+    projectPrompterSessionStatus('error', 'Popup blocked');
     toast('Allow pop-ups to open Flowmingo in a new window.');
     enterPrompter();
   }
+  return _prompterTalentWin;
 }
 
 function sendPrompterPreviewControl(action) {
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op-preview');
-  _postPrompterMessage(control);
-  ptHandleRemoteControl(action);
+  if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) return false;
+  return dispatchPrompterCommand(control, 'live', true);
 }
 
 function sendPrompterControl(action) {
@@ -7809,17 +9850,13 @@ function sendPrompterControl(action) {
   }
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op');
-  _postPrompterMessage(control);
-  trackPrompterControl(control, 'live');
-  ptHandleRemoteControl(action);
-  if (promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePromptOp();
-  if (!promptOpMode && !action.endsWith('_stop') && !action.includes('_set_')) renderLivePrompterControls();
-  if (window._firebaseReady && session.code && !session.isDemo) {
-    window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
-      'prompter.updatedAt': control.ts
-    }).catch(()=>{});
+  if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    prompterSessionController.queueCommand(control);
+    projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for talent to apply state' : 'Waiting for Flowmingo output');
+    markLivePrompterStatus(`${flowOpControlLabel(action)} queued`, 'busy');
+    return false;
   }
+  return dispatchPrompterCommand(control, 'live', isQuietPrompterControl(action));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -7927,14 +9964,26 @@ function ptPostPing(reason='heartbeat') {
   } catch {}
 }
 
+function ptPostReady(reason='ready') {
+  if (_lastAppliedPrompterSnapshotId) {
+    ptPostOperatorMessage(prompterSessionController.buildHeartbeat());
+    return;
+  }
+  ensurePrompterProtocolIdentity({ productionCode:ptLinkedCueolaCode || session.code || '' });
+  ptPostOperatorMessage(prompterSessionController.buildReady(reason));
+  ptPostPing(reason); // Phase 2 compatibility for an older operator tab.
+}
+
 // Ping a few times right after connecting so the operator answers fast, instead
 // of waiting up to 5s for the next hello cycle.
+let ptPingBurstTimers = [];
 function ptPingBurst() {
-  [0, 250, 750, 1500, 3000].forEach(d => setTimeout(() => ptPostPing('ready'), d));
+  ptPingBurstTimers.forEach(clearTimeout);
+  ptPingBurstTimers = [0, 250, 750, 1500, 3000].map(d => setTimeout(() => ptPostReady('ready'), d));
 }
 
 function ptAdoptCueolaBridgeMessage(msg={}) {
-  const code = String(msg.sessionCode || '').trim().toUpperCase();
+  const code = String(msg.productionCode || msg.sessionCode || '').trim().toUpperCase();
   if (code) {
     ptLinkedCueolaCode = code;
     if (!session.code || session.isDemo) {
@@ -7955,6 +10004,7 @@ function ptAdoptCueolaBridgeMessage(msg={}) {
 
 function ptHandleCueolaMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
   // Dedup: each message is sent over BroadcastChannel AND localStorage, so it
   // arrives twice. Skip repeats by id instead of dropping by timestamp (which
   // broke across devices with skewed clocks and re-applied relative controls).
@@ -7962,6 +10012,14 @@ function ptHandleCueolaMessage(msg) {
   if (_seenPrompterMsgIds.includes(mid)) return;
   _seenPrompterMsgIds.push(mid);
   if (_seenPrompterMsgIds.length > 120) _seenPrompterMsgIds = _seenPrompterMsgIds.slice(-60);
+  if (msg.type === 'PROMPTER_STATE') {
+    applyCompletePrompterState(msg);
+    return;
+  }
+  if (msg.type === 'PROMPTER_COMMAND' && msg.action) {
+    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.commandId || msg.controlId);
+    return;
+  }
   if (msg.type === 'cueola_hello') {
     ptAdoptCueolaBridgeMessage(msg);
     ptPostPing('ready');
@@ -7970,13 +10028,21 @@ function ptHandleCueolaMessage(msg) {
   if (msg.type === 'script_init' && msg.text != null) {
     ptAdoptCueolaBridgeMessage(msg);
     adoptPrompterText(msg.text || '', { version:Number(msg.version)||0, updatedAt:Number(msg.ts)||0, source:msg.source || 'bridge' });
-    ptInitScriptFromCueola(prompterText);
+    if (prompterText !== ptLastCueolaScript) {
+      const hadScript = ptHasScript();
+      ptLastCueolaScript = prompterText;
+      if (hadScript) ptUpdateFromCueola(prompterText);
+      else ptInitScriptFromCueola(prompterText);
+    }
     ptPostPing();
   }
   if (msg.type === 'script_update' && msg.text != null) {
     ptAdoptCueolaBridgeMessage(msg);
     adoptPrompterText(msg.text || '', { version:Number(msg.version)||0, updatedAt:Number(msg.ts)||0, source:msg.source || 'bridge' });
-    ptUpdateFromCueola(prompterText);
+    if (prompterText !== ptLastCueolaScript) {
+      ptLastCueolaScript = prompterText;
+      ptUpdateFromCueola(prompterText);
+    }
   }
   if (msg.type === 'prompter_control' && msg.action) {
     applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.controlId);
@@ -8002,7 +10068,8 @@ function ptLoadSavedOrDefault() {
   ptUpdateReady();
 }
 
-// Talent heartbeat: a ping every ~6s so the operator can tell at a glance
+// Talent heartbeat: a state-bearing ping every two seconds so the operator can
+// tell whether the renderer is responsive and recover one complete state.
 // whether the talent screen is alive (BroadcastChannel for same browser,
 // Firestore prompter.talentHeartbeat for cross-device).
 let ptHeartbeatInterval = null;
@@ -8010,11 +10077,22 @@ function ptTalentHeartbeat() {
   // Publish "talent online" only while the talent screen is actually up —
   // otherwise operators see a phantom talent long after this tab left the screen.
   if (!document.getElementById('promptypus')?.classList.contains('on')) return;
-  ptPostPing('heartbeat');
+  currentPrompterSessionState();
+  const heartbeat = ptPostOperatorMessage(prompterSessionController.buildHeartbeat());
+  ptPostPing('heartbeat'); // compatibility for older operator tabs
   if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
     try {
       window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
-        'prompter.talentHeartbeat': { ts: Date.now(), sender: FLOWMINGO_ENDPOINT_ID, senderClient: CLIENT_ID }
+        'prompter.talentHeartbeat': {
+          ts:Date.now(), sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID,
+          senderInstanceId:FLOWMINGO_ENDPOINT_ID,
+          outputInstanceId:FLOWMINGO_ENDPOINT_ID,
+          protocolVersion:heartbeat.protocolVersion,
+          sessionId:heartbeat.sessionId,
+          productionCode:heartbeat.productionCode,
+          snapshotId:heartbeat.snapshotId || '',
+          state:heartbeat.state,
+        }
       }).catch(() => {});
     } catch {}
   }
@@ -8038,7 +10116,31 @@ function ptInitReceiver() {
   };
   window.addEventListener('storage', ptReceiverStorageHandler);
   ptPingBurst();
-  if (!ptHeartbeatInterval) ptHeartbeatInterval = setInterval(ptTalentHeartbeat, 6000);
+  if (!ptHeartbeatInterval) ptHeartbeatInterval = setInterval(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS);
+}
+
+function stopPrompterTalentRuntime() {
+  ptStopPlay();
+  clearInterval(ptHeartbeatInterval);
+  ptHeartbeatInterval = null;
+  ptPingBurstTimers.forEach(clearTimeout);
+  ptPingBurstTimers = [];
+  ptReceiverChannels.forEach(channel => { try { channel.close(); } catch {} });
+  ptReceiverChannels = [];
+  if (ptReceiverStorageHandler) window.removeEventListener('storage', ptReceiverStorageHandler);
+  ptReceiverStorageHandler = null;
+  if (ptCueolaSub) { try { ptCueolaSub(); } catch {} ptCueolaSub = null; }
+  if (ptKeydownHandler) document.removeEventListener('keydown', ptKeydownHandler);
+  if (ptKeyupHandler) document.removeEventListener('keyup', ptKeyupHandler);
+  ptKeydownHandler = null;
+  ptKeyupHandler = null;
+  clearTimeout(ptIdleTimer);
+  ptIdleTimer = null;
+  clearInterval(ptClockInterval);
+  ptClockInterval = null;
+  _seenPrompterMsgIds = [];
+  _lastAppliedPrompterSnapshotId = '';
+  prompterSessionController.setStatus('closed');
 }
 
 function ptGetMaxScroll() {
@@ -8119,27 +10221,46 @@ function ptScrollLoop(ts) {
 
 function ptSyncPlayIcons(isPlaying) {
   const icon = ptEl('pt-play-icon');
-  ['pt-play-btn', 'po-play-btn'].forEach(id => {
+  ['pt-play-btn', 'po-play-btn', 'lsq-play-btn'].forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
-    btn.innerHTML = `${isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
-    btn.classList.toggle('active', isPlaying);
+    patchPrompterPlayButton(btn, isPlaying);
   });
   if (icon) icon.innerHTML = isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
+}
+
+function patchPrompterPlayButton(btn, isPlaying) {
+  if (!btn) return;
+  const playIcon = btn.querySelector('[data-prompter-play-icon="play"]');
+  const pauseIcon = btn.querySelector('[data-prompter-play-icon="pause"]');
+  const label = btn.querySelector('[data-prompter-play-label]');
+  if (playIcon && pauseIcon && label) {
+    playIcon.hidden = Boolean(isPlaying);
+    pauseIcon.hidden = !isPlaying;
+    label.textContent = isPlaying ? 'PAUSE' : 'PLAY';
+  } else {
+    // Talent and older overlay markup do not carry the mount-once hooks.
+    btn.innerHTML = `${isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
+  }
+  btn.classList.toggle('active', isPlaying);
+  btn.setAttribute('aria-pressed', isPlaying ? 'true' : 'false');
+  if (btn.hasAttribute('data-prompter-play')) {
+    btn.setAttribute('onclick', `sendPrompterControl('${isPlaying ? 'pause' : 'resume'}')`);
+  }
 }
 
 function promptOpControlsHTML(includeLiveActions = true) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
-  const playIcon = ptPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
+  const scope = includeLiveActions ? 'po' : 'lsq';
   const transport = `<div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
-        <button class="pt-btn${ptPlaying?' active':''}" id="po-play-btn" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}">${playIcon}<span>${playLabel}</span></button>
+        <button class="pt-btn${ptPlaying?' active':''}" id="${scope}-play-btn" data-prompter-play data-prompter-scope="${scope}" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}"><span class="sf-symbol" data-symbol="media.play" data-prompter-play-icon="play" aria-hidden="true"${ptPlaying ? ' hidden' : ''}></span><span class="sf-symbol" data-symbol="media.pause" data-prompter-play-icon="pause" aria-hidden="true"${ptPlaying ? '' : ' hidden'}></span><span data-prompter-play-label>${playLabel}</span></button>
       </div>
       <div class="flow-control-grid four">
-        <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')">Brake</button>
-        <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')">Boost</button>
+        <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')" onpointercancel="sendPrompterControl('brake_stop')" onlostpointercapture="sendPrompterControl('brake_stop')">Brake</button>
+        <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')" onpointercancel="sendPrompterControl('boost_stop')" onlostpointercapture="sendPrompterControl('boost_stop')">Boost</button>
         <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
         <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
       </div>
@@ -8149,26 +10270,26 @@ function promptOpControlsHTML(includeLiveActions = true) {
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed</span>
       <button class="pt-btn" onclick="sendPrompterControl('speed_down')">−</button>
-      <input type="range" class="pt-range" min="5" max="200" value="${ptTargetSpeed}" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value)">
+      <input type="range" class="pt-range" id="${scope}-speed-range" data-prompter-speed min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value);this.dataset.controlDragging=''">
       <button class="pt-btn" onclick="sendPrompterControl('speed_up')">+</button>
       </div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Size</span>
       <button class="pt-btn" onclick="sendPrompterControl('size_down')">−</button>
-      <input type="range" class="pt-range" min="24" max="120" value="${ptFontSize}" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value)">
+      <input type="range" class="pt-range" id="${scope}-size-range" data-prompter-size min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value);this.dataset.controlDragging=''">
       <button class="pt-btn" onclick="sendPrompterControl('size_up')">+</button>
       </div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
-        <button class="pt-btn${ptAlign==='left'?' active':''}" onclick="sendPrompterControl('align_left')" aria-label="Align left"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
-        <button class="pt-btn${ptAlign==='center'?' active':''}" onclick="sendPrompterControl('align_center')" aria-label="Align center"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
-        <button class="pt-btn${ptAlign==='right'?' active':''}" onclick="sendPrompterControl('align_right')" aria-label="Align right"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" data-prompter-align="left" onclick="sendPrompterControl('align_left')" aria-label="Align left" aria-pressed="${ptAlign === 'left' ? 'true' : 'false'}">Left</button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" data-prompter-align="center" onclick="sendPrompterControl('align_center')" aria-label="Align center" aria-pressed="${ptAlign === 'center' ? 'true' : 'false'}">Center</button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" data-prompter-align="right" onclick="sendPrompterControl('align_right')" aria-label="Align right" aria-pressed="${ptAlign === 'right' ? 'true' : 'false'}">Right</button>
       </div>
     </div>`;
   const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
   const screen = `<div class="flow-control-section flow-control-screen">
@@ -8229,8 +10350,10 @@ function opInspRestoreTab(scope) {
 }
 
 function ptStartPlay() {
+  if (ptPlaying && ptAnimFrame) return;
   ptPlaying = true;
   ptLastTime = null;
+  prompterSessionController.setTransport({ running:true, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
   ptSyncPlayIcons(true);
   ptAnimFrame = requestAnimationFrame(ptScrollLoop);
 }
@@ -8239,6 +10362,7 @@ function ptStopPlay() {
   ptPlaying = false;
   if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
   ptAnimFrame = null;
+  prompterSessionController.setTransport({ running:false, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
   ptSyncPlayIcons(false);
 }
 
@@ -8314,21 +10438,22 @@ function ptSeekToProgress(pct) {
 
 function ptSeekToRow(rowNum) {
   const n = parseInt(rowNum, 10);
-  if (!Number.isFinite(n) || n < 1) return;
-  requestAnimationFrame(() => {
+  if (!Number.isFinite(n) || n < 1) return Promise.resolve(false);
+  return new Promise(resolve => requestAnimationFrame(() => {
     const text = ptEl('pt-text');
     const track = ptEl('pt-track');
-    if (!text || !track) return;
+    if (!text || !track) { resolve(false); return; }
     const tag = `[${n}]`;
     const headers = Array.from(text.querySelectorAll('.scr-header'));
     const target = headers.find(h => String(h.textContent || '').trim().startsWith(tag));
-    if (!target) return;
+    if (!target) { resolve(false); return; }
     const readY = window.innerHeight / 2 + 24;
     const fontSize = parseFloat(getComputedStyle(target).fontSize) || 22;
     const targetY = readY - Math.max(34, fontSize * 1.8);
     const delta = target.getBoundingClientRect().top - targetY;
     ptApplyScrollOffset(ptOffset + delta);
-  });
+    resolve(true);
+  }));
 }
 
 // Full-screen generated slates. Instant hold + scroll pause.
@@ -8381,6 +10506,18 @@ function setFlowOpSlateState(kind) {
   syncTechButtons();
 }
 
+function patchIconLabelButton(button, symbol, label) {
+  if (!button) return;
+  const icon = button.querySelector('.sf-symbol');
+  const text = Array.from(button.children).find(child => child.tagName === 'SPAN' && !child.classList.contains('sf-symbol'));
+  if (!icon || !text) {
+    setSymbolButtonLabel(button, symbol, label);
+    return;
+  }
+  icon.setAttribute('data-symbol', symbol);
+  text.textContent = label;
+}
+
 // Keep every visible slate toggle in sync with the state.
 function syncTechButtons() {
   const talentSlateOn = anyTalentSlateOn();
@@ -8391,9 +10528,10 @@ function syncTechButtons() {
     const isFlow = id.startsWith('flow');
     const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
     const anyOn = isFlow ? flowSlateOn : talentSlateOn;
-    setSymbolButtonLabel(b, 'state.warning', techOn ? 'Back on air' : 'Tech Difficulty');
+    patchIconLabelButton(b, 'state.warning', techOn ? 'Back on air' : 'Tech Difficulty');
     b.classList.toggle('active', techOn);
     b.classList.toggle('muted', anyOn && !techOn);
+    b.setAttribute('aria-pressed', techOn ? 'true' : 'false');
   });
   ['lsq-bars-btn', 'po-bars-btn', 'flow-bars-btn'].forEach(id => {
     const b = document.getElementById(id);
@@ -8401,9 +10539,10 @@ function syncTechButtons() {
     const isFlow = id.startsWith('flow');
     const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
     const anyOn = isFlow ? flowSlateOn : talentSlateOn;
-    setSymbolButtonLabel(b, 'content.display', barsOn ? 'Back on air' : 'NTSC Bars');
+    patchIconLabelButton(b, 'content.display', barsOn ? 'Back on air' : 'NTSC Bars');
     b.classList.toggle('active', barsOn);
     b.classList.toggle('muted', anyOn && !barsOn);
+    b.setAttribute('aria-pressed', barsOn ? 'true' : 'false');
   });
 }
 
@@ -8473,15 +10612,15 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
   const punch = isFlow ? 'flowOpPunchInSeek()' : `poPunchInSeek('${scope}')`;
   const nextRowIdx = (() => {
-    let i = lsIdx;
+    let i = liveActiveCueIndex();
     do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
     return i < beats.length ? i : -1;
   })();
   const rowCue = isFlow ? '' : `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
       <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
-        <button class="pt-btn" onclick="sendPrompterControl('seek_row_${Math.max(lsIdx, 0) + 1}')" title="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
-        <button class="pt-btn" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+        <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${Math.max(liveActiveCueIndex(), 0) + 1}')" title="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
+        <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
       </div>
     </div>`;
   // Returns bare control groups so they nest inside the existing panel containers
@@ -8892,7 +11031,9 @@ function isFlowmingoTalentActive() {
 }
 
 function ptStateSnapshot() {
+  const protocol = currentPrompterSessionState();
   return {
+    ...protocol,
     playing: ptPlaying,
     speed: ptTargetSpeed,
     size: ptFontSize,
@@ -9026,6 +11167,20 @@ function renderPromptOpClockPreview() {
   ['poClockPreview', 'lsqClockPreview'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
+    let mini = el.querySelector('[data-clock-preview-mini]');
+    if (!mini) {
+      mini = document.createElement('div');
+      mini.setAttribute('data-clock-preview-mini', '');
+      const labelEl = document.createElement('span');
+      labelEl.setAttribute('data-clock-preview-label', '');
+      const valueEl = document.createElement('strong');
+      valueEl.setAttribute('data-clock-preview-value', '');
+      const questionEl = document.createElement('em');
+      questionEl.setAttribute('data-clock-preview-question', '');
+      questionEl.textContent = 'Question in chat';
+      mini.append(labelEl, valueEl, questionEl);
+      el.replaceChildren(mini);
+    }
     const state = ptClockState || {};
     const clockOn = state.mode && state.mode !== 'off';
     const left = (Number(state.targetTs) || 0) - Date.now();
@@ -9034,11 +11189,14 @@ function renderPromptOpClockPreview() {
         : fmtClockOverlay(left, state.mode !== 'wrap');
     const label = !clockOn ? 'Clock' : (state.label || 'Clock');
     el.classList.toggle('off', !clockOn);
-    el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
-      <span>${esc(label)}</span>
-      <strong>${esc(value)}</strong>
-      ${ptQuestionOn ? '<em>Question in chat</em>' : ''}
-    </div>`;
+    mini.className = `flowop-clock-mini ${state.mode || 'off'}`;
+    mini.classList.toggle('expired', Boolean(clockOn && state.mode !== 'timeofday' && left <= 0));
+    const labelEl = mini.querySelector('[data-clock-preview-label]');
+    const valueEl = mini.querySelector('[data-clock-preview-value]');
+    const questionEl = mini.querySelector('[data-clock-preview-question]');
+    if (labelEl) labelEl.textContent = label;
+    if (valueEl) valueEl.textContent = value;
+    if (questionEl) questionEl.hidden = !ptQuestionOn;
   });
 }
 
@@ -9094,7 +11252,15 @@ function applyRemoteControlOnce(action, ts, sender, controlId='') {
   if (_appliedControlSigs.has(sig)) return false;
   _appliedControlSigs.add(sig);
   if (_appliedControlSigs.size > 64) _appliedControlSigs.delete(_appliedControlSigs.values().next().value);
+  if (action.startsWith('seek_row_')) {
+    ptSeekToRow(action.replace('seek_row_', '')).then(() => {
+      prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
+      ptPostControlAck(controlId, action, ts, sender);
+    });
+    return true;
+  }
   ptHandleRemoteControl(action);
+  prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
   ptPostControlAck(controlId, action, ts, sender);
   return true;
 }
@@ -9348,17 +11514,17 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
   const mode = state?.mode || 'off';
   const questionOn = isFlow ? flowOpQuestionOn : ptQuestionOn;
   const send = action => isFlow ? `flowOpSendControl('${action}')` : `sendPrompterControl('${action}')`;
-  const btn = (symbol, label, onclick, active=false, className='') =>
-    `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
+  const btn = (symbol, label, onclick, active=false, className='', attrs='') =>
+    `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${attrs ? ` ${attrs}` : ''}${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
   return `<div class="flow-clock-stack">
     <div class="flow-clock-preview" id="${scope === 'flow' ? 'flowOpClockPreview' : `${scope}ClockPreview`}"></div>
     <div class="flow-control-section flow-clock-section">
       <div class="flow-control-title">Clock</div>
       <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
-        ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday')}
-        ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration')}
-        ${btn('time.clock', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown')}
-        ${btn('media.stop', 'Hide', send('clock_off'), false)}
+        ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday', '', 'data-clock-mode="timeofday"')}
+        ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration', '', 'data-clock-mode="duration"')}
+        ${btn('time.clock', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown', '', 'data-clock-mode="countdown"')}
+        ${btn('media.stop', 'Hide', send('clock_off'), false, '', 'data-clock-mode="off"')}
       </div>
       <div class="flow-clock-fields">
         <label class="flow-clock-field"><span>${sfIcon('state.timed')}<b>Duration</b></span><input id="${scope}-duration-min" type="number" min="1" max="999" value="${flowClockDurationMin}" oninput="setFlowClockDuration(this.value)" aria-label="Duration minutes"${dis}></label>
@@ -9377,13 +11543,13 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
     <div class="flow-control-section flow-alert-section">
       <div class="flow-control-title">Alerts</div>
       <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
-        ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn')}
+        ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn', 'data-clock-question')}
       </div>
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
         <div class="ui-stepper">
           <button type="button" class="ui-step-btn" onclick="${send('clock_size_down')}" aria-label="Overlay smaller"${dis}>−</button>
-          <span class="ui-step-val">${['S','M','L','XL','MAX'][Math.max(0, Math.min(4, state?.size ?? 1))]}</span>
+          <span class="ui-step-val" data-clock-size>${['S','M','L','XL','MAX'][Math.max(0, Math.min(4, state?.size ?? 1))]}</span>
           <button type="button" class="ui-step-btn" onclick="${send('clock_size_up')}" aria-label="Overlay bigger"${dis}>+</button>
         </div>
       </div>
@@ -9402,8 +11568,8 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${playIcon}<span>${playLabel}</span></button>
       </div>
       <div class="flow-control-grid four">
-        <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')"${dis}>Brake</button>
-        <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')"${dis}>Boost</button>
+        <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')" onpointercancel="flowOpSendControl('brake_stop')" onlostpointercapture="flowOpSendControl('brake_stop')"${dis}>Brake</button>
+        <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')" onpointercancel="flowOpSendControl('boost_stop')" onlostpointercapture="flowOpSendControl('boost_stop')"${dis}>Boost</button>
         <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
         <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
       </div>
@@ -9574,6 +11740,7 @@ function flowOpLoadSession(codeOverride='') {
   flowOpDeferredControlsDisabled = null;
   flowOpRenderControls(true);
   flowOpSetStatus('Loading...');
+  _prompterOperatorRuntimeActive = true;
   _ensurePrompterOperatorBridge(true);
   const load = () => {
     try {
@@ -9591,15 +11758,20 @@ function flowOpLoadSession(codeOverride='') {
         flowOpCode = code;
         ptLinkedCueolaCode = code;
         flowOpData = snap.data() || {};
+        ensurePrompterProtocolIdentity({ productionCode:code, sessionId:flowOpData.prompter?.sessionId || '' });
+        if (flowOpData.prompter?.state) {
+          prompterSessionController.update(flowOpData.prompter.state, { preserveVersion:true });
+        }
         flowOpRenderSession(flowOpData);
         flowOpRenderControls(false);
         const heartbeat = flowOpData.prompter?.talentHeartbeat;
         const talentOnline = heartbeat?.ts && !isPrompterSelfSender(heartbeat.sender) && (Date.now() - heartbeat.ts) < 20000;
         if (talentOnline) {
-          _notePrompterTalentSeen(heartbeat);
-          flowOpSetStatus(`READY · ${code} · talent online`);
+          _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ...heartbeat });
+          const status = prompterSessionController.getState().status;
+          flowOpSetStatus(`${prompterStatusLabel(status).toUpperCase()} · ${code} · talent online`);
         } else {
-          flowOpSetStatus(`READY · ${code}`);
+          flowOpSetStatus(`OPENING · ${code} · waiting for talent`);
         }
         const control = flowOpData.prompter?.control;
         if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
@@ -9630,6 +11802,7 @@ function flowOpStopListening() {
     try { flowOpSub(); } catch {}
     flowOpSub = null;
   }
+  if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
 }
 
 function flowOpSendControl(action, quiet=false) {
@@ -9640,17 +11813,12 @@ function flowOpSendControl(action, quiet=false) {
   }
   _ensurePrompterOperatorBridge(true);
   const control = buildPrompterControl(action, 'flowmingo-op');
-  _postPrompterMessage(control);
-  trackPrompterControl(control, 'flowop', quiet);
-  flowOpApplyControlPreview(action, quiet);
-  if (!window._firebaseReady) {
-    flowOpSetStatus('Local only · not connected', true);
-    return;
+  if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    prompterSessionController.queueCommand(control);
+    flowOpSetStatus(`${flowOpControlLabel(action)} queued · waiting for talent`);
+    return false;
   }
-  window._updateDoc(window._doc(window._db, 'sessions', flowOpCode), {
-    'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
-    'prompter.updatedAt': control.ts
-  }).catch(err => flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true));
+  return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
 }
 
 // Flowmingo Op: toggle the Technical Difficulties stand-by cover on the talent.
@@ -9693,7 +11861,7 @@ function flowOpBindKeys() {
   if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
   flowOpKeydownHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (isTextEditingTarget(e.target)) return;
+    if (isInteractiveEventTarget(e)) return;
     if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
     if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
     if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
@@ -9865,8 +12033,11 @@ function ptLoadFromCueolaCode(codeOverride='') {
         session.code = code;
         session.isDemo = false;
         session.isExpert = false;
+        ensurePrompterProtocolIdentity({ productionCode:code });
         ptConnState = 'connected';
         ptConnMessage = '';
+        const stateMessage = data.prompter?.stateMessage;
+        if (stateMessage?.type === 'PROMPTER_STATE') applyCompletePrompterState(stateMessage);
         const text = ptAssembleCueolaScript(data);
         const hasExplicitPrompterText = data?.prompter && typeof data.prompter.text === 'string';
         if (text.trim() || hasExplicitPrompterText) {
@@ -9887,7 +12058,14 @@ function ptLoadFromCueolaCode(codeOverride='') {
             // First load starts from the top; every later pushed update applies
             // LIVE in place — preserving scroll position and playback — so the
             // talent screen never has to be reset to "play" the new copy.
-            if (firstApply) ptSetScriptText(text);
+            // A protocol snapshot can win the READY handshake before the
+            // Firestore listener delivers its initial cached/server snapshot.
+            // In that ordering the renderer is already positioned (and a
+            // queued recovery command may already be running), so treating the
+            // cloud callback as a fresh load would call ptResetScroll() and
+            // stop playback again. Only the first source in a renderer with no
+            // applied protocol state is allowed to reset to the top.
+            if (firstApply && !_lastAppliedPrompterSnapshotId) ptSetScriptText(text);
             else ptApplyCueolaLiveUpdate(text);
           }
           const ta = ptEl('pt-script-input');
@@ -9909,7 +12087,8 @@ function ptLoadFromCueolaCode(codeOverride='') {
         }
         ptUpdateReady();
         const control = data.prompter?.control;
-        if (control?.action && !isPrompterSelfSender(control.sender)) {
+        if (control?.action && !isPrompterSelfSender(control.sender)
+            && prompterSessionController.accepts(control, { allowLegacy:true })) {
           applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
@@ -9988,6 +12167,7 @@ function enterPrompter() {
       if (e.key === 'Escape') ptCloseEdit();
       return;
     }
+    if (isInteractiveEventTarget(e)) return;
     if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptReversing = true; return; }
     if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptReversing = false; return; }
     if (e.repeat) return;
@@ -10024,28 +12204,43 @@ function enterPrompter() {
   // Idle cursor tracking
   ptEl('promptypus').addEventListener('mousemove', ptResetIdle);
 
-  // Touch: tap to play/pause
+  // One pointer model for mouse, trackpad, pen, and touch. Interactive controls
+  // own their gestures; only the bare talent stage can toggle or change speed.
   const stage = ptEl('pt-stage');
-  if (stage && !stage._ptTouch) {
-    stage._ptTouch = true;
-    let _tY = 0, _tT = 0, _tDrag = false, _tControl = false;
-    stage.addEventListener('touchstart', e => {
-      _tY = e.touches[0].clientY; _tT = Date.now(); _tDrag = false;
-      _tControl = !!e.target.closest('button, input, select, textarea, a, label, [role="button"]');
-    }, { passive: true });
-    stage.addEventListener('touchmove', e => {
-      if (_tControl) return;
-      const dy = e.touches[0].clientY - _tY;
-      if (dy > 20) { ptBraking = true; ptBoosting = false; _tDrag = true; }
-      else if (dy < -20) { ptBoosting = true; ptBraking = false; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); _tDrag = true; }
+  if (stage && !stage._ptPointer) {
+    stage._ptPointer = true;
+    let pointerId = null, startY = 0, startedAt = 0, dragged = false;
+    const release = (e, allowTap=false) => {
+      if (pointerId == null || (e?.pointerId != null && e.pointerId !== pointerId)) return;
+      const dy = Number(e?.clientY || startY) - startY;
+      const tap = allowTap && !dragged && Date.now() - startedAt < 350 && Math.abs(dy) < 18;
+      try { if (stage.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId); } catch {}
+      pointerId = null;
+      dragged = false;
+      ptBraking = false;
+      ptBoosting = false;
+      if (tap) ptTogglePlay();
+    };
+    stage.addEventListener('pointerdown', e => {
+      if (!e.isPrimary || isInteractiveTarget(e.target)) return;
+      pointerId = e.pointerId;
+      startY = e.clientY;
+      startedAt = Date.now();
+      dragged = false;
+      try { stage.setPointerCapture(pointerId); } catch {}
+      e.preventDefault();
+    });
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerId !== pointerId) return;
+      const dy = e.clientY - startY;
+      if (dy > 20) { ptBraking = true; ptBoosting = false; dragged = true; }
+      else if (dy < -20) { ptBoosting = true; ptBraking = false; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); dragged = true; }
       else { ptBraking = false; ptBoosting = false; }
-    }, { passive: true });
-    stage.addEventListener('touchend', e => {
-      ptBraking = false; ptBoosting = false;
-      const dy = e.changedTouches[0].clientY - _tY;
-      if (!_tControl && !_tDrag && Date.now() - _tT < 300 && Math.abs(dy) < 18) ptTogglePlay();
-      _tDrag = false; _tControl = false;
-    }, { passive: true });
+      e.preventDefault();
+    });
+    stage.addEventListener('pointerup', e => release(e, true));
+    stage.addEventListener('pointercancel', e => release(e, false));
+    stage.addEventListener('lostpointercapture', e => release(e, false));
   }
   const fileInput = ptEl('pt-file-input');
   if (fileInput && !fileInput._ptBound) {
@@ -10059,7 +12254,7 @@ function enterPrompter() {
 }
 
 function exitPrompter() {
-  ptStopPlay();
+  stopPrompterTalentRuntime();
   document.getElementById('promptypus').classList.remove('on');
   // Go back to whichever screen was active before
   const prevScreen = sessionStorage.getItem('cueola_screen');
@@ -10093,12 +12288,13 @@ function renderLivePromptOp() {
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
     return;
   }
-  const cur  = beats[lsIdx] || null;
-  const next = beats[lsIdx + 1] || null;
+  const activeIdx = liveActiveCueIndex();
+  const cur  = beats[activeIdx] || null;
+  const next = beats[activeIdx + 1] || null;
   const sd   = cur?.cues?.script;
   const script = cleanPrompterText((prompterText && prompterText.trim()) || scriptCueText(sd));
   body.innerHTML = `<div class="prompt-op-stage" tabindex="0" aria-label="Flowmingo operator controls">
-    <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${lsIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
+    <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${activeIdx + 1} of ${beats.length}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
     <div class="prompt-op-read-line"></div>
     <div class="prompt-op-track">
       <div class="prompt-op-text">${script ? scriptToFormattedHTML(script) : 'No script loaded.\n\nWaiting for Script Op.'}</div>
@@ -10232,6 +12428,7 @@ function applyTheme(t) {
   root.classList.add('theme-switching');
   root.setAttribute('data-theme', normalizeCueolaTheme(t));
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+  scriptOperatorPublishState();
 }
 
 function applyPlandaBearTheme(t) {
@@ -10385,6 +12582,33 @@ let activePatchKind = '';
 let activePaperworkItemId = '';
 let plandaBearComments = [];
 let plandaBearNotes = [];
+let _pbPendingNoteWrites = 0;
+let _pbNoteSaveSerial = 0;
+let _pbLastNoteSaveError = null;
+
+function pbBeginNoteSave() {
+  _pbPendingNoteWrites += 1;
+  _pbNoteSaveSerial += 1;
+  return _pbNoteSaveSerial;
+}
+
+function pbNoteSaveSucceeded(token) {
+  if (!_pbLastNoteSaveError || token >= _pbLastNoteSaveError.token) _pbLastNoteSaveError = null;
+}
+
+function pbNoteSaveFailed(error, token) {
+  if (!_pbLastNoteSaveError || token >= _pbLastNoteSaveError.token) {
+    _pbLastNoteSaveError = {
+      token,
+      code:error?.code || 'failed',
+      message:error?.message || String(error || 'Production note save failed.'),
+    };
+  }
+}
+
+function pbEndNoteSave() {
+  _pbPendingNoteWrites = Math.max(0, _pbPendingNoteWrites - 1);
+}
 
 function preProKey() {
   return `cueola_prepro_${session.code || session.userName || 'local'}`;
@@ -10415,6 +12639,27 @@ function preProActor() {
 }
 
 const _pbPendingCloudKeys = new Set();
+const _pbPendingCloudCounts = new Map();
+let _pbLastCloudSaveError = null;
+
+function pbBeginCloudSave(keys) {
+  keys.forEach(key => {
+    const count = (_pbPendingCloudCounts.get(key) || 0) + 1;
+    _pbPendingCloudCounts.set(key, count);
+    _pbPendingCloudKeys.add(key);
+  });
+}
+
+function pbEndCloudSave(keys) {
+  keys.forEach(key => {
+    const count = Math.max(0, (_pbPendingCloudCounts.get(key) || 0) - 1);
+    if (count) _pbPendingCloudCounts.set(key, count);
+    else {
+      _pbPendingCloudCounts.delete(key);
+      _pbPendingCloudKeys.delete(key);
+    }
+  });
+}
 
 function preProValuesEqual(a, b) {
   if (a === b) return true;
@@ -10448,20 +12693,24 @@ let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log a
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db,'sessions',session.code);
-  const changedKeys = Object.keys(changed);
+  const changedKeys = Object.keys(changed).filter(key => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key));
   if (changedKeys.length) {
     const updates = { 'prePro.updatedAt':updatedAt };
     for (const key of changedKeys) {
       // All current Planda Bear top-level keys are Firestore-safe identifiers.
       // Field-path writes prevent one stale section from replacing the package.
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
       updates[`prePro.${key}`] = changed[key];
       updates[`prePro._fieldUpdatedAt.${key}`] = updatedAt;
-      _pbPendingCloudKeys.add(key);
     }
+    pbBeginCloudSave(changedKeys);
+    _pbLastCloudSaveError = null;
     window._updateDoc(ref, updates).then(() => {
-      changedKeys.forEach(key => _pbPendingCloudKeys.delete(key));
-    }).catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
+      pbEndCloudSave(changedKeys);
+    }).catch(err => {
+      pbEndCloudSave(changedKeys);
+      _pbLastCloudSaveError = err;
+      reportCloudWriteFailure('Planda Bear cloud save', err);
+    });
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
@@ -10775,6 +13024,7 @@ function pbRefreshOpenPaperworkFields() {
 function pbApplyRemoteCollab() {
   if (!pbOpenPageId()) return;
   pbRefreshOpenPaperworkFields();
+  if (pbOpenPageId() === 'hub') renderPlandaBearAssignmentsCard();
   pbRenderFieldPresence();
   pbRenderPagePresence();
 }
@@ -10806,11 +13056,15 @@ function pbInitCollabListeners() {
       pbNoteLocalEdit(e.target.id);
       clearTimeout(_pbFieldSaveTimer);
       _pbFieldSaveTimer = setTimeout(() => {
+        _pbFieldSaveTimer = null;
         // Merge in collaborators' latest values before saving so two people on
         // the same page editing different fields don't overwrite each other.
         pbRefreshOpenPaperworkFields();
         _pbSuppressActivity = true;
-        try { saveOpenPaperworkSection(false); } finally { _pbSuppressActivity = false; }
+        try {
+          saveOpenPaperworkSection(false);
+          paperworkDirty = false;
+        } finally { _pbSuppressActivity = false; }
       }, 650);
     };
     modal.addEventListener('input', queuePaperworkAutosave);
@@ -10906,7 +13160,7 @@ function openPaperworkHub() {
     return;
   }
   applyPlandaBearTheme(plandaBearTheme);
-  hydratePreProFromFirestore();
+  hydratePreProFromFirestore().then(() => renderPlandaBearAssignmentsCard());
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
     // Production Notes lives in its own wide bar above the grid, not in the numbered list.
@@ -11529,6 +13783,7 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
   plandaBearNotes = intended;
   saveLocalPlandaBearNotes(plandaBearNotes);
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  const noteSaveToken = pbBeginNoteSave();
   const ref = window._doc(window._db, 'sessions', session.code);
   try {
     if (window._runTransaction) {
@@ -11544,8 +13799,12 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
     } else {
       await window._updateDoc(ref, { preProNotes: intended });
     }
+    pbNoteSaveSucceeded(noteSaveToken);
   } catch (err) {
+    pbNoteSaveFailed(err, noteSaveToken);
     reportCloudWriteFailure('Production notes cloud save', err);
+  } finally {
+    pbEndNoteSave();
   }
   pbNotesActivity(activitySection);
 }
@@ -11574,6 +13833,7 @@ async function pbApplyNoteMutation(next, change, activitySection) {
   plandaBearNotes = intended;
   saveLocalPlandaBearNotes(plandaBearNotes);
   _pbNotesBaseline = new Set(plandaBearNotes.map(n => n.id));
+  const noteSaveToken = pbBeginNoteSave();
   try {
     if (change.set) {
       const clean = normalizePlandaBearNote(change.set);
@@ -11598,6 +13858,7 @@ async function pbApplyNoteMutation(next, change, activitySection) {
       // merge (and any not-yet-upgraded client) resurrects the deleted thread.
       if (hadLegacyCopies) await pbPurgeLegacyArray(drop);
     }
+    pbNoteSaveSucceeded(noteSaveToken);
   } catch (err) {
     if (pbIsPermissionDenied(err)) {
       pbDropToLegacyNotes(err, 'mutation');
@@ -11605,7 +13866,10 @@ async function pbApplyNoteMutation(next, change, activitySection) {
     }
     // Transient (offline/unavailable): the plain per-note write is queued by
     // the persistent cache and flushes on reconnect — no legacy double-write.
+    pbNoteSaveFailed(err, noteSaveToken);
     reportCloudWriteFailure('Production note cloud save', err);
+  } finally {
+    pbEndNoteSave();
   }
   pbNotesActivity(activitySection);
 }
@@ -11957,14 +14221,39 @@ async function pbExportDraftPDF() {
   const draft = normalizePlandaBearNote({
     text, by: preProActor(), role: pbNoteActorRole(), tag: pbComposerTag, at: Date.now(), clientId: CLIENT_ID,
   });
+  const model = paperworkExportModel();
+  if (!model) { toast('The export model is unavailable. Reload Cueola before exporting.'); return; }
+  const snapshot = model.createSnapshot({
+    authority:'unpublished',
+    readiness:model.assessReadiness({ authority:'unpublished' }),
+    production:{
+      sessionCode:session.code || (session.isDemo ? 'DEMO' : 'LOCAL'),
+      name:show.name || 'Cueola',
+      identity:session.code || 'local',
+    },
+    exportedAt:Date.now(),
+    revisions:{ notesFingerprint:model.fingerprint([draft]) },
+    show:{ name:show.name || 'Cueola', start:normalizeTimeValue(show.start), freeMode:freeTextMode },
+    notes:[draft],
+    labels:{ document:'Production note draft' },
+    options:{ includeNotes:true, includeAssignments:false, documentType:'production-note-draft' },
+  });
+  const frozenDraft = snapshot.notes[0];
+  const html = productionNoteDocHTML(frozenDraft, snapshot.notes, snapshot.production.name);
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
   try {
     toast('Building note PDF...');
-    const stamp = new Date().toISOString().slice(0, 10);
-    await exportPaperHTMLAsPDF(productionNoteDocHTML(draft), `cueola-production-note-${stamp}.pdf`);
-    toast('Note PDF downloaded.');
-  } catch (e) {
-    toast('PDF export needs an internet connection. Use the browser print dialog instead.');
-    window.print();
+    const stamp = new Date(snapshot.exportedAt).toISOString().slice(0, 10);
+    const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-draft-${stamp}.pdf`, options);
+    toast(`Unpublished note PDF downloaded · ${result.pageCount} pages.`);
+  } catch (error) {
+    console.warn('Paged PDF renderer unavailable; opening the identical unpublished-note print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    } catch (printError) {
+      toast(`Could not render the unpublished note: ${paperworkExportFailureMessage(printError)}`);
+    }
   }
 }
 
@@ -12347,8 +14636,8 @@ function pbRootIdOf(note, byId, depth=0) {
   return parent ? pbRootIdOf(parent, byId, depth + 1) : note.id;
 }
 
-function pbBuildThreads() {
-  const all = plandaBearNotes.slice().sort((a,b)=>(a.at||0)-(b.at||0));
+function pbBuildThreads(notes=plandaBearNotes) {
+  const all = (Array.isArray(notes) ? notes : []).slice().sort((a,b)=>(a.at||0)-(b.at||0));
   const byId = new Map(all.map(n => [n.id, n]));
   const threads = new Map(); // rootId -> { root, replies }
   for (const n of all) {
@@ -13645,25 +15934,23 @@ function pbAttachmentsPaperHTML(note) {
   if (!atts.length) return '';
   return atts.map(a => {
     if (a.isImage) {
-      // synced payloads are attacker-writable: only a real data:image URL may enter the markup
-      const raw = pbNoteFileCache.get(a.fileId) || '';
-      const dataUrl = /^data:image\//i.test(raw) ? esc(raw) : '';
-      return dataUrl
-        ? `<div style="margin-top:10px"><img src="${dataUrl}" style="max-width:420px;max-height:320px;border:1px solid #ccc;border-radius:6px"><div style="font-size:10px;color:#777;margin-top:3px">${esc(a.name)}</div></div>`
-        : `<div style="font-size:11px;color:#777;margin-top:6px">📷 Image attachment: ${esc(a.name)}</div>`;
+      // Attachment blobs live in separate documents and are not part of the
+      // revision-fenced note snapshot. List the authoritative metadata rather
+      // than silently embedding a mutable cache/localStorage payload.
+      return `<div style="font-size:11px;color:#777;margin-top:6px">Image attachment: ${esc(a.name)} (open the saved original in Cueola)</div>`;
     }
     return `<div style="font-size:11px;color:#777;margin-top:6px">Attached document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
   }).join('');
 }
 
 function pbTagLabel(note) {
-  if (note.tag === 'todo') return note.done ? 'To-Do ✓' : 'To-Do';
+  if (note.tag === 'todo') return note.done ? 'To-Do (Completed)' : 'To-Do';
   return (PB_NOTE_TAGS[note.tag] || PB_NOTE_TAGS.general).label;
 }
 
-function productionNoteDocHTML(note) {
+function productionNoteDocHTML(note, notes=plandaBearNotes, productionName=show.name) {
   // Pull in the thread's replies so an exported note carries its whole conversation.
-  const thread = pbBuildThreads().find(t => t.root.id === note.id);
+  const thread = pbBuildThreads(notes).find(t => t.root.id === note.id);
   const replies = thread ? thread.replies : [];
   const likeLine = (note.likes || []).length ? `<tr><th>Likes</th><td>${(note.likes || []).length}</td></tr>` : '';
   const repliesHTML = replies.length ? `
@@ -13677,7 +15964,7 @@ function productionNoteDocHTML(note) {
   ` : '';
   return `
     <h1>Production Note</h1>
-    <div>${esc(show.name || 'Cueola')} · Production Notes</div>
+    <div>${esc(productionName || 'Cueola')} · Production Notes</div>
     <table><tbody>
       <tr><th>Tag</th><td>${esc(pbTagLabel(note))}${note.pinned ? ' · Pinned' : ''}</td></tr>
       <tr><th>Author</th><td>${esc(note.by || preProActor())}</td></tr>
@@ -13690,75 +15977,99 @@ function productionNoteDocHTML(note) {
   `;
 }
 
-function productionNotesThreadHTML() {
-  const threads = pbBuildThreads().sort((a,b)=>(a.root.at||0)-(b.root.at||0));
+function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.name, sectionNumber=8) {
+  const threads = pbBuildThreads(notes).sort((a,b)=>(a.root.at||0)-(b.root.at||0));
   const attHTML = (n) => (n.attachments || []).map(a => {
     if (a.isImage) {
-      const dataUrl = pbNoteFileCache.get(a.fileId) || '';
-      return dataUrl
-        ? `<div style="margin-top:6px"><img src="${dataUrl}" style="max-width:240px;max-height:180px;border:1px solid #ccc;border-radius:4px"></div>`
-        : `<div class="cue-muted">📷 Image: ${esc(a.name)}</div>`;
+      return `<div class="cue-muted">Image attachment: ${esc(a.name)} (open the saved original in Cueola)</div>`;
     }
     return `<div class="cue-muted">Document: ${esc(a.name)} (${esc(pbFileSize(a.size))})</div>`;
   }).join('');
   const row = (n, isReply) => `<tr>
     <td>${esc(n.at ? new Date(n.at).toLocaleString() : '')}</td>
     <td>${esc(n.by)}${n.role === 'instructor' ? '<br><span class="cue-muted">Instructor</span>' : ''}</td>
-    <td>${esc(pbTagLabel(n))}${n.pinned ? ' 📌' : ''}</td>
-    <td>${isReply ? '<div style="padding-left:16px;border-left:3px solid #ddd"><span class="cue-muted">↩ reply</span><br>' : ''}${pbRenderRichText(n.text)}${n.editedAt ? ' <span class="cue-muted">(edited)</span>' : ''}${attHTML(n)}${isReply ? '</div>' : ''}</td>
+    <td>${esc(pbTagLabel(n))}${n.pinned ? ' (Pinned)' : ''}</td>
+    <td>${isReply ? '<div style="padding-left:16px;border-left:3px solid #ddd"><span class="cue-muted">Reply</span><br>' : ''}${pbRenderRichText(n.text)}${n.editedAt ? ' <span class="cue-muted">(edited)</span>' : ''}${attHTML(n)}${isReply ? '</div>' : ''}</td>
   </tr>`;
   const rows = threads.flatMap(t => [row(t.root, false), ...t.replies.map(r => row(r, true))]).join('');
   return `
-    <h1>7. Production Notes</h1>
-    <div>${esc(show.name || 'Cueola')} · Shared discussion board</div>
+    <h1>${Number(sectionNumber) || 8}. Production Notes</h1>
+    <div>${esc(productionName || 'Cueola')} · Shared discussion board</div>
     <table><thead><tr><th>Time</th><th>By</th><th>Tag</th><th>Note</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="4">No production notes yet.</td></tr>'}</tbody></table>
   `;
 }
 
-// Pull image attachment payloads into the cache so PDF/preview can embed them.
-async function pbPrefetchNoteImages() {
-  const imgs = plandaBearNotes.flatMap(n => (n.attachments || []).filter(a => a.isImage));
-  for (const a of imgs) {
-    try { await pbLoadNoteFile(a.fileId); } catch {}
-  }
-}
-
 async function exportProductionNoteById(id) {
-  const note = plandaBearNotes.find(n => n.id === id);
-  if (!note) return;
+  let snapshot;
   try {
+    snapshot = await preparePaperworkExportSnapshot({
+      includeAssignments:false,
+      includeNotes:true,
+      documentType:'production-note',
+    });
+    const note = snapshot.notes.find(n => n.id === id);
+    if (!note) throw new Error('That note is not present in the confirmed production snapshot. Reload notes and try again.');
     toast('Building note PDF...');
-    const thread = pbBuildThreads().find(t => t.root.id === id);
-    const imgNotes = [note, ...(thread ? thread.replies : [])];
-    for (const n of imgNotes) for (const a of (n.attachments || []).filter(x => x.isImage)) await pbLoadNoteFile(a.fileId);
     const stamp = new Date(note.at || Date.now()).toISOString().slice(0,10);
-    await exportPaperHTMLAsPDF(productionNoteDocHTML(note), `cueola-production-note-${stamp}.pdf`);
-    toast('Note PDF downloaded.');
-  } catch (e) {
-    toast('PDF export needs an internet connection. Use the browser print dialog instead.');
-    window.print();
+    const html = productionNoteDocHTML(note, snapshot.notes, snapshot.production.name);
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
+    try {
+      const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-${stamp}.pdf`, options);
+      toast(`Production note PDF downloaded · ${result.pageCount} pages.`);
+    } catch (error) {
+      console.warn('Paged PDF renderer unavailable; opening the identical production-note print representation.', error);
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    }
+  } catch (error) {
+    toast(`Note export blocked: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
-function showProductionNotesPreview() {
+let lastProductionNotesExportSnapshot = null;
+async function showProductionNotesPreview() {
   activePaperworkItemId = 'production-notes';
-  loadPlandaBearNotes().then(pbPrefetchNoteImages).then(() => {
-    showPaperPreview('Production Notes Preview', productionNotesThreadHTML(), 'Export Notes Log PDF', 'exportProductionNotesPDF()', 'production-notes');
-  });
+  try {
+    const snapshot = await preparePaperworkExportSnapshot({
+      includeAssignments:false,
+      includeNotes:true,
+      documentType:'production-notes-log',
+    });
+    lastProductionNotesExportSnapshot = snapshot;
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
+    showPaperPreview('Production Notes Preview', productionNotesThreadHTML(snapshot.notes, snapshot.production.name),
+      'Export Notes Log PDF', 'exportProductionNotesPDF()', 'production-notes', options);
+  } catch (error) {
+    lastProductionNotesExportSnapshot = null;
+    toast(`Notes preview blocked: ${paperworkExportFailureMessage(error)}`);
+  }
 }
 
 async function exportProductionNotesPDF() {
+  let snapshot;
   try {
+    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+      && lastPaperPreview?.options?.snapshotFingerprint === lastProductionNotesExportSnapshot?.fingerprint;
+    snapshot = previewIsOpen ? lastProductionNotesExportSnapshot : await preparePaperworkExportSnapshot({
+      includeAssignments:false,
+      includeNotes:true,
+      documentType:'production-notes-log',
+    });
     toast('Building notes log PDF...');
-    await loadPlandaBearNotes();
-    await pbPrefetchNoteImages();
-    const stamp = new Date().toISOString().slice(0,10);
-    await exportPaperHTMLAsPDF(productionNotesThreadHTML(), `cueola-production-notes-${stamp}.pdf`);
-    toast('Notes log PDF downloaded.');
-  } catch (e) {
-    toast('PDF export needs an internet connection. Use the browser print dialog instead.');
-    window.print();
+    const stamp = new Date(snapshot.exportedAt).toISOString().slice(0,10);
+    const html = productionNotesThreadHTML(snapshot.notes, snapshot.production.name);
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
+    try {
+      const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
+      toast(`Notes log PDF downloaded · ${result.pageCount} pages.`);
+    } catch (error) {
+      console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    }
+  } catch (error) {
+    toast(`Notes export blocked: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -13998,9 +16309,321 @@ function saveOpenPaperworkSection(showToastOnSave=true) {
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(showToastOnSave);
 }
 
-function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')", flowId=null) {
+// ── Phase 7: one authority boundary for every formal paperwork export. ──
+const PAPER_EXPORT_WAIT_MS = 8000;
+
+function paperworkExportModel() {
+  return window.CueolaExportModel || null;
+}
+
+function paperworkExportTimeout(promise, ms=PAPER_EXPORT_WAIT_MS, message='The saved production did not confirm in time.') {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(message);
+        error.code = 'export-timeout';
+        reject(error);
+      }, ms);
+    }),
+  ]);
+}
+
+function paperworkExportAuthority() {
+  return session.code && !session.isDemo && !session.isExpert ? 'server' : 'local';
+}
+
+function flushPaperworkDraftForExport() {
+  if (_pbFieldSaveTimer) {
+    clearTimeout(_pbFieldSaveTimer);
+    _pbFieldSaveTimer = null;
+    try { pbRefreshOpenPaperworkFields(); } catch {}
+  }
+  if (paperworkDirty || document.querySelector('#preProModal.on,#productionScheduleModal.on,#safetyPlanModal.on,#patchSheetModal.on')) {
+    _pbSuppressActivity = true;
+    try {
+      saveOpenPaperworkSection(false);
+      paperworkDirty = false;
+    } finally { _pbSuppressActivity = false; }
+  }
+}
+
+function paperworkExportReadiness(options={}) {
+  const model = paperworkExportModel();
+  if (!model) {
+    const error = new Error('The paperwork export model is unavailable. Reload Cueola before exporting.');
+    error.code = 'export-model-unavailable';
+    throw error;
+  }
+  const serverAuthority = paperworkExportAuthority() === 'server';
+  const assignmentState = options.includeAssignments === false || !serverAuthority
+    ? 'saved'
+    : assignmentSaveState || 'unsaved';
+  return model.assessReadiness({
+    authority:serverAuthority ? 'server' : 'local',
+    paperworkDirty,
+    debouncePending:Boolean(_pbFieldSaveTimer),
+    rundown:{ pendingCount:rundownPendingBatches.length + (rundownSyncRunning ? 1 : 0) },
+    prePro:{
+      pendingCount:_pbPendingCloudKeys.size,
+      saveState:serverAuthority && _pbLastCloudSaveError ? 'failed' : 'saved',
+      error:serverAuthority ? _pbLastCloudSaveError : null,
+    },
+    assignments:{ saveState:assignmentState, fromCache:serverAuthority && assignmentFromCache },
+    notes:{
+      pendingCount:serverAuthority ? _pbPendingNoteWrites : 0,
+      saveState:serverAuthority && _pbLastNoteSaveError ? 'failed' : 'saved',
+      error:serverAuthority ? _pbLastNoteSaveError : null,
+    },
+  });
+}
+
+function paperworkExportReadinessMessage(readiness) {
+  const messages = (readiness?.issues || []).map(issue => issue.message).filter(Boolean);
+  return messages.join(' ') || 'Saved production data is not ready to export.';
+}
+
+async function waitForPaperworkSaves(options={}) {
+  flushPaperworkDraftForExport();
+  const started = Date.now();
+  let readiness = paperworkExportReadiness(options);
+  while (!readiness.canExport && Date.now() - started < PAPER_EXPORT_WAIT_MS) {
+    if (readiness.blockingCount) break;
+    await new Promise(resolve => setTimeout(resolve, 80));
+    readiness = paperworkExportReadiness(options);
+  }
+  if (!readiness.canExport) {
+    const error = new Error(paperworkExportReadinessMessage(readiness));
+    error.code = 'export-not-ready';
+    error.readiness = readiness;
+    throw error;
+  }
+  if (paperworkExportAuthority() === 'server' && typeof window._waitForPendingWrites === 'function') {
+    await paperworkExportTimeout(window._waitForPendingWrites(), PAPER_EXPORT_WAIT_MS,
+      'Cloud saves are still pending. Reconnect and wait for Cloud saved before exporting.');
+    readiness = paperworkExportReadiness(options);
+    if (!readiness.canExport) {
+      const error = new Error(paperworkExportReadinessMessage(readiness));
+      error.code = 'export-not-ready';
+      error.readiness = readiness;
+      throw error;
+    }
+  }
+  return readiness;
+}
+
+function paperworkRevisionFence(data={}, notes=[]) {
+  const model = paperworkExportModel();
+  const prePro = data.prePro && typeof data.prePro === 'object' ? data.prePro : {};
+  return {
+    rundownBatchId:String(data.rundownBatchId || ''),
+    rundownUpdatedAt:Number(data.rundownUpdatedAt) || 0,
+    preProUpdatedAt:Number(prePro.updatedAt) || 0,
+    assignmentRevision:Math.max(0, Number(data.assignmentRevision) || 0),
+    assignmentUpdatedAt:Number(data.assignmentsUpdatedAt || data.assignmentUpdatedAt) || 0,
+    notesUpdatedAt:Number(data.notesUpdatedAt || 0),
+    notesFingerprint:model?.fingerprint?.(notes) || '',
+  };
+}
+
+function firestoreDocuments(snapshot) {
+  const rows = [];
+  snapshot?.forEach?.(docSnap => rows.push({ id:docSnap.id, ...(docSnap.data() || {}) }));
+  return rows;
+}
+
+function mergeExportNotes(legacyNotes, canonicalNotes) {
+  const merged = new Map((Array.isArray(legacyNotes) ? legacyNotes : []).map(note => [note.id, note]));
+  (Array.isArray(canonicalNotes) ? canonicalNotes : []).forEach(note => merged.set(note.id, note));
+  return [...merged.values()];
+}
+
+async function readServerPaperworkSnapshot(options={}) {
+  if (!window._getDocFromServer || !window._getDocsFromServer) {
+    const error = new Error('Server-confirmed export reads are unavailable. Reload Cueola before exporting.');
+    error.code = 'export-server-reader-unavailable';
+    throw error;
+  }
+  const model = paperworkExportModel();
+  const sessionRef = window._doc(window._db, 'sessions', session.code);
+  const assignmentsRef = window._collection(window._db, 'sessions', session.code, 'assignments');
+  const notesRef = window._collection(window._db, 'sessions', session.code, 'notes');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const beforeSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef));
+    if (!beforeSnap.exists()) {
+      const error = new Error('This production no longer exists on the server.');
+      error.code = 'export-session-missing';
+      throw error;
+    }
+    const before = beforeSnap.data() || {};
+    let assignments = [];
+    if (options.includeAssignments !== false) {
+      assignments = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(assignmentsRef)));
+    }
+    let canonicalNotes = [];
+    let notesMode = 'excluded';
+    if (options.includeNotes === true) {
+      try {
+        canonicalNotes = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(notesRef)));
+        notesMode = 'canonical';
+      } catch (error) {
+        if (!pbIsPermissionDenied(error)) throw error;
+        notesMode = 'server legacy fallback';
+      }
+    }
+    const notes = options.includeNotes === true
+      ? mergeExportNotes(Array.isArray(before.preProNotes) ? before.preProNotes : [], canonicalNotes)
+      : [];
+    const afterSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef));
+    const after = afterSnap.exists() ? (afterSnap.data() || {}) : {};
+    let afterCanonicalNotes = canonicalNotes;
+    if (options.includeNotes === true && notesMode === 'canonical') {
+      afterCanonicalNotes = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(notesRef)));
+    }
+    const afterNotes = options.includeNotes === true
+      ? mergeExportNotes(Array.isArray(after.preProNotes) ? after.preProNotes : [], afterCanonicalNotes)
+      : [];
+    const beforeFence = paperworkRevisionFence(before, notes);
+    const afterFence = paperworkRevisionFence(after, afterNotes);
+    if (!model.compareRevisionFence(beforeFence, afterFence).stable) {
+      if (attempt === 0) continue;
+      const error = new Error('The production changed while Cueola was preparing the export. Preview again after saves settle.');
+      error.code = 'export-revision-race';
+      throw error;
+    }
+    const readiness = model.assessReadiness({ authority:'server', serverConfirmed:true });
+    return model.createSnapshot({
+      authority:'server',
+      readiness,
+      production:{ sessionCode:session.code, name:before.showName || show.name, identity:session.code },
+      exportedAt:Date.now(),
+      revisions:{ ...beforeFence, notesMode },
+      show:{
+        name:before.showName || show.name,
+        start:normalizeTimeValue(before.startTime || show.start),
+        freeMode:Boolean(before.freeMode),
+        outrangutan:before.outrangutan || {},
+      },
+      beats:Array.isArray(before.beats) ? before.beats : [],
+      prePro:before.prePro && typeof before.prePro === 'object' ? before.prePro : {},
+      canonicalAssignments:assignments,
+      notes:afterNotes,
+      options:{
+        includeNotes:options.includeNotes === true,
+        includeAssignments:options.includeAssignments !== false,
+        documentType:options.documentType || 'package',
+      },
+    });
+  }
+  throw new Error('Could not capture one stable production revision.');
+}
+
+function localPaperworkAssignments() {
+  return getRoleAssignments().filter(row => row.profileId && row.positionId).map(row => ({
+    assignmentId:row.assignmentId || `local_${row.profileId}_${row.positionId}`,
+    productionSession:session.code || 'LOCAL',
+    profileId:row.profileId,
+    displayName:row.person,
+    positionId:row.positionId,
+    positionLabel:row.position,
+    paperworkIds:row.paperworkIds || [],
+    paperworkLabels:row.paperwork || [],
+    status:row.status || 'assigned',
+    assignedBy:row.assignedBy || 'local-operator',
+    assignedByLabel:row.assignedByLabel || session.userName || 'Local operator',
+    createdAt:row.createdAt || Date.now(),
+    updatedAt:row.updatedAt || Date.now(),
+    revision:Math.max(1, Number(row.revision) || 1),
+  }));
+}
+
+function readLocalPaperworkSnapshot(options={}) {
+  const model = paperworkExportModel();
+  const readiness = model.assessReadiness({ authority:'local' });
+  return model.createSnapshot({
+    authority:'local',
+    readiness,
+    production:{ sessionCode:session.code || (session.isDemo ? 'DEMO' : 'LOCAL'), name:show.name, identity:session.code || 'local' },
+    exportedAt:Date.now(),
+    revisions:{
+      rundownBatchId:rundownLastSeenBatchId || '',
+      preProUpdatedAt:Number(loadPreProData().updatedAt) || 0,
+      assignmentRevision,
+      notesFingerprint:model.fingerprint(plandaBearNotes),
+    },
+    show:{ name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode, outrangutan:outrangutanState || {} },
+    beats,
+    prePro:loadPreProData(),
+    canonicalAssignments:options.includeAssignments === false ? [] : localPaperworkAssignments(),
+    notes:options.includeNotes === true ? plandaBearNotes : [],
+    options:{
+      includeNotes:options.includeNotes === true,
+      includeAssignments:options.includeAssignments !== false,
+      documentType:options.documentType || 'package',
+    },
+  });
+}
+
+async function preparePaperworkExportSnapshot(options={}) {
+  await waitForPaperworkSaves(options);
+  const snapshot = paperworkExportAuthority() === 'server'
+    ? readServerPaperworkSnapshot(options)
+    : readLocalPaperworkSnapshot(options);
+  const resolved = await snapshot;
+  const readiness = paperworkExportReadiness(options);
+  if (!readiness.canExport) {
+    const error = new Error(paperworkExportReadinessMessage(readiness));
+    error.code = 'export-not-ready';
+    error.readiness = readiness;
+    throw error;
+  }
+  return resolved;
+}
+
+function paperExportOptionsForSnapshot(snapshot, options={}) {
+  const revisions = snapshot.revisions || {};
+  const parts = [];
+  if (revisions.rundownBatchId) parts.push(`Rundown ${revisions.rundownBatchId}`);
+  if (Number.isFinite(Number(revisions.assignmentRevision))) parts.push(`Assignments r${Number(revisions.assignmentRevision) || 0}`);
+  if (revisions.preProUpdatedAt) parts.push(`Planda Bear ${paperExportDateLabel(revisions.preProUpdatedAt)}`);
+  return {
+    ...options,
+    exportMeta:{
+      productionName:snapshot.production.name,
+      productionCode:snapshot.production.sessionCode || snapshot.production.productionId || 'LOCAL',
+      exportedAt:new Date(snapshot.exportedAt).toISOString(),
+      sourceLabel:snapshot.labels.authority,
+      revisionLabel:parts.join(' · '),
+      draftLabel:snapshot.authoritative ? '' : snapshot.labels.document || snapshot.labels.authority,
+    },
+    snapshotFingerprint:snapshot.fingerprint,
+  };
+}
+
+function paperworkExportFailureMessage(error) {
+  if (error?.readiness) return paperworkExportReadinessMessage(error.readiness);
+  if (error?.code === 'permission-denied') return 'Firestore denied the saved paperwork. The staged rules need an owner deploy before production export can continue.';
+  if (error?.code === 'unavailable' || error?.code === 'export-timeout') return error.message || 'The saved production is unavailable. Reconnect before exporting.';
+  return error?.message || 'Could not prepare the saved paperwork export.';
+}
+
+let paperPreviewBuildSequence = 0;
+let lastPaperPreview = null;
+
+function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')", flowId=null, exportOptions={}) {
   document.getElementById('paperPreviewTitle').textContent = title;
-  document.getElementById('paperPreviewBody').innerHTML = html;
+  const previewBody = document.getElementById('paperPreviewBody');
+  const sequence = ++paperPreviewBuildSequence;
+  const staging = document.createElement('div');
+  staging.innerHTML = String(html || '');
+  const controls = [...staging.querySelectorAll('.no-print')].map(node => node.outerHTML).join('');
+  staging.querySelectorAll('.no-print').forEach(node => node.remove());
+  const printableHTML = staging.innerHTML;
+  lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence };
+  previewBody.style.background = 'transparent';
+  previewBody.style.padding = '0';
+  previewBody.innerHTML = `${controls}<div class="paper-export-loading" role="status">Building fixed-page preview…</div>`;
   const primary = document.getElementById('paperPreviewPrimary');
   const isExportAction = /\b(export|download)\b/i.test(primaryLabel || '');
   primary.classList.toggle('export-action', isExportAction);
@@ -14021,33 +16644,55 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
   hideModal('patchSheetModal');
   showModal('paperPreviewModal');
   renderPlandaBearComments(flowId ? pbSectionLabel(flowId) : 'All', 'pbCommentsPreview');
+  buildPaperExportDocument(printableHTML, exportOptions).then(root => {
+    if (sequence !== paperPreviewBuildSequence || !document.getElementById('paperPreviewModal')?.classList.contains('on')) {
+      root.remove();
+      return;
+    }
+    releasePaperExportDocument(root);
+    const preservedControls = [...previewBody.children].filter(node => node.matches?.('.no-print'));
+    previewBody.replaceChildren(...preservedControls, root);
+  }).catch(error => {
+    if (sequence !== paperPreviewBuildSequence) return;
+    previewBody.innerHTML = `${controls}<div class="paper-export-preview-error" role="alert">Could not build the fixed-page preview. ${esc(error?.message || 'Unknown export error')}</div>`;
+  });
 }
 
-function showRundownPaperPreview() {
+let lastRundownExportSnapshot = null;
+async function showRundownPaperPreview() {
   activePaperworkItemId = 'rundown';
-  let offsetSecs = 0;
-  showPaperPreview('Rundown Planda Bear Preview', `
-    <h1>${esc(show.name || 'Cueola Rundown')}</h1>
-    <div>Item 4 · Full rendered rundown</div>
-    <h2>Rundown</h2>
-    ${rundownPreviewTableHTML()}
-  `, 'Download Rundown PDF', 'exportPDF()', 'rundown');
+  try {
+    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'rundown' });
+    lastRundownExportSnapshot = snapshot;
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
+    showPaperPreview('Rundown Planda Bear Preview', `
+      <h1>Full Rendered Rundown</h1>
+      <p>${esc(snapshot.production.name)}</p>
+      ${rundownPreviewTableHTML(snapshot)}
+    `, 'Download Rundown PDF', 'exportPDF()', 'rundown', options);
+  } catch (error) {
+    lastRundownExportSnapshot = null;
+    toast(`Rundown preview blocked: ${paperworkExportFailureMessage(error)}`);
+  }
 }
 
 // Every Outrangutan link programmed on a row, for the printed rundown's
 // Outrangutan column (V2 Phase 5 item 5). Names resolve from the live state
 // the Outrangutan module publishes; ids print as-is when it isn't open.
-function outrangutanRowSummary(b) {
+function outrangutanRowSummary(b, savedState=outrangutanState) {
   const parts = [];
   for (const type of Object.keys(b.cues || {})) {
     const d = b.cues[type];
-    if (d?.outCueId) { const c = outrangutanState.cues?.[d.outCueId]; parts.push(`▶ ${c?.name || d.outCueId}${d.outAuto ? ' · auto' : ''}`); }
-    if (d?.outPadId) { const p = outrangutanState.pads?.[d.outPadId]; parts.push(`SFX ${p?.name || d.outPadId}${d.outPadAuto ? ' · auto' : ''}`); }
+    if (d?.outCueId) { const c = savedState?.cues?.[d.outCueId]; parts.push(`Cue: ${c?.name || d.outCueId}${d.outAuto ? ' (auto)' : ''}`); }
+    if (d?.outPadId) { const p = savedState?.pads?.[d.outPadId]; parts.push(`SFX pad: ${p?.name || d.outPadId}${d.outPadAuto ? ' (auto)' : ''}`); }
   }
   return parts;
 }
 
-function rundownPreviewTableHTML() {
+function rundownPreviewTableHTML(snapshot=null) {
+  const rundownBeats = Array.isArray(snapshot?.beats) ? snapshot.beats : beats;
+  const rundownShow = snapshot?.show || show;
+  const savedOutrangutan = snapshot?.show?.outrangutan || outrangutanState;
   let offsetSecs = 0;
   const cellFor = (b, type) => {
     const d = b.cues?.[type];
@@ -14058,14 +16703,14 @@ function rundownPreviewTableHTML() {
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
   let pdfCueNum = 0;
-  const rows = beats.map((b,i) => {
-    const start = show.start ? clock(show.start, offsetSecs) : '-';
+  const rows = rundownBeats.map((b,i) => {
+    const start = rundownShow.start ? clock(rundownShow.start, offsetSecs) : '-';
     offsetSecs += (b.min||0)*60+(b.sec||0);
     if (b.style === 'segment') {
-      return `<tr><td colspan="11" style="background:rgba(200,200,200,.12);font-weight:800;padding:8px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;border-left:3px solid currentColor">§ ${esc(b.info||'Segment')}</td></tr>`;
+      return `<tr><td colspan="11" style="background:#f4f5f7;font-weight:800;padding:8px 6px;font-size:10px;text-transform:uppercase;border-left:3px solid #4e5664">Segment: ${esc(b.info||'Untitled')}</td></tr>`;
     }
     pdfCueNum++;
-    const og = outrangutanRowSummary(b);
+    const og = outrangutanRowSummary(b, savedOutrangutan);
     return `<tr>
       <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
@@ -14083,11 +16728,22 @@ function rundownPreviewTableHTML() {
   return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th><th class="cue-playback">Outrangutan</th></tr></thead><tbody>${rows || '<tr><td colspan="11">No rows yet.</td></tr>'}</tbody></table></div>`;
 }
 
-function showCallSheetPreview() {
-  const data = saveCallSheet(false);
-  showPaperPreview('Call Sheet Preview', `
-    ${callSheetPreviewHTML(data)}
-  `, 'Export Call Sheet PDF', 'downloadCallSheetPDF()', 'call-sheet');
+let lastCallSheetExportSnapshot = null;
+let lastCallSheetExportIndex = 0;
+async function showCallSheetPreview() {
+  try {
+    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'call-sheet' });
+    const sheets = getCallSheets(snapshot.prePro);
+    const index = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+    lastCallSheetExportSnapshot = snapshot;
+    lastCallSheetExportIndex = index;
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
+    showPaperPreview('Call Sheet Preview', callSheetPreviewHTML(normalizeCallSheet(sheets[index], index)),
+      'Export Call Sheet PDF', 'downloadCallSheetPDF()', 'call-sheet', options);
+  } catch (error) {
+    lastCallSheetExportSnapshot = null;
+    toast(`Call sheet preview blocked: ${paperworkExportFailureMessage(error)}`);
+  }
 }
 
 function legacyCallSheetFromData(data={}) {
@@ -14115,8 +16771,11 @@ function legacyCallSheetFromData(data={}) {
 }
 
 function normalizeCallSheet(sheet={}, i=0, fallback={}) {
+  const label = sheet.label || sheet.sheetLabel || fallback.label || `Call Sheet ${i + 1}`;
+  const generatedId = assignmentModel()?.paperworkIdFor?.(`Call Sheet: ${label}`) || `call_sheet_${i + 1}`;
   return {
-    label: sheet.label || sheet.sheetLabel || fallback.label || `Call Sheet ${i + 1}`,
+    id: String(sheet.id || fallback.id || generatedId).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 150),
+    label,
     production: sheet.production || fallback.production || show.name || '',
     date: sheet.date || fallback.date || '',
     call: normalizeTimeValue(sheet.call) || normalizeTimeValue(fallback.call),
@@ -14193,7 +16852,9 @@ function hydrateCallSheetForm(sheet) {
 
 function currentCallSheetFromForm() {
   syncCallSheetPeopleFromDOM();
+  const currentId = getCallSheets()[activeCallSheetIndex]?.id || '';
   return normalizeCallSheet({
+    id: currentId,
     label: document.getElementById('pp-sheet-label')?.value?.trim() || `Call Sheet ${activeCallSheetIndex + 1}`,
     production: document.getElementById('pp-production')?.value?.trim() || show.name || '',
     date: document.getElementById('pp-date')?.value || '',
@@ -14645,7 +17306,7 @@ function callSheetPreviewHTML(data) {
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
       <tr><th>Venue</th><td>${esc(venueLabel(data.venue))}</td></tr>
-      <tr><th>Weather</th><td>${esc(weatherCuteSummary(data.weather, true))}</td></tr>
+      <tr><th>Weather</th><td>${esc(weatherSummaryLine(data.weather))}</td></tr>
       <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
       <tr><th>Entrance</th><td>${esc(data.entrance || '')}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>
@@ -14727,8 +17388,7 @@ function saveSafetyPlan(showToastOnSave=true) {
   if (showToastOnSave) toast('Safety plan saved.');
 }
 
-function safetyPlanHTML(safety) {
-  const data = loadPreProData();
+function safetyPlanHTML(safety, data=loadPreProData()) {
   const safetyWeather = typeof safety.weather === 'string' ? safety.weather : '';
   return `
     <h1>3. Safety Plan</h1>
@@ -14939,8 +17599,8 @@ function saveProductionSchedule(showToastOnSave=true) {
   if (showToastOnSave) toast('Production schedule saved.');
 }
 
-function productionScheduleHTML(schedule) {
-  const s = productionScheduleWithCallSheet(schedule || {}, loadPreProData());
+function productionScheduleHTML(schedule, data=loadPreProData()) {
+  const s = productionScheduleWithCallSheet(schedule || {}, data);
   const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
   const setupBody = s.setupNA
     ? `<tr><td>No separate setup day — setup happens on show day.</td></tr>`
@@ -15130,8 +17790,10 @@ function importPatchRows(kind, input) {
   reader.readAsText(file);
 }
 
-function patchTableHTML(kind, title) {
-  const rows = getPatchRows(kind).filter(row => Object.values(row).some(Boolean));
+function patchTableHTML(kind, title, data=null) {
+  const key = `${kind}PatchRows`;
+  const sourceRows = data && Array.isArray(data[key]) ? data[key] : getPatchRows(kind);
+  const rows = sourceRows.filter(row => Object.values(row).some(Boolean));
   const isComms = kind === 'comms';
   const body = rows.map(row => isComms
     ? `<tr><td>${esc(row.position || '')}</td><td>${esc(row.out || '')}</td><td>${esc(row.gear || '')}</td><td>${esc(row.notes || '')}</td></tr>`
@@ -15159,19 +17821,50 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
 // Production Notes are a working discussion board, not deliverable paperwork —
 // so they're EXCLUDED from the exported package unless the user opts in here.
 let pbPackageIncludeNotes = false;
-function showPreProPackagePreview() {
-  loadPlandaBearNotes().then(() => {
-    showPaperPreview('PDF Package Preview', preProPackageHTML(), 'Export PDF Package', 'exportPreProPackagePDF()', null);
-  });
+let lastPackageExportSnapshot = null;
+async function showPreProPackagePreview() {
+  try {
+    if (paperworkExportAuthority() === 'local' && pbPackageIncludeNotes) await loadPlandaBearNotes();
+    const snapshot = await preparePaperworkExportSnapshot({
+      includeNotes:pbPackageIncludeNotes,
+      includeAssignments:true,
+      documentType:'plandabear-package',
+    });
+    lastPackageExportSnapshot = snapshot;
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:true });
+    showPaperPreview('PDF Package Preview', preProPackageHTML(false, snapshot), 'Export PDF Package', 'exportPreProPackagePDF()', null, options);
+  } catch (error) {
+    lastPackageExportSnapshot = null;
+    toast(`Package preview blocked: ${paperworkExportFailureMessage(error)}`);
+  }
 }
 function pbTogglePackageNotes(on) {
   pbPackageIncludeNotes = !!on;
-  const body = document.getElementById('paperPreviewBody');
-  if (body) body.innerHTML = preProPackageHTML();
+  showPreProPackagePreview();
 }
 
-function preProPackageHTML(forExport=false) {
-  const data = loadPreProData();
+function assignmentRegisterHTML(snapshot) {
+  const groups = Array.isArray(snapshot?.assignmentGroups) ? snapshot.assignmentGroups : [];
+  const rows = groups.flatMap(group => group.roles.map((role, index) => `
+    <tr>
+      <td><strong>${esc(group.displayName || 'Unnamed student')}</strong><br><span class="cue-muted">${esc(group.profileId)}</span></td>
+      <td>${esc(role.positionLabel || role.positionId)}</td>
+      <td>${role.status === 'completed' ? 'Completed' : 'Assigned'}</td>
+      <td>${role.paperwork.length ? role.paperwork.map(item => esc(item.paperworkLabel)).join('<br>') : 'None required'}</td>
+      <td>${esc(role.assignedByLabel || role.assignedBy || 'Unknown')}</td>
+      <td>${role.updatedAt ? esc(new Date(role.updatedAt).toLocaleString()) : 'Not recorded'}</td>
+    </tr>`));
+  return `
+    <h1>4. Student Positions and Required Paperwork</h1>
+    <p>Canonical assignment register for production ${esc(snapshot?.production?.sessionCode || session.code || 'LOCAL')}.</p>
+    <table class="paper-assignment-register">
+      <thead><tr><th>Student profile</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
+      <tbody>${rows.join('') || '<tr><td colspan="6">No canonical assignments were saved for this production.</td></tr>'}</tbody>
+    </table>`;
+}
+
+function preProPackageHTML(forExport=false, snapshot=null) {
+  const data = snapshot?.prePro || loadPreProData();
   const safety = data.safety || {};
   const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
   const callSheets = getCallSheets(data);
@@ -15179,108 +17872,529 @@ function preProPackageHTML(forExport=false) {
     ${i > 0 ? '<div class="paper-page-break"></div>' : ''}
     <section>${callSheetPreviewHTML(sheet)}</section>
   `).join('');
-  const noteCount = plandaBearNotes.length;
+  const includePackageNotes = snapshot ? snapshot.options?.includeNotes === true : pbPackageIncludeNotes;
+  const noteCount = Array.isArray(snapshot?.notes) ? snapshot.notes.length : plandaBearNotes.length;
   const notesToggle = forExport ? '' : `
     <label class="pb-pkg-optin no-print">
-      <input type="checkbox" ${pbPackageIncludeNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
+      <input type="checkbox" ${includePackageNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
       <span>Include Production Notes in this package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
     </label>`;
-  const notesSection = pbPackageIncludeNotes
-    ? `<div class="paper-page-break"></div><section>${productionNotesThreadHTML()}</section>`
+  const notesSection = includePackageNotes
+    ? `<div class="paper-page-break"></div><section>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, 8)}</section>`
     : '';
   return `
     ${notesToggle}
     ${callSheetSections}
     <div class="paper-page-break"></div>
-    <section>${productionScheduleHTML(schedule)}</section>
+    <section>${productionScheduleHTML(schedule, data)}</section>
     <div class="paper-page-break"></div>
-    <section>${safetyPlanHTML(safety)}</section>
+    <section>${safetyPlanHTML(safety, data)}</section>
     <div class="paper-page-break"></div>
     <section>
-    <h1>4. Full Rendered Rundown</h1>
-    <div>${esc(show.name || 'Cueola Rundown')}</div>
-    ${rundownPreviewTableHTML()}
+    ${assignmentRegisterHTML(snapshot || { production:{sessionCode:session.code}, assignmentGroups:[] })}
+    </section>
+    <div class="paper-page-break"></div>
+    <section><div class="paper-landscape">
+      <h1>5. Full Rendered Rundown</h1>
+      <div>${esc(snapshot?.production?.name || show.name || 'Cueola Rundown')}</div>
+      ${rundownPreviewTableHTML(snapshot)}
+    </div>
     </section>
     <div class="paper-page-break"></div>
     <section>
-    <h1>5. Video Patch Sheet</h1>
-    ${patchTableHTML('video', 'Video Patch Sheet')}
+    <h1>6. Video Patch Sheet</h1>
+    ${patchTableHTML('video', 'Video Patch Sheet', data)}
     </section>
     <div class="paper-page-break"></div>
     <section>
-    <h1>6. Audio and Comms Patch Sheets</h1>
-    ${patchTableHTML('audio', 'Audio Patch Sheet')}
-    ${patchTableHTML('comms', 'Comms Patch Sheet')}
+    <h1>7. Audio and Comms Patch Sheets</h1>
+    ${patchTableHTML('audio', 'Audio Patch Sheet', data)}
+    ${patchTableHTML('comms', 'Comms Patch Sheet', data)}
     </section>
     ${notesSection}
   `;
 }
 
-async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-  const { jsPDF } = window.jspdf;
-  if (!window.html2canvas) throw new Error('html2canvas unavailable');
-  const orientation = opts.orientation || (html.includes('paper-landscape') ? 'landscape' : 'portrait');
-  const doc = new jsPDF({ unit:'pt', format:'letter', orientation });
-  const margin = opts.margin ?? 24;
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const pageInnerW = pageW - margin * 2;
-  const pageInnerH = pageH - margin * 2;
-  const root = document.createElement('div');
-  root.className = 'paper-preview';
-  root.style.position = 'fixed';
-  root.style.left = '-10000px';
-  root.style.top = '0';
-  root.style.width = orientation === 'landscape' ? '1120px' : '820px';
-  root.style.maxHeight = 'none';
-  root.style.overflow = 'visible';
-  const pageChunks = html.includes('paper-page-break')
-    ? html.split(/<div class="paper-page-break"><\/div>|<div class="paper-page-break">\s*<\/div>/i).map(chunk => chunk.trim()).filter(Boolean)
-    : [];
-  const renderChunkToPage = async (chunk, pageIndex) => {
-    root.innerHTML = chunk;
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    const canvas = await window.html2canvas(root, { scale:2, backgroundColor:'#ffffff', useCORS:true });
-    const ratio = Math.min(pageInnerW / canvas.width, pageInnerH / canvas.height);
-    const drawW = canvas.width * ratio;
-    const drawH = canvas.height * ratio;
-    if (pageIndex > 0) doc.addPage('letter', orientation);
-    doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin + (pageInnerW - drawW) / 2, margin, drawW, drawH);
+function paperExportMeta(opts={}) {
+  const supplied = opts.exportMeta || {};
+  const hasSourceLabel = Object.prototype.hasOwnProperty.call(supplied, 'sourceLabel');
+  const hasDraftLabel = Object.prototype.hasOwnProperty.call(supplied, 'draftLabel');
+  const exportedAt = supplied.exportedAt || new Date().toISOString();
+  const productionName = supplied.productionName || show.name || 'Cueola Production';
+  const productionCode = supplied.productionCode || session.code || (session.isDemo ? 'DEMO' : 'LOCAL');
+  return {
+    productionName:String(productionName).slice(0,240),
+    productionCode:String(productionCode).slice(0,80),
+    exportedAt,
+    sourceLabel:String(hasSourceLabel ? supplied.sourceLabel : 'UNVERIFIED PREVIEW — NOT A SAVED EXPORT').slice(0,240),
+    revisionLabel:String(supplied.revisionLabel || '').slice(0,240),
+    draftLabel:String(hasDraftLabel ? supplied.draftLabel : 'PREVIEW ONLY').slice(0,80),
   };
-  document.body.appendChild(root);
-  try {
-    if (pageChunks.length) {
-      for (let i = 0; i < pageChunks.length; i++) await renderChunkToPage(pageChunks[i], i);
-      doc.save(fileName);
+}
+
+function paperExportDateLabel(value) {
+  const parsed = new Date(value || Date.now());
+  return Number.isNaN(parsed.getTime()) ? String(value || '') : parsed.toLocaleString();
+}
+
+function paperExportMarkup(html) {
+  const source = document.createElement('div');
+  source.innerHTML = String(html || '');
+  source.querySelectorAll('script,style,link,iframe,object,embed,.no-print').forEach(node => node.remove());
+  source.querySelectorAll('[onload],[onerror],[onclick],[onchange],[oninput]').forEach(node => {
+    ['onload','onerror','onclick','onchange','oninput'].forEach(name => node.removeAttribute(name));
+  });
+  // UI masks and pseudo-elements are not deterministic inside html2canvas.
+  // Export templates use words; this is a fail-safe for a future missed icon.
+  source.querySelectorAll('.sf-symbol').forEach(node => {
+    const replacement = document.createElement('span');
+    replacement.className = 'paper-export-symbol-fallback';
+    replacement.textContent = node.getAttribute('aria-label') || '';
+    node.replaceWith(replacement);
+  });
+  return source;
+}
+
+function paperExportTokens(source, defaultOrientation='portrait') {
+  const tokens = [];
+  const walk = (node, inheritedOrientation) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.classList.contains('paper-page-break')) {
+      tokens.push({ kind:'break' });
       return;
     }
-    root.innerHTML = html;
-    const canvas = await window.html2canvas(root, { scale:2, backgroundColor:'#ffffff', useCORS:true });
-    const pageCanvas = document.createElement('canvas');
-    const pageCtx = pageCanvas.getContext('2d');
-    const sliceH = Math.floor(canvas.width * (pageInnerH / pageInnerW));
-    pageCanvas.width = canvas.width;
-    pageCanvas.height = sliceH;
-    let sourceY = 0;
-    let page = 0;
-    while (sourceY < canvas.height) {
-      pageCtx.clearRect(0, 0, pageCanvas.width, pageCanvas.height);
-      pageCtx.fillStyle = '#fff';
-      pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-      pageCtx.drawImage(canvas, 0, sourceY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-      const imgData = pageCanvas.toDataURL('image/png');
-      if (page > 0) doc.addPage('letter', orientation);
-      doc.addImage(imgData, 'PNG', margin, margin, pageInnerW, pageInnerH);
-      sourceY += sliceH;
-      page++;
+    const orientation = node.classList.contains('paper-landscape') || node.dataset.paperOrientation === 'landscape'
+      ? 'landscape'
+      : node.dataset.paperOrientation === 'portrait' ? 'portrait' : inheritedOrientation;
+    if (node.matches('section,.paper-landscape,[data-paper-section]')) {
+      [...node.children].forEach(child => walk(child, orientation));
+      return;
+    }
+    tokens.push({ kind:'node', orientation, node });
+  };
+  [...source.children].forEach(node => walk(node, defaultOrientation));
+  return tokens;
+}
+
+function createPaperExportPage(root, orientation, meta) {
+  const page = document.createElement('article');
+  page.className = `paper-export-page is-${orientation}`;
+  page.dataset.orientation = orientation;
+  page.innerHTML = `
+    <header class="paper-export-header">
+      <div class="paper-export-heading">
+        <div class="paper-export-kicker">Cueola production paperwork</div>
+        <div class="paper-export-title">${esc(meta.productionName)}</div>
+      </div>
+      <div class="paper-export-meta">Production ${esc(meta.productionCode)}<br>Exported ${esc(paperExportDateLabel(meta.exportedAt))}</div>
+    </header>
+    <div class="paper-export-source">
+      <span class="paper-export-source-main">${esc(meta.sourceLabel)}${meta.revisionLabel ? ` · ${esc(meta.revisionLabel)}` : ''}</span>
+      <span class="paper-export-source-state">${esc(meta.draftLabel || 'Saved source')}</span>
+    </div>
+    <main class="paper-export-body"></main>
+    <footer class="paper-export-footer">
+      <span class="paper-export-footer-main">${esc(meta.productionName)} · ${esc(meta.productionCode)}</span>
+      <span class="paper-export-page-number"></span>
+    </footer>`;
+  root.appendChild(page);
+  return { page, body:page.querySelector('.paper-export-body'), orientation };
+}
+
+function paperExportBodyOverflow(body) {
+  return body.scrollHeight > body.clientHeight + 2;
+}
+
+function paperExportBodyHasContent(body) {
+  return [...body.childNodes].some(node =>
+    node.nodeType === Node.ELEMENT_NODE || String(node.textContent || '').trim());
+}
+
+function paperExportReadableText(node) {
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('br').forEach(br => br.replaceWith(document.createTextNode('\n')));
+  clone.querySelectorAll('img').forEach(img => {
+    const label = img.getAttribute('alt') || img.getAttribute('title') || 'Image';
+    img.replaceWith(document.createTextNode(`[${label}]`));
+  });
+  clone.querySelectorAll('input,textarea,select').forEach(control => {
+    const value = control.value || control.getAttribute('value') || control.textContent || '';
+    control.replaceWith(document.createTextNode(value));
+  });
+  return clone.textContent || '';
+}
+
+function paperExportPreferredUnitCut(units, maximum) {
+  const limit = Math.max(1, Math.min(units.length, maximum));
+  if (limit >= units.length) return units.length;
+  const floor = Math.max(1, Math.floor(limit * 0.65));
+  for (let index = limit; index > floor; index--) {
+    if (/\s|[-/.,;:!?)]/.test(units[index - 1])) return index;
+  }
+  return limit;
+}
+
+function paperExportPlainBlock(text, sourceTag='DIV', compact=false) {
+  const block = document.createElement('div');
+  block.className = 'paper-export-oversize-block';
+  block.dataset.sourceTag = String(sourceTag || 'DIV').toLowerCase();
+  block.style.cssText = [
+    `font-size:${compact ? '6px' : '8px'}`,
+    'line-height:1.28',
+    'white-space:pre-wrap',
+    'overflow-wrap:anywhere',
+    'word-break:break-word',
+    'height:auto',
+    'min-height:0',
+    'max-height:none',
+    'overflow:visible',
+    'position:static',
+    'transform:none',
+  ].join(';');
+  block.textContent = text;
+  return block;
+}
+
+function paperExportFitTextFragment(target, sourceNode, units) {
+  let low = 1;
+  let high = units.length;
+  let best = 0;
+  const probe = (count, compact=false) => {
+    const block = paperExportPlainBlock(units.slice(0, count).join(''), sourceNode.tagName, compact);
+    target.body.appendChild(block);
+    const fits = !paperExportBodyOverflow(target.body);
+    block.remove();
+    return fits;
+  };
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (probe(middle)) { best = middle; low = middle + 1; }
+    else high = middle - 1;
+  }
+  let compact = false;
+  if (!best && probe(1, true)) { best = 1; compact = true; }
+  if (!best) throw new Error('A paperwork text fragment could not fit on an empty export page.');
+  const cut = paperExportPreferredUnitCut(units, best);
+  target.body.appendChild(paperExportPlainBlock(units.slice(0, cut).join(''), sourceNode.tagName, compact));
+  return cut;
+}
+
+function paperExportRowCells(row) {
+  return [...row.children].filter(cell => cell.tagName === 'TD' || cell.tagName === 'TH');
+}
+
+function paperExportPlainRow(sourceRow, unitLists, budget, fontSize='7px', preferBreak=false) {
+  const row = sourceRow.cloneNode(false);
+  row.removeAttribute('id');
+  row.removeAttribute('style');
+  row.classList.add('paper-export-oversize-row');
+  row.style.fontSize = fontSize;
+  const cuts = [];
+  const sourceCells = paperExportRowCells(sourceRow);
+  sourceCells.forEach((sourceCell, index) => {
+    const units = unitLists[index] || [];
+    const maximum = Math.min(units.length, budget);
+    const cut = maximum && preferBreak ? paperExportPreferredUnitCut(units, maximum) : maximum;
+    const cell = sourceCell.cloneNode(false);
+    cell.removeAttribute('id');
+    cell.removeAttribute('style');
+    cell.removeAttribute('rowspan');
+    cell.style.padding = fontSize === '7px' ? '3px' : '1px';
+    cell.style.lineHeight = '1.2';
+    cell.style.height = 'auto';
+    cell.style.minHeight = '0';
+    cell.style.maxHeight = 'none';
+    cell.style.whiteSpace = 'pre-wrap';
+    cell.style.overflowWrap = 'anywhere';
+    cell.style.wordBreak = 'break-word';
+    cell.textContent = units.slice(0, cut).join('');
+    cuts.push(cut);
+    row.appendChild(cell);
+  });
+  if (!sourceCells.length) {
+    const cell = document.createElement('td');
+    cell.textContent = unitLists[0]?.slice(0, budget).join('') || '';
+    row.appendChild(cell);
+    cuts.push(Math.min(unitLists[0]?.length || 0, budget));
+  }
+  return { row, cuts };
+}
+
+function paperExportCompactTableHeader(shell) {
+  shell.style.fontSize = '6px';
+  shell.querySelectorAll('thead th,thead td').forEach(cell => {
+    cell.style.padding = '1px';
+    cell.style.fontSize = '5px';
+    cell.style.lineHeight = '1.1';
+    cell.style.whiteSpace = 'normal';
+    cell.style.overflowWrap = 'anywhere';
+  });
+}
+
+function paperExportFitRowFragment(target, tableParts, sourceRow, unitLists) {
+  const maximum = Math.max(0, ...unitLists.map(units => units.length));
+  if (!maximum) {
+    const blank = paperExportPlainRow(sourceRow, unitLists, 0);
+    tableParts.body.appendChild(blank.row);
+    return blank.cuts;
+  }
+  const findBudget = fontSize => {
+    let low = 1;
+    let high = maximum;
+    let best = 0;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const probe = paperExportPlainRow(sourceRow, unitLists, middle, fontSize);
+      tableParts.body.appendChild(probe.row);
+      const fits = !paperExportBodyOverflow(target.body);
+      probe.row.remove();
+      if (fits) { best = middle; low = middle + 1; }
+      else high = middle - 1;
+    }
+    return best;
+  };
+  let fontSize = '7px';
+  let budget = findBudget(fontSize);
+  if (!budget) {
+    paperExportCompactTableHeader(tableParts.shell);
+    fontSize = '5px';
+    budget = findBudget(fontSize);
+  }
+  if (!budget) throw new Error('A paperwork table row could not fit below its repeated header.');
+  const fragment = paperExportPlainRow(sourceRow, unitLists, budget, fontSize, true);
+  tableParts.body.appendChild(fragment.row);
+  return fragment.cuts;
+}
+
+function paperExportTableShell(table) {
+  const shell = table.cloneNode(false);
+  shell.classList.add('paper-export-table');
+  [...table.children].forEach(child => {
+    const tag = child.tagName;
+    if (tag === 'CAPTION' || tag === 'COLGROUP' || tag === 'THEAD') shell.appendChild(child.cloneNode(true));
+  });
+  const body = document.createElement('tbody');
+  shell.appendChild(body);
+  return { shell, body };
+}
+
+async function waitForPaperExportAssets(root) {
+  try { await document.fonts?.ready; } catch {}
+  const waits = [...root.querySelectorAll('img')].map(img => {
+    if (img.complete) return typeof img.decode === 'function' ? img.decode().catch(()=>{}) : Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => resolve();
+      img.addEventListener('load', done, {once:true});
+      img.addEventListener('error', done, {once:true});
+      setTimeout(done, 3000);
+    });
+  });
+  await Promise.all(waits);
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function buildPaperExportDocument(html, opts={}) {
+  const meta = paperExportMeta(opts);
+  const defaultOrientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const source = paperExportMarkup(html);
+  // Fonts and source images must be settled before any fit decision. Clones
+  // then reuse decoded assets, and a second check below catches late relayouts.
+  await waitForPaperExportAssets(source);
+  const tokens = paperExportTokens(source, defaultOrientation);
+  const root = document.createElement('div');
+  root.className = 'paper-export-document';
+  root.dataset.exportedAt = meta.exportedAt;
+  root.dataset.productionCode = meta.productionCode;
+  root.style.position = 'fixed';
+  root.style.left = '-20000px';
+  root.style.top = '0';
+  root.style.zIndex = '-1';
+  root.setAttribute('aria-hidden','true');
+  document.body.appendChild(root);
+
+  let current = null;
+  const discardEmptyCurrent = () => {
+    if (current?.page?.isConnected && !paperExportBodyHasContent(current.body)) current.page.remove();
+  };
+  const nextPage = orientation => {
+    discardEmptyCurrent();
+    current = createPaperExportPage(root, orientation || defaultOrientation, meta);
+    return current;
+  };
+  const ensurePage = orientation => {
+    if (!current || current.orientation !== orientation) return nextPage(orientation);
+    return current;
+  };
+
+  const renderTokens = () => {
+    current = null;
+    for (const token of tokens) {
+      if (token.kind === 'break') { current = null; continue; }
+      const orientation = opts.allowMixedOrientation === false ? defaultOrientation : token.orientation;
+      if (token.node.tagName === 'TABLE') {
+        const sourceRows = [...token.node.tBodies].flatMap(body => [...body.rows]);
+        let target = ensurePage(orientation);
+        let tableParts = paperExportTableShell(token.node);
+        target.body.appendChild(tableParts.shell);
+        if (paperExportBodyOverflow(target.body)) {
+          paperExportCompactTableHeader(tableParts.shell);
+          if (paperExportBodyOverflow(target.body)) {
+            tableParts.shell.remove();
+            target = nextPage(orientation);
+            tableParts = paperExportTableShell(token.node);
+            paperExportCompactTableHeader(tableParts.shell);
+            target.body.appendChild(tableParts.shell);
+          }
+        }
+        for (const sourceRow of sourceRows) {
+          let row = sourceRow.cloneNode(true);
+          tableParts.body.appendChild(row);
+          if (!paperExportBodyOverflow(target.body)) continue;
+          row.remove();
+          if (tableParts.body.children.length) {
+            target = nextPage(orientation);
+            tableParts = paperExportTableShell(token.node);
+            target.body.appendChild(tableParts.shell);
+          }
+          tableParts.body.appendChild(row);
+          if (!paperExportBodyOverflow(target.body)) continue;
+          row.classList.add('paper-export-oversize-row');
+          row.style.fontSize = '7px';
+          row.querySelectorAll('td,th').forEach(cell => { cell.style.padding = '3px'; });
+          if (!paperExportBodyOverflow(target.body)) continue;
+          row.remove();
+          let remaining = paperExportRowCells(sourceRow).map(cell =>
+            Array.from(paperExportReadableText(cell)));
+          if (!remaining.length) remaining = [Array.from(paperExportReadableText(sourceRow))];
+          let firstFragment = true;
+          while (firstFragment || remaining.some(units => units.length)) {
+            if (!firstFragment) {
+              target = nextPage(orientation);
+              tableParts = paperExportTableShell(token.node);
+              target.body.appendChild(tableParts.shell);
+            }
+            firstFragment = false;
+            const cuts = paperExportFitRowFragment(target, tableParts, sourceRow, remaining);
+            remaining = remaining.map((units, index) => units.slice(cuts[index] || 0));
+          }
+        }
+        continue;
+      }
+
+      let target = ensurePage(orientation);
+      let clone = token.node.cloneNode(true);
+      target.body.appendChild(clone);
+      if (paperExportBodyOverflow(target.body) && target.body.children.length > 1) {
+        clone.remove();
+        target = nextPage(orientation);
+        clone = token.node.cloneNode(true);
+        target.body.appendChild(clone);
+      }
+      if (!paperExportBodyOverflow(target.body)) continue;
+      clone.classList.add('paper-export-oversize-block');
+      clone.style.fontSize = '8px';
+      clone.style.overflowWrap = 'anywhere';
+      if (!paperExportBodyOverflow(target.body)) continue;
+      clone.remove();
+      let remaining = Array.from(paperExportReadableText(token.node));
+      if (!remaining.length) remaining = Array.from('[Visual content]');
+      let firstFragment = true;
+      while (remaining.length) {
+        if (!firstFragment) target = nextPage(orientation);
+        firstFragment = false;
+        const cut = paperExportFitTextFragment(target, token.node, remaining);
+        remaining = remaining.slice(cut);
+      }
+    }
+    discardEmptyCurrent();
+    [...root.querySelectorAll('.paper-export-page')].forEach(page => {
+      const body = page.querySelector('.paper-export-body');
+      if (body && !paperExportBodyHasContent(body)) page.remove();
+    });
+    if (!root.querySelector('.paper-export-page')) nextPage(defaultOrientation);
+  };
+
+  renderTokens();
+  await waitForPaperExportAssets(root);
+  if ([...root.querySelectorAll('.paper-export-body')].some(paperExportBodyOverflow)) {
+    root.querySelectorAll('.paper-export-page').forEach(page => page.remove());
+    renderTokens();
+    await waitForPaperExportAssets(root);
+  }
+  if ([...root.querySelectorAll('.paper-export-body')].some(paperExportBodyOverflow)) {
+    root.remove();
+    throw new Error('Paperwork pagination could not preserve all content without clipping.');
+  }
+  const pages = [...root.querySelectorAll('.paper-export-page')];
+  pages.forEach((page, index) => {
+    const label = page.querySelector('.paper-export-page-number');
+    if (label) label.textContent = `Page ${index + 1} of ${pages.length}`;
+  });
+  root.dataset.pageCount = String(pages.length);
+  return root;
+}
+
+function releasePaperExportDocument(root) {
+  root.style.position = '';
+  root.style.left = '';
+  root.style.top = '';
+  root.style.zIndex = '';
+  root.removeAttribute('aria-hidden');
+  return root;
+}
+
+async function printPaperHTML(html, opts={}) {
+  const area = document.getElementById('printArea');
+  if (!area) throw new Error('Print area unavailable');
+  const root = releasePaperExportDocument(await buildPaperExportDocument(html, opts));
+  area.replaceChildren(root);
+  const cleanup = () => { if (root.parentNode === area) area.replaceChildren(); };
+  window.addEventListener('afterprint', cleanup, {once:true});
+  window.print();
+  return { pageCount:Number(root.dataset.pageCount) || 1, printed:true };
+}
+
+async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
+  const root = await buildPaperExportDocument(html, opts);
+  try {
+    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    const { jsPDF } = window.jspdf || {};
+    if (!jsPDF || !window.html2canvas) throw new Error('PDF renderer unavailable');
+    const pages = [...root.querySelectorAll('.paper-export-page')];
+    const firstOrientation = pages[0]?.dataset.orientation || 'portrait';
+    const doc = new jsPDF({ unit:'pt', format:'letter', orientation:firstOrientation, compress:true });
+    const meta = paperExportMeta(opts);
+    doc.setProperties({
+      title:meta.productionName,
+      subject:`Cueola production paperwork · ${meta.productionCode}`,
+      author:'Cueola',
+      creator:'Cueola',
+      keywords:`Cueola, production paperwork, ${meta.productionCode}`,
+    });
+    for (let index = 0; index < pages.length; index++) {
+      const page = pages[index];
+      const orientation = page.dataset.orientation || 'portrait';
+      if (index > 0) doc.addPage('letter', orientation);
+      const canvas = await window.html2canvas(page, {
+        scale:opts.scale || 1.6,
+        backgroundColor:'#ffffff',
+        useCORS:true,
+        logging:false,
+      });
+      const pageW = orientation === 'landscape' ? 792 : 612;
+      const pageH = orientation === 'landscape' ? 612 : 792;
+      doc.addImage(canvas.toDataURL('image/jpeg', opts.jpegQuality || 0.9), 'JPEG', 0, 0, pageW, pageH, undefined, 'FAST');
     }
     doc.save(fileName);
+    return { pageCount:pages.length, fileName, exportedAt:meta.exportedAt };
   } finally {
     root.remove();
   }
 }
+
+window.buildPaperExportDocument = buildPaperExportDocument;
+window.printPaperHTML = printPaperHTML;
 
 function openPrePro() {
   activePaperworkItemId = 'call-sheet';
@@ -15542,333 +18656,113 @@ function removeCallSheetPerson(idx) {
 }
 
 async function downloadCallSheetPDF() {
-  const data = getCallSheetExportData();
-  const fileName = `${cleanPdfName(callSheetTitle(data), 'cueola-call-sheet')}.pdf`;
+  let snapshot;
   try {
-    await exportPaperHTMLAsPDF(callSheetPreviewHTML(data), fileName);
-    toast('Call sheet PDF downloaded.');
+    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+      && lastPaperPreview?.options?.snapshotFingerprint === lastCallSheetExportSnapshot?.fingerprint;
+    snapshot = previewIsOpen ? lastCallSheetExportSnapshot : await preparePaperworkExportSnapshot({
+      includeAssignments:false,
+      includeNotes:false,
+      documentType:'call-sheet',
+    });
+  } catch (error) {
+    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
     return;
-  } catch (htmlErr) {
-    console.warn('Call sheet rendered PDF export failed; falling back to text PDF:', htmlErr);
   }
+  const sheets = getCallSheets(snapshot.prePro);
+  const index = document.getElementById('paperPreviewModal')?.classList.contains('on')
+    ? Math.max(0, Math.min(lastCallSheetExportIndex, sheets.length - 1))
+    : Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const savedCallSheetData = normalizeCallSheet(sheets[index], index);
+  const html = callSheetPreviewHTML(savedCallSheetData);
+  const savedCallSheetFileName = `${cleanPdfName(callSheetTitle(savedCallSheetData), 'cueola-call-sheet')}.pdf`;
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
   try {
-    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'pt', format:'letter' });
-    const margin = 42;
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    let y = margin;
-    const add = (label, value, size=10) => {
-      doc.setFont('helvetica', label ? 'bold' : 'normal');
-      doc.setFontSize(size);
-      const prefix = label ? `${label}: ` : '';
-      const lines = doc.splitTextToSize(prefix + (value || '-'), pageW - margin * 2);
-      lines.forEach(line => {
-        if (y > pageH - margin) { doc.addPage(); y = margin; }
-        doc.text(line, margin, y);
-        y += size + 6;
-      });
-      y += label ? 2 : 8;
-    };
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text(callSheetTitle(data), margin, y);
-    y += 28;
-    add('Production', data.production, 12);
-    add('Date', data.date, 10);
-    add('Call Time', data.call, 10);
-    add('Doors Open', data.doors, 10);
-    add('Show Start', data.showStart, 10);
-    add('Location', data.location, 10);
-    add('Address', data.address, 10);
-    add('Venue', venueLabel(data.venue), 10);
-    add('Weather', weatherSummaryLine(data.weather), 10);
-    add('Parking', data.parking, 10);
-    add('Entrance', data.entrance, 10);
-    add('Late / Lost Contact', data.late, 10);
-    add('Stream Information', data.stream, 10);
-    add('Dress Code', data.dress, 10);
-    add('Meals Provided', data.meals, 10);
-    y += 8;
-    const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
-    add('Crew / Talent', people.map(p => [p.name, p.position || p.role, p.email, p.phone, p.call].filter(Boolean).join(' - ')).join('\n'), 10);
-    add('General Notes', data.notes, 10);
-    doc.save(fileName);
-    toast('Call sheet PDF downloaded.');
-  } catch {
-    const area = document.getElementById('printArea');
-    if (area) area.innerHTML = `<div class="paper-preview">${callSheetPreviewHTML(data)}</div>`;
-    toast('PDF library unavailable. Opening print dialog instead.');
-    window.print();
+    const result = await exportPaperHTMLAsPDF(html, savedCallSheetFileName, options);
+    toast(`Call sheet PDF downloaded · ${result.pageCount} pages.`);
+  } catch (error) {
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    } catch (printError) {
+      toast(`Could not render the saved call sheet: ${paperworkExportFailureMessage(printError)}`);
+    }
   }
+  return;
 }
 
 async function exportPreProPackagePDF() {
+  let snapshot;
   try {
-    if (document.getElementById('preProModal')?.classList.contains('on')) persistPreProData(getPreProData(), 'Call Sheet');
-    if (document.getElementById('safetyPlanModal')?.classList.contains('on')) persistPreProData({ safety: getSafetyPlanData() }, 'Safety Plan');
-    if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(false);
-    if (document.getElementById('productionScheduleModal')?.classList.contains('on')) persistPreProData({ productionSchedule: getProductionScheduleData() }, 'Production Schedule');
-    await loadPlandaBearNotes();
-    const dataForName = loadPreProData();
-    const cleanPreviewName = (dataForName.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
-    try {
-      await exportPaperHTMLAsPDF(preProPackageHTML(true), `${cleanPreviewName}-plandabear-package.pdf`);
-      toast('Planda Bear package PDF downloaded.');
-      return;
-    } catch (htmlErr) {
-      console.warn('Preview-matched PDF export failed; falling back to text PDF:', htmlErr);
-    }
-    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'pt', format:'letter' });
-    const margin = 36;
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    let y = margin;
-    const data = loadPreProData();
-    const safety = data.safety || {};
-    const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
-    const cleanFileName = (data.production || show.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
-    const newPage = () => { doc.addPage(); y = margin; };
-    const line = (txt, size=9, bold=false, color=[25,25,25]) => {
-      doc.setFont('helvetica', bold ? 'bold' : 'normal');
-      doc.setFontSize(size);
-      doc.setTextColor(...color);
-      const chunks = doc.splitTextToSize(String(txt || '-'), pageW - margin * 2);
-      chunks.forEach(chunk => {
-        if (y > pageH - margin) newPage();
-        doc.text(chunk, margin, y);
-        y += size + 5;
+    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+      && lastPaperPreview?.options?.snapshotFingerprint === lastPackageExportSnapshot?.fingerprint;
+    snapshot = previewIsOpen && lastPackageExportSnapshot?.options?.includeNotes === pbPackageIncludeNotes
+      ? lastPackageExportSnapshot
+      : await preparePaperworkExportSnapshot({
+        includeNotes:pbPackageIncludeNotes,
+        includeAssignments:true,
+        documentType:'plandabear-package',
       });
-    };
-    const section = title => {
-      if (y > margin + 6) newPage();
-      line(title, 18, true);
-      line(`Session ${session.code || 'local'} | Exported ${new Date().toLocaleString()}`, 8, false, [95,95,95]);
-      y += 8;
-    };
-    const field = (label, value) => line(`${label}: ${value || '-'}`, 10, Boolean(label));
-    const tableRows = (headers, rows) => {
-      line(headers.join(' | '), 8, true, [50,70,100]);
-      rows.forEach(row => line(row.map(v => v || '-').join(' | '), 8));
-      y += 8;
-    };
-
-    getCallSheets(data).forEach(sheet => {
-      section(callSheetTitle(sheet));
-      field('Production', sheet.production || show.name || '');
-      field('Shoot Date', sheet.date || '');
-      field('Call Time', sheet.call || '');
-      field('Doors Open', sheet.doors || '');
-      field('Show Start', sheet.showStart || '');
-      field('Location', sheet.location || '');
-      field('Address', sheet.address || '');
-      field('Parking', sheet.parking || '');
-      field('Entrance', sheet.entrance || '');
-      field('Late / Lost Contact', sheet.late || '');
-      field('Stream Information', sheet.stream || '');
-      field('Dress Code', sheet.dress || '');
-      field('Meals Provided', sheet.meals || '');
-      const people = (sheet.people || []).filter(p => p.name || p.role || p.position || p.email || p.phone || p.call);
-      tableRows(['Name','Position','Email','Phone','Call'], people.length ? people.map(p => [p.name, p.position || p.role, p.email, p.phone, p.call]) : [['No crew or talent entered yet','','','','']]);
-      field('General Notes', sheet.notes || '');
-    });
-
-    section('2. Production Schedule');
-    line(schedule.setupNA ? 'Setup Day — N/A' : 'Setup Day', 12, true, [50,70,100]);
-    if (schedule.setupNA) {
-      field('Setup', 'No separate setup day — setup happens on show day.');
-    } else {
-      field('Setup Date', schedule.date || '');
-      field('Setup Start', schedule.setup || '');
-      field('Setup Wrap', schedule.wrap || '');
-      field('Setup Notes', schedule.setupNotes || '');
-    }
-    line('Show Day', 12, true, [50,70,100]);
-    field('Show Day', schedule.showDate || schedule.date || '');
-    field('Crew Call', schedule.call || '');
-    field('Doors Open', schedule.doors || '');
-    field('Show Start', schedule.show || '');
-    field('Location', schedule.location || '');
-    field('Address', schedule.address || '');
-    field('Show Notes', schedule.showNotes || '');
-    line('Ready Before Show', 12, true, [50,70,100]);
-    tableRows(['Ready','Checklist Item','Signed Off By'], (schedule.checklist || []).map(normalizeProductionChecklistRow).map(row => [row.done ? 'Yes' : 'No', row.item, row.done && row.doneBy ? `${row.doneBy}${row.doneAt ? ` (${new Date(row.doneAt).toLocaleDateString()})` : ''}` : '—']));
-
-    section('3. Safety Plan');
-    ['hospital','weather','firstAid','fire','emergency','nonemergency','security','late','equipment','notes'].forEach(key => {
-      const labels = { hospital:'Local Hospital', weather:'Weather', firstAid:'First Aid Kit Location', fire:'Fire Extinguisher Location', emergency:'Emergency Numbers', nonemergency:'Non-Emergency Numbers', security:'Security', late:'Late / Lost Contact', equipment:'Equipment Needed', notes:'Safety Notes' };
-      field(labels[key], safety[key] || '');
-    });
-
-    section('4. Full Rendered Rundown');
-    let offsetSecs = 0;
-    beats.forEach((b, i) => {
-      const startStr = show.start ? clock(show.start, offsetSecs) : '-';
-      offsetSecs += (b.min||0)*60+(b.sec||0);
-      line(`${i+1}. ${b.info || '-'}`, 11, true);
-      line(`${b.style === 'timed' ? 'Timed' : 'Flex'} | Start ${startStr} | Dur ${fmtDur(b)}`, 8, false, [90,90,90]);
-      if (b.notes) line(`Notes: ${b.notes}`, 8);
-      COL_DEFAULTS.forEach(type => {
-        const d = b.cues?.[type];
-        const on = getCueOn(d), off = getCueOff(d);
-        const script = type === 'script' ? scriptCueText(d) : '';
-        if (!on && !off && !script) return;
-        line(`${CT[type].label}: ${[on ? `ON ${on}` : '', off ? `OFF ${off}` : ''].filter(Boolean).join(' | ')}`, 8, true, [45,75,110]);
-        if (script) line(script, 8);
-      });
-      y += 6;
-    });
-
-    section('5. Video Patch Sheet');
-    tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('video').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
-
-    section('6. Audio and Comms Patch Sheets');
-    line('Audio Patch Sheet', 12, true);
-    tableRows(['Label','Destination','Source','Cabling','Notes'], getPatchRows('audio').filter(r => Object.values(r).some(Boolean)).map(r => [r.label, r.destination, r.source, r.cabling, r.notes]));
-    line('Comms Patch Sheet', 12, true);
-    tableRows(['Position','Out','Gear','Notes'], getPatchRows('comms').filter(r => Object.values(r).some(Boolean)).map(r => [r.position, r.out, r.gear, r.notes]));
-
-    section('7. Production Notes');
-    const noteThreads = pbBuildThreads().sort((a,b)=>(a.root.at||0)-(b.root.at||0));
-    if (noteThreads.length) {
-      const meta = n => `${n.at ? new Date(n.at).toLocaleString() : ''} | ${n.by}${n.role === 'instructor' ? ' (Instructor)' : ''} | ${pbTagLabel(n)}${n.pinned ? ' | Pinned' : ''}`;
-      noteThreads.forEach(t => {
-        line(meta(t.root), 8, true, [50,70,100]);
-        line(pbStripMarkdown(t.root.text), 9);
-        t.replies.forEach(r => {
-          line(`    ↩ ${meta(r)}`, 8, true, [50,70,100]);
-          line(`    ${pbStripMarkdown(r.text)}`, 9);
-        });
-        y += 4;
-      });
-    } else {
-      line('No production notes yet.', 9);
-    }
-
-    doc.save(`${cleanFileName}-plandabear-package.pdf`);
-    toast('Planda Bear package PDF downloaded.');
-  } catch {
-    toast('Could not export the Planda Bear package.');
+  } catch (error) {
+    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    return;
   }
+  const html = preProPackageHTML(true, snapshot);
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:true });
+  const cleanFileName = (snapshot.production.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
+  try {
+    const result = await exportPaperHTMLAsPDF(html, `${cleanFileName}-plandabear-package.pdf`, options);
+    toast(`Planda Bear package PDF downloaded · ${result.pageCount} pages.`);
+  } catch (error) {
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    } catch (printError) {
+      toast(`Could not render the saved package: ${paperworkExportFailureMessage(printError)}`);
+    }
+  }
+  return;
 }
 
 // ─────────────────────────────────────────────────────────────
 // PDF EXPORT
 // ─────────────────────────────────────────────────────────────
 async function exportPDF() {
+  let snapshot;
   try {
-    const cleanFileName = `${(show.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
-    try {
-      await exportPaperHTMLAsPDF(`
-        <h1>${esc(show.name || 'Cueola Rundown')}</h1>
-        <div>Full rendered rundown${session.code ? ` · Session ${esc(session.code)}` : ''}</div>
-        <h2>Rundown</h2>
-        ${rundownPreviewTableHTML()}
-      `, cleanFileName, { orientation:'landscape', margin:18 });
-      toast('PDF downloaded.');
-      return;
-    } catch (htmlErr) {
-      console.warn('Preview-matched PDF export failed; falling back to table PDF:', htmlErr);
-    }
-    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'pt', format:'letter', orientation:'landscape' });
-    const margin = 28;
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    let offsetSecs = 0;
-    const cueColors = {
-      video:[91,141,248], audio:[34,211,160], playback:[240,82,82],
-      gfx:[245,183,49], lighting:[176,110,248], script:[34,211,211],
-    };
-    const columns = [
-      { key:'num', label:'#', w:24 },
-      { key:'row', label:'Row', w:128 },
-      { key:'start', label:'Start', w:52 },
-      { key:'dur', label:'Dur', w:42 },
-      ...COL_DEFAULTS.map(t => ({ key:t, label:CT[t].label, w:t==='script'?118:96 })),
-      { key:'outrangutan', label:'Outrangutan', w:84 },
-    ];
-    const tableW = columns.reduce((sum,c)=>sum+c.w,0);
-    const scale = Math.min(1, (pageW - margin*2) / tableW);
-    columns.forEach(c => c.sw = c.w * scale);
-    let y = margin;
-    const title = () => {
-      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,24,35);
-      doc.text(show.name || 'Cueola Rundown', margin, y);
-      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(95,100,115);
-      doc.text(`Exported ${new Date().toLocaleString()}${session.code ? ` | Session ${session.code}` : ''}`, margin, y + 13);
-      y += 28;
-    };
-    const header = () => {
-      let x = margin;
-      columns.forEach(c => {
-        const color = cueColors[c.key] || [225,228,235];
-        doc.setFillColor(...(cueColors[c.key] ? color : [238,240,244]));
-        doc.setDrawColor(205,210,220);
-        doc.rect(x, y, c.sw, 18, 'FD');
-        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(cueColors[c.key] ? 255 : 45, cueColors[c.key] ? 255 : 50, cueColors[c.key] ? 255 : 60);
-        doc.text(c.label, x + 4, y + 12, { maxWidth:c.sw - 8 });
-        x += c.sw;
-      });
-      y += 18;
-    };
-    const cueText = (b, type) => {
-      const d = b.cues?.[type];
-      const on = getCueOn(d), off = getCueOff(d);
-      const scriptText = type === 'script' ? scriptCueText(d) : '';
-      const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'}: ${scriptText.slice(0, 220)}` : '';
-      return [on ? `ON ${on}` : '', off ? `OFF ${off}` : '', script].filter(Boolean).join('\n') || '-';
-    };
-    title();
-    header();
-    beats.forEach((b, i) => {
-      const startStr = show.start ? clock(show.start, offsetSecs) : '-';
-      offsetSecs += (b.min||0)*60+(b.sec||0);
-      const values = {
-        num:String(i+1),
-        row:[b.info || '-', b.notes || ''].filter(Boolean).join('\n'),
-        start:startStr,
-        dur:fmtDur(b),
-      };
-      COL_DEFAULTS.forEach(type => { values[type] = cueText(b,type); });
-      values.outrangutan = outrangutanRowSummary(b).join('\n') || '-';
-      const lineSets = columns.map(c => doc.splitTextToSize(String(values[c.key] || '-'), c.sw - 8));
-      const rowH = Math.max(28, ...lineSets.map(lines => lines.length * 8 + 10));
-      if (y + rowH > pageH - margin) {
-        doc.addPage('letter','landscape');
-        y = margin;
-        title();
-        header();
-      }
-      let x = margin;
-      columns.forEach((c, idx) => {
-        const color = cueColors[c.key];
-        if (color) {
-          doc.setFillColor(color[0], color[1], color[2]);
-          doc.rect(x, y, 3, rowH, 'F');
-        }
-        doc.setDrawColor(215,218,226);
-        doc.setFillColor(idx % 2 ? 252 : 255, idx % 2 ? 253 : 255, idx % 2 ? 255 : 255);
-        doc.rect(x, y, c.sw, rowH, 'S');
-        doc.setFont('helvetica', c.key === 'row' ? 'bold' : 'normal');
-        doc.setFontSize(c.key === 'row' ? 7.5 : 6.5);
-        doc.setTextColor(35,38,48);
-        doc.text(lineSets[idx], x + 5, y + 10);
-        x += c.sw;
-      });
-      y += rowH;
+    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+      && lastPaperPreview?.options?.snapshotFingerprint === lastRundownExportSnapshot?.fingerprint;
+    snapshot = previewIsOpen ? lastRundownExportSnapshot : await preparePaperworkExportSnapshot({
+      includeAssignments:false,
+      includeNotes:false,
+      documentType:'rundown',
     });
-    const fileName = `${(show.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
-    doc.save(fileName);
-    toast('PDF downloaded.');
-  } catch {
-    toast('PDF library unavailable. Opening print dialog instead.');
-    window.print();
+  } catch (error) {
+    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    return;
   }
+  const cleanFileName = `${(snapshot.production.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
+  const html = `
+    <h1>Full Rendered Rundown</h1>
+    <p>${esc(snapshot.production.name)}</p>
+    ${rundownPreviewTableHTML(snapshot)}
+  `;
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
+  try {
+    const result = await exportPaperHTMLAsPDF(html, cleanFileName, options);
+    toast(`Rundown PDF downloaded · ${result.pageCount} pages.`);
+  } catch (error) {
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+    } catch (printError) {
+      toast(`Could not render the saved rundown: ${paperworkExportFailureMessage(printError)}`);
+    }
+  }
+  return;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -16037,29 +18931,19 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
-  // Script Op pop-out window: boot focused into the live Script Op controls,
-  // joined to the same session (opened by openScriptOpPopout in another window).
+  // Retire legacy ?scriptop= links without ever booting a second full Cueola
+  // controller. Current links include the parent/session identities; an old
+  // bookmark lands on the dedicated document's explicit disconnected state.
   if (params.has('scriptop')) {
-    sessionStorage.setItem('cueola_screen', 'entry');
-    document.body.classList.add('scriptop-popout');
     const code = (params.get('scriptop') || params.get('code') || '').trim().toUpperCase();
-    let name = (params.get('name') || '').trim();
-    try { name = name || localStorage.getItem('cueola_last_name') || ''; } catch (e) {}
-    name = name || 'Script Op';
-    const bootScriptOp = () => {
-      if (!code) { showModal('modal-stud'); return; }
-      session = { code, role: 'instructor', userName: name, isDemo: false, isExpert: false };
-      freeTextMode = false;
-      enterRundown();
-      setTimeout(() => {
-        try { if (!document.getElementById('liveshow').classList.contains('on')) goLive(); } catch (e) {}
-        setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch (e) {} }, 500);
-      }, 400);
-    };
-    waitForFirebaseReady().then(ready => {
-      if (ready || !code) bootScriptOp();
-      else { try { openLocalSession(code, name, 'instructor'); } catch (e) {} setTimeout(() => { try { if (!document.getElementById('liveshow').classList.contains('on')) goLive(); } catch (e) {} setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch (e) {} }, 500); }, 400); }
+    const url = new URL('script-operator.html', location.href);
+    url.search = '';
+    if (code) url.searchParams.set('code', code);
+    ['session','controller','theme'].forEach(key => {
+      const value = params.get(key);
+      if (value) url.searchParams.set(key, value);
     });
+    location.replace(url.toString());
     return;
   }
   if (location.hash === '#flowmingo-op' || location.hash === '#flowop' || params.has('flowop') || params.has('operator')) {
@@ -16101,7 +18985,12 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
 
   const doJoin = () => {
     if (name) {
-      session = { code, role, userName:name, isDemo:false, isExpert:false };
+      session = sessionWithProfileIdentity({
+        code, role, userName:name,
+        profileId: stored?.profileId || '', username: stored?.username || '',
+        profileAliases: Array.isArray(stored?.profileAliases) ? stored.profileAliases : [],
+        isDemo:false, isExpert:false,
+      }, name);
       freeTextMode = false;
       enterRundown();
       if (shouldOpenPrePro) setTimeout(openPaperworkHub, 700);

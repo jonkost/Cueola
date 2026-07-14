@@ -26,10 +26,110 @@
   };
 
   var cachedProfile = null;   // last loaded profile doc data for the signed-in username
+  var portalRequestGeneration = 0;
+
+  function assignmentModel() {
+    return window.CueolaAssignmentModel || {};
+  }
+
+  function cleanIdentityIds(values) {
+    var seen = {};
+    return (Array.isArray(values) ? values : []).map(function (value) {
+      return String(value || '').trim();
+    }).filter(function (value) {
+      if (!value || seen[value]) return false;
+      seen[value] = true;
+      return true;
+    }).slice(0, 100);
+  }
+
+  function persistedProfileAliases(values, currentProfileId) {
+    var current = String(currentProfileId || '').trim();
+    return cleanIdentityIds((Array.isArray(values) ? values : []).filter(function (value) {
+      return typeof value === 'string';
+    })).filter(function (id) {
+      return id !== current;
+    }).slice(0, 40);
+  }
+
+  function sameIdentityIds(left, right) {
+    if (!Array.isArray(left) || left.length !== right.length) return false;
+    for (var i = 0; i < right.length; i++) if (left[i] !== right[i]) return false;
+    return true;
+  }
+
+  function fallbackProfileId(seed) {
+    var input = String(seed || '').trim().toLowerCase();
+    var h = 2166136261;
+    for (var i = 0; i < input.length; i++) {
+      h ^= input.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return 'profile_legacy_' + h.toString(36);
+  }
+
+  function newProfileId() {
+    var model = assignmentModel();
+    if (typeof model.createProfileId === 'function') return model.createProfileId();
+    var random = '';
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') random = crypto.randomUUID().replace(/-/g, '');
+    } catch (error) {}
+    return random ? 'profile_' + random : 'profile_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+  }
+
+  function canonicalProfileId(profileOrUsername) {
+    var model = assignmentModel();
+    if (typeof model.profileIdFor === 'function') {
+      var modelId = model.profileIdFor(profileOrUsername);
+      if (modelId) return String(modelId);
+    }
+    if (profileOrUsername && typeof profileOrUsername === 'object' && profileOrUsername.profileId) {
+      return String(profileOrUsername.profileId);
+    }
+    var username = typeof profileOrUsername === 'string'
+      ? profileOrUsername
+      : profileOrUsername && profileOrUsername.username;
+    return fallbackProfileId(username);
+  }
+
+  function canonicalProfileIdentity(profile) {
+    if (!profile) return null;
+    var model = assignmentModel();
+    var ids = typeof model.profileIdentityIds === 'function'
+      ? model.profileIdentityIds(profile)
+      : [profile.profileId].concat(profile.profileAliases || []);
+    return {
+      profileId: canonicalProfileId(profile),
+      profileAliases: cleanIdentityIds(ids).filter(function (id) { return id !== canonicalProfileId(profile); }),
+      username: String(profile.username || ''),
+      fullName: String(profile.fullName || ''),
+      displayName: String(profile.fullName || profile.username || ''),
+    };
+  }
 
   /* ── tiny bridges into the app (lazy — cueola-app.js loads after us) ── */
   function fb() {
     return (window._firebaseReady && window._db && window._doc && window._getDoc) ? window : null;
+  }
+  async function readWithCache(networkRead, cacheRead) {
+    var network = Promise.resolve().then(networkRead);
+    if (typeof cacheRead !== 'function') return network;
+    var timeoutToken = {};
+    var timer = 0;
+    var first = await Promise.race([
+      network,
+      new Promise(function (resolve) { timer = setTimeout(function () { resolve(timeoutToken); }, 4500); }),
+    ]);
+    clearTimeout(timer);
+    if (first !== timeoutToken) return first;
+    try {
+      return await cacheRead();
+    } catch (cacheError) {
+      var error = new Error('Firestore did not respond and this profile data is not available in cache.');
+      error.code = 'unavailable';
+      throw error;
+    }
   }
   function say(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} }
   function esc(s) {
@@ -61,10 +161,13 @@
       return raw && typeof raw.username === 'string' ? raw : null;
     } catch (e) { return null; }
   }
-  function rememberIdentity(username) {
-    try { localStorage.setItem(IDENTITY_KEY, JSON.stringify({ username: username })); } catch (e) {}
+  function rememberIdentity(username, profile) {
+    var value = { username: username };
+    if (profile) value.profileId = canonicalProfileId(profile);
+    try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(value)); } catch (e) {}
   }
   function signOut() {
+    portalRequestGeneration++;
     try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
     cachedProfile = null;
     say('Signed out on this device.');
@@ -80,14 +183,67 @@
     var c = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
     return CODE_RE.test(c) ? c : null;
   }
+  async function ensureProfileIdentity(username, profile) {
+    if (!profile || profile.renamedTo || profile.mergedInto) return profile;
+    var proposedId = profile.profileId
+      ? String(profile.profileId)
+      : canonicalProfileId(profile.username ? profile : username);
+    var aliases = persistedProfileAliases(profile.profileAliases || [], proposedId);
+    if (profile.profileId && sameIdentityIds(profile.profileAliases, aliases)) return profile;
+    var patch = { profileId: proposedId, profileAliases: aliases };
+    var w = fb();
+    if (!w || !w._updateDoc) return Object.assign({}, profile, patch, {
+      _identityMigrationError: { code: 'unavailable', message: 'Cloud connection is not ready.' },
+    });
+    try {
+      if (w._runTransaction) {
+        var ref = w._doc(w._db, 'profiles', username);
+        var migrated = null;
+        var profileMissing = false;
+        await w._runTransaction(w._db, async function (tx) {
+          var latestSnap = await tx.get(ref);
+          if (!latestSnap.exists()) { profileMissing = true; return; }
+          var latest = latestSnap.data() || {};
+          var latestId = latest.profileId || proposedId;
+          var latestAliases = persistedProfileAliases(latest.profileAliases || aliases, latestId);
+          if (!latest.profileId || !sameIdentityIds(latest.profileAliases, latestAliases)) {
+            tx.update(ref, { profileId: latestId, profileAliases: latestAliases });
+          }
+          migrated = Object.assign({ username: username }, latest, {
+            profileId: latestId,
+            profileAliases: latestAliases,
+          });
+        });
+        if (profileMissing) return null;
+        if (migrated) return migrated;
+      } else {
+        await w._updateDoc(w._doc(w._db, 'profiles', username), patch);
+      }
+      return Object.assign({}, profile, patch);
+    } catch (error) {
+      return Object.assign({}, profile, patch, { _identityMigrationError: error });
+    }
+  }
+
   async function fetchProfile(username) {
     var w = fb(); if (!w) return null;
-    var snap = await w._getDoc(w._doc(w._db, 'profiles', username));
-    return snap.exists() ? snap.data() : null;
+    var ref = w._doc(w._db, 'profiles', username);
+    var snap = await readWithCache(
+      function () { return w._getDoc(ref); },
+      w._getDocFromCache ? function () { return w._getDocFromCache(ref); } : null
+    );
+    if (!snap.exists()) return null;
+    var profile = Object.assign({ username: username }, snap.data() || {});
+    if (snap.metadata && snap.metadata.fromCache) profile._profileReadStatus = 'offline';
+    return ensureProfileIdentity(username, profile);
   }
   async function fetchCode(code) {
     var w = fb(); if (!w) return null;
-    var snap = await w._getDoc(w._doc(w._db, 'accessCodes', code));
+    var ref = w._doc(w._db, 'accessCodes', code);
+    var snap = await readWithCache(
+      function () { return w._getDoc(ref); },
+      w._getDocFromCache ? function () { return w._getDocFromCache(ref); } : null
+    );
     return snap.exists() ? snap.data() : null;
   }
 
@@ -102,7 +258,7 @@
     if (p.renamedTo) return { ok: false, msg: 'This username was renamed — sign in as “' + esc(p.renamedTo) + '”.' };
     if (p.mergedInto) return { ok: false, msg: 'This profile was merged into “' + esc(p.mergedInto) + '” — use that username.' };
     if (p.active === false) return { ok: false, msg: 'This profile was deactivated by an instructor.' };
-    rememberIdentity(username);
+    rememberIdentity(username, p);
     cachedProfile = p;
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
@@ -166,6 +322,8 @@
 
     var doc = {
       username: username,
+      profileId: newProfileId(),
+      profileAliases: [],
       fullName: fullName,
       role: codeDoc.role === 'admin' ? 'admin' : 'student',   // rules verify this matches the code doc
       avatar: normalizeAvatar(input.avatar),
@@ -182,7 +340,7 @@
         ? 'The profile was rejected — the login code may have just been revoked.'
         : 'Could not save the profile. Check the connection and try again.' };
     }
-    rememberIdentity(username);
+    rememberIdentity(username, doc);
     cachedProfile = doc;
     adoptProfileLocally(doc);
     return { ok: true, profile: doc };
@@ -209,11 +367,39 @@
 
   // Called by the app after any successful session join. If the operator joined
   // under their profile's name, quietly attach the session to the profile.
+  function profileIdentityForJoin(nameUsed) {
+    if (!cachedProfile) return null;
+    if (nameKey(nameUsed) !== nameKey(cachedProfile.fullName)) return null;
+    return canonicalProfileIdentity(cachedProfile);
+  }
+
+  function decorateJoinNameInput(input, profile) {
+    if (!input) return;
+    var joined = profile && nameKey(input.value) === nameKey(profile.fullName)
+      ? canonicalProfileIdentity(profile)
+      : null;
+    if (joined) {
+      input.dataset.profileId = joined.profileId;
+      input.dataset.profileUsername = joined.username;
+      input.dataset.profileNameKey = nameKey(profile.fullName);
+    } else {
+      delete input.dataset.profileId;
+      delete input.dataset.profileUsername;
+      delete input.dataset.profileNameKey;
+    }
+    if (!input.dataset.profileIdentityBound) {
+      input.dataset.profileIdentityBound = '1';
+      input.addEventListener('input', function () {
+        decorateJoinNameInput(input, cachedProfile);
+      });
+    }
+  }
+
   function noteJoin(code, nameUsed) {
-    var id = identity();
-    if (!id || !cachedProfile) return;
-    if (String(nameUsed || '').trim() !== String(cachedProfile.fullName || '').trim()) return;
+    var id = identity(); var joined = profileIdentityForJoin(nameUsed);
+    if (!id || !joined) return null;
     attachSessions([code]);
+    return joined;
   }
 
   /* ── per-session "require login code on entry" gate ──
@@ -256,6 +442,12 @@
     if (!strip) return;
     var id = identity();
     if (!id) {
+      var anonymousName = document.getElementById(nameId);
+      if (anonymousName) {
+        delete anonymousName.dataset.profileId;
+        delete anonymousName.dataset.profileUsername;
+        delete anonymousName.dataset.profileNameKey;
+      }
       strip.hidden = false;
       strip.innerHTML = '<span class="jis-hint">Have a profile?</span>' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.openSignIn(&quot;' + kind + '&quot;)">Use my username</button>';
@@ -274,12 +466,14 @@
       '<button type="button" class="jis-btn" onclick="CueolaIdentity.openHub()">Profile</button>' + chips;
     var nameIn = document.getElementById(nameId);
     if (nameIn && !nameIn.value && cachedProfile) nameIn.value = cachedProfile.fullName;
+    if (nameIn && cachedProfile) decorateJoinNameInput(nameIn, cachedProfile);
     if (!cachedProfile) {
       fetchProfile(id.username).then(function (p) {
         if (!p) return;
         cachedProfile = p;
         var el = document.getElementById(nameId);
         if (el && !el.value) el.value = p.fullName;
+        decorateJoinNameInput(el, p);
         decorateJoin(kind);
       }).catch(function () {});
     }
@@ -291,6 +485,7 @@
     if (codeIn) codeIn.value = String(code || '');
     var nameIn = document.getElementById(kind === 'stud' ? 'stud-name' : 'pp-join-name');
     if (nameIn && !nameIn.value && cachedProfile) nameIn.value = cachedProfile.fullName;
+    if (nameIn && cachedProfile) decorateJoinNameInput(nameIn, cachedProfile);
     if (nameIn && !nameIn.value) nameIn.focus();
   }
 
@@ -486,88 +681,310 @@
   function nameKey(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
   function sameName(a, b) { return nameKey(a) === nameKey(b); }
 
-  // Role assignments live top-level on the session doc (normalizeRoleAssignment
-  // in cueola-app tolerates person|name / position|role / paperwork|paperworkItems|file).
-  function assignmentRows(doc) {
-    if (Array.isArray(doc.roleAssignments)) return doc.roleAssignments;
+  function uniqueStrings(values) {
+    var seen = {};
+    return (values || []).map(function (value) { return String(value || '').trim(); }).filter(function (value) {
+      var key = value.toLowerCase();
+      if (!value || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  function legacyAssignmentRows(doc) {
+    // Current Planda Bear storage wins. The top-level array and Dashboard map are
+    // migration inputs only and can never override a canonical assignment doc.
     if (doc.prePro && Array.isArray(doc.prePro.roleAssignments)) return doc.prePro.roleAssignments;
+    if (Array.isArray(doc.roleAssignments)) return doc.roleAssignments;
     return [];
   }
-  function positionFor(doc, fullName) {
-    var assignments = doc.assignments || {};
-    for (var k in assignments) { if (sameName(k, fullName) && assignments[k]) return String(assignments[k]); }
-    var rows = assignmentRows(doc);
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i] || {};
-      if (sameName(r.person || r.name, fullName)) return String(r.position || r.role || '');
-    }
-    return '';
-  }
-  function paperworkFor(doc, fullName) {
-    var rows = assignmentRows(doc);
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i] || {};
-      if (sameName(r.person || r.name, fullName)) {
-        var list = r.paperwork || r.paperworkItems || r.file || [];
-        return (Array.isArray(list) ? list : [list]).map(String).filter(Boolean);
+
+  function legacyAssignmentSummary(doc, profile) {
+    var positions = [];
+    var paperwork = [];
+    legacyAssignmentRows(doc).forEach(function (row) {
+      row = row || {};
+      if (!sameName(row.person || row.name, profile.fullName)) return;
+      positions.push(row.position || row.role || '');
+      var list = row.paperwork || row.paperworkItems || row.file || [];
+      paperwork = paperwork.concat(Array.isArray(list) ? list : [list]);
+    });
+    if (!positions.length) {
+      var oldMap = doc.assignments || {};
+      for (var name in oldMap) {
+        if (sameName(name, profile.fullName) && oldMap[name]) positions.push(oldMap[name]);
       }
     }
-    return [];
+    return {
+      positions: uniqueStrings(positions),
+      paperwork: uniqueStrings(paperwork),
+      source: positions.length || paperwork.length ? 'legacy' : 'empty',
+    };
   }
-  function summarizeSession(code, doc, fullName, notesOverride) {
+
+  function canonicalAssignmentSummary(records, profile, doc, allowLegacyFallback) {
+    var model = assignmentModel();
+    var normalized = records.map(function (record) {
+      return typeof model.normalizeAssignmentRecord === 'function'
+        ? model.normalizeAssignmentRecord(record)
+        : record;
+    }).filter(Boolean);
+    var profileMatches = typeof model.assignmentsForProfile === 'function'
+      ? model.assignmentsForProfile(normalized, profile)
+      : normalized.filter(function (record) {
+          return cleanIdentityIds([profile.profileId].concat(profile.profileAliases || [])).indexOf(record.profileId) >= 0;
+        });
+    var matched = profileMatches.filter(function (record) {
+      return (!record.productionSession || record.productionSession === doc.code)
+        && record.status !== 'completed';
+    });
+    var compatibility = typeof model.compatibilityRows === 'function'
+      ? model.compatibilityRows(matched)
+      : [];
+    var positions = matched.map(function (record) { return record.positionLabel; });
+    var paperwork = [];
+    matched.forEach(function (record) {
+      paperwork = paperwork.concat(record.paperworkLabels || record.paperworkIds || []);
+    });
+    compatibility.forEach(function (row) {
+      positions.push(row && (row.position || row.role));
+      var oldPaper = row && (row.paperwork || row.paperworkItems || row.file) || [];
+      paperwork = paperwork.concat(Array.isArray(oldPaper) ? oldPaper : [oldPaper]);
+    });
+    if (!matched.length) {
+      // Canonical history for this profile (including completed work) is
+      // authoritative. Do not resurrect its stale legacy projection.
+      if (profileMatches.length) return { positions: [], paperwork: [], source: 'empty' };
+      return allowLegacyFallback === false
+        ? { positions: [], paperwork: [], source: 'unavailable' }
+        : legacyAssignmentSummary(doc, profile);
+    }
+    return { positions: uniqueStrings(positions), paperwork: uniqueStrings(paperwork), source: 'canonical' };
+  }
+
+  function profileIdentitySet(profile) {
+    var model = assignmentModel();
+    var ids = typeof model.profileIdentityIds === 'function'
+      ? model.profileIdentityIds(profile)
+      : [profile.profileId].concat(profile.profileAliases || []);
+    var set = {};
+    cleanIdentityIds(ids).forEach(function (id) { set[id] = true; });
+    return set;
+  }
+
+  function identityOwned(item, idFields, nameField, profile, ids) {
+    var presentId = '';
+    for (var i = 0; i < idFields.length; i++) {
+      if (item && item[idFields[i]]) { presentId = String(item[idFields[i]]); break; }
+    }
+    if (presentId) return Boolean(ids[presentId]);
+    return Boolean(item && item[nameField] && sameName(item[nameField], profile.fullName));
+  }
+
+  function summarizeSession(code, doc, profile, notesOverride, assignmentSummary) {
     var notes = Array.isArray(notesOverride) ? notesOverride
       : Array.isArray(doc.preProNotes) ? doc.preProNotes : [];
     var todos = 0, mentions = 0, unseen = 0;
     var lastRead = pbLastReadFor(code);
+    var identityIds = profileIdentitySet(profile);
     notes.forEach(function (n) {
       if (!n) return;
       var tag = n.tag || (n.kind === 'todo' ? 'todo' : 'general');
       var checklist = Array.isArray(n.checklist) ? n.checklist : [];
       // A todo-tagged note that carries a checklist delegates to its items
       // (mirrors the board's who-owes-what view — no double counting).
-      if (tag === 'todo' && !n.done && !checklist.length && n.assignee && sameName(n.assignee, fullName)) todos++;
+      if (tag === 'todo' && !n.done && !checklist.length && identityOwned(n, ['assigneeProfileId'], 'assignee', profile, identityIds)) todos++;
       checklist.forEach(function (it) {
-        if (it && !it.done && it.assignee && sameName(it.assignee, fullName)) todos++;
+        if (it && !it.done && identityOwned(it, ['assigneeProfileId'], 'assignee', profile, identityIds)) todos++;
       });
-      var mine = sameName(n.by, fullName);
+      var mine = identityOwned(n, ['byProfileId', 'authorProfileId'], 'by', profile, identityIds);
       // Cloud read receipts win over the device-local lastRead heuristic —
       // reading the board on ANY device clears the note here (Phase 4 item 3).
       var seenByMe = false;
       if (n.seenBy && typeof n.seenBy === 'object') {
         for (var sk in n.seenBy) {
-          if (n.seenBy[sk] && sameName(n.seenBy[sk].name, fullName)) { seenByMe = true; break; }
+          var seen = n.seenBy[sk];
+          if (seen && ((seen.profileId && identityIds[seen.profileId])
+              || (!seen.profileId && sameName(seen.name, profile.fullName)))) { seenByMe = true; break; }
         }
       }
       if (!mine && !seenByMe && (n.at || 0) > lastRead) {
         unseen++;
-        if (Array.isArray(n.mentions) && n.mentions.some(function (m) { return sameName(m, fullName); })) mentions++;
+        var mentionedById = Array.isArray(n.mentionProfileIds)
+          && n.mentionProfileIds.some(function (id) { return identityIds[id]; });
+        var mentionedByName = !Array.isArray(n.mentionProfileIds)
+          && Array.isArray(n.mentions)
+          && n.mentions.some(function (name) { return sameName(name, profile.fullName); });
+        if (mentionedById || mentionedByName) mentions++;
       }
     });
     return {
       code: code,
       showName: doc.showName || 'Untitled Show',
       deleted: !!doc.deletedAt,
-      position: positionFor(doc, fullName),
-      paperwork: paperworkFor(doc, fullName),
+      positions: assignmentSummary.positions || [],
+      paperwork: assignmentSummary.paperwork || [],
+      assignmentSource: assignmentSummary.source,
       todos: todos, unseen: unseen, mentions: mentions,
     };
   }
 
+  function portalReadStatus(error) {
+    var code = String(error && error.code || '').toLowerCase();
+    if (code === 'permission-denied') return 'denied';
+    if (code === 'not-found') return 'missing';
+    if (code === 'unavailable' || code === 'deadline-exceeded' || code === 'cancelled'
+        || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 'offline';
+    return 'error';
+  }
+
+  function portalIssueLabel(subject, state, hasFallback) {
+    if (state === 'denied') return subject + ' unavailable · access denied';
+    if (state === 'offline') return hasFallback ? subject + ' may be out of date · offline' : subject + ' not checked · offline';
+    return hasFallback ? subject + ' may be out of date' : 'Couldn’t load ' + subject.toLowerCase();
+  }
+
+  async function loadPortalSession(w, code, profile) {
+    var entry = {
+      code: code, doc: null, sessionStatus: 'ok', sessionError: null,
+      assignmentStatus: 'pending', assignmentError: null, assignments: [],
+      notesStatus: 'pending', notesError: null, notes: [], notesFallback: false,
+    };
+    var sessionSnap;
+    try {
+      var sessionRef = w._doc(w._db, 'sessions', code);
+      sessionSnap = await readWithCache(
+        function () { return w._getDoc(sessionRef); },
+        w._getDocFromCache ? function () { return w._getDocFromCache(sessionRef); } : null
+      );
+    } catch (error) {
+      entry.sessionStatus = portalReadStatus(error);
+      entry.sessionError = error;
+      return entry;
+    }
+    if (!sessionSnap.exists()) { entry.sessionStatus = 'missing'; return entry; }
+    entry.doc = sessionSnap.data() || {};
+    if (entry.doc.deletedAt) { entry.sessionStatus = 'deleted'; return entry; }
+    if (sessionSnap.metadata && sessionSnap.metadata.fromCache) entry.sessionStatus = 'offline';
+
+    if (!w._getDocs || !w._collection) {
+      entry.assignmentStatus = 'error';
+      entry.notesStatus = 'error';
+      return entry;
+    }
+
+    var assignmentRef = w._collection(w._db, 'sessions', code, 'assignments');
+    var assignmentPromise = readWithCache(
+      function () { return w._getDocs(assignmentRef); },
+      w._getDocsFromCache ? function () { return w._getDocsFromCache(assignmentRef); } : null
+    ).then(function (snap) {
+      entry.assignmentStatus = snap.metadata && snap.metadata.fromCache ? 'offline' : 'ok';
+      snap.forEach(function (docSnap) {
+        entry.assignments.push(Object.assign({ assignmentId: docSnap.id }, docSnap.data() || {}));
+      });
+    }).catch(function (error) {
+      entry.assignmentStatus = portalReadStatus(error);
+      entry.assignmentError = error;
+    });
+
+    var legacyNotes = Array.isArray(entry.doc.preProNotes) ? entry.doc.preProNotes : [];
+    var notesRef = w._collection(w._db, 'sessions', code, 'notes');
+    var notesPromise = readWithCache(
+      function () { return w._getDocs(notesRef); },
+      w._getDocsFromCache ? function () { return w._getDocsFromCache(notesRef); } : null
+    ).then(function (snap) {
+      var byId = {};
+      legacyNotes.forEach(function (note) { if (note && note.id) byId[note.id] = note; });
+      snap.forEach(function (docSnap) {
+        var note = docSnap.data();
+        if (note && note.id) byId[note.id] = note;
+      });
+      entry.notes = Object.keys(byId).map(function (id) { return byId[id]; });
+      entry.notesStatus = snap.metadata && snap.metadata.fromCache ? 'offline' : 'ok';
+      entry.notesFallback = legacyNotes.length > 0 && entry.notesStatus !== 'ok';
+    }).catch(function (error) {
+      entry.notesStatus = portalReadStatus(error);
+      entry.notesError = error;
+      entry.notes = legacyNotes.slice();
+      entry.notesFallback = legacyNotes.length > 0;
+    });
+    await Promise.all([assignmentPromise, notesPromise]);
+
+    if (entry.assignmentStatus === 'ok' || (entry.assignmentStatus === 'offline' && entry.assignments.length)) {
+      entry.assignment = canonicalAssignmentSummary(
+        entry.assignments,
+        profile,
+        Object.assign({}, entry.doc, { code: code }),
+        entry.assignmentStatus === 'ok'
+      );
+    } else {
+      // A failed canonical query is not an empty assignment. Legacy state is not
+      // allowed to hide the failure; it is read only after a successful empty query.
+      entry.assignment = { positions: [], paperwork: [], source: 'unavailable' };
+    }
+    return entry;
+  }
+
+  function renderPortalProfileProblem(username, state, detail) {
+    var copy = state === 'missing'
+      ? 'This saved profile no longer exists.'
+      : state === 'denied'
+        ? 'Cueola was denied access to this profile.'
+        : state === 'offline'
+          ? 'Cueola is offline and could not verify this profile.'
+          : 'Cueola could not load this profile.';
+    setTitle('Your Cueola profile', '@' + username);
+    if (body()) body().innerHTML = '<div class="id-portal-empty">' + copy + (detail ? '<br>' + esc(detail) : '') + '</div>' +
+      '<div class="id-portal-foot"><button type="button" class="btn-primary" onclick="CueolaIdentity.renderPortal()">Retry</button>' +
+      '<button type="button" class="btn-secondary" onclick="CueolaIdentity.signOut()">Sign out on this device</button></div>';
+  }
+
+  function unavailableSessionCard(entry) {
+    var name = entry.sessionStatus === 'deleted' ? 'Session deleted'
+      : entry.sessionStatus === 'missing' ? 'Session not found'
+        : entry.sessionStatus === 'denied' ? 'Session access denied'
+          : entry.sessionStatus === 'offline' ? 'Session not checked · offline'
+            : 'Couldn’t load session';
+    var retry = entry.sessionStatus !== 'deleted'
+      ? '<div class="id-card-actions"><button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>' : '';
+    return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
+      '<span class="id-card-name">' + esc(name) + '</span></div>' + retry + '</div>';
+  }
+
   async function renderPortal() {
+    var requestId = ++portalRequestGeneration;
     var id = identity(); if (!id) return renderHub();
     if (!fb() && typeof window.waitForFirebaseReady === 'function') {
-      // Signed in, but the Firebase module script hasn't finished booting yet —
-      // hold the portal open instead of bouncing the user back to the hub.
       setTitle('Your Cueola profile', '');
       if (body()) body().innerHTML = '<div class="id-portal-loading">Connecting…</div>';
-      try { await window.waitForFirebaseReady(); } catch (e) {}
+      try { await window.waitForFirebaseReady(); } catch (error) {}
     }
-    var p = cachedProfile || await fetchProfile(id.username).catch(function () { return null; });
-    if (!p) { renderHub(); return; }
+    if (requestId !== portalRequestGeneration) return;
+    var w = fb();
+    if (!w) return renderPortalProfileProblem(id.username, 'offline');
+
+    // Always refresh the profile when the portal opens. cachedProfile remains a
+    // fast join-strip projection, never the portal's source of truth.
+    var p;
+    try { p = await fetchProfile(id.username); }
+    catch (error) { return renderPortalProfileProblem(id.username, portalReadStatus(error), error && error.message); }
+    if (requestId !== portalRequestGeneration) return;
+    if (!p) return renderPortalProfileProblem(id.username, 'missing');
+    if (p.renamedTo || p.mergedInto) {
+      return renderPortalProfileProblem(id.username, 'missing', 'Use @' + (p.renamedTo || p.mergedInto) + ' instead.');
+    }
+    if (p.active === false) return renderPortalProfileProblem(id.username, 'denied', 'This profile was deactivated by an instructor.');
     cachedProfile = p;
+    rememberIdentity(id.username, p);
     setTitle('Hi, ' + esc(p.fullName.split(' ')[0]), '@' + p.username + (p.role === 'admin' ? ' · admin' : '') + ' — your sessions and what needs you.');
     var codes = (p.sessions || []).slice(0, 30);
-    body().innerHTML =
+    var profileWarnings = p._profileReadStatus === 'offline'
+      ? '<div class="id-portal-empty">This profile was loaded from offline cache and may be out of date. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>'
+      : '';
+    if (p._identityMigrationError) {
+      profileWarnings += '<div class="id-portal-empty">Your stable profile identity could not be saved yet. Assignments may be unavailable until cloud access is restored. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>';
+    }
+    body().innerHTML = profileWarnings +
       '<div class="id-portal-cards" id="id-portal-cards">' +
       (codes.length ? '<div class="id-portal-loading">Checking your sessions…</div>'
                     : '<div class="id-portal-empty">No sessions on your profile yet — add a session code below.</div>') +
@@ -580,46 +997,36 @@
       '</div>';
     if (!codes.length) return;
 
-    var w = fb(); if (!w) return;
-    var docs = await Promise.all(codes.map(function (code) {
-      return w._getDoc(w._doc(w._db, 'sessions', code)).then(function (s) {
-        var entry = { code: code, doc: s.exists() ? s.data() : null, notes: null };
-        if (!entry.doc || !w._getDocs || !w._collection) return entry;
-        // Phase 4: notes live in the per-note subcollection — merge it over the
-        // legacy array copy (a denied read falls back to the array alone).
-        return w._getDocs(w._collection(w._db, 'sessions', code, 'notes')).then(function (sub) {
-          var byId = {};
-          (Array.isArray(entry.doc.preProNotes) ? entry.doc.preProNotes : []).forEach(function (n) {
-            if (n && n.id) byId[n.id] = n;
-          });
-          sub.forEach(function (d) { var n = d.data(); if (n && n.id) byId[n.id] = n; });
-          entry.notes = Object.keys(byId).map(function (k) { return byId[k]; });
-          return entry;
-        }).catch(function () { return entry; });
-      }).catch(function () { return { code: code, doc: null, notes: null }; });
-    }));
+    var docs = await Promise.all(codes.map(function (code) { return loadPortalSession(w, code, p); }));
+    if (requestId !== portalRequestGeneration) return;
     var wrap = document.getElementById('id-portal-cards');
     if (!wrap) return;
     wrap.innerHTML = docs.map(function (entry) {
-      if (!entry.doc || entry.doc.deletedAt) {
-        return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
-          '<span class="id-card-name">Session not available</span></div></div>';
-      }
-      var s = summarizeSession(entry.code, entry.doc, cachedProfile.fullName, entry.notes);
+      if (!entry.doc || entry.sessionStatus === 'missing' || entry.sessionStatus === 'deleted'
+          || entry.sessionStatus === 'denied' || entry.sessionStatus === 'error') return unavailableSessionCard(entry);
+      var assignment = entry.assignment || { positions: [], paperwork: [], source: 'unavailable' };
+      var summary = summarizeSession(entry.code, entry.doc, p, entry.notes, assignment);
       var codeArg = JSON.stringify(entry.code).replace(/"/g, '&quot;');
       var badges = '';
-      if (s.position) badges += '<span class="id-badge pos">' + esc(s.position) + '</span>';
-      if (s.todos) badges += '<span class="id-badge todo">' + s.todos + ' to-do' + (s.todos === 1 ? '' : 's') + '</span>';
-      if (s.unseen) badges += '<span class="id-badge unseen">' + s.unseen + ' unseen note' + (s.unseen === 1 ? '' : 's') + (s.mentions ? ' · ' + s.mentions + ' @you' : '') + '</span>';
-      if (s.paperwork.length) badges += '<span class="id-badge paper">' + esc(s.paperwork.join(', ')) + '</span>';
-      if (!badges) badges = '<span class="id-badge quiet">Nothing waiting on you</span>';
+      summary.positions.forEach(function (position) { badges += '<span class="id-badge pos">' + esc(position) + '</span>'; });
+      if (summary.todos) badges += '<span class="id-badge todo">' + summary.todos + ' to-do' + (summary.todos === 1 ? '' : 's') + '</span>';
+      if (summary.unseen) badges += '<span class="id-badge unseen">' + summary.unseen + ' unseen note' + (summary.unseen === 1 ? '' : 's') + (summary.mentions ? ' · ' + summary.mentions + ' @you' : '') + '</span>';
+      if (summary.paperwork.length) badges += '<span class="id-badge paper">' + esc(summary.paperwork.join(', ')) + '</span>';
+      if (entry.sessionStatus === 'offline') badges += '<span class="id-badge unseen">Session may be out of date · offline</span>';
+      if (entry.assignmentStatus !== 'ok') badges += '<span class="id-badge unseen">' + esc(portalIssueLabel('Assignments', entry.assignmentStatus, false)) + '</span>';
+      else if (summary.assignmentSource === 'legacy') badges += '<span class="id-badge quiet">Legacy assignment · migration pending</span>';
+      else if (summary.assignmentSource === 'empty') badges += '<span class="id-badge quiet">No crew assignment yet</span>';
+      if (entry.notesStatus !== 'ok') badges += '<span class="id-badge unseen">' + esc(portalIssueLabel('Assigned actions', entry.notesStatus, entry.notesFallback)) + '</span>';
+      else if (!summary.todos && !summary.unseen) badges += '<span class="id-badge quiet">No open actions or unseen notes</span>';
+      var hasIssue = entry.sessionStatus !== 'ok' || entry.assignmentStatus !== 'ok' || entry.notesStatus !== 'ok';
       return '<div class="id-card">' +
         '<div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
-        '<span class="id-card-name">' + esc(s.showName) + '</span></div>' +
+        '<span class="id-card-name">' + esc(summary.showName) + '</span></div>' +
         '<div class="id-card-badges">' + badges + '</div>' +
         '<div class="id-card-actions">' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')">Open Cueola</button>' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'notes\')">Notes</button>' +
+        (hasIssue ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry status</button>' : '') +
         '</div></div>';
     }).join('');
   }
@@ -644,6 +1051,7 @@
         window.openPreProJoinModal('notes');
         document.getElementById('pp-join-code').value = code;
         document.getElementById('pp-join-name').value = p.fullName;
+        decorateJoinNameInput(document.getElementById('pp-join-name'), p);
         window.joinPreProSession();
       } catch (e) {}
       return;
@@ -652,12 +1060,15 @@
       window.openJoinSession();
       document.getElementById('stud-code').value = code;
       document.getElementById('stud-name').value = p.fullName;
+      decorateJoinNameInput(document.getElementById('stud-name'), p);
       window.joinSession();
     } catch (e) {}
   }
 
   window.CueolaIdentity = {
     identity: identity, profile: function () { return cachedProfile; },
+    profileIdentity: function () { return canonicalProfileIdentity(cachedProfile); },
+    profileIdentityForJoin: profileIdentityForJoin,
     signIn: signIn, signOut: signOut, createProfile: createProfile,
     attachSessions: attachSessions, noteJoin: noteJoin,
     entrySatisfied: entrySatisfied, revealEntryCodeRow: revealEntryCodeRow,

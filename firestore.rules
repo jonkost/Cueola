@@ -33,6 +33,14 @@ service cloud.firestore {
         && (!data.keys().hasAny(['presence']) || data.presence is map)
         && (!data.keys().hasAny(['prompter']) || data.prompter is map)
         && (!data.keys().hasAny(['outrangutan']) || data.outrangutan is map)
+        && (!data.keys().hasAny(['prePro']) || data.prePro is map)
+        && (!data.keys().hasAny(['assignments']) || data.assignments is map)
+        && (!data.keys().hasAny(['roleAssignments']) || data.roleAssignments is list)
+        && (!data.keys().hasAny(['assignmentRevision'])
+          || (data.assignmentRevision is int && data.assignmentRevision >= 0))
+        && (!data.keys().hasAny(['assignmentUpdatedAt'])
+          || (data.assignmentUpdatedAt is int && data.assignmentUpdatedAt >= 0))
+        && optionalShortString(data, 'assignmentUpdatedBy', 160)
         // Dashboard soft-delete stamp (Phase 1 item 4): restore removes both keys.
         && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is int)
         && optionalShortString(data, 'deletedBy', 120)
@@ -83,6 +91,11 @@ service cloud.firestore {
       return username.matches('^[a-z0-9][a-z0-9._-]{2,39}$');
     }
 
+    function validCanonicalId(value) {
+      return value is string
+        && value.matches('^[A-Za-z0-9_.-]{3,160}$');
+    }
+
     function validProfile(username, data) {
       return validUsername(username)
         && data is map
@@ -92,7 +105,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
-          'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto'
+          'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto',
+          'profileId', 'profileAliases'
         ])
         && data.username.lower() == username
         && shortString(data.username, 40)
@@ -103,6 +117,11 @@ service cloud.firestore {
         && data.sessions is list
         && data.sessions.size() <= 100
         && shortString(data.codeUsed, 80)
+        // Phase 6 migration fields are optional for legacy profiles. Once a
+        // profileId is added, immutableProfileId() prevents removing/changing it.
+        && (!data.keys().hasAny(['profileId']) || validCanonicalId(data.profileId))
+        && (!data.keys().hasAny(['profileAliases'])
+          || (data.profileAliases is list && data.profileAliases.size() <= 40))
         && (!data.keys().hasAny(['active']) || data.active is bool)
         && optionalShortString(data, 'renamedTo', 40)
         && optionalShortString(data, 'mergedInto', 40);
@@ -120,6 +139,65 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && request.resource.data.codeUsed == resource.data.codeUsed
         && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function immutableProfileId() {
+      // Existing profiles may add an opaque id once. Profiles that already have
+      // one must preserve it on every subsequent update.
+      return (!resource.data.keys().hasAny(['profileId']))
+        || (request.resource.data.keys().hasAny(['profileId'])
+          && request.resource.data.profileId == resource.data.profileId);
+    }
+
+    function validAssignment(assignmentId, code, data) {
+      return validCanonicalId(assignmentId)
+        // productionSession is a foreign key to the existing session path.
+        // Preserve Cueola's 1–160 character session-code contract; generated
+        // assignment/profile/position identifiers use validCanonicalId().
+        && validSessionId(code)
+        && data is map
+        && data.keys().hasAll([
+          'assignmentId', 'productionSession', 'profileId', 'displayName',
+          'positionId', 'positionLabel', 'paperworkIds', 'paperworkLabels',
+          'status', 'assignedBy', 'assignedByLabel', 'createdAt', 'updatedAt',
+          'revision'
+        ])
+        && data.keys().hasOnly([
+          'assignmentId', 'productionSession', 'profileId', 'displayName',
+          'positionId', 'positionLabel', 'paperworkIds', 'paperworkLabels',
+          'status', 'assignedBy', 'assignedByLabel', 'createdAt', 'updatedAt',
+          'revision'
+        ])
+        && data.assignmentId == assignmentId
+        && data.productionSession == code
+        && validCanonicalId(data.profileId)
+        && shortString(data.displayName, 160)
+        && validCanonicalId(data.positionId)
+        && shortString(data.positionLabel, 160)
+        && data.paperworkIds is list
+        && data.paperworkIds.size() <= 40
+        && data.paperworkLabels is list
+        && data.paperworkLabels.size() == data.paperworkIds.size()
+        && data.status in ['assigned', 'completed']
+        && validCanonicalId(data.assignedBy)
+        && shortString(data.assignedByLabel, 160)
+        && data.createdAt is int
+        && data.createdAt >= 0
+        && data.updatedAt is int
+        && data.updatedAt >= data.createdAt
+        && data.revision is int
+        && data.revision >= 1
+        && data.revision <= 1000000;
+    }
+
+    function immutableAssignmentIdentity() {
+      return request.resource.data.assignmentId == resource.data.assignmentId
+        && request.resource.data.productionSession == resource.data.productionSession
+        && request.resource.data.profileId == resource.data.profileId
+        && request.resource.data.positionId == resource.data.positionId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt >= resource.data.updatedAt
+        && request.resource.data.revision > resource.data.revision;
     }
 
     function validNote(noteId, data) {
@@ -176,6 +254,19 @@ service cloud.firestore {
         allow list: if validSessionId(code);
         allow create, update: if validSessionId(code) && validNote(noteId, request.resource.data);
       }
+
+      // Canonical Phase 6 crew assignments. These rules validate consistency
+      // and bounds only: without Firebase Auth they cannot prove whether the
+      // caller is an instructor, administrator, or student.
+      match /assignments/{assignmentId} {
+        allow get, delete: if validSessionId(code) && validCanonicalId(assignmentId);
+        allow list: if validSessionId(code);
+        allow create: if validSessionId(code)
+                      && validAssignment(assignmentId, code, request.resource.data);
+        allow update: if validSessionId(code)
+                      && validAssignment(assignmentId, code, request.resource.data)
+                      && immutableAssignmentIdentity();
+      }
     }
 
     match /admins/{docId} {
@@ -205,7 +296,8 @@ service cloud.firestore {
       allow create: if validProfile(username, request.resource.data)
                     && activeCodeForProfile(request.resource.data);
       allow update: if validProfile(username, request.resource.data)
-                    && immutableProfileIdentity();
+                    && immutableProfileIdentity()
+                    && immutableProfileId();
       allow delete: if false;
     }
 

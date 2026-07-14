@@ -99,6 +99,16 @@ denied(await write('sessions/RULES1', { deletedAt: 'yesterday' }, ['deletedAt'])
 // Type and bound violations on the session doc.
 denied(await write('sessions/RULES1', { beats: { oops: true } }, ['beats']), 'beats must stay a list');
 denied(await write('sessions/RULES1', { presence: 'nope' }, ['presence']), 'presence must stay a map');
+denied(await write('sessions/RULES1', { prePro: 'nope' }, ['prePro']), 'prePro must stay a map');
+denied(await write('sessions/RULES1', { assignments: [] }, ['assignments']), 'legacy assignments projection must stay a map');
+denied(await write('sessions/RULES1', { roleAssignments: {} }, ['roleAssignments']), 'legacy roleAssignments projection must stay a list');
+allowed(await write('sessions/RULES1', {
+  assignmentRevision: 1, assignmentUpdatedAt: 8, assignmentUpdatedBy: 'profile_instructor_01',
+}, ['assignmentRevision', 'assignmentUpdatedAt', 'assignmentUpdatedBy']), 'canonical assignment parent revision metadata');
+denied(await write('sessions/RULES1', { assignmentRevision: -1 }, ['assignmentRevision']), 'assignment parent revision must be nonnegative');
+denied(await write('sessions/RULES1', { assignmentUpdatedAt: 'now' }, ['assignmentUpdatedAt']), 'assignment parent timestamp must be an int');
+denied(await write('sessions/RULES1', { assignmentUpdatedBy: '' }, ['assignmentUpdatedBy']), 'assignment parent actor cannot be empty');
+denied(await write('sessions/RULES1', { assignmentUpdatedBy: 'x'.repeat(161) }, ['assignmentUpdatedBy']), 'assignment parent actor is bounded');
 denied(await write('sessions/RULESLONG', { code: 'RULESLONG', showName: 'x'.repeat(250) }), 'showName over 200 chars');
 denied(await write('sessions/RULESEMPTY', { code: 'RULESEMPTY', showName: '' }), 'showName empty string');
 denied(await write('sessions/WRONG', { ...session, code: 'OTHER' }), 'mismatched session code');
@@ -168,12 +178,158 @@ denied(await write('profiles/alex.smith', { sessions: Array.from({ length: 101 }
 denied(await write('profiles/mismatch.role', { ...profile, username: 'mismatch.role', role: 'admin' }),
   'create with role not matching the code doc');
 
+// Phase 6 stable identity migration. Legacy profiles may omit profileId; once
+// one is added it cannot be changed or removed. Aliases stay mutable but bounded.
+const alexProfileId = 'profile_alex_smith_01';
+allowed(await write('profiles/alex.smith', {
+  profileId: alexProfileId, profileAliases: ['alex.smith'], lastSeen: 6,
+}, ['profileId', 'profileAliases', 'lastSeen']), 'legacy profile adds its stable id once');
+denied(await write('profiles/alex.smith', { profileId: 'profile_alex_changed_02' }, ['profileId']), 'stable profile id cannot change');
+denied(await write('profiles/alex.smith', {}, ['profileId']), 'stable profile id cannot be removed');
+allowed(await write('profiles/alex.smith', { profileAliases: ['alex.smith', 'alex.s'] }, ['profileAliases']), 'profile aliases may grow within the bound');
+denied(await write('profiles/alex.smith', { profileAliases: 'alex.smith' }, ['profileAliases']), 'profile aliases must be a list');
+denied(await write('profiles/alex.smith', {
+  profileAliases: Array.from({ length: 41 }, (_, i) => `alex.alias.${i}`),
+}, ['profileAliases']), 'profile aliases over the 40-entry cap');
+
 // Rename = new doc under the (still active) code, then tombstone the old name.
-allowed(await write('profiles/alexs.new', { ...profile, username: 'alexs.new' }), 'rename creates the new doc');
+allowed(await write('profiles/alexs.new', {
+  ...profile, username: 'alexs.new', profileId: alexProfileId, profileAliases: ['alex.smith', 'alexs.new'],
+}), 'rename creates the new doc with the same stable id');
 allowed(await write('profiles/alex.smith', { active: false, renamedTo: 'alexs.new' },
   ['active', 'renamedTo']), 'rename tombstones the old doc');
 allowed(await write('profiles/alexs.new', { active: false, mergedInto: 'alex.smith' },
   ['active', 'mergedInto']), 'merge tombstone points at the target');
+
+// Phase 6 canonical assignments. Cueola has no Firebase Auth, so these are
+// role-neutral shape/consistency checks, not instructor/student authorization.
+const assignment = {
+  assignmentId: 'asn_alex_producer_01', productionSession: 'RULES1',
+  profileId: alexProfileId, displayName: 'Alex Smith',
+  positionId: 'position_producer_01', positionLabel: 'Producer',
+  paperworkIds: ['call-sheet', 'rundown'], paperworkLabels: ['Call Sheet', 'Rundown'],
+  status: 'assigned', assignedBy: 'profile_instructor_01', assignedByLabel: 'Instructor One',
+  createdAt: 10, updatedAt: 10, revision: 1,
+};
+allowed(await write('sessions/RULES1/assignments/asn_alex_producer_01', assignment), 'canonical assignment create');
+allowed(await request('sessions/RULES1/assignments/asn_alex_producer_01'), 'canonical assignment get');
+allowed(await request('sessions/RULES1/assignments?pageSize=20'), 'canonical assignments list');
+
+const secondPosition = {
+  ...assignment,
+  assignmentId: 'asn_alex_camera_01',
+  positionId: 'position_camera_01',
+  positionLabel: 'Camera 1',
+  paperworkIds: ['video-patch'],
+  paperworkLabels: ['Video Patch Sheet'],
+};
+allowed(await write('sessions/RULES1/assignments/asn_alex_camera_01', secondPosition), 'same profile may hold a second position record');
+
+allowed(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  displayName: 'Alex S.', positionLabel: 'Lead Producer',
+  paperworkIds: ['call-sheet', 'rundown', 'safety-plan'],
+  paperworkLabels: ['Call Sheet', 'Rundown', 'Safety Plan'],
+  status: 'completed', assignedBy: 'profile_instructor_02', assignedByLabel: 'Instructor Two',
+  updatedAt: 11, revision: 2,
+}, ['displayName', 'positionLabel', 'paperworkIds', 'paperworkLabels', 'status', 'assignedBy', 'assignedByLabel', 'updatedAt', 'revision']), 'assignment mutable fields update with a newer revision');
+
+const missingAssignmentStatus = { ...assignment };
+delete missingAssignmentStatus.status;
+denied(await write('sessions/RULES1/assignments/asn_missing_status_01', {
+  ...missingAssignmentStatus, assignmentId: 'asn_missing_status_01',
+}), 'assignment create requires every canonical field');
+denied(await write('sessions/RULES1/assignments/asn_doc_mismatch_01', assignment), 'assignment id must match its document id');
+denied(await write('sessions/RULES1/assignments/asn_wrong_session_01', {
+  ...assignment, assignmentId: 'asn_wrong_session_01', productionSession: 'OTHER',
+}), 'assignment is pinned to its parent production');
+allowed(await write('sessions/A/assignments/asn_short_session_01', {
+  ...assignment, assignmentId: 'asn_short_session_01', productionSession: 'A',
+}), 'canonical assignments preserve the existing short session-code contract');
+allowed(await remove('sessions/A/assignments/asn_short_session_01'), 'short-code assignment can be removed');
+denied(await write('sessions/RULES1/assignments/bad:id', {
+  ...assignment, assignmentId: 'bad:id',
+}), 'assignment document id uses the safe canonical alphabet');
+denied(await write('sessions/RULES1/assignments/asn_bad_profile_01', {
+  ...assignment, assignmentId: 'asn_bad_profile_01', profileId: 'bad:id',
+}), 'assignment profile id uses the safe canonical alphabet');
+denied(await write('sessions/RULES1/assignments/asn_bad_position_01', {
+  ...assignment, assignmentId: 'asn_bad_position_01', positionId: 'x',
+}), 'assignment position id is bounded and canonical');
+denied(await write('sessions/RULES1/assignments/asn_empty_name_01', {
+  ...assignment, assignmentId: 'asn_empty_name_01', displayName: '',
+}), 'assignment display name cannot be empty');
+denied(await write('sessions/RULES1/assignments/asn_long_name_01', {
+  ...assignment, assignmentId: 'asn_long_name_01', displayName: 'x'.repeat(161),
+}), 'assignment display name is bounded at the model contract');
+denied(await write('sessions/RULES1/assignments/asn_long_position_01', {
+  ...assignment, assignmentId: 'asn_long_position_01', positionLabel: 'x'.repeat(161),
+}), 'assignment position label is bounded at the model contract');
+denied(await write('sessions/RULES1/assignments/asn_bad_paperwork_01', {
+  ...assignment, assignmentId: 'asn_bad_paperwork_01', paperworkIds: 'rundown',
+}), 'assignment paperwork ids must be a list');
+denied(await write('sessions/RULES1/assignments/asn_unpaired_paperwork_01', {
+  ...assignment, assignmentId: 'asn_unpaired_paperwork_01', paperworkLabels: ['Call Sheet'],
+}), 'assignment paperwork ids and labels stay paired');
+denied(await write('sessions/RULES1/assignments/asn_too_much_paperwork_01', {
+  ...assignment, assignmentId: 'asn_too_much_paperwork_01',
+  paperworkIds: Array.from({ length: 41 }, (_, i) => `paper_${i}`),
+  paperworkLabels: Array.from({ length: 41 }, (_, i) => `Paper ${i}`),
+}), 'assignment paperwork is capped at 40 items');
+denied(await write('sessions/RULES1/assignments/asn_bad_status_01', {
+  ...assignment, assignmentId: 'asn_bad_status_01', status: 'deleted',
+}), 'assignment status uses the approved enum');
+denied(await write('sessions/RULES1/assignments/asn_bad_actor_01', {
+  ...assignment, assignmentId: 'asn_bad_actor_01', assignedBy: 'x',
+}), 'assignment actor id is bounded and canonical');
+denied(await write('sessions/RULES1/assignments/asn_long_actor_label_01', {
+  ...assignment, assignmentId: 'asn_long_actor_label_01', assignedByLabel: 'x'.repeat(161),
+}), 'assignment actor label is bounded at the model contract');
+denied(await write('sessions/RULES1/assignments/asn_bad_created_01', {
+  ...assignment, assignmentId: 'asn_bad_created_01', createdAt: 'now',
+}), 'assignment created timestamp must be an int');
+denied(await write('sessions/RULES1/assignments/asn_bad_updated_01', {
+  ...assignment, assignmentId: 'asn_bad_updated_01', updatedAt: 9,
+}), 'assignment updated timestamp cannot precede creation');
+denied(await write('sessions/RULES1/assignments/asn_bad_revision_01', {
+  ...assignment, assignmentId: 'asn_bad_revision_01', revision: 0,
+}), 'assignment revision starts at one');
+denied(await write('sessions/RULES1/assignments/asn_huge_revision_01', {
+  ...assignment, assignmentId: 'asn_huge_revision_01', revision: 1000001,
+}), 'assignment revision is bounded');
+denied(await write('sessions/RULES1/assignments/asn_unknown_key_01', {
+  ...assignment, assignmentId: 'asn_unknown_key_01', unexpected: true,
+}), 'assignment rejects unknown fields');
+
+// Existing producer record is now revision 2 / updatedAt 11. Identity/created
+// fields are immutable; mutable writes must advance both ordering signals.
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  assignmentId: 'asn_alex_changed_01', updatedAt: 12, revision: 3,
+}, ['assignmentId', 'updatedAt', 'revision']), 'assignment document identity cannot change');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  profileId: 'profile_other_student_01', updatedAt: 12, revision: 3,
+}, ['profileId', 'updatedAt', 'revision']), 'assignment profile identity cannot change');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  positionId: 'position_director_01', updatedAt: 12, revision: 3,
+}, ['positionId', 'updatedAt', 'revision']), 'assignment position identity cannot change');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  productionSession: 'OTHER', updatedAt: 12, revision: 3,
+}, ['productionSession', 'updatedAt', 'revision']), 'assignment production identity cannot change');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  createdAt: 9, updatedAt: 12, revision: 3,
+}, ['createdAt', 'updatedAt', 'revision']), 'assignment creation timestamp cannot change');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  updatedAt: 12, revision: 2,
+}, ['updatedAt', 'revision']), 'assignment update must advance its revision');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  updatedAt: 10, revision: 3,
+}, ['updatedAt', 'revision']), 'assignment update cannot move its timestamp backward');
+denied(await write('sessions/RULES1/assignments/asn_alex_producer_01', {
+  unexpected: true, updatedAt: 12, revision: 3,
+}, ['unexpected', 'updatedAt', 'revision']), 'assignment update rejects unknown fields');
+
+allowed(await remove('sessions/RULES1/assignments/asn_alex_producer_01'), 'canonical assignment delete');
+allowed(await request('sessions/RULES1/assignments/asn_alex_camera_01'), 'removing one position preserves the second');
+allowed(await remove('sessions/RULES1/assignments/asn_alex_camera_01'), 'second canonical assignment delete');
 
 const note = { id: 'note1', text: 'Check camera two', by: 'Alex Smith', role: 'student', likes: [], checklist: [], attachments: [] };
 allowed(await write('sessions/RULES1/notes/note1', note), 'future note subcollection write');

@@ -323,12 +323,6 @@
   .og-bar { flex-wrap: wrap; }
   .og-bar-spacer { display: none; }
   .og-theme-menu { margin-left: auto; }
-  .og-main { grid-template-columns: 1fr; grid-auto-rows: minmax(0, auto); }
-  .og-cuelist-pane,
-  .og-program-pane,
-  .og-inspector-pane { grid-column: auto; grid-row: auto; max-height: none; }
-  .og-inspector-pane { border-top: 1px solid var(--border); }
-  .og-pane + .og-pane { border-left: none; border-top: 1px solid var(--border); }
   .og-sfx { flex-direction: column; }
   .og-sfx-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); }
   .og-pad-grid { grid-template-columns: repeat(3, 1fr); }
@@ -695,13 +689,43 @@
 .og-out-note { font-size: 11.5px; color: var(--text3); align-self: center; }
 
 /* stream deck */
-.og-sd-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-.og-sd-grid { display: grid; gap: 8px; margin-top: 14px; }
-.og-sdk { border: 1px solid var(--border); border-radius: var(--r); background: var(--s2); padding: 8px; display: flex; flex-direction: column; gap: 6px; position: relative; min-width: 0; }
+.og-sd-card { width: min(1040px, 96vw); }
+.og-sd-card .og-sheet-x,
+.og-sd-card .og-bar-btn { min-height: 44px; }
+.og-sd-status { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.og-sd-device-tools { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.og-sd-device-tools label { display: grid; gap: 5px; min-width: 250px; font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--text2); }
+.og-sd-device-tools select { min-height: 44px; background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 13px; padding: 8px 10px; }
+.og-sd-device-tools select:disabled { opacity: .7; }
+.og-sd-error { margin-top: 12px; border-left: 3px solid var(--red); padding: 9px 11px; background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--text); font-size: 12.5px; line-height: 1.4; }
+.og-sd-grid { display: grid; grid-template-columns: repeat(var(--sd-cols, 5), minmax(104px, 1fr)); gap: 8px; margin-top: 14px; overflow-x: auto; padding-bottom: 4px; }
+.og-sdk { border: 1px solid var(--border); border-radius: var(--r); background: var(--s2); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; position: relative; min-width: 0; }
 .og-sdk.mapped { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: color-mix(in srgb, var(--accent) 9%, var(--s2)); }
-.og-sdk-i { font-family: var(--mono-num, monospace); font-size: 10px; color: var(--text3); }
-.og-sdk select { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 11.5px; padding: 5px 6px; width: 100%; min-width: 0; }
+.og-sdk-i { font-family: var(--mono-num, monospace); font-size: 9px; font-weight: 750; letter-spacing: .05em; color: var(--text3); }
+.og-sdk-preview { display: block; align-self: center; width: min(100%, 96px); height: auto; aspect-ratio: 1; border-radius: 8px; background: #05070a; box-shadow: inset 0 0 0 1px rgba(255,255,255,.09); }
+.og-sdk-preview[data-active="true"] { box-shadow: 0 0 0 2px var(--green), inset 0 0 0 1px rgba(255,255,255,.14); }
+.og-sdk-preview-missing { display: grid; place-items: center; aspect-ratio: 1; min-height: 72px; border-radius: 8px; background: #05070a; color: var(--text3); font-size: 10px; text-align: center; }
+.og-sdk select { min-height: 44px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
 .og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
+.og-sd-proof { margin-top: 20px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
+.og-sd-proof h4 { margin: 0; font-family: var(--syne); font-size: 14px; }
+.og-sd-proof p { margin: 5px 0 12px; color: var(--text2); font-size: 12px; line-height: 1.45; }
+.og-sd-proof-grid { display: grid; grid-template-columns: repeat(6, minmax(76px, 1fr)); gap: 12px; }
+.og-sd-proof-sample { display: grid; justify-items: center; gap: 6px; min-width: 0; }
+.og-sd-proof-preview { display: block; width: min(100%, 96px); height: auto; aspect-ratio: 1; border-radius: 8px; background: #05070a; }
+.og-sd-proof-sample span { color: var(--text2); font-size: 10.5px; text-align: center; }
+.og-sd-card :is(select,button):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 760px) {
+  .og-sd-device-tools > * { width: 100%; }
+  .og-sd-proof-grid { grid-template-columns: repeat(3, minmax(76px, 1fr)); }
+}
+
+@media (forced-colors: active) {
+  .og-sdk.mapped,
+  .og-sdk-preview[data-active="true"],
+  .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
+}
 
 /* ============================================================================
  * PHASE 4 — Cueola rundown ⇄ Outrangutan integration (loaded globally, so these
@@ -898,21 +922,19 @@
 /* count-out clock scales with the (resizable) program pane, not the viewport */
 .og-program-pane { container-type: inline-size; }
 .og-clock-time { font-size: clamp(34px, 13cqw, 130px); }
-/* On desktop the clock also flexes vertically: it becomes its own size
+/* In wide playback mode the clock also flexes vertically: it becomes its own size
    container, so the digits track BOTH the pane width and whatever height the
    splitters leave it — drag any splitter and the clock rescales to fit. */
-@media (min-width: 921px) {
-  .og-program-pane { container-type: size; }
-  /* Cap the program monitor so the clock always keeps a healthy share of the
-     pane; the monitor stays 16:9 and centers itself when height-limited. */
-  .og-program-wrap { width: min(100% - 20px, calc(52cqh * 16 / 9)); margin: 8px auto 6px; }
-  .og-clock {
-    flex: 0 0 96px; min-height: 88px; padding: 5px 0 6px; box-sizing: border-box;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    container-type: inline-size;
-  }
-  .og-clock-time { font-size: clamp(36px, 10cqw, 58px); }
+.og-main.og-lay-wide .og-program-pane { container-type: size; }
+/* Cap the program monitor so the clock always keeps a healthy share of the
+   pane; the monitor stays 16:9 and centers itself when height-limited. */
+.og-main.og-lay-wide .og-program-wrap { width: min(100% - 20px, calc(52cqh * 16 / 9)); margin: 8px auto 6px; }
+.og-main.og-lay-wide .og-clock {
+  flex: 0 0 96px; min-height: 88px; padding: 5px 0 6px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  container-type: inline-size;
 }
+.og-main.og-lay-wide .og-clock-time { font-size: clamp(36px, 10cqw, 58px); }
 
 /* ============================================================================
  * Overall density pass — tighten paddings/gaps a touch (later rules win by order).
@@ -1197,13 +1219,11 @@
   max-width: 100%;
   margin: 0;
 }
-@media (min-width: 921px) {
-  /* cap the monitor by its 16:9 height so the clock + transport always keep a
-     healthy share of the pane (the pane is a size container on desktop). */
-  .og-program-top > .og-program-wrap {
-    flex: 0 1 auto;
-    width: min(100%, calc(54cqh * 16 / 9));
-  }
+/* In wide mode, cap the monitor by its 16:9 height so the clock + transport
+   keep a healthy share of the program pane. */
+.og-main.og-lay-wide .og-program-top > .og-program-wrap {
+  flex: 0 1 auto;
+  width: min(100%, calc(54cqh * 16 / 9));
 }
 .og-tabs {
   height: 44px;
@@ -1272,11 +1292,9 @@
 .og-inspector-pane {
   background: color-mix(in srgb, var(--bg) 96%, var(--s1));
 }
-@media (min-width: 921px) {
-  .og-program-wrap { border-radius: 12px; }
-  .og-clock-time {
-    font-size: clamp(40px, 8cqw, 68px);
-  }
+.og-main.og-lay-wide .og-program-wrap { border-radius: 12px; }
+.og-main.og-lay-wide .og-clock-time {
+  font-size: clamp(40px, 8cqw, 68px);
 }
 /* Flat transport row: tiles sit directly on the panel background — no bubble
    container, no grid. Prev · Play/Pause (green) · Fade · Next, then Panic pushed
@@ -1364,15 +1382,13 @@
 .og-edit-empty {
   padding: 18px 8px;
 }
-@media (max-width: 920px) {
-  .og-program-pane {
-    align-items: stretch;
-  }
-  .og-clock,
-  .og-transport {
-    width: auto;
-    max-width: none;
-  }
+.og-main:is(.og-lay-medium, .og-lay-narrow) .og-program-pane {
+  align-items: stretch;
+  container-type: inline-size;
+}
+.og-main:is(.og-lay-medium, .og-lay-narrow) :is(.og-clock, .og-transport) {
+  width: auto;
+  max-width: none;
 }
 
 /* Playback panel pass: visible resize rails, a flatter cue-list header action,
@@ -1449,13 +1465,6 @@
 .og-splitter-h::after {
   inset: -8px 0;
 }
-@media (max-width: 920px) {
-  .og-splitter-v,
-  .og-splitter-h {
-    display: none;
-  }
-}
-
 /* Shared app icons from the uploaded SF Symbol exports. */
 .og-svg-icon {
   display: inline-block;
@@ -1622,8 +1631,10 @@
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--text) 10%, var(--border));
   border-radius: 5px;
@@ -1671,7 +1682,7 @@
   background: color-mix(in srgb, var(--s1) 80%, transparent);
 }
 .og-bottom-tab {
-  min-height: 34px; padding: 6px 15px;
+  min-height: 44px; padding: 6px 15px;
   border-radius: var(--ui-radius-control, 12px);
   background: color-mix(in srgb, var(--s2) 80%, transparent);
   border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
@@ -1688,10 +1699,15 @@
   background: color-mix(in srgb, var(--accent) 18%, var(--s2));
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
+#outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 .og-bottom-hint { margin-left: auto; font-size: 12px; color: var(--text3); white-space: nowrap; }
 .og-main.og-has-sel .og-bottom-hint { display: none; }
 
 /* ── WIDE (>1180): keep 3 columns; collapse the clip editor when idle ─────── */
+.og-main.og-lay-wide :is(#og-split-c, #og-split-i, #og-split-h) { display: grid; }
 .og-main.og-lay-wide #og-bottom-tabs { display: none; }
 .og-main.og-lay-wide #og-bottom {
   flex: 0 0 var(--og-h-edit, 200px); display: flex; flex-direction: column; min-height: 0;
@@ -1708,6 +1724,7 @@
 .og-main.og-lay-medium .og-toprow > .og-pane { min-width: 0; }
 .og-main.og-lay-medium .og-toprow > .og-cuelist-pane { flex: 0 0 clamp(260px, 30%, 320px); max-height: none; }
 .og-main.og-lay-medium .og-toprow > .og-program-pane { flex: 1 1 auto; min-width: 320px; }
+.og-main.og-lay-medium .og-program-top > .og-program-wrap { flex: 1 1 auto; width: auto; }
 .og-main.og-lay-medium #og-split-c,
 .og-main.og-lay-medium #og-split-i,
 .og-main.og-lay-medium #og-split-h { display: none; }
@@ -1749,6 +1766,13 @@
 .og-main.og-lay-narrow .og-program-top { flex-direction: column; align-items: stretch; }
 .og-main.og-lay-narrow .og-program-top > .og-program-wrap { flex: 0 0 auto; width: auto; max-width: 100%; }
 .og-main.og-lay-narrow .og-meters { flex: 0 0 auto; height: 64px; justify-content: flex-start; }
+
+@media (forced-colors: active) {
+  #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible {
+    outline-color: Highlight;
+  }
+  .og-bottom-tab.on { border-color: Highlight; }
+}
 
 /* ── SFX board: collapse the Pad Editor when no pad is selected ───────────── */
 .og-sfx.og-no-padsel > #og-split-sh { display: none; }

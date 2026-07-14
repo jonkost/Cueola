@@ -20,8 +20,17 @@
 export const ASSETS = [
   'cueola-entitlements.js',
   'cueola-avatar-profile.js',
+  'cueola-assignment-model.js',
+  'cueola-export-model.js',
   'cueola-identity.js',
   'cueola-live-session.js',
+  'cueola-prompter-session.js',
+  'cueola-script-operator-protocol.js',
+  'script-operator.js',
+  'script-operator.css',
+  'outrangutan/output-protocol.js',
+  'outrangutan/output-command-queue.js',
+  'outrangutan/stream-deck-label.js',
   'cueola-app.js',
   'outrangutan/outrangutan.js',
   'outrangutan/outrangutan.css',
@@ -29,7 +38,7 @@ export const ASSETS = [
 ];
 // sw.js repeats the explicit versioned shell URLs. Rewriting it from the same
 // hashes makes the service-worker cache name change mechanically with assets.
-export const PAGES = ['index.html', 'dashboard.html', 'sw.js'];
+export const PAGES = ['index.html', 'dashboard.html', 'script-operator.html', 'outrangutan/output.html', 'sw.js'];
 
 const VERSIONED_REF_RE = /["'(]([\w./-]+\.(?:js|css))\?v=([\w.-]+)/g;
 
@@ -47,7 +56,7 @@ export function rewriteVersions(pageText, versionByAsset) {
   const changes = [];
   let out = pageText;
   for (const [asset, hash] of Object.entries(versionByAsset)) {
-    const re = new RegExp(`(["'(])(${escapeRegex(asset)})\\?v=([\\w.-]+)`, 'g');
+    const re = new RegExp(`(["'(])((?:\\.\\./)*${escapeRegex(asset)})\\?v=([\\w.-]+)`, 'g');
     out = out.replace(re, (whole, quote, path, oldV) => {
       if (oldV !== hash) changes.push({ asset, from: oldV, to: hash });
       return `${quote}${path}?v=${hash}`;
@@ -61,7 +70,8 @@ export function rewriteVersions(pageText, versionByAsset) {
 export function findUnmanagedRefs(pageText) {
   const unmanaged = new Set();
   for (const m of pageText.matchAll(VERSIONED_REF_RE)) {
-    if (!ASSETS.includes(m[1])) unmanaged.add(m[1]);
+    const normalized = m[1].replace(/^(?:\.\.\/)+/, '');
+    if (!ASSETS.includes(normalized)) unmanaged.add(m[1]);
   }
   return [...unmanaged];
 }

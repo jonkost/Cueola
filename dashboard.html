@@ -431,6 +431,29 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .assignment-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .assignment-position{background:var(--s3);border:1px solid var(--bord2);border-radius:7px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;width:100%}
 .assignment-position:focus{border-color:var(--accent)}
+.assignment-sync-state{display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.45}
+.assignment-state-pill{flex-shrink:0;border:1px solid var(--bord2);border-radius:999px;padding:2px 7px;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+.assignment-sync-state[data-state="saved"] .assignment-state-pill,.assignment-sync-state[data-state="empty"] .assignment-state-pill{color:var(--green);border-color:color-mix(in srgb,var(--green) 42%,transparent)}
+.assignment-sync-state[data-state="loading"] .assignment-state-pill,.assignment-sync-state[data-state="saving"] .assignment-state-pill{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+.assignment-sync-state[data-state="unsaved"] .assignment-state-pill,.assignment-sync-state[data-state="conflict"] .assignment-state-pill,.assignment-sync-state[data-state="offline"] .assignment-state-pill{color:var(--yellow);border-color:color-mix(in srgb,var(--yellow) 42%,transparent)}
+.assignment-sync-state[data-state="error"] .assignment-state-pill,.assignment-sync-state[data-state="denied"] .assignment-state-pill{color:var(--red);border-color:color-mix(in srgb,var(--red) 42%,transparent)}
+.assignment-state-copy{flex:1;min-width:0}
+.assignment-state-action{flex-shrink:0;border:1px solid var(--bord2);border-radius:7px;background:transparent;color:var(--text2);padding:5px 8px;font-size:10px;font-weight:700;cursor:pointer}
+.assignment-state-action:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.assignment-verified-row{display:flex;flex-direction:column;gap:4px;padding:9px 0;border-bottom:1px solid var(--border)}
+.assignment-verified-row:last-child{border-bottom:none}
+.assignment-verified-main{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.assignment-verified-name{font-size:12px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.assignment-verified-position{font-size:11px;font-family:var(--mono);font-weight:700;color:var(--accent);white-space:nowrap}
+.assignment-verified-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:var(--text3);font-family:var(--mono);word-break:break-word}
+.assignment-paperwork{font-size:11px;color:var(--text2);line-height:1.45}
+.assignment-link-ok{color:var(--green)}
+.assignment-link-warn{color:var(--yellow)}
+.assignment-empty{font-size:12px;color:var(--text3);padding:8px 0;line-height:1.5}
+.p-name-main{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-profile-link{display:block;margin-top:2px;font-size:9px;font-family:var(--mono);font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-profile-link.unlinked{color:var(--yellow)}
+.participant-role-select:disabled,.participant-role-custom:disabled{opacity:.55;cursor:not-allowed}
 
 /* Admin level row in detail */
 .level-tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-family:var(--mono);letter-spacing:.06em}
@@ -940,6 +963,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- ── TOAST ── -->
 <div class="toast" id="toast">Copied!</div>
 
+<script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script>
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
@@ -1148,6 +1172,11 @@ let sessionScope = 'all';        // 'mine' | 'all' — standard admins default t
 let deleteMode   = 'soft';       // what the confirm modal will do: 'soft' | 'purge'
 let activeCode   = null;
 let createdCode  = null;
+let detailAssignmentLoadId = 0;
+let detailAssignmentState = {
+  code:null, status:'idle', detail:'', profiles:[], records:[], revision:0,
+  links:new Map(), dirty:false, fromCache:false,
+};
 const DELETED_KEEP_MS = 30 * 24 * 3600 * 1000;
 const SCOPE_KEY = id => `cueola_scope_${id}`;
 const LEARNER_POSITIONS = ['PM','ENG Lead','Show Caller','Camera','Audio','GFX','Playback','Lighting','Stream','Stage Manager','Talent','Safety Lead'];
@@ -1519,7 +1548,9 @@ function renderSessions() {
     const startDisplay = s.startTime ? formatTime12(s.startTime) : '—';
     const isActive = s.status === 'active';
     const learnerCount = getLearners(s).length;
-    const assignedCount = Object.keys(s.assignments || {}).length;
+    const assignedCount = Array.isArray(s.roleAssignments)
+      ? s.roleAssignments.length
+      : (Array.isArray(s.prePro?.roleAssignments) ? s.prePro.roleAssignments.length : Object.keys(s.assignments || {}).length);
     const pbContributors = new Set((Array.isArray(s.preProActivity) ? s.preProActivity : []).map(e => e && e.by).filter(Boolean)).size;
 
     // Collect unique cue types present in this session
@@ -1672,6 +1703,16 @@ function openAccountsPage() {
 let identityCodes = [];      // [{id, role, label, active, createdBy, createdAt, ...}]
 let identityProfiles = [];   // [{id, username, fullName, role, sessions, codeUsed, active, ...}]
 
+function dashboardProfileId(profile) {
+  return window.CueolaAssignmentModel?.profileIdFor?.(profile) || profile?.profileId || '';
+}
+
+function dashboardProfileAliases(profile) {
+  const current = dashboardProfileId(profile);
+  const ids = window.CueolaAssignmentModel?.profileIdentityIds?.(profile) || [current, ...(profile?.profileAliases || [])];
+  return [...new Set(ids.filter(id => id && id !== current))].slice(0, 40);
+}
+
 async function loadIdentityAdminData() {
   if (!window._firebaseReady) { await waitForFirebase(); }
   try {
@@ -1788,7 +1829,7 @@ function renderRoster() {
     return `<div class="overview-row roster-row${active ? '' : ' inactive'}">
       <input type="checkbox" class="roster-check" data-roster-user="${escapeHtml(u)}" aria-label="Select ${escapeHtml(u)}">
       <span class="roster-main"><b>${escapeHtml(p.fullName || u)}</b> <span class="roster-user">@${escapeHtml(u)}</span>
-        <span class="roster-sub">${p.role === 'admin' ? 'admin · ' : ''}code ${escapeHtml(p.codeUsed || '—')} · seen ${rosterAgo(p.lastSeen)}</span>
+        <span class="roster-sub">${p.role === 'admin' ? 'admin · ' : ''}code ${escapeHtml(p.codeUsed || '—')} · profile ${escapeHtml(dashboardProfileId(p) || 'migration pending')} · seen ${rosterAgo(p.lastSeen)}</span>
         <span class="roster-sessions">${sessions}</span></span>
       <span class="roster-pill ${active ? 'ok' : 'off'}">${active ? 'ACTIVE' : 'OFF'}</span>
       <span class="roster-actions">
@@ -1822,9 +1863,12 @@ async function rosterRename(username) {
     // New doc first (rules re-check the login code is active), then tombstone.
     const fresh = { username: clean, fullName: p.fullName, role: p.role, avatar: p.avatar || { type: 'initials' },
       theme: p.theme || 'cool', sessions: p.sessions || [], codeUsed: p.codeUsed,
+      profileId:dashboardProfileId(p), profileAliases:dashboardProfileAliases(p),
       createdAt: Date.now(), lastSeen: p.lastSeen || Date.now() };
     await window._setDoc(window._doc(db(), 'profiles', clean), fresh);
-    await window._updateDoc(window._doc(db(), 'profiles', username), { active: false, renamedTo: clean });
+    await window._updateDoc(window._doc(db(), 'profiles', username), {
+      profileId:dashboardProfileId(p), profileAliases:dashboardProfileAliases(p), active: false, renamedTo: clean,
+    });
   } catch (e) {
     showToast(e.code === 'permission-denied'
       ? 'Rename blocked — their login code is revoked. Reactivate it first.' : 'Rename failed: ' + e.message);
@@ -1844,8 +1888,18 @@ async function rosterMerge(username) {
   if (!confirm(`Merge @${username} into @${clean}? Sessions are combined; @${username} stops signing in.`)) return;
   try {
     const merged = [...new Set([...(dst.sessions || []), ...(src.sessions || [])])].slice(0, 100);
-    await window._updateDoc(window._doc(db(), 'profiles', clean), { sessions: merged });
-    await window._updateDoc(window._doc(db(), 'profiles', username), { active: false, mergedInto: clean });
+    const targetProfileId = dashboardProfileId(dst);
+    const aliases = [...new Set([
+      ...dashboardProfileAliases(dst),
+      dashboardProfileId(src),
+      ...dashboardProfileAliases(src),
+    ].filter(id => id && id !== targetProfileId))].slice(0, 40);
+    await window._updateDoc(window._doc(db(), 'profiles', clean), {
+      profileId:targetProfileId, profileAliases:aliases, sessions: merged,
+    });
+    await window._updateDoc(window._doc(db(), 'profiles', username), {
+      profileId:dashboardProfileId(src), profileAliases:dashboardProfileAliases(src), active: false, mergedInto: clean,
+    });
   } catch (e) { showToast('Merge failed: ' + e.message); return; }
   showToast(`@${username} merged into @${clean}.`);
   await loadIdentityAdminData();
@@ -2040,11 +2094,346 @@ function openCreatedSession() {
 }
 
 // ── SESSION DETAIL ─────────────────────────────────────────────
+function dashboardAssignmentModel() {
+  return window.CueolaAssignmentModel || null;
+}
+
+function sessionUsesCanonicalAssignments(sessionDoc) {
+  return Math.max(0, Number(sessionDoc?.assignmentRevision) || 0) > 0;
+}
+
+function assignmentIdentityIds(profile) {
+  const model = dashboardAssignmentModel();
+  return new Set((model?.profileIdentityIds?.(profile) || [dashboardProfileId(profile)]).filter(Boolean));
+}
+
+function normalizedIdentityLabel(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function profileNameAliases(profile) {
+  const values = [profile?.fullName, profile?.displayName, profile?.name, profile?.username, profile?.id];
+  [profile?.previousUsernames, profile?.renamedFrom, profile?.mergedFrom, profile?.aliases].forEach(value => {
+    if (Array.isArray(value)) values.push(...value);
+    else values.push(value);
+  });
+  return new Set(values.map(normalizedIdentityLabel).filter(Boolean));
+}
+
+function resolveParticipantProfile(participant, profiles) {
+  const live = (profiles || []).filter(profile => profile && profile.active !== false && !profile.renamedTo && !profile.mergedInto);
+  const explicitIds = new Set([
+    participant?.profileId,
+    ...(Array.isArray(participant?.profileAliases) ? participant.profileAliases : []),
+  ].map(value => String(value || '').trim()).filter(Boolean));
+  if (explicitIds.size) {
+    const matches = live.filter(profile => {
+      const ids = assignmentIdentityIds(profile);
+      return [...explicitIds].some(id => ids.has(id));
+    });
+    if (matches.length === 1) return { profile:matches[0], reason:'' };
+    if (matches.length > 1) return { profile:null, reason:'Profile ID matches more than one saved profile.' };
+  }
+
+  const username = normalizedIdentityLabel(participant?.username || participant?.usernameLower);
+  if (username) {
+    const matches = live.filter(profile => normalizedIdentityLabel(profile.username || profile.id) === username);
+    if (matches.length === 1) return { profile:matches[0], reason:'' };
+    if (matches.length > 1) return { profile:null, reason:'Username matches more than one saved profile.' };
+  }
+
+  const name = normalizedIdentityLabel(participant?.name || participant?.fullName || participant?.displayName);
+  if (!name) return { profile:null, reason:'Participant has no profile ID or display name.' };
+  const matches = new Map();
+  live.forEach(profile => {
+    if (profileNameAliases(profile).has(name)) matches.set(dashboardProfileId(profile), profile);
+  });
+  // A rename/merge tombstone can still point an old participant name at the
+  // current profile without turning the display name itself into identity.
+  (profiles || []).filter(profile => profile && (profile.renamedTo || profile.mergedInto)).forEach(profile => {
+    if (!profileNameAliases(profile).has(name)) return;
+    const target = normalizedIdentityLabel(profile.renamedTo || profile.mergedInto);
+    const current = live.find(candidate => normalizedIdentityLabel(candidate.username || candidate.id) === target);
+    if (current) matches.set(dashboardProfileId(current), current);
+  });
+  const unique = [...matches.values()];
+  if (unique.length === 1) return { profile:unique[0], reason:'' };
+  if (unique.length > 1) return { profile:null, reason:'Display name is not unique in the saved roster.' };
+  const missingId = [...explicitIds][0];
+  return { profile:null, reason:missingId
+    ? `Saved profile ${missingId} was not found.`
+    : 'No saved profile has this unique name or alias.' };
+}
+
+function legacyParticipantAssignment(sessionDoc, participant) {
+  const name = normalizedIdentityLabel(participant?.name);
+  const rows = Array.isArray(sessionDoc?.prePro?.roleAssignments)
+    ? sessionDoc.prePro.roleAssignments
+    : (Array.isArray(sessionDoc?.roleAssignments) ? sessionDoc.roleAssignments : []);
+  const row = rows.find(item => normalizedIdentityLabel(item?.person || item?.displayName || item?.name) === name);
+  if (row) return row;
+  const direct = sessionDoc?.assignments && typeof sessionDoc.assignments === 'object'
+    ? sessionDoc.assignments[participant?.name] : '';
+  return {
+    person:participant?.name || '',
+    position:String(direct || participant?.position || '').trim(),
+    paperwork:[],
+  };
+}
+
+function legacyParticipantPosition(sessionDoc, participant) {
+  const row = legacyParticipantAssignment(sessionDoc, participant);
+  return String(row?.positionLabel || row?.position || row?.role || '').trim();
+}
+
+function orderedDashboardAssignmentRecords(records, sessionDoc) {
+  const compatibility = Array.isArray(sessionDoc?.prePro?.roleAssignments)
+    ? sessionDoc.prePro.roleAssignments
+    : (Array.isArray(sessionDoc?.roleAssignments) ? sessionDoc.roleAssignments : []);
+  const order = new Map();
+  compatibility.forEach((row, index) => {
+    const id = String(row?.assignmentId || '').trim();
+    if (id && !order.has(id)) order.set(id, index);
+  });
+  return records.slice().sort((a, b) => {
+    const ai = order.has(a.assignmentId) ? order.get(a.assignmentId) : Number.MAX_SAFE_INTEGER;
+    const bi = order.has(b.assignmentId) ? order.get(b.assignmentId) : Number.MAX_SAFE_INTEGER;
+    return ai - bi || a.assignmentId.localeCompare(b.assignmentId);
+  });
+}
+
+function buildDashboardParticipantLinks(sessionDoc) {
+  const links = new Map();
+  const claimedProfiles = new Set();
+  const participants = Array.isArray(sessionDoc?.participants) ? sessionDoc.participants : [];
+  participants.forEach((participant, index) => {
+    const key = String(index);
+    const resolved = resolveParticipantProfile(participant, detailAssignmentState.profiles);
+    const profile = resolved.profile;
+    const profileId = profile ? dashboardProfileId(profile) : '';
+    let reason = resolved.reason;
+    if (profileId && claimedProfiles.has(profileId)) {
+      reason = 'Another participant row already links to this saved profile.';
+    } else if (profileId) {
+      claimedProfiles.add(profileId);
+    }
+    const usableProfile = reason ? null : profile;
+    const ids = usableProfile ? assignmentIdentityIds(usableProfile) : new Set();
+    const records = usableProfile
+      ? detailAssignmentState.records.filter(record => ids.has(record.profileId))
+      : [];
+    const legacyRow = legacyParticipantAssignment(sessionDoc, participant);
+    const projected = normalizedIdentityLabel(legacyParticipantPosition(sessionDoc, participant));
+    const primary = records.find(record => record.status === 'assigned' && normalizedIdentityLabel(record.positionLabel) === projected)
+      || records.find(record => record.status === 'assigned')
+      || records[0]
+      || null;
+    links.set(key, {
+      key, index, participant, profile:usableProfile,
+      profileId:usableProfile ? dashboardProfileId(usableProfile) : '',
+      reason:reason || '', records, primary, legacyRow,
+      additional:primary ? records.filter(record => record.assignmentId !== primary.assignmentId) : records.slice(),
+    });
+  });
+  detailAssignmentState.links = links;
+  return links;
+}
+
+function assignmentLoadErrorState(error) {
+  const code = String(error?.code || '').split('/').pop();
+  if (code === 'permission-denied') return {
+    status:'denied',
+    detail:'Firestore denied profiles or canonical assignments. The staged Phase 6 rules need an owner deploy; no role was treated as confirmed.',
+  };
+  if (code === 'unavailable' || code === 'deadline-exceeded' || navigator.onLine === false) return {
+    status:'offline',
+    detail:'Canonical assignments are unavailable offline. Reconnect before saving; no role was labeled Saved.',
+  };
+  return { status:'error', detail:`Could not load canonical assignments: ${error?.message || 'unknown error'}` };
+}
+
+function setDashboardAssignmentDisplayState(status, detail, { dirty=detailAssignmentState.dirty }={}) {
+  detailAssignmentState.status = status;
+  detailAssignmentState.detail = detail;
+  detailAssignmentState.dirty = dirty;
+  const sessionDoc = sessions.find(item => (item.code || item.id) === activeCode);
+  if (sessionDoc) renderLearnerAssignments(sessionDoc);
+}
+
+async function loadDashboardAssignmentSnapshots(sessionRef, profileRef, assignmentRef) {
+  const network = Promise.all([
+    window._getDoc(sessionRef), window._getDocs(profileRef), window._getDocs(assignmentRef),
+  ]).then(snapshots => ({ snapshots, forcedCache:false }));
+  if (!window._getDocFromCache || !window._getDocsFromCache) return network;
+  const timeoutToken = Symbol('dashboard-assignment-load-timeout');
+  let timer = 0;
+  const first = await Promise.race([
+    network,
+    new Promise(resolve => { timer = setTimeout(() => resolve(timeoutToken), 4500); }),
+  ]);
+  clearTimeout(timer);
+  if (first !== timeoutToken) return first;
+  try {
+    return {
+      snapshots:await Promise.all([
+        window._getDocFromCache(sessionRef),
+        window._getDocsFromCache(profileRef),
+        window._getDocsFromCache(assignmentRef),
+      ]),
+      forcedCache:true,
+    };
+  } catch (cacheError) {
+    const error = new Error('Firestore did not respond and no complete cached assignment copy is available.');
+    error.code = 'unavailable';
+    throw error;
+  }
+}
+
+async function hydrateDashboardAssignments(code) {
+  const requestId = ++detailAssignmentLoadId;
+  const sessionDoc = sessions.find(item => (item.code || item.id) === code);
+  if (!sessionDoc || !dashboardAssignmentModel()) {
+    setDashboardAssignmentDisplayState('error', 'The canonical assignment model is unavailable.');
+    return false;
+  }
+  detailAssignmentState = {
+    code, status:'loading', detail:'Loading saved profiles and canonical assignments…',
+    profiles:[], records:[], revision:Math.max(0, Number(sessionDoc.assignmentRevision) || 0),
+    links:new Map(), dirty:false, fromCache:false,
+  };
+  renderDashboardParticipants(sessionDoc, adminSession?.level === 'super');
+  renderLearnerAssignments(sessionDoc);
+  try {
+    const sessionRef = window._doc(db(), 'sessions', code);
+    const profileRef = window._collection(db(), 'profiles');
+    const assignmentRef = window._collection(db(), 'sessions', code, 'assignments');
+    const loaded = await loadDashboardAssignmentSnapshots(sessionRef, profileRef, assignmentRef);
+    const [sessionSnap, profileSnap, assignmentSnap] = loaded.snapshots;
+    if (requestId !== detailAssignmentLoadId || activeCode !== code) return false;
+    if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
+    const latestSession = sessionSnap.data() || {};
+    const profiles = [];
+    profileSnap.forEach(docSnap => profiles.push({ id:docSnap.id, ...(docSnap.data() || {}) }));
+    const records = [];
+    assignmentSnap.forEach(docSnap => {
+      const record = dashboardAssignmentModel().normalizeAssignmentRecord({ assignmentId:docSnap.id, ...(docSnap.data() || {}) });
+      if (record.productionSession === code) records.push(record);
+    });
+    const ordered = orderedDashboardAssignmentRecords(records, latestSession);
+    const fromCache = Boolean(loaded.forcedCache || sessionSnap.metadata?.fromCache || profileSnap.metadata?.fromCache || assignmentSnap.metadata?.fromCache);
+    Object.assign(sessionDoc, {
+      assignments:latestSession.assignments || {},
+      roleAssignments:Array.isArray(latestSession.roleAssignments) ? latestSession.roleAssignments : sessionDoc.roleAssignments,
+      prePro:latestSession.prePro || sessionDoc.prePro,
+    });
+    if (Object.prototype.hasOwnProperty.call(latestSession, 'assignmentRevision')) {
+      sessionDoc.assignmentRevision = Math.max(0, Number(latestSession.assignmentRevision) || 0);
+      sessionDoc.assignmentUpdatedAt = latestSession.assignmentUpdatedAt;
+      sessionDoc.assignmentUpdatedBy = latestSession.assignmentUpdatedBy;
+    } else {
+      delete sessionDoc.assignmentRevision;
+      delete sessionDoc.assignmentUpdatedAt;
+      delete sessionDoc.assignmentUpdatedBy;
+    }
+    const hasLegacy = Object.keys(latestSession.assignments || {}).length > 0
+      || (Array.isArray(latestSession.roleAssignments) && latestSession.roleAssignments.length > 0)
+      || (Array.isArray(latestSession.prePro?.roleAssignments) && latestSession.prePro.roleAssignments.length > 0);
+    let status = 'empty';
+    let detail = 'No canonical assignments have been saved for this session.';
+    if (fromCache || navigator.onLine === false) {
+      status = 'offline';
+      detail = `${ordered.length} cached assignment record${ordered.length === 1 ? '' : 's'} shown. Reconnect before saving; cached data is not a fresh confirmation.`;
+    } else if (ordered.length) {
+      status = 'saved';
+      detail = `${ordered.length} canonical assignment record${ordered.length === 1 ? '' : 's'} confirmed in Firestore · revision ${Math.max(0, Number(latestSession.assignmentRevision) || 0)}.`;
+    } else if (hasLegacy) {
+      status = 'unsaved';
+      detail = 'Legacy role selections are shown for review. Saving links only unique saved profiles and migrates them to canonical records.';
+    }
+    detailAssignmentState = {
+      code, status, detail, profiles, records:ordered,
+      revision:Math.max(0, Number(latestSession.assignmentRevision) || 0),
+      links:new Map(), dirty:false, fromCache,
+    };
+    renderDashboardParticipants(sessionDoc, adminSession?.level === 'super');
+    renderLearnerAssignments(sessionDoc);
+    return true;
+  } catch (error) {
+    if (requestId !== detailAssignmentLoadId || activeCode !== code) return false;
+    const state = assignmentLoadErrorState(error);
+    detailAssignmentState = {
+      code, status:state.status, detail:state.detail, profiles:[], records:[],
+      revision:Math.max(0, Number(sessionDoc.assignmentRevision) || 0),
+      links:new Map(), dirty:false, fromCache:false,
+    };
+    renderDashboardParticipants(sessionDoc, adminSession?.level === 'super');
+    renderLearnerAssignments(sessionDoc);
+    console.warn('Dashboard assignment hydration failed.', error);
+    return false;
+  }
+}
+
+async function retryDashboardAssignmentLoad() {
+  if (!activeCode) return;
+  if (detailAssignmentState.dirty && !confirm('Reload the server copy and discard this role draft?')) return;
+  await hydrateDashboardAssignments(activeCode);
+}
+
+function renderDashboardParticipants(sessionDoc, isSuper) {
+  const pList = document.getElementById('detail-participants');
+  if (!pList) return;
+  const parts = Array.isArray(sessionDoc?.participants) ? sessionDoc.participants : [];
+  if (!parts.length) {
+    detailAssignmentState.links = new Map();
+    pList.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No participants have joined yet.</div>';
+    return;
+  }
+  const links = buildDashboardParticipantLinks(sessionDoc);
+  pList.innerHTML = '';
+  parts.forEach((participant, index) => {
+    const link = links.get(String(index));
+    const assignedRole = link?.primary?.positionLabel || legacyParticipantPosition(sessionDoc, participant);
+    const customRole = assignedRole && !LEARNER_POSITIONS.includes(assignedRole);
+    const roleOptions = LEARNER_POSITIONS.map(position => `<option value="${escapeHtml(position)}" ${position === assignedRole ? 'selected' : ''}>${escapeHtml(position)}</option>`).join('');
+    const isAdmin = participant.role === 'instructor' || participant.role === 'admin';
+    const saving = detailAssignmentState.status === 'saving';
+    const disabled = !link?.profile || saving || ['loading','denied'].includes(detailAssignmentState.status)
+      || (detailAssignmentState.status === 'error' && !detailAssignmentState.profiles.length);
+    const profileMeta = link?.profile
+      ? `${link.profile.username ? '@' + link.profile.username + ' · ' : ''}${link.profileId}${link.additional.length ? ` · +${link.additional.length} more role${link.additional.length === 1 ? '' : 's'}` : ''}`
+      : (detailAssignmentState.status === 'loading' ? 'Loading saved profile…' : `Profile link required · ${link?.reason || 'No unique saved profile match.'}`);
+    const div = document.createElement('div');
+    div.className = 'participant';
+    div.innerHTML = `
+      <div class="p-name" title="${escapeHtml(participant.name || 'Unknown')}">
+        <span class="p-name-main">${escapeHtml(participant.name || 'Unknown')}</span>
+        <span class="p-profile-link ${link?.profile ? '' : 'unlinked'}" title="${escapeHtml(profileMeta)}">${escapeHtml(profileMeta)}</span>
+      </div>
+      <select class="participant-role-select" data-participant-index="${index}" data-profile-id="${escapeHtml(link?.profileId || '')}" data-primary-assignment-id="${escapeHtml(link?.primary?.assignmentId || '')}" onchange="toggleParticipantCustomRole(this);markDashboardAssignmentsUnsaved()" ${disabled ? 'disabled' : ''}>
+        <option value="">Assign role</option>
+        ${roleOptions}
+        <option value="__custom" ${customRole ? 'selected' : ''}>Custom...</option>
+      </select>
+      <input class="participant-role-custom" data-role-custom-index="${index}" value="${customRole ? escapeHtml(assignedRole) : ''}" placeholder="Custom role" maxlength="160" oninput="markDashboardAssignmentsUnsaved()" ${customRole ? '' : 'hidden'} ${disabled ? 'disabled' : ''}>
+      <span class="p-role ${isAdmin ? 'inst' : 'stud'}">${isAdmin ? 'ADMIN' : 'STU'}</span>
+      ${participant.joinedAt ? `<div class="p-joined">${new Date(participant.joinedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+      ${isSuper ? `<button class="p-rename" title="Rename ${escapeHtml(participant.name || '')}" aria-label="Rename ${escapeHtml(participant.name || '')}" data-pname="${escapeHtml(participant.name || '')}" onclick="renameParticipant(this.dataset.pname)">✎</button>` : ''}
+      ${isSuper ? `<button class="p-remove" title="Remove ${escapeHtml(participant.name || '')} from this session" aria-label="Remove ${escapeHtml(participant.name || '')}" data-pname="${escapeHtml(participant.name || '')}" onclick="removeParticipant(this.dataset.pname)">×</button>` : ''}
+    `;
+    pList.appendChild(div);
+  });
+}
+
 async function showDetail(code, e) {
   if (e) e.stopPropagation();
   activeCode = code;
   const s = sessions.find(x=>(x.code||x.id)===code);
   if (!s) return;
+  detailAssignmentState = {
+    code, status:'loading', detail:'Loading saved profiles and canonical assignments…',
+    profiles:[], records:[], revision:Math.max(0, Number(s.assignmentRevision) || 0),
+    links:new Map(), dirty:false, fromCache:false,
+  };
 
   const beats    = s.beats || s.cues || [];
   const cueCount = beats.length;
@@ -2076,38 +2465,7 @@ async function showDetail(code, e) {
     : 'Unknown';
 
   const isSuper = adminSession && adminSession.level === 'super';
-  const pList = document.getElementById('detail-participants');
-  const parts = s.participants || [];
-  if (!parts.length) {
-    pList.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No participants have joined yet.</div>';
-  } else {
-    pList.innerHTML = '';
-    const assignments = s.assignments || {};
-    parts.forEach(p => {
-      const colors = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316'];
-      const col = colors[Math.abs(hashStr(p.name||'')>>1) % colors.length];
-      const isAdmin = p.role==='instructor' || p.role==='admin';
-      const assignedRole = assignments[p.name] || p.position || '';
-      const customRole = assignedRole && !LEARNER_POSITIONS.includes(assignedRole);
-      const roleOptions = LEARNER_POSITIONS.map(pos => `<option value="${escapeHtml(pos)}" ${pos===assignedRole?'selected':''}>${escapeHtml(pos)}</option>`).join('');
-      const div = document.createElement('div');
-      div.className = 'participant';
-      div.innerHTML = `
-        <div class="p-name" title="${escapeHtml(p.name||'Unknown')}">${escapeHtml(p.name||'Unknown')}</div>
-        <select class="participant-role-select" data-learner-name="${escapeHtml(p.name||'')}" onchange="toggleParticipantCustomRole(this)">
-          <option value="">Assign role</option>
-          ${roleOptions}
-          <option value="__custom" ${customRole?'selected':''}>Custom...</option>
-        </select>
-        <input class="participant-role-custom" data-role-custom-for="${escapeHtml(p.name||'')}" value="${customRole?escapeHtml(assignedRole):''}" placeholder="Custom role" ${customRole?'':'hidden'}>
-        <span class="p-role ${isAdmin?'inst':'stud'}">${isAdmin?'ADMIN':'STU'}</span>
-        ${p.joinedAt?`<div class="p-joined">${new Date(p.joinedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`:''}
-        ${isSuper?`<button class="p-rename" title="Rename ${escapeHtml(p.name||'')}" aria-label="Rename ${escapeHtml(p.name||'')}" data-pname="${escapeHtml(p.name||'')}" onclick="renameParticipant(this.dataset.pname)">✎</button>`:''}
-        ${isSuper?`<button class="p-remove" title="Remove ${escapeHtml(p.name||'')} from this session" aria-label="Remove ${escapeHtml(p.name||'')}" data-pname="${escapeHtml(p.name||'')}" onclick="removeParticipant(this.dataset.pname)">×</button>`:''}
-      `;
-      pList.appendChild(div);
-    });
-  }
+  renderDashboardParticipants(s, isSuper);
 
   const addWrap = document.getElementById('detail-add-student');
   if (isSuper) {
@@ -2124,6 +2482,7 @@ async function showDetail(code, e) {
   renderPlandaBearPaperwork(s);
   renderLearnerAssignments(s);
   showModal('modal-detail');
+  void hydrateDashboardAssignments(code);
 }
 
 function fmtAgo(ts) {
@@ -2303,7 +2662,9 @@ function renderMergeTool(s, isSuper) {
         <select class="merge-select" id="merge-to"><option value="">Keep…</option>${opts}</select>
         <button class="merge-btn" onclick="mergeParticipants()">Merge</button>
       </div>
-      <div class="merge-tool-hint">The duplicate is removed and its learner position moves to the kept person.</div>
+      <div class="merge-tool-hint">${sessionUsesCanonicalAssignments(s)
+        ? 'The duplicate participant row is removed. Canonical roles stay bound to saved profile IDs; merge roster profiles separately when identities are duplicated.'
+        : 'The duplicate is removed and its legacy learner position moves to the kept person.'}</div>
     </div>`;
 }
 
@@ -2314,15 +2675,22 @@ async function renameParticipant(oldName) {
   if (!next || next === oldName) return;
   const s = sessions.find(x=>(x.code||x.id)===activeCode);
   if (!s) return;
-  const participants = (s.participants || []).map(p => p && p.name === oldName ? { ...p, name: next } : p);
+  const linkedProfileId = [...detailAssignmentState.links.values()]
+    .find(link => link.participant?.name === oldName)?.profileId || '';
+  const participants = (s.participants || []).map(p => p && p.name === oldName
+    ? { ...p, name: next, ...(linkedProfileId && !p.profileId ? { profileId:linkedProfileId } : {}) }
+    : p);
   const assignments = Object.assign({}, s.assignments || {});
-  if (Object.prototype.hasOwnProperty.call(assignments, oldName)) {
+  const canonical = sessionUsesCanonicalAssignments(s);
+  if (!canonical && Object.prototype.hasOwnProperty.call(assignments, oldName)) {
     if (!assignments[next]) assignments[next] = assignments[oldName];
     delete assignments[oldName];
   }
   try {
-    await window._updateDoc(window._doc(db(), 'sessions', activeCode), { participants, assignments });
-    s.participants = participants; s.assignments = assignments;
+    const patch = canonical ? { participants } : { participants, assignments };
+    await window._updateDoc(window._doc(db(), 'sessions', activeCode), patch);
+    s.participants = participants;
+    if (!canonical) s.assignments = assignments;
     showDetail(activeCode);
     renderSessions(); renderSuperOverview(); updateStats();
     showToast(`Renamed to ${next}`);
@@ -2341,13 +2709,16 @@ async function mergeParticipants() {
   if (!s) return;
   const participants = (s.participants || []).filter(p => p && p.name !== fromName);
   const assignments = Object.assign({}, s.assignments || {});
-  if (assignments[fromName]) {
+  const canonical = sessionUsesCanonicalAssignments(s);
+  if (!canonical && assignments[fromName]) {
     if (!assignments[toName]) assignments[toName] = assignments[fromName];
     delete assignments[fromName];
   }
   try {
-    await window._updateDoc(window._doc(db(), 'sessions', activeCode), { participants, assignments });
-    s.participants = participants; s.assignments = assignments;
+    const patch = canonical ? { participants } : { participants, assignments };
+    await window._updateDoc(window._doc(db(), 'sessions', activeCode), patch);
+    s.participants = participants;
+    if (!canonical) s.assignments = assignments;
     showDetail(activeCode);
     renderSessions(); renderSuperOverview(); updateStats();
     showToast(`Merged ${fromName} into ${toName}`);
@@ -2367,19 +2738,87 @@ function getLearners(sessionDoc) {
 
 function renderLearnerAssignments(sessionDoc) {
   const wrap = document.getElementById('detail-assignments');
-  if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Assign each production role from the dropdown beside the person above. Choose Custom to type a new role.</div>';
+  if (!wrap) return;
+  const state = detailAssignmentState.code === (sessionDoc?.code || sessionDoc?.id)
+    ? detailAssignmentState
+    : { status:'loading', detail:'Loading canonical assignments…', records:[], links:new Map(), revision:0 };
+  const labels = {
+    idle:'Waiting', loading:'Loading', empty:'Empty', saved:'Saved', unsaved:'Unsaved',
+    saving:'Saving', conflict:'Conflict', error:'Error', denied:'Permission denied', offline:'Offline',
+  };
+  const retryable = ['error','denied','offline','conflict'].includes(state.status);
+  const actionLabel = state.status === 'conflict' ? 'Load server copy' : 'Retry';
+  const statusHtml = `<div class="assignment-sync-state" data-state="${escapeHtml(state.status)}" role="status" aria-live="polite">
+    <span class="assignment-state-pill">${escapeHtml(labels[state.status] || 'Waiting')}</span>
+    <span class="assignment-state-copy">${escapeHtml(state.detail || '')}</span>
+    ${retryable ? `<button class="assignment-state-action" type="button" onclick="retryDashboardAssignmentLoad()">${actionLabel}</button>` : ''}
+  </div>`;
+
+  const recordsHtml = (state.records || []).map(record => {
+    const profile = (state.profiles || []).find(candidate => assignmentIdentityIds(candidate).has(record.profileId));
+    const portalLinked = Boolean(profile && Array.isArray(profile.sessions) && profile.sessions.includes(state.code));
+    const profileLabel = profile?.username ? `@${profile.username}` : record.profileId;
+    const savedAt = record.updatedAt ? new Date(record.updatedAt).toLocaleString() : 'timestamp unavailable';
+    const paperwork = record.paperworkLabels?.length
+      ? `Paperwork: ${record.paperworkLabels.join(', ')}`
+      : 'No paperwork linked';
+    return `<div class="assignment-verified-row">
+      <div class="assignment-verified-main">
+        <span class="assignment-verified-name" title="${escapeHtml(record.displayName)}">${escapeHtml(record.displayName)}</span>
+        <span class="assignment-verified-position">${escapeHtml(record.positionLabel)}</span>
+      </div>
+      <div class="assignment-paperwork">${escapeHtml(paperwork)}</div>
+      <div class="assignment-verified-meta">
+        <span>${escapeHtml(profileLabel)}</span>
+        <span>${escapeHtml(record.profileId)}</span>
+        <span>${escapeHtml(record.status)}</span>
+        <span title="${escapeHtml(savedAt)}">saved ${escapeHtml(fmtAgo(record.updatedAt))}</span>
+        <span>by ${escapeHtml(record.assignedByLabel)}</span>
+        <span class="${portalLinked ? 'assignment-link-ok' : 'assignment-link-warn'}">${portalLinked ? 'portal linked' : 'profile not attached to session'}</span>
+      </div>
+    </div>`;
+  }).join('');
+  const unlinked = [...(state.links || new Map()).values()].filter(link => !link.profile);
+  const unlinkedHtml = state.status === 'loading' || !unlinked.length ? '' : unlinked.map(link => `
+    <div class="assignment-verified-row">
+      <div class="assignment-verified-main">
+        <span class="assignment-verified-name">${escapeHtml(link.participant?.name || 'Unnamed participant')}</span>
+        <span class="assignment-verified-position assignment-link-warn">Profile link required</span>
+      </div>
+      <div class="assignment-paperwork">${escapeHtml(link.reason || 'No unique saved profile match.')} This row cannot create a name-only canonical assignment.</div>
+    </div>`).join('');
+  const emptyHtml = !recordsHtml && !unlinkedHtml
+    ? `<div class="assignment-empty">${state.status === 'loading'
+      ? 'Checking Firestore for saved profile links and assignments…'
+      : 'No canonical role records to verify yet. A participant must link to one unique saved profile before a role can be saved.'}</div>`
+    : '';
+  wrap.innerHTML = statusHtml + recordsHtml + unlinkedHtml + emptyHtml;
 }
 
 function toggleParticipantCustomRole(select) {
-  const name = select?.dataset?.learnerName || '';
-  const input = document.querySelector(`[data-role-custom-for="${CSS.escape(name)}"]`);
+  const input = select?.closest('.participant')?.querySelector('.participant-role-custom');
   if (!input) return;
   input.hidden = select.value !== '__custom';
   if (!input.hidden) input.focus();
 }
 
+function markDashboardAssignmentsUnsaved() {
+  if (detailAssignmentState.status === 'saving') return;
+  detailAssignmentState.dirty = true;
+  if (detailAssignmentState.status === 'offline') {
+    detailAssignmentState.detail = 'Draft changed while offline. Reconnect before saving; the cached copy is not a fresh confirmation.';
+  } else if (detailAssignmentState.status === 'conflict') {
+    detailAssignmentState.detail = 'This draft still conflicts with a newer server revision. Load the server copy before reapplying changes.';
+  } else {
+    detailAssignmentState.status = 'unsaved';
+    detailAssignmentState.detail = 'Role draft changed. Save Session to confirm canonical records and compatibility projections in Firestore.';
+  }
+  const sessionDoc = sessions.find(item => (item.code || item.id) === activeCode);
+  if (sessionDoc) renderLearnerAssignments(sessionDoc);
+}
+
 async function saveDetailMetadata(showToastOnSave=true) {
-  if (!activeCode) return;
+  if (!activeCode) return false;
   const nextTitle = document.getElementById('detail-show-input').value.trim() || 'Untitled Show';
   const nextStart = normalizeTimeValue(document.getElementById('detail-start-input').value);
   const nextOwner = document.getElementById('detail-owner-input').value.trim();
@@ -2399,37 +2838,253 @@ async function saveDetailMetadata(showToastOnSave=true) {
     updateStats();
     renderSuperOverview();
     if (showToastOnSave) showToast('Session details updated');
+    return true;
   } catch(e) {
     showToast('Update failed: ' + e.message);
+    return false;
   }
 }
 
 function saveDetailTitle() { return saveDetailMetadata(); }
 
+function dashboardAssignmentActor() {
+  const raw = String(adminSession?.id || 'dashboard').replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 140);
+  return {
+    id:`admin_${raw || 'dashboard'}`,
+    label:String(adminSession?.name || 'Cueola administrator').trim().slice(0, 160) || 'Cueola administrator',
+  };
+}
+
+function dashboardAssignmentCompatibility(records) {
+  const model = dashboardAssignmentModel();
+  return model.compatibilityRows(records).map((row, index) => ({
+    ...row,
+    assignmentId:records[index].assignmentId,
+    profileId:records[index].profileId,
+    positionId:records[index].positionId,
+    paperworkIds:records[index].paperworkIds.slice(),
+    status:records[index].status,
+    assignedBy:records[index].assignedBy,
+    assignedByLabel:records[index].assignedByLabel,
+    createdAt:records[index].createdAt,
+    updatedAt:records[index].updatedAt,
+    revision:records[index].revision,
+  }));
+}
+
+function selectedDashboardRole(select) {
+  if (!select) return '';
+  if (select.value !== '__custom') return String(select.value || '').trim();
+  return String(select.closest('.participant')?.querySelector('.participant-role-custom')?.value || '').trim();
+}
+
 async function saveLearnerAssignments(showToastOnSave=true) {
-  if (!activeCode) return;
-  const assignments = {};
-  document.querySelectorAll('.participant-role-select[data-learner-name]').forEach(input => {
-    const name = input.dataset.learnerName;
-    const custom = document.querySelector(`[data-role-custom-for="${CSS.escape(name)}"]`)?.value?.trim() || '';
-    const position = input.value === '__custom' ? custom : input.value.trim();
-    if (name && position) assignments[name] = position;
+  if (!activeCode) return false;
+  if (detailAssignmentState.status === 'saving') return false;
+  const model = dashboardAssignmentModel();
+  const sessionDoc = sessions.find(item => (item.code || item.id) === activeCode);
+  if (!model || !sessionDoc || !window._runTransaction || !window._collection || !window._getDocs) {
+    setDashboardAssignmentDisplayState('error', 'Canonical cloud saving is unavailable. The role draft remains unchanged.', { dirty:true });
+    showToast('Assignments unavailable — draft kept');
+    return false;
+  }
+  if (detailAssignmentState.code !== activeCode || ['idle','loading'].includes(detailAssignmentState.status)) {
+    setDashboardAssignmentDisplayState('error', 'Assignments are still loading. Retry after the canonical state is available.', { dirty:detailAssignmentState.dirty });
+    showToast('Wait for assignments to finish loading');
+    return false;
+  }
+  if (detailAssignmentState.fromCache || detailAssignmentState.status === 'offline') {
+    setDashboardAssignmentDisplayState('offline', 'Assignments were loaded from offline cache. Reconnect and load the server copy before saving; the draft remains unchanged.', { dirty:true });
+    showToast('Reconnect before saving assignments');
+    return false;
+  }
+
+  const selects = Array.from(document.querySelectorAll('.participant-role-select[data-participant-index]'));
+  const nextRecords = detailAssignmentState.records.slice();
+  const actor = dashboardAssignmentActor();
+  const now = Date.now();
+  const unlinkedLegacy = [];
+  for (const select of selects) {
+    const link = detailAssignmentState.links.get(String(select.dataset.participantIndex));
+    const desiredLabel = selectedDashboardRole(select);
+    if (select.value === '__custom' && !desiredLabel) {
+      setDashboardAssignmentDisplayState('error', `Type a custom role for ${link?.participant?.name || 'this participant'}, or choose a saved role.`, { dirty:true });
+      showToast('Custom role cannot be blank');
+      return false;
+    }
+    if (!link?.profile) {
+      if (desiredLabel && !link?.primary && detailAssignmentState.revision === 0) {
+        unlinkedLegacy.push(link?.participant?.name || 'Unnamed participant');
+      }
+      continue;
+    }
+    if (select.dataset.profileId !== link.profileId) {
+      setDashboardAssignmentDisplayState('conflict', 'A participant profile link changed while this editor was open. The draft remains; load the server copy before saving.', { dirty:true });
+      showToast('Profile link changed — draft kept');
+      return false;
+    }
+
+    const previous = link.primary;
+    const previousIndex = previous
+      ? nextRecords.findIndex(record => record.assignmentId === previous.assignmentId)
+      : -1;
+    if (!desiredLabel) {
+      if (previousIndex >= 0) nextRecords.splice(previousIndex, 1);
+      continue;
+    }
+    const positionId = model.positionIdFor(desiredLabel);
+    const duplicate = link.records.find(record => record.assignmentId !== previous?.assignmentId && record.positionId === positionId);
+    if (duplicate) {
+      setDashboardAssignmentDisplayState('error', `${link.profile.fullName || link.participant?.name} already has ${desiredLabel}. Additional positions were preserved; choose another role.`, { dirty:true });
+      showToast('That profile already has this role');
+      return false;
+    }
+    const displayName = String(link.profile.fullName || link.participant?.name || link.profile.username || '').trim();
+    if (previous && previous.positionId === positionId) {
+      if (previous.positionLabel === desiredLabel && previous.displayName === displayName) continue;
+      const updated = model.createAssignmentRecord({
+        assignmentId:previous.assignmentId,
+        productionSession:activeCode,
+        profileId:previous.profileId,
+        displayName,
+        positionId:previous.positionId,
+        positionLabel:desiredLabel,
+        paperworkIds:previous.paperworkIds,
+        paperworkLabels:previous.paperworkLabels,
+        status:previous.status,
+        assignedBy:actor.id,
+        assignedByLabel:actor.label,
+      }, previous, now);
+      if (previousIndex >= 0) nextRecords.splice(previousIndex, 1, updated);
+      continue;
+    }
+    const legacyRecord = previous ? null : model.normalizeAssignmentRecord({
+      ...(link.legacyRow || {}),
+      productionSession:activeCode,
+      profileId:link.profileId,
+      displayName,
+      positionId,
+      positionLabel:desiredLabel,
+      assignedBy:actor.id,
+      assignedByLabel:actor.label,
+    });
+    const record = model.createAssignmentRecord({
+      assignmentId:model.assignmentIdFor(link.profileId, positionId),
+      productionSession:activeCode,
+      profileId:link.profileId,
+      displayName,
+      positionId,
+      positionLabel:desiredLabel,
+      paperworkIds:previous?.paperworkIds || legacyRecord?.paperworkIds || [],
+      paperworkLabels:previous?.paperworkLabels || legacyRecord?.paperworkLabels || [],
+      status:'assigned',
+      assignedBy:actor.id,
+      assignedByLabel:actor.label,
+    }, null, now);
+    if (previousIndex >= 0) nextRecords.splice(previousIndex, 1, record);
+    else nextRecords.push(record);
+  }
+  if (unlinkedLegacy.length) {
+    setDashboardAssignmentDisplayState('error', `Profile link required for ${unlinkedLegacy.join(', ')}. No name-only canonical record was written; the draft remains.`, { dirty:true });
+    showToast('Link every legacy role to a saved profile first');
+    return false;
+  }
+
+  const previousById = new Map(detailAssignmentState.records.map(record => [record.assignmentId, record]));
+  const nextById = new Map(nextRecords.map(record => [record.assignmentId, record]));
+  const deletedIds = [...previousById.keys()].filter(id => !nextById.has(id));
+  const changedRecords = nextRecords.filter(record => {
+    const previous = previousById.get(record.assignmentId);
+    return !previous || JSON.stringify(previous) !== JSON.stringify(record);
   });
+  if (!deletedIds.length && !changedRecords.length) {
+    detailAssignmentState.status = nextRecords.length ? 'saved' : 'empty';
+    detailAssignmentState.detail = nextRecords.length
+      ? `${nextRecords.length} canonical assignment record${nextRecords.length === 1 ? '' : 's'} already match${nextRecords.length === 1 ? 'es' : ''} Firestore · revision ${detailAssignmentState.revision}.`
+      : 'No canonical assignments have been saved for this session.';
+    detailAssignmentState.dirty = false;
+    renderLearnerAssignments(sessionDoc);
+    if (showToastOnSave) showToast('Session roles already up to date');
+    return true;
+  }
+
+  const compatibility = dashboardAssignmentCompatibility(nextRecords);
+  const legacyPositionMap = {};
+  nextRecords.forEach(record => {
+    if (!legacyPositionMap[record.displayName]) legacyPositionMap[record.displayName] = record.positionLabel;
+  });
+  const expectedRevision = detailAssignmentState.revision;
+  const sessionRef = window._doc(db(), 'sessions', activeCode);
+  setDashboardAssignmentDisplayState('saving', 'Saving canonical records and compatibility projections in one revision-checked transaction…', { dirty:true });
   try {
-    await window._updateDoc(window._doc(db(), 'sessions', activeCode), { assignments });
-    const s = sessions.find(x=>(x.code||x.id)===activeCode);
-    if (s) s.assignments = assignments;
+    await window._runTransaction(db(), async transaction => {
+      const sessionSnap = await transaction.get(sessionRef);
+      if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
+      const actualRevision = Math.max(0, Number(sessionSnap.data().assignmentRevision) || 0);
+      if (model.hasRevisionConflict(expectedRevision, actualRevision)) {
+        const conflict = new Error(`Assignments changed on another device (server revision ${actualRevision}, dashboard revision ${expectedRevision}).`);
+        conflict.code = 'assignment-conflict';
+        throw conflict;
+      }
+      deletedIds.forEach(id => transaction.delete(window._doc(db(), 'sessions', activeCode, 'assignments', id)));
+      changedRecords.forEach(record => transaction.set(window._doc(db(), 'sessions', activeCode, 'assignments', record.assignmentId), record));
+      transaction.update(sessionRef, {
+        assignmentRevision:actualRevision + 1,
+        assignmentUpdatedAt:now,
+        assignmentUpdatedBy:actor.id,
+        assignments:legacyPositionMap,
+        roleAssignments:compatibility,
+        'prePro.roleAssignments':compatibility,
+        'prePro._fieldUpdatedAt.roleAssignments':now,
+        'prePro.updatedAt':now,
+        preProActivity:window._arrayUnion({ section:'Role Assignments', by:actor.label, clientId:actor.id, at:now }),
+      });
+    });
+    detailAssignmentState.records = nextRecords;
+    detailAssignmentState.revision = expectedRevision + 1;
+    detailAssignmentState.status = nextRecords.length ? 'saved' : 'empty';
+    detailAssignmentState.detail = nextRecords.length
+      ? `${nextRecords.length} canonical assignment record${nextRecords.length === 1 ? '' : 's'} confirmed in Firestore · revision ${detailAssignmentState.revision}.`
+      : `Confirmed empty assignment set in Firestore · revision ${detailAssignmentState.revision}.`;
+    detailAssignmentState.dirty = false;
+    sessionDoc.assignmentRevision = detailAssignmentState.revision;
+    sessionDoc.assignmentUpdatedAt = now;
+    sessionDoc.assignmentUpdatedBy = actor.id;
+    sessionDoc.assignments = legacyPositionMap;
+    sessionDoc.roleAssignments = compatibility;
+    sessionDoc.prePro = {
+      ...(sessionDoc.prePro || {}),
+      roleAssignments:compatibility,
+      _fieldUpdatedAt:{ ...(sessionDoc.prePro?._fieldUpdatedAt || {}), roleAssignments:now },
+      updatedAt:now,
+    };
+    renderDashboardParticipants(sessionDoc, adminSession?.level === 'super');
+    renderLearnerAssignments(sessionDoc);
+    renderSessions();
     renderSuperOverview();
     if (showToastOnSave) showToast('Session roles saved');
+    return true;
   } catch(e) {
-    showToast('Assignments failed: ' + e.message);
+    const errorState = assignmentLoadErrorState(e);
+    if (e?.code === 'assignment-conflict') {
+      setDashboardAssignmentDisplayState('conflict', `${e.message} The draft remains in the controls; load the server copy before deciding what to reapply.`, { dirty:true });
+      showToast('Assignments changed elsewhere — draft kept');
+    } else {
+      setDashboardAssignmentDisplayState(errorState.status, `${errorState.detail} The draft remains and nothing was labeled Saved.`, { dirty:true });
+      showToast(errorState.status === 'denied' ? 'Assignment write denied — draft kept' : 'Assignment save failed — draft kept');
+    }
+    console.warn('Dashboard assignment save failed.', e);
+    return false;
   }
 }
 
 async function saveSessionManagement() {
-  await saveDetailMetadata(false);
-  await saveLearnerAssignments(false);
+  const assignmentsSaved = await saveLearnerAssignments(false);
+  if (!assignmentsSaved) return false;
+  const metadataSaved = await saveDetailMetadata(false);
+  if (!metadataSaved) return false;
   showToast('Session saved');
+  return true;
 }
 
 function initialsOf(name) {
@@ -2483,11 +3138,13 @@ async function removeParticipant(name) {
   if (!s) return;
   const next = (s.participants || []).filter(p => (p.name||'') !== name);
   const assignments = Object.assign({}, s.assignments || {});
-  delete assignments[name];
+  const canonical = sessionUsesCanonicalAssignments(s);
+  if (!canonical) delete assignments[name];
   try {
-    await window._updateDoc(window._doc(db(), 'sessions', activeCode), { participants: next, assignments });
+    const patch = canonical ? { participants:next } : { participants:next, assignments };
+    await window._updateDoc(window._doc(db(), 'sessions', activeCode), patch);
     s.participants = next;
-    s.assignments = assignments;
+    if (!canonical) s.assignments = assignments;
     showDetail(activeCode);
     renderSessions();
     renderSuperOverview();
@@ -2696,7 +3353,7 @@ window.addEventListener('load', ()=>{
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp }
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
   const APP_CHECK_ENABLED = false;
@@ -2761,11 +3418,17 @@ window.addEventListener('load', ()=>{
   }
   window._db = db;
   window._doc = doc;
+  window._collection = collection;
   window._setDoc = setDoc;
   window._getDoc = getDoc;
+  window._getDocFromCache = getDocFromCache;
+  window._getDocs = getDocs;
+  window._getDocsFromCache = getDocsFromCache;
   window._onSnapshot = onSnapshot;
   window._updateDoc = updateDoc;
   window._deleteDoc = deleteDoc;
+  window._runTransaction = runTransaction;
+  window._arrayUnion = arrayUnion;
   window._serverTimestamp = serverTimestamp;
   window._firebaseReady = true;
   window.dispatchEvent(new Event('firebaseReady'));

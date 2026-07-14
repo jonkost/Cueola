@@ -3,17 +3,51 @@ const SHELL_ASSETS = [
   './',
   './index.html',
   './dashboard.html',
+  './script-operator.html',
   './outrangutan/output.html',
   './manifest.webmanifest',
   './assets/Brand/Cueola_Icon.svg',
+  // Script Operator controls must retain deterministic SF Symbol masks when
+  // the dedicated window is opened for the first time while offline.
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/paperclip.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/xmark.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/trash.svg',
+  './design-system/apple/symbols/runtime/light-small/editing/pencil.svg',
+  './design-system/apple/symbols/runtime/light-small/arrows/arrowshape.turn.up.right.fill.svg',
+  './design-system/apple/symbols/runtime/light-small/arrows/arrowshape.left.svg',
+  './design-system/apple/symbols/runtime/light-small/arrows/arrowshape.right.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/repeat.svg',
+  './design-system/apple/symbols/runtime/light-small/editing/scissors.svg',
+  './design-system/apple/symbols/runtime/light-small/arrows/arrow.up.to.line.svg',
+  './design-system/apple/symbols/runtime/light-small/media/display.svg',
+  './design-system/apple/symbols/runtime/light-small/textformatting/list.bullet.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/circle.fill.svg',
+  './design-system/apple/symbols/runtime/light-small/media/pause.svg',
+  './design-system/apple/symbols/runtime/light-small/media/play.display.svg',
+  './design-system/apple/symbols/runtime/light-small/media/stop.circle.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/bell.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/bell.badge.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg',
+  './design-system/apple/symbols/runtime/light-small/time/timer.svg',
+  './design-system/apple/symbols/runtime/light-small/privacyandsecurity/exclamationmark.triangle.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/clock.svg',
   'assets/sf-symbols.css?v=127986b7a0',
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
-  'cueola-identity.js?v=ba84a5c741',
-  'cueola-live-session.js?v=2762fa1f8a',
-  'cueola-app.js?v=2fdc0e32be',
-  'outrangutan/outrangutan.css?v=d494ffcdbd',
-  'outrangutan/outrangutan.js?v=42007fb466',
+  'cueola-assignment-model.js?v=d81e0cf353',
+  'cueola-export-model.js?v=b9bc3293de',
+  'cueola-identity.js?v=9c230d2c7a',
+  'cueola-live-session.js?v=6a1ac2f19e',
+  'cueola-prompter-session.js?v=1002259f73',
+  'cueola-script-operator-protocol.js?v=209555b4d7',
+  'script-operator.js?v=a0e270f8e1',
+  'script-operator.css?v=78d9e27bef',
+  'outrangutan/output-protocol.js?v=515bfb5721',
+  'outrangutan/output-command-queue.js?v=d3ef82b3a4',
+  'outrangutan/stream-deck-label.js?v=c4ae3df80f',
+  'cueola-app.js?v=709c9634c5',
+  'outrangutan/outrangutan.css?v=900667494a',
+  'outrangutan/outrangutan.js?v=f642cd1375',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -56,6 +90,8 @@ self.addEventListener('fetch', event => {
     if (request.mode === 'navigate') {
       const shellPage = url.pathname.endsWith('/dashboard.html')
         ? './dashboard.html'
+        : url.pathname.endsWith('/script-operator.html')
+          ? './script-operator.html'
         : url.pathname.endsWith('/outrangutan/output.html')
           ? './outrangutan/output.html'
           : './index.html';

@@ -29,18 +29,25 @@
   // ── constants ──────────────────────────────────────────────────────────
   const DB_NAME = 'outrangutan', DB_VER = 1;
   const MEDIA_STORE = 'media', SHOW_STORE = 'show', SHOW_KEY = 'current';
-  const OUTPUT_CHANNEL = 'outrangutan-output';
+  const OUTPUT_CHANNEL_PREFIX = 'outrangutan-output-v2:';
+  const OUTPUT_PROTOCOL = window.CueolaOutputProtocol;
+  const OUTPUT_CONTROLLER_ID = 'ogc_' + ((globalThis.crypto && globalThis.crypto.randomUUID)
+    ? globalThis.crypto.randomUUID().replace(/[^a-zA-Z0-9_-]/g, '')
+    : (Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)));
+  const STANDALONE_OUTPUT_SESSION_ID = 'standalone_' + OUTPUT_CONTROLLER_ID;
   const SCHEMA = 3;
   const PAD_COUNT = 12;          // SFX board slots (3 × 4)
   const PAD_KEYS = ['1','2','3','4','5','6','7','8','9','0','q','w'];
   const ELGATO_VID = 0x0fd9;     // Stream Deck vendor id (WebHID)
-  // Stream Deck models we know how to talk to (key count + JPEG image protocol)
+  const SD_LABELS = window.CueolaStreamDeckLabel || null;
+  // WebHID control metadata. Image orientation/packet ownership lives in the
+  // dedicated label renderer; older BMP models remain usable for input only.
   const SD_MODELS = {
-    0x0060: { name: 'Stream Deck',        keys: 15, cols: 5, img: 72,  fmt: 'bmp', flip: true,  reset: [0x0b, 0x63], bright: [0x05, 0x55, 0xaa, 0xd1, 0x01] },
-    0x006d: { name: 'Stream Deck (v2)',   keys: 15, cols: 5, img: 72,  fmt: 'jpeg', flip: false, reset: [0x03, 0x02], bright: [0x03, 0x08] },
-    0x0080: { name: 'Stream Deck MK.2',   keys: 15, cols: 5, img: 72,  fmt: 'jpeg', flip: false, reset: [0x03, 0x02], bright: [0x03, 0x08] },
-    0x0063: { name: 'Stream Deck Mini',   keys: 6,  cols: 3, img: 80,  fmt: 'bmp', flip: true,  reset: [0x0b, 0x63], bright: [0x05, 0x55, 0xaa, 0xd1, 0x01] },
-    0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, img: 96,  fmt: 'jpeg', flip: false, reset: [0x03, 0x02], bright: [0x03, 0x08] },
+    0x0060: { name: 'Stream Deck (2017)', keys: 15, cols: 5, stateOffset: 0, imageProductId: null,   reset: [0x0b, 0x63], bright: [0x05, 0x55, 0xaa, 0xd1, 0x01] },
+    0x006d: { name: 'Stream Deck (v2)',   keys: 15, cols: 5, stateOffset: 3, imageProductId: 0x006d, reset: [0x03, 0x02], bright: [0x03, 0x08] },
+    0x0080: { name: 'Stream Deck MK.2',   keys: 15, cols: 5, stateOffset: 3, imageProductId: 0x0080, reset: [0x03, 0x02], bright: [0x03, 0x08] },
+    0x0063: { name: 'Stream Deck Mini',   keys: 6,  cols: 3, stateOffset: 0, imageProductId: null,   reset: [0x0b, 0x63], bright: [0x05, 0x55, 0xaa, 0xd1, 0x01] },
+    0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, stateOffset: 3, imageProductId: 0x006c, reset: [0x03, 0x02], bright: [0x03, 0x08] },
   };
   // actions a Stream Deck key / control surface can fire
   const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…' };
@@ -89,11 +96,15 @@
 
   // ── multi-output (Phase 3) ───────────────────────────────────────────────
   let bc = null;
-  let outputMessageSeq = 0;
+  let outputChannelSessionId = '';
   let outputWindowListenerReady = false;
+  let outputWindowMessageHandler = null;
+  let outputRuntimeDetached = false;
+  let detachedOutputRuntime = null;
   const outputMessageIds = new Set();
+  const outputControllers = new Map();
   let outputs = defaultOutputs();// persisted: [{ id, label, screenId, sinkId, audioOn }]
-  const outputWins = new Map();  // id -> { win, alive, identify }
+  const outputWins = new Map();  // id -> identified output runtime + popup handle
   let screensCache = null;       // ScreenDetails.screens (Window Management API)
   let audioDevs = [];            // enumerated audiooutput devices (setSinkId)
 
@@ -101,6 +112,10 @@
   let sd = null;                 // { device, model } when connected
   let sdMap = {};                // keyIndex -> { action, ref } (persisted in settings)
   let sdLearn = null;            // keyIndex currently being mapped (learn mode)
+  let sdSimulatorProductId = 0x0080;
+  let sdPaintError = '';
+  let sdRefreshAgain = false;
+  let sdRefreshPromise = null;
 
   // ── Web Audio engine ─────────────────────────────────────────────────────
   let audioOK = true;            // flips false if Web Audio is unavailable → element fallback
@@ -628,137 +643,396 @@
   }
   function stopVoices(rt) { if (!rt) return; rt.voices.slice().forEach(v => { try { v.onended = null; v.stop(); } catch (e) {} }); rt.voices = []; }
   function stopPad(pad) { const rt = padRT.get(pad.id); if (!rt) return; cancelFade('padin-' + pad.id); stopVoices(rt); renderPadLive(pad.id); }
-  function stopAllPads() { padRT.forEach((rt, id) => { cancelFade('padin-' + id); stopVoices(rt); }); renderPads(); }
+  function stopAllPads() { padRT.forEach((rt, id) => { cancelFade('padin-' + id); stopVoices(rt); }); renderPads(); scheduleStreamDeckRefresh(); }
 
   // ── multi-output manager (Phase 3) ───────────────────────────────────────
-  // BroadcastChannel is the primary bus, with direct postMessage mirrored to
-  // every window as a show-safe fallback. Message ids make the dual path safe:
-  // a play/seek command is applied once even when both transports deliver it.
-  function seenOutputMessage(m) {
-    if (!m || !m._mid) return false;
-    if (outputMessageIds.has(m._mid)) return true;
-    outputMessageIds.add(m._mid);
-    if (outputMessageIds.size > 300) outputMessageIds.delete(outputMessageIds.values().next().value);
+  // One watchdog owns window, heartbeat, renderer, and acknowledgement health.
+  const WATCHDOG_MS = 2000, WATCHDOG_DEAD_MS = 5000;
+  let watchdogTimer = null;
+  // Stabilized protocol-v2 manager keeps Outrangutan's established
+  // sendOut/openOutput call surface while hardening everything below it.
+  const OUTPUT_ACK_MS = 5000;
+  let lastOutputProjection = '';
+  function desiredOutputSessionId() {
+    return mode === 'session' && sessionCode ? ('session_' + sessionCode) : STANDALONE_OUTPUT_SESSION_ID;
+  }
+  function createOutputRecord(id, win) {
+    return {
+      id: Number(id), win: win || null, status: win ? 'opening' : 'closed',
+      outputInstanceId: '', lastBeat: win ? Date.now() : 0, lastAck: null,
+      lastReadyMessageAt: 0,
+      painting: true, identify: false, pendingIntents: [], ackPending: new Map(),
+      handshakeAt: 0, resumeAfterSync: false, recoverability: 'none',
+      error: '', detail: win ? 'Waiting for renderer handshake' : 'Output window closed',
+      announcedStatus: ''
+    };
+  }
+  function outputRecord(id, create) {
+    id = Number(id) || 1;
+    let rec = outputWins.get(id);
+    if (!rec && create) { rec = createOutputRecord(id, null); outputWins.set(id, rec); }
+    return rec || null;
+  }
+  function outputById(id) { return outputs.find(o => o.id === Number(id)) || null; }
+  function controllerFor(id) {
+    id = Number(id) || 1;
+    if (outputRuntimeDetached) return null;
+    ensureChannel();
+    let controller = outputControllers.get(0);
+    if (!controller && OUTPUT_PROTOCOL) {
+      controller = OUTPUT_PROTOCOL.createController({
+        productionSessionId: outputChannelSessionId,
+        controllerInstanceId: OUTPUT_CONTROLLER_ID
+      });
+      outputControllers.set(0, controller);
+    }
+    if (controller) outputControllers.set(id, controller);
+    return controller || null;
+  }
+  function clearAckTimers(rec) {
+    if (!rec || !rec.ackPending) return;
+    rec.ackPending.forEach(entry => clearTimeout(entry.timer));
+    rec.ackPending.clear();
+  }
+  function seenOutputMessage(message) {
+    const id = message && (message.commandId || message._mid);
+    if (!id) return false;
+    if (outputMessageIds.has(id)) return true;
+    outputMessageIds.add(id);
+    if (outputMessageIds.size > 600) outputMessageIds.delete(outputMessageIds.values().next().value);
     return false;
   }
-  function handleOutputMessage(m) {
-    if (!m || m._from !== 'output' || seenOutputMessage(m)) return;
-    const id = m.id || 1, rec = outputWins.get(id);
-    // 'ready' = a fresh window that needs full state. A plain beat/pong must
-    // NOT re-push (a 2s heartbeat re-sending 'play' would glitch the video);
-    // it only re-syncs when it revives an output the watchdog declared dead.
-    if (m.t === 'ready') {
-      if (rec) { rec.alive = true; rec.lastBeat = Date.now(); rec.painting = true; }
-      updateOutputUI(); resendActiveToOutput(id); applyOutputSink(id);
+  function announceOutput(rec, token, message) {
+    if (!rec || rec.announcedStatus === token) return;
+    rec.announcedStatus = token;
+    slog(token === 'ready' ? 'output' : 'error', message);
+    toast((token === 'ready' ? '✓ ' : '⚠ ') + message);
+    if (token !== 'ready') console.error('[Outrangutan output]', message, { outputId: rec.id, status: rec.status, error: rec.error });
+  }
+  function stateForOutput(id) {
+    const controller = outputControllers.get(Number(id));
+    return controller ? controller.getState(String(Number(id))) : null;
+  }
+  function applyControllerState(rec, state) {
+    if (!rec || !state) return;
+    rec.outputInstanceId = state.outputInstanceId || rec.outputInstanceId;
+    rec.lastBeat = state.lastHeartbeatAt || rec.lastBeat;
+    rec.lastAck = state.lastAck || rec.lastAck;
+    rec.painting = state.rendererStatus !== 'stalled' && state.rendererStatus !== 'error';
+    rec.recoverability = state.recoverability || 'none';
+    rec.error = state.error || '';
+    if (state.rendererStatus === 'stalled') {
+      rec.status = 'stalled'; rec.detail = 'Renderer heartbeat is alive but frames are not painting';
+    } else if (state.rendererStatus === 'error' || state.mediaLoadStatus === 'error' || state.playbackStatus === 'error') {
+      rec.status = 'error'; rec.detail = state.error || 'Renderer reported a playback error';
+    } else if (state.heartbeatStatus === 'dead') {
+      rec.status = 'disconnected'; rec.detail = state.error || 'Renderer heartbeat was lost';
+    } else if (state.communicationStatus === 'syncing') {
+      rec.status = 'connecting'; rec.detail = 'Applying a safe paused program snapshot';
+    } else if (state.communicationStatus === 'recovering') {
+      rec.status = 'recovering'; rec.detail = state.error || 'Renderer needs recovery';
+    } else if (state.communicationStatus === 'ready') {
+      rec.status = 'ready';
+      rec.detail = state.recoverability === 'operator' ? 'Program restored paused — operator resume required' : 'Renderer ready and acknowledging commands';
+    } else {
+      rec.status = 'connecting'; rec.detail = 'Renderer connected; waiting for state sync';
     }
-    if (m.t === 'pong' || m.t === 'beat') {
-      if (rec) {
-        const wasDead = rec.alive === false;
-        rec.lastBeat = Date.now();
-        rec.alive = true;
-        const painting = (m.raf !== false);
-        if (!painting && rec.painting && active && active.kind === 'video' && active.cue.output === id) {
-          slog('error', 'Output ' + id + ' event loop is alive but frames are not painting.');
-        }
-        rec.painting = painting;
-        if (wasDead) {
-          const o = outputById(id);
-          slog('output', (o ? o.label : 'Output ' + id) + ' recovered — re-syncing its program state.');
-          toast('✓ ' + (o ? o.label : 'Output ' + id) + ' recovered — re-synced.');
-          resendActiveToOutput(id); applyOutputSink(id);
-          updateOutputUI();
-        }
+  }
+  function outputProgramSnapshot(id) {
+    const o = outputById(id) || { id: Number(id), label: 'Output ' + id, audioOn: false, sinkId: null };
+    const rec = outputRecord(id, true);
+    const snapshot = {
+      config: { label: o.label || ('Output ' + id), audioOn: !!o.audioOn, sinkId: o.sinkId || '', identify: !!rec.identify },
+      program: { t: 'stop' }, key: { mode: 'off' }
+    };
+    if (!active || Number(active.cue.output || 1) !== Number(id)) return snapshot;
+    const cue = active.cue;
+    if (active.kind === 'image') {
+      snapshot.program = { t: 'image', mediaId: cue.mediaId, fadeIn: 0, curve: fadeCurveOf(cue), fit: cue.fit, scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0, paused: true };
+    } else if (active.kind === 'video') {
+      snapshot.program = { t: 'play', mediaId: cue.mediaId, at: Number(active.el && active.el.currentTime) || cue.trimIn || 0, loop: !!cue.loop, volume: cue.volume, fadeIn: 0, curve: fadeCurveOf(cue), fit: cue.fit, scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0, paused: true };
+      snapshot.key = cue.key || { mode: 'off' };
+    }
+    return snapshot;
+  }
+  function desiredOutputState(id) {
+    const rec = outputRecord(id, true);
+    const cue = active && Number(active.cue.output || 1) === Number(id) ? active.cue : null;
+    let playbackStatus = 'stopped', mediaLoadStatus = 'empty', mediaId = '', cueId = '', playhead = 0;
+    if (cue && active.kind === 'image') {
+      playbackStatus = 'paused'; mediaLoadStatus = 'ready'; mediaId = cue.mediaId || ''; cueId = cue.id || '';
+    } else if (cue && active.kind === 'video') {
+      playbackStatus = active.el && active.el.paused ? 'paused' : 'playing'; mediaLoadStatus = 'ready'; mediaId = cue.mediaId || ''; cueId = cue.id || ''; playhead = Number(active.el && active.el.currentTime) || 0;
+    }
+    return {
+      windowStatus: 'open', communicationStatus: 'connected', mediaLoadStatus,
+      playbackStatus, rendererStatus: rec.painting === false ? 'stalled' : (cue ? 'painting' : 'idle'),
+      heartbeatStatus: 'healthy', lastHeartbeatAt: rec.lastBeat || Date.now(),
+      cueId, mediaId, playhead, recoverability: playbackStatus === 'playing' ? 'operator' : 'none', error: ''
+    };
+  }
+  function postOutputEnvelope(envelope, rec, trackAck) {
+    if (!envelope || !rec) return false;
+    const message = Object.assign({ _og: true, _from: 'control' }, envelope);
+    if (bc) try { bc.postMessage(message); } catch (e) {}
+    if (rec.win && !rec.win.closed) try { rec.win.postMessage(message, location.origin); } catch (e) {}
+    if (trackAck) {
+      const timer = setTimeout(() => {
+        if (!rec.ackPending.has(envelope.commandId)) return;
+        rec.ackPending.delete(envelope.commandId);
+        const controller = outputControllers.get(rec.id);
+        if (controller) controller.updateOutput(String(rec.id), { communicationStatus: 'recovering', recoverability: 'operator', error: 'No acknowledgement for ' + envelope.commandType });
+        rec.status = 'recovering'; rec.recoverability = 'operator'; rec.error = 'No acknowledgement for ' + envelope.commandType;
+        rec.detail = rec.error + ' within ' + (OUTPUT_ACK_MS / 1000) + ' seconds';
+        announceOutput(rec, 'ack-' + envelope.commandId, (outputById(rec.id)?.label || ('Output ' + rec.id)) + ' did not acknowledge ' + envelope.commandType + '.');
+        updateOutputUI();
+      }, OUTPUT_ACK_MS);
+      rec.ackPending.set(envelope.commandId, { command: envelope, timer });
+    }
+    return true;
+  }
+  function queueOutputIntent(id, message) {
+    const rec = outputRecord(id, true);
+    rec.pendingIntents.push({ message: Object.assign({}, message), queuedAt: Date.now() });
+    if (rec.pendingIntents.length > 200) rec.pendingIntents.splice(0, rec.pendingIntents.length - 100);
+  }
+  function commandTypeOf(type) {
+    return String(type || '').replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[^a-zA-Z0-9]+/g, '_').toUpperCase();
+  }
+  function dispatchOutputIntent(id, message) {
+    const rec = outputRecord(id, true), controller = controllerFor(id);
+    if (!controller || !rec.outputInstanceId || !controller.isReady(String(id), rec.outputInstanceId)) { queueOutputIntent(id, message); return false; }
+    const payload = Object.assign({}, message); delete payload.t;
+    const command = controller.buildCommand(commandTypeOf(message.t), {
+      outputId: String(id), outputInstanceId: rec.outputInstanceId,
+      cueId: message.cueId || (active && Number(active.cue.output || 1) === Number(id) ? active.cue.id : ''),
+      mediaId: message.mediaId || (active && Number(active.cue.output || 1) === Number(id) ? active.cue.mediaId : ''),
+      payload
+    });
+    return postOutputEnvelope(command, rec, true);
+  }
+  function sendOut(message, target) {
+    if (outputRuntimeDetached) return false;
+    ensureChannel();
+    const ids = target == null ? outputs.map(o => o.id) : [Number(target) || 1];
+    ids.forEach(id => dispatchOutputIntent(id, message || {}));
+    return true;
+  }
+  function flushOutputIntents(id) {
+    const rec = outputRecord(id, true);
+    const queued = rec.pendingIntents.splice(0);
+    // The complete snapshot already represents every controller-side change
+    // made before this renderer announced itself. Replaying any older intent
+    // (including seek/key/fit/image) could regress that authoritative state.
+    queued.forEach(entry => {
+      if (entry.queuedAt < rec.handshakeAt) return;
+      dispatchOutputIntent(id, entry.message);
+    });
+    if (rec.resumeAfterSync) { rec.resumeAfterSync = false; dispatchOutputIntent(id, { t: 'resume' }); }
+  }
+  function syncOutput(id, reason) {
+    const rec = outputRecord(id, true), controller = controllerFor(id);
+    if (!controller || !rec.outputInstanceId) return false;
+    rec.handshakeAt = Date.now(); rec.status = 'connecting'; rec.detail = 'Applying a safe paused program snapshot';
+    const sync = controller.buildSyncState(String(id), desiredOutputState(id), { reason: reason || 'renderer-sync' });
+    if (!sync) return false;
+    sync.payload.snapshot = outputProgramSnapshot(id);
+    postOutputEnvelope(sync, rec, false);
+    updateOutputUI();
+    return true;
+  }
+  function handleOutputMessage(message, source) {
+    if (!message || message._from !== 'output' || seenOutputMessage(message) || !OUTPUT_PROTOCOL) return;
+    const normalized = OUTPUT_PROTOCOL.normalizeEnvelope(message);
+    const id = Number(normalized.outputId) || 1;
+    if (!outputs.some(o => o.id === id)) return;
+    const rec = outputRecord(id, true), controller = controllerFor(id);
+    if (!controller) return;
+    const type = normalized.commandType;
+    if (type === OUTPUT_PROTOCOL.MESSAGE_TYPES.READY) {
+      if (rec.lastReadyMessageAt && normalized.timestamp < rec.lastReadyMessageAt) return;
+      const replaced = !!rec.outputInstanceId && rec.outputInstanceId !== normalized.outputInstanceId;
+      if (replaced && controller.isReady(String(id), rec.outputInstanceId)) {
+        const retire = controller.buildCommand('REPLACED', {
+          outputId: String(id), outputInstanceId: rec.outputInstanceId,
+          payload: { reason: 'A newer renderer instance took ownership of this output.' }
+        });
+        postOutputEnvelope(retire, rec, false);
       }
+      if (!controller.noteReady(message)) return;
+      if (replaced) rec.win = source || null;
+      else if (source) rec.win = source;
+      clearAckTimers(rec);
+      rec.outputInstanceId = normalized.outputInstanceId; rec.lastBeat = normalized.timestamp || Date.now();
+      rec.lastReadyMessageAt = normalized.timestamp || Date.now();
+      rec.status = 'connecting'; rec.error = ''; rec.announcedStatus = '';
+      ensureWatchdog();
+      syncOutput(id, replaced ? 'replacement-renderer' : 'initial-renderer');
+      return;
     }
-    if (m.t === 'closed') { if (rec) rec.alive = false; updateOutputUI(); }
-    if (m.t === 'error') toast('⚠ Output ' + id + ' could not play the media — black slate on that output.');
+    if (!controller.accepts(message)) return;
+    if (source) rec.win = source;
+    if (type === OUTPUT_PROTOCOL.MESSAGE_TYPES.STATE_APPLIED) {
+      if (!controller.markStateApplied(message)) return;
+      applyControllerState(rec, controller.getState(String(id)));
+      rec.announcedStatus = '';
+      flushOutputIntents(id);
+      if (rec.status === 'error') announceOutput(rec, 'sync-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'the synchronized program could not be rendered.'));
+      else announceOutput(rec, 'ready', (outputById(id)?.label || ('Output ' + id)) + (rec.recoverability === 'operator' ? ' recovered paused. Resume when ready.' : ' is ready.'));
+      updateOutputUI();
+      return;
+    }
+    if (type === OUTPUT_PROTOCOL.MESSAGE_TYPES.HEARTBEAT) {
+      const previousStatus = rec.status;
+      const wasUnavailable = ['disconnected', 'recovering', 'stalled', 'error'].includes(previousStatus);
+      if (!controller.noteHeartbeat(message)) return;
+      const state = controller.getState(String(id));
+      applyControllerState(rec, state);
+      if (rec.status === 'stalled' && previousStatus !== 'stalled') announceOutput(rec, 'stalled', (outputById(id)?.label || ('Output ' + id)) + ' stopped painting frames.');
+      if (rec.status === 'error' && previousStatus !== 'error') announceOutput(rec, 'heartbeat-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'renderer error.'));
+      const rendererRecovered = wasUnavailable && state.heartbeatStatus === 'healthy' && !['stalled', 'error'].includes(state.rendererStatus);
+      if (rendererRecovered) { syncOutput(id, 'heartbeat-recovery'); return; }
+      updateOutputUI();
+      return;
+    }
+    if (type === OUTPUT_PROTOCOL.MESSAGE_TYPES.COMMAND_ACK) {
+      const pending = rec.ackPending.get(normalized.commandId);
+      const ackForType = commandTypeOf(normalized.payload && normalized.payload.forCommandType);
+      if (!pending || pending.command.commandType !== ackForType) return;
+      clearTimeout(pending.timer); rec.ackPending.delete(normalized.commandId);
+      const result = controller.noteAck(message);
+      applyControllerState(rec, controller.getState(String(id)));
+      if (result && result.ok === false) {
+        rec.status = 'error'; rec.error = result.error || 'Renderer rejected a command'; rec.detail = rec.error;
+        announceOutput(rec, 'command-' + normalized.commandId, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.error);
+      }
+      updateOutputUI();
+    }
   }
   function ensureChannel() {
+    const desired = desiredOutputSessionId();
+    if (outputRuntimeDetached) return desired;
+    if (outputChannelSessionId && outputChannelSessionId !== desired) cleanupOutputRuntime(true);
+    outputChannelSessionId = desired;
     if (!outputWindowListenerReady) {
-      window.addEventListener('message', e => {
+      outputWindowMessageHandler = e => {
         if (e.origin !== location.origin || !e.data || !e.data._og) return;
-        handleOutputMessage(e.data);
-      });
+        handleOutputMessage(e.data, e.source);
+      };
+      window.addEventListener('message', outputWindowMessageHandler);
       outputWindowListenerReady = true;
     }
     if (!bc && 'BroadcastChannel' in window) {
-      bc = new BroadcastChannel(OUTPUT_CHANNEL);
-      bc.onmessage = e => handleOutputMessage(e.data);
+      bc = new BroadcastChannel(OUTPUT_CHANNEL_PREFIX + outputChannelSessionId);
+      bc.onmessage = e => handleOutputMessage(e.data, null);
     }
+    return outputChannelSessionId;
   }
-  function sendOut(msg, target) {
-    ensureChannel();
-    const out = Object.assign({ _og: true, _from: 'control', target: (target == null ? null : target), _mid: 'c' + Date.now().toString(36) + '-' + (++outputMessageSeq).toString(36) }, msg);
-    if (bc) bc.postMessage(out);
-    outputWins.forEach((rec, id) => {
-      if (target != null && id !== target) return;
-      if (!rec.win || rec.win.closed) return;
-      try { rec.win.postMessage(out, location.origin); } catch (e) {}
-    });
+  function isOutputAlive(id) {
+    const rec = outputRecord(id, false);
+    if (!rec) return false;
+    if (rec.status === 'closed') return false;
+    if (rec.win && !rec.win.closed) return true;
+    return !!(rec.lastBeat && Date.now() - rec.lastBeat <= WATCHDOG_DEAD_MS);
   }
-  function outputById(id) { return outputs.find(o => o.id === id) || null; }
-  function isOutputAlive(id) { const r = outputWins.get(id); return !!(r && r.win && !r.win.closed); }
-  // Healthy = window open AND the watchdog has heard a beat recently. A frozen
-  // renderer keeps win.closed === false forever — only the heartbeat catches it.
-  function isOutputHealthy(id) { const r = outputWins.get(id); return !!(r && r.win && !r.win.closed && r.alive); }
-
-  // ── watchdog: ping every WATCHDOG_MS, two missed beats = dead ──
-  const WATCHDOG_MS = 2000, WATCHDOG_DEAD_MS = 5000;
-  let watchdogTimer = null;
+  function isOutputHealthy(id) {
+    const rec = outputRecord(id, false), state = stateForOutput(id);
+    return !!(rec && state && rec.status === 'ready' && state.communicationStatus === 'ready' && state.heartbeatStatus === 'healthy' && !['stalled', 'error'].includes(state.rendererStatus));
+  }
   function ensureWatchdog() {
     if (watchdogTimer) return;
     watchdogTimer = setInterval(() => {
-      const now = Date.now();
+      const now = Date.now(); let changed = false;
       outputWins.forEach((rec, id) => {
-        if (!rec.win || rec.win.closed) { if (rec.alive) { rec.alive = false; updateOutputUI(); } return; }
-        sendOut({ t: 'ping' }, id);
-        if (rec.alive && rec.lastBeat && now - rec.lastBeat > WATCHDOG_DEAD_MS) {
-          rec.alive = false;
-          const o = outputById(id);
-          slog('error', (o ? o.label : 'Output ' + id) + ' stopped responding — the window may be frozen. It re-syncs automatically if it comes back.');
-          toast('⚠ ' + (o ? o.label : 'Output ' + id) + ' stopped responding.');
-          updateOutputUI();
-        }
+        const windowClosed = rec.win && rec.win.closed;
+        const heartbeatLost = rec.lastBeat && now - rec.lastBeat > WATCHDOG_DEAD_MS;
+        if (!windowClosed && !heartbeatLost) return;
+        if (['closed', 'disconnected'].includes(rec.status)) return;
+        const controller = outputControllers.get(id);
+        if (controller) controller.markDisconnected(String(id), windowClosed ? 'Output window closed' : 'Renderer heartbeat timed out');
+        rec.status = windowClosed ? 'closed' : 'disconnected'; rec.recoverability = windowClosed ? 'reload' : 'automatic';
+        rec.error = windowClosed ? 'Output window closed' : 'No renderer heartbeat for 5 seconds'; rec.detail = rec.error;
+        clearAckTimers(rec); changed = true;
+        announceOutput(rec, rec.status, (outputById(id)?.label || ('Output ' + id)) + (windowClosed ? ' closed.' : ' stopped responding.'));
       });
+      if (changed) updateOutputUI();
     }, WATCHDOG_MS);
   }
-
+  function outputUrl(id) {
+    ensureChannel();
+    return 'outrangutan/output.html#out=' + encodeURIComponent(Number(id) || 1)
+      + '&session=' + encodeURIComponent(outputChannelSessionId)
+      + '&controller=' + encodeURIComponent(OUTPUT_CONTROLLER_ID);
+  }
   function openOutput(id) {
+    reattachLiveControl();
     ensureChannel();
     const o = outputById(id) || outputs[0]; if (!o) return null;
     let feats = 'width=1280,height=720';
     const scr = (o.screenId != null && screensCache) ? screensCache.find(s => s.id === o.screenId) : null;
     if (scr) feats = 'left=' + scr.availLeft + ',top=' + scr.availTop + ',width=' + scr.availWidth + ',height=' + scr.availHeight;
-    const win = window.open('outrangutan/output.html#out=' + o.id, 'outrangutanOutput' + o.id, feats);
-    if (!win) { toast('Output window blocked — allow pop-ups for Outrangutan.'); return null; }
-    // lastBeat seeded at open so a slow first load gets the full grace window.
-    outputWins.set(o.id, { win, alive: false, identify: false, lastBeat: Date.now(), painting: true });
+    const popupName = 'outrangutanOutput_' + outputChannelSessionId.replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + OUTPUT_CONTROLLER_ID + '_' + o.id;
+    const launchToken = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const launchUrl = outputUrl(o.id).replace('#', '?launch=' + launchToken + '#');
+    const win = window.open(launchUrl, popupName, feats);
+    if (!win) {
+      const rec = outputRecord(o.id, true); rec.status = 'error'; rec.error = 'Pop-up blocked'; rec.detail = 'Allow pop-ups, then Open again';
+      toast('Output window blocked — allow pop-ups for Outrangutan.'); updateOutputUI(); return null;
+    }
+    const rec = outputRecord(o.id, true);
+    clearAckTimers(rec);
+    const controller = controllerFor(o.id);
+    if (controller) controller.markDisconnected(String(o.id), 'Opening a replacement renderer');
+    rec.win = win; rec.status = 'opening'; rec.outputInstanceId = ''; rec.lastBeat = Date.now();
+    rec.painting = true; rec.error = ''; rec.detail = 'Waiting for renderer handshake'; rec.announcedStatus = '';
     ensureWatchdog();
+    if (scr) tryFullscreen(win);
     toast(scr ? ('Opened ' + o.label + ' on ' + scr.label + '.') : ('Opened ' + o.label + '. Drag it to a display, then fullscreen it.'));
-    setTimeout(() => { sendOut({ t: 'ping' }, o.id); if (scr) tryFullscreen(win); }, 600);
     updateOutputUI();
     return win;
   }
   function tryFullscreen(win) { try { const d = win.document.documentElement; if (d && d.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch (e) {} }
-  function focusOrOpenOutput(id) { const r = outputWins.get(id); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
-  function popOutProgram() {
-    const o = outputs[0] || { id: 1 };
-    focusOrOpenOutput(o.id);
-  }
-  function resendActiveToOutput(id) {
-    if (!active || active.cue.output !== id) return;
-    if (active.kind === 'image') { sendOut({ t: 'image', mediaId: active.cue.mediaId, fadeIn: 0, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0 }, id); return; }
-    if (active.kind !== 'video') return;
-    sendOut({ t: 'play', mediaId: active.cue.mediaId, at: active.el.currentTime, loop: active.cue.loop, volume: active.cue.volume, fit: active.cue.fit, scale: active.cue.scale || 1, posX: active.cue.posX || 0, posY: active.cue.posY || 0, paused: !!(active.el && active.el.paused) }, id);
-    // Keyer re-push: a rebooted/recovered output loses its WebGL key state.
-    sendOut({ t: 'key', key: active.cue.key || { mode: 'off' } }, id);
+  function focusOrOpenOutput(id) { const r = outputRecord(id, false); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
+  function popOutProgram() { const o = outputs[0] || { id: 1 }; focusOrOpenOutput(o.id); }
+  function recoverOutput(id, resume) {
+    const rec = outputRecord(id, true);
+    rec.resumeAfterSync = !!resume;
+    if (!isOutputAlive(id)) return openOutput(id);
+    if (!syncOutput(id, 'operator-recovery')) return openOutput(id);
+    return rec.win;
   }
   function identifyOutput(id, on) {
-    if (!isOutputAlive(id)) { if (!openOutput(id)) return; setTimeout(() => identifyOutput(id, on), 700); return; }   // blocked pop-up: stop, don't retry-loop
-    const rec = outputWins.get(id); if (rec) rec.identify = on;
+    const rec = outputRecord(id, true); rec.identify = !!on;
+    if (!isOutputAlive(id)) { openOutput(id); updateOutputUI(); return; }
     const o = outputById(id);
-    sendOut({ t: 'identify', on: on, label: o ? o.label : ('Output ' + id) }, id);
+    dispatchOutputIntent(id, { t: 'identify', on: !!on, label: o ? o.label : ('Output ' + id) });
     updateOutputUI();
+  }
+  function cleanupOutputRuntime(closeWindows) {
+    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+    outputWins.forEach(rec => {
+      clearAckTimers(rec);
+      if (closeWindows && rec.win && !rec.win.closed) try { rec.win.close(); } catch (e) {}
+    });
+    if (bc) { try { bc.close(); } catch (e) {} bc = null; }
+    if (outputWindowListenerReady && outputWindowMessageHandler) window.removeEventListener('message', outputWindowMessageHandler);
+    outputWindowListenerReady = false; outputWindowMessageHandler = null;
+    outputChannelSessionId = ''; outputMessageIds.clear(); outputControllers.clear(); outputWins.clear();
+    lastOutputProjection = '';
+  }
+  function preserveOutputRuntimeForReattach() {
+    if (outputRuntimeDetached) return;
+    outputWins.forEach(rec => {
+      // Commands that were only queued before detach must never surprise the
+      // operator by replaying when control is reclaimed later.
+      rec.pendingIntents = [];
+      rec.resumeAfterSync = false;
+    });
+    detachedOutputRuntime = {
+      productionSessionId: outputChannelSessionId || desiredOutputSessionId(),
+      records: Array.from(outputWins.entries()),
+      controllers: Array.from(outputControllers.entries())
+    };
   }
 
   function addOutput() {
@@ -769,7 +1043,9 @@
   function removeOutput(id) {
     if (outputs.length <= 1) { toast('Keep at least one output.'); return; }
     const r = outputWins.get(id); if (r && r.win && !r.win.closed) try { r.win.close(); } catch (e) {}
+    clearAckTimers(r);
     outputWins.delete(id);
+    outputControllers.delete(id);
     outputs = outputs.filter(o => o.id !== id);
     cues.forEach(c => { if (c.output === id) c.output = outputs[0].id; });
     scheduleSave(); renderOutputs(); renderInspector();
@@ -803,20 +1079,322 @@
       pop.classList.toggle('on', outputs.some(o => isOutputHealthy(o.id)));
       pop.classList.toggle('dead', outputs.some(o => isOutputAlive(o.id) && !isOutputHealthy(o.id)));
       pop.setAttribute('aria-pressed', outputs.some(o => isOutputAlive(o.id)) ? 'true' : 'false');
+      pop.dataset.outputUrl = outputUrl((outputs[0] || { id: 1 }).id);
     }
     if ($('og-outputs') && $('og-outputs').classList.contains('on')) renderOutputs();
+    projectOutputStatus();
   }
 
-  // Preflight bridge: Cueola's go-live panel asks how the outputs are doing.
-  function outputHealth() {
-    let open = 0, healthy = 0; const dead = [];
-    outputs.forEach(o => {
-      if (!isOutputAlive(o.id)) return;
-      open++;
-      if (isOutputHealthy(o.id)) healthy++;
-      else dead.push(o.label || ('Output ' + o.id));
+  // One explicit projection is shared by the Outputs sheet, Cueola Live's
+  // persistent playout badge, Firestore transport telemetry, and preflight.
+  function outputStatus() {
+    const items = outputs.map(o => {
+      const rec = outputRecord(o.id, false), state = stateForOutput(o.id);
+      return {
+        id: o.id, label: o.label || ('Output ' + o.id),
+        status: rec ? rec.status : 'closed', detail: rec ? rec.detail : 'Output window closed',
+        outputInstanceId: rec ? rec.outputInstanceId : '',
+        communicationStatus: state ? state.communicationStatus : 'disconnected',
+        mediaLoadStatus: state ? state.mediaLoadStatus : 'empty',
+        playbackStatus: state ? state.playbackStatus : 'stopped',
+        rendererStatus: state ? state.rendererStatus : 'idle',
+        heartbeatStatus: state ? state.heartbeatStatus : 'unknown',
+        lastHeartbeatAt: state ? state.lastHeartbeatAt : 0,
+        lastAck: state ? state.lastAck : null,
+        recoverability: rec ? rec.recoverability : 'none',
+        pendingAcks: rec && rec.ackPending ? rec.ackPending.size : 0,
+        error: rec ? rec.error : ''
+      };
     });
-    return { open, healthy, dead };
+    const priority = ['error', 'stalled', 'disconnected', 'recovering', 'connecting', 'opening'];
+    let status = 'closed';
+    const prioritized = priority.find(candidate => items.some(item => item.status === candidate));
+    if (prioritized) status = prioritized;
+    if (items.some(item => item.status === 'ready') && !items.some(item => priority.includes(item.status))) status = 'ready';
+    const ready = items.filter(item => item.status === 'ready').length;
+    const open = items.filter(item => item.status !== 'closed').length;
+    if (ready > 0 && open < items.length && !items.some(item => priority.includes(item.status))) status = 'degraded';
+    const problem = items.find(item => item.status === status) || (status === 'degraded' ? items.find(item => item.status === 'closed') : null);
+    const detail = status === 'degraded'
+      ? (ready + ' of ' + items.length + ' outputs ready · ' + items.filter(item => item.status === 'closed').map(item => item.label + ' closed').join(', '))
+      : (problem ? (problem.label + ' · ' + problem.detail) : (ready ? (ready + ' of ' + items.length + ' outputs ready') : 'No output window open'));
+    return { status, detail, open, ready, total: items.length, items };
+  }
+  function projectOutputStatus(force) {
+    const summary = outputStatus();
+    const signature = JSON.stringify({ status: summary.status, detail: summary.detail, items: summary.items.map(item => [item.id, item.status, item.recoverability, item.pendingAcks, item.error]) });
+    if (!force && signature === lastOutputProjection) return summary;
+    lastOutputProjection = signature;
+    try { if (typeof window.syncOutrangutanControllerStatus === 'function') window.syncOutrangutanControllerStatus(); } catch (e) {}
+    try { if (mode === 'session' && sessionCode) publishLive(true); } catch (e) {}
+    return summary;
+  }
+  // Preflight keeps its established compact shape while drawing from the same
+  // protocol state as the operator-facing surfaces.
+  function outputHealth() {
+    const summary = outputStatus();
+    return {
+      open: summary.open,
+      healthy: summary.ready,
+      dead: summary.items.filter(item => item.status !== 'ready' && item.status !== 'closed').map(item => item.label),
+      status: summary.status,
+      detail: summary.detail
+    };
+  }
+
+  // Cueola Live exit adapter. Classification is deliberately observational:
+  // it never opens a channel, changes transport, or creates output records.
+  function liveExitVoiceCount() {
+    let count = 0;
+    padRT.forEach(rt => { count += rt && Array.isArray(rt.voices) ? rt.voices.length : 0; });
+    return count;
+  }
+  function liveExitWindowOpen(win) {
+    if (!win) return true; // A BroadcastChannel-only renderer can be open without a WindowProxy.
+    try { return !win.closed; } catch (e) { return true; }
+  }
+  function classifyLiveExit() {
+    const summary = outputStatus();
+    const cue = (active && active.cue) || (preInfo && preInfo.cue) || null;
+    let transportState = 'idle';
+    if (preInfo) transportState = 'pre';
+    else if (active && active.held) transportState = 'held';
+    else if (active && active.kind === 'image') transportState = active.paused ? 'paused' : 'playing';
+    else if (active && active.el) transportState = active.el.paused ? 'paused' : 'playing';
+    else if (active) transportState = 'playing';
+
+    const localOutputId = active && active.cue ? Number(active.cue.output || 1) : 0;
+    const items = summary.items.map(item => {
+      const open = isOutputAlive(item.id);
+      const rendererHasProgram = item.mediaLoadStatus !== 'empty'
+        && (item.playbackStatus === 'playing' || item.playbackStatus === 'paused');
+      const isActive = open && (rendererHasProgram || localOutputId === Number(item.id));
+      return {
+        id: Number(item.id), label: String(item.label || ('Output ' + item.id)),
+        open: !!open, active: !!isActive, status: String(item.status || 'closed'),
+        playbackStatus: String(item.playbackStatus || 'stopped'),
+        rendererStatus: String(item.rendererStatus || 'idle'),
+        communicationStatus: String(item.communicationStatus || 'disconnected')
+      };
+    });
+    const sfxVoices = liveExitVoiceCount();
+    const hasOpenOutputs = items.some(item => item.open);
+    const hasActiveOutputs = items.some(item => item.active);
+    const transportActive = !!(active || preInfo);
+    const isActive = transportActive || sfxVoices > 0 || hasActiveOutputs;
+    return {
+      timestamp: Date.now(),
+      controllerAttached: !outputRuntimeDetached && !!(outputWindowListenerReady || bc || outputControllers.size),
+      active: isActive, open: hasOpenOutputs,
+      hasActiveOutputs, hasOpenOutputs, needsDisposition: isActive,
+      transport: {
+        active: transportActive, state: transportState,
+        cueId: cue ? String(cue.id || '') : '',
+        cueName: cue ? String(cue.name || '') : '',
+        cueType: cue ? String(cue.type || (active && active.kind) || '') : ''
+      },
+      sfx: { active: sfxVoices > 0, voices: sfxVoices },
+      outputs: {
+        configured: items.length,
+        open: items.filter(item => item.open).length,
+        active: items.filter(item => item.active).length,
+        items
+      }
+    };
+  }
+  function liveExitAck(rec, commandId) {
+    const state = rec ? stateForOutput(rec.id) : null;
+    const ack = (state && state.lastAck) || (rec && rec.lastAck) || null;
+    return ack && ack.commandId === commandId ? ack : null;
+  }
+  function waitForLiveExitAck(rec, commandId) {
+    return new Promise(resolve => {
+      const deadline = Date.now() + OUTPUT_ACK_MS + 250;
+      const inspect = () => {
+        const ack = liveExitAck(rec, commandId);
+        if (ack) {
+          resolve({
+            acknowledged: ack.ok !== false,
+            status: ack.ok === false ? 'rejected' : 'acknowledged',
+            error: String(ack.error || '')
+          });
+          return;
+        }
+        if (!rec || !rec.ackPending.has(commandId) || Date.now() >= deadline) {
+          resolve({ acknowledged: false, status: 'timeout', error: 'Renderer did not acknowledge STOP.' });
+          return;
+        }
+        setTimeout(inspect, 40);
+      };
+      inspect();
+    });
+  }
+  function reattachLiveControl() {
+    const alreadyAttached = !outputRuntimeDetached;
+    const desiredSessionId = desiredOutputSessionId();
+    let identityMatched = true;
+    let restored = 0;
+    if (outputRuntimeDetached) {
+      const saved = detachedOutputRuntime;
+      outputRuntimeDetached = false;
+      if (saved && saved.productionSessionId === desiredSessionId) {
+        outputChannelSessionId = saved.productionSessionId;
+        saved.records.forEach(entry => {
+          const id = Number(entry[0]);
+          if (!outputs.some(output => Number(output.id) === id)) return;
+          const rec = entry[1];
+          // Give the existing renderer one heartbeat interval to report back;
+          // otherwise a long detach could race the watchdog into a needless
+          // safe-recovery pause immediately after listeners are reclaimed.
+          if (!rec.win || liveExitWindowOpen(rec.win)) rec.lastBeat = Date.now();
+          outputWins.set(id, rec);
+          restored += 1;
+        });
+        saved.controllers.forEach(entry => outputControllers.set(entry[0], entry[1]));
+      } else if (saved) {
+        identityMatched = false;
+      }
+      detachedOutputRuntime = null;
+    }
+    ensureChannel();
+    if (outputWins.size || outputControllers.size) ensureWatchdog();
+    const sessionRequired = mode === 'session' && !!sessionCode;
+    if (sessionRequired && !sessionSub) subscribeSession();
+    const state = classifyLiveExit();
+    const sessionAttached = sessionRequired ? !!sessionSub : false;
+    const ok = state.controllerAttached && (!sessionRequired || sessionAttached);
+    return {
+      ok, acknowledged: ok, timestamp: Date.now(), alreadyAttached,
+      productionSessionId: desiredSessionId, identityMatched,
+      controllerAttached: state.controllerAttached,
+      sessionRequired, sessionAttached,
+      outputs: {
+        restored, open: state.outputs.open, active: state.outputs.active,
+        items: state.outputs.items
+      },
+      error: ok ? '' : (!state.controllerAttached
+        ? 'Output controller listeners could not be attached.'
+        : 'The current Cueola session listener is not available yet.')
+    };
+  }
+  async function applyLiveExit(disposition) {
+    disposition = String(disposition || '').toLowerCase();
+    const before = classifyLiveExit();
+    const openEntries = before.outputs.items.filter(item => item.open).map(item => {
+      const rec = outputRecord(item.id, false);
+      return { item, rec, win: rec ? rec.win : null };
+    });
+    const base = {
+      ok: false, acknowledged: false, disposition, timestamp: Date.now(), before,
+      local: { programStopped: false, sfxStopped: false, sfxVoicesStopped: 0 },
+      controller: { detached: false, sessionDetached: false },
+      outputs: { requested: openEntries.length, acknowledged: 0, failed: 0, windowsLeftOpen: 0, items: [] },
+      error: ''
+    };
+    if (disposition !== 'stop' && disposition !== 'detach') {
+      base.error = 'Disposition must be "stop" or "detach".';
+      return base;
+    }
+
+    if (outputRuntimeDetached) {
+      if (disposition === 'detach') {
+        return Object.assign(base, {
+          ok: true, acknowledged: true, alreadyDetached: true,
+          controller: { detached: true, sessionDetached: true }
+        });
+      }
+      base.error = 'Live control is detached. Reattach before requesting STOP.';
+      return base;
+    }
+
+    if (disposition === 'detach') {
+      preserveOutputRuntimeForReattach();
+      unsubscribeSession();
+      outputRuntimeDetached = true;
+      cleanupOutputRuntime(false);
+      const items = openEntries.map(entry => ({
+        id: entry.item.id, label: entry.item.label, wasOpen: true,
+        wasActive: entry.item.active, commandId: '', status: 'detached',
+        acknowledged: true, error: ''
+      }));
+      return Object.assign(base, {
+        ok: true, acknowledged: true,
+        controller: { detached: true, sessionDetached: true },
+        outputs: {
+          requested: items.length, acknowledged: items.length, failed: 0,
+          windowsLeftOpen: openEntries.filter(entry => liveExitWindowOpen(entry.win)).length,
+          items
+        }
+      });
+    }
+
+    const previousCommands = new Map(openEntries.map(entry => [
+      entry.item.id,
+      new Set(entry.rec && entry.rec.ackPending ? entry.rec.ackPending.keys() : [])
+    ]));
+    const voicesBefore = liveExitVoiceCount();
+    try {
+      if (decks) stopAll({ silent: true });
+      else { clearPre(); active = null; sendOut({ t: 'stop' }); }
+      stopAllPads();
+    } catch (e) {
+      base.local.programStopped = !active && !preInfo;
+      base.local.sfxStopped = liveExitVoiceCount() === 0;
+      base.local.sfxVoicesStopped = Math.max(0, voicesBefore - liveExitVoiceCount());
+      base.outputs.failed = openEntries.length;
+      base.outputs.windowsLeftOpen = openEntries.filter(entry => liveExitWindowOpen(entry.win)).length;
+      base.outputs.items = openEntries.map(entry => ({
+        id: entry.item.id, label: entry.item.label, wasOpen: true,
+        wasActive: entry.item.active, commandId: '', status: 'not-requested',
+        acknowledged: false, error: 'Local stop failed before STOP could be confirmed.'
+      }));
+      base.error = 'Local stop failed: ' + String((e && e.message) || e || 'unknown error');
+      return base;
+    }
+    base.local.programStopped = !active && !preInfo;
+    base.local.sfxStopped = liveExitVoiceCount() === 0;
+    base.local.sfxVoicesStopped = Math.max(0, voicesBefore - liveExitVoiceCount());
+
+    const attempts = openEntries.map(entry => {
+      const seen = previousCommands.get(entry.item.id) || new Set();
+      let commandId = '';
+      if (entry.rec && entry.rec.ackPending) entry.rec.ackPending.forEach((pending, id) => {
+        if (!commandId && !seen.has(id) && pending.command && pending.command.commandType === 'STOP') commandId = id;
+      });
+      if (!commandId) return Promise.resolve(Object.assign(entry, {
+        commandId: '', acknowledged: false, status: 'not-ready',
+        error: 'Open renderer was not ready to accept STOP.'
+      }));
+      return waitForLiveExitAck(entry.rec, commandId).then(result => Object.assign(entry, result, { commandId }));
+    });
+    const settled = await Promise.all(attempts);
+    const items = settled.map(entry => ({
+      id: entry.item.id, label: entry.item.label, wasOpen: true,
+      wasActive: entry.item.active, commandId: entry.commandId,
+      status: entry.status, acknowledged: entry.acknowledged, error: entry.error
+    }));
+    const acknowledged = items.filter(item => item.acknowledged).length;
+    const failed = items.length - acknowledged;
+    const safeToDetach = base.local.programStopped && base.local.sfxStopped && failed === 0;
+    if (safeToDetach) {
+      preserveOutputRuntimeForReattach();
+      unsubscribeSession();
+      outputRuntimeDetached = true;
+      cleanupOutputRuntime(false);
+    }
+    base.ok = safeToDetach;
+    base.acknowledged = safeToDetach;
+    base.controller = { detached: safeToDetach, sessionDetached: safeToDetach };
+    base.outputs = {
+      requested: items.length, acknowledged, failed,
+      windowsLeftOpen: openEntries.filter(entry => liveExitWindowOpen(entry.win)).length,
+      items
+    };
+    if (!safeToDetach) {
+      const failures = items.filter(item => !item.acknowledged).map(item => item.label + ': ' + item.error);
+      base.error = failures.length ? failures.join(' ') : 'Local transport did not reach a stopped state.';
+    }
+    return base;
   }
 
   // ── Stream Deck (WebHID, Phase 3) ────────────────────────────────────────
@@ -824,6 +1402,103 @@
   // action; key images painted best-effort for gen-2 (JPEG) models. All HID I/O
   // is guarded — Chromium-only, and only fully verifiable with the hardware.
   const sdState = [];
+  const sdIconCache = new Map();
+  const sdLabelRenderer = SD_LABELS ? SD_LABELS.createRenderer({
+    createCanvas(width, height) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      return canvas;
+    },
+    encode(canvas, options) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('The browser could not encode the Stream Deck JPEG.'));
+        }, options.type, options.quality);
+      });
+    },
+  }) : null;
+
+  function sdSupportedProfile(productId) {
+    if (!sdLabelRenderer || !SD_LABELS.supportsModel(productId)) return null;
+    return SD_LABELS.getModelProfile(productId);
+  }
+  function sdCurrentProductId() {
+    return sd ? sd.device.productId : sdSimulatorProductId;
+  }
+  function sdSetPaintError(message='') {
+    sdPaintError = String(message || '');
+    const status = $('og-sd-error');
+    if (!status) return;
+    status.hidden = !sdPaintError;
+    status.textContent = sdPaintError;
+  }
+  function sdIconCanvas(action, imageSize) {
+    const cacheKey = action + ':' + imageSize;
+    if (sdIconCache.has(cacheKey)) return sdIconCache.get(cacheKey);
+    const canvas = document.createElement('canvas');
+    canvas.width = imageSize;
+    canvas.height = imageSize;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, imageSize, imageSize);
+    const s = imageSize / 96;
+    ctx.save();
+    try {
+      ctx.scale(s, s);
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (action === 'go' || action === 'cue') {
+        ctx.beginPath(); ctx.moveTo(34, 25); ctx.lineTo(72, 48); ctx.lineTo(34, 71); ctx.closePath(); ctx.fill();
+        if (action === 'cue') { ctx.beginPath(); ctx.arc(48, 48, 34, 0, Math.PI * 2); ctx.stroke(); }
+      } else if (action === 'stop') {
+        ctx.fillRect(29, 29, 38, 38);
+      } else if (action === 'pause') {
+        ctx.fillRect(29, 25, 14, 46); ctx.fillRect(53, 25, 14, 46);
+      } else if (action === 'fadeStop') {
+        ctx.beginPath(); ctx.moveTo(24, 27); ctx.lineTo(59, 62); ctx.stroke(); ctx.fillRect(57, 56, 17, 17);
+      } else if (action === 'panic') {
+        ctx.beginPath(); ctx.moveTo(48, 18); ctx.lineTo(80, 76); ctx.lineTo(16, 76); ctx.closePath(); ctx.stroke();
+        ctx.fillRect(44, 36, 8, 21); ctx.beginPath(); ctx.arc(48, 66, 4, 0, Math.PI * 2); ctx.fill();
+      } else if (action === 'pad') {
+        ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(57, 25); ctx.lineTo(57, 61); ctx.lineTo(72, 55); ctx.stroke();
+        ctx.beginPath(); ctx.arc(45, 67, 11, 0, Math.PI * 2); ctx.fill();
+      }
+    } finally {
+      ctx.restore();
+    }
+    sdIconCache.set(cacheKey, canvas);
+    return canvas;
+  }
+  function sdKeyIsActive(index, mapping) {
+    if (!mapping?.action) return false;
+    if (sdState[index] === true) return true;
+    if (mapping.action === 'go') return !!active && !isActivePaused();
+    if (mapping.action === 'pause') return isActivePaused();
+    if (mapping.action === 'cue') return !!active && active.cue?.id === mapping.ref;
+    if (mapping.action === 'pad') return !!padRT.get(mapping.ref)?.voices?.length;
+    return false;
+  }
+  function sdKeyDescriptor(index, mapping, productId=sdCurrentProductId(), overrides={}) {
+    const profile = sdSupportedProfile(productId);
+    const action = overrides.action || mapping?.action || '';
+    const label = Object.prototype.hasOwnProperty.call(overrides, 'text') ? overrides.text : sdActionLabel(mapping);
+    const iconMode = overrides.iconMode || 'combined';
+    const showIcon = action && iconMode !== 'text';
+    const showText = iconMode !== 'icon';
+    return {
+      text:showText ? label : '',
+      icon:showIcon && profile ? { image:sdIconCanvas(action, profile.imageWidth) } : '',
+      active:Object.prototype.hasOwnProperty.call(overrides, 'active') ? !!overrides.active : sdKeyIsActive(index, mapping),
+      backgroundColor:overrides.backgroundColor || (mapping?.action ? sdKeyColor(mapping) : '#101418'),
+      accentColor:'#8ff7bc',
+      maxLines:overrides.maxLines || 2,
+    };
+  }
   function sdActionLabel(m) {
     if (!m || !m.action) return '';
     if (m.action === 'cue') { const c = cueById(m.ref); return c ? ('CUE ' + c.num) : 'CUE ?'; }
@@ -939,60 +1614,71 @@
     } catch (e) { toast('Stream Deck selection cancelled.'); return; }
     if (!dev) { toast('No Stream Deck selected.'); return; }
     try { if (!dev.opened) await dev.open(); } catch (e) { toast('Could not open the Stream Deck (another app using it?).'); return; }
-    const model = SD_MODELS[dev.productId] || { name: 'Stream Deck', keys: 15, cols: 5, img: 72, fmt: 'jpeg', flip: false, reset: [0x03, 0x02], bright: [0x03, 0x08] };
+    const model = SD_MODELS[dev.productId];
+    if (!model) {
+      try { await dev.close(); } catch (e) {}
+      toast('This Stream Deck model is not supported yet; no controls or images were sent.');
+      return;
+    }
     sd = { device: dev, model };
+    sdState.length = 0;
     dev.oninputreport = onSdInput;
     try { navigator.hid.addEventListener('disconnect', onSdDisconnect); } catch (e) {}
-    sdReset(); sdBrightness(80); sdPaintAll();
-    toast('Stream Deck connected — ' + model.name + ' (' + model.keys + ' keys).');
+    sdReset(); sdBrightness(80);
+    const labelsReady = await scheduleStreamDeckRefresh();
+    toast('Stream Deck connected — ' + model.name + ' (' + model.keys + ' keys)' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
     renderStreamDeck();
   }
-  function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; renderStreamDeck(); toast('Stream Deck disconnected.'); }
-  function sdDisconnect() { if (sd && sd.device) { try { sdReset(); } catch (e) {} try { sd.device.close(); } catch (e) {} } sd = null; renderStreamDeck(); }
+  function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; sdSetPaintError(''); renderStreamDeck(); toast('Stream Deck disconnected.'); }
+  function sdDisconnect() { if (sd && sd.device) { try { sdReset(); } catch (e) {} try { sd.device.close(); } catch (e) {} } sd = null; sdSetPaintError(''); renderStreamDeck(); }
   function onSdInput(e) {
     if (!sd) return;
     const data = new Uint8Array(e.data.buffer);
-    const off = sd.model.stateOffset != null ? sd.model.stateOffset : (sd.model.fmt === 'jpeg' ? 3 : 0); // gen2 states @3, gen1 @0 (tune per model)
+    const off = sd.model.stateOffset;
+    let changed = false;
     for (let i = 0; i < sd.model.keys; i++) {
       const pressed = data[off + i] === 1, was = sdState[i];
-      if (pressed && !was) sdFireKey(i);
       sdState[i] = pressed;
+      if (pressed !== was) changed = true;
+      if (pressed && !was) sdFireKey(i);
     }
+    if (changed) scheduleStreamDeckRefresh();
   }
   function sdReset() { try { const r = sd.model.reset; sd.device.sendFeatureReport(r[0], new Uint8Array([r[1]])); } catch (e) {} }
   function sdBrightness(pct) { try { const b = sd.model.bright; sd.device.sendFeatureReport(b[0], new Uint8Array([b[1], clamp(pct | 0, 0, 100)])); } catch (e) {} }
-  async function sdPaintAll() { if (!sd) return; for (let i = 0; i < sd.model.keys; i++) await sdPaintKey(i); }
-  async function sdPaintKey(i) {
-    if (!sd || sd.model.fmt !== 'jpeg') return;   // image upload implemented for gen-2 (JPEG) models only
-    const bytes = await sdKeyImage(i, sdMap[i]); if (!bytes) return;
-    try {
-      const PKT = 1024, HEADER = 8, PAYLOAD = PKT - HEADER;   // [0x02][0x07,key,last,len_lo,len_hi,page_lo,page_hi][payload]
-      let page = 0, sent = 0;
-      while (sent < bytes.length) {
-        const chunk = bytes.subarray(sent, sent + PAYLOAD);
-        const last = (sent + chunk.length) >= bytes.length ? 1 : 0;
-        const pkt = new Uint8Array(PKT);
-        pkt[0] = 0x02; pkt[1] = 0x07; pkt[2] = i; pkt[3] = last;
-        pkt[4] = chunk.length & 0xff; pkt[5] = (chunk.length >> 8) & 0xff;
-        pkt[6] = page & 0xff; pkt[7] = (page >> 8) & 0xff;
-        pkt.set(chunk, HEADER);
-        await sd.device.sendReport(0x02, pkt.subarray(1));
-        sent += chunk.length; page++;
-      }
-    } catch (e) {}
+  async function sdPaintAll(target = sd) {
+    if (!target || target !== sd) return false;
+    if (!sdSupportedProfile(target.device.productId)) {
+      sdSetPaintError(target.model.name + ' accepts key presses, but Cueola does not guess its image protocol.');
+      return false;
+    }
+    sdSetPaintError('');
+    let success = true;
+    for (let i = 0; i < target.model.keys; i++) {
+      if (target !== sd) return false;
+      success = (await sdPaintKey(i, target)) && success;
+    }
+    return success;
   }
-  function sdKeyImage(i, m) {
-    return new Promise(res => {
-      const px = sd.model.img, cv = document.createElement('canvas'); cv.width = px; cv.height = px;
-      const ctx = cv.getContext('2d');
-      ctx.fillStyle = m && m.action ? sdKeyColor(m) : '#101418'; ctx.fillRect(0, 0, px, px);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '700 ' + Math.round(px * 0.16) + 'px -apple-system,system-ui,sans-serif';
-      sdWrap(ctx, sdActionLabel(m), px / 2, px * 0.56, px * 0.9, px * 0.2);
-      cv.toBlob(b => { if (!b) return res(null); b.arrayBuffer().then(a => res(new Uint8Array(a))).catch(() => res(null)); }, 'image/jpeg', 0.9);
-    });
+  async function sdPaintKey(i, target = sd) {
+    if (!target || target !== sd) return false;
+    if (!sdLabelRenderer || !sdSupportedProfile(target.device.productId)) return false;
+    try {
+      const rendered = await sdLabelRenderer.renderAndPacketize(target.device.productId, i, sdKeyDescriptor(i, sdMap[i], target.device.productId));
+      if (target !== sd) return false;
+      for (const packet of rendered.packets) {
+        if (target !== sd) return false;
+        await target.device.sendReport(packet.reportId, packet.data);
+      }
+      return true;
+    } catch (error) {
+      const message = 'Key ' + (i + 1) + ' label failed: ' + ((error && error.message) || error || 'unknown image error');
+      sdSetPaintError(message);
+      try { console.warn('[outrangutan] Stream Deck label:', message); } catch (e) {}
+      return false;
+    }
   }
   function sdKeyColor(m) { return ({ go: '#1c7a3e', stop: '#2e3640', pause: '#5a4a12', fadeStop: '#243a66', panic: '#8a1f1f', cue: '#234a8a', pad: '#5a2a8a' })[m.action] || '#234a8a'; }
-  function sdWrap(ctx, text, x, y, maxW, lh) { const words = String(text).split(' '); let line = '', yy = y; for (const w of words) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { ctx.fillText(line, x, yy); line = w; yy += lh; } else line = t; } if (line) ctx.fillText(line, x, yy); }
 
   // ── Outputs panel ─────────────────────────────────────────────────────────
   async function openOutputsPanel() { $('og-outputs').classList.add('on'); renderOutputs(); audioDevs = await listAudioOutputs(); renderOutputs(); }
@@ -1007,7 +1693,14 @@
       + outputs.map(o => {
         const open = isOutputAlive(o.id);
         const live = isOutputHealthy(o.id);
-        const dead = open && !live;   // window exists but the heartbeat stopped
+        const rec = outputRecord(o.id, false);
+        const state = stateForOutput(o.id);
+        const status = rec ? rec.status : 'closed';
+        const dead = open && !live;
+        const needsRecovery = !!(rec && (['stalled', 'disconnected', 'recovering', 'error'].includes(status) || rec.recoverability === 'operator'));
+        const recoveryLabel = rec && rec.recoverability === 'operator' ? 'Resume' : 'Recover paused';
+        const ack = state && state.lastAck ? ('Last ack ' + state.lastAck.commandType + (state.lastAck.ok ? ' ✓' : ' ⚠')) : 'No command ack yet';
+        const statusDetail = status.toUpperCase() + ' · ' + (rec ? rec.detail : 'Output window closed') + ' · ' + ack;
         const screenSel = screensCache
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
           : '<span class="og-out-note">Detect displays to place this on a screen</span>';
@@ -1016,8 +1709,10 @@
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
             + '<button class="og-bar-btn og-out-open" data-o="' + o.id + '">' + (open ? 'Focus' : 'Open') + '</button>'
             + '<button class="og-bar-btn og-out-id" data-o="' + o.id + '">Identify</button>'
+            + (needsRecovery ? '<button class="og-bar-btn og-out-recover" data-o="' + o.id + '" data-resume="' + (rec.recoverability === 'operator' ? '1' : '0') + '">' + recoveryLabel + '</button>' : '')
             + (outputs.length > 1 ? '<button class="og-bar-btn danger og-out-del" data-o="' + o.id + '">' + sym('action.delete') + '</button>' : '')
           + '</div>'
+          + '<div class="og-out-note" role="status">' + esc(statusDetail) + '</div>'
           + '<div class="og-out-cfg">'
             + '<div class="og-field"><label>Display</label>' + screenSel + '</div>'
             + '<label class="og-check og-check-inline og-out-audiochk"><input type="checkbox" class="og-out-audio" data-o="' + o.id + '"' + (o.audioOn ? ' checked' : '') + '> Audio on this output</label>'
@@ -1033,6 +1728,7 @@
     each('.og-out-label', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.label = el.value; scheduleSave(); renderInspector(); } }; });
     each('.og-out-open', el => { el.onclick = () => focusOrOpenOutput(+el.getAttribute('data-o')); });
     each('.og-out-id', el => { el.onclick = () => { const id = +el.getAttribute('data-o'); const rec = outputWins.get(id); identifyOutput(id, !(rec && rec.identify)); }; });
+    each('.og-out-recover', el => { el.onclick = () => recoverOutput(+el.getAttribute('data-o'), el.getAttribute('data-resume') === '1'); });
     each('.og-out-del', el => { el.onclick = () => removeOutput(+el.getAttribute('data-o')); });
     each('.og-out-screen', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.screenId = el.value === '' ? null : +el.value; scheduleSave(); } }; });
     each('.og-out-audio', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.audioOn = el.checked; applyOutputSink(o.id); scheduleSave(); } }; });
@@ -1090,31 +1786,190 @@
     on('og-transcode', 'onchange', e => { settings.transcode = e.target.checked; scheduleSave(); if (e.target.checked) loadFFmpeg(); });
   }
 
+  function sdProofSamples(productId) {
+    return [
+      { label:'Text only', mapping:{ action:'go' }, descriptor:{ text:'GO', iconMode:'text' } },
+      { label:'Icon only', mapping:{ action:'go' }, descriptor:{ text:'', iconMode:'icon' } },
+      { label:'Text + icon', mapping:{ action:'cue' }, descriptor:{ text:'CUE 12' } },
+      { label:'Multiple lines', mapping:{ action:'pad' }, descriptor:{ text:'HOUSE MUSIC' } },
+      { label:'Long label', mapping:{ action:'fadeStop' }, descriptor:{ text:'SUPERLONGTRANSITIONLABEL', maxLines:2 } },
+      { label:'Active state', mapping:{ action:'go' }, descriptor:{ text:'LIVE', active:true } },
+    ].map((sample, index) => ({
+      ...sample,
+      descriptor:sdKeyDescriptor(index, sample.mapping, productId, sample.descriptor),
+    }));
+  }
+
+  function sdPhysicalFrames(productId, descriptor) {
+    const canonical = sdLabelRenderer.renderCanonical(productId, descriptor);
+    const upload = sdLabelRenderer.createDeviceFrame(productId, canonical.canvas);
+    // A protocol-faithful display simulation applies the model's device
+    // orientation to the pre-rotated upload frame. For these profiles, two
+    // 180° conversions restore the canonical upright art.
+    const simulated = sdLabelRenderer.createDeviceFrame(productId, upload.canvas);
+    return { canonical:canonical.canvas, upload:upload.canvas, simulated:simulated.canvas };
+  }
+
+  function sdCopyCanvas(target, source) {
+    const ctx = target?.getContext?.('2d');
+    if (!ctx || !source) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, target.width, target.height);
+    ctx.save();
+    try { ctx.drawImage(source, 0, 0, target.width, target.height); }
+    finally { ctx.restore(); }
+  }
+
+  function renderStreamDeckPreviews() {
+    const body = $('og-sd-body');
+    const productId = sdCurrentProductId();
+    const profile = sdSupportedProfile(productId);
+    if (!body || !profile) return;
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sdk-preview[data-k]'), canvas => {
+      const index = Number(canvas.getAttribute('data-k'));
+      const frames = sdPhysicalFrames(productId, sdKeyDescriptor(index, sdMap[index], productId));
+      sdCopyCanvas(canvas, frames.simulated);
+      canvas.dataset.active = sdKeyIsActive(index, sdMap[index]) ? 'true' : 'false';
+    });
+    const samples = sdProofSamples(productId);
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-proof-preview[data-sample]'), canvas => {
+      const sample = samples[Number(canvas.getAttribute('data-sample'))];
+      if (sample) sdCopyCanvas(canvas, sdPhysicalFrames(productId, sample.descriptor).simulated);
+    });
+  }
+
+  function scheduleStreamDeckRefresh() {
+    sdRefreshAgain = true;
+    if (sdRefreshPromise) return sdRefreshPromise;
+    sdRefreshPromise = Promise.resolve().then(async () => {
+      let success = false;
+      try {
+        do {
+          sdRefreshAgain = false;
+          renderStreamDeckPreviews();
+          const target = sd;
+          success = target ? await sdPaintAll(target) : false;
+        } while (sdRefreshAgain);
+        return success;
+      } finally {
+        sdRefreshPromise = null;
+      }
+    });
+    return sdRefreshPromise;
+  }
+
+  function buildStreamDeckProofCanvas(productId) {
+    const profile = SD_LABELS.getModelProfile(productId);
+    const gap = 12, labelHeight = 18, edge = 24, keySize = profile.imageWidth;
+    const gridWidth = (profile.columns * (keySize + gap)) - gap;
+    const gridHeight = profile.rows * (keySize + labelHeight + gap);
+    const sampleSize = keySize, sampleGap = 16;
+    const samples = sdProofSamples(productId);
+    const sampleWidth = (samples.length * (sampleSize + sampleGap)) - sampleGap;
+    const width = Math.max(gridWidth, sampleWidth) + edge * 2;
+    const sectionHeight = 34 + gridHeight;
+    const height = 76 + sectionHeight * 2 + 50 + sampleSize + 46;
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    try {
+      ctx.fillStyle = '#080b12'; ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#f7f8fb'; ctx.font = '700 20px -apple-system,system-ui,sans-serif';
+      ctx.fillText('Cueola Stream Deck orientation proof', edge, 29);
+      ctx.fillStyle = '#9aa4b5'; ctx.font = '12px -apple-system,system-ui,sans-serif';
+      ctx.fillText(profile.name + ' · ' + profile.keys + ' keys · device upload rotation ' + profile.deviceRotationDegrees + '°', edge, 50);
+      const drawGrid = (title, y, frameName) => {
+        ctx.fillStyle = '#d8dfeb'; ctx.font = '700 13px -apple-system,system-ui,sans-serif'; ctx.fillText(title, edge, y + 15);
+        for (let i = 0; i < profile.keys; i++) {
+          const row = Math.floor(i / profile.columns), col = i % profile.columns;
+          const x = edge + col * (keySize + gap), ky = y + 28 + row * (keySize + labelHeight + gap);
+          const calibration = sdKeyDescriptor(i, { action:'go' }, productId, {
+            text:'K' + String(i + 1).padStart(2, '0'),
+            active:i === 0 || i === profile.keys - 1,
+            backgroundColor:i % 2 ? '#234a8a' : '#1c7a3e',
+          });
+          const frame = sdPhysicalFrames(productId, calibration)[frameName];
+          ctx.drawImage(frame, x, ky, keySize, keySize);
+          ctx.fillStyle = '#9aa4b5'; ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'center';
+          ctx.fillText(String(i + 1), x + keySize / 2, ky + keySize + 13); ctx.textAlign = 'start';
+        }
+      };
+      drawGrid('SIMULATED PHYSICAL DISPLAY · labels must read upright', 66, 'simulated');
+      drawGrid('RAW HID JPEG FRAME · intentionally pre-rotated 180°', 66 + sectionHeight, 'upload');
+      const sampleY = 66 + sectionHeight * 2 + 26;
+      ctx.fillStyle = '#d8dfeb'; ctx.font = '700 13px -apple-system,system-ui,sans-serif'; ctx.fillText('CONTENT AND STATE CASES · simulated display', edge, sampleY);
+      samples.forEach((sample, index) => {
+        const x = edge + index * (sampleSize + sampleGap), y = sampleY + 14;
+        ctx.drawImage(sdPhysicalFrames(productId, sample.descriptor).simulated, x, y, sampleSize, sampleSize);
+        ctx.fillStyle = '#9aa4b5'; ctx.font = '10px -apple-system,system-ui,sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(sample.label, x + sampleSize / 2, y + sampleSize + 14); ctx.textAlign = 'start';
+      });
+    } finally {
+      ctx.restore();
+    }
+    return canvas;
+  }
+
+  function exportStreamDeckProof() {
+    const productId = sdCurrentProductId();
+    if (!sdSupportedProfile(productId)) { sdSetPaintError('This model has no verified Cueola image profile to export.'); return; }
+    const canvas = buildStreamDeckProofCanvas(productId);
+    canvas.toBlob(blob => {
+      if (!blob) { sdSetPaintError('Could not encode the Stream Deck orientation proof.'); return; }
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url;
+      link.download = 'cueola-stream-deck-orientation-' + productId.toString(16).padStart(4, '0') + '.png';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      toast('Stream Deck orientation proof exported.');
+    }, 'image/png');
+  }
+
   function renderStreamDeck() {
     const body = $('og-sd-body'); if (!body) return;
-    const connected = !!sd, keys = connected ? sd.model.keys : 15, cols = connected ? sd.model.cols : 5;
+    const connected = !!sd, productId = sdCurrentProductId(), profile = sdSupportedProfile(productId);
+    const keys = connected ? sd.model.keys : (profile?.keys || 15);
+    const cols = connected ? sd.model.cols : (profile?.columns || 5);
     let grid = '';
     for (let i = 0; i < keys; i++) {
       const m = sdMap[i] || {};
-      const actSel = '<select class="og-sd-act" data-k="' + i + '">' + opt('', '—', m.action || '') + Object.keys(SD_ACTIONS).map(a => opt(a, SD_ACTIONS[a], m.action || '')).join('') + '</select>';
+      const actSel = '<select class="og-sd-act" data-k="' + i + '" aria-label="Key ' + (i + 1) + ' action">' + opt('', '—', m.action || '') + Object.keys(SD_ACTIONS).map(a => opt(a, SD_ACTIONS[a], m.action || '')).join('') + '</select>';
       let refSel = '';
-      if (m.action === 'cue') refSel = '<select class="og-sd-ref" data-k="' + i + '"><option value="">Pick cue…</option>' + cues.map(c => '<option value="' + c.id + '"' + (m.ref === c.id ? ' selected' : '') + '>#' + c.num + ' ' + esc(c.name) + '</option>').join('') + '</select>';
-      else if (m.action === 'pad') refSel = '<select class="og-sd-ref" data-k="' + i + '"><option value="">Pick pad…</option>' + pads.map(p => '<option value="' + p.id + '"' + (m.ref === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
-      grid += '<div class="og-sdk' + (m.action ? ' mapped' : '') + '"><span class="og-sdk-i">' + (i + 1) + '</span>' + actSel + refSel + '</div>';
+      if (m.action === 'cue') refSel = '<select class="og-sd-ref" data-k="' + i + '" aria-label="Key ' + (i + 1) + ' cue"><option value="">Pick cue…</option>' + cues.map(c => '<option value="' + c.id + '"' + (m.ref === c.id ? ' selected' : '') + '>#' + c.num + ' ' + esc(c.name) + '</option>').join('') + '</select>';
+      else if (m.action === 'pad') refSel = '<select class="og-sd-ref" data-k="' + i + '" aria-label="Key ' + (i + 1) + ' SFX pad"><option value="">Pick pad…</option>' + pads.map(p => '<option value="' + p.id + '"' + (m.ref === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
+      const preview = profile ? '<canvas class="og-sdk-preview" data-k="' + i + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="Simulated physical display for key ' + (i + 1) + '"></canvas>' : '<div class="og-sdk-preview-missing">No image profile</div>';
+      grid += '<div class="og-sdk' + (m.action ? ' mapped' : '') + '"><span class="og-sdk-i">KEY ' + (i + 1) + '</span>' + preview + actSel + refSel + '</div>';
     }
     const hasHid = ('hid' in navigator);
+    const unsupportedConnectedOption = connected && !profile
+      ? '<option value="' + productId + '" selected>' + esc(sd.model.name) + ' · input only — no image profile</option>'
+      : '';
+    const profileOptions = unsupportedConnectedOption + (SD_LABELS ? SD_LABELS.SUPPORTED_PRODUCT_IDS.map(id => {
+      const item = SD_LABELS.getModelProfile(id);
+      return '<option value="' + id + '"' + (id === productId ? ' selected' : '') + '>' + esc(item.name) + ' · ' + item.keys + ' keys</option>';
+    }).join('') : '');
+    const proofSamples = profile ? sdProofSamples(productId).map((sample, index) => '<div class="og-sd-proof-sample"><canvas class="og-sd-proof-preview" data-sample="' + index + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="' + esc(sample.label) + ' orientation sample"></canvas><span>' + esc(sample.label) + '</span></div>').join('') : '';
     body.innerHTML =
       '<div class="og-sd-status">'
         + (connected ? '<span class="og-out-dot live"></span> Connected — ' + esc(sd.model.name) + ' (' + sd.model.keys + ' keys)' : (hasHid ? '<span class="og-out-dot"></span> Not connected' : 'WebHID unavailable — needs Chrome/Edge'))
         + '<div class="og-bar-spacer"></div>'
         + (connected ? '<button class="og-bar-btn danger" id="og-sd-disc">Disconnect</button>' : '<button class="og-bar-btn" id="og-sd-conn"' + (hasHid ? '' : ' disabled') + '>Connect Stream Deck</button>')
       + '</div>'
-      + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, or a specific cue or SFX pad — no Elgato software. Mapping works before the device is connected; once connected, pressing a physical key fires it. Button images paint on gen-2 models (MK.2 / XL / v2).</p>'
-      + '<div class="og-sd-grid" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + grid + '</div>';
+      + '<div class="og-sd-device-tools"><label><span>' + (connected ? 'Connected image profile' : 'Preview model') + '</span><select id="og-sd-model"' + (connected ? ' disabled' : '') + '>' + profileOptions + '</select></label><button class="og-bar-btn" id="og-sd-export"' + (profile ? '' : ' disabled') + '>' + sym('action.export') + 'Export orientation proof</button></div>'
+      + '<div class="og-sd-error" id="og-sd-error" role="status"' + (sdPaintError ? '' : ' hidden') + '>' + esc(sdPaintError) + '</div>'
+      + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, a cue, or an SFX pad. The preview models the physical display from the same canonical art and verified 180° upload transform used by Classic/MK.2/v2 and XL hardware. It supports rehearsal, but does not replace a physical-device check.</p>'
+      + '<div class="og-sd-grid" style="--sd-cols:' + cols + '">' + grid + '</div>'
+      + (profile ? '<section class="og-sd-proof"><h4>Orientation check</h4><p>These cases round-trip through the raw device frame before display simulation.</p><div class="og-sd-proof-grid">' + proofSamples + '</div></section>' : '');
     if ($('og-sd-conn')) $('og-sd-conn').onclick = sdConnect;
     if ($('og-sd-disc')) $('og-sd-disc').onclick = sdDisconnect;
-    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-act'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); const a = e.target.value; if (!a) delete sdMap[k]; else { sdMap[k] = Object.assign({}, sdMap[k], { action: a }); if (a !== 'cue' && a !== 'pad') delete sdMap[k].ref; } settings.sdMap = sdMap; renderStreamDeck(); if (sd) sdPaintKey(k); scheduleSave(); }; });
-    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; if (sd) sdPaintKey(k); scheduleSave(); }; });
+    if ($('og-sd-export')) $('og-sd-export').onclick = exportStreamDeckProof;
+    if ($('og-sd-model')) $('og-sd-model').onchange = e => { sdSimulatorProductId = Number(e.target.value); renderStreamDeck(); };
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-act'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); const a = e.target.value; if (!a) delete sdMap[k]; else { sdMap[k] = Object.assign({}, sdMap[k], { action: a }); if (a !== 'cue' && a !== 'pad') delete sdMap[k].ref; } settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
+    renderStreamDeckPreviews();
+    sdSetPaintError(sdPaintError);
   }
 
   // ── Cueola session sync (Phase 4) ────────────────────────────────────────
@@ -1223,6 +2078,7 @@
       const remaining = Math.max(0, (end || 0) - el.currentTime);
       live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), offset: Math.round(el.currentTime * 10) / 10, thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
     }
+    live.outputs = outputStatus();
     live.seq = ++_liveSeq;
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }); } catch (e) {}
   }
@@ -1855,6 +2711,7 @@
       tag.textContent = s === 'play' ? 'ON AIR' : s === 'pre' ? 'PRE-WAIT' : s === 'pause' ? 'PAUSED' : 'IDLE';
     }
     syncGoButton();               // GO ⇄ RESUME label tracks the paused state
+    scheduleStreamDeckRefresh();  // physical labels + simulator share transport state
     publishLive(true);            // push transport change to the rundown immediately
   }
 
@@ -2453,21 +3310,60 @@
   }
 
   // ── Responsive layout modes ───────────────────────────────────────────────
-  // wide (>720): three columns (Cue List | Program | Inspector) + bottom clip
-  //   editor, splitters live. The Inspector stays a right-hand column.
-  // narrow (≤720): the same panes stack and scroll as one column.
+  // Playback layout has one width owner: the visible Outrangutan root. The
+  // viewport is only a fallback while that root is hidden or has no box yet.
+  // CSS consumes the resulting class; it does not independently choose a mode.
+  const LAYOUT_NARROW_MAX = 720, LAYOUT_MEDIUM_MAX = 1180;
   let layoutMode = null, bottomTab = 'insp';
-  function currentMode() {
-    const w = window.innerWidth || document.documentElement.clientWidth || 1280;
-    if (w <= 720) return 'narrow';
+  let layoutResizeObserver = null, layoutResizeFallbackBound = false, layoutFrame = 0;
+  function responsiveLayoutWidth() {
+    const root = $('outrangutan');
+    if (root) {
+      const rect = root.getBoundingClientRect();
+      const rootWidth = Math.round(rect.width || root.clientWidth || 0);
+      if (rootWidth > 0) return rootWidth;
+    }
+    return Math.round(window.innerWidth || document.documentElement.clientWidth || 1280);
+  }
+  function modeForLayoutWidth(width) {
+    if (width <= LAYOUT_NARROW_MAX) return 'narrow';
+    if (width <= LAYOUT_MEDIUM_MAX) return 'medium';
     return 'wide';
+  }
+  function requestLayoutModeUpdate() {
+    if (layoutFrame) return;
+    const run = () => { layoutFrame = 0; applyLayoutMode(); };
+    layoutFrame = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(run)
+      : setTimeout(run, 0);
+  }
+  function initResponsiveLayout() {
+    const root = $('outrangutan');
+    if (root && typeof ResizeObserver === 'function') {
+      if (!layoutResizeObserver) {
+        layoutResizeObserver = new ResizeObserver(requestLayoutModeUpdate);
+        layoutResizeObserver.observe(root);
+      }
+      return;
+    }
+    if (!layoutResizeFallbackBound) {
+      layoutResizeFallbackBound = true;
+      window.addEventListener('resize', requestLayoutModeUpdate, { passive: true });
+    }
   }
   function applyLayoutMode() {
     const main = document.querySelector('.og-main');
-    const mode = currentMode();
+    const width = responsiveLayoutWidth();
+    const mode = modeForLayoutWidth(width);
     if (main) {
       main.classList.remove('og-lay-wide', 'og-lay-medium', 'og-lay-narrow');
       main.classList.add('og-lay-' + mode);
+      main.setAttribute('data-layout-mode', mode);
+    }
+    const root = $('outrangutan');
+    if (root) {
+      root.setAttribute('data-layout-mode', mode);
+      root.setAttribute('data-layout-width', String(width));
     }
     // relocate the Inspector pane: a top-row column at wide, part of the shared
     // tabbed bottom region at medium/narrow. Keep #og-inspector-pane intact.
@@ -2502,8 +3398,8 @@
     bottomTab = t;
     const bottom = $('og-bottom'); if (bottom) bottom.classList.toggle('show-edit', t === 'edit');
     const bi = $('og-bottom-tab-insp'), be = $('og-bottom-tab-edit');
-    if (bi) { bi.classList.toggle('on', t === 'insp'); bi.setAttribute('aria-selected', t === 'insp' ? 'true' : 'false'); }
-    if (be) { be.classList.toggle('on', t === 'edit'); be.setAttribute('aria-selected', t === 'edit' ? 'true' : 'false'); }
+    if (bi) { bi.classList.toggle('on', t === 'insp'); bi.setAttribute('aria-selected', t === 'insp' ? 'true' : 'false'); bi.tabIndex = t === 'insp' ? 0 : -1; }
+    if (be) { be.classList.toggle('on', t === 'edit'); be.setAttribute('aria-selected', t === 'edit' ? 'true' : 'false'); be.tabIndex = t === 'edit' ? 0 : -1; }
   }
 
   async function deleteCue(id) {
@@ -2548,7 +3444,7 @@
       b.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files[0]) assignPad(p.slot, e.dataTransfer.files[0]); });
     });
   }
-  function renderPadLive(id) { const b = document.querySelector('.og-pad[data-pad="' + id + '"]'); const rt = padRT.get(id); if (b) b.classList.toggle('live', !!(rt && rt.voices.length)); }
+  function renderPadLive(id) { const b = document.querySelector('.og-pad[data-pad="' + id + '"]'); const rt = padRT.get(id); if (b) b.classList.toggle('live', !!(rt && rt.voices.length)); scheduleStreamDeckRefresh(); }
   let padSlotForFile = 0;
   let listeningPadKey = false;
 
@@ -2839,42 +3735,85 @@
   // Rides Cueola's exportPaperHTMLAsPDF pipeline (same page, same look as the
   // rundown/call-sheet paperwork).
   async function printShowPack() {
-    if (!cues.length && !pads.length) { toast('Nothing to print yet — add a cue or pad first.'); return; }
+    const cloneForExport = value => {
+      if (typeof structuredClone === 'function') return structuredClone(value);
+      return JSON.parse(JSON.stringify(value));
+    };
+    const freezeExportValue = (value, seen = new WeakSet()) => {
+      if (!value || typeof value !== 'object' || seen.has(value)) return value;
+      seen.add(value);
+      Object.values(value).forEach(child => freezeExportValue(child, seen));
+      return Object.freeze(value);
+    };
+    // The pack is intentionally a local, point-in-time artifact. Clone before
+    // the first await so edits made while the PDF renderer is running cannot
+    // change its rows, identity, counts, or audit metadata.
+    const snapshot = freezeExportValue({
+      cues: cloneForExport(cues),
+      pads: cloneForExport(pads),
+      banks: cloneForExport(banks),
+      mode,
+      sessionCode: sessionCode || '',
+      exportedAt: new Date().toISOString(),
+    });
+    if (!snapshot.cues.length && !snapshot.pads.length) { toast('Nothing to print yet — add a cue or pad first.'); return; }
     if (typeof window.exportPaperHTMLAsPDF !== 'function') { toast('The print pipeline is not available here.'); return; }
     const contLabel = c => c.continueMode === 'auto_follow' ? 'Follow' : c.continueMode === 'auto_continue' ? 'Continue' : 'Manual';
-    const trimLabel = c => (c.trimIn || c.trimOut != null) ? fmtClock(c.trimIn || 0) + ' → ' + (c.trimOut == null ? 'end' : fmtClock(c.trimOut)) : '—';
-    const cueRows = cues.map((c, i) => `<tr>
+    const trimLabel = c => (c.trimIn || c.trimOut != null) ? fmtClock(c.trimIn || 0) + ' to ' + (c.trimOut == null ? 'end' : fmtClock(c.trimOut)) : 'None';
+    const cueRows = snapshot.cues.map((c, i) => `<tr>
         <td>${i + 1}</td><td><strong>${esc(c.name || 'Untitled')}</strong></td>
-        <td>${esc(c.type || '—')}</td><td>${c.dur ? fmtClock(c.dur) : '—'}</td>
+        <td>${esc(c.type || 'Not set')}</td><td>${c.dur ? fmtClock(c.dur) : 'Not set'}</td>
         <td>${trimLabel(c)}</td><td>${contLabel(c)}</td><td>${c.loop ? 'Loop' : ''}</td>
       </tr>`).join('');
-    const cueSheet = cues.length ? `
-      <h2>Cue Sheet — ${cues.length} cue${cues.length === 1 ? '' : 's'}</h2>
+    const cueSheet = snapshot.cues.length ? `
+      <h2>Cue Sheet - ${snapshot.cues.length} cue${snapshot.cues.length === 1 ? '' : 's'}</h2>
       <table><thead><tr><th>#</th><th>Cue</th><th>Type</th><th>Duration</th><th>Trim</th><th>Continue</th><th></th></tr></thead>
       <tbody>${cueRows}</tbody></table>` : '';
-    const padSections = banks.map(bank => {
-      const bp = pads.filter(p => p.bank === bank.id).sort((a, b) => (a.slot || 0) - (b.slot || 0));
+    const padSections = snapshot.banks.map(bank => {
+      const bp = snapshot.pads.filter(p => p.bank === bank.id).sort((a, b) => (a.slot || 0) - (b.slot || 0));
       if (!bp.length) return '';
       const rows = bp.map(p => `<tr>
-          <td>${(p.slot || 0) + 1}</td><td>${p.emoji ? esc(p.emoji) + ' ' : ''}<strong>${esc(p.name || 'Pad')}</strong></td>
-          <td>${p.key ? esc(String(p.key).toUpperCase()) : '—'}</td>
-          <td>${p.loop ? 'Loop' : ''}${p.trimIn || p.trimOut != null ? (p.loop ? ' · ' : '') + 'trimmed' : ''}</td>
+          <td>${(p.slot || 0) + 1}</td><td><strong>${esc(p.name || 'Pad')}</strong></td>
+          <td>${p.key ? esc(String(p.key).toUpperCase()) : 'None'}</td>
+          <td>${p.loop ? 'Loop' : ''}${p.trimIn || p.trimOut != null ? (p.loop ? ' / ' : '') + 'Trimmed' : ''}</td>
         </tr>`).join('');
       return `<h3>${esc(bank.name || 'Bank')}</h3>
-        <table><thead><tr><th>Pad</th><th>Sound</th><th>Hotkey</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        <table><thead><tr><th>Pad</th><th>Sound</th><th>Hotkey</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
     }).join('');
-    const padMap = pads.length ? `<h2>SFX Pad Map — ${pads.length} pad${pads.length === 1 ? '' : 's'}</h2>${padSections}` : '';
-    const title = mode === 'session' && sessionCode ? 'Session ' + sessionCode : 'Standalone show';
+    const padMap = snapshot.pads.length ? `<h2>SFX Pad Map - ${snapshot.pads.length} pad${snapshot.pads.length === 1 ? '' : 's'}</h2>${padSections}` : '';
+    const productionCode = snapshot.mode === 'session' && snapshot.sessionCode ? snapshot.sessionCode : 'STANDALONE';
+    const html = `
+      <h1>Outrangutan Show Pack</h1>
+      ${cueSheet}
+      ${padMap}
+    `;
+    const options = {
+      orientation: 'portrait',
+      allowMixedOrientation: false,
+      exportMeta: {
+        productionName: 'Outrangutan Show Pack',
+        productionCode,
+        exportedAt: snapshot.exportedAt,
+        sourceLabel: 'Local Outrangutan snapshot',
+        revisionLabel: snapshot.cues.length + ' cues / ' + snapshot.pads.length + ' pads',
+        draftLabel: 'LOCAL SHOW PACK',
+      },
+    };
     try {
-      await window.exportPaperHTMLAsPDF(`
-        <h1>Outrangutan Show Pack</h1>
-        <div>${esc(title)} · printed ${esc(new Date().toLocaleString())}</div>
-        ${cueSheet}
-        ${padMap}
-      `, 'outrangutan-show-pack.pdf', { orientation: 'portrait', margin: 24 });
-      slog('session', 'Show pack printed — ' + cues.length + ' cues · ' + pads.length + ' pads');
+      await window.exportPaperHTMLAsPDF(html, 'outrangutan-show-pack.pdf', options);
+      slog('session', 'Show pack printed - ' + snapshot.cues.length + ' cues / ' + snapshot.pads.length + ' pads');
       toast('Show pack PDF downloaded.');
-    } catch (e) { toast('Could not build the show pack PDF.'); }
+    } catch (error) {
+      console.warn('[Outrangutan] PDF renderer unavailable; opening the identical print representation.', error);
+      try {
+        if (typeof window.printPaperHTML !== 'function') throw error;
+        const result = await window.printPaperHTML(html, options);
+        toast('PDF renderer unavailable. Print preview opened - ' + result.pageCount + ' pages.');
+      } catch (printError) {
+        console.error('[Outrangutan] Show pack print fallback failed.', printError);
+        toast('Could not build the show pack PDF.');
+      }
+    }
   }
 
   async function exportShowFile() {
@@ -3180,8 +4119,8 @@
           // and the Clip Editor; hidden at wide, where the Inspector is a column.
           + '<div class="og-bottom" id="og-bottom">'
             + '<div class="og-bottom-tabs" id="og-bottom-tabs" role="tablist" aria-label="Bottom panel">'
-              + '<button type="button" class="og-bottom-tab on" id="og-bottom-tab-insp" data-btab="insp" role="tab">Inspector</button>'
-              + '<button type="button" class="og-bottom-tab" id="og-bottom-tab-edit" data-btab="edit" role="tab">Clip Editor</button>'
+              + '<button type="button" class="og-bottom-tab on" id="og-bottom-tab-insp" data-btab="insp" role="tab" aria-selected="true" aria-controls="og-inspector-pane">Inspector</button>'
+              + '<button type="button" class="og-bottom-tab" id="og-bottom-tab-edit" data-btab="edit" role="tab" aria-selected="false" aria-controls="og-edit-pane" tabindex="-1">Clip Editor</button>'
               + '<span class="og-bottom-hint" id="og-bottom-hint">Select a cue to inspect or trim</span>'
             + '</div>'
             + '<div class="og-pane og-edit-pane" id="og-edit-pane">'
@@ -3219,7 +4158,7 @@
         + '<p style="color:var(--text2);font-size:12px;margin:12px 0 0">Click a field and press a key to rebind. GO and PANIC are always reachable by keyboard.</p>'
         + '<button class="og-help-close" id="og-help-close">Done</button></div></div>'
       + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
-      + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
       + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="og-sheet-x" id="og-midi-x">Done</button></div><div id="og-midi-body"></div></div></div>'
       + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
@@ -3247,6 +4186,19 @@
     $('og-tab-sfx').onclick = () => setTab('sfx');
     $('og-bottom-tab-insp').onclick = () => setBottomTab('insp');
     $('og-bottom-tab-edit').onclick = () => setBottomTab('edit');
+    const onBottomTabKey = (e) => {
+      let next = '';
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Home') next = 'insp';
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'End') next = 'edit';
+      if (!next) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setBottomTab(next);
+      const target = $(next === 'insp' ? 'og-bottom-tab-insp' : 'og-bottom-tab-edit');
+      if (target) target.focus();
+    };
+    $('og-bottom-tab-insp').onkeydown = onBottomTabKey;
+    $('og-bottom-tab-edit').onkeydown = onBottomTabKey;
     $('og-program-popout').onclick = popOutProgram;
     $('og-output-btn').onclick = openOutputsPanel;
     $('og-sd-btn').onclick = openSdPanel;
@@ -3332,9 +4284,9 @@
 
     built = true;
     renderTransportKeys();
-    initSplitters(); applyLayoutMode();
-    let ogResizeT = 0;
-    window.addEventListener('resize', () => { if (ogResizeT) clearTimeout(ogResizeT); ogResizeT = setTimeout(applyLayoutMode, 120); });
+    initSplitters();
+    initResponsiveLayout();
+    applyLayoutMode();
 
     renderWallClock();
     setInterval(renderWallClock, 1000);
@@ -3389,9 +4341,13 @@
     } catch (e) { return { ok: false, reason: 'error' }; }
   }
   async function enterOutrangutan(m) {
-    build(); ensureChannel(); showScreen();
+    build();
+    if (m === 'session') mode = 'session';
+    else { mode = 'standalone'; sessionCode = null; }
+    reattachLiveControl();
+    showScreen();
     if (m === 'session') openSessionJoin();
-    else { mode = 'standalone'; sessionCode = null; closeSessionJoin(); await applyShow(); }
+    else { closeSessionJoin(); await applyShow(); }
   }
 
   function openSessionJoin() {
@@ -3418,6 +4374,7 @@
     if (!code || !name) { if (err) { err.textContent = 'Please fill in both fields.'; err.classList.add('on'); } const f = code ? nameEl : codeEl; if (f) f.focus(); return; }
     if (err) err.classList.remove('on');
     sessionCode = code; sessionUserName = name; mode = 'session';
+    reattachLiveControl(); // identity change immediately closes any standalone/stale-session outputs
     try { localStorage.setItem('cueola_outrangutan_code', code); localStorage.setItem('cueola_last_code', code); localStorage.setItem('cueola_last_name', name); } catch (e) {}
     closeSessionJoin(); await applyShow();
     slog('session', 'Joined session ' + code);
@@ -3427,6 +4384,7 @@
   function exitOutrangutan() {
     stopAll({ silent: true }); stopAllPads(); closeSessionJoin(); unsubscribeSession();
     outputs.forEach(o => { const r = outputWins.get(o.id); if (r && r.identify) identifyOutput(o.id, false); });
+    cleanupOutputRuntime(true);
     closeOutputsPanel(); closeSdPanel();
     $('outrangutan').classList.remove('on');
     const entry = $('entry'); if (entry) entry.classList.add('on');
@@ -3486,6 +4444,10 @@
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
     preflight: preflightReport,                     // P7: deep media/SFX check for the Cueola preflight panel
     outputHealth,                                   // watchdog status for the preflight "Playout outputs" row
+    outputStatus,                                   // full protocol state for Cueola Live + operator diagnostics
+    classifyLiveExit,                               // read-only active/open state for Cueola Live exit decisions
+    applyLiveExit,                                  // acknowledged stop or transport-neutral controller detach
+    reattachLiveControl,                            // idempotently reclaim detached output/session listeners
     saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
     isReady: () => built && showLoaded && isOpen(),  // safe to receive an external SFX pad right now?
     addAudioPad,                                    // Cueola audio note → SFX pad hand-off
@@ -3493,7 +4455,8 @@
     // Console rehearsal hook: test MIDI mappings (incl. learn mode) without a
     // box plugged in — Outrangutan.midiInject(0x90, 60, 127) is a C4 note-on.
     midiInject: (status, d1, d2) => onMidiMessage({ data: [status, d1, d2 || 0] }),
-    _state: () => ({ cues, pads, banks, currentBankId, outputs, sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
+    _state: () => ({ cues, pads, banks, currentBankId, outputs, outputStatus: outputStatus(), sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
+    _outputUrl: id => outputUrl(id || 1),             // live-preview rehearsal hook; carries exact protocol identity
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     // P4: same-page fast path — when Cueola and Outrangutan share this tab (the
     // one-operator setup), the rundown fires pads/cues directly (<30 ms) instead

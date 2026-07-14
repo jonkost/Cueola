@@ -37,101 +37,265 @@
     <div id="idlabel">Output</div>
   </div>
 
+<script src="../outrangutan/output-protocol.js?v=515bfb5721"></script>
+<script src="../outrangutan/output-command-queue.js?v=d3ef82b3a4"></script>
 <script>
 (function () {
   'use strict';
   const DB_NAME = 'outrangutan', DB_VER = 1, STORE = 'media';
+  const Protocol = window.CueolaOutputProtocol;
+  const CommandQueue = window.CueolaOutputCommandQueue;
   const idEl = document.getElementById('identify');
   const idLabel = document.getElementById('idlabel');
   const waiting = document.getElementById('waiting');
-  const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('outrangutan-output') : null;
-  let messageSeq = 0;
-  const messageIds = new Set();
-  // this output's id (controller addresses messages with `target`; null = broadcast)
-  const MY_ID = (parseInt((location.hash.match(/out=(\d+)/) || [])[1], 10) || 1);
-  document.title = 'Outrangutan Output ' + MY_ID;
+  const vimg = document.getElementById('vimg');
+  const keycv = document.getElementById('keycv');
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const outputNumber = parseInt(hash.get('out'), 10) || 1;
+  const OUTPUT_ID = String(outputNumber);
+  const PRODUCTION_SESSION_ID = String(hash.get('session') || '').trim();
+  const CONTROLLER_INSTANCE_ID = String(hash.get('controller') || '').trim();
 
-  // two decks for crossfades
+  document.title = 'Outrangutan Output ' + OUTPUT_ID;
+  if (!Protocol || !CommandQueue) {
+    waiting.textContent = 'OUTPUT ERROR — protocol unavailable';
+    waiting.style.color = '#a33';
+    return;
+  }
+  if (!PRODUCTION_SESSION_ID || !CONTROLLER_INSTANCE_ID) {
+    waiting.textContent = 'OUTPUT ERROR — session identity missing';
+    waiting.style.color = '#a33';
+    return;
+  }
+
+  const randomId = () => {
+    if (self.crypto && typeof self.crypto.randomUUID === 'function') return self.crypto.randomUUID();
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  };
+  const outputProtocol = Protocol.createOutput({
+    productionSessionId: PRODUCTION_SESSION_ID,
+    controllerInstanceId: CONTROLLER_INSTANCE_ID,
+    outputId: OUTPUT_ID,
+    outputInstanceId: 'ogout_' + randomId(),
+    state: {
+      windowStatus: 'open', communicationStatus: 'connecting', mediaLoadStatus: 'empty',
+      playbackStatus: 'stopped', rendererStatus: 'idle', heartbeatStatus: 'healthy',
+      recoverability: 'automatic'
+    }
+  });
+  const channelName = 'outrangutan-output-v2:' + PRODUCTION_SESSION_ID;
+  const bc = ('BroadcastChannel' in self) ? new BroadcastChannel(channelName) : null;
+  const runtime = {
+    mediaLoadStatus: 'empty', playbackStatus: 'stopped', cueId: '', mediaId: '',
+    error: '', recoverability: 'none', recoveryNeedsResume: false
+  };
+  let dbPromise = null;
+  let imgUrl = null;
+  let lastFrameAt = performance.now();
+  let lastVideoFrameAt = performance.now();
+  let lastVideoProgressAt = performance.now();
+  let lastObservedPlayhead = -1;
+  let frameRAF = null;
+  let heartbeatTimer = null;
+  let shuttingDown = false;
+  let syncing = false;
+
+  function send(message) {
+    if (!message || shuttingDown) return;
+    const wire = Object.assign({ _og: true, _from: 'output' }, message);
+    if (bc) bc.postMessage(wire);
+    if (window.opener) {
+      try { window.opener.postMessage(wire, location.origin); } catch (e) {}
+    }
+  }
+
+  // Two decks retain the existing clean-cut and crossfade renderer.
   const decks = { a: deck('va'), b: deck('vb') };
   let front = decks.a;
-  // muted by default — the controller carries program audio; per-output audio is opt-in (setSinkId)
-  function deck(id) { const el = document.getElementById(id); el.muted = true; return { el: el, url: null, mediaId: null }; }
+  function deck(id) {
+    const el = document.getElementById(id);
+    el.muted = true;
+    return { el: el, url: null, mediaId: '', cueId: '', metadataHandler: null, videoFrameRequest: null };
+  }
   function other(d) { return d === decks.a ? decks.b : decks.a; }
-
-  const fades = {};
-  function curveK(k, c) { k = Math.max(0, Math.min(1, k)); if (c === 's') return k * k * (3 - 2 * k); if (c === 'log') return Math.pow(k, 2.2); return k; }
-  function runFade(token, apply, from, to, ms, curve, done) {
-    if (fades[token]) cancelAnimationFrame(fades[token]);
-    if (!(ms > 0)) { apply(to); if (done) done(); return; }
-    const t0 = performance.now();
-    const tick = (t) => {
-      const k = (t - t0) / ms;
-      if (k >= 1) { apply(to); delete fades[token]; if (done) done(); return; }
-      apply(from + (to - from) * curveK(k, curve)); fades[token] = requestAnimationFrame(tick);
+  function bringFront(d) {
+    decks.a.el.classList.toggle('front', d === decks.a);
+    decks.b.el.classList.toggle('front', d === decks.b);
+    front = d;
+  }
+  function clearDeckCallbacks(d) {
+    d.el.onerror = null;
+    if (d.metadataHandler) {
+      d.el.removeEventListener('loadedmetadata', d.metadataHandler);
+      d.metadataHandler = null;
+    }
+    if (d.videoFrameRequest != null && d.el.cancelVideoFrameCallback) {
+      try { d.el.cancelVideoFrameCallback(d.videoFrameRequest); } catch (e) {}
+      d.videoFrameRequest = null;
+    }
+  }
+  function watchVideoFrames(d) {
+    if (!d.el.requestVideoFrameCallback) return;
+    if (d.videoFrameRequest != null && d.el.cancelVideoFrameCallback) try { d.el.cancelVideoFrameCallback(d.videoFrameRequest); } catch (e) {}
+    const frame = () => {
+      d.videoFrameRequest = null;
+      if (front === d && !d.el.paused) lastVideoFrameAt = performance.now();
+      if (d.mediaId) d.videoFrameRequest = d.el.requestVideoFrameCallback(frame);
     };
-    fades[token] = requestAnimationFrame(tick);
+    d.videoFrameRequest = d.el.requestVideoFrameCallback(frame);
+  }
+  function revoke(d) {
+    if (!d.url) return;
+    try { URL.revokeObjectURL(d.url); } catch (e) {}
+    d.url = null;
+  }
+  function stopDeck(d) {
+    clearDeckCallbacks(d);
+    try { d.el.pause(); } catch (e) {}
+    d.el.removeAttribute('src');
+    d.el.load();
+    revoke(d);
+    d.mediaId = '';
+    d.cueId = '';
+    d.el.style.opacity = 0;
+  }
+
+  // Every transition carries the command generation that started it. A newer
+  // destructive command cancels all older animation and callback ownership.
+  const fades = new Map();
+  function curveK(k, c) {
+    k = Math.max(0, Math.min(1, k));
+    if (c === 's') return k * k * (3 - 2 * k);
+    if (c === 'log') return Math.pow(k, 2.2);
+    return k;
+  }
+  function cancelFade(token) {
+    const raf = fades.get(token);
+    if (raf != null) cancelAnimationFrame(raf);
+    fades.delete(token);
+  }
+  function runFade(token, apply, from, to, ms, curve, done, context) {
+    cancelFade(token);
+    const current = () => !context || context.isCurrent();
+    if (!current()) return;
+    if (!(ms > 0)) {
+      apply(to);
+      if (done && current()) done();
+      return;
+    }
+    const t0 = performance.now();
+    const schedule = () => { fades.set(token, requestAnimationFrame(tick)); };
+    const tick = (t) => {
+      if (!current()) { fades.delete(token); return; }
+      const k = (t - t0) / ms;
+      if (k >= 1) {
+        apply(to);
+        fades.delete(token);
+        if (done && current()) done();
+        return;
+      }
+      apply(from + (to - from) * curveK(k, curve));
+      schedule();
+    };
+    schedule();
+  }
+  function cancelRendererEffects() {
+    Array.from(fades.keys()).forEach(cancelFade);
+    clearDeckCallbacks(decks.a);
+    clearDeckCallbacks(decks.b);
+    vimg.onerror = null;
+    stopKeyLoop();
   }
 
   function openDB() {
-    return new Promise((resolve, reject) => {
-      const r = indexedDB.open(DB_NAME, DB_VER);
-      r.onupgradeneeded = () => { try { r.result.createObjectStore(STORE); } catch (e) {} };
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error);
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VER);
+      request.onupgradeneeded = () => { try { request.result.createObjectStore(STORE); } catch (e) {} };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => { dbPromise = null; reject(request.error); };
     });
+    return dbPromise;
   }
   async function getBlob(id) {
     const db = await openDB();
     return new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
-      tx.onsuccess = () => resolve(tx.result && tx.result.blob ? tx.result.blob : null);
-      tx.onerror = () => resolve(null);
+      const request = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
+      request.onsuccess = () => resolve(request.result && request.result.blob ? request.result.blob : null);
+      request.onerror = () => resolve(null);
     });
   }
-  function revoke(d) { if (d.url) { try { URL.revokeObjectURL(d.url); } catch (e) {} d.url = null; } }
-
-  async function loadInto(d, mediaId, at, loop, fit) {
-    const blob = await getBlob(mediaId);
-    revoke(d); d.mediaId = mediaId;
-    if (!blob) { d.el.removeAttribute('src'); d.el.load(); reply({ t: 'error', mediaId: mediaId }); return false; }
-    d.url = URL.createObjectURL(blob);
-    // decode failure mid-show → black slate here + alert the controller
-    d.el.onerror = () => { reply({ t: 'error', mediaId: mediaId }); stopDeck(d); };
-    d.el.src = d.url; d.el.loop = !!loop; d.el.style.objectFit = fit || 'contain'; d.el.load();
-    if (typeof at === 'number') { try { d.el.currentTime = at; } catch (e) {} }
-    waiting.style.display = 'none';
-    return true;
+  function rendererError(message, mediaId, recoverability) {
+    runtime.mediaLoadStatus = 'error';
+    runtime.playbackStatus = 'error';
+    runtime.mediaId = String(mediaId || runtime.mediaId || '');
+    runtime.error = String(message || 'Output renderer error');
+    runtime.recoverability = recoverability || 'reload';
+    sendHeartbeat();
   }
-  function bringFront(d) { decks.a.el.classList.toggle('front', d === decks.a); decks.b.el.classList.toggle('front', d === decks.b); front = d; }
-  function stopDeck(d) { d.el.onerror = null; try { d.el.pause(); } catch (e) {} d.el.removeAttribute('src'); d.el.load(); revoke(d); d.mediaId = null; d.el.style.opacity = 0; }
-
-  // ── still images (Phase 2 master plan) ──
-  const vimg = document.getElementById('vimg');
-  let imgUrl = null;
-  function releaseImgUrl() { if (imgUrl) { try { URL.revokeObjectURL(imgUrl); } catch (e) {} imgUrl = null; } }
-  async function doImage(m) {
+  async function loadInto(d, m, context) {
+    runtime.mediaLoadStatus = 'loading';
+    runtime.error = '';
     const blob = await getBlob(m.mediaId);
-    if (!blob) { reply({ t: 'error', mediaId: m.mediaId }); return; }
-    releaseImgUrl();
-    imgUrl = URL.createObjectURL(blob);
-    vimg.onerror = () => { reply({ t: 'error', mediaId: m.mediaId }); clearImage(0); };
-    vimg.src = imgUrl;
-    vimg.style.objectFit = m.fit || 'contain';
-    vimg.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')';
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Media load superseded' };
+    if (!blob) {
+      rendererError('Media is not available in this output window.', m.mediaId, 'reload');
+      return { ok: false, error: 'Media is not available in this output window.' };
+    }
+
+    clearDeckCallbacks(d);
+    revoke(d);
+    d.mediaId = String(m.mediaId || '');
+    d.cueId = String(m._cueId || '');
+    d.url = URL.createObjectURL(blob);
+    d.el.onerror = () => {
+      if (!context.isCurrent() || d.mediaId !== String(m.mediaId || '')) return;
+      rendererError('The output could not decode this media.', m.mediaId, 'reload');
+      stopDeck(d);
+    };
+    d.el.src = d.url;
+    d.el.loop = !!m.loop;
+    d.el.style.objectFit = m.fit || 'contain';
+    d.el.load();
+    lastVideoFrameAt = performance.now();
+    lastVideoProgressAt = lastVideoFrameAt;
+    lastObservedPlayhead = Number(m.at) || 0;
+    watchVideoFrames(d);
+    if (typeof m.at === 'number') {
+      const seekWhenReady = () => {
+        d.metadataHandler = null;
+        if (!context.isCurrent() || d.mediaId !== String(m.mediaId || '')) return;
+        try { d.el.currentTime = Math.max(0, m.at); } catch (e) {}
+      };
+      d.metadataHandler = seekWhenReady;
+      d.el.addEventListener('loadedmetadata', seekWhenReady, { once: true });
+      try { d.el.currentTime = Math.max(0, m.at); } catch (e) {}
+    }
     waiting.style.display = 'none';
-    const clearVideo = () => { stopDeck(decks.a); stopDeck(decks.b); };
-    if (m.fadeIn > 0) { vimg.style.opacity = 0; runFade('img', v => { vimg.style.opacity = v; }, 0, 1, m.fadeIn, m.curve, clearVideo); }
-    else { vimg.style.opacity = 1; clearVideo(); }
-  }
-  function clearImage(ms, curve) {
-    if (!vimg.getAttribute('src')) return;
-    const from = parseFloat(vimg.style.opacity || '1') || 1;
-    runFade('img', v => { vimg.style.opacity = v; }, from, 0, ms || 0, curve, () => { vimg.onerror = null; vimg.removeAttribute('src'); releaseImgUrl(); });
+    runtime.mediaLoadStatus = 'ready';
+    runtime.cueId = d.cueId;
+    runtime.mediaId = d.mediaId;
+    runtime.error = '';
+    return { ok: true };
   }
 
-  // ── keyer (Phase 5: chroma/luma/alpha key, mirrored from the controller) ──
-  const keycv = document.getElementById('keycv');
-  let keyer = null, keyState = { mode: 'off' }, keyRAF = null;
+  function releaseImgUrl() {
+    if (!imgUrl) return;
+    try { URL.revokeObjectURL(imgUrl); } catch (e) {}
+    imgUrl = null;
+  }
+  function clearImage(ms, curve, context) {
+    if (!vimg.getAttribute('src')) return;
+    const from = Number.isFinite(parseFloat(vimg.style.opacity)) ? parseFloat(vimg.style.opacity) : 1;
+    runFade('img', (v) => { vimg.style.opacity = v; }, from, 0, ms || 0, curve, () => {
+      vimg.onerror = null;
+      vimg.removeAttribute('src');
+      releaseImgUrl();
+    }, context);
+  }
+
+  // Chroma/luma/alpha keying remains local to the output renderer.
+  let keyer = null, keyState = { mode: 'off' }, keyRAF = null, keyContext = null;
   const KEY_VERT = 'attribute vec2 p; varying vec2 v_uv; void main(){ v_uv = vec2((p.x+1.0)/2.0, 1.0-(p.y+1.0)/2.0); gl_Position = vec4(p,0.0,1.0); }';
   const KEY_FRAG = [
     'precision mediump float;',
@@ -171,110 +335,505 @@
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     } };
   }
-  function applyKey(m) {
+  function stopKeyLoop() {
+    if (keyRAF) cancelAnimationFrame(keyRAF);
+    keyRAF = null;
+    keyContext = null;
+  }
+  function restartKeyLoop(context) {
+    stopKeyLoop();
+    if (!keyer || !keyState.mode || keyState.mode === 'off') return;
+    keyContext = context || null;
+    const loop = () => {
+      if (keyContext && !keyContext.isCurrent()) { stopKeyLoop(); return; }
+      if (front && front.el && front.el.videoWidth) keyer.render(front.el, keyState);
+      keyRAF = requestAnimationFrame(loop);
+    };
+    keyRAF = requestAnimationFrame(loop);
+  }
+  function applyKey(m, context) {
     keyState = (m && m.key) || { mode: 'off' };
     if (keyState.mode && keyState.mode !== 'off') {
       if (!keyer) keyer = makeKeyer(keycv);
       if (!keyer) return;
       keycv.classList.add('on');
-      if (!keyRAF) { const loop = () => { if (front && front.el && front.el.videoWidth) keyer.render(front.el, keyState); keyRAF = requestAnimationFrame(loop); }; keyRAF = requestAnimationFrame(loop); }
+      restartKeyLoop(context);
     } else { keyOff(); }
   }
-  function keyOff() { keycv.classList.remove('on'); if (keyRAF) { cancelAnimationFrame(keyRAF); keyRAF = null; } }
+  function keyOff() { keycv.classList.remove('on'); stopKeyLoop(); }
 
-  function applyTransform(d, m) { d.el.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')'; }
-  async function doPlay(m) {
-    const d = other(front);
-    const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
-    if (!ok) return;
-    if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+  function applyTransform(d, m) {
+    d.el.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')';
+  }
+  function requestPlayback(d, paused, context) {
+    if (paused) {
+      try { d.el.pause(); } catch (e) {}
+      runtime.playbackStatus = 'paused';
+      return { ok: true };
+    }
+    let started;
+    try { started = d.el.play(); } catch (error) {
+      rendererError(error && error.message ? error.message : 'Playback could not start.', d.mediaId, 'operator');
+      return { ok: false, error: runtime.error };
+    }
+    runtime.playbackStatus = 'playing';
+    if (started && typeof started.catch === 'function') {
+      started.catch((error) => {
+        if (!context.isCurrent() || (error && error.name === 'AbortError')) return;
+        rendererError(error && error.name === 'NotAllowedError' ? 'Playback requires operator interaction.' : 'Playback could not start.', d.mediaId, 'operator');
+      });
+    }
+    return { ok: true };
+  }
+  async function doPlay(m, context) {
+    const d = other(front), prev = front;
+    const loaded = await loadInto(d, m, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Play superseded' };
+    if (!loaded.ok) return loaded;
     applyTransform(d, m);
     d.el.volume = (m.fadeIn > 0) ? 0 : (typeof m.volume === 'number' ? m.volume : 1);
     bringFront(d);
-    try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
-    if (m.paused) { try { d.el.pause(); } catch (e) {} }   // controller is paused: show the frame, don't roll
-    clearImage(m.fadeIn || 0, m.curve);
-    const prev = other(d);
-    if (m.fadeIn > 0) { d.el.style.opacity = 0; runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * (m.volume == null ? 1 : m.volume); }, 0, 1, m.fadeIn, m.curve, () => stopDeck(prev)); }
-    else { d.el.style.opacity = 1; stopDeck(prev); }
+    const playback = requestPlayback(d, !!m.paused, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Play superseded' };
+    if (!playback.ok) return playback;
+    runtime.recoveryNeedsResume = !!m.paused;
+    runtime.recoverability = m.paused ? 'operator' : 'none';
+    clearImage(m.fadeIn || 0, m.curve, context);
+    restartKeyLoop(context);
+    if (m.fadeIn > 0) {
+      d.el.style.opacity = 0;
+      runFade('in', (v) => { d.el.style.opacity = v; d.el.volume = v * (m.volume == null ? 1 : m.volume); }, 0, 1, m.fadeIn, m.curve, () => stopDeck(prev), context);
+    } else {
+      d.el.style.opacity = 1;
+      stopDeck(prev);
+    }
+    return { ok: true };
   }
-  async function doXfade(m) {
+  async function doXfade(m, context) {
     const d = other(front), prev = front;
-    const ok = await loadInto(d, m.mediaId, m.at, m.loop, m.fit);
-    if (!ok) return doPlay(m);
-    if (typeof m.at === 'number') { try { d.el.currentTime = m.at; } catch (e) {} }
+    const loaded = await loadInto(d, m, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Crossfade superseded' };
+    if (!loaded.ok) return loaded;
     applyTransform(d, m);
     d.el.volume = 0; d.el.style.opacity = 0;
     bringFront(d);
-    try { await d.el.play(); } catch (e) { if (e && e.name !== 'NotAllowedError') { reply({ t: 'error', mediaId: m.mediaId }); stopDeck(d); return; } }
-    clearImage(m.ms, m.curve);
+    const playback = requestPlayback(d, false, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Crossfade superseded' };
+    if (!playback.ok) return playback;
+    runtime.recoveryNeedsResume = false;
+    runtime.recoverability = 'none';
+    clearImage(m.ms, m.curve, context);
+    restartKeyLoop(context);
     const vol = (m.volume == null ? 1 : m.volume);
-    const pv0 = prev.el.volume || vol;   // capture once — reading it back each frame compounds the decay
-    runFade('in', v => { d.el.style.opacity = v; d.el.volume = v * vol; }, 0, 1, m.ms, m.curve);
-    runFade('out', v => { prev.el.volume = v * pv0; }, 1, 0, m.ms, m.curve, () => stopDeck(prev));
+    const pv0 = prev.el.volume || vol;
+    runFade('in', (v) => { d.el.style.opacity = v; d.el.volume = v * vol; }, 0, 1, m.ms, m.curve, null, context);
+    runFade('out', (v) => { prev.el.volume = v * pv0; }, 1, 0, m.ms, m.curve, () => stopDeck(prev), context);
+    return { ok: true };
+  }
+  async function doImage(m, context) {
+    runtime.mediaLoadStatus = 'loading';
+    runtime.error = '';
+    const blob = await getBlob(m.mediaId);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Image load superseded' };
+    if (!blob) {
+      rendererError('Image is not available in this output window.', m.mediaId, 'reload');
+      return { ok: false, error: 'Image is not available in this output window.' };
+    }
+
+    releaseImgUrl();
+    imgUrl = URL.createObjectURL(blob);
+    vimg.style.opacity = 0;
+    vimg.onerror = () => {
+      if (!context.isCurrent()) return;
+      rendererError('The output could not decode this image.', m.mediaId, 'reload');
+      clearImage(0, null, context);
+    };
+    vimg.src = imgUrl;
+    vimg.style.objectFit = m.fit || 'contain';
+    vimg.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')';
+    if (typeof vimg.decode === 'function') {
+      try { await vimg.decode(); } catch (error) {
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Image load superseded' };
+        rendererError('The output could not decode this image.', m.mediaId, 'reload');
+        clearImage(0, null, context);
+        return { ok: false, error: 'The output could not decode this image.' };
+      }
+      if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Image load superseded' };
+    }
+    waiting.style.display = 'none';
+    runtime.mediaLoadStatus = 'ready';
+    runtime.playbackStatus = 'paused';
+    runtime.cueId = String(m._cueId || '');
+    runtime.mediaId = String(m.mediaId || '');
+    runtime.error = '';
+    runtime.recoveryNeedsResume = false;
+    runtime.recoverability = 'none';
+    keyOff();
+    const clearVideo = () => { stopDeck(decks.a); stopDeck(decks.b); };
+    if (m.fadeIn > 0) {
+      runFade('img', (v) => { vimg.style.opacity = v; }, 0, 1, m.fadeIn, m.curve, clearVideo, context);
+    } else {
+      vimg.style.opacity = 1;
+      clearVideo();
+    }
+    return { ok: true };
   }
 
-  async function handle(m) {
-    switch (m && m.t) {
-      case 'ping': reply({ t: 'pong' }); break;
-      case 'play': await doPlay(m); break;
-      case 'xfade': await doXfade(m); break;
-      case 'image': await doImage(m); break;
-      case 'pause': try { front.el.pause(); } catch (e) {} break;
-      case 'resume': try { await front.el.play(); } catch (e) {} break;
-      case 'seek': try { front.el.currentTime = m.at; } catch (e) {} break;
-      case 'volume': front.el.volume = Math.max(0, Math.min(1, m.v)); break;
-      case 'fit': front.el.style.objectFit = m.fit || 'contain'; break;
-      case 'fade': { clearImage(m.ms, m.curve); const v0 = front.el.volume || 1, to = m.to || 0; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => { if (to === 0) { stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; } }); break; }
-      case 'black': { clearImage(m.ms || 0, m.curve); const v0 = front.el.volume || 1; runFade('master', v => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => { stopDeck(front); keyOff(); }); break; }
-      case 'stop': clearImage(0); stopDeck(decks.a); stopDeck(decks.b); keyOff(); waiting.style.display = 'grid'; break;
-      case 'holdLast': try { front.el.pause(); } catch (e) {} break;
-      case 'identify': idEl.classList.toggle('on', !!m.on); idLabel.textContent = m.label || ('Output ' + MY_ID); break;
-      case 'audio': await applyAudio(m); break;   // per-output device routing (setSinkId)
-      case 'key': applyKey(m); break;             // chroma/luma/alpha key mirrored from controller
-    }
-  }
-  async function applyAudio(m) {
+  async function applyAudio(m, context) {
     const on = !!m.on;
     for (const d of [decks.a, decks.b]) {
+      if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
       d.el.muted = !on;
-      if (on && m.sinkId && d.el.setSinkId) { try { await d.el.setSinkId(m.sinkId); } catch (e) {} }
+      if (d.el.setSinkId) {
+        try { await d.el.setSinkId(m.sinkId || ''); }
+        catch (error) {
+          runtime.error = 'Audio output routing failed: ' + (error && error.message ? error.message : 'device unavailable');
+          runtime.recoverability = 'operator';
+          return { ok: false, error: runtime.error };
+        }
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
+      }
+    }
+    if (runtime.error.indexOf('Audio output routing failed:') === 0) { runtime.error = ''; runtime.recoverability = runtime.recoveryNeedsResume ? 'operator' : 'none'; }
+    return { ok: true };
+  }
+
+  function clearProgram() {
+    clearImage(0);
+    stopDeck(decks.a);
+    stopDeck(decks.b);
+    keyOff();
+    waiting.style.display = 'grid';
+    runtime.mediaLoadStatus = 'empty';
+    runtime.playbackStatus = 'stopped';
+    runtime.cueId = '';
+    runtime.mediaId = '';
+    runtime.error = '';
+    runtime.recoverability = 'none';
+    runtime.recoveryNeedsResume = false;
+  }
+  function canonicalType(type) {
+    return String(type || '').toLowerCase().replace(/[_-]/g, '');
+  }
+  async function applyRendererCommand(command, context) {
+    const type = canonicalType(command.commandType);
+    const m = Object.assign({}, command.payload || {}, {
+      _cueId: command.cueId || (command.payload && command.payload.cueId) || '',
+      mediaId: command.mediaId || (command.payload && command.payload.mediaId) || ''
+    });
+    let result;
+    switch (type) {
+      case 'ping': return { ok: true };
+      case 'play':
+        result = await doPlay(m, context);
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Play superseded' };
+        return result;
+      case 'xfade':
+        result = await doXfade(m, context);
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Crossfade superseded' };
+        return result;
+      case 'image':
+        result = await doImage(m, context);
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Image superseded' };
+        return result;
+      case 'pause':
+        try { front.el.pause(); } catch (e) {}
+        runtime.playbackStatus = front.mediaId ? 'paused' : runtime.playbackStatus;
+        return { ok: true };
+      case 'resume':
+        if (!front.mediaId) return { ok: false, error: 'There is no video to resume.' };
+        result = requestPlayback(front, false, context);
+        runtime.recoveryNeedsResume = false;
+        runtime.recoverability = 'none';
+        return result;
+      case 'seek':
+        try { front.el.currentTime = Math.max(0, Number(m.at) || 0); } catch (e) { return { ok: false, error: 'Seek could not be applied.' }; }
+        return { ok: true };
+      case 'volume':
+        if (!Number.isFinite(Number(m.v))) return { ok: false, error: 'Volume value is invalid.' };
+        front.el.volume = Math.max(0, Math.min(1, Number(m.v)));
+        return { ok: true };
+      case 'fit':
+        front.el.style.objectFit = m.fit || 'contain';
+        return { ok: true };
+      case 'fade': {
+        runtime.error = '';
+        runtime.recoverability = 'none';
+        clearImage(m.ms, m.curve, context);
+        const v0 = front.el.volume || 1, to = Number(m.to) || 0;
+        runFade('master', (v) => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => {
+          if (to === 0) clearProgram();
+        }, context);
+        return { ok: true };
+      }
+      case 'black': {
+        runtime.error = '';
+        runtime.recoverability = 'none';
+        clearImage(m.ms || 0, m.curve, context);
+        const v0 = front.el.volume || 1;
+        runFade('master', (v) => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => {
+          stopDeck(decks.a);
+          stopDeck(decks.b);
+          keyOff();
+          runtime.mediaLoadStatus = 'empty';
+          runtime.playbackStatus = 'stopped';
+          runtime.cueId = '';
+          runtime.mediaId = '';
+        }, context);
+        return { ok: true };
+      }
+      case 'stop':
+      case 'clear':
+        clearProgram();
+        return { ok: true };
+      case 'replaced':
+        clearProgram();
+        waiting.textContent = 'OUTPUT REPLACED — close this window';
+        waiting.style.display = 'grid';
+        runtime.recoverability = 'unrecoverable';
+        return { ok: true };
+      case 'holdlast':
+        try { front.el.pause(); } catch (e) {}
+        runtime.playbackStatus = front.mediaId ? 'paused' : runtime.playbackStatus;
+        return { ok: true };
+      case 'identify':
+        idEl.classList.toggle('on', !!m.on);
+        idLabel.textContent = m.label || ('Output ' + OUTPUT_ID);
+        return { ok: true };
+      case 'audio':
+        result = await applyAudio(m, context);
+        if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
+        return result;
+      case 'key':
+        applyKey(m, context);
+        return { ok: true };
+      default:
+        return { ok: false, error: 'Unsupported output command: ' + command.commandType };
     }
   }
-  function reply(msg) {
-    const out = Object.assign({ _og: true, _from: 'output', id: MY_ID, _mid: 'o' + MY_ID + '-' + Date.now().toString(36) + '-' + (++messageSeq).toString(36) }, msg);
-    if (bc) bc.postMessage(out);
-    if (window.opener) try { window.opener.postMessage(out, location.origin); } catch (e) {}
-  }
 
-  // act only on broadcast (target null) or messages addressed to this output
-  function forMe(d) { return d && d._from !== 'output' && (d.target == null || d.target === MY_ID); }
-  function receive(d) {
-    if (!forMe(d)) return;
-    if (d._mid) {
-      if (messageIds.has(d._mid)) return;
-      messageIds.add(d._mid);
-      if (messageIds.size > 300) messageIds.delete(messageIds.values().next().value);
+  function observedState(overrides) {
+    const hasImage = !!vimg.getAttribute('src');
+    const hasVideo = !!(front && front.mediaId);
+    let playbackStatus = runtime.playbackStatus;
+    let playhead = 0;
+    if (hasVideo) {
+      playhead = Number.isFinite(front.el.currentTime) ? front.el.currentTime : 0;
+      playbackStatus = front.el.ended ? 'ended' : (front.el.paused ? 'paused' : 'playing');
+    } else if (hasImage) {
+      playbackStatus = 'paused';
+    } else if (runtime.mediaLoadStatus !== 'loading' && runtime.mediaLoadStatus !== 'error') {
+      playbackStatus = 'stopped';
     }
-    handle(d);
+    const now = performance.now();
+    const visible = document.visibilityState !== 'hidden';
+    const eventLoopPainting = !visible || (now - lastFrameAt) < 1500;
+    if (hasVideo && !front.el.paused && Number.isFinite(front.el.currentTime) && front.el.currentTime > lastObservedPlayhead + 0.01) {
+      lastObservedPlayhead = front.el.currentTime;
+      lastVideoProgressAt = now;
+    }
+    const videoPainting = !hasVideo || front.el.paused || !visible || (now - Math.max(lastVideoFrameAt, lastVideoProgressAt)) < 3500;
+    let rendererStatus = eventLoopPainting && videoPainting ? ((hasImage || hasVideo) ? 'painting' : 'idle') : 'stalled';
+    if (runtime.error) rendererStatus = 'error';
+    return Object.assign({
+      windowStatus: 'open',
+      communicationStatus: syncing ? 'syncing' : (outputProtocol.isReady() ? 'ready' : 'connected'),
+      mediaLoadStatus: runtime.mediaLoadStatus,
+      playbackStatus: playbackStatus,
+      rendererStatus: rendererStatus,
+      heartbeatStatus: 'healthy',
+      cueId: runtime.cueId,
+      mediaId: runtime.mediaId,
+      playhead: playhead,
+      recoverability: runtime.recoveryNeedsResume ? 'operator' : runtime.recoverability,
+      error: runtime.error
+    }, overrides || {});
   }
-  if (bc) bc.onmessage = (e) => receive(e.data);
-  window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data && e.data._og) receive(e.data); });
+  function publishDomState(state) {
+    document.body.dataset.outputId = OUTPUT_ID;
+    document.body.dataset.outputInstance = outputProtocol.outputInstanceId;
+    document.body.dataset.communication = state.communicationStatus;
+    document.body.dataset.mediaLoad = state.mediaLoadStatus;
+    document.body.dataset.playback = state.playbackStatus;
+    document.body.dataset.renderer = state.rendererStatus;
+  }
+  function sendHeartbeat(overrides) {
+    if (shuttingDown) return;
+    const state = observedState(overrides);
+    publishDomState(state);
+    send(outputProtocol.buildHeartbeat(state));
+  }
 
-  decks.a.el.addEventListener('ended', () => { if (front === decks.a) reply({ t: 'ended', mediaId: decks.a.mediaId }); });
-  decks.b.el.addEventListener('ended', () => { if (front === decks.b) reply({ t: 'ended', mediaId: decks.b.mediaId }); });
+  async function applySnapshot(message, context) {
+    const payload = message.payload || {};
+    const snapshot = payload.snapshot || {};
+    const config = snapshot.config || {};
+    const sourceState = payload.state || {};
+    const acceptedState = outputProtocol.applySyncState(message);
+    if (!acceptedState) return { ok: false, error: 'State sync was rejected.' };
+    syncing = true;
+    idLabel.textContent = config.label || ('Output ' + OUTPUT_ID);
+    idEl.classList.toggle('on', !!config.identify);
+    const audioResult = await applyAudio({ on: !!config.audioOn, sinkId: config.sinkId || '' }, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'State sync superseded' };
 
-  // ── watchdog heartbeat ──
-  // The controller must see a beat every ~2s or it declares this output dead.
-  // The rAF stamp rides the render loop, so the beat carries whether frames
-  // are actually painting (raf:false = event loop alive but rendering stalled
-  // or throttled). A fully frozen window emits nothing — that is the signal.
-  let lastFrameAt = performance.now();
-  (function frameStamp() { lastFrameAt = performance.now(); requestAnimationFrame(frameStamp); })();
-  setInterval(() => reply({ t: 'beat', raf: (performance.now() - lastFrameAt) < 1500 }), 2000);
+    const program = Object.assign({}, snapshot.program || { t: 'stop' }, {
+      _cueId: message.cueId || sourceState.cueId || '',
+      mediaId: (snapshot.program && snapshot.program.mediaId) || message.mediaId || sourceState.mediaId || '',
+      // Recovery snapshots must never roll without an explicit operator resume.
+      paused: true,
+      fadeIn: 0
+    });
+    let rendererResult;
+    const programType = canonicalType(program.t || 'stop');
+    if (programType === 'play') rendererResult = await doPlay(program, context);
+    else if (programType === 'image') rendererResult = await doImage(program, context);
+    else { clearProgram(); rendererResult = { ok: true }; }
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'State sync superseded' };
 
-  reply({ t: 'ready' });
-  window.addEventListener('beforeunload', () => reply({ t: 'closed' }));
+    if (snapshot.key) applyKey({ key: snapshot.key }, context);
+    if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'State sync superseded' };
+    runtime.recoveryNeedsResume = programType === 'play' && (!!payload.safeRecovery || sourceState.playbackStatus === 'playing');
+    if (runtime.recoveryNeedsResume) runtime.recoverability = 'operator';
+    if (!rendererResult.ok) {
+      runtime.error = rendererResult.error || runtime.error || 'The synchronized program could not be rendered.';
+      runtime.mediaLoadStatus = 'error';
+      runtime.playbackStatus = 'error';
+      runtime.recoverability = 'reload';
+    }
+    if (!audioResult.ok) {
+      runtime.error = audioResult.error || 'Audio output routing failed.';
+      runtime.recoverability = 'operator';
+    }
+    const state = outputProtocol.update(observedState({
+      communicationStatus: 'syncing',
+      playbackStatus: runtime.recoveryNeedsResume && runtime.mediaLoadStatus === 'ready' ? 'paused' : observedState().playbackStatus,
+      recoverability: runtime.recoveryNeedsResume ? 'operator' : runtime.recoverability
+    }));
+    publishDomState(state);
+    const stateApplied = outputProtocol.buildStateApplied(message.commandId);
+    syncing = false;
+    publishDomState(outputProtocol.getState());
+    return {
+      ok: rendererResult.ok && audioResult.ok,
+      error: rendererResult.error || audioResult.error || '',
+      stateApplied: stateApplied
+    };
+  }
+
+  function destructive(command) {
+    return ['syncstate', 'play', 'xfade', 'image', 'stop', 'clear', 'black', 'fade', 'holdlast', 'replaced'].includes(canonicalType(command && command.commandType));
+  }
+  const commandQueue = CommandQueue.createQueue({
+    isDestructive: destructive,
+    onInvalidate: cancelRendererEffects,
+    apply: applyRendererCommand,
+    maxResults: 160
+  });
+  const syncInFlight = new Set();
+  const syncApplied = new Set();
+
+  function queueOutcome(queueResult) {
+    if (!queueResult) return { ok: false, error: 'Output command returned no result.' };
+    if (queueResult.status === 'cancelled') return { ok: true, error: '', status: 'superseded', cancelled: true, superseded: true, reason: queueResult.reason || 'Command superseded.' };
+    if (queueResult.status === 'failed') return { ok: false, error: queueResult.error && queueResult.error.message ? queueResult.error.message : 'Output command failed.' };
+    const value = queueResult.value;
+    if (value && typeof value === 'object') return Object.assign({ ok: value.ok !== false }, value);
+    return { ok: true };
+  }
+  function receiveSync(message) {
+    if (syncApplied.has(message.commandId)) {
+      send(outputProtocol.buildStateApplied(message.commandId));
+      return;
+    }
+    if (syncInFlight.has(message.commandId)) return;
+    syncInFlight.add(message.commandId);
+    commandQueue.submit(message, applySnapshot).then((queueResult) => {
+      syncInFlight.delete(message.commandId);
+      const outcome = queueOutcome(queueResult);
+      if (outcome.stateApplied) {
+        syncApplied.add(message.commandId);
+        while (syncApplied.size > 24) syncApplied.delete(syncApplied.values().next().value);
+        send(outcome.stateApplied);
+      } else if (!outcome.cancelled) {
+        rendererError(outcome.error || 'State synchronization failed.', message.mediaId, 'reload');
+      }
+    });
+  }
+  function receiveCommand(message) {
+    const begin = outputProtocol.beginCommand(message);
+    if (begin.ack) { send(begin.ack); return; }
+    if (!begin.accepted) return;
+    commandQueue.submit(begin.command).then((queueResult) => {
+      const outcome = queueOutcome(queueResult);
+      const state = observedState();
+      const ack = outputProtocol.completeCommand(begin.command, outcome, state);
+      publishDomState(outputProtocol.getState());
+      if (ack) send(ack);
+    });
+  }
+  function receive(message) {
+    if (!outputProtocol.accepts(message)) return;
+    const normalized = Protocol.normalizeEnvelope(message);
+    if (normalized.commandType === Protocol.MESSAGE_TYPES.SYNC_STATE) {
+      receiveSync(normalized);
+      return;
+    }
+    receiveCommand(normalized);
+  }
+
+  if (bc) bc.onmessage = (event) => receive(event.data);
+  const receiveWindowMessage = (event) => {
+    if (event.origin !== location.origin) return;
+    receive(event.data);
+  };
+  window.addEventListener('message', receiveWindowMessage);
+
+  function mediaEnded(d) {
+    if (front !== d) return;
+    runtime.playbackStatus = 'ended';
+    runtime.recoverability = 'none';
+    sendHeartbeat({ playbackStatus: 'ended' });
+  }
+  decks.a.el.addEventListener('ended', () => mediaEnded(decks.a));
+  decks.b.el.addEventListener('ended', () => mediaEnded(decks.b));
+
+  const frameStamp = () => {
+    lastFrameAt = performance.now();
+    frameRAF = requestAnimationFrame(frameStamp);
+  };
+  const resetRendererGrace = () => {
+    if (document.visibilityState !== 'hidden') {
+      lastFrameAt = performance.now(); lastVideoFrameAt = lastFrameAt; lastVideoProgressAt = lastFrameAt;
+    }
+  };
+  document.addEventListener('visibilitychange', resetRendererGrace);
+  frameRAF = requestAnimationFrame(frameStamp);
+  heartbeatTimer = setInterval(() => sendHeartbeat(), 2000);
+
+  publishDomState(outputProtocol.getState());
+  send(outputProtocol.buildReady());
+  window.__OUTRANGUTAN_OUTPUT_V2__ = Object.freeze({
+    outputId: OUTPUT_ID,
+    outputInstanceId: outputProtocol.outputInstanceId,
+    productionSessionId: PRODUCTION_SESSION_ID,
+    controllerInstanceId: CONTROLLER_INSTANCE_ID,
+    getState: outputProtocol.getState,
+    getQueueState: commandQueue.getState
+  });
+
+  window.addEventListener('beforeunload', () => {
+    shuttingDown = true;
+    clearInterval(heartbeatTimer);
+    cancelAnimationFrame(frameRAF);
+    commandQueue.close('output window closed');
+    cancelRendererEffects();
+    clearDeckCallbacks(decks.a);
+    clearDeckCallbacks(decks.b);
+    document.removeEventListener('visibilitychange', resetRendererGrace);
+    window.removeEventListener('message', receiveWindowMessage);
+    if (bc) bc.close();
+  });
 })();
 </script>
 </body>
