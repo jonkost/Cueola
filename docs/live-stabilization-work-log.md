@@ -1007,7 +1007,7 @@ The follow-up repair was completed before Phase 10 execution. `sdConnect()` now 
 
 ### Rehearsal Definition (Pre-Test)
 
-The integrated rehearsal began on 2026-07-14 against the existing 24-row shared QA fixture `STAB26` at `127.0.0.1:8018`. The fixture already contains four stable student profiles, multi-role assignment/paperwork records, six scripted rows, media references, long operator notes, and enough rundown rows to execute the required 20-cue run without manufacturing a second source of truth.
+The integrated rehearsal began on 2026-07-14 against the 24-row shared QA fixture `STAB26` at `127.0.0.1:8018`. The rundown contained six scripted rows, six historical media references, long operator notes, and enough rows to execute the required 20-cue run. A fresh Firestore emulator reset later proved that the root session, profile/assignment collections, and device-local Outrangutan media have different lifetimes. The root session was recovered from Cueola's local draft, and four canonical profiles plus assignment records were reconstructed through the normal no-password UI on 2026-07-14. The reconstructed fixture proves current end-to-end behavior; it does not prove that the exact pre-reset profile documents persisted.
 
 The 30 plan steps are treated as one stateful operator sequence rather than isolated feature demos. Evidence will be captured at the saved-production boundary, Live subsystem/status boundary, cue 20 or later, post-network recovery, post-exit/reload, export boundary, Stream Deck proof, re-entry boundary, and real elapsed +10/+20/+30-minute output checkpoints.
 
@@ -1015,13 +1015,13 @@ The 30 plan steps are treated as one stateful operator sequence rather than isol
 
 | Integrated state | Authoritative owner | Phase 10 observation |
 | --- | --- | --- |
-| Rundown and production identity | shared session document plus `CueolaLiveSession` staging | server reads/writes require a reachable owner-deployed Firestore/emulator path; the cached `STAB26` fixture is useful but not server proof |
-| Student identity, assignments, and paperwork | canonical profile IDs, assignment subcollection, and assignment controller | cached records can be inspected; student/instructor server visibility cannot pass while the external emulator/rules target is unreachable |
+| Rundown and production identity | shared session document plus `CueolaLiveSession` staging | recovered into the running Firestore emulator, reloaded from server authority, and acknowledged by Live preflight |
+| Student identity, assignments, and paperwork | canonical profile IDs, assignment subcollection, and assignment controller | four profiles were recreated through class-code onboarding, saved as four canonical assignment records at revision 1, and reloaded in both instructor and student surfaces |
 | Active/selected cue and execution history | Live lifecycle controller and stable-keyed run ledger | run locally through at least 20 activations and re-entry without positional re-inference |
 | Flowmingo | one controller-owned prompter session and child-window protocol | verify open, ready, pause/resume, close/reopen, and current-session synchronization |
 | Script Operator | one child-window protocol plus Live subsystem record | verify one active channel, close/reopen, current cue, and no duplicate delivery |
 | Outrangutan playback/output | command queue, output protocol, and Live subsystem projection | verify open, media commands, close/reopen, failure/recovery, and output longevity |
-| Export | immutable export transaction with explicit authority | shared export must fail closed if server confirmation is unavailable; local draft proof does not substitute for shared authority |
+| Export | immutable export transaction with explicit authority | 15 fixed pages were captured from server-confirmed session and assignment revision 1 state and exported as a PDF package |
 | Stream Deck labels | canonical renderer, model-owned device frame, HID packet delivery | simulator/export proof is available; physical LCD acceptance requires attached WebHID hardware |
 | Browser/platform behavior | Chromium preview plus Safari/WebHID capability surface | Chromium can exercise the full local operator path; Safari and physical hardware are not available in this managed preview |
 
@@ -1044,7 +1044,7 @@ State ownership and root cause: `setCloudSyncState()` owns the real builder badg
 
 The repair will retain one in-memory cloud status record inside `setCloudSyncState()`, derive the Live rail from that same record, map saving to connecting and shared local-only state to disconnected, and refresh the rail whenever its owner changes. No Firestore document, collection, or rules shape is involved.
 
-Repair completed: `setCloudSyncState()` now updates `cloudSyncProjection` before rendering either surface, and the Live rail maps the same `synced`, `saving`, `error`, `local`, and `off` owner states to truthful operation states. After activating `cueola-app.js?v=709c9634c5`, the reproduced builder `saving` state projects as Live `connecting` with identical **Cloud sync saving changes...** detail. The final Live UI contract passes 11/11 focused cases; the integrated dwell screenshots capture the repaired shared projection.
+Repair completed: `setCloudSyncState()` now updates `cloudSyncProjection` before rendering either surface, and the Live rail maps the same `synced`, `saving`, `error`, `local`, and `off` owner states to truthful operation states. After activating the final `cueola-app.js?v=808880c00b`, the reproduced builder `saving` state projects as Live `connecting` with identical **Cloud sync saving changes...** detail. The final Live UI contract passes 16/16 focused cases; the integrated dwell and restored Live checks capture the repaired shared projection.
 
 ### Integrated Defect 2 — Flowmingo Recovery Dead End (Documented Before Repair)
 
@@ -1058,7 +1058,7 @@ State ownership and root cause: the prompter session controller intentionally us
 
 The repair will expose **Recover Flowmingo** for a recovering prompter, close and clear the stale talent-window/output identity on deliberate recovery, and open a fresh output that must complete the normal snapshot handshake. This changes no persisted data or Firestore rules.
 
-Repair completed: a recovering prompter now exposes **Recover Flowmingo**, and deliberate recovery calls `openFlowmingoTalentWindow({ replace:true })`. Replacement closes and clears the stale window, endpoint identity, heartbeat, and handshake record before opening a fresh talent endpoint. The exact current asset `cueola-app.js?v=709c9634c5` was then exercised live: the stalled endpoint exposed the recovery control, activating it moved the rail to **Opening Flowmingo output**, and a fresh controlled talent tab restored `READY · STAB26` before returning to **Talent scrolling**. This is an operator-owned replacement through the existing protocol rather than a focus-only retry.
+Repair completed: a recovering prompter now exposes **Recover Flowmingo**, and deliberate recovery calls `openFlowmingoTalentWindow({ replace:true })`. Replacement closes and clears the stale window, endpoint identity, heartbeat, and handshake record before opening a fresh talent endpoint. The final `cueola-app.js?v=808880c00b` was then exercised live: the stalled endpoint exposed the recovery control, activating it moved the rail to **Opening Flowmingo output**, and a fresh controlled talent tab restored `READY · STAB26` before returning to **Talent scrolling**. This is an operator-owned replacement through the existing protocol rather than a focus-only retry.
 
 ### Integrated Defect 3 — Fresh-Emulator Rundown Loss (Documented Before Repair)
 
@@ -1083,26 +1083,26 @@ Root cause and first incorrect transition: recovery/rejoin and first-time server
 
 The repair will make missing-session creation one atomic, complete bootstrap operation based on a captured current session payload; it will never overwrite an existing document. The snapshot listener will wait for that decision rather than promoting a metadata-only document, and a focused contract will pin the complete payload and create-only transaction behavior. Because the already restarted emulator has no persisted `STAB26` export, recovery of this particular QA fixture will use Cueola's documented local Session History UI if an intact snapshot remains; no rehearsal data will be silently manufactured.
 
-Repair completed: session role no longer doubles as create permission. The explicit **Create Session** action now performs a create-only Firestore transaction with a complete rundown document; URL, Dashboard, resume, and ordinary join paths install only the listener and never create missing authority. A missing or incomplete server snapshot preserves the per-code local draft, displays a persistent recovery instruction, and blocks both the ordinary rundown transaction and the optimistic cloud-success projection. **Retry cloud sync** now performs a real server read even when networking is already enabled.
+Repair completed: session role no longer doubles as create permission. The explicit **Create Session** action now performs a create-only Firestore transaction with a complete rundown document; URL, Dashboard, resume, and ordinary join paths install only the listener and never create missing authority. A missing or incomplete server snapshot preserves the per-code local draft, displays a persistent recovery instruction, and blocks both the ordinary rundown transaction and the optimistic cloud-success projection. The rundown flush transaction checks both missing and incomplete documents before `applyRundownBatch()` or `transaction.update()`, tags the actual availability failure, and never patches a partial authority. **Retry cloud sync** now performs a real server read even when networking is already enabled.
 
 Snapshot recovery can recreate a missing or incomplete document only after the existing confirmation. Recovery payloads include show metadata, rundown rows/aliases, custom sources, cues, and the existing restorable paperwork allowlist, while deliberately resetting or excluding presence, participants, active cue, Live status, prompter/playout transport, clocks, commands, kicks/moves, and heartbeats. The same History sheet now exposes **Restore Current Local Copy** when the server session is missing or incomplete; that separate confirmed action recovers the displayed rundown plus locally saved Planda Bear data and production notes.
 
 The live reproduction exposed an additional fixture-retention fact before recovery: all 20 IndexedDB History slots had rolled over to zero-row authoritative snapshots, but the separate per-code local draft still held **Cueola STAB26 Live Rehearsal**, all 24 rows, six script cues, and all six playback references. The repaired build rejected the incomplete server document, rendered those 24 local rows with an explicit error, then recreated `STAB26` through **Restore Current Local Copy**. A full reload returned **Cloud sync connected · STAB26**, the same show identity, and 24 rows. Live preflight received a 51 ms server acknowledgment; Live then rendered row 1 of 24 with the Saved state rail reporting the same connected session. The current-build console contained zero warnings or errors, and the visual proof was captured from the restored Live surface.
 
-This repair does not pretend that a root-session recovery recreates unrelated Firestore collections or device-local media. The fresh emulator still lacks the four canonical profile documents and assignment subcollection records, and Outrangutan's IndexedDB blobs remain workstation-local. That changes later Phase 10 setup: an emulator export/import or deterministic seed must exist before deliberately restarting authority; root Session History alone is not a complete integrated fixture backup.
+This repair does not pretend that a root-session recovery recreates unrelated Firestore collections or device-local media. Four replacement profile documents and their canonical assignment records were therefore created through the product UI and saved at assignment revision 1. Outrangutan's IndexedDB blobs remain workstation-local and still require explicit import. Future integrated setup must create an emulator export/import checkpoint or deterministic seed before deliberately restarting authority; root Session History alone is not a complete integrated fixture backup.
 
 ### Integrated Rehearsal Results (2026-07-14)
 
 | Step | Result | Observation |
 | --- | --- | --- |
 | 1. Open QA production | Pass | Opened cached shared production `STAB26` as instructor with the expected 24 rundown rows. |
-| 2. Assign students | Partial | Four cached student assignments rendered. **Save Assignments** failed closed because only the offline cache was available; no server-confirmed write is claimed. |
-| 3. Attach paperwork | Partial | Cached assignment and paperwork requirements rendered for the four profiles, but the unreachable Firestore authority prevented a fresh server-confirmed attachment transaction. |
+| 2. Assign students | Pass against reconstructed authority | Minted class code `FVU7QX`, recreated Avery Stone, Jordan Lee, Morgan Cruz, and Riley Chen through the normal no-password onboarding UI, linked their recovered rows, and saved **4 assignment records confirmed in Firestore · revision 1**. |
+| 3. Attach paperwork | Pass | Saved each canonical role and its required paperwork. Avery and Morgan each received five items; Jordan and Riley each received six. |
 | 4. Reload the app | Pass against restored emulator authority | After the Defect 3 repair and confirmed local-copy recovery, a full reload returned **Cloud sync connected · STAB26**, the same instructor production, and all 24 rows. |
-| 5. Confirm assignments remain | Blocked authoritatively | Cached values remained, but the plan requires persistence across the shared server boundary; the configured emulator/rules target was unavailable. |
-| 6. Sign in as a student | Pass locally | Opened Avery's student portal from the cached identity. The portal visibly labeled the profile and session as offline/out of date. |
-| 7. Confirm student assignments | Partial | The expected cached assignment rendered, while assignment and paperwork freshness were explicitly reported as not checked offline. |
-| 8. Return as instructor | Pass locally | Returned through the dashboard as the Phase 6 QA instructor and reopened `STAB26` with the same 24 rows. |
+| 5. Confirm assignments remain | Pass | A true emulator-backed reload retained all four linked profiles and reported **Saved · 4 assignment records confirmed in Firestore · revision 1**. |
+| 6. Sign in as a student | Pass | Reloaded Riley Chen's server-backed profile and opened the student portal through the no-password class-code identity path. |
+| 7. Confirm student assignments | Pass | Riley's portal showed session `STAB26`, **Technical Director**, and all six assigned paperwork items without a legacy/offline warning. |
+| 8. Return as instructor | Pass | Reloaded the explicit emulator instructor URL and reopened Admin; the same 24-row production and four revision-1 assignment records remained authoritative. |
 | 9. Enter Live mode | Pass | Entered Live with row 2 active initially and later re-entered at the preserved cue boundary. |
 | 10. Open Flowmingo | Pass | Talent output reported `READY · STAB26`, `✓ Show`, and `✓ Script`; transport and recovery were exercised on the current asset. |
 | 11. Open Script Operator | Pass | Script Operator opened, synchronized to the show, and remained active through the final dwell. |
@@ -1114,13 +1114,13 @@ This repair does not pretend that a root-session recovery recreates unrelated Fi
 | 17. Move focus among windows | Partial | Repeatedly interacted with the controlled main, talent, and playback tabs. Physical multi-display placement and OS-level focus behavior remain unavailable. |
 | 18. Close/reopen prompter | Pass | Closed and reopened a fresh talent tab, and separately reproduced the missed-heartbeat recovery state before using the new **Recover Flowmingo** replacement action. |
 | 19. Close/reopen playback | Partial | Reopened the standalone program output and confirmed the output control remained pressed. A physical/claimable renderer window and media state were unavailable. |
-| 20. Interrupt network | Blocked | The Firestore/emulator target was already unreachable and the managed browser exposed no real network toggle, so a second controlled interruption would not be meaningful. |
-| 21. Restore network | Blocked | No reachable authority was available to restore. Local browser connectivity remained healthy. |
-| 22. Confirm synchronization | Partial | Flowmingo and Script Operator resynchronized locally after replacement/re-entry. Server-confirmed assignment, export, and playback-session synchronization remained blocked. |
+| 20. Interrupt network | Blocked pending checkpoint | Authority is now reachable, but intentionally stopping the fresh emulator before the owner creates an export checkpoint would destroy the reconstructed fixture. No destructive interruption is claimed. |
+| 21. Restore network | Blocked pending checkpoint | A restart/restore drill remains deferred until the emulator export is confirmed. The live retry/probe and missing-authority recovery paths were exercised separately. |
+| 22. Confirm synchronization | Pass except playback media | Rundown, profiles, assignments, Flowmingo, and Script Operator all reloaded or resynchronized against the current session. Playback remains blocked until the device-local media is imported and remapped. |
 | 23. Exit Live mode | Pass | Used **Return to Rundown** after the cue run; active commands froze through the Phase 5 exit transaction. |
 | 24. Return to rundown | Pass locally | Builder restored the 24-row rundown and reported saved locally/cloud sync pending. |
-| 25. Confirm no data loss | Pass for root session; profile fixture partial | Production name, role, and all 24 rows survived recovery and a fresh server-backed reload. The restarted emulator had no export for the separate profile/assignment collections, so their earlier records are not claimed as recovered. |
-| 26. Export paperwork | Blocked safely | **Preview Package** refused stale cached state with `Package preview blocked: Assignments is still loading its saved state.` This is the intended fail-closed behavior, not a completed formal export. Evidence: `/private/tmp/cueola-phase10-export-blocked.png`. |
+| 25. Confirm no data loss | Pass for current reconstructed fixture | Production name, role, all 24 rows, four new canonical profiles, and four revision-1 assignment records survived true emulator-backed reloads. The new IDs are authoritative for this fixture; the exact pre-reset profile documents are not claimed as recovered. |
+| 26. Export paperwork | Pass | Planda Bear preview produced 15 fixed pages, each labeled **SERVER-CONFIRMED EXPORT · Assignments r1 · Planda Bear 7/14/2026, 9:45:24 AM** and **Saved source**, then exported `/Users/jonkost/Downloads/cueola-stab26-live-rehearsal-plandabear-package (1).pdf` (2,687,166 bytes). |
 | 27. Verify Stream Deck labels | Partial | The integrated MK.2 simulator rendered 15 keys with key 1 mapped to GO, and the Phase 9 XL proof covers all supported positions. Evidence: `/private/tmp/cueola-phase10-stream-deck.png` and `/Users/jonkost/Downloads/cueola-stream-deck-orientation-006c.png`. Physical LCD verification remains blocked without hardware. |
 | 28. Re-enter Live mode | Pass | Re-entry preserved row 22 as the active boundary and row 23 as next; a subsequent GO moved exactly once to row 23. |
 | 29. Check duplicate actions | Partial | One Live GO produced one row transition and one completion record; one Flowmingo resume/pause pair produced one state change per command. Playback GO could not be tested without media cues. |
@@ -1128,47 +1128,52 @@ This repair does not pretend that a root-session recovery recreates unrelated Fi
 
 ### Root Cause (Integrated Findings)
 
-The two new product defects were both projection/ownership failures at integration boundaries. Cloud state had a real owner but Live invented a success fallback instead of reading it. Flowmingo had a real recovery state but the UI classified that state as transient while the open helper reused a stale window, leaving no recovery transition. The remaining incomplete acceptance cases are not hidden versions of those defects: they are unavailable external authorities or missing device-local fixtures that the application now surfaces explicitly.
+The three new product defects were ownership failures at integration boundaries. Cloud state had a real owner but Live invented a success fallback instead of reading it. Flowmingo had a real recovery state but the UI classified that state as transient while the open helper reused a stale window. Fresh-emulator join/recovery incorrectly shared create authority and promoted a metadata-only document before a complete bootstrap decision. The remaining incomplete acceptance cases are missing device-local fixtures or unavailable physical platforms/hardware that the application now surfaces explicitly.
 
-The rehearsal also exposed a test-fixture durability lesson: session-side media references and device-local Outrangutan blobs have different lifetimes. A QA session can retain playback cue references while a fresh browser profile has no IndexedDB assets. Future integrated setup must seed and verify the device-local media store in the exact browser profile before starting the acceptance clock; an open program window is not evidence that media is available or on air.
+The rehearsal also exposed two fixture lessons. Session-side media references and device-local Outrangutan blobs have different lifetimes, so the exact browser profile must be seeded before the acceptance clock. In addition, the Dashboard's production launch does not preserve the debug `firestoreEmulator=1` query parameter; emulator QA must use an explicit emulator URL. A temporary Dashboard-launched tab therefore reached production Firestore and was discarded rather than being treated as fixture evidence.
 
 ### Affected Files
 
-- `cueola-app.js`: shared cloud-state projection and forced Flowmingo replacement/recovery path.
-- `scripts/tests/live-ui-contract.test.mjs`: focused contracts for the truthful sync owner and recovering-prompter action.
-- `index.html` and `sw.js`: current `cueola-app.js?v=709c9634c5` cache references.
+- `cueola-app.js`: shared cloud-state projection, forced Flowmingo replacement/recovery, explicit complete session bootstrap, fail-closed missing/incomplete joins and transactions, server-probed retry, durable-only History recovery, current-local-copy recovery, and fingerprinted per-code drafts with aliases.
+- `scripts/tests/live-ui-contract.test.mjs`: 16 focused contracts covering the Live ownership repairs, create/join separation, fail-closed transaction order, and recovery surfaces.
+- `scripts/test-rules.mjs`: full-session bootstrap/recovery write contract using the existing permitted session schema.
+- `index.html` and `sw.js`: final `cueola-app.js?v=808880c00b` cache references.
 - `docs/live-stabilization-work-log.md`: integrated evidence, results, and blockers.
 
-No Phase 10 collection or document shape changed, so no additional Firestore-rules edit was required. The existing `firestore.rules` changes from Phase 6 remain staged only for owner deployment.
+No Phase 10 collection, document path, or allowed field shape changed, so `firestore.rules` did not require a Phase 10 edit. The existing Phase 6 rules already cover the complete durable bootstrap payload and remain owner-deployed only.
 
 ### Repair
 
 1. Made `cloudSyncProjection` the common owner for builder and Live saved-state UI, including saving/connecting, error, local-only/disconnected, and synced/ready mappings.
 2. Made a missed-heartbeat Flowmingo state actionable and routed deliberate recovery through a forced replacement that clears stale window/protocol identity before the normal handshake.
-3. Added the two focused Live UI contracts and bumped every touched cache reference.
-4. Preserved the fail-closed assignment/export behavior when shared authority was unavailable; no local cache was promoted to server truth.
+3. Separated explicit complete creation/recovery authority from join/resume behavior, rejected missing and incomplete server documents before any patch or write, and preserved recoverable local drafts without exporting volatile control state.
+4. Expanded the focused UI and rules contracts and bumped every touched cache reference to `cueola-app.js?v=808880c00b`.
+5. Reconstructed four canonical profiles/assignments through the public UI, verified student and instructor reloads, and completed a server-confirmed 15-page export.
 
 ### Why This Is Durable
 
-Both repairs remove an invented or stale authority instead of adding timing delays. Saved-state wording now derives from the same in-memory record on every surface. Flowmingo recovery now creates a new output identity and must complete the existing snapshot handshake, so focusing an unresponsive handle cannot look like recovery. The additional contracts pin those ownership boundaries, and the integrated run confirms the local lifecycle still executes commands exactly once after exit/re-entry.
+All three repairs remove an invented or stale authority instead of adding timing delays. Saved-state wording derives from one in-memory record on every surface. Flowmingo recovery creates a new output identity and must complete the existing snapshot handshake. Firestore create/recovery is explicit and complete, while ordinary join and sync transactions fail closed before mutating missing or incomplete authority. The contracts pin those ownership boundaries, and the integrated run confirms current server-backed state survives reload and exports only after its revision fence is satisfied.
 
 ### Regression Risk
 
 - A legitimate long-running `saving` state is now visibly connecting rather than optimistically synchronized; this is intentionally more conservative.
 - Forced Flowmingo recovery closes a stale handle. Any browser that refuses scripted close/open will remain visibly recovering instead of silently reusing it.
+- Local-copy recovery intentionally excludes volatile Live/presence/transport/heartbeat state; operators must re-enter Live after recovery.
+- Fresh-emulator integrated fixtures need an export/import checkpoint that covers root session plus profile/assignment collections before restart testing.
 - Outrangutan assets are device-local. New profiles need an explicit seed/preflight step before media acceptance, independent of Firestore session data.
 - Safari, popup placement on a physical second display, and real Stream Deck LCD output remain external acceptance dependencies.
 
 ### Tests Performed
 
 - JavaScript syntax: 31/31 files passed.
-- Repository tests: 12/12 suites and 130/130 assertions passed.
-- Entitlements: 21/21 assertions passed; combined total 151/151.
-- DOM/handler contracts: 4 pages, 767 ID references, 652 handler references, and 9 allowlisted entries passed.
+- Repository tests: 12/12 suites and 135/135 assertions passed, including 16/16 focused Live UI cases.
+- Entitlements: 21/21 assertions passed; combined total 156/156.
+- DOM/handler contracts: 4 pages, 769 ID references, 653 handler references, and 9 allowlisted entries passed.
 - Cache dry run: all 17 managed references current.
 - `git diff --check`: passed.
-- Chromium operator run: 20 deliberate cue activations, Flowmingo pause/resume and replacement, Script Operator synchronization, Live exit/re-entry, one-command/one-action check, Stream Deck simulator proof, fail-closed assignment/export paths, and a measured 30-minute output dwell with final 0/0/0 browser diagnostic entries.
+- Firestore rules contract: the owner previously ran the full emulator contract successfully; the new complete-bootstrap case remains to be rerun against the long-lived emulator from the owner's terminal because the managed shell cannot connect to that host port.
+- Chromium operator run: restored and reloaded all 24 rows; completed 20 deliberate cue activations; exercised Flowmingo pause/resume/replacement, Script Operator synchronization, Live exit/re-entry, and one-command/one-action behavior; recreated four profiles; saved and reloaded four canonical assignment records at revision 1; opened Riley's server-backed portal; produced a 15-page server-confirmed preview and PDF; and observed zero current-build warning/error console entries.
 
 ### Result
 
-**Partial; environment-blocked.** The available Chromium operator path passes the documented local lifecycle, show-control, cue-ledger, Flowmingo, Script Operator, Stream Deck simulator, and fail-closed authority cases. The project Definition of Done cannot be reported as a full pass: server-confirmed assignment/student/export behavior requires a reachable owner-deployed Firestore/rules target; media playback requires the missing device-local assets in this exact profile; Safari, physical external-display behavior, and physical Stream Deck LCD output were unavailable. No deployment, commit, or push was performed, and the preview remains running for review.
+**Partial; environment-blocked.** The available Chromium plus Firestore-emulator path passes root-session recovery/reload, reconstructed profile and assignment authority, the server-backed student portal, server-confirmed export, local lifecycle/show control, cue ledger, Flowmingo, Script Operator, and Stream Deck simulator cases. The reconstructed fixture proves current behavior but not persistence of the pre-reset profile documents. Full Definition of Done still requires importing/remapping the device-local media and completing real playback/45-minute output acceptance, a checkpointed network restart/restore drill, Safari/physical external-display behavior, and physical Stream Deck LCD verification. No deployment, commit, or push was performed, and the preview plus emulator remain running for review.
