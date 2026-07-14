@@ -309,8 +309,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .modal-err{font-size:12px;color:var(--red);background:rgba(240,82,82,.08);border:1px solid rgba(240,82,82,.2);border-radius:7px;padding:9px 12px;display:none}
 .modal-err.on{display:block}
 .btn-full{width:100%;padding:14px;border-radius:var(--r);font-size:15px;font-weight:600;font-family:var(--sans);cursor:pointer;border:none;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;letter-spacing:0}
-.btn-primary{background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);color:var(--accent)}
-.btn-primary:hover{background:color-mix(in srgb,var(--accent) 24%,transparent);color:var(--text);transform:translateY(-1px)}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff}
+.btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+[data-theme="koala"] .btn-primary{background:linear-gradient(135deg,#404040,#494949);color:#fff;border:1px solid rgba(255,255,255,.2)}
+[data-theme="koala"] .btn-primary:hover{filter:brightness(1.15)}
+[data-theme="panda"] .btn-primary{background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border:1px solid rgba(255,255,255,.18)}
+[data-theme="panda"] .btn-primary:hover{filter:brightness(1.2)}
 .btn-secondary{background:transparent;border:1.5px solid var(--bord2);color:var(--text2)}
 .btn-secondary:hover{border-color:var(--text2);color:var(--text)}
 .btn-danger{background:rgba(240,82,82,.1);border:1px solid rgba(240,82,82,.3);color:var(--red)}
@@ -671,7 +675,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         <button type="button" class="scope-btn" id="scope-mine" onclick="setSessionScope('mine')" aria-pressed="false">Mine</button>
         <button type="button" class="scope-btn" id="scope-all" onclick="setSessionScope('all')" aria-pressed="false">All</button>
       </div>
-      <button class="btn-sm btn-ghost" onclick="refreshSessions()">↻ Refresh</button>
+      <button class="btn-sm btn-ghost" onclick="refreshSessions()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span> Refresh</button>
     </div>
   </div>
 
@@ -737,7 +741,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         <div class="admin-control-form-title">Class Roster</div>
         <input class="admin-mini-in" id="rosterBulkCodes" placeholder="Session code(s), comma-separated">
         <button class="admin-mini-btn primary" onclick="rosterBulkAttach()">Attach to selected</button>
-        <button class="admin-mini-btn" onclick="loadIdentityAdminData()">↻ Refresh</button>
+        <button class="admin-mini-btn" onclick="loadIdentityAdminData()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span> Refresh</button>
       </div>
       <div class="overview-list" id="rosterList"><div class="roster-empty">Loading roster…</div></div>
     </div>
@@ -940,7 +944,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- ── MODAL: SYSTEM SETTINGS ── -->
 <div class="modal-wrap" id="modal-system-settings">
   <div class="modal" style="max-width:640px">
-    <div class="modal-title">⚙️ System Settings</div>
+    <div class="modal-title"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span> System Settings</div>
     <div class="modal-sub">Choose the workspace look and keep global Cueola preferences in one place.</div>
     <div class="field">
       <label class="field-lbl">Theme</label>
@@ -956,12 +960,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       </div>
     </div>
     <button class="btn-full btn-primary" onclick="saveSystemSettings()">Save Settings</button>
-    <a class="btn-full btn-secondary" href="#" onclick="hideModal('modal-system-settings')" style="margin-top:4px;text-align:center;text-decoration:none">Close</a>
+    <button type="button" class="btn-full btn-secondary" onclick="hideModal('modal-system-settings')" style="margin-top:4px">Close</button>
   </div>
 </div>
 
 <!-- ── TOAST ── -->
-<div class="toast" id="toast">Copied!</div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script>
@@ -1589,7 +1593,7 @@ function renderSessions() {
         <button class="sc-btn sc-btn-copy" onclick="openPrePro(${codeArg},event)"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> Planda Bear</button>
         <button class="sc-btn sc-btn-muted" onclick="openRundownPeek(${codeArg})">Rundown ▸</button>
         <button class="sc-btn sc-btn-open" onclick="openSession(${codeArg})">Open →</button>
-        <button class="sc-btn sc-btn-muted" onclick="showDetail(${codeArg},event)">Session Setup ⚙</button>
+        <button class="sc-btn sc-btn-muted" onclick="showDetail(${codeArg},event)">Session Setup <span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       </div>
     `;
     area.appendChild(card);

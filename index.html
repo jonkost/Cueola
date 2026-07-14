@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=6cad33dc00">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=2fd1c473da">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -43,7 +43,6 @@
   /* Floating popovers/sheets keep ONE large soft ambient (framecheck tier-1) — everything else is shadowless. */
   --liquid-shadow-raised:0 28px 74px rgba(0,0,0,.30),inset 0 1px 0 color-mix(in srgb,#fff 16%,transparent);
   --liquid-blur:26px;--liquid-saturation:155%;
-  --ui-focus-ring:0 0 0 3px color-mix(in srgb,var(--accent) 28%,transparent);
   /* ── Filled-quiet button foundation (Claude-desktop language) ──
      Buttons get a solid-ish "button area" fill one surface step off their
      background — NEVER a prominent stroke. Label/icon rest at --btn-ink and
@@ -153,8 +152,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ec-actions{align-self:flex-start;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
 .ec-mini-btn{border:1px solid transparent;background:color-mix(in srgb,var(--oc,var(--accent)) 14%,transparent);color:var(--oc,var(--accent));border-radius:999px;padding:3px 10px;font-size:12px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
 .ec-mini-btn:hover{background:color-mix(in srgb,var(--oc,var(--accent)) 24%,transparent);color:var(--text);transform:translateY(-1px)}
-.inst .ec-pill{background:rgba(91,141,248,.15);color:var(--accent)}.stud .ec-pill{background:rgba(34,211,160,.15);color:var(--green)}
-.demo .ec-pill{background:rgba(245,183,49,.15);color:var(--yellow)}.exp .ec-pill{background:rgba(70,82,122,.2);color:var(--text3)}
+.inst .ec-pill{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}.stud .ec-pill{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
+.demo .ec-pill{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}.exp .ec-pill{background:color-mix(in srgb,var(--text3) 20%,transparent);color:var(--text3)}
 .e-divider{width:100%;max-width:280px;height:1px;background:var(--border);margin:8px auto 0}
 .e-footer{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center}
 .e-footer-label{font-size:13px;color:var(--text3);font-family:var(--sans);font-weight:500;letter-spacing:0}
@@ -172,8 +171,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .session-badge{display:flex;align-items:center;gap:7px;padding:6px 13px;background:var(--s3);border:1px solid var(--bord2);border-radius:20px;font-family:var(--mono);font-size:12px;color:var(--text2);font-weight:500}
 .session-badge strong{color:var(--accent);letter-spacing:.08em}
 .role-badge{padding:5px 11px;border-radius:20px;font-size:11px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
-.role-inst{background:rgba(91,141,248,.15);color:var(--accent)}.role-stud{background:rgba(34,211,160,.15);color:var(--green)}
-.role-admin{background:rgba(240,82,82,.15);color:var(--red)}
+.role-inst{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}.role-stud{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
+.role-admin{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
 /* Overflow stays visible on desktop so the avatar name tooltips can escape the bar;
    narrow screens trade tooltips for horizontal scrolling (media query below). */
 .tb-right{display:flex;gap:7px;align-items:center;min-width:0}
@@ -183,17 +182,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .tbtn{padding:7px 14px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
 .tbtn:active{transform:scale(.96)}
 .tbtn:focus:not(:focus-visible){outline:none}
-.tbtn:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 65%,white);outline-offset:2px}
 .tbtn-ghost{background:var(--btn-fill);color:var(--btn-ink);border:var(--btn-hairline)}.tbtn-ghost:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
 .tbtn.icon-only{width:38px;height:38px;padding:0;justify-content:center;font-size:19px}
 .tbtn-live{background:#ff3b30;color:#fff;border:none}.tbtn-live:hover{background:#ff5247}.tbtn-live .live-dot{background:#fff}
 .tbtn-admin{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);border:1px solid transparent}.tbtn-admin:hover{background:color-mix(in srgb,var(--red) 20%,transparent)}
 .live-dot{width:6px;height:6px;background:#fff;border-radius:50%}
-.mode-tabs{display:flex;background:var(--btn-fill);border:var(--btn-hairline);border-radius:8px;padding:3px;gap:2px}
-#tabLive{display:none}
-.mtab{padding:6px 14px;border-radius:7px;font-size:14px;font-weight:600;color:var(--text2);cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0}
-.mtab:hover{color:var(--text)}
-.mtab.on{background:var(--s4);color:var(--text);box-shadow:var(--shadow-sm)}
 
 /* ── PRESENCE ── */
 .presence-wrap{position:relative;display:flex;align-items:center;cursor:default}
@@ -405,7 +398,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
 .empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
 .empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2);text-align:center}
-.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:800;font-family:var(--mono);letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
+.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer}
 .empty-rundown-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
 /* ── BOT BAR ── */
@@ -432,8 +425,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-row-current td{background:color-mix(in srgb,var(--accent) 15%,transparent)}
 .live-row-next td{background:color-mix(in srgb,var(--green) 7%,transparent)}
 .live-row-done{opacity:.4}
-.live-row-selected td{outline:1px solid color-mix(in srgb,var(--cyan) 55%,transparent);outline-offset:-1px}
-.live-row-selected td:first-child{box-shadow:inset 3px 0 var(--cyan)}
+/* Selection is ONE quiet treatment: a soft tint + cyan rail on rows that are
+   not on air. Per-cell outlines boxed every cell of the NOW row and read as a
+   broken grid. The On Air row is already the loudest thing — selecting it adds
+   no extra chrome. */
+.live-row-selected:not(.live-row-current) td{background:color-mix(in srgb,var(--cyan) 7%,transparent)}
+.live-row-selected:not(.live-row-current) td:first-child{box-shadow:inset 3px 0 var(--cyan)}
 .live-col-num{width:38px}.live-col-status{width:80px}.live-col-name{width:190px}.live-col-time{width:74px}.live-col-cue,.live-col-script{width:auto}
 /* Freeze #, State and Row so you never lose your place while the cue columns scroll. */
 .live-grid td:nth-child(-n+3),.live-grid th:nth-child(-n+3){position:sticky;background:var(--s1)}
@@ -891,14 +888,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ar-nav{display:flex;gap:8px;margin-top:4px;padding-top:12px;border-top:1px solid var(--border)}
 .ar-back{padding:10px 18px;border-radius:var(--r);font-size:15px;font-family:var(--sans);cursor:pointer;background:var(--btn-fill);border:1px solid transparent;color:var(--btn-ink);transition:all .15s}
 .ar-back:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
-.ar-next{flex:1;padding:12px;border-radius:var(--r);font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;transition:all .15s}
-.ar-next:hover{filter:brightness(1.1)}
+.ar-next{flex:1;padding:12px;border-radius:11px;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
+.ar-next:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);box-shadow:var(--shadow-md)}
 .ar-next:disabled{opacity:.4;cursor:not-allowed;filter:none}
 
 /* ── EDIT SHEET ── */
 .edit-sheet{max-height:85vh;overflow-y:auto;padding-bottom:16px}
 .edit-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
-.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:var(--r);color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:all .15s}
+.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:11px;color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
+.save-btn:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.save-btn:active{transform:translateY(0) scale(.99);filter:brightness(.96)}
 .del-btn{width:100%;padding:9px;background:color-mix(in srgb,var(--red) 11%,transparent);border:1px solid transparent;border-radius:var(--r);color:var(--red);font-size:14px;font-family:var(--sans);cursor:pointer;transition:all .15s;margin-top:6px}
 .del-btn:hover{background:color-mix(in srgb,var(--red) 18%,transparent)}
 
@@ -958,10 +957,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="white"] :is(.ls-bar,.follow-bar,.ls-overview,.ls-show-card,.ls-stat-card,.live-grid-wrap,.live-grid td,.live-grid th,.ls-sidebar,.ls-prompter-text,.ls-prompter-actions,.ls-cue-script,.lv-cur-script,#pt-edit-box,#pt-script-input){background:#ffffff;color:#000;border-color:#c9c5bd}
 [data-theme="white"] :is(.ls-exit-btn,.ls-clock,.follow-lbl,.live-time,.live-note,.live-script-copy,.ls-prompter-status,.pt-cueola-help){color:#333}
 [data-theme="white"] :is(.live-row-current td,.live-row-next td){color:#000}
-[data-theme="koala"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border:1px solid rgba(255,255,255,.2)}
-[data-theme="koala"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn):hover{filter:brightness(1.15)}
-[data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border:1px solid rgba(255,255,255,.18)}
-[data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn):hover{filter:brightness(1.2)}
+[data-theme="koala"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next){background:linear-gradient(135deg,#404040,#494949);color:#fff;border:1px solid rgba(255,255,255,.2)}
+[data-theme="koala"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next):hover{filter:brightness(1.15)}
+[data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border:1px solid rgba(255,255,255,.18)}
+[data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next):hover{filter:brightness(1.2)}
 [data-theme="koala"] .p-avatar.inst,[data-theme="panda"] .p-avatar.inst{background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 [data-theme="koala"] .p-avatar.stud,[data-theme="panda"] .p-avatar.stud{background:#7a7a7a;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.3) inset}
 .btn-secondary{background:var(--btn-fill);border:var(--btn-hairline);color:var(--btn-ink);padding:11px 16px;border-radius:11px;font-size:15px;font-weight:500;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);width:100%}
@@ -1080,8 +1079,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-level-btn{flex:1;padding:7px;border-radius:7px;font-size:11px;font-family:var(--mono);font-weight:600;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--text3);transition:all .15s}
 .admin-level-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .admin-level-btn.sel{border-color:transparent;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
-.admin-add-btn{padding:9px;border-radius:8px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:all .15s}
-.admin-add-btn:hover{filter:brightness(1.1)}
+.admin-add-btn{padding:9px;border-radius:11px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
+.admin-add-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .admin-sources-grid{display:flex;flex-direction:column;gap:8px}
 .admin-src-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .admin-src-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;width:64px;flex-shrink:0}
@@ -1275,8 +1274,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .call-add-btn{width:100%;padding:10px;border-radius:8px;border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer}
 .call-add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .patch-table{display:grid;gap:0;margin-top:8px;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2)}
-.patch-table.video,.patch-table.audio{grid-template-columns:1fr 1fr 1fr 1fr 1.2fr 38px}
-.patch-table.comms{grid-template-columns:1.1fr .55fr 1fr 1.4fr 38px}
+.patch-table.video,.patch-table.audio{grid-template-columns:1fr 1fr 1fr 1fr 1.2fr 34px 38px}
+.patch-table.comms{grid-template-columns:1.1fr .55fr 1fr 1.4fr 34px 38px}
+.patch-move{display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--s3)}
+.patch-move-btn{flex:1 1 50%;min-height:0;border:0;border-radius:0;background:transparent;color:var(--text3);cursor:pointer;display:grid;place-items:center;padding:0}
+.patch-move-btn .sf-symbol{font-size:9px}
+.patch-move-btn:hover:not(:disabled){color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.patch-move-btn:disabled{opacity:.3;cursor:default}
 .patch-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
 .patch-table .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .patch-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
@@ -1464,7 +1468,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-fab{position:absolute;right:18px;bottom:18px;z-index:24;width:54px;height:54px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);font-size:32px;font-weight:300;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 16px 40px rgba(0,0,0,.35);transition:transform .16s var(--ease),filter .16s var(--ease),opacity .16s var(--ease)}
 .pb-fab:hover{filter:brightness(1.1);transform:scale(1.06)}
 .pb-fab:active{transform:scale(.96)}
-.pb-fab svg{width:24px;height:24px;display:block}
+.pb-fab .sf-symbol{width:24px;height:24px;display:block}
 .pb-board.composing .pb-fab{opacity:0;transform:scale(.5);pointer-events:none}
 /* Compose sheet — slides up from the bottom of the board */
 .pb-compose-sheet{position:absolute;left:0;right:0;bottom:0;z-index:26;padding:0 12px 12px;transform:translateY(110%);transition:transform .26s var(--ease);pointer-events:none;max-height:calc(100% - 10px);display:flex;flex-direction:column}
@@ -1659,7 +1663,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-clitem{display:flex;align-items:center;gap:9px;min-width:0}
 .pb-clitem-check{width:20px;height:20px;flex:none;border-radius:6px;border:2px solid color-mix(in srgb,var(--orange) 60%,var(--bord2));background:transparent;color:transparent;font-size:12px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 button.pb-clitem-check:hover{border-color:var(--green)}
-.pb-clitem-check.done{background:var(--green);border-color:var(--green);color:#04130d}
+.pb-clitem-check.done{background:var(--green);border-color:var(--green);color:var(--bg)}
 .pb-clitem-check.static{cursor:default}
 .pb-clitem-text{font-size:13px;color:var(--text);min-width:0;word-break:break-word}
 .pb-clitem.done .pb-clitem-text{text-decoration:line-through;color:var(--text3)}
@@ -1843,6 +1847,10 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-export-page:is(.is-portrait,[data-orientation="portrait"]){width:8.5in;height:11in}
 .paper-export-page:is(.is-landscape,[data-orientation="landscape"]){width:11in;height:8.5in;padding:.42in .5in .38in}
 .paper-export-page *{box-sizing:border-box;letter-spacing:0;font-kerning:normal}
+/* Paper is ALWAYS white — pin print-safe token values so a light/mono screen
+   theme (Koala/Panda set --video/--accent to #fff) can't render white-on-white
+   department rails or mention chips on the exported pages. */
+.paper-export-page,.paper-preview{--video:#2f6fed;--green:#0f8a5f;--red:#d64545;--yellow:#b98a00;--purple:#8a4fc9;--cyan:#0f8a96;--orange:#d65a18;--accent:#2f6fed;--text:#111;--text2:#444;--text3:#777}
 .paper-export-header{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16pt;padding-bottom:7pt;border-bottom:1px solid #cfd3da}
 .paper-export-heading{min-width:0;display:grid;gap:2pt}
 .paper-export-kicker{color:#626a78;font-size:7pt;font-weight:700;line-height:1.2;text-transform:uppercase}
@@ -1917,13 +1925,13 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-thread-flash{animation:pbThreadFlash 1.8s var(--ease)}
 @keyframes pbThreadFlash{0%,55%{box-shadow:0 0 0 2px var(--accent),0 0 22px color-mix(in srgb,var(--accent) 45%,transparent)}100%{box-shadow:none}}
 /* Clickable new-post notification toast */
-.pb-notify-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,140%);z-index:1000;display:flex;align-items:center;gap:11px;max-width:min(440px,calc(100vw - 32px));padding:13px 14px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--bord2));border-radius:13px;background:color-mix(in srgb,var(--s3) 97%,transparent);box-shadow:0 16px 44px rgba(0,0,0,.5);cursor:pointer;opacity:0;transition:transform .26s var(--ease),opacity .26s var(--ease)}
+.pb-notify-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,140%);z-index:1000;display:flex;align-items:center;gap:11px;max-width:min(440px,calc(100vw - 32px));padding:13px 14px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--bord2));border-radius:10px;background:var(--s4);box-shadow:0 18px 50px rgba(0,0,0,.42);cursor:pointer;opacity:0;transition:transform .26s var(--ease),opacity .26s var(--ease)}
 .pb-notify-toast.on{transform:translate(-50%,0);opacity:1}
 .pb-notify-toast[hidden]{display:none}
 .pb-notify-ico{font-size:20px;flex:none}
 .pb-notify-text{font-size:13px;color:var(--text);line-height:1.4;flex:1;min-width:0}
 .pb-notify-x{flex:none;border:0;background:transparent;color:var(--text3);font-size:18px;line-height:1;cursor:pointer;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
-.pb-notify-x:hover{background:var(--s4);color:var(--text)}
+.pb-notify-x:hover{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text)}
 
 /* ── LIVE EXIT DECISION / WARNING OVERLAYS ── */
 #exitLiveOv{align-items:center;justify-content:center;padding:24px}
@@ -2093,7 +2101,6 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .ls-show-card{grid-column:1/-1}
 }
 @media(max-width:600px){
-  .mode-tabs{display:none}
   .topbar{align-items:flex-start;padding:8px 10px;gap:8px}
   .brand{height:36px}
   .tb-right{width:100%;justify-content:flex-start}
@@ -2114,6 +2121,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .call-grid{grid-template-columns:1fr}
   .call-grid .field-in{border-right:0}
   .patch-table.video,.patch-table.audio,.patch-table.comms{grid-template-columns:1fr}
+  .patch-move{flex-direction:row;border-right:0}
+  .patch-move-btn{min-height:38px}
   .readiness-builder-head,.readiness-toolbar,.readiness-row-top,.readiness-row-head,.readiness-simple-head,.readiness-simple-row{grid-template-columns:1fr}
   .readiness-row-head{display:none}
   .readiness-prompt{grid-column:auto}
@@ -2191,14 +2200,14 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-status{display:flex;align-items:center;gap:7px;min-width:0}
 .pt-bar-sync{font-size:11px;font-weight:700;letter-spacing:.03em;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
 .pt-bar-sync::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 8px currentColor}
-.pt-state-bad{color:#f87171;background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.4)}
-.pt-state-warn,.pt-state-connecting{color:#fbbf24;background:rgba(251,191,36,.14);border-color:rgba(251,191,36,.4)}
+.pt-state-bad{color:var(--red,#f05252);background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);border-color:color-mix(in srgb,var(--red,#f05252) 40%,transparent)}
+.pt-state-warn,.pt-state-connecting{color:var(--yellow,#f5b731);background:color-mix(in srgb,var(--yellow,#f5b731) 14%,transparent);border-color:color-mix(in srgb,var(--yellow,#f5b731) 40%,transparent)}
 .pt-state-connecting::before{animation:pt-pulse 1s infinite}
-.pt-state-ready{color:#34d399;background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.45)}
+.pt-state-ready{color:var(--green,#22d3a0);background:color-mix(in srgb,var(--green,#22d3a0) 16%,transparent);border-color:color-mix(in srgb,var(--green,#22d3a0) 45%,transparent)}
 @keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .pt-check{font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--pt-text,#d6e8f0);opacity:.4;border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:999px;padding:3px 9px 3px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .pt-check::before{content:"○";font-size:11px;line-height:1}
-.pt-check.ok{opacity:1;color:#34d399;border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.12)}
+.pt-check.ok{opacity:1;color:var(--green,#22d3a0);border-color:color-mix(in srgb,var(--green,#22d3a0) 45%,transparent);background:color-mix(in srgb,var(--green,#22d3a0) 12%,transparent)}
 .pt-check.ok::before{content:"✓"}
 @media (max-width:700px){.pt-check{display:none}}
 .pt-setup{position:absolute;inset:0;z-index:150;display:none;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--pt-bg,#08090f) 86%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
@@ -2213,11 +2222,11 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-setup-btn{flex:none;background:var(--pt-accent,#7eb8c8);color:#04121a;border:0;border-radius:12px;padding:0 22px;font-family:var(--syne);font-weight:800;font-size:15px;cursor:pointer;letter-spacing:.03em}
 .pt-setup-btn:hover{filter:brightness(1.08)}
 .pt-setup-status{min-height:17px;font-size:12px;color:var(--pt-accent,#7eb8c8);margin-bottom:14px;font-family:var(--mono)}
-.pt-setup-status.warn{color:#fbbf24}
+.pt-setup-status.warn{color:var(--yellow,#f5b731)}
 .pt-setup-steps{list-style:none;margin:0 0 16px;padding:0;text-align:left;display:flex;flex-direction:column;gap:9px}
 .pt-setup-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.85;line-height:1.35}
 .pt-step-dot{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--pt-ui-border,rgba(126,184,200,.5));display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:transparent}
-.pt-step-dot.ok{background:#34d399;border-color:#34d399;color:#04121a}
+.pt-step-dot.ok{background:var(--green,#22d3a0);border-color:var(--green,#22d3a0);color:var(--bg,#04121a)}
 .pt-step-dot.ok::before{content:"✓"}
 .pt-setup-alt{background:none;border:0;color:var(--pt-text,#d6e8f0);opacity:.55;font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--sans)}
 .pt-setup-alt:hover{opacity:.85}
@@ -2378,7 +2387,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flowop-clock-mini{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-family:var(--mono)}
 .flowop-clock-mini span{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--pt-accent,#c8a97e)}
 .flowop-clock-mini strong{font-size:16px;font-weight:900;color:var(--pt-text,#f0ead6);font-variant-numeric:tabular-nums}
-.flowop-clock-mini em{grid-column:1/-1;font-style:normal;font-size:10px;font-weight:900;color:#ffd23c;text-transform:uppercase;letter-spacing:.08em}
+.flowop-clock-mini em{grid-column:1/-1;font-style:normal;font-size:10px;font-weight:900;color:var(--yellow,#f5b731);text-transform:uppercase;letter-spacing:.08em}
 .ls-sidebar .flow-clock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ls-sidebar .flow-clock-fields{grid-template-columns:1fr}
 .ls-sidebar .flow-wrap-grid{grid-template-columns:1fr 1fr}
@@ -2463,6 +2472,16 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   gap:10px;
   padding:12px 12px 14px;
   background:linear-gradient(180deg,color-mix(in srgb,var(--s1) 42%,transparent),color-mix(in srgb,var(--s1) 68%,transparent));
+  /* The drawer is app chrome, not a prompter surface: ptSetTheme() writes the
+     prompter palette onto documentElement, so without these pins a dark
+     prompter theme bleeds into the drawer under light app themes (and vice
+     versa). Resolve pt tokens from the app theme here; prompter screens keep
+     their own inline pt vars. */
+  --pt-bg:var(--bg);
+  --pt-text:var(--text);
+  --pt-accent:var(--accent);
+  --pt-ui-bg:var(--s1);
+  --pt-ui-border:color-mix(in srgb,var(--text) 22%,transparent);
 }
 .flow-control-panel{display:flex;flex-direction:column;gap:10px;width:100%}
 .flow-control-section{
@@ -3081,7 +3100,7 @@ input.pt-range::-moz-range-thumb,
   color:var(--pt-accent,#7eb8c8);
 }
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn,.pt-setup-input,.pt-cueola-input,#pt-script-input,.flowop-code):focus-visible{
-  outline:2px solid var(--pt-accent,#7eb8c8);
+  outline:2px solid color-mix(in srgb,var(--pt-accent,#7eb8c8) 78%,white);
   outline-offset:2px;
 }
 #pt-edit-overlay{
@@ -3405,8 +3424,8 @@ input.pt-range::-moz-range-thumb,
 :is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action){display:inline-flex;align-items:center;justify-content:center;gap:7px}
 /* Per-note PDF buttons (.pb-note-act) stay ghost-style like Reply/Pin/Delete — red is for the page-level exports only. */
 .settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action{
-  background:#ff453a!important;
-  border-color:#ff9f99!important;
+  background:var(--red)!important;
+  border-color:color-mix(in srgb,var(--red) 55%,#fff)!important;
   color:#fff!important;
   text-shadow:none!important;
 }
@@ -3761,6 +3780,14 @@ input.pt-range::-moz-range-thumb,
 .ls-go-primary{display:inline-flex;align-items:center;gap:8px;max-width:min(38vw,380px);min-height:44px!important;padding:9px 16px!important;border:1px solid color-mix(in srgb,var(--red) 62%,#fff)!important;border-radius:11px!important;background:var(--red)!important;color:#fff!important;box-shadow:0 4px 14px color-mix(in srgb,var(--red) 24%,transparent),inset 0 1px 0 color-mix(in srgb,#fff 22%,transparent);text-align:left}
 .ls-go-primary:hover{filter:brightness(1.08)}
 .ls-go-primary:active{transform:scale(.985)}
+.ls-flowmingo-btn{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 30%,transparent)}
+.force-follow-btn{font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:color-mix(in srgb,var(--red) 10%,transparent);color:var(--red);cursor:pointer;white-space:nowrap}
+.ov-close-x{background:none;border:0;color:var(--text3);font-size:18px;cursor:pointer;padding:4px;min-width:34px;min-height:34px;border-radius:8px;display:inline-grid;place-items:center}
+.ov-close-x:hover{color:var(--text);background:color-mix(in srgb,var(--text) 8%,transparent)}
+/* a gated GO must LOOK gated — the solid red !important fill otherwise reads
+   as an active button that silently ignores clicks */
+.ls-go-primary:disabled{background:color-mix(in srgb,var(--red) 22%,var(--s3))!important;border-color:color-mix(in srgb,var(--red) 20%,transparent)!important;color:color-mix(in srgb,#fff 45%,transparent)!important;box-shadow:none;cursor:not-allowed}
+.ls-go-primary:disabled:hover{filter:none}
 .ls-go-kicker{font-family:var(--mono);font-size:13px;font-weight:950;letter-spacing:.08em}
 .ls-go-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sans);font-size:12.5px;font-weight:800}
 
@@ -3980,7 +4007,7 @@ input.pt-range::-moz-range-thumb,
                 <a class="license-link" href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">Full license text</a>
               </div>
             </details>
-            <div class="entry-theme-meta"><span>Cueola</span><b>v1.0.0</b></div>
+            <div class="entry-theme-meta"><span>Cueola</span><b>v2.0.0</b></div>
           </div>
         </div>
       </div>
@@ -3992,13 +4019,13 @@ input.pt-range::-moz-range-thumb,
         <div class="ec-desc">Enter the session code your director gave you.</div>
         <span class="ec-pill">Enter session code</span>
       </button>
-      <button type="button" class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:rgba(245,183,49,.08)">
+      <button type="button" class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-plandabear"/></svg></div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
         <div class="ec-desc">Build the pre-production package with your session code.</div>
-        <span class="ec-pill" style="background:rgba(245,183,49,.15);color:var(--yellow)">Session code required</span>
+        <span class="ec-pill" style="background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)">Session code required</span>
       </button>
-      <div class="e-card e-card-full flowmingo-card" style="--oc:var(--cyan);--ob:rgba(34,211,211,.07)">
+      <div class="e-card e-card-full flowmingo-card" style="--oc:var(--cyan);--ob:color-mix(in srgb,var(--cyan) 7%,transparent)">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
         <div class="ec-title">Flow<span class="brand-hi">mingo</span></div>
         <div class="ec-desc">Open the script display for talent, or run a remote operator without going live in Cueola.</div>
@@ -4046,8 +4073,6 @@ input.pt-range::-moz-range-thumb,
     <div style="display:flex;align-items:center;gap:8px">
       <button class="brand" onclick="goHome()" title="Back to home" aria-label="Back to home" style="background:none;border:none;cursor:pointer;color:inherit;padding:6px 4px"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="hi">ola</span></span></button>
     </div>
-    <div id="tabBuild" style="display:none"></div>
-    <div id="tabLive" style="display:none"></div>
     <div class="tb-right">
       <div class="session-badge" id="topSessionBadge" style="display:none">
         <span class="sync-dot" id="syncDot"></span>Code: <strong id="topCode">—</strong>
@@ -4129,7 +4154,7 @@ input.pt-range::-moz-range-thumb,
 	      <button class="ls-exit-btn ls-critical-action" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><span>Full Grid</span></button>
 	      <button class="ls-exit-btn ls-critical-action" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
 	      <button class="ls-exit-btn ls-critical-action" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Flow<span class="brand-hi">mingo</span></span> Op</button>
-	      <button class="ls-exit-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window" style="color:var(--cyan);border-color:rgba(34,211,211,.3)"><span>Flow<span class="brand-hi">mingo</span></span></button>
+	      <button class="ls-exit-btn ls-flowmingo-btn" onclick="openFlowmingoTalentWindow()" title="Open Flowmingo in a new browser window"><span>Flow<span class="brand-hi">mingo</span></span></button>
 	      <button class="ls-exit-btn" onclick="openLearningHub()" title="Open the Cueola learning guide">Guide</button>
 	      <button class="ls-exit-btn icon-only" onclick="toggleCueolaFullscreen('liveshow')" title="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
 	    </div>
@@ -4142,7 +4167,7 @@ input.pt-range::-moz-range-thumb,
     <div class="follow-chips" id="followChips">
       <button type="button" class="follow-chip follow-self active" onclick="followSelf()" aria-pressed="true">Myself</button>
     </div>
-    <button id="forceFollowBtn" style="display:none;font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:rgba(240,82,82,.1);color:var(--red);cursor:pointer;white-space:nowrap" onclick="forceMeAsShowCaller()">Make Everyone Follow Me</button>
+    <button id="forceFollowBtn" class="force-follow-btn" style="display:none" onclick="forceMeAsShowCaller()">Make Everyone Follow Me</button>
   </div>
   <div class="ls-overview" aria-label="Live show overview">
     <div class="ls-show-card ls-overview-show">
@@ -4243,7 +4268,7 @@ input.pt-range::-moz-range-thumb,
         <span class="ls-bot-lbl">Elapsed</span>
         <div class="ls-prod-clock-face"><span class="ls-timer" id="ls-timer">00:00:00:00</span></div>
       </div>
-      <div class="ls-bot-sep" style="background:#1a1c20"></div>
+      <div class="ls-bot-sep"></div>
       <div class="ls-bot-clk">
         <span class="ls-bot-lbl">Remaining</span>
         <div class="ls-prod-clock-face"><span class="ls-remain" id="ls-remain">—</span></div>
@@ -4337,39 +4362,39 @@ input.pt-range::-moz-range-thumb,
   <div id="pt-panel">
     <div class="pt-ctrl-group">
       <button class="pt-btn" id="pt-play-btn" onclick="ptTogglePlay()">
-        <svg id="pt-play-icon" width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12Z"/></svg>
+        <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
         PLAY
       </button>
     </div>
-    <div class="pt-ctrl-group">
+    <div class="pt-ctrl-group" role="group" aria-label="Prompter speed">
       <span class="pt-ctrl-label">Speed</span>
-      <button class="pt-btn" onclick="ptAdjustSpeed(-5)">−</button>
-      <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)">
-      <button class="pt-btn" onclick="ptAdjustSpeed(5)">+</button>
+      <button class="pt-btn" onclick="ptAdjustSpeed(-5)" title="Decrease speed" aria-label="Decrease speed">−</button>
+      <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)" aria-label="Prompter speed">
+      <button class="pt-btn" onclick="ptAdjustSpeed(5)" title="Increase speed" aria-label="Increase speed">+</button>
     </div>
-    <div class="pt-ctrl-group">
+    <div class="pt-ctrl-group" role="group" aria-label="Prompter text size">
       <span class="pt-ctrl-label">Size</span>
-      <button class="pt-btn" onclick="ptAdjustSize(-4)">−</button>
-      <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)">
-      <button class="pt-btn" onclick="ptAdjustSize(4)">+</button>
+      <button class="pt-btn" onclick="ptAdjustSize(-4)" title="Decrease text size" aria-label="Decrease text size">−</button>
+      <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)" aria-label="Prompter text size">
+      <button class="pt-btn" onclick="ptAdjustSize(4)" title="Increase text size" aria-label="Increase text size">+</button>
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Align</span>
-      <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
-      <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')"><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+      <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" title="Align left" aria-label="Align script left">Left</button>
+      <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" title="Align center" aria-label="Align script center">Center</button>
+      <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" title="Align right" aria-label="Align script right">Right</button>
     </div>
     <div class="pt-ctrl-group">
       <span class="pt-ctrl-label">Theme</span>
-      <div class="pt-theme-dot active" id="pt-t-cool" style="background:#0a0d18" onclick="ptSetTheme('cool')" title="Glacier"></div>
-      <div class="pt-theme-dot" id="pt-t-warm" style="background:#ffc400" onclick="ptSetTheme('warm')" title="Honey"></div>
-      <div class="pt-theme-dot" id="pt-t-white" style="background:#fafaf7" onclick="ptSetTheme('white')" title="Polar Bear"></div>
-      <div class="pt-theme-dot" id="pt-t-green" style="background:#041208" onclick="ptSetTheme('green')" title="Eucalyptus"></div>
-      <div class="pt-theme-dot" id="pt-t-koala" style="background:#1c1c1b" onclick="ptSetTheme('koala')" title="Koala"></div>
-      <div class="pt-theme-dot" id="pt-t-panda" style="background:#000000" onclick="ptSetTheme('panda')" title="Planda Bear"></div>
-      <div class="pt-theme-dot" id="pt-t-flamingo" style="background:#0e0410" onclick="ptSetTheme('flamingo')" title="Flowmingo"></div>
-      <div class="pt-theme-dot" id="pt-t-outrangutan" style="background:#ff6a00" onclick="ptSetTheme('outrangutan')" title="Outrangutan"></div>
-      <div class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear"></div>
+      <button type="button" class="pt-theme-dot active" id="pt-t-cool" style="background:#0a0d18" onclick="ptSetTheme('cool')" title="Glacier" aria-label="Glacier theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-warm" style="background:#ffc400" onclick="ptSetTheme('warm')" title="Honey" aria-label="Honey theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-white" style="background:#fafaf7" onclick="ptSetTheme('white')" title="Polar Bear" aria-label="Polar Bear theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-green" style="background:#041208" onclick="ptSetTheme('green')" title="Eucalyptus" aria-label="Eucalyptus theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-koala" style="background:#1c1c1b" onclick="ptSetTheme('koala')" title="Koala" aria-label="Koala theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-panda" style="background:#000000" onclick="ptSetTheme('panda')" title="Planda Bear" aria-label="Planda Bear theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-flamingo" style="background:#0e0410" onclick="ptSetTheme('flamingo')" title="Flowmingo" aria-label="Flowmingo theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-outrangutan" style="background:#ff6a00" onclick="ptSetTheme('outrangutan')" title="Outrangutan" aria-label="Outrangutan theme"></button>
+      <button type="button" class="pt-theme-dot" id="pt-t-prepbear" style="background:#080a14" onclick="ptSetTheme('prepbear')" title="PrepBear" aria-label="PrepBear theme"></button>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="ptOpenEdit()"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script</span></button>
@@ -4556,7 +4581,7 @@ input.pt-range::-moz-range-thumb,
 <!-- ══════════════════════════════════════════
      CUE CONFIG MODAL
 ══════════════════════════════════════════ -->
-<div class="modal-wrap" id="cueConfigModal">
+<div class="modal-wrap" id="cueConfigModal" data-esc-hold>
   <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
     <div class="modal-title" id="cueConfigTitle">Configure Cue</div>
     <div id="cueConfigFields"></div>
@@ -4633,7 +4658,7 @@ input.pt-range::-moz-range-thumb,
   <div class="warn-card" style="max-width:480px;max-height:80vh;overflow-y:auto;border-color:var(--bord2);width:100%">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div class="warn-title" id="lrpTitle" style="font-size:18px;margin:0"></div>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px" onclick="hideOverlay('lsRowPreviewOv')" title="Close preview" aria-label="Close preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+      <button class="ov-close-x" onclick="hideOverlay('lsRowPreviewOv')" title="Close preview" aria-label="Close preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
     </div>
     <div id="lrpBody"></div>
     <div class="lrp-nav">
@@ -4933,7 +4958,7 @@ input.pt-range::-moz-range-thumb,
             <button type="button" class="pb-chat-tool" id="pbFilterBtn" onclick="pbToggleFilterMenu(event)"><span class="sf-symbol" data-symbol="action.filter" aria-hidden="true"></span><span>Filter</span></button>
             <div class="pb-filter-pop" id="pbNotesFilters" hidden></div>
           </div>
-          <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()">↓ Newest</button>
+          <button type="button" class="pb-chat-tool" id="pbNotesSortBtn" onclick="pbToggleNotesSort()"><span class="sf-symbol" data-symbol="action.down" aria-hidden="true"></span><span>Newest</span></button>
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbOwesBtn" onclick="pbOpenOwes()" hidden title="Every open to-do and checklist item, by person"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Open items</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
@@ -4979,7 +5004,7 @@ input.pt-range::-moz-range-thumb,
         </div>
       </div>
 
-      <button type="button" class="pb-fab" id="pbFab" onclick="pbOpenComposer()" title="Write a new note" aria-label="Write a new note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+      <button type="button" class="pb-fab" id="pbFab" onclick="pbOpenComposer()" title="Write a new note" aria-label="Write a new note"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span></button>
     </div>
 
     <div class="paperwork-flow-actions" id="pbNavNotes"></div>
@@ -5209,12 +5234,12 @@ input.pt-range::-moz-range-thumb,
   </div>
 </div>
 
-<div class="modal-wrap" id="modal-settings">
+<div class="modal-wrap" id="modal-settings" data-esc-hold>
   <div class="modal settings-sheet">
     <div class="modal-title">Settings</div>
     <div class="settings-section">
       <div class="settings-sec-label">Show</div>
-      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none">🔒 Locked — only an admin can change this.</div></div>
+      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none"><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span> Locked — only an admin can change this.</div></div>
       <div class="field"><label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="set-starttime" type="time"></div>
       <div class="field">
         <label class="field-lbl">Production Clock Frame Rate</label>
@@ -5273,7 +5298,7 @@ input.pt-range::-moz-range-thumb,
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save Changes</button>
     </div>
-    <div class="settings-version" style="margin-top:10px;text-align:center;font-size:10.5px;color:var(--text3);font-family:var(--mono)">Cueola v1.0.0</div>
+    <div class="settings-version" style="margin-top:10px;text-align:center;font-size:10.5px;color:var(--text3);font-family:var(--mono)">Cueola v2.0.0</div>
   </div>
 </div>
 
@@ -5316,7 +5341,7 @@ input.pt-range::-moz-range-thumb,
   <button class="btn-primary" type="button" onclick="applyCueolaUpdate()">Reload</button>
   <button class="app-update-dismiss" type="button" onclick="dismissCueolaUpdate()" aria-label="Dismiss update notice">Later</button>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=746c10a762"></script>
@@ -5329,8 +5354,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=555eaa6d24"></script>
-<script src="outrangutan/outrangutan.js?v=378ae59215"></script>
+<script src="cueola-app.js?v=3a32068c89"></script>
+<script src="outrangutan/outrangutan.js?v=fba2b010d8"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

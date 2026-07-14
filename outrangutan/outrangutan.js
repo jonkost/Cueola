@@ -145,7 +145,7 @@
   function fmtSmpte(sec) { sec = Math.max(0, sec || 0); const t = Math.floor(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60, f = Math.min(OG_FPS - 1, Math.floor((sec - t) * OG_FPS)); const p = n => String(n).padStart(2, '0'); return p(h) + ':' + p(m) + ':' + p(s) + ';' + p(f); }
   function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
-  function assetIcon(name, cls) { return '<span class="og-svg-icon og-icon-' + name + (cls ? ' ' + cls : '') + '" aria-hidden="true"></span>'; }
+  function assetIcon(name, cls) { var symName = { clock: 'time.clock', 'document-plus': 'og.document.plus', scope: 'og.scope' }[name] || name; return '<span class="sf-symbol' + (cls ? ' ' + cls : '') + '" data-symbol="' + symName + '" aria-hidden="true"></span>'; }
   function currentCueolaTheme() {
     return document.documentElement.getAttribute('data-theme') || localStorage.getItem('cueola_theme') || 'cool';
   }
@@ -552,7 +552,7 @@
     return /^data:image\/(png|jpe?g|webp|gif);base64,[a-zA-Z0-9+/=]+$/.test(s) ? s : null;
   }
   function sanitizeImportedShow(s) {
-    if (Array.isArray(s.cues)) s.cues.forEach(c => { if (c) { c.color = safeColor(c.color); c.thumb = safeThumb(c.thumb); if (c.key) { c.key.color = safeColor(c.key.color, '#00b140'); c.key.bg = safeColor(c.key.bg, '#000000'); } } });
+    if (Array.isArray(s.cues)) s.cues.forEach(c => { if (c) { c.color = safeColor(c.color); c.thumb = safeThumb(c.thumb); if (c.key) { c.key.color = safeColor(c.key.color, '#00b140'); c.key.bg = safeColor(c.key.bg, '#000000'); } c.sfxPadId = typeof c.sfxPadId === 'string' ? c.sfxPadId : ''; c.sfxDelay = Math.max(0, Number(c.sfxDelay) || 0); } });
     if (Array.isArray(s.pads)) s.pads.forEach(p => { if (p) { p.color = safeColor(p.color, 'var(--accent)'); p.emoji = typeof p.emoji === 'string' ? p.emoji.slice(0, 4) : ''; } });
     return s;
   }
@@ -573,6 +573,8 @@
       key: { mode: 'off', color: '#00b140', sim: 0.30, smooth: 0.10, bg: '#000000' }, // Phase 5 keying
       obs: { action: 'none', scene: '' },   // OBS action on fire
       obsTriggerScene: '',                  // fire this cue when OBS switches to this scene
+      sfxPadId: o.sfxPadId || '',           // tied SFX pad: fires with this cue…
+      sfxDelay: 0,                          // …after this many seconds; fades out when the clip ends
     };
   }
   function renumber() { cues.forEach((c, i) => { c.num = i + 1; }); clearPreload(); }   // order changed → staged next-cue is stale
@@ -666,6 +668,38 @@
   function stopPad(pad) { const rt = padRT.get(pad.id); if (!rt) return; cancelFade('padin-' + pad.id); stopVoices(rt); renderPadLive(pad.id); }
   function stopAllPads() { padRT.forEach((rt, id) => { cancelFade('padin-' + id); stopVoices(rt); }); renderPads(); scheduleStreamDeckRefresh(); }
 
+  // ── Clip→SFX tie ──────────────────────────────────────────────────────────
+  // A cue can carry a tied SFX pad (cue.sfxPadId + cue.sfxDelay): firing the
+  // clip fires the pad once — after the optional delay — and the pad plays
+  // through the clip. When the clip ends, is stopped, fails, or another clip
+  // takes over, a still-sounding tied pad fades out instead of hard-cutting.
+  // Rundown-triggered clips take this same fire path, so a linked rundown row
+  // brings the tied SFX with it for free.
+  let sfxTie = null;   // { cueId, padId, timer } — at most one tie is live at a time
+  function armCueSfxTie(cue) {
+    disarmCueSfxTie(true);                       // a new clip replaces any previous tie
+    if (!cue || !cue.sfxPadId) return;
+    const pad = padById(cue.sfxPadId);
+    if (!pad || !pad.mediaId) { slog('sfx', 'Tied pad missing for “' + cue.name + '” — tie skipped'); return; }
+    const delayMs = Math.max(0, Number(cue.sfxDelay) || 0) * 1000;
+    sfxTie = { cueId: cue.id, padId: pad.id, timer: null };
+    const fire = () => { slog('sfx', 'Tie · “' + (pad.name || 'Pad') + '” with “' + cue.name + '”'); firePad(pad); };
+    if (delayMs > 0) sfxTie.timer = setTimeout(() => { if (sfxTie && sfxTie.cueId === cue.id) { sfxTie.timer = null; fire(); } }, delayMs);
+    else fire();
+  }
+  function disarmCueSfxTie(fade) {
+    if (!sfxTie) return;
+    const { padId, timer } = sfxTie;
+    sfxTie = null;
+    if (timer) clearTimeout(timer);              // clip stopped before the delay elapsed → pad never fires
+    if (!fade) return;
+    const pad = padById(padId);
+    const rt = pad && padRT.get(pad.id);
+    if (!pad || !rt || !rt.voices.length) return;
+    const ms = Math.max(200, (Number(pad.fadeOut) || 0) * 1000 || 700);
+    runFade('padin-' + pad.id, v => { rt.ch.gain.gain.value = v * (pad.gain == null ? 1 : pad.gain); }, 1, 0, ms, settings.fadeCurve, () => stopPad(pad));
+  }
+
   // ── multi-output manager (Phase 3) ───────────────────────────────────────
   // One watchdog owns window, heartbeat, renderer, and acknowledgement health.
   const WATCHDOG_MS = 2000, WATCHDOG_DEAD_MS = 5000;
@@ -727,7 +761,7 @@
     if (!rec || rec.announcedStatus === token) return;
     rec.announcedStatus = token;
     slog(token === 'ready' ? 'output' : 'error', message);
-    toast((token === 'ready' ? '✓ ' : '⚠ ') + message);
+    toast((token === 'ready' ? '' : '⚠ ') + message);
     if (token !== 'ready') console.error('[Outrangutan output]', message, { outputId: rec.id, status: rec.status, error: rec.error });
   }
   function stateForOutput(id) {
@@ -2025,7 +2059,13 @@
 
   function subscribeSession() {
     unsubscribeSession();
-    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    if (mode !== 'session' || !sessionCode) return;
+    if (!fbReady()) {
+      // Firebase may still be booting — attach the sync bus as soon as it's up
+      // instead of silently leaving the joined session deaf.
+      window.addEventListener('firebaseReady', () => { if (mode === 'session' && sessionCode && !sessionSub) subscribeSession(); }, { once: true });
+      return;
+    }
     try { sessionSub = window._onSnapshot(sessionRef(), snap => { try { onSessionDoc(snap.data() || {}); } catch (e) {} }, () => {}); } catch (e) {}
     publishCues(); publishLive(true);
   }
@@ -2482,10 +2522,12 @@
     const state = playing ? 'playing' : paused ? 'paused' : 'idle';
     if (b._goState === state) return;
     b._goState = state;
-    const keyTxt = ($('og-k-go') && $('og-k-go').textContent) || '';
-    const icon = sym('media.playpause');   // playpause.circle.fill — one glyph for the toggle; label + color carry the state
-    const label = paused ? 'Resume' : 'Play / Pause';
-    b.innerHTML = icon + label + '<span class="og-tbtn-key" id="og-k-go">' + esc(keyTxt) + '</span>';
+    // The button is icon-only; state rides the caption label + a paused tint.
+    b.classList.toggle('paused', paused);
+    b.title = paused ? 'Resume' : 'Play / Pause';
+    b.setAttribute('aria-label', b.title);
+    const lbl = $('og-go-lbl');
+    if (lbl) lbl.textContent = paused ? 'Resume' : 'Play / Pause';
   }
   function fireCue(cue) {
     clearPre();
@@ -2562,6 +2604,7 @@
     }
 
     setStatus('play'); startTicker(); renderCueList();
+    armCueSfxTie(cue);
     // mirror to the cue's target output window (addressable; other outputs untouched)
     const prevOut = (prev && prev.kind === 'video') ? prev.cue.output : null;
     const out = cue.output || 1;
@@ -2605,6 +2648,7 @@
     else el.style.opacity = 1;
     if (active.remainMs > 0) armImageTimer();
     setStatus('play'); startTicker(); renderCueList();
+    armCueSfxTie(cue);
     applyKeyForActive();          // stills never key — this also stops a leftover key loop
     fireObsForCue(cue);
     preloadNext(cue);
@@ -2623,6 +2667,7 @@
   // and the rundown stays advanceable. (Decisions Log #4: black slate.)
   function failLive(cue, deck, err) {
     try { console.warn('[outrangutan] cue failed:', cue && cue.name, (err && err.message) || (deck && deck.el && deck.el.error && deck.el.error.message) || err || ''); } catch (e) {}
+    disarmCueSfxTie(true);
     if (active && active.kind === 'image') clearImageTimer();
     cue.broken = true;
     if (deck) stopDeck(deck);
@@ -2679,6 +2724,7 @@
   }
   function handleEnded(cue) {
     clearImageTimer();
+    disarmCueSfxTie(true);        // clip finished → a still-sounding tied pad fades out
     const m = cue.continueMode;
     if (m === 'auto_follow') { autoFrom(cue); return; }
     // end action for the picture/audio (output messages only for picture cues — audio never touches one)
@@ -2695,12 +2741,13 @@
   // Cue the standby cursor back to the first armed cue, so the next GO restarts the show.
   function cueToTop() { const first = cues.find(c => c.armed !== false) || cues[0]; if (first) selectedId = first.id; }
   function stopAll(opts) {
-    clearPre(); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' });
+    clearPre(); disarmCueSfxTie(true); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' });
     if (!opts || !opts.silent) { cueToTop(); renderInspector(); renderEditArea(); slog('media', 'Stop'); toast('Stopped.'); }
     renderCueList();
   }
   function panic() {
     clearPre();
+    disarmCueSfxTie(false);       // PANIC: clear any pending tie timer; stopAllPads hard-kills the audio
     fades.forEach((r) => cancelAnimationFrame(r)); fades.clear();
     stopAllDecks(); stopAllPads(); stopKeyLoop();
     setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea();
@@ -2726,6 +2773,7 @@
   }
   function fadeStopAll() {
     clearPre();   // a pending pre-wait cue must never fire on air after the operator stopped everything
+    disarmCueSfxTie(false);   // clear a pending tie timer; the pad loop below fades anything already sounding
     const ms = 800, curve = settings.fadeCurve;
     clearImageTimer();
     sendOut({ t: 'fade', to: 0, ms });
@@ -2880,7 +2928,7 @@
 
   function renderCueList() {
     const wrap = $('og-cuelist'); if (!wrap) return;
-    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty">No cues yet.<br>Drop a video, audio, or still-image file below, or click “Add media”.</div>'; return; }
+    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty"><div class="og-cue-empty-title">No cues yet</div><div class="og-cue-empty-sub">Drop a video, audio, or still-image file below, or click “Add media”.</div></div>'; return; }
     const playingId = active ? active.cue.id : (preInfo ? preInfo.cue.id : null);
     wrap.innerHTML = cues.map(c => {
       const cls = ['og-cue']; if (c.id === selectedId) cls.push('selected'); if (c.id === playingId) cls.push('playing'); if (c.armed === false) cls.push('armed-off'); if (c.broken) cls.push('broken');
@@ -2891,7 +2939,7 @@
         + '<span class="og-cue-num">' + c.num + '</span>'
         + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : c.type === 'image' ? 'content.image' : 'department.video') + '</span>'
         + '<span class="og-cue-name">' + esc(c.name) + '</span>'
-        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time — replace or re-import this media">⚠</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
+        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time — replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" title="Tied SFX pad — fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
@@ -2988,6 +3036,19 @@
           '<button class="og-swatch' + (c.color === col ? ' sel' : '') + '" data-col="' + col + '" style="background:' + col + '" aria-label="Set cue color"></button>').join('') + '</div>') +
         field('Notes', '<input id="og-i-notes" type="text" value="' + esc(c.notes || '') + '">')
       ) +
+      (function () {   // Clip→SFX tie: pick a pad, optionally delay its fire
+        if (!pads.length) return sec('SFX', '<div class="og-insp-meta">No SFX pads yet — build one on the SFX Board, then tie it here.</div>');
+        const padOpts = opt('', '—', c.sfxPadId || '') + pads.map(p => {
+          const bank = banks.find(b => b.id === p.bank);
+          return opt(p.id, (p.name || 'Pad') + (bank && banks.length > 1 ? ' · ' + bank.name : ''), c.sfxPadId || '');
+        }).join('');
+        return sec('SFX',
+          field('Tied pad', '<select id="og-i-sfxpad">' + padOpts + '</select>') +
+          (c.sfxPadId
+            ? field('Delay (s)', '<input id="og-i-sfxdelay" type="number" min="0" step="0.5" value="' + (c.sfxDelay || 0) + '">') +
+              '<div class="og-insp-meta">Fires with this cue and fades out when the clip ends or stops — a rundown-linked fire brings it too.</div>'
+            : ''));
+      })() +
       (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
         return sec('OBS',
           field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
@@ -3063,6 +3124,8 @@
     bind('og-i-keysim', 'oninput', e => { c.key.sim = parseFloat(e.target.value); keyOut(); scheduleSave(); });
     bind('og-i-keysmooth', 'oninput', e => { c.key.smooth = parseFloat(e.target.value); keyOut(); scheduleSave(); });
     bind('og-i-keybg', 'oninput', e => { c.key.bg = e.target.value; keyOut(); scheduleSave(); });
+    bind('og-i-sfxpad', 'onchange', e => { c.sfxPadId = e.target.value; renderInspector(); renderCueList(); scheduleSave(); });
+    bind('og-i-sfxdelay', 'onchange', e => { c.sfxDelay = Math.max(0, parseFloat(e.target.value) || 0); scheduleSave(); });
     bind('og-i-obsaction', 'onchange', e => { c.obs.action = e.target.value; renderInspector(); scheduleSave(); });
     bind('og-i-obsscene', 'onchange', e => { c.obs.scene = e.target.value; scheduleSave(); });
     bind('og-i-obstrigger', 'onchange', e => { c.obsTriggerScene = e.target.value; scheduleSave(); });
@@ -3073,7 +3136,7 @@
     // P6: upgrade to kit controls IN PLACE — bindings stay on the original
     // elements (hidden but still receiving value + onchange from the upgrades).
     ['og-i-continue', 'og-i-fadecurve', 'og-i-endaction', 'og-i-fit', 'og-i-loop', 'og-i-armed'].forEach(id => upgradeSelectToSeg(ins, id));
-    [['og-i-prewait', 0.5], ['og-i-fadein', 0.1], ['og-i-fadeout', 0.1], ['og-i-xfade', 0.1], ['og-i-imgdur', 0.5]].forEach(p => upgradeNumberToStepper(ins, p[0], p[1]));
+    [['og-i-prewait', 0.5], ['og-i-fadein', 0.1], ['og-i-fadeout', 0.1], ['og-i-xfade', 0.1], ['og-i-imgdur', 0.5], ['og-i-sfxdelay', 0.5]].forEach(p => upgradeNumberToStepper(ins, p[0], p[1]));
     upgradeCheckToToggle(ins, 'og-i-comp');
   }
   function field(label, inner) { return '<div class="og-field"><label>' + label + '</label>' + inner + '</div>'; }
@@ -3288,62 +3351,24 @@
 
   // ── Resizable panes ──────────────────────────────────────────────────────
   function applyLayout() {
-    const L = settings.layout || (settings.layout = { wCuelist: 280, wInspector: 280, hEdit: 150 });
+    // Fixed, width-derived pane proportions (user resizing removed): the cue
+    // list and inspector each take a clamped share of the row, the program pane
+    // keeps the rest, and the editor strip takes a clamped share of the height.
+    // Old persisted settings.layout values are deliberately ignored.
     const root = $('outrangutan'); if (!root) return;
     const top = $('og-toprow');
     const topW = (top && top.clientWidth) || root.clientWidth || 1280;
-    const maxSide = clamp(Math.floor(topW * 0.28), 240, 380);
-    const minCenter = clamp(Math.floor(topW * 0.46), 480, 820);
-    let cuelistW = clamp(Number(L.wCuelist) || 280, 210, maxSide);
-    let inspectorW = clamp(Number(L.wInspector) || 280, 210, maxSide);
-    const sideBudget = topW - minCenter - 12;
-    if (sideBudget > 0 && cuelistW + inspectorW > sideBudget) {
-      const side = clamp(Math.floor(sideBudget / 2), 210, maxSide);
-      cuelistW = Math.min(cuelistW, side);
-      inspectorW = Math.min(inspectorW, side);
-    }
+    const cuelistW = clamp(Math.floor(topW * 0.22), 230, 330);
+    const inspectorW = clamp(Math.floor(topW * 0.24), 250, 360);
     const main = document.querySelector('.og-main');
     const mainH = (main && main.clientHeight) || root.clientHeight || 900;
-    const maxEdit = clamp(Math.floor(mainH * 0.24), 140, 260);
-    const editH = clamp(Number(L.hEdit) || 150, 96, maxEdit);
+    const editH = clamp(Math.floor(mainH * 0.2), 130, 220);
     root.style.setProperty('--og-w-cuelist', cuelistW + 'px');
     root.style.setProperty('--og-w-inspector', inspectorW + 'px');
     root.style.setProperty('--og-h-edit', editH + 'px');
   }
-  function wireSplitter(id, onMove) {
-    const el = $(id); if (!el) return;
-    let dragging = false;
-    const start = (e, moveName, upName, pointerId) => {
-      if (dragging) return;
-      dragging = true;
-      e.preventDefault();
-      if (pointerId != null) { try { el.setPointerCapture(pointerId); } catch (er) {} }
-      el.classList.add('drag');
-      const mv = (ev) => { ev.preventDefault(); onMove(ev); };
-      const up = () => {
-        if (pointerId != null) { try { el.releasePointerCapture(pointerId); } catch (er) {} }
-        dragging = false;
-        el.classList.remove('drag');
-        document.removeEventListener(moveName, mv);
-        document.removeEventListener(upName, up);
-        scheduleSave();
-      };
-      document.addEventListener(moveName, mv);
-      document.addEventListener(upName, up);
-      onMove(e);
-    };
-    el.onpointerdown = (e) => start(e, 'pointermove', 'pointerup', e.pointerId);
-    el.onmousedown = (e) => start(e, 'mousemove', 'mouseup', null);
-  }
-  function initSplitters() {
-    // read settings.layout fresh each move — `settings` is reassigned by loadShow()
-    wireSplitter('og-split-c', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wCuelist = clamp(ev.clientX - r.left, 180, r.width - 420); applyLayout(); });
-    wireSplitter('og-split-i', (ev) => { const r = $('og-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 180, r.width - 420); applyLayout(); });
-    wireSplitter('og-split-h', (ev) => { const m = document.querySelector('.og-main'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
-    // SFX board shares the same inspector-width + edit-height vars (one resize, both views)
-    wireSplitter('og-split-si', (ev) => { const r = $('og-sfx-toprow').getBoundingClientRect(); settings.layout.wInspector = clamp(r.right - ev.clientX, 220, r.width - 320); applyLayout(); });
-    wireSplitter('og-split-sh', (ev) => { const m = document.querySelector('.og-sfx'); if (!m) return; const r = m.getBoundingClientRect(); settings.layout.hEdit = clamp(r.bottom - ev.clientY, 80, r.height - 240); applyLayout(); });
-  }
+  // Panel resizing was removed (owner decision, 2026-07-14): the splitters were
+  // not useful in practice. applyLayout() now owns the pane proportions outright.
 
   // ── Responsive layout modes ───────────────────────────────────────────────
   // Playback layout has one width owner: the visible Outrangutan root. The
@@ -4120,7 +4145,6 @@
             + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
           + '</div>'
-          + '<div class="og-splitter og-splitter-v" id="og-split-c" title="Drag to resize"></div>'
           + '<div class="og-pane og-program-pane">'
             + '<div class="og-pane-head">Program</div>'
             + '<div class="og-program-top">'
@@ -4135,22 +4159,24 @@
             + '</div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
             + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><button type="button" class="og-clock-dir" id="og-clock-dir" title="Toggle count direction (elapsed / remaining)" aria-label="Toggle count direction">' + sym('media.forward') + '</button><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div></div>'
+            // Media transport: one centred cluster of round icon buttons with quiet
+            // captions underneath — Play/Pause is the big green primary, Panic sits
+            // apart behind a hairline. Captions carry the labels + key hints so the
+            // buttons themselves stay clean.
             + '<div class="og-transport">'
               + '<div class="og-transport-group">'
-                + '<button class="og-tbtn" id="og-prev">' + sym('chevron.left') + 'Previous Cue<span class="og-tbtn-key">↑</span></button>'
-                + '<button class="og-tbtn og-tbtn-go" id="og-go">' + sym('media.playpause') + 'Play / Pause<span class="og-tbtn-key" id="og-k-go"></span></button>'
-                + '<button class="og-tbtn" id="og-fade">' + sym('media.waveform.low') + 'Fade Out<span class="og-tbtn-key" id="og-k-fade"></span></button>'
-                + '<button class="og-tbtn" id="og-next">' + sym('chevron.right') + 'Next Cue<span class="og-tbtn-key">↓</span></button>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-prev" title="Previous cue" aria-label="Previous cue">' + sym('chevron.left') + '</button><span class="og-tcap">Prev <span class="og-tbtn-key">↑</span></span></div>'
+                + '<div class="og-tctl og-tctl-go"><button class="og-tbtn og-tbtn-go" id="og-go" title="Play / Pause" aria-label="Play or pause">' + sym('media.playpause') + '</button><span class="og-tcap"><span id="og-go-lbl">Play / Pause</span> <span class="og-tbtn-key" id="og-k-go"></span></span></div>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-fade" title="Fade out" aria-label="Fade out">' + sym('media.waveform.low') + '</button><span class="og-tcap">Fade <span class="og-tbtn-key" id="og-k-fade"></span></span></div>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-next" title="Next cue" aria-label="Next cue">' + sym('chevron.right') + '</button><span class="og-tcap">Next <span class="og-tbtn-key">↓</span></span></div>'
               + '</div>'
-              + '<button class="og-tbtn og-tbtn-panic" id="og-panic">' + sym('action.power') + 'Panic<span class="og-tbtn-key" id="og-k-panic"></span></button>'
+              + '<div class="og-tctl og-tctl-panic"><button class="og-tbtn og-tbtn-panic" id="og-panic" title="Panic — stop everything" aria-label="Panic — stop everything">' + sym('action.power') + '</button><span class="og-tcap">Panic <span class="og-tbtn-key" id="og-k-panic"></span></span></div>'
             + '</div>'
           + '</div>'
-          + '<div class="og-splitter og-splitter-v" id="og-split-i" title="Drag to resize"></div>'
           + '<div class="og-pane og-inspector-pane" id="og-inspector-pane">'
             + '<div class="og-pane-head">Inspector</div><div class="og-inspector" id="og-inspector"></div>'
           + '</div>'
           + '</div>'   // /og-toprow
-          + '<div class="og-splitter og-splitter-h" id="og-split-h" title="Drag to resize the clip editor"></div>'
           // shared bottom region — at medium/narrow widths the Inspector pane is
           // relocated here (JS applyLayoutMode) and these tabs switch between it
           // and the Clip Editor; hidden at wide, where the Inspector is a column.
@@ -4175,14 +4201,12 @@
             + '<div class="og-pad-grid-wrap"><div class="og-pad-grid" id="og-pad-grid"></div><div class="og-pad-search-results" id="og-pad-search-results"></div></div>'
             + '<input type="file" id="og-pad-file" accept="audio/*,video/*" hidden>'
           + '</div>'
-          + '<div class="og-splitter og-splitter-v" id="og-split-si" title="Drag to resize"></div>'
           + '<div class="og-pane og-sfx-side">'
             + '<div class="og-pane-head">Pad Inspector<div class="og-pane-actions"><span class="og-master"><span class="og-master-lbl">MASTER</span><span class="og-meter"><span class="og-meter-fill" id="og-master-fill2"></span></span></span></div></div>'
             + '<div class="og-sfx-master"><label class="og-field"><span>Master level</span><input type="range" id="og-master-gain" min="0" max="1.2" step="0.01" value="1"></label></div>'
             + '<div class="og-pad-inspector" id="og-pad-inspector"></div>'
           + '</div>'
           + '</div>'   // /og-sfx-toprow
-          + '<div class="og-splitter og-splitter-h" id="og-split-sh" title="Drag to resize the pad editor"></div>'
           + '<div class="og-pane og-edit-pane" id="og-sfx-edit-pane">'
             + '<div class="og-pane-head">Pad Editor<div class="og-pane-actions" id="og-sfx-edit-actions"></div></div>'
             + '<div class="og-edit-body" id="og-sfx-edit-body"></div>'
@@ -4337,7 +4361,7 @@
 
     built = true;
     renderTransportKeys();
-    initSplitters();
+
     initResponsiveLayout();
     applyLayoutMode();
 
@@ -4393,7 +4417,10 @@
       return { ok: true };
     } catch (e) { return { ok: false, reason: 'error' }; }
   }
+  let returnScreenId = 'entry';   // where Exit goes back to — the screen the operator came FROM
   async function enterOutrangutan(m) {
+    const current = document.querySelector('.screen.on');
+    returnScreenId = (current && current.id && current.id !== 'outrangutan') ? current.id : 'entry';
     build();
     if (m === 'session') mode = 'session';
     else { mode = 'standalone'; sessionCode = null; }
@@ -4409,7 +4436,9 @@
     const codeEl = $('og-join-code'), nameEl = $('og-join-name'), err = $('og-join-err');
     let preCode = sessionCode || '', preName = '';
     try {
-      preCode = preCode || localStorage.getItem('cueola_outrangutan_code') || (window.session && window.session.code) || localStorage.getItem('cueola_last_code') || '';
+      // The session the operator is IN right now outranks any remembered code
+      // from a previous production (the old order prefilled stale shows).
+      preCode = preCode || window.cueolaActiveSessionCode || localStorage.getItem('cueola_outrangutan_code') || localStorage.getItem('cueola_last_code') || '';
       preName = localStorage.getItem('cueola_last_name') || '';
     } catch (e) {}
     if (codeEl && !codeEl.value) codeEl.value = preCode;
@@ -4440,8 +4469,14 @@
     cleanupOutputRuntime(true);
     closeOutputsPanel(); closeSdPanel();
     $('outrangutan').classList.remove('on');
-    const entry = $('entry'); if (entry) entry.classList.add('on');
-    try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('entry'); } catch (e) {}
+    // Return to the screen the operator came from (rundown, Live, …) — always
+    // dumping them on the front page threw away their place mid-show.
+    const back = $(returnScreenId) || $('entry');
+    if (back) back.classList.add('on');
+    const backId = back ? back.id : 'entry';
+    const token = backId === 'liveshow' ? 'live' : backId === 'rundown' ? 'build' : 'entry';
+    try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState(token); } catch (e) {}
+    try { sessionStorage.setItem('cueola_screen', token); } catch (e) {}
   }
 
   // ── P7: preflight — deep-check this machine's library for the Cueola panel:
@@ -4502,7 +4537,12 @@
     applyLiveExit,                                  // acknowledged stop or transport-neutral controller detach
     reattachLiveControl,                            // idempotently reclaim detached output/session listeners
     saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
-    isReady: () => built && showLoaded && isOpen(),  // safe to receive an external SFX pad right now?
+    // Safe to receive an external SFX pad: the module has loaded its show into
+    // memory (writes go through the live state, never blind-clobber the saved
+    // record). The screen does NOT have to be the visible one — requiring that
+    // made the notes-board hand-off unreachable, since the notes modal and the
+    // Outrangutan screen can't be on screen at the same time.
+    isReady: () => built && showLoaded,
     addAudioPad,                                    // Cueola audio note → SFX pad hand-off
     goToSfx: () => { if (built) { showScreen(); setTab('sfx'); } },
     // Console rehearsal hook: test MIDI mappings (incl. learn mode) without a

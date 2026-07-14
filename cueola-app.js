@@ -1,8 +1,14 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '1.0.0';
+const CUEOLA_VERSION = '2.0.0';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
+// The live session code, readable by sibling modules (Outrangutan's join
+// prefill) — `session` is a top-level `let` in a classic script, so it never
+// lands on window by itself.
+Object.defineProperty(window, 'cueolaActiveSessionCode', {
+  get() { try { return (session && session.code && !session.isDemo && !session.isExpert) ? session.code : ''; } catch { return ''; } },
+});
 
 function sfIcon(symbol, className='') {
   const classes = className ? `sf-symbol ${className}` : 'sf-symbol';
@@ -270,6 +276,12 @@ function adoptLiveActiveCue(index, options={}) {
 }
 
 function canOwnLiveActiveCue() {
+  // Solo surfaces — the demo, expert mode, and an unsynced local workspace —
+  // have no shared show to protect, so the operator always drives. The student
+  // gate only applies inside a real shared session (students must not move the
+  // class's live cue). Without the solo carve-out, the demo (role:'student')
+  // had GO permanently disabled and could never be run.
+  if (session.isDemo || session.isExpert || !session.code) return isFollowingSelf();
   return session.role !== 'student' && isFollowingSelf();
 }
 
@@ -450,6 +462,9 @@ const CUEOLA_THEME_LABELS = {
   outrangutan: 'Outrangutan',
   prepbear: 'PrepBear',
 };
+// Canonical theme-chip swatch colors — single source for every theme picker
+// (settings modal, entry popover, PB bar, prompter/Flowmingo op panels).
+const CUEOLA_THEME_SWATCHES = { cool:'#0a0d18', warm:'#ffc400', white:'#fafaf7', green:'#041208', koala:'#1c1c1b', panda:'#000000', flamingo:'#0e0410', outrangutan:'#ff6a00', prepbear:'#080a14' };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
 function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
@@ -1293,8 +1308,9 @@ function clock(time24, offsetSecs) {
 
 function toast(msg, dur=2500) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  // Reveal before writing text so the aria-live region announces the mutation.
   el.style.display = 'block';
+  el.textContent = msg;
   clearTimeout(el._t);
   el._t = setTimeout(() => el.style.display='none', dur);
 }
@@ -1769,8 +1785,6 @@ const CUEOLA_TTS_RATE_KEY = 'cueola_tts_rate';
 const LOCAL_NARRATION_VOICE = 'af_heart';
 const LOCAL_NARRATION_BASE = `assets/narration/${LOCAL_NARRATION_VOICE}`;
 const LOCAL_NARRATION_MANIFEST = `${LOCAL_NARRATION_BASE}/manifest.json`;
-const TTS_SVG_ON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-const TTS_SVG_OFF = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
 
 function normalizeTTSRate(value) {
   const n = parseFloat(value);
@@ -5323,6 +5337,19 @@ document.addEventListener('keydown', e => {
     const open = d.isOpen ? d.isOpen(el) : !el.hidden;
     if (open) { d.closeFn(el); e.preventDefault(); return; }
   }
+  // Dialog-stack fallback: popovers/overlays keep priority (the defaultPrevented
+  // guard above covers keymapRef/jog/lsRowPreview, which consume via
+  // consumeRemoteKey). data-esc-hold preserves the Phase-6 explicit-dismiss
+  // exemptions for panels with unsaved edits.
+  const top = topDialog();
+  if (!top || top.hasAttribute('data-esc-hold')) return;
+  if (top.id === 'productionNotesModal' && document.getElementById('pbBoard')?.classList.contains('composing')) {
+    e.preventDefault();
+    pbCloseComposer();
+    return;
+  }
+  e.preventDefault();
+  closeDialog(top.id);
 });
 uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeEntryThemes(), { isOpen: el => !el.hasAttribute('hidden'), ignore: ['#entryThemeGear'] });
 
@@ -6860,16 +6887,29 @@ function outrangutanTargetName(action, id) {
   return m?.name || id;
 }
 
+// Honest success copy: a command is a fire-and-forget session-doc write. When
+// no playout has ever published into this session, say so instead of implying
+// something played.
+function outrangutanEverConnected() {
+  if (window.Outrangutan && window.Outrangutan._local && window.Outrangutan._local.session?.() === session.code) return true;
+  return Boolean(outrangutanState && (outrangutanState.live || Object.keys(outrangutanState.cues || {}).length));
+}
+function outrangutanSendToast(kind) {
+  toast(outrangutanEverConnected()
+    ? `Outrangutan: ${kind} sent.`
+    : `${kind} queued — open Outrangutan on the playout machine to receive it.`);
+}
+
 function fireOutrangutanFromModal() {
   const outCue = document.getElementById('cc-out-cue')?.value || '';
   if (!outCue) { toast('Link an Outrangutan cue first.'); return; }
-  if (fireOutrangutanCommand('cue', outCue)) toast('Outrangutan: GO sent.');
+  if (fireOutrangutanCommand('cue', outCue)) outrangutanSendToast('GO');
 }
 
 function fireOutrangutanSfxFromModal() {
   const outPad = document.getElementById('cc-out-pad')?.value || '';
   if (!outPad) { toast('Link an SFX pad first.'); return; }
-  if (fireOutrangutanCommand('pad', outPad)) toast('Outrangutan: SFX sent.');
+  if (fireOutrangutanCommand('pad', outPad)) outrangutanSendToast('SFX');
 }
 
 // P5: playout transport from the live-screen keymap — same-tab fast path first,
@@ -6890,7 +6930,7 @@ function fireOutrangutanSfxCell(beatId, type) {
   const b = beats.find(x => x.id === beatId);
   const d = b?.cues?.[type];
   if (!d || !d.outPadId) { toast('No SFX pad linked.'); return; }
-  if (fireOutrangutanCommand('pad', d.outPadId)) toast('SFX sent.');
+  if (fireOutrangutanCommand('pad', d.outPadId)) outrangutanSendToast('SFX');
 }
 
 function outrangutanCellLinked(d) { return !!(d && d.outCueId); }
@@ -7361,8 +7401,6 @@ function enterLiveSessionScreen(liveState) {
   document.getElementById('liveshow').classList.add('on');
   document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
   _lastLiveScrollIdx = null;
-  document.getElementById('tabLive').classList.add('on');
-  document.getElementById('tabBuild').classList.remove('on');
   sessionStorage.setItem('cueola_screen','live');
   pushSessionHistoryState('live');
   logShow('session', 'Went live · row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
@@ -7391,8 +7429,6 @@ function leaveLiveSessionScreen(liveState, context={}) {
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
-  document.getElementById('tabBuild').classList.add('on');
-  document.getElementById('tabLive').classList.remove('on');
   sessionStorage.setItem('cueola_screen','build');
   pushSessionHistoryState('build');
   logShow('session', 'Left live → build screen');
@@ -7402,6 +7438,11 @@ function leaveLiveSessionScreen(liveState, context={}) {
 function isFollowingSelf() {
   if (browsingSelf) return true;        // explicitly browsing on my own
   if (followTarget) return false;       // mirroring someone else
+  // Solo surfaces — the demo, expert mode, an unsynced local workspace — have
+  // no show caller to follow: the operator IS the show. Without this, the
+  // demo's student role defaulted to "following" a caller that doesn't exist,
+  // which kept GO disabled and made the demo rundown unrunnable.
+  if (session.isDemo || session.isExpert || !session.code) return true;
   return session.role !== 'student';    // instructors/experts drive their own position by default
 }
 
@@ -8143,7 +8184,7 @@ function liveRowPreview(idx) {
       ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
-  if (!types.length) html = '<div style="color:var(--text3);text-align:center;padding:20px">No cues configured.</div>';
+  if (!types.length) html = '<div class="empty-rundown"><div class="empty-rundown-sub">No cues configured for this row.</div></div>';
   bodyEl.innerHTML = html;
   const prevBtn = document.getElementById('lrpPrevBtn');
   const nextBtn = document.getElementById('lrpNextBtn');
@@ -8349,7 +8390,7 @@ function renderLive() {
   if (promptOpMode) { renderLivePromptOp(); return; }
   const body = document.getElementById('lsBody');
   if (!beats.length) {
-    body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
+    body.innerHTML='<div class="empty-rundown"><div class="empty-rundown-title">No cues in rundown</div><div class="empty-rundown-sub">Build rows in the Rundown tab, then run the show from here.</div></div>';
     updateLiveOverview();
     updateLiveGoControl();
     applyLivePrompterPanelState();
@@ -10096,7 +10137,11 @@ function trackPrompterControl(control, origin='live', quiet=false) {
 }
 
 function openPrompterApp() {
-  sessionStorage.setItem('cueola_screen', 'entry');
+  // Preserve where the operator came from — stamping 'entry' here made the
+  // Guide's "Open Talent Display" action exit back to the front page instead
+  // of the rundown/Live screen it was opened from.
+  const cur = sessionStorage.getItem('cueola_screen');
+  if (!cur || cur === 'entry') sessionStorage.setItem('cueola_screen', 'entry');
   enterPrompter();
 }
 
@@ -10229,8 +10274,8 @@ const PT_THEMES = {
   prepbear: { bg:'#080912', text:'#ffffff', accent:'#eeca57', uiBg:'rgba(20,23,42,.92)',    uiBorder:'rgba(238,202,87,.30)' },
 };
 
-const PT_SVG_PLAY  = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><path d="M0 0 L10 6 L0 12Z"/></svg>`;
-const PT_SVG_PAUSE = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><rect x="0" y="0" width="3.5" height="12" rx="1"/><rect x="6.5" y="0" width="3.5" height="12" rx="1"/></svg>`;
+const PT_SVG_PLAY  = sfIcon('media.play');
+const PT_SVG_PAUSE = sfIcon('media.pause');
 
 function ptEl(id) { return document.getElementById(id); }
 
@@ -10521,7 +10566,7 @@ function ptSyncPlayIcons(isPlaying) {
     if (!btn) return;
     patchPrompterPlayButton(btn, isPlaying);
   });
-  if (icon) icon.innerHTML = isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
+  if (icon) icon.dataset.symbol = isPlaying ? 'media.pause' : 'media.play';
 }
 
 function patchPrompterPlayButton(btn, isPlaying) {
@@ -10584,7 +10629,7 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
   const screen = `<div class="flow-control-section flow-control-screen">
@@ -11885,15 +11930,15 @@ function flowOpControlsHTML(disabled=false) {
       </div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
-        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="0" y="5" width="9" height="2" rx="1"/><rect x="0" y="10" width="12" height="2" rx="1"/></svg></button>
-        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2.5" y="5" width="9" height="2" rx="1"/><rect x="1" y="10" width="12" height="2" rx="1"/></svg></button>
-        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="5" y="5" width="9" height="2" rx="1"/><rect x="2" y="10" width="12" height="2" rx="1"/></svg></button>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}>Left</button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}>Center</button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}>Right</button>
       </div>
     </div>`;
   const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${PT_THEMES[name].bg}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
   const screen = `<div class="flow-control-section flow-control-screen">
@@ -12580,7 +12625,7 @@ function renderLivePromptOp() {
   const body = document.getElementById('lsBody');
   ptSetTheme(ptThemeName);
   if (!beats.length) {
-    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">No cues in rundown.</div>';
+    body.innerHTML = '<div class="empty-rundown"><div class="empty-rundown-title">No cues in rundown</div><div class="empty-rundown-sub">Build rows in the Rundown tab, then run the show from here.</div></div>';
     return;
   }
   const activeIdx = liveActiveCueIndex();
@@ -13225,6 +13270,14 @@ function pbRefreshScheduleFields() {
   pbSetFieldIfIdle('ps-address', schedule.address || '');
   pbSetFieldIfIdle('ps-setup-notes', schedule.setupNotes || '');
   pbSetFieldIfIdle('ps-show-notes', schedule.showNotes || '');
+  // Setup-N/A and the Ready Before Show checklist ride the same shared object —
+  // if the refresh skips them, this client's next autosave rebuilds the whole
+  // schedule from its stale DOM and silently reverts collaborators' ticks.
+  if (!pbFieldRecentlyEdited('ps-setup-na')) setSetupNotApplicable(schedule.setupNA);
+  if (!document.activeElement?.closest?.('#ps-checklist')) {
+    const domRows = collectProductionChecklistRows(false);
+    if (JSON.stringify(schedule.checklist) !== JSON.stringify(domRows)) renderProductionChecklist(schedule.checklist);
+  }
 }
 
 // For type=time inputs, the value must be HH:MM (24h). setTimeInputValue handles
@@ -13263,6 +13316,46 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-dress', sheet.dress || '');
   pbSetFieldIfIdle('pp-meals', sheet.meals || '');
   pbSetFieldIfIdle('pp-notes', sheet.notes || '');
+  // Times with N/A toggles, venue, and the weather block ride the same shared
+  // sheet — if the refresh skips them, this client's next autosave rebuilds the
+  // sheet from its stale DOM/module vars and silently reverts collaborators'
+  // edits (the exact overwrite the debounced-merge comment promises to prevent).
+  const idle = id => { const el = document.getElementById(id); return el && el !== document.activeElement && !pbFieldRecentlyEdited(id); };
+  if (idle('pp-show-start')) {
+    const showNA = sheet.showStart === 'N/A';
+    setShowNotApplicable(showNA);
+    if (!showNA) pbSetFieldIfIdle('pp-show-start', timeTo24(sheet.showStart));
+  }
+  if (idle('pp-wrap')) {
+    const wrapNA = sheet.wrap === 'N/A';
+    setWrapNotApplicable(wrapNA);
+    if (!wrapNA) pbSetFieldIfIdle('pp-wrap', timeTo24(sheet.wrap));
+  }
+  if (idle('pp-doors')) {
+    const doorsNA = sheet.doors === 'N/A';
+    setDoorsNotApplicable(doorsNA);
+    pbSetFieldIfIdle('pp-doors', doorsNA ? '' : timeTo24(sheet.doors));
+  }
+  if (!pbFieldRecentlyEdited('pp-venue-group')) {
+    const remoteVenue = normalizeCallSheetVenue(sheet.venue);
+    if (remoteVenue !== callSheetVenue) { callSheetVenue = remoteVenue; renderCallSheetVenue(); }
+  }
+  const wxIds = ['pp-wx-conditions','pp-wx-high','pp-wx-low','pp-wx-precip','pp-wx-wind','pp-wx-sunrise','pp-wx-sunset'];
+  const wxBusy = wxIds.some(id => { const el = document.getElementById(id); return (el && el === document.activeElement) || pbFieldRecentlyEdited(id); });
+  if (!wxBusy) {
+    const remoteWx = normalizeCallSheetWeather(sheet.weather);
+    if (JSON.stringify(remoteWx) !== JSON.stringify(normalizeCallSheetWeather(callSheetWeather))) {
+      callSheetWeather = remoteWx;
+      renderCallSheetWeatherCard();
+    }
+  }
+  // A remotely added/renamed sheet must show up in the selector too.
+  const select = document.getElementById('pp-call-sheet-select');
+  if (select && select !== document.activeElement) {
+    const names = sheets.map((s, i) => callSheetDisplayName(s, i));
+    const current = [...select.options].map(o => o.textContent);
+    if (JSON.stringify(names) !== JSON.stringify(current)) renderCallSheetSelector(sheets);
+  }
   // Crew grid is an array — re-render it (so adds/removes sync) only when nobody
   // is typing in it, then keep the local roster in step for the next save.
   const people = Array.isArray(sheet.people) && sheet.people.length ? sheet.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
@@ -13285,12 +13378,16 @@ function pbRefreshPatchFields() {
   const data = loadPreProData();
   const kinds = activePatchKind === 'video' ? ['video'] : ['audio', 'comms'];
   const editingInGrid = !!document.activeElement?.closest?.('.patch-table');
-  if (editingInGrid) {
+  // Just-typed cells (not only the focused one) must survive the merge — the
+  // 650ms autosave runs THROUGH this refresh, so without the recently-edited
+  // guard it reverted every unsaved cell except the one holding the caret.
+  const anyRecent = [...document.querySelectorAll('[data-patch-kind]')].some(i => pbFieldRecentlyEdited(i.id));
+  if (editingInGrid || anyRecent) {
     kinds.forEach(kind => {
       const rows = data[`${kind}PatchRows`];
       if (!Array.isArray(rows)) return;
       document.querySelectorAll(`[data-patch-kind="${kind}"]`).forEach(input => {
-        if (input === document.activeElement) return;
+        if (input === document.activeElement || pbFieldRecentlyEdited(input.id)) return;
         const r = rows[Number(input.dataset.patchRow)];
         const val = r ? (r[input.dataset.patchField] || '') : input.value;
         if (input.value !== val) input.value = val;
@@ -14990,7 +15087,7 @@ function pbClearNotesFilters() {
 function pbToggleNotesSort() {
   pbNotesNewestFirst = !pbNotesNewestFirst;
   const btn = document.getElementById('pbNotesSortBtn');
-  if (btn) btn.textContent = pbNotesNewestFirst ? '↓ Newest' : '↑ Oldest';
+  if (btn) setSymbolButtonLabel(btn, pbNotesNewestFirst ? 'action.down' : 'action.up', pbNotesNewestFirst ? 'Newest' : 'Oldest');
   renderPlandaBearNotes();
 }
 
@@ -15318,7 +15415,7 @@ function pbCancelReply() {
 function pbReplyKeydown(e, rootId) {
   if (pbMentionKeydown(e)) return;   // mention autocomplete owns keys while open
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); pbPostReply(rootId); }
-  else if (e.key === 'Escape') pbCancelReply();
+  else if (e.key === 'Escape') { e.preventDefault(); pbCancelReply(); }
 }
 
 async function pbPostReply(rootId) {
@@ -15398,7 +15495,7 @@ function pbCancelEditNote() {
 
 function pbEditInputKeydown(e, id) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); pbSaveEditNote(id); }
-  else if (e.key === 'Escape') { pbCancelEditNote(); }
+  else if (e.key === 'Escape') { e.preventDefault(); pbCancelEditNote(); }
 }
 
 async function pbSaveEditNote(id) {
@@ -15954,7 +16051,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
     || (pbNotesNewestFirst ? b.lastAt - a.lastAt : a.lastAt - b.lastAt));
 
   if (!visible.length) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">🔍</span><b>No matching notes</b><span>Nothing matches that search or tag.</span><button type="button" class="pb-chat-tool" onclick="pbClearNotesFilters()">Clear filters</button></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('action.filter')}</span><b>No matching notes</b><span>Nothing matches that search or tag.</span><button type="button" class="pb-chat-tool" onclick="pbClearNotesFilters()">Clear filters</button></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -16301,6 +16398,22 @@ function pbTagLabel(note) {
   return (PB_NOTE_TAGS[note.tag] || PB_NOTE_TAGS.general).label;
 }
 
+// A note's tasks belong on paper too: the To-Do assignee and every checklist
+// item (with its owner and sign-off) — a checklist-only note used to print as
+// an empty body.
+function pbNotePaperTasksHTML(note) {
+  const parts = [];
+  const items = note.checklist || [];
+  if (note.tag === 'todo' && (note.assignee || '').trim() && !items.length) {
+    parts.push(`<div class="cue-muted" style="margin-top:4px">Assigned to: ${esc(note.assignee)}</div>`);
+  }
+  if (items.length) {
+    parts.push(`<div style="margin-top:6px">${items.map(it => `
+      <div style="font-size:12px;margin:2px 0">${it.done ? '&#9745;' : '&#9744;'} ${esc(it.text || '')}${(it.assignee || '').trim() ? ` <span class="cue-muted">&rarr; ${esc(it.assignee)}</span>` : ''}${it.done && it.doneBy ? ` <span class="cue-muted">(done by ${esc(it.doneBy)})</span>` : ''}</div>`).join('')}</div>`);
+  }
+  return parts.join('');
+}
+
 function productionNoteDocHTML(note, notes=plandaBearNotes, productionName=show.name) {
   // Pull in the thread's replies so an exported note carries its whole conversation.
   const thread = pbBuildThreads(notes).find(t => t.root.id === note.id);
@@ -16325,6 +16438,7 @@ function productionNoteDocHTML(note, notes=plandaBearNotes, productionName=show.
       ${likeLine}
     </tbody></table>
     ${note.text ? `<div class="paper-note-body">${pbRenderRichText(note.text)}</div>` : ''}
+    ${pbNotePaperTasksHTML(note)}
     ${pbAttachmentsPaperHTML(note)}
     ${repliesHTML}
   `;
@@ -16342,7 +16456,7 @@ function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.na
     <td>${esc(n.at ? new Date(n.at).toLocaleString() : '')}</td>
     <td>${esc(n.by)}${n.role === 'instructor' ? '<br><span class="cue-muted">Instructor</span>' : ''}</td>
     <td>${esc(pbTagLabel(n))}${n.pinned ? ' (Pinned)' : ''}</td>
-    <td>${isReply ? '<div style="padding-left:16px;border-left:3px solid #ddd"><span class="cue-muted">Reply</span><br>' : ''}${pbRenderRichText(n.text)}${n.editedAt ? ' <span class="cue-muted">(edited)</span>' : ''}${attHTML(n)}${isReply ? '</div>' : ''}</td>
+    <td>${isReply ? '<div style="padding-left:16px;border-left:3px solid #ddd"><span class="cue-muted">Reply</span><br>' : ''}${pbRenderRichText(n.text)}${n.editedAt ? ' <span class="cue-muted">(edited)</span>' : ''}${pbNotePaperTasksHTML(n)}${attHTML(n)}${isReply ? '</div>' : ''}</td>
   </tr>`;
   const rows = threads.flatMap(t => [row(t.root, false), ...t.replies.map(r => row(r, true))]).join('');
   return `
@@ -17052,7 +17166,8 @@ function rundownPreviewTableHTML(snapshot=null) {
     const on = getCueOn(d), off = getCueOff(d);
     const scriptText = type === 'script' ? scriptCueText(d) : '';
     const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ${scriptLineLabel(scriptText)}` : '';
-    const parts = [on && `<span class="cue-type">ON</span> ${esc(on)}`, off && `<span class="cue-type">OFF</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
+    // Same operation vocabulary as the editor and Live: on = READY (standby), off = TAKE (go).
+    const parts = [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
   let pdfCueNum = 0;
@@ -17412,6 +17527,7 @@ function setCallSheetVenue(v) {
   const nv = normalizeCallSheetVenue(v);
   callSheetVenue = (callSheetVenue === nv) ? '' : nv; // click active to clear
   renderCallSheetVenue();
+  pbNoteLocalEdit('pp-venue-group');   // hold the collab refresh off this click briefly
   paperworkDirty = true;
 }
 
@@ -17465,8 +17581,15 @@ function onCallSheetWeatherInput(field, value) {
     callSheetWeather = { conditions:'', high:'', low:'', precip:'', wind:'', sunrise:'', sunset:'', emoji:'', source:'manual', forecastDate:'', place:'', updatedAt:0 };
   }
   callSheetWeather[field] = value;
-  callSheetWeather.source = callSheetWeather.source || 'manual';
+  // A hand edit makes the entry manual — and a rewritten conditions line must
+  // drop the fetched icon/emoji so the symbol re-infers from the new text
+  // instead of showing the old forecast's picture next to corrected words.
+  callSheetWeather.source = 'manual';
+  if (field === 'conditions') { callSheetWeather.symbol = ''; callSheetWeather.emoji = ''; }
   callSheetWeather.updatedAt = Date.now();
+  const icoEl = document.getElementById('pp-weather-ico');
+  if (icoEl) icoEl.innerHTML = sfIcon(weatherSymbolFor(callSheetWeather));
+  setWeatherStatus(['Manual entry', callSheetWeather.place, callSheetWeather.forecastDate].filter(Boolean).join(' · '));
   paperworkDirty = true;
 }
 
@@ -17599,6 +17722,7 @@ function addAnotherCallSheet() {
   // sheet doesn't inherit the previous day's call/show/wrap times.
   const nextSheet = normalizeCallSheet({
     ...source,
+    id: '',   // never inherit the source's paperwork id — a duplicate id makes the two sheets inseparable in role assignments
     label: `Call Sheet ${sheets.length + 1}`,
     date: '', call: '', showStart: '', wrap: '', doors: '',
     weather: null, // new day → fetch fresh forecast; venue carries over from source
@@ -17643,19 +17767,41 @@ function showPatchSheetPreview(kind) {
   openPatchSheetEditor(kind);
 }
 
+// Paper-friendly formats: the editors store ISO dates and 24-hour times (native
+// date/time inputs), but paperwork reads better as 'Friday, Aug 1, 2026' and
+// '7:30 PM' — matching the rundown pages in the same package. Non-date/non-time
+// text (free-text doors, 'N/A') passes through untouched.
+function paperDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '').trim());
+  if (!m) return v || '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d) ? (v || '') : d.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'short', day:'numeric' });
+}
+function paperTime(v) {
+  const s = String(v || '').trim();
+  if (!s || s === 'N/A') return s;
+  const t = timeTo24(s);
+  if (!t) return s;
+  let [h, mm] = t.split(':').map(Number);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(mm).padStart(2, '0')} ${ap}`;
+}
+
 function callSheetPreviewHTML(data) {
   const title = callSheetTitle(data);
   const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
-  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(p.call || data.call || '')}</td></tr>`).join('');
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(paperTime(p.call || data.call || ''))}</td></tr>`).join('');
+  const notes = (data.notes || '').trim();
   return `
     <h1>${esc(title)}</h1>
     <table><tbody>
       <tr><th>Production</th><td>${esc(data.production || show.name || '')}</td></tr>
-      <tr><th>Shoot Date</th><td>${esc(data.date || '')}</td></tr>
-      <tr><th>Call Time</th><td>${esc(data.call || '')}</td></tr>
-      <tr><th>Doors Open</th><td>${esc(data.doors || '')}</td></tr>
-      <tr><th>Show Start</th><td>${esc(data.showStart || '')}</td></tr>
-      <tr><th>Estimated Wrap</th><td>${esc(data.wrap || '')}</td></tr>
+      <tr><th>Shoot Date</th><td>${esc(paperDate(data.date))}</td></tr>
+      <tr><th>Call Time</th><td>${esc(paperTime(data.call))}</td></tr>
+      <tr><th>Doors Open</th><td>${esc(paperTime(data.doors))}</td></tr>
+      <tr><th>Show Start</th><td>${esc(paperTime(data.showStart))}</td></tr>
+      <tr><th>Estimated Wrap</th><td>${esc(paperTime(data.wrap))}</td></tr>
       <tr><th>Location</th><td>${esc(data.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(data.address || '')}</td></tr>
       <tr><th>Venue</th><td>${esc(venueLabel(data.venue))}</td></tr>
@@ -17669,8 +17815,8 @@ function callSheetPreviewHTML(data) {
     </tbody></table>
     <h2>Crew / Talent</h2>
     <table><thead><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="5">No crew or talent entered yet.</td></tr>'}</tbody></table>
-    <h2>General Notes</h2>
-    <table><tbody><tr><td>${esc(data.notes || '')}</td></tr></tbody></table>`;
+    ${notes ? `<h2>General Notes</h2>
+    <table><tbody><tr><td>${esc(notes)}</td></tr></tbody></table>` : ''}`;
 }
 
 function showCuePartPreview(type) {
@@ -17720,7 +17866,11 @@ function getSafetyPlanData() {
   // If the weather field still equals the call-sheet auto-fill, keep it "auto"
   // (store empty) so it stays live with the call sheet; a real edit is kept.
   const existingWeather = typeof existing.weather === 'string' ? existing.weather : '';
-  const wxVal = document.getElementById('sp-weather')?.value?.trim() || existingWeather || '';
+  // When the field is on screen its value is the truth — including an
+  // intentionally cleared '' (which returns the note to the call-sheet auto
+  // weather). Only fall back to the stored note when the modal isn't open.
+  const wxEl = document.getElementById('sp-weather');
+  const wxVal = wxEl ? wxEl.value.trim() : existingWeather;
   const wxAuto = safetyPlanWeatherAutoText(data);
   return {
     hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
@@ -17745,7 +17895,6 @@ function safetyPlanHTML(safety, data=loadPreProData()) {
   const safetyWeather = typeof safety.weather === 'string' ? safety.weather : '';
   return `
     <h1>3. Safety Plan</h1>
-    <div>Item 3</div>
     <table><tbody>
       <tr><th>Local Hospital</th><td>${esc(safety.hospital || '')}</td></tr>
       <tr><th>Weather</th><td>${esc(safetyWeather || safetyPlanWeatherAutoText(data))}</td></tr>
@@ -17753,7 +17902,7 @@ function safetyPlanHTML(safety, data=loadPreProData()) {
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
       <tr><th>Non-Emergency Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
-      <tr><th>Security</th><td>${esc(safety.security || '')}</td></tr>
+      <tr><th>Security</th><td>${esc(safetySecurityValue(safety.security) || '')}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(safety.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
@@ -17861,7 +18010,9 @@ function openProductionSchedule() {
 function renderProductionChecklist(items) {
   const el = document.getElementById('ps-checklist');
   if (!el) return;
-  const rows = (Array.isArray(items) && items.length ? items : defaultProductionSchedule().checklist).map(normalizeProductionChecklistRow);
+  // -1 = no positional guide fallback: rendering a user-added empty row with
+  // its array index used to stamp a default check's text into it.
+  const rows = (Array.isArray(items) && items.length ? items : defaultProductionSchedule().checklist).map(row => normalizeProductionChecklistRow(row, -1));
   const complete = rows.filter(row => row.done).length;
   el.innerHTML = `<div class="readiness-builder">
     <div class="readiness-builder-head">
@@ -17892,10 +18043,26 @@ function renderProductionChecklist(items) {
   </div>`;
 }
 
+// Collect the checklist exactly as typed. -1 disables the positional guide
+// fallback in normalizeProductionChecklistRow — that fallback exists to repair
+// legacy saves of the DEFAULT rows, but applied to a user-added row it used to
+// FABRICATE a default item into a row the user left empty.
+function collectProductionChecklistRows(keepBlank=false) {
+  const rows = [];
+  document.querySelectorAll('[data-ps-row]').forEach(input => {
+    const idx = Number(input.dataset.psRow);
+    const field = input.dataset.psField;
+    if (!rows[idx]) rows[idx] = {};
+    rows[idx][field] = field === 'done' ? input.checked : input.value.trim();
+  });
+  const mapped = rows.filter(Boolean).map(row => normalizeProductionChecklistRow(row, -1));
+  return keepBlank ? mapped : mapped.filter(row => row.area || row.item || row.done);
+}
+
 function addProductionChecklistRow() {
-  const current = getProductionScheduleData();
-  current.checklist.push({ area:'', item:'', hint:'', done:false });
-  renderProductionChecklist(current.checklist);
+  const rows = collectProductionChecklistRows(true);
+  rows.push({ area:'', item:'', hint:'', done:false });
+  renderProductionChecklist(rows);
 }
 
 // Checking a readiness item records WHO signed it off and WHEN, then syncs to the
@@ -17913,23 +18080,19 @@ function onProductionChecklistToggle(cb) {
     if (atEl) atEl.value = '0';
   }
   saveProductionSchedule(false);                                  // persist + broadcast to the session
-  renderProductionChecklist(getProductionScheduleData().checklist); // show the sign-off line
+  renderProductionChecklist(collectProductionChecklistRows(true)); // show the sign-off line, keep in-progress blank rows
+  paperworkDirty = false;   // the toggle already persisted — don't leave a stale dirty flag
 }
 
 function removeProductionChecklistRow(idx) {
-  const current = getProductionScheduleData();
-  current.checklist.splice(idx, 1);
-  renderProductionChecklist(current.checklist.length ? current.checklist : [{ area:'', item:'', hint:'', done:false }]);
+  const rows = collectProductionChecklistRows(true);
+  rows.splice(idx, 1);
+  renderProductionChecklist(rows.length ? rows : [{ area:'', item:'', hint:'', done:false }]);
+  saveProductionSchedule(false);   // a deletion is a real edit — persist it like the tick box does
+  paperworkDirty = false;
 }
 
 function getProductionScheduleData() {
-  const rows = [];
-  document.querySelectorAll('[data-ps-row]').forEach(input => {
-    const idx = Number(input.dataset.psRow);
-    const field = input.dataset.psField;
-    if (!rows[idx]) rows[idx] = {};
-    rows[idx][field] = field === 'done' ? input.checked : input.value.trim();
-  });
   return {
     setupNA: document.getElementById('ps-setup-na')?.classList.contains('on') || false,
     date: document.getElementById('ps-date')?.value || '',
@@ -17943,7 +18106,7 @@ function getProductionScheduleData() {
     address: document.getElementById('ps-address')?.value?.trim() || '',
     setupNotes: document.getElementById('ps-setup-notes')?.value || '',
     showNotes: document.getElementById('ps-show-notes')?.value || '',
-    checklist: rows.map(normalizeProductionChecklistRow).filter(row => row && (row.area || row.item || row.done)),
+    checklist: collectProductionChecklistRows(false),
   };
 }
 
@@ -17957,9 +18120,9 @@ function productionScheduleHTML(schedule, data=loadPreProData()) {
   const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
   const setupBody = s.setupNA
     ? `<tr><td>No separate setup day — setup happens on show day.</td></tr>`
-    : `<tr><th>Setup Date</th><td>${esc(s.date || '')}</td></tr>
-      <tr><th>Setup Start</th><td>${esc(s.setup || '')}</td></tr>
-      <tr><th>Setup Wrap</th><td>${esc(s.wrap || '')}</td></tr>
+    : `<tr><th>Setup Date</th><td>${esc(paperDate(s.date))}</td></tr>
+      <tr><th>Setup Start</th><td>${esc(paperTime(s.setup))}</td></tr>
+      <tr><th>Setup Wrap</th><td>${esc(paperTime(s.wrap))}</td></tr>
       <tr><th>Setup Notes</th><td>${esc(s.setupNotes || '')}</td></tr>`;
   return `
     <h1>2. Production Schedule</h1>
@@ -17969,10 +18132,10 @@ function productionScheduleHTML(schedule, data=loadPreProData()) {
     </tbody></table>
     <h2>Show Day</h2>
     <table><tbody>
-      <tr><th>Show Day</th><td>${esc(s.showDate || s.date || '')}</td></tr>
-      <tr><th>Crew Call</th><td>${esc(s.call || '')}</td></tr>
-      <tr><th>Doors Open</th><td>${esc(s.doors || '')}</td></tr>
-      <tr><th>Show Start</th><td>${esc(s.show || '')}</td></tr>
+      <tr><th>Show Day</th><td>${esc(paperDate(s.showDate || s.date))}</td></tr>
+      <tr><th>Crew Call</th><td>${esc(paperTime(s.call))}</td></tr>
+      <tr><th>Doors Open</th><td>${esc(paperTime(s.doors))}</td></tr>
+      <tr><th>Show Start</th><td>${esc(paperTime(s.show))}</td></tr>
       <tr><th>Location</th><td>${esc(s.location || '')}</td></tr>
       <tr><th>Address</th><td>${esc(s.address || '')}</td></tr>
       <tr><th>Show Notes</th><td>${esc(s.showNotes || '')}</td></tr>
@@ -18001,32 +18164,38 @@ function getPatchRows(kind) {
 function patchInput(value, kind, row, field) {
   const id = `pb-patch-${kind}-${row}-${field}`;
   const label = `${kind === 'comms' ? 'Comms' : kind === 'audio' ? 'Audio' : 'Video'} row ${Number(row) + 1} ${field}`;
-  return `<input id="${esc(id)}" class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field === 'label' ? 'Label' : field}" aria-label="${esc(label)}">`;
+  return `<input id="${esc(id)}" class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field.charAt(0).toUpperCase() + field.slice(1)}" aria-label="${esc(label)}">`;
 }
 
 function renderPatchTable(kind, title) {
   const rows = getPatchRows(kind);
   const isComms = kind === 'comms';
   const heads = isComms ? ['Position','Out','Gear','Notes'] : ['Label','Destination','Source','Cabling','Notes'];
+  const moveCell = (i) => `<div class="patch-move">
+          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},-1)" title="Move row up" aria-label="Move ${kind} row ${i + 1} up" ${i === 0 ? 'disabled' : ''}>${sfIcon('chevron.up')}</button>
+          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},1)" title="Move row down" aria-label="Move ${kind} row ${i + 1} down" ${i === rows.length - 1 ? 'disabled' : ''}>${sfIcon('chevron.down')}</button>
+        </div>`;
   return `
     <div class="field">
       <label class="field-lbl">${title}</label>
-      <div class="field-hint">Type directly in the first row. Use Add row for another line, or import a CSV/TSV.</div>
+      <div class="field-hint">Type directly in the first row. Use Add row for another line, or import a CSV/TSV. The arrows reorder rows.</div>
       <div class="patch-table ${isComms ? 'comms' : kind}" id="${kind}-patch-table">
-        ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div></div>
+        ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div class="patch-head"></div><div class="patch-head"></div>
         ${rows.map((row,i) => isComms ? `
           ${patchInput(row.position, kind, i, 'position')}
           ${patchInput(row.out, kind, i, 'out')}
           ${patchInput(row.gear, kind, i, 'gear')}
           ${patchInput(row.notes, kind, i, 'notes')}
-          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})">x</button>
+          ${moveCell(i)}
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" title="Remove row" aria-label="Remove ${kind} row ${i + 1}">x</button>
         ` : `
           ${patchInput(row.label, kind, i, 'label')}
           ${patchInput(row.destination, kind, i, 'destination')}
           ${patchInput(row.source, kind, i, 'source')}
           ${patchInput(row.cabling, kind, i, 'cabling')}
           ${patchInput(row.notes, kind, i, 'notes')}
-          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})">x</button>
+          ${moveCell(i)}
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" title="Remove row" aria-label="Remove ${kind} row ${i + 1}">x</button>
         `).join('')}
       </div>
       <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
@@ -18108,7 +18277,25 @@ function removePatchRow(kind, idx) {
   pbRenderPatchBody();
 }
 
+// Reorder a patch row (the ▲/▼ arrows). Reads the grid as typed (blanks kept),
+// swaps, persists, and re-renders — then puts focus back on the same arrow at
+// the row's new index so keyboard users can keep stepping it.
+function movePatchRow(kind, idx, delta) {
+  const rows = collectPatchRows(kind, true);
+  const to = idx + delta;
+  if (to < 0 || to >= rows.length) return;
+  [rows[idx], rows[to]] = [rows[to], rows[idx]];
+  saveVisiblePatchRows({ [kind]: rows }, kind);
+  pbRenderPatchBody();
+  setTimeout(() => {
+    const table = document.getElementById(`${kind}-patch-table`);
+    const btn = table?.querySelectorAll('.patch-move')[to]?.children[delta < 0 ? 0 : 1];
+    if (btn && !btn.disabled) btn.focus();
+  }, 0);
+}
+
 function savePatchSheet(showToastOnSave=true) {
+  const editingCell = document.activeElement?.closest?.('.patch-table');
   if (activePatchKind === 'video') {
     savePatchRows('video', collectPatchRows('video'));
     if (showToastOnSave) toast('Video patch sheet saved.');
@@ -18117,6 +18304,10 @@ function savePatchSheet(showToastOnSave=true) {
     savePatchRows('comms', collectPatchRows('comms'));
     if (showToastOnSave) toast('Audio and comms patch sheets saved.');
   }
+  // Saving drops all-blank rows and compacts indices — re-render so the DOM's
+  // data-patch-row indices line up with the stored array again (unless the user
+  // is mid-keystroke in a cell; the next idle refresh reconciles then).
+  if (!editingCell) pbRenderPatchBody();
 }
 
 function importPatchRows(kind, input) {
@@ -18131,8 +18322,26 @@ function importPatchRows(kind, input) {
       const headerCells = kind === 'comms' ? ['position','pos'] : ['label','name'];
       if (headerCells.includes(first)) lines.shift();
     }
+    // RFC-4180-aware split: spreadsheet exports quote any cell containing the
+    // delimiter ("Vocal, lead") and escape quotes by doubling them — a bare
+    // split(',') shears those cells apart and leaks stray quote characters.
+    const splitDelimited = (line, sep) => {
+      const cols = [];
+      let cur = '', inQ = false;
+      for (let c = 0; c < line.length; c++) {
+        const ch = line[c];
+        if (inQ) {
+          if (ch === '"') { if (line[c + 1] === '"') { cur += '"'; c++; } else inQ = false; }
+          else cur += ch;
+        } else if (ch === '"' && cur === '') inQ = true;
+        else if (ch === sep) { cols.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      cols.push(cur);
+      return cols.map(v => v.trim());
+    };
     const rows = lines.map(line => {
-      const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+      const cols = splitDelimited(line, line.includes('\t') ? '\t' : ',');
       if (kind === 'comms') return { position:cols[0]||'', out:cols[1]||'', gear:cols[2]||'', notes:cols.slice(3).join(', ')||'' };
       return { label:cols[0]||'', destination:cols[1]||'', source:cols[2]||'', cabling:cols[3]||'', notes:cols.slice(4).join(', ')||'' };
     });
@@ -18159,13 +18368,13 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
   savePatchSheet(false);
   if (kind === 'video') {
     showPaperPreview('Video Patch Sheet Preview', `
-      <h1>5. Video Patch Sheet</h1>
+      <h1>6. Video Patch Sheet</h1>
       ${patchTableHTML('video', 'Video Patch Sheet')}
     `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
     return;
   }
   showPaperPreview('Audio and Comms Patch Sheet Preview', `
-    <h1>6. Audio and Comms Patch Sheets</h1>
+    <h1>7. Audio and Comms Patch Sheets</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
@@ -18842,6 +19051,7 @@ function setSetupNotApplicable(isNA) {
 }
 function toggleSetupNotApplicable() {
   setSetupNotApplicable(!document.getElementById('ps-setup-na')?.classList.contains('on'));
+  pbNoteLocalEdit('ps-setup-na');   // hold the collab refresh off this toggle briefly
   paperworkDirty = true;
 }
 window.setSetupNotApplicable = setSetupNotApplicable;
@@ -19199,6 +19409,7 @@ window.addEventListener('popstate', () => {
     document.getElementById('rundown')?.classList.contains('on') ||
     document.getElementById('liveshow')?.classList.contains('on') ||
     document.getElementById('promptypus')?.classList.contains('on') ||
+    document.getElementById('outrangutan')?.classList.contains('on') ||
     document.getElementById('flowOp')?.classList.contains('on');
   if (!browserBackGuardReady || !inSession) return;
   if (!confirmSaveUnsavedPaperwork()) {

@@ -304,6 +304,7 @@
       const ok = result.ok !== false && result.accepted !== false;
       const detail = result.error || result.reason || result.detail || (ok ? 'Command acknowledged' : 'Command failed');
       if (!ok || pending?.kind !== 'preview') setDraftStatus(detail, ok ? 'ok' : 'error');
+      if (pending && (pending.kind === 'push' || pending.kind === 'clear')) toast(ok ? (pending.kind === 'push' ? 'Pushed to Flowmingo' : detail) : detail);
       return;
     }
 
@@ -842,6 +843,15 @@
     draftStatus.className = `draft-status${state ? ` is-${state}` : ''}`;
   }
 
+  function toast(msg, dur = 2500) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+    window.clearTimeout(el._t);
+    el._t = window.setTimeout(() => { el.style.display = 'none'; }, dur);
+  }
+
   function applyTheme(theme) {
     const normalized = normalizeTheme(theme);
     if (!normalized) return;
@@ -863,6 +873,8 @@
     window.clearInterval(heartbeatTimer);
     window.clearInterval(clockTimer);
     window.clearTimeout(draftTimer);
+    const toastElement = document.getElementById('toast');
+    if (toastElement) window.clearTimeout(toastElement._t);
     pendingIntents.forEach(entry => window.clearTimeout(entry.timer));
     pendingIntents.clear();
     if (protocol) {

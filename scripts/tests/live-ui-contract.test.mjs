@@ -31,7 +31,7 @@ test('selected and active are independent states with visible affordances', () =
   assert.match(app, /aria-selected="\$\{i === selectedIdx \? 'true' : 'false'\}"/);
   assert.match(app, /setLiveSelectedCue\(i, \{ reason:'live-row-selection' \}\)/);
   assert.match(app, /activateLiveRundownRow\(event,\$\{i\}\)/);
-  assert.match(html, /\.live-row-selected td/);
+  assert.match(html, /\.live-row-selected:not\(\.live-row-current\) td/);
   assert.match(html, /\.live-status\.now/);
 });
 
