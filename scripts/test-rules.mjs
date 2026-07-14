@@ -67,6 +67,14 @@ const session = {
 console.log(`Firestore rules contract · ${host} · ${project}`);
 
 allowed(await write('sessions/RULES1', session), 'Cueola creates session');
+allowed(await write('sessions/BOOTSTRAP1', {
+  code: 'BOOTSTRAP1', createdBy: 'Recovery Operator', showName: 'Recovered rehearsal', startTime: '',
+  beats: [{ id: 1, style: 'flex', info: 'Recovered open', cues: {} }],
+  rundownAliases: {}, customSources: {}, cues: [], freeMode: false,
+  activeIdx: 0, status: 'idle', participants: [],
+  prePro: { production: 'Recovered rehearsal' }, preProNotes: [], roleAssignments: [],
+  rundownUpdatedAt: 1, rundownUpdatedBy: 'Recovery Operator', createdAt: 1,
+}), 'explicit create or History recovery writes a complete session document');
 allowed(await request('sessions/RULES1'), 'Cueola/Flowmingo reads session');
 allowed(await request('sessions?pageSize=20'), 'dashboard lists sessions');
 allowed(await write('sessions/RULES1', { prompter: { text: 'Prompt-Up update' } }, ['prompter']), 'Prompt-Up updates prompter');

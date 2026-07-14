@@ -5160,7 +5160,7 @@ input.pt-range::-moz-range-thumb,
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="inst-name" type="text" placeholder='e.g. "Alex Director"' maxlength="40"></div>
     <div class="field"><label class="field-lbl">Show Name <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="inst-show" type="text" placeholder='e.g. "Campus News Week 12"' maxlength="60"></div>
     <div class="modal-err" id="inst-err">Please enter your name.</div>
-    <button class="btn-primary" onclick="createSession()">Create Session</button>
+    <button class="btn-primary" id="inst-create-btn" onclick="createSession()">Create Session</button>
     <button class="btn-secondary" onclick="hideModal('modal-inst')">Cancel</button>
   </div>
 </div>
@@ -5291,6 +5291,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-sub" id="sessionHistorySub">Local recovery snapshots for this session.</div>
     <div class="snap-list" id="sessionHistoryList" aria-live="polite"></div>
     <div class="modal-actions">
+      <button class="btn-secondary" id="sessionHistoryRestoreLocal" onclick="restoreCurrentLocalSessionToCloud()" hidden><span class="sf-symbol" data-symbol="action.repeat" aria-hidden="true"></span><span>Restore Current Local Copy</span></button>
       <button class="btn-secondary export-action" id="sessionHistoryExportAll" onclick="exportAllSessionSnapshots()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export All</span></button>
       <button class="btn-primary" onclick="hideModal('modal-session-history')">Done</button>
     </div>
@@ -5322,7 +5323,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=709c9634c5"></script>
+<script src="cueola-app.js?v=808880c00b"></script>
 <script src="outrangutan/outrangutan.js?v=f642cd1375"></script>
 
 <script type="module">

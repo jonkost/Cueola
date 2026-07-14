@@ -84,6 +84,76 @@ test('a missed Flowmingo heartbeat exposes a fresh-output recovery path', () => 
   assert.match(open, /_prompterRecoveryAnnounced = false/);
 });
 
+test('explicit create and ordinary join have separate Firestore authority', () => {
+  const create = app.slice(app.indexOf('async function createSession()'), app.indexOf('function enterAsInstructor'));
+  const createOnly = app.slice(app.indexOf('async function createSessionDocumentIfMissing'), app.indexOf('async function restoreMissingSessionDocument'));
+  const setup = app.slice(app.indexOf('function setupFirestore()'), app.indexOf('// ── P3: snapshot render gating'));
+  assert.match(create, /await createSessionDocumentIfMissing\(ref, payload\)/);
+  assert.match(createOnly, /const snap = await transaction\.get\(ref\)/);
+  assert.match(createOnly, /if \(snap\.exists\(\)\) return false/);
+  assert.match(createOnly, /transaction\.set\(ref, payload\)/);
+  assert.doesNotMatch(setup, /_setDoc\(|createSessionDocumentIfMissing\(/);
+});
+
+test('a missing or incomplete joined session fails closed without a partial write', () => {
+  const setup = app.slice(app.indexOf('function setupFirestore()'), app.indexOf('// ── P3: snapshot render gating'));
+  const flush = app.slice(app.indexOf('async function flushRundownSyncQueue()'), app.indexOf('function setupFirestore()'));
+  assert.match(setup, /if \(!snap\.exists\(\)\)[\s\S]*markSharedSessionUnavailable\('missing'\)/);
+  assert.match(setup, /!isCompleteRundownSessionDocument\(d\)[\s\S]*markSharedSessionUnavailable\('incomplete'\)/);
+  assert.match(flush, /if \(!snap\.exists\(\)\)[\s\S]*missingError\.code = 'not-found'/);
+  assert.match(flush, /!isCompleteRundownSessionDocument\(data\)[\s\S]*cueolaSessionAvailability = 'incomplete'/);
+  const missingGuard = flush.indexOf('if (!snap.exists())');
+  const incompleteGuard = flush.indexOf('if (!isCompleteRundownSessionDocument(data))');
+  const firstPatch = flush.indexOf('committedBeats = applyRundownBatch');
+  const write = flush.indexOf('transaction.update(ref, update)');
+  assert.ok(missingGuard >= 0 && incompleteGuard > missingGuard && firstPatch > incompleteGuard && write > firstPatch,
+    'missing and incomplete guards must both run before applying or writing a rundown batch');
+  assert.match(flush, /markSharedSessionUnavailable\(unavailableKind\)/);
+  assert.match(flush, /transaction\.update\(ref, update\)/);
+  assert.doesNotMatch(flush, /else transaction\.set/);
+});
+
+test('History recovery can explicitly recreate only durable session state', () => {
+  const payload = app.slice(app.indexOf('function buildSnapshotRecoveryPayload'), app.indexOf('async function createSessionDocumentIfMissing'));
+  const restore = app.slice(app.indexOf('async function restoreSessionSnapshot'), app.indexOf('// Save / open a rundown'));
+  for (const field of ['showName', 'startTime', 'beats', 'rundownAliases', 'customSources', 'cues', 'freeMode']) {
+    assert.match(payload, new RegExp(field));
+  }
+  for (const volatile of ['presence', 'prompter', 'outrangutan', 'showClock', 'forceCmd', 'kicked', 'movedTo']) {
+    assert.doesNotMatch(payload, new RegExp(`doc\\?\\.${volatile}`));
+  }
+  assert.match(restore, /await restoreMissingSessionDocument\(ref, recoveryPayload\)/);
+  assert.match(restore, /if \(recreatedSession\)[\s\S]*rundownPendingBatches\.length = 0/);
+});
+
+test('a missing session exposes confirmed recovery of the current local copy', () => {
+  const current = app.slice(app.indexOf('function buildCurrentLocalRecoveryPayload'), app.indexOf('async function restoreSessionSnapshot'));
+  assert.match(html, /id="sessionHistoryRestoreLocal"[^>]*onclick="restoreCurrentLocalSessionToCloud\(\)"[^>]*hidden/);
+  assert.match(current, /showName:show\.name/);
+  assert.match(current, /beats,/);
+  assert.match(current, /rundownAliases,/);
+  assert.match(current, /customSources:sessionCustomSources/);
+  assert.match(current, /loadPreProData\(\)/);
+  assert.match(current, /localPlandaBearNotes\(\)/);
+  assert.match(current, /await restoreMissingSessionDocument\(ref, payload\)/);
+  assert.match(current, /if \(!confirm\(/);
+  for (const volatile of ['presence', 'prompter', 'outrangutan', 'showClock', 'forceCmd']) {
+    assert.doesNotMatch(current, new RegExp(`${volatile}:`));
+  }
+});
+
+test('cloud retry performs a server probe and local recovery keeps aliases', () => {
+  const retry = app.slice(app.indexOf('async function recoverLiveSubsystem'), app.indexOf('function liveSessionState'));
+  const probe = app.slice(app.indexOf('async function probeSharedSessionAuthority'), app.indexOf('function nextBeatId'));
+  const draft = app.slice(app.indexOf('function saveLocalDraft'), app.indexOf('// ── Local session snapshot history'));
+  const autoJoin = app.slice(app.indexOf("const doJoin = () => {"), app.indexOf('waitForFirebaseReady().then(ready => {', app.indexOf("const doJoin = () => {")));
+  assert.match(retry, /await probeSharedSessionAuthority\(\)/);
+  assert.match(probe, /window\._getDocFromServer/);
+  assert.match(draft, /rundownAliases/);
+  assert.match(draft, /fingerprint === localDraftLastFingerprint/);
+  assert.match(autoJoin, /restoreLocalDraftAsRundownBaseline\(\)/);
+});
+
 test('drawer and drag handles are safe for pointer and keyboard operation', () => {
   assert.match(html, /id="lsSidebarScrim"/);
   assert.match(html, /id="lsResizer"[^>]*onkeydown="resizeLivePanelByKey\(event\)"[^>]*role="separator"/);

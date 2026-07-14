@@ -1060,6 +1060,37 @@ The repair will expose **Recover Flowmingo** for a recovering prompter, close an
 
 Repair completed: a recovering prompter now exposes **Recover Flowmingo**, and deliberate recovery calls `openFlowmingoTalentWindow({ replace:true })`. Replacement closes and clears the stale window, endpoint identity, heartbeat, and handshake record before opening a fresh talent endpoint. The exact current asset `cueola-app.js?v=709c9634c5` was then exercised live: the stalled endpoint exposed the recovery control, activating it moved the rail to **Opening Flowmingo output**, and a fresh controlled talent tab restored `READY · STAB26` before returning to **Talent scrolling**. This is an operator-owned replacement through the existing protocol rather than a focus-only retry.
 
+### Integrated Defect 3 — Fresh-Emulator Rundown Loss (Documented Before Repair)
+
+Reproduction after the Firestore rules contract passed and a fresh long-running emulator started on `127.0.0.1:8080`:
+
+1. Keep the already loaded instructor tab on the cached `STAB26` rehearsal. It still renders **Cueola STAB26 Live Rehearsal**, row 23 of 24, while the cloud rail truthfully reports **Reconnecting — showing last confirmed state**.
+2. Choose **Retry cloud sync** and wait for the newly available emulator. The Firebase connection initializes successfully, but the cached rundown has no staged rundown batch, so `syncToFirestore()` returns without writing it.
+3. Reload the same instructor URL with `?firestoreEmulator=1&code=STAB26`.
+4. `setupFirestore()` finds that `sessions/STAB26` does not exist and writes a metadata-only document containing `code`, `createdBy`, `showName`, `startTime`, `freeMode`, and `createdAt`.
+5. The first server snapshot is then adopted as authoritative. Because that document has no `beats` and was created from boot defaults, the interface reports **Cloud sync connected · STAB26**, **Untitled Show**, and zero rows.
+
+State ownership at the failure boundary:
+
+| State | Intended authority | Observed owner during failure |
+| --- | --- | --- |
+| Existing shared session document | Firestore server snapshot | Correctly absent in the fresh emulator |
+| Recoverable local rundown before first server document exists | Current loaded session/draft, pending an explicit bootstrap decision | Rendered in memory, but already equal to `rundownShadowBeats`, so no transaction batch is generated |
+| First authoritative session document | One complete, instructor-created bootstrap write | Metadata-only `_setDoc` from boot defaults |
+| State adopted after server confirmation | Complete Firestore session document | Incomplete bootstrap document becomes authoritative and projects zero rows |
+
+Root cause and first incorrect transition: recovery/rejoin and first-time server creation share `setupFirestore()` without an explicit bootstrap transaction. The missing-document branch writes an incomplete document from mutable boot state, while the ordinary collaborative queue only writes differences from the local shadow. An intact locally loaded rundown can therefore produce no batch, and the metadata-only create becomes the first server authority. The first incorrect transition is that incomplete creation write—not the emulator, listener metadata, cached snapshot, or later render.
+
+The repair will make missing-session creation one atomic, complete bootstrap operation based on a captured current session payload; it will never overwrite an existing document. The snapshot listener will wait for that decision rather than promoting a metadata-only document, and a focused contract will pin the complete payload and create-only transaction behavior. Because the already restarted emulator has no persisted `STAB26` export, recovery of this particular QA fixture will use Cueola's documented local Session History UI if an intact snapshot remains; no rehearsal data will be silently manufactured.
+
+Repair completed: session role no longer doubles as create permission. The explicit **Create Session** action now performs a create-only Firestore transaction with a complete rundown document; URL, Dashboard, resume, and ordinary join paths install only the listener and never create missing authority. A missing or incomplete server snapshot preserves the per-code local draft, displays a persistent recovery instruction, and blocks both the ordinary rundown transaction and the optimistic cloud-success projection. **Retry cloud sync** now performs a real server read even when networking is already enabled.
+
+Snapshot recovery can recreate a missing or incomplete document only after the existing confirmation. Recovery payloads include show metadata, rundown rows/aliases, custom sources, cues, and the existing restorable paperwork allowlist, while deliberately resetting or excluding presence, participants, active cue, Live status, prompter/playout transport, clocks, commands, kicks/moves, and heartbeats. The same History sheet now exposes **Restore Current Local Copy** when the server session is missing or incomplete; that separate confirmed action recovers the displayed rundown plus locally saved Planda Bear data and production notes.
+
+The live reproduction exposed an additional fixture-retention fact before recovery: all 20 IndexedDB History slots had rolled over to zero-row authoritative snapshots, but the separate per-code local draft still held **Cueola STAB26 Live Rehearsal**, all 24 rows, six script cues, and all six playback references. The repaired build rejected the incomplete server document, rendered those 24 local rows with an explicit error, then recreated `STAB26` through **Restore Current Local Copy**. A full reload returned **Cloud sync connected · STAB26**, the same show identity, and 24 rows. Live preflight received a 51 ms server acknowledgment; Live then rendered row 1 of 24 with the Saved state rail reporting the same connected session. The current-build console contained zero warnings or errors, and the visual proof was captured from the restored Live surface.
+
+This repair does not pretend that a root-session recovery recreates unrelated Firestore collections or device-local media. The fresh emulator still lacks the four canonical profile documents and assignment subcollection records, and Outrangutan's IndexedDB blobs remain workstation-local. That changes later Phase 10 setup: an emulator export/import or deterministic seed must exist before deliberately restarting authority; root Session History alone is not a complete integrated fixture backup.
+
 ### Integrated Rehearsal Results (2026-07-14)
 
 | Step | Result | Observation |
@@ -1067,7 +1098,7 @@ Repair completed: a recovering prompter now exposes **Recover Flowmingo**, and d
 | 1. Open QA production | Pass | Opened cached shared production `STAB26` as instructor with the expected 24 rundown rows. |
 | 2. Assign students | Partial | Four cached student assignments rendered. **Save Assignments** failed closed because only the offline cache was available; no server-confirmed write is claimed. |
 | 3. Attach paperwork | Partial | Cached assignment and paperwork requirements rendered for the four profiles, but the unreachable Firestore authority prevented a fresh server-confirmed attachment transaction. |
-| 4. Reload the app | Pass locally | Reload restored the same instructor identity, production, and 24-row rundown from the cached fixture. |
+| 4. Reload the app | Pass against restored emulator authority | After the Defect 3 repair and confirmed local-copy recovery, a full reload returned **Cloud sync connected · STAB26**, the same instructor production, and all 24 rows. |
 | 5. Confirm assignments remain | Blocked authoritatively | Cached values remained, but the plan requires persistence across the shared server boundary; the configured emulator/rules target was unavailable. |
 | 6. Sign in as a student | Pass locally | Opened Avery's student portal from the cached identity. The portal visibly labeled the profile and session as offline/out of date. |
 | 7. Confirm student assignments | Partial | The expected cached assignment rendered, while assignment and paperwork freshness were explicitly reported as not checked offline. |
@@ -1088,7 +1119,7 @@ Repair completed: a recovering prompter now exposes **Recover Flowmingo**, and d
 | 22. Confirm synchronization | Partial | Flowmingo and Script Operator resynchronized locally after replacement/re-entry. Server-confirmed assignment, export, and playback-session synchronization remained blocked. |
 | 23. Exit Live mode | Pass | Used **Return to Rundown** after the cue run; active commands froze through the Phase 5 exit transaction. |
 | 24. Return to rundown | Pass locally | Builder restored the 24-row rundown and reported saved locally/cloud sync pending. |
-| 25. Confirm no data loss | Partial | Production name, role, all 24 rows, and cue position survived the local exit/re-entry cycle. Shared-authority persistence could not be confirmed. |
+| 25. Confirm no data loss | Pass for root session; profile fixture partial | Production name, role, and all 24 rows survived recovery and a fresh server-backed reload. The restarted emulator had no export for the separate profile/assignment collections, so their earlier records are not claimed as recovered. |
 | 26. Export paperwork | Blocked safely | **Preview Package** refused stale cached state with `Package preview blocked: Assignments is still loading its saved state.` This is the intended fail-closed behavior, not a completed formal export. Evidence: `/private/tmp/cueola-phase10-export-blocked.png`. |
 | 27. Verify Stream Deck labels | Partial | The integrated MK.2 simulator rendered 15 keys with key 1 mapped to GO, and the Phase 9 XL proof covers all supported positions. Evidence: `/private/tmp/cueola-phase10-stream-deck.png` and `/Users/jonkost/Downloads/cueola-stream-deck-orientation-006c.png`. Physical LCD verification remains blocked without hardware. |
 | 28. Re-enter Live mode | Pass | Re-entry preserved row 22 as the active boundary and row 23 as next; a subsequent GO moved exactly once to row 23. |

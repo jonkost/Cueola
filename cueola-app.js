@@ -229,7 +229,8 @@ async function recoverLiveSubsystem(name) {
     setSyncReconnecting(true);
     try {
       if (typeof window._enableNetwork === 'function') await window._enableNetwork();
-      syncToFirestore();
+      const authoritative = await probeSharedSessionAuthority();
+      if (authoritative) syncToFirestore();
     } catch (error) {
       setCloudSyncState('error', firebaseConnectionLabel(error, 'Cloud sync recovery failed'));
       containError('Cloud sync recovery', error);
@@ -471,6 +472,8 @@ let pnTargetBeatId = null;
 let pnFilterTag = 'all';
 
 const LOCAL_DRAFT_PREFIX = 'cueola_local_draft_';
+let localDraftLastKey = '';
+let localDraftLastFingerprint = '';
 
 function localDraftKey() {
   if (session.isDemo) return '';
@@ -482,13 +485,18 @@ function saveLocalDraft() {
   const key = localDraftKey();
   if (!key) return;
   try {
-    localStorage.setItem(key, JSON.stringify({
+    const content = {
       show:{ ...show, start:normalizeTimeValue(show.start) },
       beats,
+      rundownAliases,
       customSources: sessionCustomSources,
       freeTextMode,
-      updatedAt: Date.now(),
-    }));
+    };
+    const fingerprint = JSON.stringify(content);
+    if (key === localDraftLastKey && fingerprint === localDraftLastFingerprint) return;
+    localStorage.setItem(key, JSON.stringify({ ...content, updatedAt:Date.now() }));
+    localDraftLastKey = key;
+    localDraftLastFingerprint = fingerprint;
   } catch {}
 }
 
@@ -505,8 +513,19 @@ function restoreLocalDraft() {
       start: normalizeTimeValue(draft.show?.start),
     };
     beats = draft.beats.map(migrateBeat);
+    rundownAliases = draft.rundownAliases && typeof draft.rundownAliases === 'object'
+      ? cloneRundownValue(draft.rundownAliases)
+      : {};
     sessionCustomSources = draft.customSources || {};
     freeTextMode = Boolean(draft.freeTextMode);
+    localDraftLastKey = key;
+    localDraftLastFingerprint = JSON.stringify({
+      show:{ ...show, start:normalizeTimeValue(show.start) },
+      beats,
+      rundownAliases,
+      customSources:sessionCustomSources,
+      freeTextMode,
+    });
     return true;
   } catch {
     return false;
@@ -650,7 +669,12 @@ async function openSessionHistory() {
   const sub = document.getElementById('sessionHistorySub');
   list.innerHTML = '<div class="snap-empty">Loading local recovery snapshots…</div>';
   const records = await sessionHistoryList();
-  sub.textContent = `${records.length} of ${SESSION_HISTORY_LIMIT} local recovery snapshots · newest first`;
+  const canRestoreLocal = Boolean(rundownSyncBlockedMissing && session.role === 'instructor' && session.code);
+  sub.textContent = canRestoreLocal
+    ? `${records.length} of ${SESSION_HISTORY_LIMIT} snapshots · current local copy has ${beats.length} row${beats.length === 1 ? '' : 's'}`
+    : `${records.length} of ${SESSION_HISTORY_LIMIT} local recovery snapshots · newest first`;
+  const restoreLocal = document.getElementById('sessionHistoryRestoreLocal');
+  if (restoreLocal) restoreLocal.hidden = !canRestoreLocal;
   document.getElementById('sessionHistoryExportAll').disabled = !records.length;
   list.innerHTML = records.length ? records.map(record => `
     <div class="snap-row">
@@ -689,20 +713,104 @@ async function exportAllSessionSnapshots() {
   toast('Session history exported.');
 }
 
+function buildCurrentLocalRecoveryPayload() {
+  const payload = buildSessionBootstrapPayload({
+    code:session.code,
+    createdBy:session.userName,
+    showName:show.name,
+    startTime:show.start,
+    beats,
+    rundownAliases,
+    customSources:sessionCustomSources,
+    cues:[],
+    freeMode:freeTextMode,
+    createdAt:window._serverTimestamp(),
+  });
+  const prePro = loadPreProData();
+  if (prePro && typeof prePro === 'object' && Object.keys(prePro).length) {
+    payload.prePro = cloneRundownValue(prePro);
+    if (Array.isArray(prePro.roleAssignments)) payload.roleAssignments = cloneRundownValue(prePro.roleAssignments);
+  }
+  const localNotes = localPlandaBearNotes();
+  if (localNotes.length) payload.preProNotes = cloneRundownValue(localNotes);
+  payload.rundownUpdatedAt = Date.now();
+  payload.rundownUpdatedBy = session.userName || 'Cueola operator';
+  return payload;
+}
+
+async function restoreCurrentLocalSessionToCloud() {
+  if (!window._firebaseReady || !session.code || session.role !== 'instructor') return;
+  if (!confirm(`Restore the current local copy of ${session.code} to the cloud?\n\nThis will recreate a missing or incomplete session with ${beats.length} rundown row${beats.length === 1 ? '' : 's'} and locally saved Planda Bear content. Live presence, clocks, commands, and device heartbeats are never restored.`)) return;
+  const button = document.getElementById('sessionHistoryRestoreLocal');
+  if (button) button.disabled = true;
+  try {
+    const ref = window._doc(window._db, 'sessions', session.code);
+    const payload = buildCurrentLocalRecoveryPayload();
+    const restored = await restoreMissingSessionDocument(ref, payload);
+    if (!restored) {
+      toast('A complete server copy now exists. Reload it before choosing what to keep.', 6000);
+      return;
+    }
+    rundownPendingBatches.length = 0;
+    rundownSyncBlockedMissing = false;
+    rundownCloudBeats = cloneRundownValue(beats);
+    rundownShadowBeats = cloneRundownValue(beats);
+    rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+    missingSessionNoticeCode = '';
+    setSyncReconnecting(false);
+    setCloudSyncState('synced', `Cloud session restored · ${session.code}`);
+    saveLocalDraft();
+    hideModal('modal-session-history');
+    joinPresence();
+    toast(`Restored ${session.code} from this browser's local copy.`);
+  } catch (err) {
+    reportCloudWriteFailure('Local session recovery', err);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function restoreSessionSnapshot(id) {
   const record = await getSessionSnapshotRecord(id);
   if (!record) { toast('Snapshot not found.'); return; }
   if (!confirm(`Restore the ${new Date(record.createdAt).toLocaleString()} snapshot?\n\nCurrent rundown content will be replaced through normal cloud sync. A recovery copy of the current session will be saved first.`)) return;
   await captureSessionSnapshot('interval', true);
   const doc = await decodeSessionSnapshot(record);
+  const sharedCloud = window._firebaseReady && session.code && !session.isDemo && !session.isExpert;
+  let recreatedSession = false;
+  if (sharedCloud) {
+    try {
+      const ref = window._doc(window._db,'sessions',session.code);
+      const recoveryPayload = buildSnapshotRecoveryPayload(doc);
+      recreatedSession = await restoreMissingSessionDocument(ref, recoveryPayload);
+    } catch (err) {
+      reportCloudWriteFailure('Snapshot restore', err);
+      return;
+    }
+  }
   beats = (Array.isArray(doc.beats) ? doc.beats : []).map(migrateBeat);
   show.name = doc.showName || 'Untitled Show';
   show.start = normalizeTimeValue(doc.startTime);
   freeTextMode = Boolean(doc.freeMode);
   sessionCustomSources = doc.customSources || {};
+  rundownAliases = doc.rundownAliases && typeof doc.rundownAliases === 'object'
+    ? cloneRundownValue(doc.rundownAliases)
+    : {};
   renderRundown();
-  syncToFirestore();
-  if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
+  if (recreatedSession) {
+    rundownPendingBatches.length = 0;
+    rundownSyncBlockedMissing = false;
+    rundownCloudBeats = cloneRundownValue(beats);
+    rundownShadowBeats = cloneRundownValue(beats);
+    rundownShadowShow = { name:show.name, start:show.start, freeMode:freeTextMode };
+    missingSessionNoticeCode = '';
+    setSyncReconnecting(false);
+    setCloudSyncState('synced', `Cloud session restored · ${session.code}`);
+    saveLocalDraft();
+  } else {
+    syncToFirestore();
+  }
+  if (sharedCloud && !recreatedSession) {
     const updates = {};
     SESSION_RESTORABLE_FIELDS.forEach(field => { updates[field] = doc[field] === undefined ? window._deleteField() : cloneRundownValue(doc[field]); });
     try { await window._updateDoc(window._doc(window._db,'sessions',session.code), updates); }
@@ -979,6 +1087,7 @@ function resumeLastSession() {
   };
   freeTextMode = false;
   rememberLastSession(r.code, r.name);
+  restoreLocalDraftAsRundownBaseline();
   if (Number.isFinite(r.lsIdx)) setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue' });
   // The rundown arrives async (cloud snapshot / local draft) — goLive()'s clamp
   // would zero the restored row on a still-empty list. Re-assert it once the
@@ -3543,6 +3652,7 @@ let rundownAliases = {};
 let rundownPendingBatches = [];
 let rundownSyncRunning = false;
 let rundownSyncRetryTimer = null;
+let rundownSyncBlockedMissing = false;
 let beatIdSequence = 0;
 const RUNDOWN_HISTORY_LIMIT = 50;
 let rundownUndoStack = [];
@@ -3551,6 +3661,15 @@ const rundownLocalBatchIds = new Set();
 let rundownLastSeenBatchId = '';
 let rundownHistoryReplay = false;
 let rundownHistorySessionCode = '';
+let missingSessionNoticeCode = '';
+
+function restoreLocalDraftAsRundownBaseline() {
+  if (!restoreLocalDraft()) return false;
+  rundownCloudBeats = [];
+  rundownShadowBeats = cloneRundownValue(beats);
+  rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+  return true;
+}
 
 function genCode() {
   const d = new Date();
@@ -3592,7 +3711,7 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
   beats = [];
   freeTextMode = true;
   rememberLastSession(session.code, session.userName);
-  restoreLocalDraft();
+  restoreLocalDraftAsRundownBaseline();
   enterRundown();
   toast('Opened local copy. Shared sync is unavailable while offline.');
 }
@@ -3617,17 +3736,61 @@ function openLocalPlandaBear(code='', name='You') {
   }
 }
 
-function createSession() {
+async function createSession() {
   const name = document.getElementById('inst-name').value.trim();
   const showName = document.getElementById('inst-show').value.trim();
-  if (!name) { document.getElementById('inst-err').classList.add('on'); return; }
-  document.getElementById('inst-err').classList.remove('on');
-  session = sessionWithProfileIdentity({ code:genCode(), role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
-  show.name = showName||'Untitled Show';
-  freeTextMode = false;
-  document.getElementById('code-display-val').textContent = session.code;
-  hideModal('modal-inst');
-  showModal('modal-code');
+  const err = document.getElementById('inst-err');
+  const btn = document.getElementById('inst-create-btn');
+  if (!name) {
+    err.textContent = 'Please enter your name.';
+    err.classList.add('on');
+    return;
+  }
+  err.classList.remove('on');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+  const ready = await waitForFirebaseReady();
+  if (!ready) {
+    err.textContent = 'Cueola cloud did not finish loading. Check the connection and try again.';
+    err.classList.add('on');
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Session'; }
+    return;
+  }
+  try {
+    let code = '';
+    let created = false;
+    for (let attempt = 0; attempt < 12 && !created; attempt++) {
+      code = genCode();
+      const ref = window._doc(window._db, 'sessions', code);
+      const payload = buildSessionBootstrapPayload({
+        code,
+        createdBy:name,
+        showName:showName || 'Untitled Show',
+        startTime:'',
+        beats:[],
+        rundownAliases:{},
+        customSources:{},
+        cues:[],
+        freeMode:false,
+        createdAt:window._serverTimestamp(),
+      });
+      created = await createSessionDocumentIfMissing(ref, payload);
+    }
+    if (!created) throw new Error('No unused session code was available.');
+    session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
+    show = { name:showName || 'Untitled Show', start:'' };
+    beats = [];
+    rundownAliases = {};
+    sessionCustomSources = {};
+    freeTextMode = false;
+    document.getElementById('code-display-val').textContent = session.code;
+    hideModal('modal-inst');
+    showModal('modal-code');
+  } catch (createErr) {
+    err.textContent = firebaseConnectionHint(createErr);
+    err.classList.add('on');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Session'; }
+  }
 }
 
 function enterAsInstructor() {
@@ -3819,7 +3982,7 @@ function loadExpert() {
   show = { name:'Untitled Show', start:'' };
   beats = [];
   freeTextMode = true;
-  restoreLocalDraft();
+  restoreLocalDraftAsRundownBaseline();
   enterRundown();
 }
 
@@ -3939,8 +4102,8 @@ function enterRundown() {
     document.getElementById('topCode').textContent = session.code;
     document.getElementById('roleTag').textContent = session.role==='instructor'?'INST':'STU';
     document.getElementById('roleTag').className = `role-badge ${session.role==='instructor'?'role-inst':'role-stud'}`;
-    setCloudSyncState(session.isDemo ? 'local' : (window._firebaseReady ? 'synced' : 'saving'),
-      session.isDemo ? 'Demo mode: same-browser sync only.' : (window._firebaseReady ? `Cloud sync ready · ${session.code}` : 'Connecting to cloud sync...'));
+    setCloudSyncState(session.isDemo ? 'local' : 'saving',
+      session.isDemo ? 'Demo mode: same-browser sync only.' : (window._firebaseReady ? `Confirming cloud session · ${session.code}` : 'Connecting to cloud sync...'));
   } else {
     badge.style.display='none';
     setCloudSyncState('off', 'No shared session code.');
@@ -3963,6 +4126,112 @@ function cloneRundownValue(value) {
 
 function rundownValueEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function isCompleteRundownSessionDocument(data) {
+  return Boolean(data && typeof data === 'object' && Array.isArray(data.beats));
+}
+
+function buildSessionBootstrapPayload(source={}) {
+  const sourceShowName = String(source.showName || '').trim();
+  const sourceCreatedBy = String(source.createdBy || '').trim();
+  const sourceAliases = source.rundownAliases && typeof source.rundownAliases === 'object'
+    ? source.rundownAliases
+    : {};
+  const sourceCustomSources = source.customSources && typeof source.customSources === 'object'
+    ? source.customSources
+    : {};
+  const payload = {
+    code:String(source.code || '').trim().toUpperCase(),
+    createdBy:sourceCreatedBy || 'Cueola operator',
+    showName:sourceShowName || 'Untitled Show',
+    startTime:normalizeTimeValue(source.startTime),
+    beats:cloneRundownValue(Array.isArray(source.beats) ? source.beats : []),
+    rundownAliases:cloneRundownValue(sourceAliases),
+    customSources:cloneRundownValue(sourceCustomSources),
+    cues:cloneRundownValue(Array.isArray(source.cues) ? source.cues : []),
+    freeMode:Boolean(source.freeMode),
+    activeIdx:0,
+    status:'idle',
+    participants:[],
+  };
+  if (source.createdAt !== undefined) payload.createdAt = source.createdAt;
+  return payload;
+}
+
+function buildSnapshotRecoveryPayload(doc) {
+  const payload = buildSessionBootstrapPayload({
+    code:session.code,
+    createdBy:session.userName,
+    showName:doc?.showName,
+    startTime:doc?.startTime,
+    beats:doc?.beats,
+    rundownAliases:doc?.rundownAliases,
+    customSources:doc?.customSources,
+    cues:doc?.cues,
+    freeMode:doc?.freeMode,
+    createdAt:window._serverTimestamp(),
+  });
+  SESSION_RESTORABLE_FIELDS.forEach(field => {
+    if (doc?.[field] !== undefined) payload[field] = cloneRundownValue(doc[field]);
+  });
+  payload.rundownUpdatedAt = Date.now();
+  payload.rundownUpdatedBy = session.userName || 'Cueola operator';
+  return payload;
+}
+
+async function createSessionDocumentIfMissing(ref, payload) {
+  if (!window._runTransaction) throw new Error('Firestore transaction support is unavailable.');
+  return window._runTransaction(window._db, async transaction => {
+    const snap = await transaction.get(ref);
+    if (snap.exists()) return false;
+    transaction.set(ref, payload);
+    return true;
+  });
+}
+
+async function restoreMissingSessionDocument(ref, payload) {
+  if (!window._runTransaction) throw new Error('Firestore transaction support is unavailable.');
+  return window._runTransaction(window._db, async transaction => {
+    const snap = await transaction.get(ref);
+    if (snap.exists() && isCompleteRundownSessionDocument(snap.data())) return false;
+    transaction.set(ref, payload);
+    return true;
+  });
+}
+
+function markSharedSessionUnavailable(kind='missing') {
+  const incomplete = kind === 'incomplete';
+  rundownSyncBlockedMissing = true;
+  const detail = incomplete
+    ? `Session ${session.code} is incomplete on the server. Local recovery copy kept; use Settings → File → History to restore it.`
+    : `Session ${session.code} was not found on the server. Local recovery copy kept; use Settings → File → History to restore it.`;
+  setSyncReconnecting(false, `Cloud server reached; session ${session.code} is ${incomplete ? 'incomplete' : 'missing'}`);
+  setCloudSyncState('error', detail);
+  if (missingSessionNoticeCode !== `${session.code}:${kind}`) {
+    missingSessionNoticeCode = `${session.code}:${kind}`;
+    logShow('sync', detail);
+    toast(detail, 7000);
+  }
+}
+
+async function probeSharedSessionAuthority() {
+  if (!window._getDocFromServer || !session.code) return null;
+  const snap = await window._getDocFromServer(window._doc(window._db, 'sessions', session.code));
+  if (!snap.exists()) {
+    markSharedSessionUnavailable('missing');
+    return null;
+  }
+  if (!isCompleteRundownSessionDocument(snap.data())) {
+    markSharedSessionUnavailable('incomplete');
+    return null;
+  }
+  missingSessionNoticeCode = '';
+  rundownSyncBlockedMissing = false;
+  setSyncReconnecting(false);
+  setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
+  if (rundownPendingBatches.length) flushRundownSyncQueue();
+  return snap;
 }
 
 function nextBeatId() {
@@ -4193,7 +4462,7 @@ function projectPendingRundownBatches(remoteBeats) {
 }
 
 async function flushRundownSyncQueue() {
-  if (rundownSyncRunning || !rundownPendingBatches.length || !window._runTransaction) return;
+  if (rundownSyncRunning || rundownSyncBlockedMissing || !rundownPendingBatches.length || !window._runTransaction) return;
   rundownSyncRunning = true;
   clearTimeout(rundownSyncRetryTimer);
   rundownSyncRetryTimer = null;
@@ -4205,7 +4474,18 @@ async function flushRundownSyncQueue() {
     let committedAliases = null;
     await window._runTransaction(window._db, async transaction => {
       const snap = await transaction.get(ref);
-      const data = snap.exists() ? (snap.data() || {}) : {};
+      if (!snap.exists()) {
+        const missingError = new Error(`Session ${targetSessionCode} was not found on the server.`);
+        missingError.code = 'not-found';
+        missingError.cueolaSessionAvailability = 'missing';
+        throw missingError;
+      }
+      const data = snap.data() || {};
+      if (!isCompleteRundownSessionDocument(data)) {
+        const incompleteError = new Error(`Session ${targetSessionCode} is incomplete on the server.`);
+        incompleteError.cueolaSessionAvailability = 'incomplete';
+        throw incompleteError;
+      }
       const mergedAliases = { ...(data.rundownAliases || {}) };
       committedBeats = applyRundownBatch(Array.isArray(data.beats) ? data.beats : [], batch, mergedAliases, mergedAliases);
       committedAliases = mergedAliases;
@@ -4217,8 +4497,7 @@ async function flushRundownSyncQueue() {
         rundownUpdatedBy: batch.by,
         rundownBatchId: batch.id,
       };
-      if (snap.exists()) transaction.update(ref, update);
-      else transaction.set(ref, { code:targetSessionCode, ...update }, { merge:true });
+      transaction.update(ref, update);
     });
     const batchIndex = rundownPendingBatches.findIndex(item => item.id === batch.id);
     if (batchIndex >= 0) rundownPendingBatches.splice(batchIndex, 1);
@@ -4232,6 +4511,11 @@ async function flushRundownSyncQueue() {
       setCloudSyncState('synced', `Cloud sync saved · ${targetSessionCode}`);
     }
   } catch (err) {
+    const unavailableKind = err?.cueolaSessionAvailability || (err?.code === 'not-found' ? 'missing' : '');
+    if (unavailableKind) {
+      markSharedSessionUnavailable(unavailableKind);
+      return;
+    }
     reportCloudWriteFailure('Rundown cloud save', err);
     clearTimeout(rundownSyncRetryTimer);
     rundownSyncRetryTimer = setTimeout(() => {
@@ -4252,6 +4536,7 @@ function setupFirestore() {
       rundownRedoStack = [];
       rundownLocalBatchIds.clear();
       rundownLastSeenBatchId = '';
+      rundownSyncBlockedMissing = false;
       sessionSnapshotLastAt = 0;
       sessionSnapshotLatestDoc = null;
       sessionSnapshotPendingForceReason = '';
@@ -4260,34 +4545,28 @@ function setupFirestore() {
     pbStartNotesListener();   // per-note live push (resets itself on session change)
     const ref = window._doc(window._db,'sessions',session.code);
 
-    if (session.role==='instructor') {
-      // Seed the session doc only when it doesn't exist yet — an instructor
-      // REJOINING must never overwrite the live showName/startTime/freeMode
-      // with this device's boot defaults (the snapshot below adopts cloud state).
-      window._getDoc(ref).then(snap => {
-        if (snap.exists()) return;
-        return window._setDoc(ref,{
-          code:session.code, createdBy:session.userName,
-          showName:show.name, startTime:normalizeTimeValue(show.start),
-          freeMode:freeTextMode,
-          createdAt:window._serverTimestamp()
-        },{merge:true});
-      }).catch(err => reportCloudWriteFailure('Session cloud setup', err));
-    }
-
     // includeMetadataChanges: with the persistent cache, coming back online can
     // deliver a metadata-only transition (fromCache→server, ack of a queued
     // write) with no data change — without it the RECONNECTING chip never
     // clears after an idle offline stretch.
     firestoreUnsub = window._onSnapshot(ref, { includeMetadataChanges: true }, snap => {
-      if (!snap.exists()) return;
+      if (!snap.exists()) {
+        if (!snap.metadata?.fromCache) markSharedSessionUnavailable('missing');
+        return;
+      }
+      const d = snap.data() || {};
+      if (!isCompleteRundownSessionDocument(d)) {
+        if (!snap.metadata?.fromCache) markSharedSessionUnavailable('incomplete');
+        return;
+      }
+      rundownSyncBlockedMissing = false;
+      missingSessionNoticeCode = '';
       // Only a server-confirmed snapshot may claim "connected"; a cached one
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
       const snapMeta = snap.metadata || {};
       if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Cloud sync saving changes...');
       else if (!snapMeta.fromCache) setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
-      const d = snap.data();
       try {
         sessionSnapshotLatestDoc = JSON.parse(JSON.stringify(d));
         captureSessionSnapshot(sessionSnapshotLastAt ? 'interval' : 'joined');
@@ -4334,6 +4613,7 @@ function setupFirestore() {
         rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
       }
       if (d.customSources) sessionCustomSources = d.customSources;
+      saveLocalDraft();
       if (d.prePro && typeof d.prePro === 'object') {
         try { mergePreProFromCloud(d.prePro); } catch {}
       }
@@ -4415,6 +4695,7 @@ function setupFirestore() {
       // of the AVT "Questions" blanking/flash and main-thread flooding.
       renderRundownIfChanged(d);
       noteSnapshotArrived(snap);
+      if (rundownPendingBatches.length) flushRundownSyncQueue();
     }, err => reportCloudWriteFailure('Cloud listener', err));
   };
 
@@ -4466,13 +4747,13 @@ function noteSnapshotArrived(snap) {
   setSyncReconnecting(!!(snap && snap.metadata && snap.metadata.fromCache && !(snap.metadata.hasPendingWrites)));
 }
 let _syncReconnState = false;
-function setSyncReconnecting(on) {
+function setSyncReconnecting(on, restoredDetail='Cloud sync restored') {
   const chip = document.getElementById('ls-stat-sync');
   if (chip) chip.hidden = !on;
   if (on) setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
   if (on !== _syncReconnState) {   // P7: log only the transitions, not every snapshot
     _syncReconnState = on;
-    logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : 'Cloud sync restored');
+    logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : restoredDetail);
   }
   renderLiveStatusRail();
 }
@@ -4497,6 +4778,10 @@ function syncToFirestore() {
   rundownLocalBatchIds.add(batch.id);
   if (rundownLocalBatchIds.size > 100) rundownLocalBatchIds.delete(rundownLocalBatchIds.values().next().value);
   rundownPendingBatches.push(batch);
+  if (rundownSyncBlockedMissing) {
+    markSharedSessionUnavailable('missing');
+    return;
+  }
   setCloudSyncState('saving', 'Cloud sync saving changes...');
   flushRundownSyncQueue();
 }
@@ -18992,6 +19277,7 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
         isDemo:false, isExpert:false,
       }, name);
       freeTextMode = false;
+      restoreLocalDraftAsRundownBaseline();
       enterRundown();
       if (shouldOpenPrePro) setTimeout(openPaperworkHub, 700);
     } else {

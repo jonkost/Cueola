@@ -45,7 +45,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=709c9634c5',
+  'cueola-app.js?v=808880c00b',
   'outrangutan/outrangutan.css?v=900667494a',
   'outrangutan/outrangutan.js?v=f642cd1375',
 ];
