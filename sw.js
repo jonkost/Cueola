@@ -50,8 +50,8 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=e402c9625d',
-  'outrangutan/outrangutan.css?v=ea63806f81',
+  'cueola-app.js?v=89f7110bc6',
+  'outrangutan/outrangutan.css?v=d7acbd39c7',
   'outrangutan/outrangutan.js?v=72194eed1e',
 ];
 
@@ -62,7 +62,7 @@ const versionSignature = SHELL_ASSETS
 // Bumped for cache-policy OR page-HTML-only releases: the shell caches
 // index.html/dashboard.html, whose content never feeds versionSignature —
 // an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
-const WORKER_SCHEMA = '3';
+const WORKER_SCHEMA = '4';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
@@ -88,7 +88,8 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   // Firebase SDKs, Firestore, App Check, and the local emulator are different
   // origins and intentionally remain under their own networking/persistence.
-  if (url.origin !== self.location.origin || url.pathname.endsWith('/sw.js')) return;
+  // restore-p2607.html is a recovery utility that must never be shell-cached.
+  if (url.origin !== self.location.origin || url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/restore-p2607.html')) return;
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);

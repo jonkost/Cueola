@@ -791,6 +791,20 @@ async function restoreSessionSnapshot(id) {
   if (!confirm(`Restore the ${new Date(record.createdAt).toLocaleString()} snapshot?\n\nCurrent rundown content will be replaced through normal cloud sync. A recovery copy of the current session will be saved first.`)) return;
   await captureSessionSnapshot('interval', true);
   const doc = await decodeSessionSnapshot(record);
+  // Restored paperwork must WIN against every device's cached copy: re-stamp
+  // prePro as newest, else a stale-but-newer-stamped local mirror silently
+  // re-clobbers the restore within seconds (P2607 incident, 2026-07-15).
+  if (doc.prePro && typeof doc.prePro === 'object') {
+    const now = Date.now();
+    const restamped = cloneRundownValue(doc.prePro);
+    delete restamped._stamps;
+    restamped.updatedAt = now;
+    restamped._fieldUpdatedAt = {};
+    for (const k of Object.keys(restamped)) {
+      if (k !== 'updatedAt' && k !== '_fieldUpdatedAt' && k !== 'activeCallSheetIndex') restamped._fieldUpdatedAt[k] = now;
+    }
+    doc.prePro = restamped;
+  }
   const sharedCloud = window._firebaseReady && session.code && !session.isDemo && !session.isExpert;
   let recreatedSession = false;
   if (sharedCloud) {
@@ -13130,11 +13144,18 @@ function pbCollectionsToArrays(doc) {
   return out;
 }
 
+// Leaf-granular wire writes stay DARK until every client ships the engine:
+// a leaf-writing client puts map-shaped collections on the wire that the
+// deployed array-reading build cannot see, and mixed-version saves accumulate
+// orphan rows (P2607 incident, 2026-07-15). Flip to true only as part of a
+// coordinated deploy (with a WORKER_SCHEMA bump so cached clients refresh).
+window.CUEOLA_PB_LEAF_SYNC = false;
+
 function persistPreProData(patch, section) {
   const Sync = preProSyncEngine();
   const previous = loadPreProData();
   const now = Date.now();
-  if (!Sync) return persistPreProDataLegacy(previous, patch, section, now);
+  if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) return persistPreProDataLegacy(previous, patch, section, now);
   const nextRaw = pbAdoptRowIdentity(previous, { ...previous, ...(patch || {}) });
   delete nextRaw.activeCallSheetIndex; // selected sheet is device-local, never shared
   const prevNorm = Sync.normalizeDoc(previous).doc;
@@ -13264,7 +13285,13 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
 function mergePreProFromCloud(server, recoverNewerLocal=false) {
   if (!server || typeof server !== 'object') return loadPreProData();
   const Sync = preProSyncEngine();
-  if (!Sync) return mergePreProFromCloudLegacy(server, recoverNewerLocal);
+  // Engine merge reads BOTH wire shapes; it is needed to digest any map-shaped
+  // data already on the wire, but its recovery pushes must also stay legacy
+  // while CUEOLA_PB_LEAF_SYNC is dark — mergePreProFromCloudLegacy handles that.
+  if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) {
+    const digestible = Sync ? pbCollectionsToArrays(Sync.normalizeDoc(server).doc) : server;
+    return mergePreProFromCloudLegacy(digestible, recoverNewerLocal);
+  }
   const local = loadPreProData();
   const { merged, recovery } = Sync.mergeDocs(local, server, { pendingPaths:_pbPendingCloudKeys, recoverNewerLocal });
   const toStore = pbCollectionsToArrays(merged);

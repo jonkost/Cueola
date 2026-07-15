@@ -427,10 +427,12 @@
 
 /* count-out clock — with the monitor, the loudest thing here */
 .og-clock {
-  flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
-  margin: 0; padding: 4px 16px 8px; border: 0; background: transparent; cursor: pointer; user-select: none;
+  /* Owner mockup 2026-07-15: time big and centered under the program monitor,
+     transport centered beneath it. */
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  width: 100%; margin: 0; padding: 4px 16px 8px; border: 0; background: transparent; cursor: pointer; user-select: none;
 }
-.og-clock-meta { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 2px; }
+.og-clock-meta { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; }
 .og-clock-label { margin: 0; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--text2); }
 .og-clock-dir {
   flex: 0 0 auto; display: inline-grid; place-items: center;
@@ -445,7 +447,7 @@
 /* SMPTE digits: tabular, pane-scaled; color strictly by count direction.
    LED face matches Cueola main's production clocks — the one sanctioned
    hardcoded-hex zone per DESIGN_GUIDELINES.md. */
-.og-clock-time { font-family: 'Courier New', Courier, monospace; font-weight: 900; font-size: clamp(30px, 7.5cqw, 56px); line-height: 1; letter-spacing: .06em; font-variant-numeric: tabular-nums; color: #ff3030; background: #060709; border: 1px solid #1c2028; border-radius: 2px; padding: 6px 14px; }
+.og-clock-time { font-family: 'Courier New', Courier, monospace; font-weight: 900; font-size: clamp(40px, 11cqw, 92px); line-height: 1; letter-spacing: .06em; font-variant-numeric: tabular-nums; color: #ff3030; background: #060709; border: 1px solid #1c2028; border-radius: 2px; padding: 8px 20px; }
 .og-clock.og-count-down .og-clock-time { color: #ff3030; }
 .og-clock.og-count-up .og-clock-time { color: #3ad090; }
 
@@ -913,8 +915,8 @@
 /* the monitor caps by 16:9 height so clock + transport keep a healthy share */
 .og-main.og-lay-wide .og-program-pane { container-type: size; }
 .og-main.og-lay-wide .og-program-top > .og-program-wrap { flex: 0 1 auto; width: min(100%, calc(54cqh * 16 / 9)); }
-.og-main.og-lay-wide .og-clock { flex: 0 0 84px; min-height: 76px; box-sizing: border-box; justify-content: center; container-type: inline-size; }
-.og-main.og-lay-wide .og-clock-time { font-size: clamp(26px, 6.5cqw, 44px); }
+.og-main.og-lay-wide .og-clock { flex: 0 0 auto; min-height: 90px; box-sizing: border-box; justify-content: center; container-type: inline-size; }
+.og-main.og-lay-wide .og-clock-time { font-size: clamp(34px, 9cqw, 72px); }
 
 /* MEDIUM (721–1180): Cue List | Program on top, shared tabbed bottom card */
 .og-main.og-lay-medium { display: flex; flex-direction: column; overflow: hidden; }

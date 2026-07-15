@@ -8,3 +8,12 @@ firestore-debug.log
 firepit-log.txt
 ds-bundle/
 .design-sync/.cache/
+# P2607 recovery artifacts — contain real student data, never publish
+P2607-prepro-backup-*.json
+p2607-snapshot-restore.json
+restore-p2607.html
+
+# P2607 recovery artifacts — contain real student data, never publish
+P2607-prepro-backup-*.json
+p2607-snapshot-restore.json
+restore-p2607.html
