@@ -1,0 +1,19 @@
+// ROLLBACK COPY — the Firestore ruleset that was live before the staged rules
+// deploy on 2026-07-15 18:32 UTC (previous ruleset
+// projects/cueola/rulesets/42b14529-b0c5-441e-b291-5a1908015a08, released
+// 2026-05-30). To roll back: replace firestore.rules with this content and
+// deploy rules only (docs/app-check-rollout.md § Rollback).
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sessions/{code} {
+      allow read, write: if true;
+    }
+    match /admins/{docId} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

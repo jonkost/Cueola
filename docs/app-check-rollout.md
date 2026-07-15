@@ -5,7 +5,18 @@ Firebase App Check bootstrap in both `index.html` and `dashboard.html`. Nothing
 in this runbook is deployed automatically. The owner controls every Firebase
 Console and deploy action.
 
-## ⚠ Deploy sooner rather than later (verified 2026-07-11)
+## ✅ Staged rules DEPLOYED 2026-07-15 (owner-instructed)
+
+The staged `firestore.rules` were released 2026-07-15 18:32 UTC as ruleset
+`ff0556f6-0a58-4d98-8992-87caf599fd3b` (via the Rules REST API — no local
+firebase CLI/Java). Live smoke test passed: session writes unchanged;
+profiles/assignments/notes reads open; malformed writes rejected. The previous
+ruleset text is preserved at `docs/rules-rollback-2026-07-15.rules`.
+App Check registration/enforcement (sections 3–6) remains NOT started.
+
+The section below is retained for history.
+
+## ⚠ Deploy sooner rather than later (verified 2026-07-11) — RESOLVED 2026-07-15
 
 Production probes show the CURRENTLY DEPLOYED rules are an older hardened
 revision: `sessions/{code}` works, but `sessions/{code}/files`,
