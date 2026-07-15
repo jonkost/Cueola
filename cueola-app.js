@@ -2715,6 +2715,12 @@ let assignmentFromCache = false;
 // staged rules that open profiles/assignments are still an owner errand).
 // Exports degrade to the legacy prePro roster instead of hard-blocking.
 let _assignmentLoadDenied = false;
+// True when the canonical register is empty and the roster still lives on the
+// legacy session fields. The Admin panel shows this as a migration to-do
+// ('unsaved'/'conflict'), but it must not block paperwork exports: the printed
+// register honestly says no canonical records exist, and the call sheet roster
+// comes from prePro either way.
+let _assignmentLegacyPending = false;
 
 function assignmentModel() {
   return window.CueolaAssignmentModel || null;
@@ -3155,6 +3161,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
       assignmentFromCache = fromCache;
       _assignmentLoadDenied = false;
 
+      _assignmentLegacyPending = !records.length && legacyRows.length > 0;
       let rows;
       if (records.length) {
         rows = records.map(record => normalizeRoleAssignment(record));
@@ -17195,11 +17202,16 @@ function paperworkExportReadiness(options={}) {
     throw error;
   }
   const serverAuthority = paperworkExportAuthority() === 'server';
-  // Deployed rules still refuse the canonical profiles/assignments reads (the
-  // staged-rules deploy is an owner errand). That must not dead-end everyone's
-  // paperwork: the export degrades to the legacy prePro roster — the same
-  // 'server legacy fallback' contract the production-notes read already uses.
-  const assignmentsLegacyFallback = assignmentSaveState === 'failed' && _assignmentLoadDenied;
+  // Two situations must not dead-end everyone's paperwork behind the
+  // canonical-assignments gate, because the export is deterministic without it
+  // (the register prints "no canonical records", the call sheet roster comes
+  // from prePro): (1) rules denying the canonical reads — the same 'server
+  // legacy fallback' contract the production-notes read uses — and (2) a
+  // legacy roster that predates canonical migration ('unsaved'/'conflict'
+  // Admin to-dos; with no student profiles minted yet it cannot even be
+  // migrated, so blocking would strand every export).
+  const assignmentsLegacyFallback = (assignmentSaveState === 'failed' && _assignmentLoadDenied)
+    || (['unsaved', 'conflict'].includes(assignmentSaveState) && _assignmentLegacyPending);
   const assignmentState = options.includeAssignments === false || !serverAuthority || assignmentsLegacyFallback
     ? 'saved'
     : assignmentSaveState || 'unsaved';
