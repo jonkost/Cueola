@@ -50,7 +50,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=06036761f2',
+  'cueola-app.js?v=09c4032d8d',
   'outrangutan/outrangutan.css?v=41e3c5379f',
   'outrangutan/outrangutan.js?v=72194eed1e',
 ];
@@ -62,7 +62,7 @@ const versionSignature = SHELL_ASSETS
 // Bumped for cache-policy OR page-HTML-only releases: the shell caches
 // index.html/dashboard.html, whose content never feeds versionSignature —
 // an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
-const WORKER_SCHEMA = '4';
+const WORKER_SCHEMA = '5';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

@@ -17153,6 +17153,10 @@ function saveOpenPaperworkSection(showToastOnSave=true) {
 
 // ── Phase 7: one authority boundary for every formal paperwork export. ──
 const PAPER_EXPORT_WAIT_MS = 8000;
+// Server downloads get their own, longer budget: the show-day session document
+// is large (full rundown + legacy notes + presence) and school Wi-Fi is slow —
+// the 8s local-wait budget was killing legitimate exports mid-download.
+const PAPER_EXPORT_READ_MS = 20000;
 
 function paperworkExportModel() {
   return window.CueolaExportModel || null;
@@ -17262,7 +17266,9 @@ async function waitForPaperworkSaves(options={}) {
     throw error;
   }
   if (paperworkExportAuthority() === 'server' && typeof window._waitForPendingWrites === 'function') {
-    await paperworkExportTimeout(window._waitForPendingWrites(), PAPER_EXPORT_WAIT_MS,
+    // Network-bound like the server reads — the local 8s budget was too tight
+    // for a slow connection flushing this client's own queued writes.
+    await paperworkExportTimeout(window._waitForPendingWrites(), PAPER_EXPORT_READ_MS,
       'Cloud saves are still pending. Reconnect and wait for Cloud saved before exporting.');
     readiness = paperworkExportReadiness(options);
     if (!readiness.canExport) {
@@ -17311,8 +17317,9 @@ async function readServerPaperworkSnapshot(options={}) {
   const sessionRef = window._doc(window._db, 'sessions', session.code);
   const assignmentsRef = window._collection(window._db, 'sessions', session.code, 'assignments');
   const notesRef = window._collection(window._db, 'sessions', session.code, 'notes');
+  const readTimeoutMsg = 'The saved production did not download in time. Check the connection and try again.';
   for (let attempt = 0; attempt < 2; attempt++) {
-    const beforeSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef));
+    const beforeSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef), PAPER_EXPORT_READ_MS, readTimeoutMsg);
     if (!beforeSnap.exists()) {
       const error = new Error('This production no longer exists on the server.');
       error.code = 'export-session-missing';
@@ -17323,7 +17330,7 @@ async function readServerPaperworkSnapshot(options={}) {
     let assignmentsMode = options.includeAssignments === false ? 'excluded' : 'canonical';
     if (options.includeAssignments !== false) {
       try {
-        assignments = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(assignmentsRef)));
+        assignments = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(assignmentsRef), PAPER_EXPORT_READ_MS, readTimeoutMsg));
       } catch (error) {
         if (!pbIsPermissionDenied(error)) throw error;
         // Same degradation as notes below: rules predating the staged deploy
@@ -17336,7 +17343,7 @@ async function readServerPaperworkSnapshot(options={}) {
     let notesMode = 'excluded';
     if (options.includeNotes === true) {
       try {
-        canonicalNotes = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(notesRef)));
+        canonicalNotes = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(notesRef), PAPER_EXPORT_READ_MS, readTimeoutMsg));
         notesMode = 'canonical';
       } catch (error) {
         if (!pbIsPermissionDenied(error)) throw error;
@@ -17346,22 +17353,26 @@ async function readServerPaperworkSnapshot(options={}) {
     const notes = options.includeNotes === true
       ? mergeExportNotes(Array.isArray(before.preProNotes) ? before.preProNotes : [], canonicalNotes)
       : [];
-    const afterSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef));
-    const after = afterSnap.exists() ? (afterSnap.data() || {}) : {};
-    let afterCanonicalNotes = canonicalNotes;
-    if (options.includeNotes === true && notesMode === 'canonical') {
-      afterCanonicalNotes = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(notesRef)));
-    }
-    const afterNotes = options.includeNotes === true
-      ? mergeExportNotes(Array.isArray(after.preProNotes) ? after.preProNotes : [], afterCanonicalNotes)
-      : [];
-    const beforeFence = paperworkRevisionFence(before, notes);
-    const afterFence = paperworkRevisionFence(after, afterNotes);
-    if (!model.compareRevisionFence(beforeFence, afterFence).stable) {
-      if (attempt === 0) continue;
-      const error = new Error('The production changed while Cueola was preparing the export. Preview again after saves settle.');
-      error.code = 'export-revision-race';
-      throw error;
+    // The session document arrives in ONE atomic server read — beats, prePro,
+    // and the legacy roster cannot be torn against each other, so re-reading
+    // the whole document to prove "stability" is unnecessary. (The old
+    // before/after fence compared live-edit stamps across two sequential
+    // downloads of a large document: every export raced the classroom's
+    // typing and died with "the production changed…". Notes merge by id, so a
+    // note posted mid-export is merely newer, never inconsistent.) The one
+    // thing a re-read CAN prove is cross-document consistency: when canonical
+    // assignment records were captured, confirm the register revision on the
+    // document did not move while the subcollection downloaded.
+    if (assignmentsMode === 'canonical' && assignments.length) {
+      const checkSnap = await paperworkExportTimeout(window._getDocFromServer(sessionRef), PAPER_EXPORT_READ_MS, readTimeoutMsg);
+      const revBefore = Math.max(0, Number(before.assignmentRevision) || 0);
+      const revAfter = checkSnap.exists() ? Math.max(0, Number(checkSnap.data()?.assignmentRevision) || 0) : revBefore;
+      if (revBefore !== revAfter) {
+        if (attempt === 0) continue;
+        const error = new Error('Assignments were being saved while Cueola prepared the export. Try again in a moment.');
+        error.code = 'export-revision-race';
+        throw error;
+      }
     }
     const readiness = model.assessReadiness({ authority:'server', serverConfirmed:true });
     return model.createSnapshot({
@@ -17369,7 +17380,7 @@ async function readServerPaperworkSnapshot(options={}) {
       readiness,
       production:{ sessionCode:session.code, name:before.showName || show.name, identity:session.code },
       exportedAt:Date.now(),
-      revisions:{ ...beforeFence, notesMode, assignmentsMode },
+      revisions:{ ...paperworkRevisionFence(before, notes), notesMode, assignmentsMode },
       show:{
         name:before.showName || show.name,
         start:normalizeTimeValue(before.startTime || show.start),
@@ -17379,7 +17390,7 @@ async function readServerPaperworkSnapshot(options={}) {
       beats:Array.isArray(before.beats) ? before.beats : [],
       prePro:before.prePro && typeof before.prePro === 'object' ? before.prePro : {},
       canonicalAssignments:assignments,
-      notes:afterNotes,
+      notes,
       options:{
         includeNotes:options.includeNotes === true,
         includeAssignments:options.includeAssignments !== false,
@@ -17685,12 +17696,64 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
   };
 }
 
+// P2607 incident residue (2026-07-15): mixed-version saves accumulated dozens
+// of orphan one-person call sheets and duplicated crew rows. These sanitizers
+// run at the getCallSheets boundary, so every render, export, AND save flows
+// through them — any healthy client that saves the call sheet republishes the
+// cleaned array, healing the shared doc instead of re-spreading the damage.
+function dedupeCallSheetPeople(people) {
+  if (!Array.isArray(people)) return [];
+  const seen = new Set();
+  return people.filter(p => {
+    if (!p || typeof p !== 'object') return false;
+    const key = ['name', 'position', 'email', 'phone', 'call']
+      .map(k => String(p[k] || '').trim().toLowerCase()).join('|');
+    if (!key.replace(/\|/g, '')) return false;   // fully blank row
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// Content identity ignores generated ids/ord and auto-numbered "Call Sheet N"
+// labels — two sheets that differ only by those are the same sheet duplicated,
+// never two intentional days (a real second day differs by date/times/label).
+function callSheetContentKey(sheet) {
+  const label = String(sheet.label || '').trim();
+  return JSON.stringify([
+    /^call sheet\s*\d*$/i.test(label) ? '' : label.toLowerCase(),
+    ...['production', 'date', 'call', 'showStart', 'wrap', 'doors', 'location', 'address',
+      'venue', 'parking', 'entrance', 'late', 'stream', 'dress', 'meals', 'notes']
+      .map(k => String(sheet[k] || '').trim().toLowerCase()),
+    weatherSummaryLine(sheet.weather),
+    (sheet.people || []).map(p => ['name', 'position', 'email', 'phone', 'call']
+      .map(k => String(p?.[k] || '').trim().toLowerCase()).join('|')),
+  ]);
+}
+
+function sanitizeCallSheets(sheets) {
+  const seen = new Set();
+  const out = [];
+  for (const sheet of sheets) {
+    const clean = { ...sheet, people: dedupeCallSheetPeople(sheet.people) };
+    const key = callSheetContentKey(clean);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+  }
+  // Real sheets (any schedule/venue content) ahead of crew-only leftovers, so
+  // a fresh device's default active sheet is never an orphaned stub.
+  const hasSchedule = s => Boolean(s.date || s.call || s.showStart || s.wrap || s.location || s.address || s.venue);
+  const ranked = [...out.filter(hasSchedule), ...out.filter(s => !hasSchedule(s))];
+  return ranked.length ? ranked : sheets;
+}
+
 function getCallSheets(data=loadPreProData()) {
   const legacy = legacyCallSheetFromData(data);
   const rawSheets = Array.isArray(data.callSheets) && data.callSheets.length ? data.callSheets : [legacy];
   // Each sheet is self-contained — do NOT inherit empty fields from another sheet
   // (the shared top-level "legacy" values), which used to bleed times across days.
-  const sheets = rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i));
+  const sheets = sanitizeCallSheets(rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i)));
   return sheets.length ? sheets : [normalizeCallSheet(legacy, 0)];
 }
 
@@ -17859,6 +17922,9 @@ function weatherSummaryLine(w) {
   if (w.precip) parts.push(`Precip ${w.precip}`);
   if (w.wind) parts.push(`Wind ${w.wind}`);
   if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+  // Say which DAY this forecast is for — a sheet dated Friday prints Friday's
+  // storm, and without the label that reads as "wrong weather" on show day.
+  if (w.forecastDate) parts.push(`Forecast for ${callSheetDayLabel(w.forecastDate) || w.forecastDate}`);
   return parts.join(' · ');
 }
 
