@@ -2711,6 +2711,10 @@ let assignmentSaveState = 'loading';
 let assignmentSaveDetail = 'Loading saved profiles and assignments…';
 let assignmentHydratePromise = null;
 let assignmentFromCache = false;
+// True when the last canonical load was refused by the DEPLOYED rules (the
+// staged rules that open profiles/assignments are still an owner errand).
+// Exports degrade to the legacy prePro roster instead of hard-blocking.
+let _assignmentLoadDenied = false;
 
 function assignmentModel() {
   return window.CueolaAssignmentModel || null;
@@ -3149,6 +3153,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
       canonicalRoleAssignments = records;
       assignmentRevision = Math.max(0, Number(sessionData.assignmentRevision) || 0);
       assignmentFromCache = fromCache;
+      _assignmentLoadDenied = false;
 
       let rows;
       if (records.length) {
@@ -3179,6 +3184,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
     } catch (error) {
       assignmentFromCache = false;
       const denied = error?.code === 'permission-denied';
+      _assignmentLoadDenied = denied;
       setAssignmentSaveState('failed', denied
         ? 'Firestore denied profiles or assignments. The staged rules need an owner deploy before production can use this workflow.'
         : `${firebaseConnectionLabel(error, 'Could not load assignments')}. Existing local rows were not treated as confirmed.`);
@@ -5178,6 +5184,11 @@ function keymapDispatch(e, phase) {
     else if (e.key === 'Escape') { consumeRemoteKey(e); hideOverlay('lsRowPreviewOv'); }
     return true;
   }
+  if (document.getElementById('lsStartChoiceOv')?.classList.contains('on')) {
+    // The start-from chooser owns the keys — Space must not fire GO underneath.
+    if (phase === 'down' && e.key === 'Escape') { consumeRemoteKey(e); hideOverlay('lsStartChoiceOv'); }
+    return true;
+  }
   if (typeof jogScrubHandleKey === 'function' && jogScrubHandleKey(e, phase)) return true;
   if (isInteractiveEventTarget(e)) {
     // Releasing a held key while focus sits in a text field must still send the
@@ -5362,6 +5373,12 @@ document.addEventListener('keydown', e => {
   if (top.id === 'productionNotesModal' && document.getElementById('pbBoard')?.classList.contains('composing')) {
     e.preventDefault();
     pbCloseComposer();
+    return;
+  }
+  if (top.id === 'paperPreviewModal') {
+    // Esc on a Planda Bear preview returns to the workspace, not the front page.
+    e.preventDefault();
+    dismissPaperPreview();
     return;
   }
   e.preventDefault();
@@ -7753,6 +7770,58 @@ function toggleShowClock() {
   updateLiveClockButton();
   updateLiveOverview();
   broadcastShowClock();  // start/pause the clock for everyone in the session
+}
+
+// "Start Show" pressed before the clock has ever run: if the session is parked
+// mid-rundown (a restored snapshot or a previous rehearsal left the shared cue
+// on row N), the caller chooses between taking it from the top and starting
+// where the session is parked. Before this, the only way back to row 1 was
+// Admin → Restart Show Clock with a typed RESTART confirm.
+function liveStartShowPressed() {
+  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  if (!canDriveShowClock()) {
+    toast('The show caller controls the clock for everyone.');
+    return false;
+  }
+  const activeIdx = liveActiveCueIndex();
+  const firstIdx = liveNextPlayableCueIndex(-1);
+  if (!liveClockRunning && !elapsedSecs && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
+    const hereEl = document.getElementById('lsStartChoiceRow');
+    if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} — ${beats[activeIdx]?.info || 'Untitled'}`;
+    const topEl = document.getElementById('lsStartChoiceTopLbl');
+    if (topEl) topEl.textContent = `Row ${firstIdx + 1}`;
+    const hereLbl = document.getElementById('lsStartChoiceHereLbl');
+    if (hereLbl) hereLbl.textContent = `Row ${activeIdx + 1}`;
+    showOverlay('lsStartChoiceOv');
+    return true;
+  }
+  return toggleShowClock();
+}
+
+function lsStartFromTop() {
+  hideOverlay('lsStartChoiceOv');
+  const firstIdx = liveNextPlayableCueIndex(-1);
+  if (firstIdx < 0) return false;
+  stopTimer(false);
+  elapsedSecs = 0;
+  liveTimerStartMs = null;
+  setOperatorLiveCue(firstIdx, 'start-from-top');
+  logShow('cue', 'Show start → from the top · row ' + (firstIdx + 1) + rowLogLabel(beats[firstIdx]));
+  renderLive();
+  sendToPrompter(false);
+  syncLiveIdx();
+  startTimer();
+  updateLiveClockButton();
+  updateLiveOverview();
+  updateLiveRemain();
+  broadcastShowClock();
+  toast(`Show started from the top — Row ${firstIdx + 1}.`);
+  return true;
+}
+
+function lsStartFromHere() {
+  hideOverlay('lsStartChoiceOv');
+  return toggleShowClock();
 }
 
 // Restart the show from the top: stop the clock, zero the elapsed time, and jump
@@ -13848,6 +13917,10 @@ function openPaperworkHub() {
   }
   applyPlandaBearTheme(plandaBearTheme);
   hydratePreProFromFirestore().then(() => renderPlandaBearAssignmentsCard());
+  // Assignments otherwise hydrate only when the Admin panel opens; warm them
+  // here so Export PDF Package never dead-ends on "still loading its saved
+  // state" for a crew member who never touches Admin.
+  if (paperworkExportAuthority() === 'server' && assignmentSaveState === 'loading') hydrateRoleAssignments();
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
     // Production Notes lives in its own wide bar above the grid, not in the numbered list.
@@ -17122,7 +17195,12 @@ function paperworkExportReadiness(options={}) {
     throw error;
   }
   const serverAuthority = paperworkExportAuthority() === 'server';
-  const assignmentState = options.includeAssignments === false || !serverAuthority
+  // Deployed rules still refuse the canonical profiles/assignments reads (the
+  // staged-rules deploy is an owner errand). That must not dead-end everyone's
+  // paperwork: the export degrades to the legacy prePro roster — the same
+  // 'server legacy fallback' contract the production-notes read already uses.
+  const assignmentsLegacyFallback = assignmentSaveState === 'failed' && _assignmentLoadDenied;
+  const assignmentState = options.includeAssignments === false || !serverAuthority || assignmentsLegacyFallback
     ? 'saved'
     : assignmentSaveState || 'unsaved';
   return model.assessReadiness({
@@ -17151,6 +17229,13 @@ function paperworkExportReadinessMessage(readiness) {
 
 async function waitForPaperworkSaves(options={}) {
   flushPaperworkDraftForExport();
+  // Assignments hydrate lazily (Admin panel or hub open). If an export gates on
+  // them while they still sit in their initial 'loading' state, start — or join
+  // — that load instead of polling a state nothing else is going to change.
+  if (options.includeAssignments !== false && paperworkExportAuthority() === 'server'
+      && assignmentSaveState === 'loading') {
+    try { await paperworkExportTimeout(hydrateRoleAssignments()); } catch {}
+  }
   const started = Date.now();
   let readiness = paperworkExportReadiness(options);
   while (!readiness.canExport && Date.now() - started < PAPER_EXPORT_WAIT_MS) {
@@ -17223,8 +17308,17 @@ async function readServerPaperworkSnapshot(options={}) {
     }
     const before = beforeSnap.data() || {};
     let assignments = [];
+    let assignmentsMode = options.includeAssignments === false ? 'excluded' : 'canonical';
     if (options.includeAssignments !== false) {
-      assignments = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(assignmentsRef)));
+      try {
+        assignments = firestoreDocuments(await paperworkExportTimeout(window._getDocsFromServer(assignmentsRef)));
+      } catch (error) {
+        if (!pbIsPermissionDenied(error)) throw error;
+        // Same degradation as notes below: rules predating the staged deploy
+        // deny the subcollection — the package falls back to the legacy roster
+        // already carried on the session document (prePro.roleAssignments).
+        assignmentsMode = 'server legacy fallback';
+      }
     }
     let canonicalNotes = [];
     let notesMode = 'excluded';
@@ -17263,7 +17357,7 @@ async function readServerPaperworkSnapshot(options={}) {
       readiness,
       production:{ sessionCode:session.code, name:before.showName || show.name, identity:session.code },
       exportedAt:Date.now(),
-      revisions:{ ...beforeFence, notesMode },
+      revisions:{ ...beforeFence, notesMode, assignmentsMode },
       show:{
         name:before.showName || show.name,
         start:normalizeTimeValue(before.startTime || show.start),
@@ -17376,7 +17470,18 @@ function paperworkExportFailureMessage(error) {
 let paperPreviewBuildSequence = 0;
 let lastPaperPreview = null;
 
-function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideModal('paperPreviewModal')", flowId=null, exportOptions={}) {
+// Closing the paper preview (Done / Esc) reopens the Planda Bear hub when the
+// preview replaced a Planda Bear surface — showPaperPreview hides the hub, so
+// a plain hideModal would strand the user on whatever screen sits underneath.
+function dismissPaperPreview() {
+  hideModal('paperPreviewModal');
+  if (!lastPaperPreview?.fromPlandaBear) return;
+  const pbStillOpen = ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal']
+    .some(id => document.getElementById(id)?.classList.contains('on'));
+  if (!pbStillOpen) openPaperworkHub();
+}
+
+function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismissPaperPreview()", flowId=null, exportOptions={}) {
   document.getElementById('paperPreviewTitle').textContent = title;
   const previewBody = document.getElementById('paperPreviewBody');
   const sequence = ++paperPreviewBuildSequence;
@@ -17385,7 +17490,12 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="hideM
   const controls = [...staging.querySelectorAll('.no-print')].map(node => node.outerHTML).join('');
   staging.querySelectorAll('.no-print').forEach(node => node.remove());
   const printableHTML = staging.innerHTML;
-  lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence };
+  // Captured BEFORE the hub/editors get hidden below: dismissing the preview
+  // must land back on the Planda Bear workspace it replaced, not the front page.
+  const fromPlandaBear = Boolean(flowId)
+    || ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal']
+      .some(id => document.getElementById(id)?.classList.contains('on'));
+  lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence, fromPlandaBear };
   previewBody.style.background = 'transparent';
   previewBody.style.padding = '0';
   previewBody.innerHTML = `${controls}<div class="paper-export-loading" role="status">Building fixed-page preview…</div>`;
@@ -18129,7 +18239,7 @@ function showCuePartPreview(type) {
     <h1>${titleMap[type]}</h1>
     <div>Rendered from the rundown editor.</div>
     <table><thead><tr><th>#</th><th>Row</th><th>Ready</th><th>Take</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
-  `, 'Done', "hideModal('paperPreviewModal')", null);
+  `, 'Done', 'dismissPaperPreview()', null);
 }
 
 function openSafetyPlan() {

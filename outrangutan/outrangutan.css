@@ -912,11 +912,20 @@
 .og-main.og-lay-wide #og-bottom > .og-edit-pane { flex: 1 1 auto; min-height: 0; margin: 0; }
 .og-main.og-lay-wide.og-no-sel #og-bottom { flex: 0 0 auto; }
 .og-main.og-lay-wide.og-no-sel #og-edit-pane .og-edit-body { display: none; }
-/* the monitor caps by 16:9 height so clock + transport keep a healthy share */
+/* The monitor row is the pane's flexible child and the monitor sizes itself
+   from the row's REAL leftover height (100cqh of the row), so it can never
+   paint over the clock meta below — the old fixed 54cqh guess overflowed once
+   the clock + transport stack outgrew its assumed share. The monitor + meters
+   group is centered so the clock underneath lines up with the program. */
 .og-main.og-lay-wide .og-program-pane { container-type: size; }
-.og-main.og-lay-wide .og-program-top > .og-program-wrap { flex: 0 1 auto; width: min(100%, calc(54cqh * 16 / 9)); }
+.og-main.og-lay-wide .og-program-top,
+.og-main.og-lay-medium .og-program-top { flex: 1 1 auto; min-height: 0; justify-content: center; container-type: size; }
+.og-main.og-lay-wide .og-program-top > .og-program-wrap,
+.og-main.og-lay-medium .og-program-top > .og-program-wrap { flex: 0 1 auto; align-self: center; width: min(100%, calc(100cqh * 16 / 9)); }
 .og-main.og-lay-wide .og-clock { flex: 0 0 auto; min-height: 90px; box-sizing: border-box; justify-content: center; container-type: inline-size; }
-.og-main.og-lay-wide .og-clock-time { font-size: clamp(34px, 9cqw, 72px); }
+/* digits scale with pane height too, so a short pane gets a smaller clock
+   instead of a clipped one (cqh skips the inline-size clock, queries the pane) */
+.og-main.og-lay-wide .og-clock-time { font-size: clamp(28px, min(9cqw, 16cqh), 72px); }
 
 /* MEDIUM (721–1180): Cue List | Program on top, shared tabbed bottom card */
 .og-main.og-lay-medium { display: flex; flex-direction: column; overflow: hidden; }
@@ -924,7 +933,8 @@
 .og-main.og-lay-medium .og-toprow > .og-pane { min-width: 0; }
 .og-main.og-lay-medium .og-toprow > .og-cuelist-pane { flex: 0 0 clamp(260px, 30%, 320px); max-height: none; }
 .og-main.og-lay-medium .og-toprow > .og-program-pane { flex: 1 1 auto; min-width: 320px; }
-.og-main.og-lay-medium .og-program-top > .og-program-wrap { flex: 1 1 auto; width: auto; }
+/* monitor sizing shared with wide mode above — the row's 100cqh cap keeps the
+   16:9 monitor inside its leftover height instead of overlapping the clock */
 .og-main.og-lay-medium #og-bottom { flex: 0 0 auto; }
 .og-main.og-lay-medium #og-bottom-tabs { display: flex; }
 .og-main.og-lay-medium.og-has-sel #og-bottom { flex: 0 0 min(42vh, 380px); }

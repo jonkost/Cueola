@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=d7acbd39c7">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=41e3c5379f">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -4162,7 +4162,7 @@ input.pt-range::-moz-range-thumb,
     <div class="ls-brand"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
-      <button class="ls-exit-btn ls-start-btn ls-critical-action" id="liveStartBtn" onclick="toggleShowClock()" title="Start or pause the show clock">Start Show</button>
+      <button class="ls-exit-btn ls-start-btn ls-critical-action" id="liveStartBtn" onclick="liveStartShowPressed()" title="Start or pause the show clock">Start Show</button>
 	      <button class="ls-exit-btn ls-critical-action" id="liveFocusBtn" onclick="toggleLiveFocus()" title="Switch between Focus and full Grid view"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><span>Full Grid</span></button>
 	      <button class="ls-exit-btn ls-critical-action" id="prompterPanelBtn" onclick="toggleLivePrompterPanel()" title="Show or hide the Script Op panel"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script Op</span></button>
 	      <button class="ls-exit-btn ls-critical-action" id="promptOpBtn" onclick="togglePromptOpMode()" title="Toggle Flowmingo operator view"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Flow<span class="brand-hi">mingo</span></span> Op</button>
@@ -4682,6 +4682,20 @@ input.pt-range::-moz-range-thumb,
   </div>
 </div>
 
+<!-- Start Show choice: the session was parked mid-rundown (restored run or a
+     previous rehearsal), so the caller picks where the clock starts from. -->
+<div class="overlay" id="lsStartChoiceOv" onclick="if(event.target===this)hideOverlay('lsStartChoiceOv')" style="align-items:center;justify-content:center;padding:24px">
+  <div class="warn-card" style="max-width:440px;border-color:var(--bord2);width:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="warn-title" style="font-size:18px;margin:0">Start the show from…</div>
+      <button class="ov-close-x" onclick="hideOverlay('lsStartChoiceOv')" title="Cancel" aria-label="Cancel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+    </div>
+    <div style="color:var(--text2);font-size:13px;line-height:1.5;margin-bottom:16px">This session is parked on <strong id="lsStartChoiceRow" style="color:var(--text)"></strong> with the clock at 0:00 — likely left over from a previous run.</div>
+    <button class="btn-primary" style="width:100%;margin-bottom:8px" onclick="lsStartFromTop()"><span class="sf-symbol" data-symbol="chevron.up" aria-hidden="true"></span> Take it from the top — <span id="lsStartChoiceTopLbl"></span></button>
+    <button class="btn-secondary" style="width:100%" onclick="lsStartFromHere()">Start here — <span id="lsStartChoiceHereLbl"></span></button>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════
      PAPERWORK HUB
 ══════════════════════════════════════════ -->
@@ -4751,7 +4765,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="paper-preview" id="paperPreviewBody"></div>
     <div id="pbCommentsPreview"></div>
-    <button class="btn-primary" id="paperPreviewPrimary" onclick="hideModal('paperPreviewModal')">Done</button>
+    <button class="btn-primary" id="paperPreviewPrimary" onclick="dismissPaperPreview()">Done</button>
     <div class="paperwork-flow-actions" id="pbNavPreview"></div>
   </div>
 </div>
@@ -5369,7 +5383,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=89f7110bc6"></script>
+<script src="cueola-app.js?v=4130151fc6"></script>
 <script src="outrangutan/outrangutan.js?v=72194eed1e"></script>
 
 <script type="module">
