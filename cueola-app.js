@@ -2198,20 +2198,22 @@ function markPaperworkDirty() {
 }
 
 function confirmSaveUnsavedPaperwork() {
-  if (!paperworkDirty) return true;
-  if (confirm('You have unsaved Planda Bear data. Save it before leaving this page?')) {
-    saveOpenPaperworkSection(false);
-    paperworkDirty = false;
-    toast('Planda Bear saved.');
-    return true;
-  }
-  return confirm('Leave without saving those Planda Bear changes?');
+  // Paperwork autosaves as you type (queuePaperworkAutosave); "dirty" only ever
+  // means a 650ms debounce is in flight. Flush it silently instead of
+  // interrupting with a save dialog — the same path every export uses.
+  flushPaperworkDraftForExport();
+  return true;
 }
 
 window.addEventListener('beforeunload', e => {
-  if (!paperworkDirty) return;
-  e.preventDefault();
-  e.returnValue = '';
+  if (paperworkDirty) flushPaperworkDraftForExport();
+  // The flush above lands in localStorage synchronously; only warn when a
+  // cloud write is still in flight and closing now could strand collaborators
+  // without this device's last edits.
+  if (_pbPendingCloudKeys.size) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 document.addEventListener('input', e => {
@@ -8190,7 +8192,30 @@ function liveRowPreview(idx) {
   const nextBtn = document.getElementById('lrpNextBtn');
   if (prevBtn) prevBtn.disabled = idx <= 0;
   if (nextBtn) nextBtn.disabled = idx >= beats.length - 1;
+  // "Cue here": offered to any driving operator (same gate as GO), hidden on
+  // the current row, segments, disabled and failed rows.
+  const cueBtn = document.getElementById('lrpCueBtn');
+  const cueHint = document.getElementById('lrpCueHint');
+  if (cueBtn) {
+    const canCue = canOwnLiveActiveCue()
+      && b.style !== 'segment'
+      && !liveCueIsDisabled(idx)
+      && liveCueExecutionStatus(idx) !== 'failed'
+      && liveActiveCueIndex() !== idx;
+    cueBtn.hidden = !canCue;
+    if (cueHint) cueHint.hidden = !canCue;
+    const lbl = document.getElementById('lrpCueBtnLabel');
+    if (lbl) lbl.textContent = `Cue to Row ${idx + 1}`;
+  }
   showOverlay('lsRowPreviewOv');
+}
+
+function lrpCueHere() {
+  const idx = previewRowIdx;
+  hideOverlay('lsRowPreviewOv');
+  if (jumpToLsCue(idx, { confirmed:true })) {
+    toast(`Cued to Row ${idx + 1} — ${beats[idx]?.info || ''}`.trim());
+  }
 }
 
 function previewRelativeRow(delta) {
@@ -8637,10 +8662,14 @@ function saveLiveScript() {
   renderLive(); syncToFirestore(); toast('Script saved & pushed.');
 }
 
-function jumpToLsCue(i) {
+function jumpToLsCue(i, opts = {}) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  if (session.role==='student') return false;
-  if (isStandardShowCaller()) return false; // standard show callers may only advance sequentially
+  // Same gate as GO (canOwnLiveActiveCue): blocks students in shared sessions
+  // but keeps the solo/demo carve-out where the operator always drives.
+  if (!canOwnLiveActiveCue()) return false;
+  // Standard show callers advance sequentially UNLESS they explicitly confirmed
+  // a jump (the row-preview "Cue here" ask) — that confirm IS the safety rail.
+  if (isStandardShowCaller() && !opts.confirmed) return false;
   if (liveCueIsDisabled(i)) {
     toast(`Row ${i + 1} is disabled and cannot go active.`);
     return false;
@@ -8674,6 +8703,9 @@ function selectLiveRundownRow(event, i) {
   if (!Number.isFinite(i) || !beats[i] || beats[i]?.style === 'segment' || liveCueIsDisabled(i)) return false;
   setLiveSelectedCue(i, { reason:'live-row-selection' });
   renderLive();
+  // Clicking a row opens its preview card, which carries the "Cue here" ask —
+  // the supported way to cue the show to any row (incl. back to the top).
+  liveRowPreview(i);
   return true;
 }
 
@@ -11264,7 +11296,7 @@ function ptDownloadAsTxt() {
 async function ptDownloadAsPDF() {
   const txt = ptDownloadText();
   if (!txt) return;
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await ptLoadLibrary('assets/vendor/jspdf.umd.min.js').catch(() => ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'));
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const margin = 20;
@@ -11279,7 +11311,7 @@ async function ptDownloadAsPDF() {
     doc.text(line, margin, y);
     y += 7;
   }
-  doc.save('flowmingo-script.pdf');
+  downloadBlobFile(doc.output('blob'), 'flowmingo-script.pdf');
 }
 
 // Called by Cueola when script changes — scroll reset (new cue/session)
@@ -12988,6 +13020,7 @@ function pbBeginCloudSave(keys) {
     _pbPendingCloudCounts.set(key, count);
     _pbPendingCloudKeys.add(key);
   });
+  updatePbSaveStatus();
 }
 
 function pbEndCloudSave(keys) {
@@ -12999,6 +13032,35 @@ function pbEndCloudSave(keys) {
       _pbPendingCloudKeys.delete(key);
     }
   });
+  updatePbSaveStatus();
+}
+
+// Google-Docs-style save state for the paperwork nav: the bottom bar shows a
+// live status chip instead of a manual save button (paperwork autosaves as
+// you type — queuePaperworkAutosave — so a Save button only sowed doubt).
+function pbSaveStatusState() {
+  if (_pbFieldSaveTimer || _pbPendingCloudKeys.size) return 'saving';
+  if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return 'local';
+  if (_pbLastCloudSaveError) return 'offline';
+  return 'saved';
+}
+
+function updatePbSaveStatus() {
+  const chips = document.querySelectorAll('[data-pb-save-status]');
+  if (!chips.length) return;
+  const state = pbSaveStatusState();
+  const label = state === 'saving' ? 'Saving…'
+    : state === 'offline' ? 'Saved on this device — reconnecting'
+    : state === 'local' ? 'Saved on this device'
+    : 'All changes saved';
+  const icon = state === 'saving' ? sfIcon('time.clock')
+    : state === 'offline' ? sfIcon('state.warning')
+    : sfIcon('state.success');
+  chips.forEach(chip => {
+    chip.classList.remove('is-saving', 'is-offline', 'is-local', 'is-saved');
+    chip.classList.add(`is-${state}`);
+    chip.innerHTML = `${icon}<span>${label}</span>`;
+  });
 }
 
 function preProValuesEqual(a, b) {
@@ -13006,9 +13068,102 @@ function preProValuesEqual(a, b) {
   try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
 }
 
+function preProSyncEngine() { return window.CueolaPreProSync || null; }
+
+// Bridge for DOM collectors that rebuild row objects without ids: adopt the
+// previous save's row ids (and ord) by position so leaf diffs stay row-stable.
+// Rows that already carry an id keep it; extra new rows get fresh ids later
+// (rowsToMap). Applies to every known collection incl. per-sheet crew.
+function pbAdoptRowIdentity(previous, next) {
+  const Sync = preProSyncEngine();
+  if (!Sync) return next;
+  const adopt = (prevRows, nextRows) => {
+    if (!Array.isArray(nextRows)) return nextRows;
+    const prevList = Sync.rowsToList(prevRows || []);
+    return nextRows.map((row, i) => {
+      if (!row || typeof row !== 'object' || row.id) return row;
+      const prev = prevList[i];
+      return prev ? { ...row, id: prev.id, ord: prev.ord } : row;
+    });
+  };
+  const out = { ...next };
+  for (const k of ['people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows']) {
+    if (out[k] !== undefined) out[k] = adopt(previous?.[k], out[k]);
+  }
+  if (out.productionSchedule && Array.isArray(out.productionSchedule.checklist)) {
+    out.productionSchedule = { ...out.productionSchedule, checklist: adopt(previous?.productionSchedule?.checklist, out.productionSchedule.checklist) };
+  }
+  if (Array.isArray(out.callSheets)) {
+    const prevSheets = Sync.rowsToList(previous?.callSheets || []);
+    out.callSheets = out.callSheets.map((sheet, i) => {
+      if (!sheet || typeof sheet !== 'object') return sheet;
+      const prev = sheet.id ? prevSheets.find(s => s.id === sheet.id) : prevSheets[i];
+      const withId = sheet.id || !prev ? { ...sheet } : { ...sheet, id: prev.id, ord: prev.ord };
+      if (Array.isArray(withId.people)) withId.people = adopt(prev?.people, withId.people);
+      return withId;
+    });
+  }
+  return out;
+}
+
+// Known row collections come back out of the merge as ordered maps; the rest
+// of the app (renders, exports, PDF) keeps consuming arrays, so convert at the
+// boundary. Rows keep their id/ord fields — that is what makes them stable.
+function pbCollectionsToArrays(doc) {
+  const Sync = preProSyncEngine();
+  if (!Sync || !doc || typeof doc !== 'object') return doc;
+  const out = { ...doc };
+  for (const k of ['people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows']) {
+    if (out[k] && typeof out[k] === 'object' && !Array.isArray(out[k])) out[k] = Sync.rowsToList(out[k]);
+  }
+  if (out.productionSchedule?.checklist && typeof out.productionSchedule.checklist === 'object' && !Array.isArray(out.productionSchedule.checklist)) {
+    out.productionSchedule = { ...out.productionSchedule, checklist: Sync.rowsToList(out.productionSchedule.checklist) };
+  }
+  if (out.callSheets && typeof out.callSheets === 'object' && !Array.isArray(out.callSheets)) {
+    out.callSheets = Sync.rowsToList(out.callSheets).map(sheet => {
+      if (sheet?.people && typeof sheet.people === 'object' && !Array.isArray(sheet.people)) {
+        return { ...sheet, people: Sync.rowsToList(sheet.people) };
+      }
+      return sheet;
+    });
+  }
+  return out;
+}
+
 function persistPreProData(patch, section) {
+  const Sync = preProSyncEngine();
   const previous = loadPreProData();
   const now = Date.now();
+  if (!Sync) return persistPreProDataLegacy(previous, patch, section, now);
+  const nextRaw = pbAdoptRowIdentity(previous, { ...previous, ...(patch || {}) });
+  delete nextRaw.activeCallSheetIndex; // selected sheet is device-local, never shared
+  const prevNorm = Sync.normalizeDoc(previous).doc;
+  const nextNorm = Sync.normalizeDoc(nextRaw).doc;
+  const diff = Sync.diffLeaves(prevNorm, nextNorm, now);
+  // record stamps + tombstones on the doc we keep locally
+  const stamped = JSON.parse(JSON.stringify(nextNorm));
+  if (!stamped._stamps || typeof stamped._stamps !== 'object' || Array.isArray(stamped._stamps)) stamped._stamps = {};
+  for (const [dotted, stamp] of Object.entries(diff.stampWrites)) {
+    const path = dotted.replace(/^_stamps\./, '').split('.');
+    let cur = stamped._stamps;
+    for (let i = 0; i < path.length - 1; i++) {
+      if (typeof cur[path[i]] !== 'object' || cur[path[i]] === null || Array.isArray(cur[path[i]])) cur[path[i]] = {};
+      cur = cur[path[i]];
+    }
+    cur[path[path.length - 1]] = stamp;
+  }
+  Sync.gcTombstones(stamped, now);
+  stamped.updatedAt = now;
+  const toStore = pbCollectionsToArrays(stamped);
+  delete toStore.activeCallSheetIndex;
+  try { localStorage.setItem(preProKey(), JSON.stringify(toStore)); } catch {}
+  syncPreProLeavesToFirestore(diff, section, now);
+  return toStore;
+}
+
+// Legacy top-level-key persist, kept as a fallback if the sync engine script
+// ever fails to load — paperwork must save no matter what.
+function persistPreProDataLegacy(previous, patch, section, now) {
   const changed = {};
   for (const [key, value] of Object.entries(patch || {})) {
     if (key === 'updatedAt' || key === '_fieldUpdatedAt' || key === 'activeCallSheetIndex') continue;
@@ -13023,7 +13178,7 @@ function persistPreProData(patch, section) {
   }
   for (const key of Object.keys(changed)) fieldUpdatedAt[key] = now;
   const next = { ...previous, ...(patch || {}), _fieldUpdatedAt:fieldUpdatedAt, updatedAt:now };
-  delete next.activeCallSheetIndex; // selected sheet is device-local, never shared
+  delete next.activeCallSheetIndex;
   try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
   syncPreProToFirestore(changed, section, now);
   return next;
@@ -13031,7 +13186,9 @@ function persistPreProData(patch, section) {
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
-  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  // 'LOCAL' is the no-session sentinel (openLocalPlandaBear/openLocalOutrangutan):
+  // there is no sessions/LOCAL doc, so a write can only fail with not-found.
+  if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db,'sessions',session.code);
   const changedKeys = Object.keys(changed).filter(key => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key));
   if (changedKeys.length) {
@@ -13047,8 +13204,54 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
     window._updateDoc(ref, updates).then(() => {
       pbEndCloudSave(changedKeys);
     }).catch(err => {
-      pbEndCloudSave(changedKeys);
+      // Record the failure before pbEndCloudSave re-renders the save-status
+      // chip, so the chip never reports "saved" over a failed write.
       _pbLastCloudSaveError = err;
+      pbEndCloudSave(changedKeys);
+      reportCloudWriteFailure('Planda Bear cloud save', err);
+    });
+  }
+  if (section && !_pbSuppressActivity && window._arrayUnion) {
+    const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+  }
+}
+
+function pbLeafPathSafe(dotted) {
+  return String(dotted).split('.').every(seg => /^[A-Za-z_][A-Za-z0-9_]*$/.test(seg));
+}
+
+// Render-equality for row collections: compares the ORDERED sequence of row
+// contents while ignoring the sync bookkeeping fields (id/ord) — stored rows
+// carry them, freshly-collected DOM rows may not, and a reorder still shows up
+// as a different sequence. Prevents idle refreshes from re-rendering forever.
+function pbRowsRenderEqual(a, b) {
+  const Sync = preProSyncEngine();
+  const list = v => (Sync ? Sync.rowsToList(v || []) : (Array.isArray(v) ? v : []));
+  const strip = rows => list(rows).map(r => { const { ord, id, ...rest } = (r && typeof r === 'object') ? r : {}; return rest; });
+  try { return JSON.stringify(strip(a)) === JSON.stringify(strip(b)); } catch { return false; }
+}
+
+// Leaf-granular outbound writer: masked field-path updates per changed leaf
+// (see PB_COLLAB_PLAN.md). The pending-key set now holds LEAF paths, so the
+// snapshot merge protects exactly the fields in flight, nothing coarser.
+function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
+  if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
+  const Sync = preProSyncEngine();
+  const ref = window._doc(window._db, 'sessions', session.code);
+  const changedPaths = (diff.changedPaths || []).filter(pbLeafPathSafe);
+  if (changedPaths.length && Sync) {
+    const updates = Sync.buildFirestoreUpdates(diff, { base:'prePro', now, deleteField: window._deleteField() });
+    for (const key of Object.keys(updates)) {
+      if (!pbLeafPathSafe(key.replace(/^prePro\./, ''))) delete updates[key];
+    }
+    pbBeginCloudSave(changedPaths);
+    _pbLastCloudSaveError = null;
+    window._updateDoc(ref, updates).then(() => {
+      pbEndCloudSave(changedPaths);
+    }).catch(err => {
+      _pbLastCloudSaveError = err;
+      pbEndCloudSave(changedPaths);
       reportCloudWriteFailure('Planda Bear cloud save', err);
     });
   }
@@ -13060,6 +13263,50 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
 
 function mergePreProFromCloud(server, recoverNewerLocal=false) {
   if (!server || typeof server !== 'object') return loadPreProData();
+  const Sync = preProSyncEngine();
+  if (!Sync) return mergePreProFromCloudLegacy(server, recoverNewerLocal);
+  const local = loadPreProData();
+  const { merged, recovery } = Sync.mergeDocs(local, server, { pendingPaths:_pbPendingCloudKeys, recoverNewerLocal });
+  const toStore = pbCollectionsToArrays(merged);
+  delete toStore.activeCallSheetIndex;
+  try { localStorage.setItem(preProKey(), JSON.stringify(toStore)); } catch {}
+  const recKeys = Object.keys(recovery || {});
+  if (recoverNewerLocal && recKeys.length
+      && window._firebaseReady && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert) {
+    // Device came back with newer local leaves — re-push just those.
+    const now = Date.now();
+    const localNorm = Sync.normalizeDoc(local).doc;
+    const updates = { 'prePro.updatedAt': now };
+    const changed = [];
+    for (const dotted of recKeys) {
+      if (dotted.startsWith('__delete__.')) {
+        const p = dotted.slice('__delete__.'.length);
+        if (!pbLeafPathSafe(p)) continue;
+        updates[`prePro.${p}`] = window._deleteField();
+        updates[`prePro._stamps.${p}`] = { [Sync.DEL]: now };
+        changed.push(p);
+      } else {
+        if (!pbLeafPathSafe(dotted)) continue;
+        updates[`prePro.${dotted}`] = recovery[dotted];
+        updates[`prePro._stamps.${dotted}`] = Sync.stampFor(localNorm, dotted.split('.')).at || now;
+        changed.push(dotted);
+      }
+    }
+    if (changed.length) {
+      const ref = window._doc(window._db, 'sessions', session.code);
+      pbBeginCloudSave(changed);
+      window._updateDoc(ref, updates).then(() => pbEndCloudSave(changed)).catch(err => {
+        _pbLastCloudSaveError = err;
+        pbEndCloudSave(changed);
+        reportCloudWriteFailure('Planda Bear draft recovery', err);
+      });
+      logShow('sync', `Recovering ${changed.length} newer Planda Bear field(s) from this device`);
+    }
+  }
+  return toStore;
+}
+
+function mergePreProFromCloudLegacy(server, recoverNewerLocal=false) {
   const local = loadPreProData();
   const localTimes = local._fieldUpdatedAt || {};
   const serverTimes = server._fieldUpdatedAt || {};
@@ -13210,7 +13457,7 @@ function pbRenderFieldPresence() {
       field.style.position = 'relative';
       const chip = document.createElement('div');
       chip.className = 'pb-field-editor-chip';
-      chip.textContent = `✏️ ${p.name || 'Someone'}`;
+      chip.innerHTML = `${sfIcon('action.edit')} ${esc(p.name || 'Someone')}`;
       field.appendChild(chip);
     }
   });
@@ -13274,9 +13521,9 @@ function pbRefreshScheduleFields() {
   // if the refresh skips them, this client's next autosave rebuilds the whole
   // schedule from its stale DOM and silently reverts collaborators' ticks.
   if (!pbFieldRecentlyEdited('ps-setup-na')) setSetupNotApplicable(schedule.setupNA);
-  if (!document.activeElement?.closest?.('#ps-checklist')) {
+  if (!document.activeElement?.closest?.('#ps-checklist') && !pbFieldRecentlyEdited('ps-checklist')) {
     const domRows = collectProductionChecklistRows(false);
-    if (JSON.stringify(schedule.checklist) !== JSON.stringify(domRows)) renderProductionChecklist(schedule.checklist);
+    if (!pbRowsRenderEqual(schedule.checklist, domRows)) renderProductionChecklist(schedule.checklist);
   }
 }
 
@@ -13359,7 +13606,7 @@ function pbRefreshCallSheetFields() {
   // Crew grid is an array — re-render it (so adds/removes sync) only when nobody
   // is typing in it, then keep the local roster in step for the next save.
   const people = Array.isArray(sheet.people) && sheet.people.length ? sheet.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
-  if (!document.activeElement?.closest?.('#pp-crew-grid') && JSON.stringify(people) !== JSON.stringify(callSheetPeople)) {
+  if (!document.activeElement?.closest?.('#pp-crew-grid') && !pbFieldRecentlyEdited('pp-crew-grid') && !pbRowsRenderEqual(people, callSheetPeople)) {
     callSheetPeople = people;
     renderCallSheetPeople();
   }
@@ -13398,7 +13645,7 @@ function pbRefreshPatchFields() {
   const differs = kinds.some(kind => {
     const rows = data[`${kind}PatchRows`];
     if (!Array.isArray(rows)) return false;
-    return JSON.stringify(rows) !== JSON.stringify(collectPatchRows(kind, true));
+    return !pbRowsRenderEqual(rows, collectPatchRows(kind, true));
   });
   if (differs) pbRenderPatchBody();
 }
@@ -13425,6 +13672,23 @@ function pbIsCollabField(el) {
   return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') && el.id;
 }
 
+// Autosave must also cover the dynamic-row widgets whose inputs carry data-*
+// keys instead of ids (crew grid, checklist rows, patch cells) — presence
+// stays id-based, but every edit has to reach the debounced save.
+function pbIsAutosaveField(el) {
+  if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA' && el.tagName !== 'SELECT')) return false;
+  return !!(el.id || el.dataset.callField || el.dataset.psField || el.dataset.patchField);
+}
+
+// Guard key for the 10s recent-edit hold: id when the field has one, else the
+// containing widget so the whole-grid re-render guards cover just-blurred rows.
+function pbAutosaveGuardKey(el) {
+  if (el.id) return el.id;
+  if (el.dataset.callField) return 'pp-crew-grid';
+  if (el.dataset.psField) return 'ps-checklist';
+  return '';
+}
+
 let _pbCollabListenersReady = false;
 function pbInitCollabListeners() {
   if (_pbCollabListenersReady) return;
@@ -13443,9 +13707,10 @@ function pbInitCollabListeners() {
       _pbFieldBlurTimer = setTimeout(() => pbSetPresenceField(null), 1500);
     });
     const queuePaperworkAutosave = e => {
-      if (!pbIsCollabField(e.target)) return;
+      if (!pbIsAutosaveField(e.target)) return;
       paperworkDirty = true;
-      pbNoteLocalEdit(e.target.id);
+      const guardKey = pbAutosaveGuardKey(e.target);
+      if (guardKey) pbNoteLocalEdit(guardKey);
       clearTimeout(_pbFieldSaveTimer);
       _pbFieldSaveTimer = setTimeout(() => {
         _pbFieldSaveTimer = null;
@@ -13457,7 +13722,9 @@ function pbInitCollabListeners() {
           saveOpenPaperworkSection(false);
           paperworkDirty = false;
         } finally { _pbSuppressActivity = false; }
+        updatePbSaveStatus();
       }, 650);
+      updatePbSaveStatus();
     };
     modal.addEventListener('input', queuePaperworkAutosave);
     // Safari commits time pickers and <select>s with only a 'change' event.
@@ -13518,21 +13785,22 @@ function renderPaperworkNav(id, slotId='') {
   slot.hidden = false;
   const isFirst = idx <= 0;
   const isLast = idx >= PAPERWORK_ITEMS.length - 1;
-  // Notes post instantly and the rundown page renders itself — "Save Progress"
-  // and "Preview" only make sense on the form pages.
-  const saveButton = (id === 'rundown' || id === 'production-notes') ? '' : `<button type="button" class="save" onclick="savePaperworkItem('${item.id}',true)">Save Progress</button>`;
+  // Notes post instantly and the rundown page renders itself — the live
+  // save-status chip and "Preview" only make sense on the form pages.
+  const saveStatus = (id === 'rundown' || id === 'production-notes') ? '' : `<span class="pb-save-status" data-pb-save-status role="status" aria-live="polite"></span>`;
   const previewButton = (slotId === 'pbNavPreview' || id === 'production-notes') ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
   slot.innerHTML = `
     <div class="paperwork-flow-left">
-      <button type="button" onclick="returnToPaperworkHub()">${sfIcon('action.back')}<span>Planda Bear</span></button>
+      <button type="button" onclick="returnToPaperworkHub()">${sfIcon('chevron.left')}<span>Planda Bear</span></button>
     </div>
     <div class="pb-step-pill">Step ${item.order} of ${PAPERWORK_ITEMS.length}</div>
     <div class="paperwork-flow-right">
-      ${saveButton}
+      ${saveStatus}
       ${previewButton}
-      <button type="button" onclick="openPaperworkRelative(-1)" ${isFirst ? 'disabled' : ''}>${sfIcon('action.back')}<span>Previous</span></button>
-      <button type="button" class="primary" onclick="openPaperworkRelative(1)"><span>${isLast ? 'Finish' : 'Next'}</span>${sfIcon('action.forward')}</button>
+      <button type="button" onclick="openPaperworkRelative(-1)" ${isFirst ? 'disabled' : ''}>${sfIcon('chevron.left')}<span>Previous</span></button>
+      <button type="button" class="primary" onclick="openPaperworkRelative(1)"><span>${isLast ? 'Finish' : 'Next'}</span>${sfIcon('chevron.right')}</button>
     </div>`;
+  updatePbSaveStatus();
 }
 
 function openPaperworkRelative(delta) {
@@ -16798,7 +17066,10 @@ function paperworkExportTimeout(promise, ms=PAPER_EXPORT_WAIT_MS, message='The s
 }
 
 function paperworkExportAuthority() {
-  return session.code && !session.isDemo && !session.isExpert ? 'server' : 'local';
+  // 'LOCAL' is the no-session sentinel — there is no sessions/LOCAL doc to
+  // confirm against, so local storage is the authority (same rule as
+  // syncPreProToFirestore / pbSaveStatusState).
+  return session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert ? 'server' : 'local';
 }
 
 function flushPaperworkDraftForExport() {
@@ -17939,6 +18210,8 @@ function normalizeProductionChecklistRow(row, i=0) {
   const fallback = DEFAULT_PRODUCTION_CHECKS[i]?.item || guide.hint || row?.hint || '';
   const done = Boolean(row?.done);
   return {
+    // Stable row identity for leaf-granular sync (PB_COLLAB_PLAN.md).
+    ...(row?.id ? { id: String(row.id) } : {}),
     area: row?.area || guide.area || '',
     item: row?.item || row?.task || fallback,
     hint: row?.hint || guide.hint || fallback,
@@ -18033,6 +18306,7 @@ function renderProductionChecklist(items) {
           ${row.done && row.doneBy ? `<div class="readiness-signoff">✓ Signed off by ${esc(row.doneBy)}${row.doneAt ? ` · ${esc(pbAgo(row.doneAt))}` : ''}</div>` : ''}
         </div>
         <button class="readiness-remove" onclick="removeProductionChecklistRow(${i})" title="Remove row" aria-label="Remove readiness row">×</button>
+        <input type="hidden" data-ps-row="${i}" data-ps-field="id" value="${esc(row.id||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="doneBy" value="${esc(row.doneBy||'')}">
@@ -18181,7 +18455,7 @@ function renderPatchTable(kind, title) {
       <div class="field-hint">Type directly in the first row. Use Add row for another line, or import a CSV/TSV. The arrows reorder rows.</div>
       <div class="patch-table ${isComms ? 'comms' : kind}" id="${kind}-patch-table">
         ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div class="patch-head"></div><div class="patch-head"></div>
-        ${rows.map((row,i) => isComms ? `
+        ${rows.map((row,i) => (row.id ? `<input type="hidden" data-patch-kind="${kind}" data-patch-row="${i}" data-patch-field="id" value="${esc(row.id)}">` : '') + (isComms ? `
           ${patchInput(row.position, kind, i, 'position')}
           ${patchInput(row.out, kind, i, 'out')}
           ${patchInput(row.gear, kind, i, 'gear')}
@@ -18196,7 +18470,7 @@ function renderPatchTable(kind, title) {
           ${patchInput(row.notes, kind, i, 'notes')}
           ${moveCell(i)}
           <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" title="Remove row" aria-label="Remove ${kind} row ${i + 1}">x</button>
-        `).join('')}
+        `)).join('')}
       </div>
       <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
       <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import CSV/TSV</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
@@ -18211,7 +18485,10 @@ function collectPatchRows(kind, keepBlank=false) {
     if (!rows[idx]) rows[idx] = {};
     rows[idx][field] = input.value.trim();
   });
-  return keepBlank ? rows.filter(Boolean) : rows.filter(row => Object.values(row).some(Boolean));
+  // Row identity rides a hidden id cell (PB_COLLAB_PLAN.md); an id alone does
+  // not make a row non-blank, and empty ids are dropped so fresh rows get one.
+  rows.forEach(row => { if (row && !row.id) delete row.id; });
+  return keepBlank ? rows.filter(Boolean) : rows.filter(row => Object.entries(row).some(([k, v]) => k !== 'id' && Boolean(v)));
 }
 
 function patchSectionForKind(kind) {
@@ -18916,11 +19193,38 @@ async function printPaperHTML(html, opts={}) {
   return { pageCount:Number(root.dataset.pageCount) || 1, printed:true };
 }
 
+// PDF renderer libraries are vendored same-origin (assets/vendor/) so exports
+// work offline and behind blocked CDNs — show-critical. CDN stays as fallback.
+async function loadPdfExportLibraries() {
+  const load = (local, cdn) =>
+    paperworkExportTimeout(ptLoadLibrary(local).catch(() => ptLoadLibrary(cdn)), 12000, 'The PDF renderer took too long to load.');
+  await load('assets/vendor/jspdf.umd.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await load('assets/vendor/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+}
+
+// Explicit blob + anchor download: jsPDF's doc.save() can be silently dropped
+// after async work (no longer a trusted gesture in some browsers/webviews) —
+// the operator saw a "downloaded" toast with no file. Anchor-with-download
+// attribute is not gesture-gated and works everywhere the app runs.
+function downloadBlobFile(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  if (typeof a.download === 'undefined') {
+    window.open(url, '_blank');
+  } else {
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
   const root = await buildPaperExportDocument(html, opts);
   try {
-    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadPdfExportLibraries();
     const { jsPDF } = window.jspdf || {};
     if (!jsPDF || !window.html2canvas) throw new Error('PDF renderer unavailable');
     const pages = [...root.querySelectorAll('.paper-export-page')];
@@ -18938,17 +19242,17 @@ async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
       const page = pages[index];
       const orientation = page.dataset.orientation || 'portrait';
       if (index > 0) doc.addPage('letter', orientation);
-      const canvas = await window.html2canvas(page, {
+      const canvas = await paperworkExportTimeout(window.html2canvas(page, {
         scale:opts.scale || 1.6,
         backgroundColor:'#ffffff',
         useCORS:true,
         logging:false,
-      });
+      }), 15000, `Rendering page ${index + 1} took too long.`);
       const pageW = orientation === 'landscape' ? 792 : 612;
       const pageH = orientation === 'landscape' ? 612 : 792;
       doc.addImage(canvas.toDataURL('image/jpeg', opts.jpegQuality || 0.9), 'JPEG', 0, 0, pageW, pageH, undefined, 'FAST');
     }
-    doc.save(fileName);
+    downloadBlobFile(doc.output('blob'), fileName);
     return { pageCount:pages.length, fileName, exportedAt:meta.exportedAt };
   } finally {
     root.remove();
@@ -19099,6 +19403,9 @@ function savePrePro() {
 
 function syncCallSheetPeopleFromDOM() {
   callSheetPeople = Array.from(document.querySelectorAll('.call-person-row')).map(row => ({
+    // Stable row identity for the leaf-granular sync (PB_COLLAB_PLAN.md):
+    // rows carry their id through the DOM so edits/deletes stay row-exact.
+    ...(row.dataset.rowId ? { id: row.dataset.rowId } : {}),
     name: row.querySelector('[data-call-field="name"]')?.value?.trim() || '',
     position: row.querySelector('[data-call-field="position"]')?.value?.trim() || '',
     email: row.querySelector('[data-call-field="email"]')?.value?.trim() || '',
@@ -19191,7 +19498,7 @@ function renderCallSheetPeople() {
     <div class="call-grid-head">Call</div>
     <div class="call-grid-head"></div>
     ${rows.map((p,i)=>`
-      <div class="call-person-row" data-idx="${i}" style="display:contents">
+      <div class="call-person-row" data-idx="${i}"${p.id ? ` data-row-id="${esc(p.id)}"` : ''} style="display:contents">
         <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" title="Drag to reorder" aria-label="Drag to reorder">⠿</div>
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="position" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">

@@ -32,10 +32,15 @@ const SHELL_ASSETS = [
   './design-system/apple/symbols/runtime/light-small/privacyandsecurity/exclamationmark.triangle.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/clock.svg',
   'assets/sf-symbols.css?v=4adcd0fd7c',
+  // PDF export renderers — vendored same-origin so paperwork exports never
+  // depend on CDN reachability during a show (pinned jspdf 2.5.1 / html2canvas 1.4.1).
+  'assets/vendor/jspdf.umd.min.js',
+  'assets/vendor/html2canvas.min.js',
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=943c230239',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-export-model.js?v=b9bc3293de',
+  'cueola-prepro-sync.js?v=2a99ec4a39',
   'cueola-identity.js?v=9c230d2c7a',
   'cueola-live-session.js?v=6a1ac2f19e',
   'cueola-prompter-session.js?v=1002259f73',
@@ -45,9 +50,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=3a32068c89',
-  'outrangutan/outrangutan.css?v=2fd1c473da',
-  'outrangutan/outrangutan.js?v=fba2b010d8',
+  'cueola-app.js?v=e402c9625d',
+  'outrangutan/outrangutan.css?v=ea63806f81',
+  'outrangutan/outrangutan.js?v=72194eed1e',
 ];
 
 const versionSignature = SHELL_ASSETS

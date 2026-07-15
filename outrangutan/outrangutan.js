@@ -36,8 +36,9 @@
     : (Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)));
   const STANDALONE_OUTPUT_SESSION_ID = 'standalone_' + OUTPUT_CONTROLLER_ID;
   const SCHEMA = 3;
-  const PAD_COUNT = 12;          // SFX board slots (3 × 4)
-  const PAD_KEYS = ['1','2','3','4','5','6','7','8','9','0','q','w'];
+  const PAD_COUNT = 12;          // SFX board slots per bank (default; user-expandable)
+  const PAD_COUNT_MAX = 20;      // per-bank ceiling for the "+ Add pad" ghost tile
+  const PAD_KEYS = ['1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','k'];
   const ELGATO_VID = 0x0fd9;     // Stream Deck vendor id (WebHID)
   const SD_LABELS = window.CueolaStreamDeckLabel || null;
   // WebHID control metadata. Image orientation/packet ownership lives in the
@@ -51,6 +52,7 @@
   };
   // actions a Stream Deck key / control surface can fire
   const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…' };
+  const OBS_UI = false; // OBS Studio UI hidden until ready — backend stays live for existing shows
 
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
@@ -554,6 +556,7 @@
   function sanitizeImportedShow(s) {
     if (Array.isArray(s.cues)) s.cues.forEach(c => { if (c) { c.color = safeColor(c.color); c.thumb = safeThumb(c.thumb); if (c.key) { c.key.color = safeColor(c.key.color, '#00b140'); c.key.bg = safeColor(c.key.bg, '#000000'); } c.sfxPadId = typeof c.sfxPadId === 'string' ? c.sfxPadId : ''; c.sfxDelay = Math.max(0, Number(c.sfxDelay) || 0); } });
     if (Array.isArray(s.pads)) s.pads.forEach(p => { if (p) { p.color = safeColor(p.color, 'var(--accent)'); p.emoji = typeof p.emoji === 'string' ? p.emoji.slice(0, 4) : ''; } });
+    if (Array.isArray(s.banks)) s.banks.forEach(b => { if (b) b.padCount = clampPadCount(b.padCount); });
     return s;
   }
 
@@ -584,9 +587,12 @@
   function fadeCurveOf(cue) { return cue && cue.fadeCurve ? cue.fadeCurve : settings.fadeCurve; }
 
   // ── SFX banks + pads ───────────────────────────────────────────────────────
-  function defaultBanks() { return [{ id: rid('bk_'), name: 'Bank 1' }]; }
+  function defaultBanks() { return [{ id: rid('bk_'), name: 'Bank 1', padCount: PAD_COUNT }]; }
+  function clampPadCount(v) { const n = Math.round(Number(v)); return isNaN(n) ? PAD_COUNT : Math.min(PAD_COUNT_MAX, Math.max(PAD_COUNT, n)); }
+  function bankPadCount() { const b = banks.find(x => x.id === currentBankId); return b ? clampPadCount(b.padCount) : PAD_COUNT; }
   function ensureBanks() {
     if (!Array.isArray(banks) || !banks.length) banks = defaultBanks();
+    banks.forEach(b => { b.padCount = clampPadCount(b.padCount); });
     if (!banks.find(b => b.id === currentBankId)) currentBankId = banks[0].id;
   }
   function padBySlot(slot) { return pads.find(p => (p.bank || (banks[0] && banks[0].id)) === currentBankId && p.slot === slot) || null; }
@@ -601,7 +607,7 @@
     };
   }
   function setBank(id) { if (!banks.find(b => b.id === id)) return; currentBankId = id; selectedPadId = null; renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave(); }
-  function addBank() { const b = { id: rid('bk_'), name: 'Bank ' + (banks.length + 1) }; banks.push(b); currentBankId = b.id; selectedPadId = null; renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave(); }
+  function addBank() { const b = { id: rid('bk_'), name: 'Bank ' + (banks.length + 1), padCount: PAD_COUNT }; banks.push(b); currentBankId = b.id; selectedPadId = null; renderBanks(); renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave(); }
   function renameBank(id, name) { const b = banks.find(x => x.id === id); if (b) { b.name = name || b.name; renderBanks(); scheduleSave(); } }
   function removeBank(id) {
     if (banks.length <= 1) { toast('Keep at least one bank.'); return; }
@@ -1840,14 +1846,16 @@
       '<div class="og-intg-sect"><div class="og-intg-head">' + sym('action.settings') + ' Transcode on upload</div>'
       + '<label class="og-check"><input type="checkbox" id="og-transcode"' + (settings.transcode ? ' checked' : '') + '> Normalize non-web-playable uploads to H.264 MP4 (ffmpeg.wasm)</label>'
       + '<p class="og-sheet-note">When on, dropping a .mov/.mkv/etc. transcodes it in-browser (ffmpeg.wasm, ~30&nbsp;MB, lazy-loaded) before it becomes a cue. ProRes/DNxHD &amp; large jobs belong to the future native engine; this always falls back to storing as-is.</p></div>';
-    body.innerHTML = obsHTML + dbxHTML + intgHTML;
+    body.innerHTML = (OBS_UI ? obsHTML : '') + dbxHTML + intgHTML;
 
     const on = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
-    on('og-obs-conn', 'onclick', () => obsConnect($('og-obs-host').value.trim(), parseInt($('og-obs-port').value, 10) || 4455, $('og-obs-pw').value));
-    on('og-obs-disc', 'onclick', () => { obsDisconnect(); renderIntegrations(); });
-    on('og-obs-stream', 'onclick', () => obsReq(obs.streaming ? 'StopStream' : 'StartStream'));
-    on('og-obs-record', 'onclick', () => obsReq(obs.recording ? 'StopRecord' : 'StartRecord'));
-    Array.prototype.forEach.call(body.querySelectorAll('.og-obs-scene'), b => { b.onclick = () => obsReq('SetCurrentProgramScene', { sceneName: b.getAttribute('data-scene') }); });
+    if (OBS_UI) {
+      on('og-obs-conn', 'onclick', () => obsConnect($('og-obs-host').value.trim(), parseInt($('og-obs-port').value, 10) || 4455, $('og-obs-pw').value));
+      on('og-obs-disc', 'onclick', () => { obsDisconnect(); renderIntegrations(); });
+      on('og-obs-stream', 'onclick', () => obsReq(obs.streaming ? 'StopStream' : 'StartStream'));
+      on('og-obs-record', 'onclick', () => obsReq(obs.recording ? 'StopRecord' : 'StartRecord'));
+      Array.prototype.forEach.call(body.querySelectorAll('.og-obs-scene'), b => { b.onclick = () => obsReq('SetCurrentProgramScene', { sceneName: b.getAttribute('data-scene') }); });
+    }
     on('og-dbx-token', 'onchange', e => { dbx.token = e.target.value.trim(); });
     on('og-dbx-folder', 'onchange', e => { dbx.folder = e.target.value.trim(); });
     on('og-dbx-list', 'onclick', () => { dbx.token = $('og-dbx-token').value.trim(); dbx.folder = $('og-dbx-folder').value.trim(); dropboxList(); });
@@ -3049,7 +3057,7 @@
               '<div class="og-insp-meta">Fires with this cue and fades out when the clip ends or stops — a rundown-linked fire brings it too.</div>'
             : ''));
       })() +
-      (function () { const ob = c.obs || (c.obs = { action: 'none', scene: '' });
+      (function () { if (!OBS_UI) return ''; const ob = c.obs || (c.obs = { action: 'none', scene: '' });
         return sec('OBS',
           field('On fire', '<select id="og-i-obsaction">' + opt('none', '—', ob.action) + opt('scene', 'Switch scene', ob.action) + opt('startRecord', 'Start record', ob.action) + opt('stopRecord', 'Stop record', ob.action) + opt('startStream', 'Start stream', ob.action) + opt('stopStream', 'Stop stream', ob.action) + '</select>') +
           (ob.action === 'scene' ? field('Scene', '<input id="og-i-obsscene" type="text" value="' + esc(ob.scene || '') + '" placeholder="Scene name">') : '') +
@@ -3126,9 +3134,11 @@
     bind('og-i-keybg', 'oninput', e => { c.key.bg = e.target.value; keyOut(); scheduleSave(); });
     bind('og-i-sfxpad', 'onchange', e => { c.sfxPadId = e.target.value; renderInspector(); renderCueList(); scheduleSave(); });
     bind('og-i-sfxdelay', 'onchange', e => { c.sfxDelay = Math.max(0, parseFloat(e.target.value) || 0); scheduleSave(); });
-    bind('og-i-obsaction', 'onchange', e => { c.obs.action = e.target.value; renderInspector(); scheduleSave(); });
-    bind('og-i-obsscene', 'onchange', e => { c.obs.scene = e.target.value; scheduleSave(); });
-    bind('og-i-obstrigger', 'onchange', e => { c.obsTriggerScene = e.target.value; scheduleSave(); });
+    if (OBS_UI) {
+      bind('og-i-obsaction', 'onchange', e => { c.obs.action = e.target.value; renderInspector(); scheduleSave(); });
+      bind('og-i-obsscene', 'onchange', e => { c.obs.scene = e.target.value; scheduleSave(); });
+      bind('og-i-obstrigger', 'onchange', e => { c.obsTriggerScene = e.target.value; scheduleSave(); });
+    }
     bind('og-i-armed', 'onchange', e => { c.armed = e.target.value === '1'; renderCueList(); scheduleSave(); });
     bind('og-i-notes', 'oninput', e => { c.notes = e.target.value; scheduleSave(); });
     bind('og-i-del', 'onclick', () => deleteCue(c.id));
@@ -3476,8 +3486,9 @@
   function renderPads() {
     const grid = $('og-pad-grid'); if (!grid) return;
     ensureBanks();
+    const padCount = bankPadCount();
     let html = '';
-    for (let i = 0; i < PAD_COUNT; i++) {
+    for (let i = 0; i < padCount; i++) {
       const p = padBySlot(i);
       if (!p) { html += '<button class="og-pad empty" data-slot="' + i + '"><span class="og-pad-empty-l">' + sym('action.add') + '</span><span class="og-pad-hint">Drop a sound</span></button>'; continue; }
       const live = padRT.get(p.id); const playing = live && live.voices.length;
@@ -3489,7 +3500,14 @@
         + '<span class="og-pad-meter"><span class="og-pad-meter-fill" id="og-padmeter-' + p.id + '"></span></span>'
         + '</button>';
     }
+    if (padCount < PAD_COUNT_MAX) html += '<button class="og-pad og-pad-add-slot" id="og-pad-add-slot" title="Grow this bank by one pad slot">+ Add pad · ' + padCount + '/' + PAD_COUNT_MAX + '</button>';
     grid.innerHTML = html;
+    const addSlot = $('og-pad-add-slot');
+    if (addSlot) addSlot.onclick = () => {
+      const b = banks.find(x => x.id === currentBankId); if (!b) return;
+      b.padCount = clampPadCount((b.padCount || PAD_COUNT) + 1);
+      saveShow(); renderPads();
+    };
     Array.prototype.forEach.call(grid.querySelectorAll('.og-pad.empty'), b => {
       const slot = +b.getAttribute('data-slot');
       b.onclick = () => { padSlotForFile = slot; $('og-pad-file').click(); };
@@ -3663,6 +3681,7 @@
     if (!s || !Array.isArray(s.cues)) { outputs = defaultOutputs(); sdMap = {}; banks = defaultBanks(); currentBankId = banks[0].id; return null; }
     cues = s.cues.map(c => Object.assign(makeCue({ type: c.type }), c, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, c.eq || {}) }));
     banks = (Array.isArray(s.banks) && s.banks.length) ? s.banks.slice() : defaultBanks();
+    banks.forEach(b => { b.padCount = clampPadCount(b.padCount); });   // missing → 12, stored → clamp [12, 20]
     currentBankId = (s.currentBankId && banks.find(b => b.id === s.currentBankId)) ? s.currentBankId : banks[0].id;
     pads = Array.isArray(s.pads) ? s.pads.map(p => Object.assign({ eq: { low: 0, mid: 0, high: 0 }, gain: 1, retrigger: 'restart', fadeIn: 0, trimIn: 0, emoji: '', bank: banks[0].id }, p, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, p.eq || {}) })) : [];
     pads.forEach(p => { if (!banks.find(b => b.id === p.bank)) p.bank = banks[0].id; });   // re-home orphaned pads
@@ -4105,7 +4124,7 @@
     const root = $('outrangutan'); if (!root || built) return;
     root.innerHTML =
       '<div class="og-bar">'
-        + '<button class="og-back" id="og-back">' + sym('action.back') + '<span>Cueola</span></button>'
+        + '<button class="og-back" id="og-back">' + sym('chevron.left') + '<span>Cueola</span></button>'
         + '<div class="og-title"><span class="og-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span><span class="og-wordmark">Out<span class="og-wm-hi">rangutan</span></span></div>'
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
@@ -4124,7 +4143,7 @@
             + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
             + '<button class="og-bar-btn" id="og-midi-btn" title="MIDI control surfaces (Web MIDI)">' + sym('action.grid') + 'MIDI</button>'
             + '<button class="og-bar-btn" id="og-print-btn" title="Print the show-day pack — cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
-            + '<button class="og-bar-btn" id="og-pro-btn" title="OBS · Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
+            + '<button class="og-bar-btn" id="og-pro-btn" title="' + (OBS_UI ? 'OBS · ' : '') + 'Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
             + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
             + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
@@ -4140,9 +4159,12 @@
         + '<div class="og-main">'
           + '<div class="og-toprow" id="og-toprow">'
           + '<div class="og-pane og-cuelist-pane">'
-            + '<div class="og-pane-head">Cue List<div class="og-pane-actions"><button class="og-bar-btn" id="og-matte-add" title="Add a full-screen solid-color matte cue">' + sym('content.image') + ' Matte</button></div></div>'
+            + '<div class="og-pane-head">Cue List</div>'
             + '<div class="og-cuelist" id="og-cuelist"></div>'
-            + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
+            + '<div class="og-cue-add-row">'
+              + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
+              + '<button class="og-bar-btn og-matte-inline" id="og-matte-add" title="Add a solid-color matte cue">' + sym('content.image') + ' Matte</button>'
+            + '</div>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
           + '</div>'
           + '<div class="og-pane og-program-pane">'
@@ -4410,7 +4432,7 @@
     try {
       ensureBanks();
       let slot = -1;
-      for (let i = 0; i < PAD_COUNT; i++) { const p = padBySlot(i); if (!p || !p.mediaId) { slot = i; break; } }
+      for (let i = 0; i < bankPadCount(); i++) { const p = padBySlot(i); if (!p || !p.mediaId) { slot = i; break; } }
       if (slot < 0) { addBank(); slot = 0; }   // current bank full → start a fresh one
       await assignPad(slot, file);
       setTab('sfx');

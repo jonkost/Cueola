@@ -29,7 +29,7 @@
 /* show-mode lock dims edit affordances */
 #outrangutan.locked .og-cue-add, #outrangutan.locked .og-inspector input,
 #outrangutan.locked .og-inspector select, #outrangutan.locked .og-cue-del { opacity: .4; pointer-events: none; }
-#outrangutan.locked .og-pad.empty, #outrangutan.locked .og-pad-edit,
+#outrangutan.locked .og-pad.empty, #outrangutan.locked .og-pad-add-slot, #outrangutan.locked .og-pad-edit,
 #outrangutan.locked .og-pad-inspector input, #outrangutan.locked .og-pad-inspector select,
 #outrangutan.locked .og-p-clear { opacity: .4; pointer-events: none; }
 
@@ -309,8 +309,8 @@
 .og-cue.broken .og-cue-name { color: color-mix(in srgb, var(--red) 70%, var(--text)); }
 .og-cue-num { font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--text3); font-variant-numeric: tabular-nums; text-align: right; }
 .og-cue.playing .og-cue-num, .og-cue.selected .og-cue-num { color: var(--text); }
-.og-cue-typeicon { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); }
-.og-cue-typeicon .sf-symbol { font-size: 11px; color: #fff; }
+.og-cue-typeicon { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; color: var(--bg); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); }
+.og-cue-typeicon .sf-symbol { font-size: 11px; color: var(--bg); }
 .og-type-video { background: var(--video); }
 .og-type-audio { background: var(--green); }
 .og-type-image { background: var(--yellow); }
@@ -329,7 +329,10 @@
 .og-cue-meter { display: inline-block; vertical-align: middle; margin-left: 6px; position: relative; width: 56px; height: 5px; background: var(--s3); border-radius: 3px; overflow: hidden; }
 .og-cue-meter-fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, var(--green) 0%, var(--green) 55%, var(--yellow) 80%, var(--red) 100%); }
 
-/* drop zone */
+/* drop zone + inline matte button — every "create a cue" affordance in one row */
+.og-cue-add-row { display: flex; gap: 8px; align-items: stretch; margin: 8px 10px 10px; }
+.og-cue-add-row #og-cue-add { flex: 1; min-width: 0; margin: 0; }
+.og-matte-inline { flex: 0 0 auto; }
 .og-cue-add {
   display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 9px; text-align: left;
   margin: 8px 10px 10px; padding: 12px 14px;
@@ -397,7 +400,7 @@
 .og-master-lbl { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text3); }
 .og-meter { position: relative; width: 84px; height: 8px; background: var(--s3); border: 1px solid var(--og-edge); border-radius: 3px; overflow: hidden; display: inline-block; }
 .og-meter-fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, var(--green) 0%, var(--green) 55%, var(--yellow) 80%, var(--red) 100%); }
-.og-meter-peak { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: 0; }
+.og-meter-peak { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: 0; }
 
 .og-vfader {
   flex: 1 1 auto; -webkit-appearance: none; appearance: none;
@@ -420,7 +423,7 @@
 .og-scope-vec { flex: 0 0 auto; aspect-ratio: 1; }
 .og-scope-lbl { position: absolute; top: 6px; left: 9px; z-index: 1; pointer-events: none; font-family: var(--mono); font-size: 8.5px; font-weight: 800; letter-spacing: .12em; color: rgba(214, 232, 240, .62); text-shadow: 0 1px 3px rgba(0, 0, 0, .85); }
 .og-scope canvas { display: block; width: 100%; height: 100%; }
-.og-scopes-btn.on { background: var(--accent); color: #fff; border-color: transparent; }
+.og-scopes-btn.on { background: color-mix(in srgb, var(--accent) 84%, var(--s2)); color: color-mix(in srgb, var(--bg) 18%, #000); border-color: transparent; }
 
 /* count-out clock — with the monitor, the loudest thing here */
 .og-clock {
@@ -439,14 +442,16 @@
 .og-clock-dir .sf-symbol { font-size: 12px; transition: transform .16s ease; transform: rotate(90deg); }   /* down = counting down */
 .og-clock-dir.is-elapsed .sf-symbol { transform: rotate(-90deg); }                                          /* up = counting up */
 .og-clock-duration { color: var(--text3); font: 800 10px/1 var(--mono-num, monospace); letter-spacing: .08em; }
-/* SMPTE digits: tabular, pane-scaled; color strictly by count direction */
-.og-clock-time { font-family: var(--mono-num, monospace); font-weight: 800; font-size: clamp(40px, 12cqw, 96px); line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--red); }
-.og-clock.og-count-down .og-clock-time { color: var(--red); }
-.og-clock.og-count-up .og-clock-time { color: var(--green); }
+/* SMPTE digits: tabular, pane-scaled; color strictly by count direction.
+   LED face matches Cueola main's production clocks — the one sanctioned
+   hardcoded-hex zone per DESIGN_GUIDELINES.md. */
+.og-clock-time { font-family: 'Courier New', Courier, monospace; font-weight: 900; font-size: clamp(30px, 7.5cqw, 56px); line-height: 1; letter-spacing: .06em; font-variant-numeric: tabular-nums; color: #ff3030; background: #060709; border: 1px solid #1c2028; border-radius: 2px; padding: 6px 14px; }
+.og-clock.og-count-down .og-clock-time { color: #ff3030; }
+.og-clock.og-count-up .og-clock-time { color: #3ad090; }
 
 /* media transport — round icon cluster with quiet captions (kept from the
    owner-approved redesign; single source of transport styling) */
-.og-transport { display: flex; align-items: flex-start; justify-content: center; gap: 20px; margin: 8px 0 16px; padding: 0 14px; }
+.og-transport { display: flex; align-items: flex-start; justify-content: center; gap: 20px; margin: 14px 0 20px; padding: 0 14px; }
 .og-transport-group { display: flex; align-items: flex-start; gap: 18px; }
 .og-tctl { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 60px; }
 .og-tctl-go { min-width: 84px; }
@@ -638,7 +643,7 @@
 #og-sfx-stop {
   background: color-mix(in srgb, var(--red) 20%, var(--s3)) !important;
   border-color: color-mix(in srgb, var(--red) 54%, var(--og-edge)) !important;
-  color: color-mix(in srgb, #fff 88%, var(--red)) !important;
+  color: color-mix(in srgb, var(--text) 88%, var(--red)) !important;
 }
 #og-sfx-stop .sf-symbol { font-size: 19px; }
 #og-sfx-stop:hover { background: color-mix(in srgb, var(--red) 27%, var(--s3)) !important; border-color: color-mix(in srgb, var(--red) 70%, var(--og-edge)) !important; }
@@ -678,7 +683,7 @@
 .og-search-name { flex: 1 1 auto; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .og-search-bank { font-size: 11px; color: var(--text3); white-space: nowrap; }
 .og-search-fire { background: var(--s3); border: 1px solid color-mix(in srgb, var(--text) 6%, transparent); border-radius: 6px; color: var(--text2); width: 30px; height: 26px; font-size: 14px; cursor: pointer; display: grid; place-items: center; flex: 0 0 auto; }
-.og-search-fire:hover { background: var(--green); color: color-mix(in srgb, var(--bg) 18%, #000); border-color: var(--green); }
+.og-search-fire:hover { background: var(--green); color: var(--s1); border-color: var(--green); }
 .og-search-none { padding: 16px; text-align: center; color: var(--text3); font-size: 12.5px; }
 
 /* pads: color-lit tiles */
@@ -701,6 +706,9 @@
 .og-pad.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .og-pad.empty { border: 1.5px dashed var(--og-edge-strong); background: transparent; color: var(--text3); align-items: center; justify-content: center; gap: 4px; flex-direction: column; }
 .og-pad.empty:hover, .og-pad.drag { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* ghost tile: grow the current bank by one slot (12 → 20 max) */
+.og-pad-add-slot { border: 1.5px dashed var(--og-edge-strong); background: transparent; color: var(--text3); align-items: center; justify-content: center; font-size: 12px; }
+.og-pad-add-slot:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .og-pad-empty-l .sf-symbol { font-size: 22px; }
 .og-pad-hint { font-size: 12px; }
 .og-pad-key { position: absolute; top: 8px; left: 8px; font-family: var(--mono-num, var(--mono)); font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--pad) 70%, var(--text)); background: rgba(0, 0, 0, .30); border-radius: 5px; padding: 1px 6px; min-width: 14px; text-align: center; }
@@ -854,7 +862,7 @@
 .og-intg-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .og-intg-port { flex: 0 0 80px; }
 .og-obs-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.og-obs-scene.on { background: var(--accent); color: #fff; border-color: transparent; }
+.og-obs-scene.on { background: color-mix(in srgb, var(--accent) 84%, var(--s2)); color: color-mix(in srgb, var(--bg) 18%, #000); border-color: transparent; }
 .og-dbx-files { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .og-dbx-file { display: flex; align-items: center; gap: 8px; }
 .og-dbx-name { flex: 1 1 auto; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -905,8 +913,8 @@
 /* the monitor caps by 16:9 height so clock + transport keep a healthy share */
 .og-main.og-lay-wide .og-program-pane { container-type: size; }
 .og-main.og-lay-wide .og-program-top > .og-program-wrap { flex: 0 1 auto; width: min(100%, calc(54cqh * 16 / 9)); }
-.og-main.og-lay-wide .og-clock { flex: 0 0 96px; min-height: 88px; box-sizing: border-box; justify-content: center; container-type: inline-size; }
-.og-main.og-lay-wide .og-clock-time { font-size: clamp(36px, 10cqw, 62px); }
+.og-main.og-lay-wide .og-clock { flex: 0 0 84px; min-height: 76px; box-sizing: border-box; justify-content: center; container-type: inline-size; }
+.og-main.og-lay-wide .og-clock-time { font-size: clamp(26px, 6.5cqw, 44px); }
 
 /* MEDIUM (721–1180): Cue List | Program on top, shared tabbed bottom card */
 .og-main.og-lay-medium { display: flex; flex-direction: column; overflow: hidden; }

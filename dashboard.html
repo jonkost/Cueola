@@ -151,7 +151,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sc-live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,211,160,.55);animation:scLivePulse 2s infinite}
 @keyframes scLivePulse{0%{box-shadow:0 0 0 0 rgba(34,211,160,.45)}70%{box-shadow:0 0 0 7px rgba(34,211,160,0)}100%{box-shadow:0 0 0 0 rgba(34,211,160,0)}}
 .sc-live-count{font-size:10.5px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;color:var(--green);text-transform:uppercase;margin-right:2px}
-.sc-live-ava{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;background:var(--green);border:1.5px solid var(--bg);margin-left:-4px;cursor:default}
+.sc-live-ava{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--bg);background:var(--green);border:1.5px solid var(--bg);margin-left:-4px;cursor:default}
 .sc-live-ava:first-of-type{margin-left:0}
 .sc-live-ava.inst{background:var(--accent)}
 .sc-live-extra{font-size:10px;font-family:var(--mono);color:var(--text3);margin-left:3px}
@@ -182,7 +182,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-mini-btn:hover{border-color:var(--accent);color:var(--accent)}
 .admin-mini-btn.primary{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent)}
 .admin-mini-btn.primary:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--text)}
-.admin-mini-btn.danger{background:rgba(240,82,82,.07);border-color:rgba(240,82,82,.22);color:#d98292}
+.admin-mini-btn.danger{background:rgba(240,82,82,.07);border-color:rgba(240,82,82,.22);color:color-mix(in srgb,var(--red) 75%,var(--text))}
 .admin-mini-btn.danger:hover{border-color:var(--red);color:var(--red);background:rgba(240,82,82,.12)}
 .admin-field-pack{display:flex;flex-direction:column;gap:5px;min-width:0}
 .admin-field-pack span{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
@@ -280,8 +280,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sc-btn-copy:hover{color:var(--text);border-color:var(--text2)}
 .sc-btn-muted{background:transparent;color:var(--text3);border:1px solid var(--border)}
 .sc-btn-muted:hover{color:var(--text2);border-color:var(--bord2);background:rgba(255,255,255,.02)}
-.sc-btn-del{background:rgba(240,82,82,.07);color:#d98292;border:1px solid rgba(240,82,82,.22)}
-.sc-btn-del:hover{color:var(--red);border-color:rgba(240,82,82,.4);background:rgba(240,82,82,.12)}
 
 /* ── EMPTY STATE ── */
 .empty-state{
@@ -311,6 +309,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn-full{width:100%;padding:14px;border-radius:var(--r);font-size:15px;font-weight:600;font-family:var(--sans);cursor:pointer;border:none;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;letter-spacing:0}
 .btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff}
 .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+:is([data-theme="honey"],[data-theme="warm"],[data-theme="eucalyptus"],[data-theme="green"],[data-theme="prepbear"]) .btn-primary{color:#1c1404}
 [data-theme="koala"] .btn-primary{background:linear-gradient(135deg,#404040,#494949);color:#fff;border:1px solid rgba(255,255,255,.2)}
 [data-theme="koala"] .btn-primary:hover{filter:brightness(1.15)}
 [data-theme="panda"] .btn-primary{background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border:1px solid rgba(255,255,255,.18)}
@@ -1419,8 +1418,8 @@ async function refreshSessions() {
 
 // ── RENDER SESSIONS ───────────────────────────────────────────
 const CUE_COLORS = {
-  video:'#5b8df8', audio:'#22d3a0', lighting:'#b06ef8',
-  playback:'#f05252', gfx:'#f5b731', script:'#22d3d3'
+  video:'#5b8df8', audio:'var(--green)', lighting:'var(--purple)',
+  playback:'var(--red)', gfx:'var(--yellow)', script:'var(--cyan)'
 };
 const CARD_PALETTE = ['#5b8df8','#22d3a0','#f5c842','#f05252','#b06ef8','#f97316','#ec4899'];
 
