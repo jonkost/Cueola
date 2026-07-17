@@ -366,6 +366,11 @@ let followTargetId = '';    // presence id keeps duplicate/stale display names f
 let editId = null;
 let timerInterval = null;
 let elapsedSecs = 0;
+// True once the show clock has run in THIS page load. A stopped clock with
+// leftover elapsedSecs on a fresh load means the session hydrated a parked
+// rehearsal clock, not a live pause — that state must still offer the
+// take-it-from-the-top chooser instead of silently resuming mid-rundown.
+let _clockRanThisLoad = false;
 let liveTimerStartMs = null;
 let prompterText = '';
 let prompterVersion = 0;
@@ -7792,7 +7797,7 @@ function liveStartShowPressed() {
   }
   const activeIdx = liveActiveCueIndex();
   const firstIdx = liveNextPlayableCueIndex(-1);
-  if (!liveClockRunning && !elapsedSecs && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
+  if (!liveClockRunning && (!elapsedSecs || !_clockRanThisLoad) && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
     const hereEl = document.getElementById('lsStartChoiceRow');
     if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} — ${beats[activeIdx]?.info || 'Untitled'}`;
     const topEl = document.getElementById('lsStartChoiceTopLbl');
@@ -12844,6 +12849,7 @@ function resumeRemoteClockIfRunning() {
 function startTimer(anchorMs) {
   stopTimer(false);
   liveClockRunning = true;
+  _clockRanThisLoad = true;
   // anchorMs lets a synced (remote) clock line up to the exact origin the caller
   // started from; locally we derive it from the elapsed time so far.
   const start = (typeof anchorMs === 'number' && anchorMs > 0) ? anchorMs : (Date.now() - elapsedSecs * 1000);

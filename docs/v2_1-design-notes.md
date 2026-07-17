@@ -185,6 +185,12 @@ Scope: **M** (2–3 days). Open questions: plan decision 7 (capture breadth, tim
 
 ## D4. Stage Plot — drag-and-drop plot diagram (Planda Bear)
 
+> **Status (owner directive 2026-07-16): built LAST in the window, and the phase opens with an
+> owner design consult — the owner advises how the plot paperwork should look and behave at that
+> point.** Everything below is a technically-verified BASELINE (editor technology, data shape,
+> sync strategy, print path), not a locked visual design; the plot-count model, export inclusion,
+> assignability, and v1 cutline are all decided at the consult.
+
 **Decision:** "Stage Plot" as a vanilla SVG-element editor page (no library, no canvas): a new
 PAPERWORK_ITEMS page whose data is ONE new identifier-safe top-level key `prePro.stagePlots` — an
 ARRAY of named plots (min-1), each `{id, items:[{id, type, x_ft, y_ft, rot, scale, w_ft, h_ft,

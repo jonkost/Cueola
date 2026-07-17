@@ -18,6 +18,32 @@ paperwork/export overhaul and groups (the classroom-critical items) and slips St
 Training-video *recording* is an owner errand that may trail past Aug 2; everything else lands in
 the window.
 
+## Build dark, release deliberately
+
+The entire window is built **without touching the live product**. cueola.live changes only on a
+deliberate publish, so:
+
+- **All work lands on a `v2.1` branch** (owner sign-off pending — decision 16). Claude prepares
+  commits per work item as usual; the owner commits to the branch and pushes it. A branch push
+  publishes nothing (Pages serves main) but gives offsite backup — 13 days of work never sits
+  uncommitted on one machine. **main stays frozen as the known-good show build** until release.
+- **Shared-infrastructure touches before release are limited to provably inert ones:** console
+  toggles (Email/Password provider — no live client has auth code; App Check monitor mode —
+  enforces nothing), bootstrap `admins/{uid}` docs (invisible under current rules + current JS).
+  Production Firestore **rules do not move until release day** — all rules work is developed and
+  tested against the emulator (rules PUT). QA against live Firestore uses throwaway session codes
+  (the 2607T pattern); there is no staging project.
+- **Release day (Phase 12) is one deliberate sequence:** additive rules blocks (/groups,
+  /snapshots, admins) → merge `v2.1` → main + push → ?v= / WORKER_SCHEMA levers roll the fleet →
+  tightening rules last (admin gating, scoped lists), each with dated rollback copies in docs/.
+  Rollback: revert main, redeploy the rollback rules — main never stopped being a working product.
+- Phases whose D-notes describe mid-window prod deploys (e.g. D1's "hosting first, then rules")
+  execute that ordering **within the release-day sequence** instead; the emulator stands in for
+  prod during the build.
+
+**Decision 16 — confirm the `v2.1` branch workflow** (a deliberate exception to the usual
+straight-to-main habit, for this window only).
+
 ## How this plan works
 
 - **One phase per work session (or few).** Each phase lists goal, dependencies, work, verification. Don't reorder without checking the "depends on" line.
@@ -52,8 +78,8 @@ Answer the rest as their phase approaches. Recommendations are marked.
 **Cloud snapshots (D3) — blocks Phase 7**
 7. Snapshot reads/writes are **admin-gated in rules from day one** (no PII window on the new collection). Remaining calls: instructor/admin-only capture (recommended) or every device? Time-based expiry (~30 days) on top of the 20-cap + Delete Forever + term rotation (recommended: yes)?
 
-**Stage Plot (D4) — blocks Phase 8**
-8. Multiple named plots with '+ Add Plot' (recommended) or two fixed pages? In the export package by default when non-empty (recommended: yes)? Assignable to students via the assignment catalog (recommended: defer)? Confirm the deferred list (freehand walls, image backgrounds, multi-select align, cable runs, live cursors).
+**Stage Plot (D4) — answered at the Phase 8 design consult (owner directive: plot paperwork is built last, owner advises its look/behavior then)**
+8. Deferred to the phase-start consult: plot count model, export inclusion, student assignability, and the v1 cutline. D4's technical baseline (SVG editor, sync, print path) holds regardless of the visual direction chosen.
 
 **Start Next Episode (D5) — blocks Phase 6**
 9. Defaults to confirm: call/show/wrap **times carry** (only date + weather blank); **cues carry**; **crew grid carries**; naming auto-increments ("Ep 12" → "Ep 13"); a **grouped** source carries each group's paperwork structure into fresh group docs (recommended). Crew/assignments carry-over deferred to a later opt-in.
@@ -203,12 +229,16 @@ capture doc actually appears (fire-and-forget writes fail silently otherwise).
 
 ---
 
-## Phase 8 — Stage Plot (design D4) — **Thu Jul 30 – Fri Jul 31** *(first to slip, decision 15)*
+## Phase 8 — Stage Plot (design D4) — **built LAST: Sat Aug 1 – Sun Aug 2** *(owner directive 2026-07-16)*
 
-**Depends on:** Phase 3 (numbered-section builder + config fieldset; Intro preset sets it off). **Size:** 1.5 days.
-SVG drag-and-drop editor, ~10 SF-style glyphs, feet-scaled stage with grid snap, inspector per the
-kit, advisory single-editor presence, letter-landscape print via the section builder. v1 cutline per
-decision 8.
+**The plot paperwork is deliberately the final build item, and the phase OPENS with an owner design
+consult** — you advise how it should look and work then; D4 is a technically-verified baseline
+(SVG editor, sync strategy, print path), not a locked design. Expect direction changes at zero
+sunk cost since nothing is built yet.
+**Depends on:** Phase 3 (numbered-section builder + config fieldset; Intro preset sets it off);
+owner design direction at phase start. **Size:** 1.5 days.
+Being last also makes the decision-15 cut order automatic: if the runway is gone by Aug 1, Stage
+Plot is the natural slip to a fast-follow point release — nothing else depends on it.
 
 **Verify:** touch + mouse; two-browser advisory lock; vector print; PDF export on school hardware; nine themes; Intro-preset session hides it.
 
@@ -288,9 +318,9 @@ Sun 26 – Mon 27           Phase 4   dashboard redesign
 Mon 27 – Tue 28           Phase 5   identity + avatars
 Tue 28 – Wed 29           Phase 6   groups + Start Next Episode
 Thu Jul 30                Phase 7   cloud snapshots
-Thu 30 – Fri 31           Phase 8   Stage Plot            ← slips first if needed
-Fri Jul 31                Phase 9   platform & UI sweep (continuous before this)
-Sat Aug 1                 Phase 10  security close-out  ·  Phase 11 docs & training
+Thu 30 – Fri 31           Phase 9   platform & UI sweep (continuous before this)
+Fri 31 – Sat Aug 1        Phase 10  security close-out  ·  Phase 11 docs & training
+Sat 1 – Sun 2             Phase 8   Stage Plot — LAST · opens with owner design consult
 Sun Aug 2                 Phase 12  QA + v2.1.0
 ```
 
