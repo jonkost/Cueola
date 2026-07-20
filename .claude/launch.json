@@ -4,40 +4,57 @@
     {
       "name": "Cueola",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3001'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"],
+      "runtimeArgs": [
+        "-c",
+        "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3001'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"
+      ],
       "autoPort": true,
       "port": 3001
     },
     {
       "name": "Cueola-alt",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3011'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"],
+      "runtimeArgs": [
+        "-c",
+        "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3011'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola')).serve_forever()"
+      ],
       "autoPort": true,
       "port": 3011
     },
     {
-      "name": "Cueola-v21",
-      "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3021'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola-v2.1')).serve_forever()"],
-      "autoPort": true,
-      "port": 3021
-    },
-    {
       "name": "Prompt-Up-The-Jam",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "3002", "--directory", "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3002",
+        "--directory",
+        "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam"
+      ],
       "port": 3002
     },
     {
       "name": "SwitchUp-Studio",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "3003", "--directory", "/Users/jonkost/Documents/GitHub/SwitchUp-Studio"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3003",
+        "--directory",
+        "/Users/jonkost/Documents/GitHub/SwitchUp-Studio"
+      ],
       "port": 3003
     },
     {
       "name": "jonkost.github.io",
       "runtimeExecutable": "/usr/local/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "3004", "--directory", "/Users/jonkost/Documents/GitHub/jonkost.github.io"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3004",
+        "--directory",
+        "/Users/jonkost/Documents/GitHub/jonkost.github.io"
+      ],
       "port": 3004
     }
   ]
