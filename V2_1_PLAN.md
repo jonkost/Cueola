@@ -105,9 +105,9 @@ Answer the rest as their phase approaches. Recommendations are marked.
 **Contingency**
 15. Cut order under deadline pressure (confirm): Stage Plot (Phase 8) slips first, to a post-2.1 point release → Phase 5's presence-avatar stretch drops → groups (Phase 6) slips ONLY to the following between-terms window, never mid-term (if it slips, Phase 10 still lands the inert /groups rules block and docs mark groups "coming soon"). **Never cut:** Phases 1, **1.5 (live reliability — owner directive 2026-07-20)**, 2, 3 (paperwork/export), 4, 10, 11, 12 — they are the "rock solid + professional + teachable" promise. The paperwork/export overhaul is explicitly not cuttable. *2026-07-20 revision:* inserting Phase 1.5 consumes the remaining slack — Stage Plot's slip to a 2.1.1 fast-follow is now the **expected** outcome, not the contingency, unless days are recovered mid-window.
 
-**Live reliability (D11) — Phase 1.5 opens with these confirmed or defaulted**
-16b. *(numbered to avoid renumbering decision 16 below)* YouTube-chat questions: recommended and specced as a **plain paste lane** — operator pastes text copied from YouTube chat into a question box and pushes it to the talent as a labeled QUESTION card. No YouTube API, no OAuth, nothing to configure on show day. Confirm or redirect.
-16c. Talent overlay budget: clocks/wrap/tech-issue/question banners cap at a **bounded band (~20% of screen height)** so the script always stays readable; full-screen takeover is reserved for the deliberate stand-by slate only. Confirm the band or give a different number at the Phase 1.5 open.
+**Live reliability (D11) — both CONFIRMED by owner 2026-07-20**
+16b. *(numbered to avoid renumbering decision 16 below)* **Confirmed 2026-07-20:** YouTube-chat questions ship as the **plain paste lane** — operator pastes text copied from YouTube chat into a question box and pushes it to the talent as a labeled QUESTION card. No YouTube API, no OAuth, nothing to configure on show day.
+16c. **Confirmed 2026-07-20:** talent overlay budget — clocks/wrap/tech-issue/question banners cap at a **bounded band (~20% of screen height)** so the script always stays readable; full-screen takeover is reserved for the deliberate stand-by slate only.
 
 ---
 
