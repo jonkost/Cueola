@@ -1,9 +1,9 @@
 # Cueola v2.1 — Master Plan
 
 **Written:** 2026-07-16, adversarially reviewed same day · **Revised 2026-07-16 (evening):** owner set the delivery window and added the paperwork/export overhaul + platform/UI scope.
-**Execution window:** Tuesday **July 21** → Sunday **August 2, 2026** (hard deadline, full completion). Show days before the window: Friday July 17 and Monday July 20 — no planned code changes until the window opens.
+**Execution window:** Tuesday **July 21** → Sunday **August 2, 2026** *(revised 2026-07-18 per decision 17: Aug 2 is the target, and the window extends as needed so Stage Plot ships inside 2.1 — nothing is cut to a point release)*. Show days before the window: Friday July 17 and Monday July 20 — no planned code changes until the window opens.
 **Goal:** v2.1 ships rock solid and 100% professional, needing only basic fixes until 3.0.
-**Companion:** [docs/v2_1-design-notes.md](docs/v2_1-design-notes.md) — architecture decisions **D1–D10** with file:line implementation sketches (D8 = standing engineering rules). Read the design note before starting its phase. Never copy a line number or WORKER_SCHEMA value from a note into code — re-verify against the live file.
+**Companion:** [docs/v2_1-design-notes.md](docs/v2_1-design-notes.md) — architecture decisions **D1–D11** with file:line implementation sketches (D8 = standing engineering rules; **D11 = live show control system, added from the Jul 17 show intake — owner directive: "a big focus on Live show controls"**). Read the design note before starting its phase. Never copy a line number or WORKER_SCHEMA value from a note into code — re-verify against the live file.
 **UI references:** [docs/design/2.1_design_reference.md](docs/design/2.1_design_reference.md) + [docs/design/hig-component-kit.md](docs/design/hig-component-kit.md) — references, not hard rules; Cueola's color themes stay.
 
 ---
@@ -100,7 +100,11 @@ Answer the rest as their phase approaches. Recommendations are marked.
 14. Where do training videos live — unlisted YouTube links inside lessons (recommended), school LMS, or self-hosted? Lessons and the Quick Start get "Watch the video" slots either way; recording may trail past Aug 2.
 
 **Contingency**
-15. Cut order under deadline pressure (confirm): Stage Plot (Phase 8) slips first, to a post-2.1 point release → Phase 5's presence-avatar stretch drops → groups (Phase 6) slips ONLY to the following between-terms window, never mid-term (if it slips, Phase 10 still lands the inert /groups rules block and docs mark groups "coming soon"). **Never cut:** Phases 1, 2, 3 (paperwork/export), 4, 10, 11, 12 — they are the "rock solid + professional + teachable" promise. The paperwork/export overhaul is explicitly not cuttable.
+15. Cut order under deadline pressure (confirm): Stage Plot (Phase 8) slips first, to a post-2.1 point release → Phase 5's presence-avatar stretch drops → groups (Phase 6) slips ONLY to the following between-terms window, never mid-term (if it slips, Phase 10 still lands the inert /groups rules block and docs mark groups "coming soon"). **Never cut:** Phases 1, 2, 3 (paperwork/export), 4, 10, 11, 12 — they are the "rock solid + professional + teachable" promise. The paperwork/export overhaul is explicitly not cuttable. *(Amended Jul 17: Phase 13 — live show controls — joins the never-cut list; it is the owner's declared "big focus" and every item in it burned the owner live on air.)*
+
+**Live show controls (D11) — blocks Phase 13** *(added from the Jul 17 show intake)*
+17. **Resolved 2026-07-18: Stage Plot stays in 2.1 — the deadline extends past Aug 2 as needed.** Phase 13 takes Jul 28–29, groups+clone shift to Jul 30–31, snapshots to Aug 1, Phase 8 (Stage Plot) stays LAST and runs past Aug 2 if the runway demands it. Aug 2 is now the target, not a wall; nothing moves to a point release.
+18. **Resolved 2026-07-18 (owner design):** auto-trigger rows run a **visible automatic RTRT call**: on cue advance the rundown clearly shows READY → TRACK → ROLL over ~3 seconds with the ability to stop inside that window, then TAKE fires automatically. Browsing/selecting rows still never starts the sequence — only the advance/GO path does; the 3-second abort window is the accidental-trigger fix. Manual armed-call (op steps READY→TAKE explicitly) remains available per row/show.
 
 ---
 
@@ -119,12 +123,25 @@ order — there is no slack buffer at this pace.
 
 | # | Show date | What happened / what was clunky | Area | Severity | Size | Triaged into |
 |---|-----------|--------------------------------|------|----------|------|--------------|
-| 1 |           |                                |      |          |      |              |
-| 2 |           |                                |      |          |      |              |
+| 1 | Jul 17 | Solo op runs rundown + prompter + playout on 6 screens / 1 keyboard + mouse + Stream Deck (Universal Control across Mac Pro + MacBook Air); controls must be one-op-first | Live (all) | High | — | D11 context (shapes all of Phase 13) |
+| 2 | Jul 17 | Prompter controls felt unintuitive while working the Script Op | Prompter | High | M | D11.1/D11.2 |
+| 3 | Jul 17 | Pop-out controls stopped working mid-show | Script Op / pop-outs | High | M | D11.8 |
+| 4 | Jul 17 | **Owner directive:** prompter stops auto-following cue advance; one continuous feed, row labels stay, op lines up manually; punch-in unchanged | Prompter | High | M | D11.2 |
+| 5 | Jul 17 | Brake + Boost need keycommands inside the Script Op | Script Op | Med | S | D11.1 |
+| 6 | Jul 17 | Script Op preview must flow with the prompter + arrow at current position | Script Op | High | M | D11.2 |
+| 7 | Jul 17 | Could not cue prompter to the beginning at show start → delayed the show | Prompter | High | S | D11.2 (cue-to-top affordance; `T`/`C` promoted) |
+| 8 | Jul 17 | Show clock never started; Live click-row-to-go-to-cue must work regardless of clock state | Live | High | S | D11.5 |
+| 9 | Jul 17 | Accidental playout triggers while clicking through the rundown → "Ready Track Roll Take" armed call element | Live / Playout | High | M | D11.3 |
+| 10 | Jul 17 | Playout countdown visible live on the rundown for everyone (auto-triggered or linked) | Live / OG | Med | M | D11.4 |
+| 11 | Jul 17 | Row GO button renders but did nothing | Live | High | S | D11.5 (silent-refusal audit) |
+| 12 | Jul 17 | Next button intermittently didn't trigger; resizes with its label text — show controls must stay geometrically consistent | Live | High | S | D11.5 |
+| 13 | Jul 17 | Reorder playout clips on the fly during the show | Outrangutan | Med | M | D11.6 |
+| 14 | Jul 17 | Stream Deck on rundown + prompter side; ideally ONE deck drives the whole app across computers | Control surfaces | Med | L | D11.7 |
+| 15 | Jul 20 | *(Monday's show — add rows here)* | | | | |
 
 ---
 
-## Phase 1 — Foundations: repo hygiene, naming, hosting privacy — **Tue Jul 21**
+## Phase 1 — Foundations: repo hygiene, naming, hosting privacy — **✅ DONE early, Jul 17** *(built dark on the `v2.1` branch; Safari re-check owed at Phase 9)*
 
 **Depends on:** Phase 0 closed. **Size:** 1 day.
 
@@ -138,7 +155,7 @@ order — there is no slack buffer at this pace.
 
 ---
 
-## Phase 2 — Admin accounts: username + password, app-wide (design D1) — **Wed Jul 22 – Thu Jul 23**
+## Phase 2 — Admin accounts: username + password, app-wide (design D1) — **✅ BUILT early, Jul 18** *(dark on the `v2.1` branch; rules emulator-proven, NOT deployed. Remaining: owner console errand + bootstrap mint, then live signed-in QA + two-browser carry test + Safari pass; rules deploy is release-day per docs/admin-accounts-runbook.md)*
 
 **Depends on:** Phase 1; decisions 1–4. **Size:** 2 days.
 
@@ -151,7 +168,7 @@ Console errand (Email/Password + App Check monitor registration, one visit) → 
 
 ---
 
-## Phase 3 — Paperwork & Export overhaul (designs D9 + D6) — **Thu Jul 23 – Sun Jul 26**
+## Phase 3 — Paperwork & Export overhaul (designs D9 + D6) — **✅ CODE-COMPLETE early, Jul 18** *(dark on `v2.1`; all 9 items browser-verified. Owed: Safari pass, two-browser editor QA, live 2607T-replica export, owner design look)*
 
 **The owner-priority phase.** Solid generation, professional de-branded output, modern
 student-friendly look, and the per-session paperwork config + call-sheet delete that share the same
@@ -172,7 +189,7 @@ refactor. **Depends on:** Phase 1 (vendored pdf libs); decision 10. **Size:** ~3
 
 ---
 
-## Phase 4 — Dashboard redesign for instructors — **Sun Jul 26 – Mon Jul 27**
+## Phase 4 — Dashboard redesign for instructors — **✅ CODE-COMPLETE early, Jul 18** *(dark on `v2.1`; wizard, task-split setup, real dialogs, vocabulary, term grouping all browser-verified. Owed: fresh-instructor walkthrough with real data, Safari pass, assignments-transaction + purge regression vs live)*
 
 **Depends on:** Phase 2. **Size:** 1.5–2 days. As previously specced, now styled with the D10 kit:
 one vocabulary (**sign-in / class key / show code**) with glossary tooltips; session creation as a
@@ -186,7 +203,7 @@ two-phase-save honesty, ownership by uid).
 
 ---
 
-## Phase 5 — Student identity: profiles required + fun avatars (design D7) — **Mon Jul 27 – Tue Jul 28**
+## Phase 5 — Student identity: profiles required + fun avatars (design D7) — **✅ CODE-COMPLETE early, Jul 18** *(dark on `v2.1`; 24-icon manifest + entry gate on every side door, tests green. Owed: live gate QA, nine-theme icon pass; presence-avatar stretch not built)*
 
 **Depends on:** Phase 2; decisions 11–12. **Size:** 1.5 days.
 Profiles required per decision 12 (class-key fallback always routes through the sign-up wizard);
@@ -200,7 +217,7 @@ D7). Stretch (first to drop): avatars on presence surfaces.
 
 ---
 
-## Phase 6 — Groups + Start Next Episode (designs D2 + D5) — **Tue Jul 28 – Wed Jul 29**
+## Phase 6 — Groups + Start Next Episode (designs D2 + D5) — **✅ CODE-COMPLETE early, Jul 18** *(dark on `v2.1`; rules emulator-proven NOT deployed, clone module tested, group spine verified. Owed: two-browser group isolation + split-brain QA, grouped clone vs live, wizard re-run)*
 
 **Depends on:** Phases 2–4 (admin gating + wizard slots); Phase 3's config handshake; decisions 5–6, 9. **Size:** 2 days.
 **Groups:** one term session, 4–5 group workspaces (per-group subdocs), shared rundown/Live; picker
@@ -226,6 +243,49 @@ capture doc actually appears (fire-and-forget writes fail silently otherwise).
 
 **Verify:** grouped round-trip restore beats a live stale client; dedupe; chunked restore; non-admin refused; Delete Forever wipes.
 **Prepared commit:** `v2.1 restore: cloud snapshot trail + merged history`.
+
+---
+
+## Phase 13 — Live show controls (design D11) — **Tue Jul 28 – Wed Jul 29** *(added Jul 17; owner's declared big focus — never-cut)*
+
+**Depends on:** Phase 1 (naming/keymap groundwork); decisions 17–18. Groups (Phase 6) shifts to
+Jul 30–31 and snapshots (Phase 7) to Aug 1 to make room — see decision 17. **Size:** 2–2.5 days.
+Everything here is judged against the solo-operator reality (D11 context: one op, 6 screens,
+one keyboard/mouse/Stream Deck, Universal Control across two Macs).
+
+1. **Unified keycommand system (D11.1):** shared `cueola-keymap.js` registry with per-surface
+   scopes; Script Op gets registered keys including J/L hold Brake/Boost with blur-safety;
+   shared `?` overlay per scope; printed operator cheat card joins the show pack.
+2. **Prompter decoupled (D11.2 — owner directive):** cue advance never moves the prompter; one
+   continuous feed with row labels; manual line-up via `C`/`T`/Cue Now/Cue Next (promoted, on
+   the cheat card); Script Op preview auto-flows with the talent position + ▶ arrow; cue-to-top
+   preflight affordance; punch-in unchanged.
+3. **Ready · Track · Roll · Take (D11.3):** armed-call flow for linked-playout rows; browsing
+   never fires; TAKE by button/key/Stream Deck; auto-trigger becomes the opt-in mode per
+   decision 18.
+4. **Live playout countdown on the rundown (D11.4):** publish `{clipId,rowId,startedAt,durMs}`
+   once per start (additive field), clients tick locally; renders for every viewer on any
+   machine.
+5. **Control integrity sweep (D11.5):** no silent refusals (every guarded GO/Next/row-click
+   surfaces why); fixed geometry for all show transport controls (labels never resize targets);
+   click-row-to-cue independent of show-clock state; row-GO and Next reliability bugs
+   root-caused here.
+6. **Playout live reorder (D11.6):** drag-reorder mid-show; playing clip untouched; row links
+   follow clip ids.
+7. **Session control bus for Stream Deck (D11.7):** fireSurfaceAction generalized with surface
+   targets routed over Firestore command docs — one deck drives rundown, prompter, and playout
+   across computers; midiInject-simulated QA, hardware smoke = owner errand.
+8. **Pop-out reliability (D11.8):** diagnose the Jul 17 failure; connection chip per pop-out,
+   auto-reconnect, one-click reopen with full state resync.
+
+**Verify:** per D11's verify list — solo-op keycommand-only dry run, decoupled-prompter proof,
+RTRT no-accidental-fire test, cross-machine countdown, fixed-geometry screenshot diff,
+pop-out kill/recovery, two-browser + stale-client QA.
+**Prepared commits:** `v2.1 controls: unified keymap + script-op brake/boost` · `v2.1 prompter:
+continuous feed decoupled from cue advance + preview arrow` · `v2.1 live: RTRT armed playback
+calls + control integrity sweep` · `v2.1 playout: live reorder + rundown countdown` · `v2.1
+controls: session control bus (one Stream Deck, all surfaces)` · `v2.1 live: pop-out
+reconnect + status chips`.
 
 ---
 
@@ -310,18 +370,19 @@ rollback kit inventory, CHANGELOG, version 2.1.0, release notes.
 ## Sequencing at a glance
 
 ```
-Fri Jul 17 · Mon Jul 20   Phase 0   shows run · intake only · triage Mon evening
-Tue Jul 21                Phase 1   foundations (PII, vendoring, naming)
+Fri Jul 17 · Mon Jul 20   Phase 0   shows run · intake (Jul 17 logged) · triage Mon evening
+Tue Jul 21                Phase 1   foundations — DONE EARLY Jul 17 (built dark on v2.1 branch)
 Wed 22 – Thu 23           Phase 2   admin accounts + rules (App Check monitor on)
 Thu 23 – Sun 26           Phase 3   PAPERWORK & EXPORT OVERHAUL (+ config + delete)
 Sun 26 – Mon 27           Phase 4   dashboard redesign
 Mon 27 – Tue 28           Phase 5   identity + avatars
-Tue 28 – Wed 29           Phase 6   groups + Start Next Episode
-Thu Jul 30                Phase 7   cloud snapshots
-Thu 30 – Fri 31           Phase 9   platform & UI sweep (continuous before this)
-Fri 31 – Sat Aug 1        Phase 10  security close-out  ·  Phase 11 docs & training
-Sat 1 – Sun 2             Phase 8   Stage Plot — LAST · opens with owner design consult
+Tue 28 – Wed 29           Phase 13  LIVE SHOW CONTROLS (D11) — owner's big focus
+Thu 30 – Fri 31           Phase 6   groups + Start Next Episode
+Sat Aug 1 (am)            Phase 7   cloud snapshots
+continuous + Fri 31       Phase 9   platform & UI sweep
+Sat Aug 1                 Phase 10  security close-out  ·  Phase 11 docs & training
 Sun Aug 2                 Phase 12  QA + v2.1.0
+Sat Aug 1 – onward        Phase 8   Stage Plot — LAST · owner design consult · extends past Aug 2 as needed (decision 17)
 ```
 
 ## Out of scope (3.0 parking lot)
