@@ -9334,8 +9334,46 @@ function _handlePrompterControlAck(msg) {
   }
 }
 
+// Split-brain recovery (TH2607 show-day incident): a talent output heartbeating
+// for OUR production but on a different prompter sessionId was dropped by
+// accepts() forever — operator and talent each rejected the other's session, so
+// the handshake never completed and every control queued while the talent
+// looked "connected" in the doc. This happens whenever a second operator
+// surface (or a talent reload) re-seeds the talent's session. The surface
+// actually calling the show adopts the talent's session and re-publishes its
+// own state into it; the talent then accepts that snapshot (sessionId matches),
+// its next heartbeat carries our snapshotId, and readiness + queued commands
+// converge through the normal path.
+let _lastPrompterSessionReclaimTs = 0;
+function _maybeReclaimPrompterTalentSession(msg) {
+  if (!['PROMPTER_HEARTBEAT', 'PROMPTER_READY'].includes(msg?.type)) return false;
+  if (Number(msg.protocolVersion) !== window.CueolaPrompterSession?.PROTOCOL_VERSION) return false;
+  const code = String(msg.productionCode || '').trim().toUpperCase();
+  if (!code || !session.code || code !== String(session.code).toUpperCase()) return false;
+  const remoteSession = String(msg.sessionId || '').trim();
+  const localSession = String(prompterSessionController.getState().sessionId || '').trim();
+  if (!remoteSession || !localSession || remoteSession === localSession) return false;
+  // Only the surface actually calling the show may reclaim, and never in a
+  // tight loop — two live operator windows must not snapshot-war over talent.
+  if (!document.getElementById('liveshow')?.classList.contains('on')) return false;
+  if (!canOwnLiveActiveCue()) return false;
+  const now = Date.now();
+  if (now - _lastPrompterSessionReclaimTs < 10000) return false;
+  const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+  if (!outputId) return false;
+  _lastPrompterSessionReclaimTs = now;
+  prompterSessionController.setIdentity({ sessionId: remoteSession });
+  _activePrompterOutputInstanceId = outputId;
+  prompterSessionController.noteOutput(outputId, 'connected');
+  _notePrompterTalentSeen(msg);
+  logShow('prompter', `Reclaimed talent output ${outputId} — adopted prompter session ${remoteSession} (was ${localSession}) and re-sent state`);
+  sendPrompterStateSnapshot(outputId, 'recovery');
+  return true;
+}
+
 function _handlePrompterOperatorMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (_maybeReclaimPrompterTalentSession(msg)) return;
   if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
   // Talent messages are mirrored over BroadcastChannel, legacy channel,
   // localStorage, and sometimes Firestore. Process one logical message once;
