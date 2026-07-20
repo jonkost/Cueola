@@ -282,7 +282,11 @@ function canOwnLiveActiveCue() {
   // class's live cue). Without the solo carve-out, the demo (role:'student')
   // had GO permanently disabled and could never be run.
   if (session.isDemo || session.isExpert || !session.code) return isFollowingSelf();
-  return session.role !== 'student' && isFollowingSelf();
+  // An admin unlock outranks the joined role, same as hasInstructorPrivileges()
+  // and isAdminShowCaller(): rejoining a session by code lands as 'student'
+  // (TH2607 show-day incident — the operator's own device could not advance
+  // the rundown), and the admin device must still be able to call the show.
+  return (session.role !== 'student' || adminSession != null) && isFollowingSelf();
 }
 
 function setOperatorLiveCue(index, reason) {
@@ -366,6 +370,11 @@ let followTargetId = '';    // presence id keeps duplicate/stale display names f
 let editId = null;
 let timerInterval = null;
 let elapsedSecs = 0;
+// True once the show clock has run in THIS page load. A stopped clock with
+// leftover elapsedSecs on a fresh load means the session hydrated a parked
+// rehearsal clock, not a live pause — that state must still offer the
+// take-it-from-the-top chooser instead of silently resuming mid-rundown.
+let _clockRanThisLoad = false;
 let liveTimerStartMs = null;
 let prompterText = '';
 let prompterVersion = 0;
@@ -3692,7 +3701,11 @@ async function joinSession() {
         errEl.classList.add('on');
         return;
       }
-      session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
+      // Joining by code always landed as 'student' — even for the teacher who
+      // created the session — which silently removed the ability to advance
+      // the live rundown (TH2607). A signed-in admin profile keeps the wheel.
+      const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+      session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
       show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
       beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
       freeTextMode = Boolean(d.freeMode);
@@ -3724,7 +3737,9 @@ async function joinPreProSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking…'; }
   const openLocal = snap => {
     const d = snap.data() || {};
-    session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
+    // Same role rule as joinSession: an admin profile keeps instructor standing.
+    const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+    session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
@@ -4425,7 +4440,19 @@ function setupFirestore() {
       // The shared show cue is authoritative independently of this device's
       // local/followed selection. Older code folded both values into lsIdx.
       if (Number.isFinite(d.activeIdx)) {
-        adoptLiveActiveCue(d.activeIdx, { select:false, reason:'firestore-active-cue' });
+        // A parked or legacy doc can point the shared cue at a segment marker
+        // or a disabled/deleted row (TH2607: activeIdx 0 on a leading segment
+        // from session creation). The Live run ledger rightly refuses those —
+        // resolve to the next playable row, and contain any residual throw so
+        // one bad index cannot abort the rest of this snapshot handler
+        // (presence, prompter, clock, and rundown updates all ride below).
+        const remoteActiveIdx = liveCueIsDisabled(d.activeIdx)
+          ? liveNextPlayableCueIndex(d.activeIdx)
+          : d.activeIdx;
+        if (remoteActiveIdx >= 0 && remoteActiveIdx < beats.length) {
+          try { adoptLiveActiveCue(remoteActiveIdx, { select:false, reason:'firestore-active-cue' }); }
+          catch (error) { containError('Remote active-cue adoption', error); }
+        }
       }
       // Following: mirror the position of whoever I follow (their broadcast
       // presence.idx). Browsing self keeps my own position. A student who hasn't
@@ -7218,7 +7245,7 @@ function enterLiveSessionScreen(liveState) {
   updateLiveClockButton();
   const timerEl = document.getElementById('ls-timer');
   if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
-  updateWallClock();
+  startWallClock();
 }
 
 function showRundown() {
@@ -7228,6 +7255,7 @@ function showRundown() {
 
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
+  stopWallClock();
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
@@ -7245,7 +7273,10 @@ function isFollowingSelf() {
   // demo's student role defaulted to "following" a caller that doesn't exist,
   // which kept GO disabled and made the demo rundown unrunnable.
   if (session.isDemo || session.isExpert || !session.code) return true;
-  return session.role !== 'student';    // instructors/experts drive their own position by default
+  // An admin unlock drives its own position by default, same as an instructor:
+  // a device that rejoined by code (role 'student') but holds the admin session
+  // must land with GO live, not parked behind a follow default (TH2607).
+  return session.role !== 'student' || adminSession != null;
 }
 
 // Admin Show Caller = following self AND has any admin session
@@ -7554,7 +7585,7 @@ function liveStartShowPressed() {
   }
   const activeIdx = liveActiveCueIndex();
   const firstIdx = liveNextPlayableCueIndex(-1);
-  if (!liveClockRunning && !elapsedSecs && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
+  if (!liveClockRunning && (!elapsedSecs || !_clockRanThisLoad) && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
     const hereEl = document.getElementById('lsStartChoiceRow');
     if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} — ${beats[activeIdx]?.info || 'Untitled'}`;
     const topEl = document.getElementById('lsStartChoiceTopLbl');
@@ -8187,7 +8218,12 @@ function updateLiveGoControl(projectedState=null) {
   label.textContent = text;
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
-  button.title = dispatchable ? `GO to ${text}` : failed ? `Recover failed row ${nextIndex + 1} before GO` : nextBeat ? 'Follow the active show caller to use GO' : 'No upcoming cue';
+  const studentLocked = !canOwnLiveActiveCue() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
+  button.title = dispatchable ? `GO to ${text}`
+    : failed ? `Recover failed row ${nextIndex + 1} before GO`
+    : studentLocked ? 'Joined as a student — only the show caller (instructor or admin) advances the rundown'
+    : nextBeat ? 'Follow the active show caller to use GO'
+    : 'No upcoming cue';
   button.setAttribute('aria-label', button.title);
 }
 
@@ -9061,8 +9097,46 @@ function _handlePrompterControlAck(msg) {
   }
 }
 
+// Split-brain recovery (TH2607 show-day incident): a talent output heartbeating
+// for OUR production but on a different prompter sessionId was dropped by
+// accepts() forever — operator and talent each rejected the other's session, so
+// the handshake never completed and every control queued while the talent
+// looked "connected" in the doc. This happens whenever a second operator
+// surface (or a talent reload) re-seeds the talent's session. The surface
+// actually calling the show adopts the talent's session and re-publishes its
+// own state into it; the talent then accepts that snapshot (sessionId matches),
+// its next heartbeat carries our snapshotId, and readiness + queued commands
+// converge through the normal path.
+let _lastPrompterSessionReclaimTs = 0;
+function _maybeReclaimPrompterTalentSession(msg) {
+  if (!['PROMPTER_HEARTBEAT', 'PROMPTER_READY'].includes(msg?.type)) return false;
+  if (Number(msg.protocolVersion) !== window.CueolaPrompterSession?.PROTOCOL_VERSION) return false;
+  const code = String(msg.productionCode || '').trim().toUpperCase();
+  if (!code || !session.code || code !== String(session.code).toUpperCase()) return false;
+  const remoteSession = String(msg.sessionId || '').trim();
+  const localSession = String(prompterSessionController.getState().sessionId || '').trim();
+  if (!remoteSession || !localSession || remoteSession === localSession) return false;
+  // Only the surface actually calling the show may reclaim, and never in a
+  // tight loop — two live operator windows must not snapshot-war over talent.
+  if (!document.getElementById('liveshow')?.classList.contains('on')) return false;
+  if (!canOwnLiveActiveCue()) return false;
+  const now = Date.now();
+  if (now - _lastPrompterSessionReclaimTs < 10000) return false;
+  const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
+  if (!outputId) return false;
+  _lastPrompterSessionReclaimTs = now;
+  prompterSessionController.setIdentity({ sessionId: remoteSession });
+  _activePrompterOutputInstanceId = outputId;
+  prompterSessionController.noteOutput(outputId, 'connected');
+  _notePrompterTalentSeen(msg);
+  logShow('prompter', `Reclaimed talent output ${outputId} — adopted prompter session ${remoteSession} (was ${localSession}) and re-sent state`);
+  sendPrompterStateSnapshot(outputId, 'recovery');
+  return true;
+}
+
 function _handlePrompterOperatorMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (_maybeReclaimPrompterTalentSession(msg)) return;
   if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
   // Talent messages are mirrored over BroadcastChannel, legacy channel,
   // localStorage, and sometimes Firestore. Process one logical message once;
@@ -12608,6 +12682,7 @@ function resumeRemoteClockIfRunning() {
 function startTimer(anchorMs) {
   stopTimer(false);
   liveClockRunning = true;
+  _clockRanThisLoad = true;
   // anchorMs lets a synced (remote) clock line up to the exact origin the caller
   // started from; locally we derive it from the elapsed time so far.
   const start = (typeof anchorMs === 'number' && anchorMs > 0) ? anchorMs : (Date.now() - elapsedSecs * 1000);
@@ -12635,6 +12710,20 @@ function updateWallClock() {
   const h=now.getHours(), m=now.getMinutes(), s=now.getSeconds();
   const ap=h>=12?'PM':'AM', h12=h%12||12;
   clockEl.textContent=`${h12}:${pad(m)}:${pad(s)} ${ap}`;
+}
+
+// The wall clock previously only ticked inside the show-clock interval, so it
+// sat frozen (or "—") until Start Show was pressed. Time of day must run the
+// whole time the live screen is up (owner directive 2026-07-20).
+let wallClockInterval = null;
+function startWallClock() {
+  clearInterval(wallClockInterval);
+  wallClockInterval = setInterval(updateWallClock, 1000);
+  updateWallClock();
+}
+function stopWallClock() {
+  clearInterval(wallClockInterval);
+  wallClockInterval = null;
 }
 
 function stopTimer(stopPrompter=true) {

@@ -16,6 +16,13 @@
       "port": 3011
     },
     {
+      "name": "Cueola-v21",
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-c", "import os,functools,http.server,socketserver;socketserver.TCPServer.allow_reuse_address=True;socketserver.TCPServer(('',int(os.environ.get('PORT','3021'))),functools.partial(http.server.SimpleHTTPRequestHandler,directory='/Users/jonkost/Documents/GitHub/Cueola-v2.1')).serve_forever()"],
+      "autoPort": true,
+      "port": 3021
+    },
+    {
       "name": "Prompt-Up-The-Jam",
       "runtimeExecutable": "/usr/local/bin/python3",
       "runtimeArgs": ["-m", "http.server", "3002", "--directory", "/Users/jonkost/Documents/GitHub/Prompt-Up-The-Jam"],

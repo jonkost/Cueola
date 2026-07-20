@@ -26,7 +26,13 @@ assert.match(page, /\.paper-export-page :is\(p,li,td,th,[^)]+\)\{overflow-wrap:a
 assert.match(app, /_getDocFromServer/);
 assert.match(app, /_getDocsFromServer/);
 assert.match(app, /_waitForPendingWrites/);
-assert.match(app, /compareRevisionFence\(beforeFence, afterFence\)\.stable/);
+// The 2026-07-15 export change replaced the whole-document before/after fence
+// (every export raced live classroom typing) with a targeted cross-document
+// consistency check: the assignment register revision must not move while the
+// assignments subcollection downloads.
+assert.match(app, /Number\(before\.assignmentRevision\)/);
+assert.match(app, /revBefore !== revAfter/);
+assert.match(app, /error\.code = 'export-revision-race'/);
 assert.match(app, /error:serverAuthority \? _pbLastCloudSaveError : null/);
 assert.match(app, /pendingCount:serverAuthority \? _pbPendingNoteWrites : 0/);
 assert.match(app, /error:serverAuthority \? _pbLastNoteSaveError : null/);
