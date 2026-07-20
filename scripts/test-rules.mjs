@@ -30,8 +30,26 @@ function document(data) {
   return { fields: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, encode(value)])) };
 }
 
+// v2.1 (D1): simulated Firebase Auth. The emulator accepts unsigned JWTs for
+// request.auth, and the literal token 'owner' bypasses rules entirely (used
+// ONLY to seed admins/{uid} fixtures the way the service-account bootstrap
+// script does in production). setAuth(null) restores anonymous requests.
+let authToken = null;
+function fakeToken(uid) {
+  const b64 = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
+  return `${b64({ alg: 'none', typ: 'JWT' })}.${b64({
+    iss: `https://securetoken.google.com/${project}`, aud: project, auth_time: 1,
+    user_id: uid, sub: uid, iat: 1, exp: 9999999999, firebase: { sign_in_provider: 'password' },
+  })}.`;
+}
+function setAuth(uid) {
+  authToken = uid === null ? null : (uid === 'owner' ? 'owner' : fakeToken(uid));
+}
+
 async function request(path, options = {}) {
-  const response = await fetch(`${base}/${path}`, options);
+  const headers = { ...(options.headers || {}) };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const response = await fetch(`${base}/${path}`, { ...options, headers });
   const body = await response.text();
   return { status: response.status, ok: response.ok, body };
 }
@@ -135,17 +153,43 @@ denied(await write('sessions/RULES1/files/file3', { ...legacyFile, fileId: 'file
 denied(await write('sessions/RULES1/files/file4', { ...legacyFile, fileId: 'file4', evil: true }), 'unknown key on attachment doc');
 denied(await write('sessions/RULES1/files/file5', { ...legacyFile, fileId: 'file5', session: 'OTHERSESSION' }), 'attachment pinned to another session');
 
+// ── v2.1 admin accounts (D1) ─────────────────────────────────────────────
+// Legacy admins/global is frozen read-only; admins/{uid} is the directory.
 const admins = { list: [{ id: 'adm_1', name: 'Instructor', codeHash: '12345678', level: 'super' }] };
-allowed(await write('admins/global', admins), 'dashboard writes valid admin roster');
-allowed(await request('admins/global'), 'admin roster listener read');
-denied(await write('admins/other', admins), 'non-global admin document');
-denied(await write('admins/global', { list: admins.list, unexpected: true }), 'invalid admin document shape');
+denied(await write('admins/global', admins), 'legacy admin roster writes are retired');
+allowedMissing(await request('admins/global'), 'legacy roster read stays open (rollback safety)');
 denied(await remove('admins/global'), 'admin roster delete stays denied');
+
+const superDoc = { username: 'jkost', name: 'Jon Kost', level: 'super', createdAt: 1, createdBy: 'bootstrap-script' };
+const stdDoc = { username: 'casey', name: 'Casey Kim', level: 'standard', createdAt: 2, createdBy: 'uid_super_1' };
+setAuth('owner');   // rules bypass — stands in for the service-account bootstrap
+allowed(await write('admins/uid_super_1', superDoc), 'bootstrap seeds the first super admin (bypass)');
+setAuth(null);
+denied(await request('admins/uid_super_1'), 'admins doc read requires a signed-in user');
+denied(await write('admins/uid_nope_1', stdDoc), 'unauthenticated cannot mint admins');
+setAuth('uid_rando_9');   // signed in, but no admins doc → not an admin
+allowed(await request('admins/uid_super_1'), 'any signed-in user resolves admins docs');
+denied(await write('admins/uid_nope_1', stdDoc), 'signed-in non-admin cannot mint admins');
+denied(await remove('admins/uid_super_1'), 'signed-in non-admin cannot delete admins');
+setAuth('uid_super_1');
+allowed(await write('admins/uid_std_1', stdDoc), 'super mints a standard admin');
+denied(await write('admins/uid_bad_1', { ...stdDoc, username: 'Bad Name!' }), 'admin username shape enforced');
+denied(await write('admins/uid_bad_2', { ...stdDoc, username: 'okname', level: 'full' }), "retired 'full' level rejected");
+denied(await write('admins/uid_bad_3', { username: 'okname2', level: 'standard' }), 'admin doc requires name');
+denied(await remove('admins/uid_super_1'), 'self-deletion lockout guard');
+setAuth('uid_std_1');
+denied(await write('admins/uid_nope_2', stdDoc), 'standard admin cannot mint admins');
+setAuth(null);
 
 allowedMissing(await request('accounts/acct_1'), 'entitlement reads remain available');
 denied(await write('accounts/acct_1', { tier: 'paid' }), 'client entitlement grants remain denied');
 
 const accessCode = { role: 'student', label: 'Fall TV', active: true, createdBy: 'Instructor', createdAt: 1 };
+// v2.1 (D1): minting is admin-gated — the public minting hole is closed.
+denied(await write('accessCodes/UNAUTH1', accessCode), 'unauthenticated code minting retired');
+setAuth('uid_rando_9');
+denied(await write('accessCodes/UNAUTH2', accessCode), 'signed-in non-admin code minting refused');
+setAuth('uid_std_1');   // a standard admin can mint class codes
 allowed(await write('accessCodes/CLASS2026', accessCode), 'future access code shape');
 denied(await write('accessCodes/CLASS2026BAD', { ...accessCode, role: 'super' }), 'invalid access-code role');
 denied(await write('accessCodes/CLASS2026BAD', { role: 'student', active: true, createdBy: 'x', createdAt: 1 }), 'access code missing required label');
@@ -158,6 +202,7 @@ allowed(await write('accessCodes/CLASS2026', { active: false, revokedAt: 5, revo
 denied(await write('accessCodes/CLASS2026', { active: false, revokedAt: 'yesterday' },
   ['active', 'revokedAt']), 'revokedAt must be an int');
 allowed(await write('accessCodes/CLASS2026', { active: true }, ['active']), 'dashboard reactivate patch');
+setAuth(null);   // student flows below stay anonymous — the university rule
 
 const profile = {
   username: 'alex.smith', fullName: 'Alex Smith', role: 'student', avatar: { type: 'initials' },
@@ -368,10 +413,39 @@ allowed(await remove('sessions/RULES1/notes/note9'), 'per-note delete');
 denied(await write('unknown/doc', { anything: true }), 'unknown collection locked down');
 denied(await request('unknown/doc'), 'unknown collection read locked down');
 
+// v2.1 (D2/D5): group workspaces + clone lineage + config hygiene.
+allowed(await write('sessions/RULES1', { groups: [{ id:'g1', name:'Group 1' }], groupsLocked: false },
+  ['groups', 'groupsLocked']), 'groups config on the session doc');
+denied(await write('sessions/RULES1', { groups: 'g1' }, ['groups']), 'groups must be a list');
+denied(await write('sessions/RULES1', { groupsLocked: 'yes' }, ['groupsLocked']), 'groupsLocked must be a bool');
+allowed(await write('sessions/RULES1', { clonedFrom: 'RULES0' }, ['clonedFrom']), 'clone lineage stamp');
+denied(await write('sessions/RULES1', { clonedFrom: 42 }, ['clonedFrom']), 'clonedFrom must be a string');
+allowed(await write('sessions/RULES1/groups/g1', {
+  prePro: { production: 'Group 1 show', _fieldUpdatedAt: { production: 1 } },
+  preProActivity: [{ section: 'Call Sheet', by: 'QA', at: 1 }],
+  updatedAt: 1,
+}), 'group workspace doc write');
+allowed(await write('sessions/RULES1/groups/g1', { prePro: { production: 'Edited' } }, ['prePro.production']), 'masked group paperwork patch');
+allowed(await request('sessions/RULES1/groups?pageSize=10'), 'group workspace list');
+denied(await write('sessions/RULES1/groups/bad-id', { prePro: {} }), 'group id must be identifier-safe');
+denied(await write('sessions/RULES1/groups/g2', { prePro: 'nope' }), 'group prePro must be a map');
+denied(await write('sessions/RULES1/groups/g3', { preProActivity: {} }), 'group activity must be a list');
+allowed(await remove('sessions/RULES1/groups/g1'), 'group workspace delete (purge cascade)');
+
 allowed(await remove('sessions/RULES1/notes/note1'), 'future note delete');
 allowed(await remove('sessions/RULES1/files/file1.chunk.1'), 'future file chunk delete');
 allowed(await remove('sessions/RULES1/files/file1'), 'future file delete');
-allowed(await remove('sessions/pbfile_file1'), 'legacy attachment delete');
-allowed(await remove('sessions/RULES1'), 'dashboard deletes session');
+
+// v2.1 (D1): session ownership stamp + admin-gated session destruction.
+allowed(await write('sessions/RULES1', { ownerUid: 'uid_super_1' }, ['ownerUid']), 'ownerUid stamp patch');
+denied(await write('sessions/RULES1', { ownerUid: 42 }, ['ownerUid']), 'ownerUid must be a string');
+denied(await remove('sessions/pbfile_file1'), 'unauthenticated legacy attachment delete refused');
+denied(await remove('sessions/RULES1'), 'unauthenticated session delete refused');
+setAuth('uid_rando_9');
+denied(await remove('sessions/RULES1'), 'signed-in non-admin session delete refused');
+setAuth('uid_std_1');
+allowed(await remove('sessions/pbfile_file1'), 'admin purge deletes legacy attachment');
+allowed(await remove('sessions/RULES1'), 'admin deletes session');
+setAuth(null);
 
 console.log('PASS: Cueola/dashboard/Flowmingo/Outrangutan/Prompt-Up write patterns, type/bound denials, and future collection guards');

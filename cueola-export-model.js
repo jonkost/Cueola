@@ -722,6 +722,29 @@
     source.includeAssignments = source.includeAssignments !== false;
     source.includeCompletedAssignments = source.includeCompletedAssignments !== false;
     source.documentType = singleLine(source.documentType || 'package');
+    // v2.1 D9.1/D6: sheet selection + paperwork config ride inside options so
+    // the snapshot fingerprint changes when either does. Stable forms only:
+    // callSheetIds sorted; paperwork keeps ONLY explicit false entries
+    // (missing = enabled), keys sorted.
+    if (Array.isArray(source.callSheetIds)) {
+      source.callSheetIds = source.callSheetIds.map(singleLine).filter(Boolean).sort();
+    } else {
+      delete source.callSheetIds;
+    }
+    if (isObject(source.paperwork)) {
+      var paperwork = {};
+      Object.keys(source.paperwork).sort().forEach(function (key) {
+        if (source.paperwork[key] === false) paperwork[key] = false;
+      });
+      source.paperwork = paperwork;
+    } else {
+      delete source.paperwork;
+    }
+    // v2.1 D2: the active group rides INSIDE the fingerprinted options so
+    // preview-reuse guards can never export the wrong group's paperwork.
+    source.groupId = singleLine(source.groupId || '');
+    source.groupName = singleLine(source.groupName || '');
+    if (!source.groupId) { delete source.groupId; delete source.groupName; }
     return source;
   }
 

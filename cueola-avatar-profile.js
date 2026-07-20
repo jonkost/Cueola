@@ -19,13 +19,21 @@
   const MAX_IMAGE_DATA_URL_LENGTH = 60000;
   const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,/;
 
-  function normalizeAvatar(avatar, approvedAnimals) {
+  function normalizeAvatar(avatar, approvedAnimals, iconManifest) {
     if (!avatar || typeof avatar !== 'object' || Array.isArray(avatar)) return null;
     if (avatar.type === 'animal'
         && typeof avatar.value === 'string'
         && approvedAnimals
         && Object.prototype.hasOwnProperty.call(approvedAnimals, avatar.value)) {
       return { type: 'animal', value: avatar.value };
+    }
+    // v2.1 D7: icon avatars are manifest-lookup ONLY — the stored value is a
+    // ~20-byte manifest id, never SVG markup or a path.
+    if (avatar.type === 'icon'
+        && typeof avatar.value === 'string'
+        && iconManifest
+        && Object.prototype.hasOwnProperty.call(iconManifest, avatar.value)) {
+      return { type: 'icon', value: avatar.value };
     }
     if (avatar.type === 'image'
         && typeof avatar.value === 'string'
@@ -43,19 +51,20 @@
     options = options || {};
     const storage = options.storage;
     const approvedAnimals = options.approvedAnimals || {};
+    const iconManifest = options.iconManifest || {};
     const profileKey = options.profileKey || PROFILE_KEY;
 
     function getProfile() {
       try {
         const profile = JSON.parse(storage.getItem(profileKey) || 'null');
-        return { avatar: normalizeAvatar(profile && profile.avatar, approvedAnimals) || defaultAvatar() };
+        return { avatar: normalizeAvatar(profile && profile.avatar, approvedAnimals, iconManifest) || defaultAvatar() };
       } catch {
         return { avatar: defaultAvatar() };
       }
     }
 
     function setAvatar(avatar) {
-      const normalized = normalizeAvatar(avatar, approvedAnimals) || defaultAvatar();
+      const normalized = normalizeAvatar(avatar, approvedAnimals, iconManifest) || defaultAvatar();
       try { storage.setItem(profileKey, JSON.stringify({ avatar: normalized })); } catch {}
       return normalized;
     }

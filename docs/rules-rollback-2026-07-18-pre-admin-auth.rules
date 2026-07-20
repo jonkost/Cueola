@@ -1,40 +1,11 @@
 rules_version = '2';
 
-// v2.1 (D1): STUDENTS still have no username/password authentication — codes
-// and profiles are unchanged (university rule, enforced structurally). ADMINS
-// now sign in through Firebase Auth (Email/Password with synthetic
-// <username>@admins.cueola.app emails); authorization is the uid-keyed
-// admins/{uid} doc checked by isAdmin()/isSuperAdmin() below. App Check stays
-// the perimeter control for everything else; shape validation keeps an
-// accepted client from creating arbitrary collections or unbounded structures.
-//
-// DEPLOY DISCIPLINE (D8 rule 3): this file contains TIGHTENING changes
-// (admin-gated accessCodes minting + session delete). Deploy only in the
-// release-day sequence: hosting first → fleet refresh → instructors minted →
-// then these rules. Rollback copy: docs/rules-rollback-2026-07-18-pre-admin-auth.rules
+// Cueola deliberately has no username/password authentication. App Check is the
+// perimeter control; these rules validate paths and document shapes so an
+// accepted client cannot create arbitrary collections or unbounded structures.
+// They do not identify a person or prove an instructor role.
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── v2.1 admin identity (D1) ────────────────────────────────
-    function isAdmin() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-    function isSuperAdmin() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.level == 'super';
-    }
-    function validAdminAccountDocument(data) {
-      return data is map
-        && data.keys().hasAll(['username', 'name', 'level'])
-        && data.username is string
-        && data.username.matches('^[a-z0-9][a-z0-9._-]{2,39}$')
-        && shortString(data.name, 120)
-        && data.level in ['super', 'standard']
-        && (!data.keys().hasAny(['createdAt']) || data.createdAt is int)
-        && optionalShortString(data, 'createdBy', 160);
-    }
 
     function shortString(value, limit) {
       return value is string && value.size() > 0 && value.size() <= limit;
@@ -74,14 +45,14 @@ service cloud.firestore {
         && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is int)
         && optionalShortString(data, 'deletedBy', 120)
         // Phase 3 per-session admin toggle: entry also requires a class login code.
-        && (!data.keys().hasAny(['requireLoginCode']) || data.requireLoginCode is bool)
-        // v2.1 (D1): session ownership by admin Auth uid.
-        && optionalShortString(data, 'ownerUid', 160)
-        // v2.1 (D2/D5): groups config + clone lineage — hygiene type checks
-        // (validSessionDocument has no field allowlist; these are not gates).
-        && (!data.keys().hasAny(['groups']) || data.groups is list)
-        && (!data.keys().hasAny(['groupsLocked']) || data.groupsLocked is bool)
-        && optionalShortString(data, 'clonedFrom', 160);
+        && (!data.keys().hasAny(['requireLoginCode']) || data.requireLoginCode is bool);
+    }
+
+    function validAdminsDocument(data) {
+      return data is map
+        && data.keys().hasOnly(['list'])
+        && data.list is list
+        && data.list.size() <= 200;
     }
 
     function validFileDocument(code, fileId, data) {
@@ -267,9 +238,7 @@ service cloud.firestore {
       allow get: if validSessionId(code);
       allow list: if true;
       allow create, update: if validSessionId(code) && validSessionDocument(code, request.resource.data);
-      // v2.1 (D1): destroying a session is admin-only. (TIGHTENING —
-      // release-day deploy; the dashboard purge runs signed-in.)
-      allow delete: if validSessionId(code) && isAdmin();
+      allow delete: if validSessionId(code);
 
       // Phase 1 item 3 target. Reads/writes are shape-limited now so the rules
       // can be deployed before the client migration without reopening rules.
@@ -284,19 +253,6 @@ service cloud.firestore {
         allow get, delete: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$');
         allow list: if validSessionId(code);
         allow create, update: if validSessionId(code) && validNote(noteId, request.resource.data);
-      }
-
-      // v2.1 (D2): one paperwork workspace per group. The doc shape mirrors
-      // today's session-doc paperwork fields; group ids are identifier-safe
-      // so masked prePro.<key> patches stay legal.
-      match /groups/{groupId} {
-        allow get, delete: if validSessionId(code) && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$');
-        allow list: if validSessionId(code);
-        allow create, update: if validSessionId(code)
-          && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$')
-          && request.resource.data is map
-          && (!request.resource.data.keys().hasAny(['prePro']) || request.resource.data.prePro is map)
-          && (!request.resource.data.keys().hasAny(['preProActivity']) || request.resource.data.preProActivity is list);
       }
 
       // Canonical Phase 6 crew assignments. These rules validate consistency
@@ -314,18 +270,9 @@ service cloud.firestore {
     }
 
     match /admins/{docId} {
-      // v2.1 (D1): uid-keyed admin accounts. Reads need only a signed-in Auth
-      // user (a fresh admin must read their own doc to resolve their session);
-      // writes are super-only, and no one can delete their own doc (lockout
-      // guard). The legacy 'global' list-doc is FROZEN read-only for one
-      // release as rollback safety — its writes are gone.
-      allow read: if docId == 'global' || request.auth != null;
-      allow create, update: if docId != 'global'
-        && isSuperAdmin()
-        && validAdminAccountDocument(request.resource.data);
-      allow delete: if docId != 'global'
-        && isSuperAdmin()
-        && docId != request.auth.uid;
+      allow read: if docId == 'global';
+      allow create, update: if docId == 'global' && validAdminsDocument(request.resource.data);
+      allow delete: if false;
     }
 
     // Entitlements are server-authoritative. Admin SDK/server writes bypass rules.
@@ -339,11 +286,7 @@ service cloud.firestore {
     match /accessCodes/{code} {
       allow get: if code.matches('^[A-Za-z0-9_-]{4,80}$');
       allow list: if true;
-      // v2.1 (D1): minting/updating class codes is admin-only — kills the
-      // public admin-code minting hole. (TIGHTENING — release-day deploy.)
-      allow create, update: if isAdmin()
-        && code.matches('^[A-Za-z0-9_-]{4,80}$')
-        && validAccessCode(request.resource.data);
+      allow create, update: if code.matches('^[A-Za-z0-9_-]{4,80}$') && validAccessCode(request.resource.data);
       allow delete: if false;
     }
 

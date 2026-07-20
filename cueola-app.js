@@ -561,6 +561,25 @@ let sessionSnapshotLastAt = 0;
 let sessionSnapshotCaptureRunning = false;
 let sessionSnapshotPendingForceReason = '';
 
+// D8 rule 6: every append log gets a cap — unbounded arrays are the #1 path to
+// the 1MB session-doc limit. Appends stay arrayUnion (cheap, merge-safe); once
+// the known log length passes cap+slack, the writer rewrites the trimmed tail
+// instead. The slack keeps concurrent writers from constantly racing full-set
+// writes; a trim losing a couple of interleaved feed entries is acceptable.
+const PREPRO_ACTIVITY_CAP = 200;
+const PREPRO_ACTIVITY_TRIM_SLACK = 20;
+function preProActivityValue(entry, knownLog) {
+  try {
+    const log = Array.isArray(knownLog) ? knownLog
+      : (sessionSnapshotLatestDoc && Array.isArray(sessionSnapshotLatestDoc.preProActivity)
+        ? sessionSnapshotLatestDoc.preProActivity : null);
+    if (log && log.length >= PREPRO_ACTIVITY_CAP + PREPRO_ACTIVITY_TRIM_SLACK) {
+      return log.slice(-(PREPRO_ACTIVITY_CAP - 1)).concat([entry]);
+    }
+  } catch {}
+  return window._arrayUnion(entry);
+}
+
 function openSessionHistoryDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(SESSION_HISTORY_DB, 1);
@@ -866,7 +885,7 @@ function rundownFilePayload() {
   };
 }
 function rundownFileName() {
-  const safe = (show.name || 'Cueola Rundown').replace(/[^\w \-]+/g, '').trim() || 'Cueola Rundown';
+  const safe = (show.name || 'Rundown').replace(/[^\w \-]+/g, '').trim() || 'Rundown';
   return safe + '.cueola';
 }
 async function exportRundownFile() {
@@ -2253,28 +2272,21 @@ function toggleCueolaFullscreen(screenId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ADMIN SYSTEM (Firestore-backed, localStorage fallback cache)
+// ADMIN SYSTEM — v2.1 (D1): Firebase Auth via cueola-admin-auth.js
 // ─────────────────────────────────────────────────────────────
-const ADMIN_KEY = 'cueola_admins_v2';         // localStorage mirror key
-const ADMIN_SESSION_KEY = 'cueola_admin_sess'; // localStorage session key
-const ADMINS_DOC = 'admins/global';            // Firestore document path
-const OWNER_BOOTSTRAP_HASH = '045515f2';
-const OWNER_ADMIN_ID = 'adm_owner_jonkost';
-
-let _adminsCache = [];      // in-memory list, always current
-let _adminsCacheReady = false; // true once Firestore (or fallback) has loaded
-let _adminsUnsub = null;    // Firestore onSnapshot unsubscribe
-
-function waitForAdminsReady(timeoutMs=8000) {
-  if (_adminsCacheReady) return Promise.resolve(true);
-  return new Promise(resolve => {
-    const started = Date.now();
-    const timer = setInterval(() => {
-      if (_adminsCacheReady || Date.now() - started >= timeoutMs) {
-        clearInterval(timer);
-        resolve(_adminsCacheReady);
-      }
-    }, 100);
+// The legacy codeHash system (admins/global list-doc, OWNER_BOOTSTRAP_HASH,
+// cueola_admins_v2 / cueola_admin_sess localStorage mirrors) is retired.
+// CueolaAdminAuth owns sign-in and session resolution; this adapter mirrors
+// the published session into the legacy `adminSession` global so every
+// existing consumer (script lock, session info, presence inspect,
+// entitlements, assignment actor…) works unchanged. Auth's IndexedDB
+// persistence carries the session across all same-origin surfaces.
+function initAdminAuthAdapter() {
+  if (!window.CueolaAdminAuth) return;
+  CueolaAdminAuth.onChange(session => {
+    adminSession = session ? { id:session.id, uid:session.uid, username:session.username, name:session.name, level:session.level } : null;
+    updateAdminUI();
+    try { renderPresence(currentPresence); } catch {}
   });
 }
 
@@ -2285,137 +2297,11 @@ const SESSION_SOURCE_DEFAULTS = {
   scriptWho: ['Host','Guest 1','Guest 2','VOU'],
 };
 
-function hashStr(s) {
-  let h = 0;
-  for (let i=0;i<s.length;i++) { h = Math.imul(31,h)+s.charCodeAt(i)|0; }
-  return (h>>>0).toString(16).padStart(8,'0');
-}
-
-function isOwnerBootstrapCode(code) {
-  return hashStr(code || '') === OWNER_BOOTSTRAP_HASH;
-}
-
-// ── Read helpers (always sync against in-memory cache) ──────
-function getAdmins()      { return _adminsCache; }
-function hasSuperAdmin()  { return _adminsCache.some(a=>a.level==='super'); }
-function countFullAccess(){ return _adminsCache.filter(a=>a.level==='super'||a.level==='full').length; }
-
-// ── Write: update cache + localStorage mirror + Firestore ───
-function saveAdmins(list) {
-  _adminsCache = list;
-  try { localStorage.setItem(ADMIN_KEY, JSON.stringify(list)); } catch {}
-  if (window._firebaseReady) {
-    window._setDoc(window._doc(window._db, 'admins', 'global'), { list })
-      .catch(err => reportCloudWriteFailure('Admin cloud save', err));
-  }
-}
-
-// ── Load from Firestore; migrate localStorage admins if first run ──
-function initAdminsFromFirestore() {
-  if (!window._firebaseReady) return;
-  const ref = window._doc(window._db, 'admins', 'global');
-
-  // Set up real-time listener — changes on any device propagate here instantly
-  if (_adminsUnsub) _adminsUnsub();
-  _adminsUnsub = window._onSnapshot(ref, snap => {
-    if (snap.exists()) {
-      _adminsCache = snap.data().list || [];
-    } else {
-      // First run: migrate any existing localStorage admins to Firestore
-      const local = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
-      _adminsCache = local;
-      if (local.length) {
-        window._setDoc(ref, { list: local }).catch(err => reportCloudWriteFailure('Admin migration', err));
-      }
-    }
-    _adminsCacheReady = true;
-    // Re-run session restore now that we have real data
-    restoreAdminSession();
-    updateAdminUI();
-  }, () => {
-    // Firestore read failed — fall back to localStorage
-    _adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
-    _adminsCacheReady = true;
-    restoreAdminSession();
-    updateAdminUI();
-  });
-}
-
-// ── Session: device-local, verified against cache ───────────
-function loginAdmin(code) {
-  if (!_adminsCacheReady) {
-    const owner = ensureOwnerSuperAdmin(code);
-    if (owner) {
-      adminSession = { id:owner.id, name:owner.name, level:owner.level };
-      try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
-      try { renderPresence(currentPresence); } catch {}
-      return adminSession;
-    }
-    return null;
-  }
-  const h = hashStr(code);
-  const a = _adminsCache.find(x=>x.codeHash===h);
-  const resolved = a || ensureOwnerSuperAdmin(code);
-  if (!resolved) return null;
-  adminSession = { id:resolved.id, name:resolved.name, level:resolved.level };
-  try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession)); } catch {}
-  try { renderPresence(currentPresence); } catch {}   // badges become clickable right away
-  return adminSession;
-}
-
 function logoutAdmin() {
+  if (window.CueolaAdminAuth) CueolaAdminAuth.signOut();  // adapter resets UI
   adminSession = null;
-  try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch {}
   updateAdminUI();
   try { renderPresence(currentPresence); } catch {}
-}
-
-function restoreAdminSession() {
-  try {
-    const s = JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY));
-    if (s) {
-      const a = _adminsCache.find(x=>x.id===s.id);
-      if (a) adminSession = { id:a.id, name:a.name, level:a.level };
-      else   adminSession = null; // admin was removed — invalidate session
-    }
-  } catch {}
-}
-
-// ── CRUD helpers ─────────────────────────────────────────────
-function createAdmin(name, code, level, createdBy=null) {
-  const list = [..._adminsCache];
-  const id = 'adm_'+Date.now().toString(36);
-  list.push({ id, name, codeHash:hashStr(code), level, createdBy });
-  saveAdmins(list);
-  return id;
-}
-
-function ensureOwnerSuperAdmin(code) {
-  if (!isOwnerBootstrapCode(code)) return null;
-  const existingOwner = _adminsCache.find(a=>a.id===OWNER_ADMIN_ID);
-  const owner = {
-    id: OWNER_ADMIN_ID,
-    name: existingOwner?.name || 'Jon Kost',
-    codeHash: existingOwner?.codeHash || OWNER_BOOTSTRAP_HASH,
-    level: 'super',
-    createdBy: 'owner-bootstrap'
-  };
-  const list = _adminsCache.filter(a=>a.id!==OWNER_ADMIN_ID);
-  list.unshift(owner);
-  saveAdmins(list);
-  return owner;
-}
-
-function removeAdmin(id) {
-  saveAdmins(_adminsCache.filter(a=>a.id!==id));
-}
-
-function updateAdminCode(id, newCode) {
-  const idx = _adminsCache.findIndex(a=>a.id===id);
-  if (idx < 0) return false;
-  const list = _adminsCache.map(a=>a.id===id ? {...a, codeHash:hashStr(newCode)} : a);
-  saveAdmins(list);
-  return true;
 }
 
 function updateAdminUI() {
@@ -2433,74 +2319,43 @@ function updateAdminUI() {
 // ─────────────────────────────────────────────────────────────
 // ADMIN LOGIN OVERLAY
 // ─────────────────────────────────────────────────────────────
+// The in-app sign-in door (D1): script lock, session info, and presence
+// inspect all funnel here when !adminSession — it must always offer a real
+// sign-in path or the Live surface dead-ends.
 function openAdminLogin() {
-  hideModal('adminSetupModal');
-  document.getElementById('adminCodeIn').value = '';
+  document.getElementById('adminUserIn').value = '';
+  document.getElementById('adminPassIn').value = '';
   document.getElementById('adminLoginErr').classList.remove('on');
-  const hint = document.getElementById('adminSetupHint');
-  hint.style.display = hasSuperAdmin() ? 'none' : 'block';
   showModal('adminLoginModal');
-  setTimeout(()=>document.getElementById('adminCodeIn').focus(),100);
+  setTimeout(()=>document.getElementById('adminUserIn').focus(),100);
 }
 
 async function submitAdminLogin() {
-  const code = document.getElementById('adminCodeIn').value.trim();
-  if (!code) return;
+  const username = document.getElementById('adminUserIn').value.trim();
+  const password = document.getElementById('adminPassIn').value;
   const err = document.getElementById('adminLoginErr');
   const btn = document.getElementById('admin-login-btn');
-  err.classList.remove('on');
-  if (!_adminsCacheReady) {
-    err.textContent = 'Loading admin access…';
+  if (!username || !password) {
+    err.textContent = 'Enter your username and password.';
     err.classList.add('on');
-    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
-    const ready = await waitForAdminsReady();
-    if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
-    if (!ready) {
-      err.textContent = 'Admin access could not load. Check the connection and try again; your code was kept.';
-      document.getElementById('adminCodeIn').focus();
-      return;
-    }
+    return;
   }
-  const result = loginAdmin(code);
-  if (result) {
+  err.classList.remove('on');
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+  try {
+    const result = await CueolaAdminAuth.signIn(username, password);
     hideModal('adminLoginModal');
-    updateAdminUI();
+    document.getElementById('adminPassIn').value = '';
     toast(`Welcome, ${result.name}`);
     if (document.getElementById('rundown').classList.contains('on')) openAdminPanel();
-  } else {
-    err.textContent = 'Incorrect code. Try again.';
+  } catch (e) {
+    err.textContent = e?.message || 'Sign-in failed.';
     err.classList.add('on');
-    document.getElementById('adminCodeIn').value='';
-    document.getElementById('adminCodeIn').focus();
+    document.getElementById('adminPassIn').value = '';
+    document.getElementById('adminPassIn').focus();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
   }
-}
-
-function openAdminSetup() {
-  hideModal('adminLoginModal');
-  document.getElementById('setupOwnerCode').value = '';
-  showModal('adminSetupModal');
-}
-
-function submitAdminSetup() {
-  const name  = document.getElementById('setupAdminName').value.trim();
-  const owner = document.getElementById('setupOwnerCode').value;
-  const code  = document.getElementById('setupAdminCode').value;
-  const code2 = document.getElementById('setupAdminCode2').value;
-  const err   = document.getElementById('setupAdminErr');
-  err.classList.remove('on');
-  if (!name || !owner || !code) { err.textContent='Name, owner bootstrap code, and admin code are required.'; err.classList.add('on'); return; }
-  if (!isOwnerBootstrapCode(owner)) { err.textContent='Owner bootstrap code is required to create a super admin.'; err.classList.add('on'); return; }
-  if (code.trim().length < 4) { err.textContent='Use at least 4 characters for the admin code.'; err.classList.add('on'); return; }
-  if (code !== code2) { err.textContent='Codes do not match.'; err.classList.add('on'); return; }
-  if (hasSuperAdmin() && !_adminsCache.some(a=>a.id===OWNER_ADMIN_ID)) { err.textContent='Super admin already exists.'; err.classList.add('on'); return; }
-  ensureOwnerSuperAdmin(owner);
-  updateAdminCode(OWNER_ADMIN_ID, code);
-  const admins = getAdmins().map(a=>a.id===OWNER_ADMIN_ID ? {...a, name:name||'Jon Kost'} : a);
-  saveAdmins(admins);
-  loginAdmin(code);
-  hideModal('adminSetupModal');
-  updateAdminUI();
-  toast(`Super admin created. Welcome, ${name}!`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2530,13 +2385,11 @@ function renderAdminBody() {
   // silently resetting them to the last saved state.
   const pendingAssignments = body?.querySelector('[data-role-assignment-row]')
     ? getRoleAssignmentsFromAdminDOM(true) : null;
-  const admins = getAdmins();
-  const isSuper = adminSession.level==='super';
-  const isFull  = adminSession.level==='full'||isSuper;
+  const isSuper = adminSession.level==='super';   // 'full' level retired (plan decision 4)
 
   let html = '';
 
-  // ── Admin management ──
+  // ── Admin management (accounts live on the dashboard now — D1) ──
   if (isSuper) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Admin Management</div>
@@ -2546,46 +2399,11 @@ function renderAdminBody() {
         <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
         <button class="admin-act-btn" onclick="openPaperworkHub()">Open Planda Bear</button>
       </div>` : ''}
-      <div class="admin-list">`;
-    admins.forEach(a => {
-      const isMe = a.id===adminSession.id;
-      const canEdit = isSuper && !isMe; // super can edit others; full cannot see codes
-      const canRemove = (isSuper && !isMe) || (isFull && a.level==='standard' && !isMe);
-      const levelClass = `alc-${a.level}`;
-      const canEditCode = isSuper; // super can edit any code including own
-      html += `<div class="admin-item">
-        <div>
-          <div class="admin-item-name">${esc(a.name)}</div>
-          <span class="admin-level-chip ${levelClass}" style="margin-top:4px;display:inline-block">${a.level.toUpperCase()}</span>
-        </div>
-        <div style="flex:1"></div>
-        ${isMe ? '<span class="admin-item-you">YOU</span>' : ''}
-        <div class="admin-item-acts">
-          ${session.code ? `<button class="admin-act-btn" onclick="shareSessionInvite(${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Send Session</button>` : ''}
-          ${canEditCode ? `<button class="admin-act-btn" onclick="promptEditCode('${a.id}',${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Edit Code</button>` : ''}
-          ${isSuper && !isMe && a.level==='standard' ? `<button class="admin-act-btn" onclick="promoteToFull('${a.id}')">→ Full</button>` : ''}
-          ${isSuper && !isMe && a.level==='full' ? `<button class="admin-act-btn" onclick="promoteToSuper('${a.id}')">→ Super</button><button class="admin-act-btn" onclick="demoteToStandard('${a.id}')">→ Standard</button>` : ''}
-          ${isSuper && !isMe && a.level==='super' ? `<button class="admin-act-btn" onclick="demoteToFull('${a.id}')">→ Full</button>` : ''}
-          ${canRemove ? `<button class="admin-act-btn danger" onclick="confirmRemoveAdmin('${a.id}',${JSON.stringify(a.name).replace(/"/g,'&quot;')})">Remove</button>` : ''}
-        </div>
-      </div>`;
-    });
-    html += `</div>`;
-
-    // Add admin form
-    html += `<div class="admin-add-form" id="addAdminForm">
-      <div class="admin-add-label">Add Admin</div>
-      <input class="admin-in" id="newAdminName" type="text" placeholder="Name" autocomplete="off">
-      <input class="admin-in" id="newAdminCode" type="password" placeholder="Admin code" autocomplete="new-password">
-      <div class="admin-level-row">
-        <button class="admin-level-btn sel" id="newLvlStandard" onclick="selectNewLevel('standard')">Standard</button>
-        ${isSuper && countFullAccess()<3 ? `<button class="admin-level-btn" id="newLvlFull" onclick="selectNewLevel('full')">Full Access</button>` : ''}
+      <div style="font-size:12px;color:var(--text3);line-height:1.6;margin-top:8px">
+        Signed in as <b>${esc(adminSession.name)}</b> (${esc(adminSession.username || '')}).
+        Instructor accounts are managed on the <a href="dashboard.html#accounts" style="color:var(--accent)">Dashboard → Accounts</a> page.
       </div>
-      <div id="newAdminErr" style="font-size:12px;color:var(--red);display:none"></div>
-      <button class="admin-add-btn" onclick="submitAddAdmin()">Add Admin</button>
     </div>`;
-
-    html += `</div>`;
   }
 
   // ── Session sources ──
@@ -3312,7 +3130,7 @@ async function saveRoleAssignmentsFromAdmin() {
         'prePro.roleAssignments':compatibility,
         'prePro._fieldUpdatedAt.roleAssignments':now,
         'prePro.updatedAt':now,
-        preProActivity:window._arrayUnion({ section:'Role Assignments', by:actor.label, clientId:CLIENT_ID, at:now }),
+        preProActivity:preProActivityValue({ section:'Role Assignments', by:actor.label, clientId:CLIENT_ID, at:now }, sessionSnap.data().preProActivity),
       });
     });
 
@@ -3384,38 +3202,6 @@ function renderSourcesRow(key, label) {
       <button class="admin-src-add" onclick="addCustomSource('${key}')">+ Add</button>
     </div>
   </div>`;
-}
-
-let _newAdminLevel = 'standard';
-function selectNewLevel(lvl) {
-  _newAdminLevel = lvl;
-  document.querySelectorAll('.admin-level-btn').forEach(b => b.classList.remove('sel'));
-  const btn = document.getElementById(`newLvl${lvl.charAt(0).toUpperCase()+lvl.slice(1)}`);
-  if (btn) btn.classList.add('sel');
-}
-
-function submitAddAdmin() {
-  const name = document.getElementById('newAdminName').value.trim();
-  const code = document.getElementById('newAdminCode').value.trim();
-  const err  = document.getElementById('newAdminErr');
-  err.style.display='none';
-  if (!name||!code) { err.textContent='Name and code required.'; err.style.display='block'; return; }
-  if (code.length < 4) { err.textContent='Use at least 4 characters for an admin code.'; err.style.display='block'; return; }
-  if (_adminsCache.some(a => a.name.trim().toLowerCase() === name.toLowerCase())) { err.textContent='An admin with that name already exists.'; err.style.display='block'; return; }
-  if (_adminsCache.some(a => a.codeHash === hashStr(code))) { err.textContent='That admin code is already in use.'; err.style.display='block'; return; }
-  if (_newAdminLevel==='full' && countFullAccess()>=3) { err.textContent='Max 3 full-access admins.'; err.style.display='block'; return; }
-  createAdmin(name, code, _newAdminLevel, adminSession.id);
-  renderAdminBody();
-  toast(`Admin "${name}" added.`);
-}
-
-function promptEditCode(id, name) {
-  const code = prompt(`New code for ${name}:`);
-  const clean = (code || '').trim();
-  if (!clean) return;
-  if (clean.length < 4) { toast('Use at least 4 characters for an admin code.'); return; }
-  if (_adminsCache.some(a => a.id !== id && a.codeHash === hashStr(clean))) { toast('That admin code is already in use.'); return; }
-  if (updateAdminCode(id, clean)) toast('Code updated.');
 }
 
 function sessionInviteLink() {
@@ -3541,42 +3327,6 @@ function followSessionMove(newCode, isMover = false) {
   } else {
     toast(`This session moved to a new code: ${session.code}`);
   }
-}
-
-function promoteToFull(id) {
-  if (countFullAccess()>=3) { toast('Max 3 full-access admins reached.'); return; }
-  const admins = getAdmins();
-  const a = admins.find(x=>x.id===id);
-  if (a && !dangerConfirm(`Promote "${a.name}" to Full Access?`, 'Full Access admins can manage sessions and operate high-impact show controls.')) return;
-  if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Full Access.`); }
-}
-
-function promoteToSuper(id) {
-  const admins = getAdmins();
-  const a = admins.find(x=>x.id===id);
-  if (a && !dangerConfirm(`Promote "${a.name}" to Super Admin?`, 'Super admins can add, remove, promote, and demote other admins across this app.', { requireText:'SUPER' })) return;
-  if (a) { a.level='super'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} promoted to Super Admin.`); }
-}
-
-function demoteToFull(id) {
-  const admins = getAdmins();
-  const a = admins.find(x=>x.id===id);
-  if (a && !dangerConfirm(`Demote "${a.name}" to Full Access?`, 'They will keep broad show access but lose Super Admin management powers.')) return;
-  if (a) { a.level='full'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} set to Full Access.`); }
-}
-
-function demoteToStandard(id) {
-  const admins = getAdmins();
-  const a = admins.find(x=>x.id===id);
-  if (a && !dangerConfirm(`Demote "${a.name}" to Standard?`, 'They will lose full-access controls for shared show management.')) return;
-  if (a) { a.level='standard'; saveAdmins(admins); renderAdminBody(); toast(`${a.name} set to Standard.`); }
-}
-
-function confirmRemoveAdmin(id, name) {
-  if (!dangerConfirm(`Remove admin "${name}"?`, 'Their saved admin session will stop working on the next admin sync. This does not delete show data.', { requireText:'REMOVE' })) return;
-  removeAdmin(id);
-  renderAdminBody();
-  toast(`${name} removed.`);
 }
 
 function addCustomSource(key) {
@@ -3714,12 +3464,13 @@ function restoreLocalDraftAsRundownBaseline() {
   return true;
 }
 
+// v2.1 D5: standardized on the shared two-letter format (YYMM + 2 letters
+// from the 24-letter no-I/O alphabet = 576 codes/month). Collisions are the
+// create-if-missing transaction's job, never this function's.
 function genCode() {
-  const d = new Date();
-  const yy=String(d.getFullYear()).slice(-2), mm=pad(d.getMonth()+1);
-  const letters='ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const l = letters[Math.floor(Math.random()*letters.length)];
-  return `${yy}${mm}${l}`;
+  return window.CueolaSessionClone
+    ? CueolaSessionClone.generateEpisodeCode()
+    : `${String(new Date().getFullYear()).slice(-2)}${pad(new Date().getMonth() + 1)}AA`;
 }
 
 function waitForFirebaseReady(timeoutMs=FIREBASE_WAIT_MS) {
@@ -3807,6 +3558,7 @@ async function createSession() {
       const payload = buildSessionBootstrapPayload({
         code,
         createdBy:name,
+        ownerUid:adminSession?.id || '',
         showName:showName || 'Untitled Show',
         startTime:'',
         beats:[],
@@ -4069,6 +3821,7 @@ async function startBlankSlate() {
     await window._setDoc(ref, {
       code,
       createdBy:name,
+      ...(adminSession ? { ownerUid: adminSession.id } : {}),
       showName,
       startTime:'',
       beats:[],
@@ -4199,6 +3952,9 @@ function buildSessionBootstrapPayload(source={}) {
     participants:[],
   };
   if (source.createdAt !== undefined) payload.createdAt = source.createdAt;
+  // v2.1 (D1): ownership by Auth uid, stamped when the creator is a signed-in
+  // admin and preserved through snapshot recovery.
+  if (typeof source.ownerUid === 'string' && source.ownerUid) payload.ownerUid = source.ownerUid;
   return payload;
 }
 
@@ -4206,6 +3962,7 @@ function buildSnapshotRecoveryPayload(doc) {
   const payload = buildSessionBootstrapPayload({
     code:session.code,
     createdBy:session.userName,
+    ownerUid:doc?.ownerUid,     // recovery keeps the original owner, never restamps
     showName:doc?.showName,
     startTime:doc?.startTime,
     beats:doc?.beats,
@@ -4657,9 +4414,12 @@ function setupFirestore() {
       }
       if (d.customSources) sessionCustomSources = d.customSources;
       saveLocalDraft();
-      if (d.prePro && typeof d.prePro === 'object') {
+      if (d.prePro && typeof d.prePro === 'object' && !groupActive()) {
+        // D2: while a group is active, the parent-doc prePro is the frozen
+        // master copy — the group subdoc listener owns paperwork merges.
         try { mergePreProFromCloud(d.prePro); } catch {}
       }
+      pbEnsureGroupSubscription();   // groups config can appear/lock mid-session
       onAssignmentRevisionSnapshot(d);
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
       // The shared show cue is authoritative independently of this device's
@@ -4860,7 +4620,9 @@ async function joinPresence() {
   } : {};
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,...identity,lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
+      [`presence.${presenceId}`]:{name,role:session.role,...identity,
+        ...(groupActive() ? { groupId: activeGroupId } : {}),   // D2: group on the presence entry
+        lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
     });
     clearInterval(presenceInterval);
     presenceInterval = setInterval(async()=>{
@@ -7035,7 +6797,7 @@ async function loadScriptFile(input, targetId) {
   const file = input.files[0]; if (!file) return;
   const target = document.getElementById(targetId||'cc-s-text');
   if (file.name.toLowerCase().endsWith('.pdf') && window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/vendor/pdf.worker.min.js';
     try {
       const ab = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({data:ab}).promise;
@@ -10339,7 +10101,9 @@ let ptMirrored = false;
 let ptPanelVisible = true;
 let ptFontSize = 52;
 let ptAlign = 'center';
-let ptThemeName = normalizeCueolaTheme(localStorage.getItem('promptypus_theme') || 'cool');
+// cueola_* is the storage standard (docs/NAMING.md): read new key, fall back to
+// the legacy promptypus_* key once, write only the new key.
+let ptThemeName = normalizeCueolaTheme(localStorage.getItem('cueola_prompter_theme') || localStorage.getItem('promptypus_theme') || 'cool');
 let ptIdleTimer = null;
 let ptKeydownHandler = null;
 let ptKeyupHandler = null;
@@ -10514,7 +10278,7 @@ function ptHandleCueolaMessage(msg) {
 function ptLoadSavedOrDefault() {
   const textEl = ptEl('pt-text');
   if (!textEl || textEl.textContent.trim()) return;
-  const saved = (() => { try { return localStorage.getItem('promptypus_script_html'); } catch { return null; } })();
+  const saved = (() => { try { return localStorage.getItem('cueola_prompter_script_html') || localStorage.getItem('promptypus_script_html'); } catch { return null; } })();
   if (saved) {
     ptSetScriptHTML(saved);
     return;
@@ -11167,7 +10931,7 @@ function ptSetTheme(name) {
   document.documentElement.style.setProperty('--pt-accent', t.accent);
   document.documentElement.style.setProperty('--pt-ui-bg', t.uiBg);
   document.documentElement.style.setProperty('--pt-ui-border', t.uiBorder);
-  try { localStorage.setItem('promptypus_theme', name); } catch {}
+  try { localStorage.setItem('cueola_prompter_theme', name); } catch {}
   document.querySelectorAll('.pt-theme-dot').forEach(d => { d.classList.remove('active'); d.classList.remove('on'); });
   const dot = ptEl('pt-t-' + name);
   if (dot) dot.classList.add('active');
@@ -11239,7 +11003,7 @@ function ptSetScriptHTML(html, sourceText) {
   // rich imports (DOCX/Pages) that have no plain source.
   prompterText = (sourceText != null) ? sourceText : ptExtractText(el);
   ptScriptIsPlaceholder = false; // a real script was loaded (welcome default overrides this after)
-  try { localStorage.setItem('promptypus_script_html', el.innerHTML); } catch {}
+  try { localStorage.setItem('cueola_prompter_script_html', el.innerHTML); } catch {}
   ptResetAutoPauseMarkers();
   ptResetScroll();
   ptUpdateSyncLabel();
@@ -11255,7 +11019,7 @@ function ptSetScriptText(text) {
 // initial render, jarring for a mid-show edit).
 function ptApplyCueolaLiveUpdate(text) {
   prompterText = text || '';
-  try { localStorage.setItem('promptypus_script_html', scriptToFormattedHTML(text || '')); } catch {}
+  try { localStorage.setItem('cueola_prompter_script_html', scriptToFormattedHTML(text || '')); } catch {}
   ptUpdateFromCueola(text || '');   // preserves ptOffset + keeps scrolling if playing
 }
 
@@ -11271,8 +11035,8 @@ function ptLoadLibrary(src) {
 }
 
 async function ptExtractFromPDF(arrayBuffer) {
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  await ptLoadLibrary('assets/vendor/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/vendor/pdf.worker.min.js';
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pages = [];
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -11297,13 +11061,13 @@ async function ptExtractFromPDF(arrayBuffer) {
 }
 
 async function ptExtractFromDOCX(arrayBuffer) {
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+  await ptLoadLibrary('assets/vendor/mammoth.browser.min.js');
   const result = await mammoth.convertToHtml({ arrayBuffer });
   return result.value.replace(/<p>\s*<\/p>/g, '<p> </p>');
 }
 
 async function ptExtractFromPages(arrayBuffer) {
-  await ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  await ptLoadLibrary('assets/vendor/jszip.min.js');
   const zip = await JSZip.loadAsync(arrayBuffer);
   const pdfEntry = zip.file('QuickLook/Preview.pdf');
   if (pdfEntry) {
@@ -11386,7 +11150,7 @@ function ptDownloadAsTxt() {
 async function ptDownloadAsPDF() {
   const txt = ptDownloadText();
   if (!txt) return;
-  await ptLoadLibrary('assets/vendor/jspdf.umd.min.js').catch(() => ptLoadLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'));
+  await ptLoadLibrary('assets/vendor/jspdf.umd.min.js');
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const margin = 20;
@@ -11828,7 +11592,7 @@ function flowOpSetTheme(name) {
         : name === 'prepbear'
           ? 'linear-gradient(135deg,#080912 0%,#14172a 50%,#2f357c 100%)'
           : t.bg;
-  try { localStorage.setItem('promptypus_theme', name); } catch {}
+  try { localStorage.setItem('cueola_prompter_theme', name); } catch {}
 }
 
 function flowOpControlLabel(action) {
@@ -13017,6 +12781,62 @@ const PAPERWORK_ITEMS = [
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
   { order:7, id:'production-notes', title:'Production Notes', sub:'The crew’s message board — tag a department and the thread stays with the show.' },
 ];
+// ── v2.1 D6: per-session paperwork config (sparse override map on the parent
+// session doc's prePro — identifier-safe underscore keys, MISSING = ENABLED,
+// so new paperwork types appear by default with zero migration). Disabling
+// hides everywhere but never deletes; re-enable restores everything.
+function paperworkConfigKey(itemId) { return String(itemId || '').replace(/-/g, '_'); }
+function paperworkEnabledMapLive() {
+  // SESSION-LEVEL: the parent session doc wins (grouped clients still read the
+  // parent — the groups phase re-verifies this); local prePro is the fallback
+  // for solo/offline workspaces.
+  const parent = sessionSnapshotLatestDoc?.prePro?.paperworkEnabled;
+  if (parent && typeof parent === 'object') return parent;
+  const local = loadPreProData()?.paperworkEnabled;
+  return (local && typeof local === 'object') ? local : {};
+}
+function paperworkTypeEnabled(itemId) {
+  if (itemId === 'production-notes') return true;   // exempt from the config (decision 10)
+  return paperworkEnabledMapLive()[paperworkConfigKey(itemId)] !== false;
+}
+function enabledPaperworkItems() {
+  return PAPERWORK_ITEMS.filter(item => paperworkTypeEnabled(item.id));
+}
+// Only-disabled projection for snapshot options — MUST ride inside
+// snapshot.options so the export fingerprint changes when the config does.
+function disabledPaperworkOptions() {
+  const out = {};
+  PAPERWORK_ITEMS.forEach(item => {
+    if (!paperworkTypeEnabled(item.id)) out[paperworkConfigKey(item.id)] = false;
+  });
+  return out;
+}
+
+// ── v2.1 D6: numbered-section builder — the ONLY source of package section
+// numbers, shared by the full package AND every per-item preview. The call
+// sheet keeps its document-style header (no printed number) but still owns
+// slot 1, so downstream numbers match today's package when nothing is
+// disabled and renumber coherently when something is.
+const PAPERWORK_PACKAGE_SECTION_ORDER = ['call-sheet', 'production-scheduler', 'safety-plan',
+  'assignment-register', 'rundown', 'video-patch', 'audio-comms-patch', 'production-notes'];
+function paperworkSectionNumbers(snapshot=null) {
+  const disabled = snapshot?.options?.paperwork || null;
+  const isOn = id => {
+    if (id === 'assignment-register' || id === 'production-notes') return true;
+    return disabled ? disabled[paperworkConfigKey(id)] !== false : paperworkTypeEnabled(id);
+  };
+  const numbers = new Map();
+  let n = 0;
+  PAPERWORK_PACKAGE_SECTION_ORDER.forEach(id => { if (isOn(id)) numbers.set(id, ++n); });
+  return numbers;
+}
+function paperworkSectionNumber(id, snapshot=null) {
+  return paperworkSectionNumbers(snapshot).get(id) || null;
+}
+function paperSectionTitle(num, title) {
+  return num ? `${num}. ${title}` : title;
+}
+
 const PRODUCTION_CHECKLIST_GUIDES = [
   { area:'Record path', hint:'Confirm record destination, inputs, media space, format, and expected runtime.' },
   { area:'Camera chain', hint:'Confirm cameras, lenses, white balance, shade, framing, and return/video paths.' },
@@ -13072,22 +12892,202 @@ function pbEndNoteSave() {
   _pbPendingNoteWrites = Math.max(0, _pbPendingNoteWrites - 1);
 }
 
+// ── v2.1 Phase 6 (D2): group workspaces ──────────────────────
+// One paperwork subdocument per group at sessions/{code}/groups/{gid}; the
+// legacy sync spine reads/writes the group doc instead of the session doc
+// when a group is active. Rundown and Live stay SHARED on the parent doc —
+// paperwork-per-group, show-per-class.
+let activeGroupId = '';
+
+function sessionGroups() {
+  const list = sessionSnapshotLatestDoc?.groups;
+  return Array.isArray(list)
+    ? list.filter(g => g && typeof g.id === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(g.id))
+    : [];
+}
+function groupsLocked() { return sessionSnapshotLatestDoc?.groupsLocked === true; }
+function activeGroupStorageKey() { return `cueola_group_${session.code || 'local'}`; }
+function loadActiveGroupId() {
+  try { return localStorage.getItem(activeGroupStorageKey()) || ''; } catch { return ''; }
+}
+function setActiveGroupId(gid) {
+  activeGroupId = String(gid || '');
+  try {
+    if (activeGroupId) localStorage.setItem(activeGroupStorageKey(), activeGroupId);
+    else localStorage.removeItem(activeGroupStorageKey());
+  } catch {}
+}
+function groupActive() {
+  return Boolean(activeGroupId && sessionGroups().some(g => g.id === activeGroupId));
+}
+function activeGroupName() {
+  const group = sessionGroups().find(g => g.id === activeGroupId);
+  return group ? String(group.name || group.id) : '';
+}
+// THE parameterization point: session doc when ungrouped, group subdoc when
+// grouped. Every paperwork read/write flows through here.
+function preProDocRef() {
+  return groupActive()
+    ? window._doc(window._db, 'sessions', session.code, 'groups', activeGroupId)
+    : window._doc(window._db, 'sessions', session.code);
+}
+
 function preProKey() {
-  return `cueola_prepro_${session.code || session.userName || 'local'}`;
+  const base = `cueola_prepro_${session.code || session.userName || 'local'}`;
+  return groupActive() ? `${base}__${activeGroupId}` : base;
+}
+
+// Per-group inbound listener: feeds mergePreProFromCloud exactly like the main
+// listener's prePro branch, but from the active group subdoc.
+let _pbGroupUnsub = null;
+let _pbGroupSubKey = '';
+function pbEnsureGroupSubscription() {
+  const wantKey = groupActive() ? `${session.code}/${activeGroupId}` : '';
+  if (wantKey === _pbGroupSubKey) return;
+  if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
+  _pbGroupSubKey = wantKey;
+  if (!wantKey || !window._onSnapshot || !window._firebaseReady) return;
+  _pbGroupUnsub = window._onSnapshot(preProDocRef(), snap => {
+    const d = snap.exists() ? (snap.data() || {}) : {};
+    if (d.prePro && typeof d.prePro === 'object') {
+      try { mergePreProFromCloud(d.prePro); } catch {}
+    }
+  }, err => console.warn('group workspace listener failed', err?.code || err));
+}
+
+// Switch this device to a group workspace: re-key the local mirror, re-stamp
+// presence, resubscribe, and re-hydrate. Students may switch freely until an
+// instructor locks groups; instructors/admins always may.
+function selectGroup(gid, opts = {}) {
+  const groups = sessionGroups();
+  if (gid && !groups.some(g => g.id === gid)) { toast('That group no longer exists.'); return false; }
+  const isCrew = Boolean(adminSession) || session.role === 'instructor';
+  if (!opts.force && !isCrew && groupsLocked() && groupActive() && gid !== activeGroupId) {
+    toast('Groups are locked — ask your instructor to move you.');
+    return false;
+  }
+  setActiveGroupId(gid);
+  pbEnsureGroupSubscription();
+  try { joinPresence(); } catch {}          // re-stamps groupId on the presence entry
+  hydratePreProFromFirestore().then(() => {
+    try { renderPlandaBearAssignmentsCard(); } catch {}
+    try { renderPackageSheetPicker(); } catch {}
+  });
+  if (!opts.silent) toast(gid ? `Working in ${activeGroupName()}.` : 'Working on the whole-class paperwork.');
+  return true;
+}
+
+// The hub's group bar: shows where you are; instructors get a switcher
+// dropdown for per-group review + export, students a Switch button until
+// groups lock. Hidden entirely for ungrouped sessions.
+function renderPbGroupBar() {
+  const bar = document.getElementById('pbGroupBar');
+  if (!bar) return;
+  const groups = sessionGroups();
+  if (!groups.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+  const isCrew = Boolean(adminSession) || session.role === 'instructor';
+  bar.hidden = false;
+  if (isCrew) {
+    bar.innerHTML = `
+      <span class="pb-group-bar-label">Reviewing</span>
+      <select class="field-in pb-group-select" onchange="selectGroup(this.value) && renderPbGroupBar()">
+        ${groups.map(g => `<option value="${esc(g.id)}" ${g.id === activeGroupId ? 'selected' : ''}>${esc(g.name || g.id)}</option>`).join('')}
+      </select>
+      <span class="pb-group-bar-note">Each group has its own paperwork · exports follow this picker${groupsLocked() ? ' · groups are locked' : ''}</span>`;
+  } else {
+    bar.innerHTML = `
+      <span class="pb-group-bar-label">Your group</span>
+      <b>${esc(activeGroupName() || '—')}</b>
+      ${groupsLocked() ? '<span class="pb-group-bar-note">Groups are locked</span>'
+        : '<button type="button" class="btn-sm btn-ghost" onclick="openGroupPicker()">Switch group</button>'}`;
+  }
+}
+
+// Group picker: chips modal shown at join (and reopenable from the hub until
+// locked). Students must pick; instructors default to reviewing Group 1.
+function openGroupPicker() {
+  const groups = sessionGroups();
+  if (!groups.length) return;
+  const host = document.getElementById('groupPickerChips');
+  if (!host) return;
+  host.innerHTML = groups.map(g => `
+    <button type="button" class="group-chip${g.id === activeGroupId ? ' sel' : ''}" onclick="pickGroupChip('${esc(g.id)}')">${esc(g.name || g.id)}</button>`).join('');
+  const lockNote = document.getElementById('groupPickerLockNote');
+  if (lockNote) lockNote.hidden = !groupsLocked();
+  showModal('groupPickerModal');
+}
+function pickGroupChip(gid) {
+  if (selectGroup(gid)) {
+    hideModal('groupPickerModal');
+    renderPbGroupBar();
+    // A blocked hub open resumes now that the device has a group.
+    if (!document.getElementById('paperworkHubModal')?.classList.contains('on')) openPaperworkHub();
+  }
+}
+// Called when entering the Planda Bear hub: force a choice when groups are
+// active and this device hasn't picked one yet.
+function pbEnsureGroupChosen() {
+  const groups = sessionGroups();
+  if (!groups.length) { if (activeGroupId) setActiveGroupId(''); return true; }
+  if (!activeGroupId) {
+    const remembered = loadActiveGroupId();
+    if (remembered && groups.some(g => g.id === remembered)) {
+      activeGroupId = remembered;
+      pbEnsureGroupSubscription();
+      return true;
+    }
+    if (adminSession || session.role === 'instructor') {
+      selectGroup(groups[0].id, { silent: true });   // instructors land in Group 1, switchable
+      return true;
+    }
+    openGroupPicker();
+    return false;
+  }
+  pbEnsureGroupSubscription();
+  return true;
 }
 
 function activeCallSheetKey() {
-  return `cueola_call_sheet_index_${session.code || session.userName || 'local'}`;
+  const base = `cueola_call_sheet_index_${session.code || session.userName || 'local'}`;
+  return groupActive() ? `${base}__${activeGroupId}` : base;   // D2: per-group selection
 }
 
-function loadActiveCallSheetIndex() {
-  try { return Math.max(0, Number(localStorage.getItem(activeCallSheetKey())) || 0); } catch { return 0; }
+// v2.1 D6 selection hardening: the stored selection is {id, index}, and the id
+// wins — a remote delete or sanitizer collapse can renumber the array, but it
+// can never silently swap a different sheet into an open form.
+let activeCallSheetId = '';
+
+function loadActiveCallSheetIndex(sheets=null) {
+  try {
+    const raw = localStorage.getItem(activeCallSheetKey());
+    if (raw == null) return 0;
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (parsed && typeof parsed === 'object') {
+      const list = sheets || getCallSheets();
+      const byId = parsed.id ? list.findIndex(sheet => sheet.id === parsed.id) : -1;
+      if (byId >= 0) { activeCallSheetId = parsed.id; return byId; }
+      return Math.max(0, Math.min(Number(parsed.index) || 0, Math.max(0, list.length - 1)));
+    }
+    return Math.max(0, Number(raw) || 0);   // legacy numeric value (read-old)
+  } catch { return 0; }
 }
 
-function storeActiveCallSheetIndex(index) {
+function storeActiveCallSheetIndex(index, sheets=null) {
   activeCallSheetIndex = Math.max(0, Number(index) || 0);
-  try { localStorage.setItem(activeCallSheetKey(), String(activeCallSheetIndex)); } catch {}
+  const list = sheets || getCallSheets();
+  activeCallSheetId = list[activeCallSheetIndex]?.id || '';
+  try { localStorage.setItem(activeCallSheetKey(), JSON.stringify({ id: activeCallSheetId, index: activeCallSheetIndex })); } catch {}
   return activeCallSheetIndex;
+}
+
+// Resolve the device's selection against the CURRENT sheet list, id-first.
+function resolveActiveCallSheetIndex(sheets=getCallSheets()) {
+  const byId = activeCallSheetId ? sheets.findIndex(sheet => sheet.id === activeCallSheetId) : -1;
+  const idx = byId >= 0 ? byId : Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, Math.max(0, sheets.length - 1)));
+  activeCallSheetIndex = idx;
+  activeCallSheetId = sheets[idx]?.id || activeCallSheetId;
+  return idx;
 }
 
 function loadPreProData() {
@@ -13286,7 +13286,9 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
   // 'LOCAL' is the no-session sentinel (openLocalPlandaBear/openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
-  const ref = window._doc(window._db,'sessions',session.code);
+  // D2: writes land on the ACTIVE workspace — the group subdoc when grouped.
+  const ref = preProDocRef();
+  const grouped = groupActive();
   const changedKeys = Object.keys(changed).filter(key => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key));
   if (changedKeys.length) {
     const updates = { 'prePro.updatedAt':updatedAt };
@@ -13298,7 +13300,18 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
     }
     pbBeginCloudSave(changedKeys);
     _pbLastCloudSaveError = null;
-    window._updateDoc(ref, updates).then(() => {
+    // D2: the FIRST save to a group whose subdoc doesn't exist yet retries as
+    // a setDoc merge (updateDoc requires an existing doc).
+    const groupSeedFallback = err => {
+      if (!grouped || err?.code !== 'not-found') return Promise.reject(err);
+      const seed = { prePro: { updatedAt: updatedAt, _fieldUpdatedAt: {} }, updatedAt: updatedAt };
+      changedKeys.forEach(key => {
+        seed.prePro[key] = changed[key];
+        seed.prePro._fieldUpdatedAt[key] = updatedAt;
+      });
+      return window._setDoc(ref, seed, { merge: true });
+    };
+    window._updateDoc(ref, updates).catch(groupSeedFallback).then(() => {
       pbEndCloudSave(changedKeys);
     }).catch(err => {
       // Record the failure before pbEndCloudSave re-renders the save-status
@@ -13310,7 +13323,11 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) })
+      .catch(err => (grouped && err?.code === 'not-found')
+        ? window._setDoc(ref, { preProActivity: [entry] }, { merge: true })
+        : Promise.reject(err))
+      .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -13335,7 +13352,7 @@ function pbRowsRenderEqual(a, b) {
 function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
   const Sync = preProSyncEngine();
-  const ref = window._doc(window._db, 'sessions', session.code);
+  const ref = preProDocRef();   // D2: the dark engine stays group-compatible
   const changedPaths = (diff.changedPaths || []).filter(pbLeafPathSafe);
   if (changedPaths.length && Sync) {
     const updates = Sync.buildFirestoreUpdates(diff, { base:'prePro', now, deleteField: window._deleteField() });
@@ -13354,7 +13371,7 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -13449,7 +13466,9 @@ function mergePreProFromCloudLegacy(server, recoverNewerLocal=false) {
 async function hydratePreProFromFirestore() {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   try {
-    const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
+    // D2: hydrate from the active workspace (group subdoc when grouped). A
+    // group doc that doesn't exist yet is a legitimately blank workspace.
+    const snap = await window._getDoc(preProDocRef());
     if (!snap.exists()) return;
     const server = snap.data().prePro;
     if (!server || typeof server !== 'object') return;
@@ -13594,6 +13613,8 @@ function pbRefreshSafetyFields() {
   const safety = data.safety || {};
   const wxNote = typeof safety.weather === 'string' ? safety.weather : '';
   pbSetFieldIfIdle('sp-hospital', safety.hospital || data.hospital || '');
+  pbSetFieldIfIdle('sp-hospital-address', safety.hospitalAddress || '');
+  pbSetFieldIfIdle('sp-hospital-phone', safety.hospitalPhone || '');
   pbSetFieldIfIdle('sp-weather', wxNote || safetyPlanWeatherAutoText(data));
   pbSetFieldIfIdle('sp-first-aid', safety.firstAid || '');
   pbSetFieldIfIdle('sp-fire', safety.fire || '');
@@ -13615,7 +13636,9 @@ function pbRefreshScheduleFields() {
   pbSetFieldIfIdle('ps-show', timeTo24(schedule.show));
   pbSetFieldIfIdle('ps-wrap', timeTo24(schedule.wrap));
   pbSetFieldIfIdle('ps-show-date', schedule.showDate || '');
-  pbSetFieldIfIdle('ps-doors', schedule.doors || '');
+  // D9.6: ps-doors is a time input now — normalize legacy free-text values
+  // ("7pm") so they hydrate instead of blanking; unparseable text is dropped.
+  pbSetFieldIfIdle('ps-doors', timeTo24(schedule.doors || '') || '');
   pbSetFieldIfIdle('ps-location', schedule.location || '');
   pbSetFieldIfIdle('ps-address', schedule.address || '');
   pbSetFieldIfIdle('ps-setup-notes', schedule.setupNotes || '');
@@ -13651,7 +13674,7 @@ function timeTo24(v) {
 function pbRefreshCallSheetFields() {
   const data = loadPreProData();
   const sheets = getCallSheets(data);
-  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = resolveActiveCallSheetIndex(sheets);
   const sheet = normalizeCallSheet(sheets[idx], idx);
   pbSetFieldIfIdle('pp-sheet-label', sheet.label || '');
   pbSetFieldIfIdle('pp-production', sheet.production || show.name || '');
@@ -13665,6 +13688,7 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-stream', sheet.stream || '');
   pbSetFieldIfIdle('pp-dress', sheet.dress || '');
   pbSetFieldIfIdle('pp-meals', sheet.meals || '');
+  pbSetFieldIfIdle('pp-meal-time', sheet.mealTime || '');
   pbSetFieldIfIdle('pp-notes', sheet.notes || '');
   // Times with N/A toggles, venue, and the weather block ride the same shared
   // sheet — if the refresh skips them, this client's next autosave rebuilds the
@@ -13873,8 +13897,11 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
 }
 
 function renderPaperworkNav(id, slotId='') {
-  const idx = paperworkItemIndex(id);
-  const item = PAPERWORK_ITEMS[idx] || PAPERWORK_ITEMS[0];
+  // D6: navigation runs over the ENABLED items only — steps renumber when a
+  // type is disabled, and Previous/Next skip hidden editors.
+  const items = enabledPaperworkItems();
+  const idx = items.findIndex(item => item.id === id);
+  const item = items[idx] || items[0];
   const slotMap = {
     'call-sheet':'pbNavCallSheet',
     'production-scheduler':'pbNavProduction',
@@ -13887,7 +13914,7 @@ function renderPaperworkNav(id, slotId='') {
   if (!slot || !item) return;
   slot.hidden = false;
   const isFirst = idx <= 0;
-  const isLast = idx >= PAPERWORK_ITEMS.length - 1;
+  const isLast = idx >= items.length - 1;
   // Notes post instantly and the rundown page renders itself — the live
   // save-status chip and "Preview" only make sense on the form pages.
   const saveStatus = (id === 'rundown' || id === 'production-notes') ? '' : `<span class="pb-save-status" data-pb-save-status role="status" aria-live="polite"></span>`;
@@ -13896,7 +13923,7 @@ function renderPaperworkNav(id, slotId='') {
     <div class="paperwork-flow-left">
       <button type="button" onclick="returnToPaperworkHub()">${sfIcon('chevron.left')}<span>Planda Bear</span></button>
     </div>
-    <div class="pb-step-pill">Step ${item.order} of ${PAPERWORK_ITEMS.length}</div>
+    <div class="pb-step-pill">Step ${idx + 1} of ${items.length}</div>
     <div class="paperwork-flow-right">
       ${saveStatus}
       ${previewButton}
@@ -13909,11 +13936,12 @@ function renderPaperworkNav(id, slotId='') {
 function openPaperworkRelative(delta) {
   const current = currentPaperworkItemId();
   savePaperworkItem(current, false);
-  const idx = paperworkItemIndex(current);
+  const items = enabledPaperworkItems();   // D6: skip disabled editors
+  const idx = items.findIndex(item => item.id === current);
   const nextIdx = idx + delta;
-  if (nextIdx < 0 || nextIdx >= PAPERWORK_ITEMS.length) return returnToPaperworkHub();
+  if (nextIdx < 0 || nextIdx >= items.length) return returnToPaperworkHub();
   hidePaperworkEditors();
-  openPaperworkItem(PAPERWORK_ITEMS[nextIdx].id);
+  openPaperworkItem(items[nextIdx].id);
 }
 
 function openPaperworkHub() {
@@ -13922,6 +13950,8 @@ function openPaperworkHub() {
     openPreProJoinModal('hub');
     return;
   }
+  if (!pbEnsureGroupChosen()) return;   // D2: grouped sessions require a pick
+  renderPbGroupBar();
   applyPlandaBearTheme(plandaBearTheme);
   hydratePreProFromFirestore().then(() => renderPlandaBearAssignmentsCard());
   // Assignments otherwise hydrate only when the Admin panel opens; warm them
@@ -13930,9 +13960,10 @@ function openPaperworkHub() {
   if (paperworkExportAuthority() === 'server' && assignmentSaveState === 'loading') hydrateRoleAssignments();
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
-    // Production Notes lives in its own wide bar above the grid, not in the numbered list.
-    grid.innerHTML = PAPERWORK_ITEMS.filter(item => item.id !== 'production-notes').map(item => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
-      <div class="paperwork-card-num">${item.order}</div>
+    // Production Notes lives in its own wide bar above the grid, not in the
+    // numbered list. D6: only enabled types render, numbered sequentially.
+    grid.innerHTML = enabledPaperworkItems().filter(item => item.id !== 'production-notes').map((item, i) => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
+      <div class="paperwork-card-num">${i + 1}</div>
       <div>
         <div class="paperwork-card-title">${esc(item.title)}</div>
         <div class="paperwork-card-sub">${esc(item.sub)}</div>
@@ -13940,6 +13971,7 @@ function openPaperworkHub() {
       <div class="paperwork-card-by" data-pb-by hidden></div>
     </button>`).join('');
   }
+  renderPackageSheetPicker();   // D9.1: honest call-sheet count + picker
   showModal('paperworkHubModal');
   paperworkDirty = false;
   pbInitCollabListeners();
@@ -14067,7 +14099,7 @@ async function writePlandaBearComments(comments, activitySection='Instructor Com
   window._updateDoc(ref, { preProComments: plandaBearComments }).catch(err => reportCloudWriteFailure('Planda Bear comment save', err));
   if (activitySection && window._arrayUnion) {
     const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
-    window._updateDoc(ref, { preProActivity: window._arrayUnion(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -14579,7 +14611,7 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
 function pbNotesActivity(section) {
   if (!section || !window._arrayUnion || !pbNotesCloudSession()) return;
   const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-  window._updateDoc(window._doc(window._db, 'sessions', session.code), { preProActivity: window._arrayUnion(entry) })
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { preProActivity: preProActivityValue(entry) })
     .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
 }
 
@@ -14766,11 +14798,81 @@ const PB_AVATAR_ANIMALS = {
   outrangutan: { label: 'Outrangutan', src: 'assets/Brand/Outrangutan_icon.svg', bg: '#1a1817' },
   cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#123a2a' },
 };
+// v2.1 D7: FROZEN icon-avatar manifest (decision 11: ~24 launch icons; brand
+// animals above stay). Every symbol name is verified against the generated
+// sf-symbols runtime; the stored avatar value is the manifest id only. Ids are
+// append-only — removing or renaming one orphans saved profiles (they fall
+// back to initials, harmless but rude).
+const PB_AVATAR_ICONS = {
+  play:        { label: 'Play',        symbol: 'media.play' },
+  playpause:   { label: 'Play/Pause',  symbol: 'media.playpause' },
+  waveform:    { label: 'Waveform',    symbol: 'media.waveform' },
+  camera:      { label: 'Camera',      symbol: 'department.video' },
+  audio:       { label: 'Audio',       symbol: 'department.audio' },
+  gfx:         { label: 'Graphics',    symbol: 'department.graphics' },
+  lighting:    { label: 'Lighting',    symbol: 'department.lighting' },
+  playback:    { label: 'Playback',    symbol: 'department.playback' },
+  script:      { label: 'Script',      symbol: 'department.script' },
+  pages:       { label: 'Pages',       symbol: 'content.script' },
+  clock:       { label: 'Clock',       symbol: 'time.clock' },
+  calendar:    { label: 'Calendar',    symbol: 'content.calendar' },
+  checklist:   { label: 'Checklist',   symbol: 'content.checklist' },
+  bookmark:    { label: 'Bookmark',    symbol: 'action.bookmark' },
+  bell:        { label: 'Bell',        symbol: 'notification.default' },
+  star:        { label: 'Star',        symbol: 'state.favorite' },
+  bolt:        { label: 'Flex',        symbol: 'state.flex' },
+  go:          { label: 'GO!',         symbol: 'marker.go' },
+  standby:     { label: 'Standby',     symbol: 'marker.ready' },
+  sunshine:    { label: 'Sunshine',    symbol: 'weather.clear' },
+  storm:       { label: 'Storm',       symbol: 'weather.thunderstorm' },
+  snow:        { label: 'Snow',        symbol: 'weather.snow' },
+  wind:        { label: 'Wind',        symbol: 'weather.wind' },
+  tree:        { label: 'Tree',        symbol: 'nature.tree' },
+  // The fun picks (owner-approved 2026-07-18): vendored Twemoji 15.1.0 SVGs
+  // (CC-BY 4.0 — assets/avatars/LICENSE.txt). `src` entries render full-color
+  // like the brand animals; stored values stay manifest ids either way.
+  trex:        { label: 'T-Rex',       src: 'assets/avatars/trex.svg' },
+  unicorn:     { label: 'Unicorn',     src: 'assets/avatars/unicorn.svg' },
+  frog:        { label: 'Frog',        src: 'assets/avatars/frog.svg' },
+  turtle:      { label: 'Turtle',      src: 'assets/avatars/turtle.svg' },
+  bunny:       { label: 'Bunny',       src: 'assets/avatars/bunny.svg' },
+  flamingo2:   { label: 'Flamingo',    src: 'assets/avatars/flamingo2.svg' },
+  orangutan2:  { label: 'Orangutan',   src: 'assets/avatars/orangutan2.svg' },
+  koala2:      { label: 'Koala',       src: 'assets/avatars/koala2.svg' },
+  panda2:      { label: 'Panda',       src: 'assets/avatars/panda2.svg' },
+  robot:       { label: 'Robot',       src: 'assets/avatars/robot.svg' },
+  ghost:       { label: 'Ghost',       src: 'assets/avatars/ghost.svg' },
+  alien:       { label: 'Alien',       src: 'assets/avatars/alien.svg' },
+  pizza:       { label: 'Pizza',       src: 'assets/avatars/pizza.svg' },
+  taco:        { label: 'Taco',        src: 'assets/avatars/taco.svg' },
+  popcorn:     { label: 'Popcorn',     src: 'assets/avatars/popcorn.svg' },
+  cupcake:     { label: 'Cupcake',     src: 'assets/avatars/cupcake.svg' },
+  coffee:      { label: 'Coffee',      src: 'assets/avatars/coffee.svg' },
+  guitar:      { label: 'Guitar',      src: 'assets/avatars/guitar.svg' },
+  headphones:  { label: 'Headphones',  src: 'assets/avatars/headphones.svg' },
+  clapper:     { label: 'Clapper',     src: 'assets/avatars/clapper.svg' },
+  paint:       { label: 'Paint',       src: 'assets/avatars/paint.svg' },
+  shades:      { label: 'Shades',      src: 'assets/avatars/shades.svg' },
+  crown:       { label: 'Crown',       src: 'assets/avatars/crown.svg' },
+  rocket:      { label: 'Rocket',      src: 'assets/avatars/rocket.svg' },
+  rainbow:     { label: 'Rainbow',     src: 'assets/avatars/rainbow.svg' },
+  fire:        { label: 'Fire',        src: 'assets/avatars/fire.svg' },
+  dice:        { label: 'Dice',        src: 'assets/avatars/dice.svg' },
+  ninja:       { label: 'Ninja',       src: 'assets/avatars/ninja.svg' },
+};
+
+// One renderer for a manifest icon's inner content: full-color art when the
+// entry ships an SVG, theme-tinted SF mask otherwise.
+function pbIconEntryInner(entry) {
+  if (entry && entry.src) return `<img class="pb-av-img pb-av-art" src="${esc(entry.src)}" alt="" draggable="false">`;
+  return `<span class="pb-av-ico">${sfIcon(entry.symbol)}</span>`;
+}
 const PB_PROFILE_KEY = 'cueola_profile';
 const pbProfileModel = CueolaAvatarProfile.createProfileModel({
   storage: localStorage,
   profileKey: PB_PROFILE_KEY,
   approvedAnimals: PB_AVATAR_ANIMALS,
+  iconManifest: PB_AVATAR_ICONS,
 });
 
 function pbGetProfile() {
@@ -14780,19 +14882,24 @@ function pbSetProfileAvatar(avatar) {
   return pbProfileModel.setAvatar(avatar);
 }
 
-// Coerce any avatar blob to a safe shape: an approved animal key, a data:image URL, else initials.
+// Coerce any avatar blob to a safe shape: an approved animal key, a manifest
+// icon id, a data:image URL, else initials.
 function pbNormalizeAvatar(a) {
-  return CueolaAvatarProfile.normalizeAvatar(a, PB_AVATAR_ANIMALS);
+  return CueolaAvatarProfile.normalizeAvatar(a, PB_AVATAR_ANIMALS, PB_AVATAR_ICONS);
 }
 
 // The avatar chip's inner content for a note/reply author (falls back to initials).
 function pbAvatarInner(note) {
   const a = pbNormalizeAvatar(note && note.avatar);
   if (a && a.type === 'animal') { const an = PB_AVATAR_ANIMALS[a.value]; return `<img class="pb-av-img" src="${an.src}" alt="" draggable="false">`; }
+  // D7: symbol icons ride the SF-Symbols mask pipeline (theme-tinted); the
+  // fun picks are full-color vendored art.
+  if (a && a.type === 'icon') return pbIconEntryInner(PB_AVATAR_ICONS[a.value]);
   if (a && a.type === 'image') return `<img class="pb-av-img" src="${esc(a.value)}" alt="" draggable="false">`;
   return esc(pbInitials(note && note.by));
 }
-// Background for the avatar chip: brand bg for animals, transparent for photos, else the hashed color.
+// Background for the avatar chip: brand bg for animals, transparent for photos,
+// else the hashed personal color (icons sit on it too — stable per user).
 function pbAvatarBg(note) {
   const a = pbNormalizeAvatar(note && note.avatar);
   if (a && a.type === 'animal') return PB_AVATAR_ANIMALS[a.value].bg;
@@ -14846,6 +14953,11 @@ function pbRenderUserPortal() {
     `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'animal' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('animal','${k}')" title="${esc(v.label)}">
       <span class="pb-av-chip" style="background:${v.bg}"><img class="pb-av-img" src="${v.src}" alt=""></span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
     </button>`).join('');
+  // D7: icon avatars — theme-tinted masks on the user's stable hashed color.
+  const iconBtns = Object.entries(PB_AVATAR_ICONS).map(([k, v]) =>
+    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'icon' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('icon','${k}')" title="${esc(v.label)}">
+      <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${pbIconEntryInner(v)}</span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
+    </button>`).join('');
   slot.innerHTML = `
     <div class="pb-portal-preview">
       <span class="pb-note-avatar pb-av-lg" style="background:${pbAvatarBg(me)}">${pbAvatarInner(me)}</span>
@@ -14857,6 +14969,7 @@ function pbRenderUserPortal() {
         <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${esc(pbInitials(session.userName))}</span><span class="pb-av-choice-lbl">Initials</span>
       </button>
       ${animalBtns}
+      ${iconBtns}
       <label class="pb-av-choice pb-av-upload${sel('image') ? ' sel' : ''}">
         <span class="pb-av-chip">${sel('image') ? `<img class="pb-av-img" src="${esc(_pbPortalDraft.value)}" alt="">` : sfIcon('action.attach')}</span>
         <span class="pb-av-choice-lbl">${sel('image') ? 'Change photo' : 'Upload'}</span>
@@ -15014,6 +15127,7 @@ async function pbExportDraftPDF() {
     const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-draft-${stamp}.pdf`, options);
     toast(`Unpublished note PDF downloaded · ${result.pageCount} pages.`);
   } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical unpublished-note print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
@@ -16835,7 +16949,7 @@ function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.na
   </tr>`;
   const rows = threads.flatMap(t => [row(t.root, false), ...t.replies.map(r => row(r, true))]).join('');
   return `
-    <h1>${Number(sectionNumber) || 8}. Production Notes</h1>
+    <h1 class="psec-h psec-notes">${Number(sectionNumber) || 8}. Production Notes</h1>
     <div>${esc(productionName || 'Cueola')} · Shared discussion board</div>
     <table><thead><tr><th>Time</th><th>By</th><th>Tag</th><th>Note</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="4">No production notes yet.</td></tr>'}</tbody></table>
@@ -16860,6 +16974,7 @@ async function exportProductionNoteById(id) {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-${stamp}.pdf`, options);
       toast(`Production note PDF downloaded · ${result.pageCount} pages.`);
     } catch (error) {
+      if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical production-note print representation.', error);
       const result = await printPaperHTML(html, options);
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
@@ -16906,6 +17021,7 @@ async function exportProductionNotesPDF() {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
       toast(`Notes log PDF downloaded · ${result.pageCount} pages.`);
     } catch (error) {
+      if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
       const result = await printPaperHTML(html, options);
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
@@ -17127,6 +17243,12 @@ async function renderPlandaBearHubActivity() {
 }
 
 function openPaperworkItem(id) {
+  // D6: disabled types are hidden for everyone — deep links, presence opens,
+  // and stale buttons all bounce here instead of opening a hidden editor.
+  if (!paperworkTypeEnabled(id)) {
+    toast('That paperwork type is turned off for this session.');
+    return;
+  }
   activePaperworkItemId = id;
   pbSetPresencePage(id);   // tell the room which page I'm on
   if (id === 'call-sheet') return openPrePro();
@@ -17463,20 +17585,31 @@ async function preparePaperworkExportSnapshot(options={}) {
   return resolved;
 }
 
+const PAPER_EXPORT_DOCUMENT_TITLES = {
+  'plandabear-package':'Production Paperwork',
+  'rundown':'Rundown',
+  'call-sheet':'Call Sheet',
+  'production-notes':'Production Notes',
+};
+
 function paperExportOptionsForSnapshot(snapshot, options={}) {
   const revisions = snapshot.revisions || {};
-  const parts = [];
-  if (revisions.rundownBatchId) parts.push(`Rundown ${revisions.rundownBatchId}`);
-  if (Number.isFinite(Number(revisions.assignmentRevision))) parts.push(`Assignments r${Number(revisions.assignmentRevision) || 0}`);
-  if (revisions.preProUpdatedAt) parts.push(`Planda Bear ${paperExportDateLabel(revisions.preProUpdatedAt)}`);
+  // D9.3: the printed footer carries only a small revision stamp — revision
+  // integrity still matters for classrooms, branding does not.
+  const revBits = [];
+  if (Number.isFinite(Number(revisions.assignmentRevision))) revBits.push(`Rev r${Number(revisions.assignmentRevision) || 0}`);
+  revBits.push(paperExportDateOnlyLabel(revisions.preProUpdatedAt || snapshot.exportedAt));
   return {
     ...options,
     exportMeta:{
       productionName:snapshot.production.name,
       productionCode:snapshot.production.sessionCode || snapshot.production.productionId || 'LOCAL',
+      // D2: grouped exports carry the group name in the printed header.
+      documentTitle:[PAPER_EXPORT_DOCUMENT_TITLES[snapshot.options?.documentType] || '',
+        snapshot.options?.groupName || ''].filter(Boolean).join(' — '),
       exportedAt:new Date(snapshot.exportedAt).toISOString(),
       sourceLabel:snapshot.labels.authority,
-      revisionLabel:parts.join(' · '),
+      revisionLabel:revBits.join(' · '),
       draftLabel:snapshot.authoritative ? '' : snapshot.labels.document || snapshot.labels.authority,
     },
     snapshotFingerprint:snapshot.fingerprint,
@@ -17587,44 +17720,103 @@ function outrangutanRowSummary(b, savedState=outrangutanState) {
   return parts;
 }
 
+// v2.1 D9.5: student-friendly rundown print. Reduced broadcast columns are
+// the DEFAULT (all-columns stays one toggle away), the Outrangutan column is
+// gone from print (stays in-app — D9.3), widths are proportional via
+// <colgroup>, and every page carries a running total + total-runtime footer,
+// a READY/TAKE legend, and numbered segments.
+let rundownExportColumns = (() => {
+  try { return localStorage.getItem('cueola_rundown_export_columns') === 'all' ? 'all' : 'broadcast'; }
+  catch { return 'broadcast'; }
+})();
+function setRundownExportColumns(mode) {
+  rundownExportColumns = mode === 'all' ? 'all' : 'broadcast';
+  try { localStorage.setItem('cueola_rundown_export_columns', rundownExportColumns); } catch {}
+  // Refresh whichever preview is open so the toggle answers immediately.
+  if (document.getElementById('paperPreviewModal')?.classList.contains('on')) {
+    if (activePaperworkItemId === 'rundown') showRundownPaperPreview();
+    else showPreProPackagePreview();
+  }
+}
+
+function rundownFmtTotal(secs) {
+  const s = Math.max(0, Math.round(secs));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}` : `${m}:${String(r).padStart(2,'0')}`;
+}
+
 function rundownPreviewTableHTML(snapshot=null) {
   const rundownBeats = Array.isArray(snapshot?.beats) ? snapshot.beats : beats;
   const rundownShow = snapshot?.show || show;
-  const savedOutrangutan = snapshot?.show?.outrangutan || outrangutanState;
-  let offsetSecs = 0;
-  const cellFor = (b, type) => {
+  const allColumns = rundownExportColumns === 'all';
+  const cueParts = (b, type) => {
     const d = b.cues?.[type];
     const on = getCueOn(d), off = getCueOff(d);
     const scriptText = type === 'script' ? scriptCueText(d) : '';
     const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ${scriptLineLabel(scriptText)}` : '';
     // Same operation vocabulary as the editor and Live: on = READY (standby), off = TAKE (go).
-    const parts = [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
+    return [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
+  };
+  const cellFor = (b, type) => {
+    const parts = cueParts(b, type);
     return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
   };
+  // Broadcast preset folds the five department columns into one labeled list.
+  const combinedCues = b => {
+    const lines = ['video','audio','playback','gfx','lighting'].flatMap(type => {
+      const parts = cueParts(b, type);
+      return parts.length ? [`<span class="cue-${type}"><span class="cue-dept">${type.toUpperCase()}</span> ${parts.join(' · ')}</span>`] : [];
+    });
+    return lines.length ? lines.join('<br>') : '<span class="cue-muted">-</span>';
+  };
+  const columnCount = allColumns ? 11 : 7;
+  let offsetSecs = 0;
   let pdfCueNum = 0;
-  const rows = rundownBeats.map((b,i) => {
+  let segmentNum = 0;
+  const rows = rundownBeats.map(b => {
     const start = rundownShow.start ? clock(rundownShow.start, offsetSecs) : '-';
     offsetSecs += (b.min||0)*60+(b.sec||0);
     if (b.style === 'segment') {
-      return `<tr><td colspan="11" style="background:#f4f5f7;font-weight:800;padding:8px 6px;font-size:10px;text-transform:uppercase;border-left:3px solid #4e5664">Segment: ${esc(b.info||'Untitled')}</td></tr>`;
+      segmentNum++;
+      return `<tr><td colspan="${columnCount}" style="background:#f4f5f7;font-weight:800;padding:8px 6px;font-size:10px;text-transform:uppercase;border-left:3px solid #4e5664">Segment ${segmentNum}: ${esc(b.info||'Untitled')}</td></tr>`;
     }
     pdfCueNum++;
-    const og = outrangutanRowSummary(b, savedOutrangutan);
-    return `<tr>
+    const total = rundownFmtTotal(offsetSecs);
+    const lead = `
       <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
       <td>${fmtDur(b)}</td>
+      <td class="cue-total">${total}</td>`;
+    if (!allColumns) {
+      return `<tr>${lead}
+      <td>${combinedCues(b)}</td>
+      <td class="cue-script">${cellFor(b,'script')}</td>
+    </tr>`;
+    }
+    return `<tr>${lead}
       <td class="cue-video">${cellFor(b,'video')}</td>
       <td class="cue-audio">${cellFor(b,'audio')}</td>
       <td class="cue-playback">${cellFor(b,'playback')}</td>
       <td class="cue-gfx">${cellFor(b,'gfx')}</td>
       <td class="cue-lighting">${cellFor(b,'lighting')}</td>
       <td class="cue-script">${cellFor(b,'script')}</td>
-      <td class="cue-playback">${og.length ? og.map(esc).join('<br>') : '<span class="cue-muted">-</span>'}</td>
     </tr>`;
   }).join('');
-  return `<div class="paper-landscape"><table class="paper-rundown-grid"><thead><tr><th>#</th><th>Row</th><th>Start</th><th>Dur</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th><th class="cue-playback">Outrangutan</th></tr></thead><tbody>${rows || '<tr><td colspan="11">No rows yet.</td></tr>'}</tbody></table></div>`;
+  const colgroup = allColumns
+    ? '<colgroup><col style="width:3%"><col style="width:15%"><col style="width:6%"><col style="width:5%"><col style="width:6%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:12%"></colgroup>'
+    : '<colgroup><col style="width:4%"><col style="width:21%"><col style="width:7%"><col style="width:6%"><col style="width:7%"><col style="width:38%"><col style="width:17%"></colgroup>';
+  const headCells = allColumns
+    ? '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th>'
+    : '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th>Cues</th><th class="cue-script">Script</th>';
+  const legend = `<div class="paper-rundown-legend"><b>READY</b> = standby the source · <b>TAKE</b> = go · Total = running show time</div>`;
+  const columnsToggle = `
+    <label class="pb-pkg-optin no-print">
+      <input type="checkbox" ${allColumns ? 'checked' : ''} onchange="setRundownExportColumns(this.checked ? 'all' : 'broadcast')">
+      <span>Show all department columns (broadcast preset is the default)</span>
+    </label>`;
+  const totalFooter = `<tfoot><tr><td colspan="4" style="text-align:right;font-weight:800">Total runtime</td><td class="cue-total" style="font-weight:800">${rundownFmtTotal(offsetSecs)}</td><td colspan="${columnCount - 5}"></td></tr></tfoot>`;
+  return `<div class="paper-landscape">${columnsToggle}${legend}<table class="paper-rundown-grid">${colgroup}<thead><tr>${headCells}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}">No rows yet.</td></tr>`}</tbody>${totalFooter}</table></div>`;
 }
 
 let lastCallSheetExportSnapshot = null;
@@ -17633,7 +17825,7 @@ async function showCallSheetPreview() {
   try {
     const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'call-sheet' });
     const sheets = getCallSheets(snapshot.prePro);
-    const index = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+    const index = resolveActiveCallSheetIndex(sheets);
     lastCallSheetExportSnapshot = snapshot;
     lastCallSheetExportIndex = index;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
@@ -17691,6 +17883,7 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     stream: sheet.stream || fallback.stream || '',
     dress: sheet.dress || fallback.dress || '',
     meals: sheet.meals || fallback.meals || '',
+    mealTime: normalizeTimeValue(sheet.mealTime) || normalizeTimeValue(fallback.mealTime) || '',
     people: Array.isArray(sheet.people) ? sheet.people : (Array.isArray(fallback.people) ? fallback.people : []),
     notes: sheet.notes || fallback.notes || '',
   };
@@ -17731,6 +17924,39 @@ function callSheetContentKey(sheet) {
   ]);
 }
 
+// v2.1 D9.1 — the "52 pages" root cause. Exact-key dedupe missed P2607-style
+// NEAR-duplicates (one weather refetch, one crew tweak, a custom label), so a
+// corrupted doc could carry ~40 survivors into a ~52-page package. Two sheets
+// are near-duplicates ONLY when no schedule field actively disagrees (two
+// intentional days always differ by date/times, so they can never collapse)
+// and their crews overlap. The most contentful sheet wins; ties go to the
+// later (newer) entry. Runs at the getCallSheets boundary, so any healthy
+// client's next save republishes the healed array.
+function callSheetNearDuplicates(a, b) {
+  const fields = ['date', 'call', 'showStart', 'wrap', 'doors', 'location', 'address', 'notes'];
+  for (const key of fields) {
+    const va = String(a[key] || '').trim().toLowerCase();
+    const vb = String(b[key] || '').trim().toLowerCase();
+    if (va && vb && va !== vb) return false;   // active disagreement = two real sheets
+  }
+  const names = sheet => new Set((sheet.people || [])
+    .map(p => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
+  const na = names(a), nb = names(b);
+  if (!na.size || !nb.size) return true;       // an empty/orphan stub folds into the fuller sheet
+  let shared = 0;
+  na.forEach(n => { if (nb.has(n)) shared++; });
+  const jaccard = shared / (na.size + nb.size - shared);
+  const subset = shared === Math.min(na.size, nb.size);
+  return jaccard >= 0.5 || subset;
+}
+
+function callSheetContentScore(sheet) {
+  const fields = ['label', 'date', 'call', 'showStart', 'wrap', 'doors', 'location', 'address',
+    'parking', 'entrance', 'late', 'stream', 'dress', 'meals', 'notes'];
+  return fields.reduce((n, key) => n + (String(sheet[key] || '').trim() ? 1 : 0), 0)
+    + (sheet.people || []).length;
+}
+
 function sanitizeCallSheets(sheets) {
   const seen = new Set();
   const out = [];
@@ -17741,19 +17967,52 @@ function sanitizeCallSheets(sheets) {
     seen.add(key);
     out.push(clean);
   }
+  // Near-duplicate collapse (D9.1). Greedy single pass: each sheet either
+  // beats an existing keeper (replaces it) or folds into one.
+  const keepers = [];
+  for (const sheet of out) {
+    const matchIdx = keepers.findIndex(k => callSheetNearDuplicates(k, sheet));
+    if (matchIdx < 0) { keepers.push(sheet); continue; }
+    // Later entry wins ties — it's the newer save.
+    if (callSheetContentScore(sheet) >= callSheetContentScore(keepers[matchIdx])) {
+      keepers[matchIdx] = sheet;
+    }
+  }
   // Real sheets (any schedule/venue content) ahead of crew-only leftovers, so
   // a fresh device's default active sheet is never an orphaned stub.
   const hasSchedule = s => Boolean(s.date || s.call || s.showStart || s.wrap || s.location || s.address || s.venue);
-  const ranked = [...out.filter(hasSchedule), ...out.filter(s => !hasSchedule(s))];
+  const ranked = [...keepers.filter(hasSchedule), ...keepers.filter(s => !hasSchedule(s))];
   return ranked.length ? ranked : sheets;
+}
+
+// v2.1 D6: per-workspace delete tombstones ({sheetId: deletedAtMs}) filtered
+// on EVERY read. Deletion is convergent under whole-array LWW: a stale client
+// that resurrects a deleted sheet is healed by the next save from any current
+// client, because that save flows back through this filter.
+const CALL_SHEET_TOMBSTONE_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
+const CALL_SHEET_TOMBSTONE_MAX_ENTRIES = 20;
+function callSheetTombstones(data=loadPreProData()) {
+  const map = data?.callSheetTombstones;
+  return (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
+}
+function pruneCallSheetTombstones(map) {
+  const now = Date.now();
+  const entries = Object.entries(map || {})
+    .filter(([, at]) => Number.isFinite(Number(at)) && now - Number(at) < CALL_SHEET_TOMBSTONE_MAX_AGE_MS)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, CALL_SHEET_TOMBSTONE_MAX_ENTRIES);
+  return Object.fromEntries(entries);
 }
 
 function getCallSheets(data=loadPreProData()) {
   const legacy = legacyCallSheetFromData(data);
   const rawSheets = Array.isArray(data.callSheets) && data.callSheets.length ? data.callSheets : [legacy];
+  const tombstones = callSheetTombstones(data);
   // Each sheet is self-contained — do NOT inherit empty fields from another sheet
   // (the shared top-level "legacy" values), which used to bleed times across days.
-  const sheets = sanitizeCallSheets(rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i)));
+  const normalized = rawSheets.map((sheet, i) => normalizeCallSheet(sheet, i))
+    .filter(sheet => !tombstones[sheet.id]);
+  const sheets = sanitizeCallSheets(normalized);
   return sheets.length ? sheets : [normalizeCallSheet(legacy, 0)];
 }
 
@@ -17796,6 +18055,7 @@ function hydrateCallSheetForm(sheet) {
   document.getElementById('pp-stream').value = data.stream || '';
   document.getElementById('pp-dress').value = data.dress || '';
   document.getElementById('pp-meals').value = data.meals || '';
+  setTimeInputValue('pp-meal-time', data.mealTime || '');
   document.getElementById('pp-notes').value = data.notes || '';
   callSheetPeople = Array.isArray(data.people) && data.people.length ? data.people : [{ name:'', position:'', email:'', phone:'', call:'' }];
   renderCallSheetPeople();
@@ -17823,6 +18083,7 @@ function currentCallSheetFromForm() {
     stream: document.getElementById('pp-stream')?.value?.trim() || '',
     dress: document.getElementById('pp-dress')?.value?.trim() || '',
     meals: document.getElementById('pp-meals')?.value || '',
+    mealTime: timeInputValue('pp-meal-time'),
     people: callSheetPeople,
     notes: document.getElementById('pp-notes')?.value || '',
   }, activeCallSheetIndex);
@@ -17958,7 +18219,7 @@ function weatherCompactSummary(w, withSun=false) {
 // The active call sheet's weather object (used to auto-fill the safety plan).
 function activeCallSheetWeather(data) {
   const sheets = getCallSheets(data);
-  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = resolveActiveCallSheetIndex(sheets);
   return sheets[idx]?.weather || null;
 }
 
@@ -18189,7 +18450,7 @@ function switchCallSheet(index) {
   if (!Number.isFinite(nextIndex)) return;
   const data = saveCallSheetStateLocally(false);
   const sheets = getCallSheets(data);
-  storeActiveCallSheetIndex(Math.max(0, Math.min(nextIndex, sheets.length - 1)));
+  storeActiveCallSheetIndex(Math.max(0, Math.min(nextIndex, sheets.length - 1)), sheets);
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(sheets[activeCallSheetIndex]);
 }
@@ -18200,10 +18461,61 @@ function updateActiveCallSheetLabel(value) {
   select.options[activeCallSheetIndex].textContent = (value || '').trim() || `Call Sheet ${activeCallSheetIndex + 1}`;
 }
 
+// Structure changes (add/delete sheets) stay with instructors/admins; a solo
+// local workspace (no shared code) is always the operator's own to edit.
+function canManageCallSheetStructure() {
+  return Boolean(adminSession || session.role === 'instructor' || session.isDemo || session.isExpert || !session.code);
+}
+
+// v2.1 D6: instructor/admin-gated hard delete with a per-workspace tombstone
+// so the deletion converges across stale clients. Never deletes the last
+// sheet (the min-1 guard avoids the legacy-field ghost). Assignment rows
+// pointing at this sheet's paperwork label are stripped with a toast naming
+// the affected students. Session History remains the undo of last resort.
+function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
+  if (!canManageCallSheetStructure()) { toast('Only an instructor or admin can delete a call sheet.'); return; }
+  const data = saveCallSheetStateLocally(false);
+  const sheets = getCallSheets(data);
+  if (sheets.length <= 1) { toast('A session always keeps at least one call sheet.'); return; }
+  const idx = Math.max(0, Math.min(Number(index) || 0, sheets.length - 1));
+  const sheet = sheets[idx];
+  const sheetLabel = `Call Sheet: ${callSheetDisplayName(sheet, idx)}`.toLowerCase();
+  const savedRows = Array.isArray(data.roleAssignments) ? data.roleAssignments : [];
+  const affected = savedRows.filter(row => (Array.isArray(row?.paperwork) ? row.paperwork : [])
+    .some(item => String(item || '').trim().toLowerCase() === sheetLabel));
+  const affectedNames = cleanUniqueStrings(affected.map(row => row?.person || row?.name)).filter(Boolean);
+  const detail = affectedNames.length
+    ? `Assigned to: ${affectedNames.join(', ')}. Their call-sheet assignment will be removed.`
+    : 'No students are assigned to this sheet.';
+  if (!dangerConfirm(`Delete "${callSheetDisplayName(sheet, idx)}"?`, `${detail} Session History remains the undo of last resort.`, { requireText:'DELETE' })) return;
+  const remaining = sheets.filter((_, i) => i !== idx);
+  const tombstones = pruneCallSheetTombstones({ ...callSheetTombstones(data), [sheet.id]: Date.now() });
+  const strippedRows = savedRows.map(row => {
+    if (!Array.isArray(row?.paperwork)) return row;
+    const kept = row.paperwork.filter(item => String(item || '').trim().toLowerCase() !== sheetLabel);
+    return kept.length === row.paperwork.length ? row : { ...row, paperwork: kept };
+  });
+  const nextIdx = Math.max(0, Math.min(idx, remaining.length - 1));
+  storeActiveCallSheetIndex(nextIdx, remaining);
+  persistPreProData({
+    ...data,
+    callSheets: remaining,
+    callSheetTombstones: tombstones,
+    roleAssignments: strippedRows,
+    updatedAt: Date.now(),
+  }, 'Call Sheet');
+  renderCallSheetSelector(remaining);
+  hydrateCallSheetForm(remaining[nextIdx]);
+  renderPackageSheetPicker();
+  toast(affectedNames.length
+    ? `Call sheet deleted. Removed from: ${affectedNames.join(', ')}.`
+    : 'Call sheet deleted.');
+}
+
 function addAnotherCallSheet() {
   const data = saveCallSheetStateLocally(false);
   const sheets = getCallSheets(data);
-  const source = sheets[activeCallSheetIndex] || sheets[0] || legacyCallSheetFromData(data);
+  const source = sheets[resolveActiveCallSheetIndex(sheets)] || sheets[0] || legacyCallSheetFromData(data);
   // Copy the venue + crew roster, but start the schedule fresh so the new day's
   // sheet doesn't inherit the previous day's call/show/wrap times.
   const nextSheet = normalizeCallSheet({
@@ -18215,11 +18527,16 @@ function addAnotherCallSheet() {
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
   }, sheets.length);
   sheets.push(nextSheet);
-  storeActiveCallSheetIndex(sheets.length - 1);
-  const next = { ...data, ...nextSheet, callSheets:sheets, updatedAt:Date.now() };
+  storeActiveCallSheetIndex(sheets.length - 1, sheets);
+  // Re-creating a sheet whose generated id collides with a tombstoned one
+  // clears that tombstone — otherwise the new sheet would vanish on next read.
+  const tombstones = { ...callSheetTombstones(data) };
+  delete tombstones[nextSheet.id];
+  const next = { ...data, ...nextSheet, callSheets:sheets, callSheetTombstones:pruneCallSheetTombstones(tombstones), updatedAt:Date.now() };
   persistPreProData(next, 'Call Sheet');
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(nextSheet);
+  renderPackageSheetPicker();
   toast('Added another call sheet.');
 }
 
@@ -18245,7 +18562,7 @@ function getCallSheetExportData() {
   }
   const data = loadPreProData();
   const sheets = getCallSheets(data);
-  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = resolveActiveCallSheetIndex(sheets);
   return normalizeCallSheet(sheets[idx], idx);
 }
 
@@ -18263,9 +18580,13 @@ function paperDate(v) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return isNaN(d) ? (v || '') : d.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'short', day:'numeric' });
 }
+// v2.1 D9.6: the single print choke point for times — an empty time prints
+// '--:--' (matching what the type=time inputs show on screen); an explicit
+// 'N/A' passes through untouched.
 function paperTime(v) {
   const s = String(v || '').trim();
-  if (!s || s === 'N/A') return s;
+  if (!s) return '--:--';
+  if (s === 'N/A') return s;
   const t = timeTo24(s);
   if (!t) return s;
   let [h, mm] = t.split(':').map(Number);
@@ -18274,16 +18595,34 @@ function paperTime(v) {
   return `${h}:${String(mm).padStart(2, '0')} ${ap}`;
 }
 
-function callSheetPreviewHTML(data) {
+// v2.1 D9.7: day-of-days over the sheet set (chronological, dated sheets only).
+function callSheetDayOfDays(sheet, prePro) {
+  try {
+    const dated = getCallSheets(prePro).filter(s => s.date).sort((a, b) => a.date.localeCompare(b.date));
+    if (dated.length < 2 || !sheet.date) return '';
+    const idx = dated.findIndex(s => s.id === sheet.id);
+    return idx >= 0 ? `Day ${idx + 1} of ${dated.length}` : '';
+  } catch { return ''; }
+}
+
+function callSheetPreviewHTML(data, prePro=loadPreProData()) {
   const title = callSheetTitle(data);
   const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
   const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(paperTime(p.call || data.call || ''))}</td></tr>`).join('');
   const notes = (data.notes || '').trim();
+  const dayOfDays = callSheetDayOfDays(data, prePro);
+  // D9.7: nearest hospital single-sourced with the Safety Plan — enter it once.
+  const safety = prePro?.safety || {};
+  const hospitalBits = [safety.hospital, safety.hospitalAddress, safety.hospitalPhone]
+    .map(v => String(v || '').trim()).filter(Boolean);
+  const meals = [data.mealTime ? paperTime(data.mealTime) : '', String(data.meals || '').trim()]
+    .filter(Boolean).join(' — ');
   return `
-    <h1>${esc(title)}</h1>
+    <h1 class="psec-h psec-callsheet">${esc(title)}</h1>
+    ${dayOfDays ? `<div class="paper-day-of-days">${esc(dayOfDays)}</div>` : ''}
     <table><tbody>
       <tr><th>Production</th><td>${esc(data.production || show.name || '')}</td></tr>
-      <tr><th>Shoot Date</th><td>${esc(paperDate(data.date))}</td></tr>
+      <tr><th>Shoot Date</th><td>${esc(paperDate(data.date))}${dayOfDays ? ` · ${esc(dayOfDays)}` : ''}</td></tr>
       <tr><th>Call Time</th><td>${esc(paperTime(data.call))}</td></tr>
       <tr><th>Doors Open</th><td>${esc(paperTime(data.doors))}</td></tr>
       <tr><th>Show Start</th><td>${esc(paperTime(data.showStart))}</td></tr>
@@ -18297,7 +18636,8 @@ function callSheetPreviewHTML(data) {
       <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>
       <tr><th>Stream Information</th><td>${esc(data.stream || '')}</td></tr>
       <tr><th>Dress Code</th><td>${esc(data.dress || '')}</td></tr>
-      <tr><th>Meals Provided</th><td>${esc(data.meals || '')}</td></tr>
+      <tr><th>Meals</th><td>${esc(meals)}</td></tr>
+      ${hospitalBits.length ? `<tr><th>Nearest Hospital</th><td>${hospitalBits.map(esc).join(' · ')}</td></tr>` : ''}
     </tbody></table>
     <h2>Crew / Talent</h2>
     <table><thead><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="5">No crew or talent entered yet.</td></tr>'}</tbody></table>
@@ -18326,6 +18666,8 @@ function openSafetyPlan() {
   const data = loadPreProData();
   const safety = data.safety || {};
   document.getElementById('sp-hospital').value = safety.hospital || data.hospital || '';
+  document.getElementById('sp-hospital-address').value = safety.hospitalAddress || '';
+  document.getElementById('sp-hospital-phone').value = safety.hospitalPhone || '';
   // Auto-fill weather from the call sheet's fetched forecast (with icons) when the
   // safety plan hasn't been given its own weather note yet. Only a real STRING note
   // counts — legacy saves sometimes stored the whole weather OBJECT here, which both
@@ -18360,6 +18702,8 @@ function getSafetyPlanData() {
   const wxAuto = safetyPlanWeatherAutoText(data);
   return {
     hospital: document.getElementById('sp-hospital')?.value?.trim() ?? existing.hospital ?? '',
+    hospitalAddress: document.getElementById('sp-hospital-address')?.value?.trim() ?? existing.hospitalAddress ?? '',
+    hospitalPhone: document.getElementById('sp-hospital-phone')?.value?.trim() ?? existing.hospitalPhone ?? '',
     weather: (wxAuto && wxVal === wxAuto) ? '' : wxVal,
     firstAid: document.getElementById('sp-first-aid')?.value?.trim() ?? existing.firstAid ?? '',
     fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
@@ -18377,12 +18721,12 @@ function saveSafetyPlan(showToastOnSave=true) {
   if (showToastOnSave) toast('Safety plan saved.');
 }
 
-function safetyPlanHTML(safety, data=loadPreProData()) {
+function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSectionNumber('safety-plan')) {
   const safetyWeather = typeof safety.weather === 'string' ? safety.weather : '';
   return `
-    <h1>3. Safety Plan</h1>
+    <h1 class="psec-h psec-safety">${paperSectionTitle(sectionNumber, 'Safety Plan')}</h1>
     <table><tbody>
-      <tr><th>Local Hospital</th><td>${esc(safety.hospital || '')}</td></tr>
+      <tr><th>Local Hospital</th><td>${esc([safety.hospital, safety.hospitalAddress, safety.hospitalPhone].map(v => String(v || '').trim()).filter(Boolean).join(' · '))}</td></tr>
       <tr><th>Weather</th><td>${esc(safetyWeather || safetyPlanWeatherAutoText(data))}</td></tr>
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
@@ -18483,7 +18827,7 @@ function openProductionSchedule() {
   setTimeInputValue('ps-show', schedule.show);
   setTimeInputValue('ps-wrap', schedule.wrap);
   document.getElementById('ps-show-date').value = schedule.showDate || '';
-  document.getElementById('ps-doors').value = schedule.doors || '';
+  document.getElementById('ps-doors').value = timeTo24(schedule.doors || '') || '';
   document.getElementById('ps-location').value = schedule.location || '';
   document.getElementById('ps-address').value = schedule.address || '';
   document.getElementById('ps-setup-notes').value = schedule.setupNotes || '';
@@ -18604,7 +18948,7 @@ function saveProductionSchedule(showToastOnSave=true) {
   if (showToastOnSave) toast('Production schedule saved.');
 }
 
-function productionScheduleHTML(schedule, data=loadPreProData()) {
+function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=paperworkSectionNumber('production-scheduler')) {
   const s = productionScheduleWithCallSheet(schedule || {}, data);
   const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
   const setupBody = s.setupNA
@@ -18614,7 +18958,7 @@ function productionScheduleHTML(schedule, data=loadPreProData()) {
       <tr><th>Setup Wrap</th><td>${esc(paperTime(s.wrap))}</td></tr>
       <tr><th>Setup Notes</th><td>${esc(s.setupNotes || '')}</td></tr>`;
   return `
-    <h1>2. Production Schedule</h1>
+    <h1 class="psec-h psec-schedule">${paperSectionTitle(sectionNumber, 'Production Schedule')}</h1>
     <h2>Setup Day${s.setupNA ? ' — N/A' : ''}</h2>
     <table><tbody>
       ${setupBody}
@@ -18650,10 +18994,17 @@ function getPatchRows(kind) {
   return Array.isArray(data[key]) && data[key].length ? data[key] : defaultPatchRows(kind);
 }
 
+// D9.9: real example placeholders, not key echoes — students copy the shape.
+const PATCH_FIELD_PLACEHOLDERS = {
+  video: { label:'e.g. CAM 2', destination:'e.g. TX1 · SDI in 2', source:'e.g. Sony FX6 on tripod', cabling:'e.g. 50ft SDI via floor run', notes:'e.g. Shading from CCU 2' },
+  audio: { label:'e.g. Host mic', destination:'e.g. Board ch 1', source:'e.g. SM7B on boom', cabling:'e.g. XLR snake ch 1', notes:'e.g. Backup lav on ch 5' },
+  comms: { position:'e.g. Show Caller', out:'e.g. Channel A', gear:'e.g. Wired beltpack 3', notes:'e.g. Talks to camera + playback' },
+};
 function patchInput(value, kind, row, field) {
   const id = `pb-patch-${kind}-${row}-${field}`;
   const label = `${kind === 'comms' ? 'Comms' : kind === 'audio' ? 'Audio' : 'Video'} row ${Number(row) + 1} ${field}`;
-  return `<input id="${esc(id)}" class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${field.charAt(0).toUpperCase() + field.slice(1)}" aria-label="${esc(label)}">`;
+  const placeholder = PATCH_FIELD_PLACEHOLDERS[kind]?.[field] || field.charAt(0).toUpperCase() + field.slice(1);
+  return `<input id="${esc(id)}" class="field-in" data-patch-kind="${kind}" data-patch-row="${row}" data-patch-field="${field}" value="${esc(value || '')}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}">`;
 }
 
 function renderPatchTable(kind, title) {
@@ -18858,15 +19209,17 @@ function patchTableHTML(kind, title, data=null) {
 
 function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
   savePatchSheet(false);
+  // Section numbers come from the shared builder (D6) so a single-sheet
+  // preview and the full package can never disagree.
   if (kind === 'video') {
     showPaperPreview('Video Patch Sheet Preview', `
-      <h1>6. Video Patch Sheet</h1>
+      <h1 class="psec-h psec-video">${paperSectionTitle(paperworkSectionNumber('video-patch'), 'Video Patch Sheet')}</h1>
       ${patchTableHTML('video', 'Video Patch Sheet')}
     `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
     return;
   }
   showPaperPreview('Audio and Comms Patch Sheet Preview', `
-    <h1>7. Audio and Comms Patch Sheets</h1>
+    <h1 class="psec-h psec-audio">${paperSectionTitle(paperworkSectionNumber('audio-comms-patch'), 'Audio and Comms Patch Sheets')}</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet')}
     ${patchTableHTML('comms', 'Comms Patch Sheet')}
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
@@ -18876,6 +19229,48 @@ function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
 // so they're EXCLUDED from the exported package unless the user opts in here.
 let pbPackageIncludeNotes = false;
 let lastPackageExportSnapshot = null;
+
+// D9.1: export-time call-sheet picker. Device-local exclude set; the export
+// snapshot carries the resulting INCLUDED ids inside its fingerprinted
+// options, so preview reuse can never serve a stale sheet selection. At least
+// one sheet always stays included.
+let pbPackageSheetExcludes = new Set();
+function packageIncludedCallSheetIds(sheets=getCallSheets()) {
+  const included = sheets.filter(sheet => !pbPackageSheetExcludes.has(sheet.id)).map(sheet => sheet.id);
+  return (included.length ? included : sheets.slice(0, 1).map(sheet => sheet.id)).sort();
+}
+function pbToggleExportSheet(id, on) {
+  if (on) pbPackageSheetExcludes.delete(id);
+  else pbPackageSheetExcludes.add(id);
+  renderPackageSheetPicker();
+}
+function renderPackageSheetPicker() {
+  const host = document.getElementById('packageExportOptions');
+  if (!host) return;
+  const sheets = getCallSheets();
+  if (sheets.length <= 1) { host.innerHTML = ''; host.hidden = true; return; }
+  // Prune excludes for sheets that no longer exist (sanitizer collapse, delete).
+  const ids = new Set(sheets.map(sheet => sheet.id));
+  pbPackageSheetExcludes.forEach(id => { if (!ids.has(id)) pbPackageSheetExcludes.delete(id); });
+  const includedCount = sheets.filter(sheet => !pbPackageSheetExcludes.has(sheet.id)).length || 1;
+  // An unusual sheet count is the honest tell for a corrupted doc (D9.1).
+  const warning = sheets.length > 6
+    ? `<div class="pb-pkg-sheet-warning">This package includes ${sheets.length} call sheets — that is unusually many. Uncheck any that should not print.</div>`
+    : '';
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="pb-pkg-sheet-picker">
+      <div class="pb-pkg-sheet-picker-title">Call sheets in the package · ${includedCount} of ${sheets.length}</div>
+      ${warning}
+      ${sheets.map((sheet, i) => `
+        <label class="pb-pkg-optin">
+          <input type="checkbox" ${pbPackageSheetExcludes.has(sheet.id) ? '' : 'checked'}
+            onchange="pbToggleExportSheet('${esc(sheet.id)}', this.checked)">
+          <span>${esc(callSheetDisplayName(sheet, i))}${sheet.date ? ` · ${esc(sheet.date)}` : ''}</span>
+        </label>`).join('')}
+    </div>`;
+}
+
 async function showPreProPackagePreview() {
   try {
     if (paperworkExportAuthority() === 'local' && pbPackageIncludeNotes) await loadPlandaBearNotes();
@@ -18883,6 +19278,9 @@ async function showPreProPackagePreview() {
       includeNotes:pbPackageIncludeNotes,
       includeAssignments:true,
       documentType:'plandabear-package',
+      callSheetIds:packageIncludedCallSheetIds(),
+      paperwork:disabledPaperworkOptions(),
+      ...(groupActive() ? { groupId: activeGroupId, groupName: activeGroupName() } : {}),
     });
     lastPackageExportSnapshot = snapshot;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:true });
@@ -18897,7 +19295,7 @@ function pbTogglePackageNotes(on) {
   showPreProPackagePreview();
 }
 
-function assignmentRegisterHTML(snapshot) {
+function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('assignment-register', snapshot)) {
   const groups = Array.isArray(snapshot?.assignmentGroups) ? snapshot.assignmentGroups : [];
   const rows = groups.flatMap(group => group.roles.map((role, index) => `
     <tr>
@@ -18909,8 +19307,8 @@ function assignmentRegisterHTML(snapshot) {
       <td>${role.updatedAt ? esc(new Date(role.updatedAt).toLocaleString()) : 'Not recorded'}</td>
     </tr>`));
   return `
-    <h1>4. Student Positions and Required Paperwork</h1>
-    <p>Canonical assignment register for production ${esc(snapshot?.production?.sessionCode || session.code || 'LOCAL')}.</p>
+    <h1 class="psec-h psec-register">${paperSectionTitle(sectionNumber, 'Student Positions and Required Paperwork')}</h1>
+    <p>Who holds each position, and the paperwork that position owns.</p>
     <table class="paper-assignment-register">
       <thead><tr><th>Student profile</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
       <tbody>${rows.join('') || '<tr><td colspan="6">No canonical assignments were saved for this production.</td></tr>'}</tbody>
@@ -18919,13 +19317,16 @@ function assignmentRegisterHTML(snapshot) {
 
 function preProPackageHTML(forExport=false, snapshot=null) {
   const data = snapshot?.prePro || loadPreProData();
-  const safety = data.safety || {};
-  const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
-  const callSheets = getCallSheets(data);
-  const callSheetSections = callSheets.map((sheet, i) => `
-    ${i > 0 ? '<div class="paper-page-break"></div>' : ''}
-    <section>${callSheetPreviewHTML(sheet)}</section>
-  `).join('');
+  // D6: one numbering map drives which sections render AND what number each
+  // gets — a disabled type renumbers the package and the per-item previews
+  // identically because both consult the same builder.
+  const numbers = paperworkSectionNumbers(snapshot);
+  const allSheets = getCallSheets(data);
+  // D9.1: export-time sheet picker — the snapshot's fingerprinted options
+  // carry the included sheet ids; absent means every sheet.
+  const pickedIds = Array.isArray(snapshot?.options?.callSheetIds) ? snapshot.options.callSheetIds : null;
+  const pickedSheets = pickedIds ? allSheets.filter(sheet => pickedIds.includes(sheet.id)) : allSheets;
+  const callSheets = pickedSheets.length ? pickedSheets : allSheets.slice(0, 1);
   const includePackageNotes = snapshot ? snapshot.options?.includeNotes === true : pbPackageIncludeNotes;
   const noteCount = Array.isArray(snapshot?.notes) ? snapshot.notes.length : plandaBearNotes.length;
   const notesToggle = forExport ? '' : `
@@ -18933,39 +19334,49 @@ function preProPackageHTML(forExport=false, snapshot=null) {
       <input type="checkbox" ${includePackageNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
       <span>Include Production Notes in this package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
     </label>`;
-  const notesSection = includePackageNotes
-    ? `<div class="paper-page-break"></div><section>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, 8)}</section>`
-    : '';
-  return `
-    ${notesToggle}
-    ${callSheetSections}
-    <div class="paper-page-break"></div>
-    <section>${productionScheduleHTML(schedule, data)}</section>
-    <div class="paper-page-break"></div>
-    <section>${safetyPlanHTML(safety, data)}</section>
-    <div class="paper-page-break"></div>
-    <section>
-    ${assignmentRegisterHTML(snapshot || { production:{sessionCode:session.code}, assignmentGroups:[] })}
-    </section>
-    <div class="paper-page-break"></div>
-    <section><div class="paper-landscape">
-      <h1>5. Full Rendered Rundown</h1>
-      <div>${esc(snapshot?.production?.name || show.name || 'Cueola Rundown')}</div>
+  const sections = [];
+  if (numbers.has('call-sheet')) {
+    sections.push(callSheets.map((sheet, i) => `
+      ${i > 0 ? '<div class="paper-page-break"></div>' : ''}
+      <section>${callSheetPreviewHTML(sheet, data)}</section>`).join(''));
+  }
+  if (numbers.has('production-scheduler')) {
+    const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
+    sections.push(`<section>${productionScheduleHTML(schedule, data, numbers.get('production-scheduler'))}</section>`);
+  }
+  if (numbers.has('safety-plan')) {
+    sections.push(`<section>${safetyPlanHTML(data.safety || {}, data, numbers.get('safety-plan'))}</section>`);
+  }
+  sections.push(`<section>
+    ${assignmentRegisterHTML(snapshot || { production:{sessionCode:session.code}, assignmentGroups:[] }, numbers.get('assignment-register'))}
+    </section>`);
+  if (numbers.has('rundown')) {
+    sections.push(`<section><div class="paper-landscape">
+      <h1 class="psec-h psec-rundown">${paperSectionTitle(numbers.get('rundown'), 'Full Rendered Rundown')}</h1>
+      <div>${esc(snapshot?.production?.name || show.name || 'Rundown')}</div>
       ${rundownPreviewTableHTML(snapshot)}
     </div>
-    </section>
-    <div class="paper-page-break"></div>
-    <section>
-    <h1>6. Video Patch Sheet</h1>
+    </section>`);
+  }
+  if (numbers.has('video-patch')) {
+    sections.push(`<section>
+    <h1 class="psec-h psec-video">${paperSectionTitle(numbers.get('video-patch'), 'Video Patch Sheet')}</h1>
     ${patchTableHTML('video', 'Video Patch Sheet', data)}
-    </section>
-    <div class="paper-page-break"></div>
-    <section>
-    <h1>7. Audio and Comms Patch Sheets</h1>
+    </section>`);
+  }
+  if (numbers.has('audio-comms-patch')) {
+    sections.push(`<section>
+    <h1 class="psec-h psec-audio">${paperSectionTitle(numbers.get('audio-comms-patch'), 'Audio and Comms Patch Sheets')}</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet', data)}
     ${patchTableHTML('comms', 'Comms Patch Sheet', data)}
-    </section>
-    ${notesSection}
+    </section>`);
+  }
+  if (includePackageNotes) {
+    sections.push(`<section>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, numbers.get('production-notes'))}</section>`);
+  }
+  return `
+    ${notesToggle}
+    ${sections.join('\n    <div class="paper-page-break"></div>\n    ')}
   `;
 }
 
@@ -18979,6 +19390,7 @@ function paperExportMeta(opts={}) {
   return {
     productionName:String(productionName).slice(0,240),
     productionCode:String(productionCode).slice(0,80),
+    documentTitle:String(supplied.documentTitle || '').slice(0,120),
     exportedAt,
     sourceLabel:String(hasSourceLabel ? supplied.sourceLabel : 'UNVERIFIED PREVIEW — NOT A SAVED EXPORT').slice(0,240),
     revisionLabel:String(supplied.revisionLabel || '').slice(0,240),
@@ -18989,6 +19401,12 @@ function paperExportMeta(opts={}) {
 function paperExportDateLabel(value) {
   const parsed = new Date(value || Date.now());
   return Number.isNaN(parsed.getTime()) ? String(value || '') : parsed.toLocaleString();
+}
+
+// D9.3: printed pages carry a date, never an export timestamp.
+function paperExportDateOnlyLabel(value) {
+  const parsed = new Date(value || Date.now());
+  return Number.isNaN(parsed.getTime()) ? String(value || '') : parsed.toLocaleDateString();
 }
 
 function paperExportMarkup(html) {
@@ -19030,6 +19448,11 @@ function paperExportTokens(source, defaultOrientation='portrait') {
   return tokens;
 }
 
+// v2.1 D9.3 de-branding: production-title-led header (production name, sheet
+// title, date, Page N of M), small revision-stamp footer only. No wordmark,
+// session code, export timestamps, or authority bands on the printed body —
+// the fingerprint/authority system stays INTERNAL (it still gates what gets
+// exported; it just stops printing itself on every page).
 function createPaperExportPage(root, orientation, meta) {
   const page = document.createElement('article');
   page.className = `paper-export-page is-${orientation}`;
@@ -19037,19 +19460,14 @@ function createPaperExportPage(root, orientation, meta) {
   page.innerHTML = `
     <header class="paper-export-header">
       <div class="paper-export-heading">
-        <div class="paper-export-kicker">Cueola production paperwork</div>
         <div class="paper-export-title">${esc(meta.productionName)}</div>
+        ${meta.documentTitle ? `<div class="paper-export-doc">${esc(meta.documentTitle)}</div>` : ''}
       </div>
-      <div class="paper-export-meta">Production ${esc(meta.productionCode)}<br>Exported ${esc(paperExportDateLabel(meta.exportedAt))}</div>
+      <div class="paper-export-meta">${esc(paperExportDateOnlyLabel(meta.exportedAt))}<br><span class="paper-export-page-number"></span></div>
     </header>
-    <div class="paper-export-source">
-      <span class="paper-export-source-main">${esc(meta.sourceLabel)}${meta.revisionLabel ? ` · ${esc(meta.revisionLabel)}` : ''}</span>
-      <span class="paper-export-source-state">${esc(meta.draftLabel || 'Saved source')}</span>
-    </div>
     <main class="paper-export-body"></main>
     <footer class="paper-export-footer">
-      <span class="paper-export-footer-main">${esc(meta.productionName)} · ${esc(meta.productionCode)}</span>
-      <span class="paper-export-page-number"></span>
+      <span class="paper-export-footer-main">${esc(meta.revisionLabel || '')}</span>
     </footer>`;
   root.appendChild(page);
   return { page, body:page.querySelector('.paper-export-body'), orientation };
@@ -19088,12 +19506,14 @@ function paperExportPreferredUnitCut(units, maximum) {
   return limit;
 }
 
-function paperExportPlainBlock(text, sourceTag='DIV', compact=false) {
+// v2.1 D9.4: 9px is the export font FLOOR — content flows to more pages
+// instead of shrinking below it. The old 8px/6px compact path is gone.
+function paperExportPlainBlock(text, sourceTag='DIV') {
   const block = document.createElement('div');
   block.className = 'paper-export-oversize-block';
   block.dataset.sourceTag = String(sourceTag || 'DIV').toLowerCase();
   block.style.cssText = [
-    `font-size:${compact ? '6px' : '8px'}`,
+    'font-size:9px',
     'line-height:1.28',
     'white-space:pre-wrap',
     'overflow-wrap:anywhere',
@@ -19113,8 +19533,8 @@ function paperExportFitTextFragment(target, sourceNode, units) {
   let low = 1;
   let high = units.length;
   let best = 0;
-  const probe = (count, compact=false) => {
-    const block = paperExportPlainBlock(units.slice(0, count).join(''), sourceNode.tagName, compact);
+  const probe = count => {
+    const block = paperExportPlainBlock(units.slice(0, count).join(''), sourceNode.tagName);
     target.body.appendChild(block);
     const fits = !paperExportBodyOverflow(target.body);
     block.remove();
@@ -19125,11 +19545,11 @@ function paperExportFitTextFragment(target, sourceNode, units) {
     if (probe(middle)) { best = middle; low = middle + 1; }
     else high = middle - 1;
   }
-  let compact = false;
-  if (!best && probe(1, true)) { best = 1; compact = true; }
-  if (!best) throw new Error('A paperwork text fragment could not fit on an empty export page.');
+  // D9.4: never shrink below the floor — force minimal progress instead so the
+  // loop always advances (a 9px unit on a fresh page fits for any real content).
+  if (!best) best = 1;
   const cut = paperExportPreferredUnitCut(units, best);
-  target.body.appendChild(paperExportPlainBlock(units.slice(0, cut).join(''), sourceNode.tagName, compact));
+  target.body.appendChild(paperExportPlainBlock(units.slice(0, cut).join(''), sourceNode.tagName));
   return cut;
 }
 
@@ -19137,7 +19557,7 @@ function paperExportRowCells(row) {
   return [...row.children].filter(cell => cell.tagName === 'TD' || cell.tagName === 'TH');
 }
 
-function paperExportPlainRow(sourceRow, unitLists, budget, fontSize='7px', preferBreak=false) {
+function paperExportPlainRow(sourceRow, unitLists, budget, fontSize='9px', preferBreak=false) {
   const row = sourceRow.cloneNode(false);
   row.removeAttribute('id');
   row.removeAttribute('style');
@@ -19153,7 +19573,7 @@ function paperExportPlainRow(sourceRow, unitLists, budget, fontSize='7px', prefe
     cell.removeAttribute('id');
     cell.removeAttribute('style');
     cell.removeAttribute('rowspan');
-    cell.style.padding = fontSize === '7px' ? '3px' : '1px';
+    cell.style.padding = '3px';
     cell.style.lineHeight = '1.2';
     cell.style.height = 'auto';
     cell.style.minHeight = '0';
@@ -19174,17 +19594,10 @@ function paperExportPlainRow(sourceRow, unitLists, budget, fontSize='7px', prefe
   return { row, cuts };
 }
 
-function paperExportCompactTableHeader(shell) {
-  shell.style.fontSize = '6px';
-  shell.querySelectorAll('thead th,thead td').forEach(cell => {
-    cell.style.padding = '1px';
-    cell.style.fontSize = '5px';
-    cell.style.lineHeight = '1.1';
-    cell.style.whiteSpace = 'normal';
-    cell.style.overflowWrap = 'anywhere';
-  });
-}
-
+// v2.1 D9.4: oversize rows FLOW across pages at the 9px floor. The old
+// character-fragmenting path (7px → 5px cells under a 6px compacted header)
+// is deleted — a row that outgrows its page continues on the next page under
+// a repeated normal-size header.
 function paperExportFitRowFragment(target, tableParts, sourceRow, unitLists) {
   const maximum = Math.max(0, ...unitLists.map(units => units.length));
   if (!maximum) {
@@ -19192,41 +19605,41 @@ function paperExportFitRowFragment(target, tableParts, sourceRow, unitLists) {
     tableParts.body.appendChild(blank.row);
     return blank.cuts;
   }
-  const findBudget = fontSize => {
-    let low = 1;
-    let high = maximum;
-    let best = 0;
-    while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-      const probe = paperExportPlainRow(sourceRow, unitLists, middle, fontSize);
-      tableParts.body.appendChild(probe.row);
-      const fits = !paperExportBodyOverflow(target.body);
-      probe.row.remove();
-      if (fits) { best = middle; low = middle + 1; }
-      else high = middle - 1;
-    }
-    return best;
-  };
-  let fontSize = '7px';
-  let budget = findBudget(fontSize);
-  if (!budget) {
-    paperExportCompactTableHeader(tableParts.shell);
-    fontSize = '5px';
-    budget = findBudget(fontSize);
+  let low = 1;
+  let high = maximum;
+  let best = 0;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const probe = paperExportPlainRow(sourceRow, unitLists, middle);
+    tableParts.body.appendChild(probe.row);
+    const fits = !paperExportBodyOverflow(target.body);
+    probe.row.remove();
+    if (fits) { best = middle; low = middle + 1; }
+    else high = middle - 1;
   }
-  if (!budget) throw new Error('A paperwork table row could not fit below its repeated header.');
-  const fragment = paperExportPlainRow(sourceRow, unitLists, budget, fontSize, true);
+  // Never shrink below the floor — force minimal progress so the flow loop
+  // always advances (one 9px unit under a header fits on any fresh page).
+  if (!best) best = 1;
+  const fragment = paperExportPlainRow(sourceRow, unitLists, best, '9px', true);
   tableParts.body.appendChild(fragment.row);
   return fragment.cuts;
 }
 
-function paperExportTableShell(table) {
+function paperExportTableShell(table, continued=false) {
   const shell = table.cloneNode(false);
   shell.classList.add('paper-export-table');
   [...table.children].forEach(child => {
     const tag = child.tagName;
     if (tag === 'CAPTION' || tag === 'COLGROUP' || tag === 'THEAD') shell.appendChild(child.cloneNode(true));
   });
+  // D9.4: a section that flows onto another page says so, with its headers
+  // repeated at normal size.
+  if (continued && !shell.querySelector('caption')) {
+    const caption = document.createElement('caption');
+    caption.className = 'paper-export-cont';
+    caption.textContent = '(continued)';
+    shell.prepend(caption);
+  }
   const body = document.createElement('tbody');
   shell.appendChild(body);
   return { shell, body };
@@ -19290,15 +19703,13 @@ async function buildPaperExportDocument(html, opts={}) {
         let target = ensurePage(orientation);
         let tableParts = paperExportTableShell(token.node);
         target.body.appendChild(tableParts.shell);
+        // D9.4: a header that doesn't fit the remaining space moves to a fresh
+        // page at normal size — headers are never compacted to 5–6px anymore.
         if (paperExportBodyOverflow(target.body)) {
-          paperExportCompactTableHeader(tableParts.shell);
-          if (paperExportBodyOverflow(target.body)) {
-            tableParts.shell.remove();
-            target = nextPage(orientation);
-            tableParts = paperExportTableShell(token.node);
-            paperExportCompactTableHeader(tableParts.shell);
-            target.body.appendChild(tableParts.shell);
-          }
+          tableParts.shell.remove();
+          target = nextPage(orientation);
+          tableParts = paperExportTableShell(token.node);
+          target.body.appendChild(tableParts.shell);
         }
         for (const sourceRow of sourceRows) {
           let row = sourceRow.cloneNode(true);
@@ -19307,13 +19718,14 @@ async function buildPaperExportDocument(html, opts={}) {
           row.remove();
           if (tableParts.body.children.length) {
             target = nextPage(orientation);
-            tableParts = paperExportTableShell(token.node);
+            tableParts = paperExportTableShell(token.node, true);
             target.body.appendChild(tableParts.shell);
           }
           tableParts.body.appendChild(row);
           if (!paperExportBodyOverflow(target.body)) continue;
+          // D9.4: gentle step stops at the 9px floor, then the row FLOWS.
           row.classList.add('paper-export-oversize-row');
-          row.style.fontSize = '7px';
+          row.style.fontSize = '9px';
           row.querySelectorAll('td,th').forEach(cell => { cell.style.padding = '3px'; });
           if (!paperExportBodyOverflow(target.body)) continue;
           row.remove();
@@ -19324,7 +19736,7 @@ async function buildPaperExportDocument(html, opts={}) {
           while (firstFragment || remaining.some(units => units.length)) {
             if (!firstFragment) {
               target = nextPage(orientation);
-              tableParts = paperExportTableShell(token.node);
+              tableParts = paperExportTableShell(token.node, true);
               target.body.appendChild(tableParts.shell);
             }
             firstFragment = false;
@@ -19346,7 +19758,7 @@ async function buildPaperExportDocument(html, opts={}) {
       }
       if (!paperExportBodyOverflow(target.body)) continue;
       clone.classList.add('paper-export-oversize-block');
-      clone.style.fontSize = '8px';
+      clone.style.fontSize = '9px';   // D9.4 floor
       clone.style.overflowWrap = 'anywhere';
       if (!paperExportBodyOverflow(target.body)) continue;
       clone.remove();
@@ -19375,9 +19787,11 @@ async function buildPaperExportDocument(html, opts={}) {
     renderTokens();
     await waitForPaperExportAssets(root);
   }
+  // D9.4: the abort is gone — flow-first pagination makes clipping impossible
+  // by construction for well-formed sections; a pathological layout ships with
+  // a console warning instead of stranding the operator with no export.
   if ([...root.querySelectorAll('.paper-export-body')].some(paperExportBodyOverflow)) {
-    root.remove();
-    throw new Error('Paperwork pagination could not preserve all content without clipping.');
+    console.warn('Paper export: a page still reports overflow after relayout — exporting anyway (content flows, nothing is dropped).');
   }
   const pages = [...root.querySelectorAll('.paper-export-page')];
   pages.forEach((page, index) => {
@@ -19409,12 +19823,13 @@ async function printPaperHTML(html, opts={}) {
 }
 
 // PDF renderer libraries are vendored same-origin (assets/vendor/) so exports
-// work offline and behind blocked CDNs — show-critical. CDN stays as fallback.
+// work offline and behind blocked CDNs — show-critical. No CDN fallback: the
+// v2.1 CSP no longer allows cdnjs, so a fallback would fail anyway.
 async function loadPdfExportLibraries() {
-  const load = (local, cdn) =>
-    paperworkExportTimeout(ptLoadLibrary(local).catch(() => ptLoadLibrary(cdn)), 12000, 'The PDF renderer took too long to load.');
-  await load('assets/vendor/jspdf.umd.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-  await load('assets/vendor/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  const load = (local) =>
+    paperworkExportTimeout(ptLoadLibrary(local), 12000, 'The PDF renderer took too long to load.');
+  await load('assets/vendor/jspdf.umd.min.js');
+  await load('assets/vendor/html2canvas.min.js');
 }
 
 // Explicit blob + anchor download: jsPDF's doc.save() can be silently dropped
@@ -19436,8 +19851,49 @@ function downloadBlobFile(blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+// ── v2.1 D9.2: export progress sheet ─────────────────────────
+// Determinate "Rendering page N of M" during the per-page raster loop, an
+// indeterminate "Laying out pages…" stage during layout, and a Cancel that
+// aborts between pages (never mid-page).
+let _paperExportCancelled = false;
+function showPaperProgress(title='Exporting PDF') {
+  _paperExportCancelled = false;
+  const titleEl = document.getElementById('paperProgressTitle');
+  if (titleEl) titleEl.textContent = title;
+  setPaperProgress('Preparing…', null);
+  showModal('paperProgressSheet');
+}
+function setPaperProgress(status, fraction) {
+  const statusEl = document.getElementById('paperProgressStatus');
+  if (statusEl) statusEl.textContent = status;
+  const bar = document.getElementById('paperProgressBar');
+  if (!bar) return;
+  if (fraction == null) {
+    bar.classList.add('indeterminate');
+  } else {
+    bar.classList.remove('indeterminate');
+    bar.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  }
+}
+function hidePaperProgress() { hideModal('paperProgressSheet'); }
+function cancelPaperExport() {
+  _paperExportCancelled = true;
+  setPaperProgress('Canceling…', null);
+}
+function paperExportCancelledError() {
+  return Object.assign(new Error('Export canceled.'), { code:'export-cancelled' });
+}
+
 async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
-  const root = await buildPaperExportDocument(html, opts);
+  showPaperProgress('Exporting PDF');
+  setPaperProgress('Laying out pages…', null);
+  let root;
+  try {
+    root = await buildPaperExportDocument(html, opts);
+  } catch (error) {
+    hidePaperProgress();
+    throw error;
+  }
   try {
     await loadPdfExportLibraries();
     const { jsPDF } = window.jspdf || {};
@@ -19446,14 +19902,17 @@ async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
     const firstOrientation = pages[0]?.dataset.orientation || 'portrait';
     const doc = new jsPDF({ unit:'pt', format:'letter', orientation:firstOrientation, compress:true });
     const meta = paperExportMeta(opts);
+    // D9.3: neutral document metadata — no app branding in the PDF file.
     doc.setProperties({
-      title:meta.productionName,
-      subject:`Cueola production paperwork · ${meta.productionCode}`,
-      author:'Cueola',
-      creator:'Cueola',
-      keywords:`Cueola, production paperwork, ${meta.productionCode}`,
+      title:meta.documentTitle ? `${meta.productionName} — ${meta.documentTitle}` : meta.productionName,
+      subject:meta.documentTitle || 'Production paperwork',
+      author:meta.productionName,
+      creator:meta.productionName,
+      keywords:'',
     });
     for (let index = 0; index < pages.length; index++) {
+      if (_paperExportCancelled) throw paperExportCancelledError();
+      setPaperProgress(`Rendering page ${index + 1} of ${pages.length}`, index / pages.length);
       const page = pages[index];
       const orientation = page.dataset.orientation || 'portrait';
       if (index > 0) doc.addPage('letter', orientation);
@@ -19467,9 +19926,11 @@ async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
       const pageH = orientation === 'landscape' ? 612 : 792;
       doc.addImage(canvas.toDataURL('image/jpeg', opts.jpegQuality || 0.9), 'JPEG', 0, 0, pageW, pageH, undefined, 'FAST');
     }
+    setPaperProgress('Saving file…', 1);
     downloadBlobFile(doc.output('blob'), fileName);
     return { pageCount:pages.length, fileName, exportedAt:meta.exportedAt };
   } finally {
+    hidePaperProgress();
     root.remove();
   }
 }
@@ -19482,7 +19943,7 @@ function openPrePro() {
   hideModal('paperworkHubModal');
   const data = loadPreProData();
   const sheets = getCallSheets(data);
-  storeActiveCallSheetIndex(Math.max(0, Math.min(loadActiveCallSheetIndex(), sheets.length - 1)));
+  storeActiveCallSheetIndex(Math.max(0, Math.min(loadActiveCallSheetIndex(sheets), sheets.length - 1)), sheets);
   renderCallSheetSelector(sheets);
   hydrateCallSheetForm(sheets[activeCallSheetIndex]);
   renderPaperworkNav('call-sheet');
@@ -19579,7 +20040,9 @@ window.toggleSetupNotApplicable = toggleSetupNotApplicable;
 function getPreProData() {
   const existing = loadPreProData();
   const sheets = getCallSheets(existing);
-  activeCallSheetIndex = Math.max(0, Math.min(activeCallSheetIndex, sheets.length - 1));
+  // D6 selection hardening: resolve by remembered id so a remote delete that
+  // renumbers the array can't make the open form overwrite a different sheet.
+  resolveActiveCallSheetIndex(sheets);
   const active = currentCallSheetFromForm();
   sheets[activeCallSheetIndex] = active;
   return {
@@ -19594,7 +20057,7 @@ function saveCallSheet(showToastOnSave=true) {
   applyPlandaShowStartToRundown();
   if (showToastOnSave) toast('Call sheet saved.');
   const sheets = getCallSheets(saved);
-  const idx = Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+  const idx = resolveActiveCallSheetIndex(sheets);
   return normalizeCallSheet(sheets[idx], idx);
 }
 
@@ -19704,7 +20167,9 @@ function renderCallSheetPeople() {
   const grid = document.getElementById('pp-crew-grid');
   if (!grid) return;
   const rows = callSheetPeople.length ? callSheetPeople : [{ name:'', position:'', email:'', phone:'', call:'' }];
-  grid.innerHTML = `
+  // D9.9: position is free text backed by the session's position catalog.
+  const positionOptions = `<datalist id="ppPositionOptions">${getRolePositionOptions().map(p => `<option value="${esc(p)}"></option>`).join('')}</datalist>`;
+  grid.innerHTML = `${positionOptions}
     <div class="call-grid-head call-grid-head-grip"></div>
     <div class="call-grid-head">Name</div>
     <div class="call-grid-head">Position</div>
@@ -19716,7 +20181,7 @@ function renderCallSheetPeople() {
       <div class="call-person-row" data-idx="${i}"${p.id ? ` data-row-id="${esc(p.id)}"` : ''} style="display:contents">
         <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" title="Drag to reorder" aria-label="Drag to reorder">⠿</div>
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
-        <input class="field-in" data-call-field="position" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">
+        <input class="field-in" data-call-field="position" list="ppPositionOptions" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="email" value="${esc(p.email||'')}" placeholder="Email" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="phone" value="${esc(p.phone||'')}" placeholder="Phone" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="call" type="time" value="${esc(normalizeTimeValue(p.call)||'')}" oninput="syncCallSheetPeopleFromDOM()">
@@ -19729,6 +20194,44 @@ function addCallSheetPerson() {
   // New crew/talent default to the sheet's overall call time (editable per person).
   callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:timeInputValue('pp-call') });
   renderCallSheetPeople();
+}
+
+// v2.1 D9.7: one-tap crew fill from the saved role assignments — the app
+// already knows person + position; stop making students retype them.
+function fillCallSheetCrewFromRoster() {
+  syncCallSheetPeopleFromDOM();
+  const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
+  if (!roster.length) { toast('No saved role assignments yet — assign positions in Admin first.'); return; }
+  const have = new Set(callSheetPeople.map(p => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
+  const defaultCall = timeInputValue('pp-call');
+  let added = 0;
+  roster.forEach(row => {
+    const name = String(row.person).trim();
+    const key = name.toLowerCase();
+    if (have.has(key)) return;
+    have.add(key);
+    callSheetPeople.push({ name, position: String(row.position || '').trim(), email:'', phone:'', call: defaultCall });
+    added++;
+  });
+  // Drop placeholder blank rows once real people exist.
+  if (added) callSheetPeople = callSheetPeople.filter(p => Object.values(p).some(v => String(v || '').trim()));
+  renderCallSheetPeople();
+  toast(added ? `Added ${added} ${added === 1 ? 'person' : 'people'} from the roster.` : 'Everyone on the roster is already on this sheet.');
+}
+
+// v2.1 D9.7: estimated wrap = show start (or call) + the rundown's total
+// runtime. One tap, still editable.
+function estimateWrapFromRundown() {
+  const totalSecs = beats.reduce((n, b) => n + (b.min||0)*60 + (b.sec||0), 0);
+  if (!totalSecs) { toast('The rundown has no timed rows yet.'); return; }
+  const startVal = timeInputValue('pp-show-start') || timeInputValue('pp-call');
+  if (!startVal) { toast('Set a show start or call time first.'); return; }
+  const [h, m] = startVal.split(':').map(Number);
+  const endMins = (h * 60 + m + Math.ceil(totalSecs / 60)) % (24 * 60);
+  const wrap = `${String(Math.floor(endMins / 60)).padStart(2,'0')}:${String(endMins % 60).padStart(2,'0')}`;
+  setWrapNotApplicable(false);
+  setTimeInputValue('pp-wrap', wrap);
+  toast(`Estimated wrap ${paperTime(wrap)} (start + ${rundownFmtTotal(totalSecs)} runtime).`);
 }
 
 function removeCallSheetPerson(idx) {
@@ -19757,7 +20260,7 @@ async function downloadCallSheetPDF() {
   const sheets = getCallSheets(snapshot.prePro);
   const index = document.getElementById('paperPreviewModal')?.classList.contains('on')
     ? Math.max(0, Math.min(lastCallSheetExportIndex, sheets.length - 1))
-    : Math.max(0, Math.min(Number(activeCallSheetIndex) || 0, sheets.length - 1));
+    : resolveActiveCallSheetIndex(sheets);
   const savedCallSheetData = normalizeCallSheet(sheets[index], index);
   const html = callSheetPreviewHTML(savedCallSheetData);
   const savedCallSheetFileName = `${cleanPdfName(callSheetTitle(savedCallSheetData), 'cueola-call-sheet')}.pdf`;
@@ -19766,6 +20269,7 @@ async function downloadCallSheetPDF() {
     const result = await exportPaperHTMLAsPDF(html, savedCallSheetFileName, options);
     toast(`Call sheet PDF downloaded · ${result.pageCount} pages.`);
   } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
@@ -19782,12 +20286,19 @@ async function exportPreProPackagePDF() {
   try {
     const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
       && lastPaperPreview?.options?.snapshotFingerprint === lastPackageExportSnapshot?.fingerprint;
-    snapshot = previewIsOpen && lastPackageExportSnapshot?.options?.includeNotes === pbPackageIncludeNotes
+    const selectionMatches = JSON.stringify(lastPackageExportSnapshot?.options?.callSheetIds || null)
+      === JSON.stringify(packageIncludedCallSheetIds())
+      && JSON.stringify(lastPackageExportSnapshot?.options?.paperwork || {})
+      === JSON.stringify(disabledPaperworkOptions());
+    snapshot = previewIsOpen && selectionMatches && lastPackageExportSnapshot?.options?.includeNotes === pbPackageIncludeNotes
       ? lastPackageExportSnapshot
       : await preparePaperworkExportSnapshot({
         includeNotes:pbPackageIncludeNotes,
         includeAssignments:true,
         documentType:'plandabear-package',
+        callSheetIds:packageIncludedCallSheetIds(),
+        paperwork:disabledPaperworkOptions(),
+        ...(groupActive() ? { groupId: activeGroupId, groupName: activeGroupName() } : {}),
       });
   } catch (error) {
     toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
@@ -19800,6 +20311,7 @@ async function exportPreProPackagePDF() {
     const result = await exportPaperHTMLAsPDF(html, `${cleanFileName}-plandabear-package.pdf`, options);
     toast(`Planda Bear package PDF downloaded · ${result.pageCount} pages.`);
   } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
@@ -19839,6 +20351,7 @@ async function exportPDF() {
     const result = await exportPaperHTMLAsPDF(html, cleanFileName, options);
     toast(`Rundown PDF downloaded · ${result.pageCount} pages.`);
   } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
@@ -19916,10 +20429,9 @@ const DEMO_BEATS = [
 // ─────────────────────────────────────────────────────────────
 // INIT — auto-join from dashboard or ?code= URL param
 // ─────────────────────────────────────────────────────────────
-// Seed cache from localStorage immediately (best-effort, before Firebase loads)
-// so the login UI is usable even on a slow connection.
-_adminsCache = (() => { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))||[]; } catch { return []; } })();
-restoreAdminSession();
+// Admin session restores through CueolaAdminAuth's persisted Auth state; the
+// adapter updates the UI whenever the session resolves or changes.
+initAdminAuthAdapter();
 updateAdminUI();
 applyTheme(currentTheme);
 applyPlandaBearTheme(plandaBearTheme);
@@ -19946,8 +20458,8 @@ window.addEventListener('popstate', () => {
 });
 
 // Then load from Firestore (source of truth) — updates cache + restores session again
-if (window._firebaseReady) initAdminsFromFirestore();
-else window.addEventListener('firebaseReady', initAdminsFromFirestore, { once: true });
+// (v2.1) admins/global listener removed — CueolaAdminAuth binds itself on
+// firebaseReady and the adapter registered at boot mirrors the session.
 
 // ── Entitlement layer (Phase 1) ─────────────────────────────────────────────
 // Server-authoritative, offline-tolerant account entitlement. Reads accounts/{id}
@@ -20015,6 +20527,37 @@ function cueolaCan(key) {
 if (window._firebaseReady) cueolaInitEntitlements();
 else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: true });
 
+// ── v2.1 Phase 5 (decision 12a): ONE entry gate for every door ──────────────
+// The main join modals already call CueolaIdentity.entrySatisfied; the side
+// entrances (Outrangutan join, #flowop, #flowmingo, dashboard auto-join and
+// ?code= links) historically bypassed it. This helper closes them all: when a
+// session requires a class key and the visitor has no signed-in profile with
+// an active key, they are routed through the front-door join modal (which owns
+// the key input and the sign-up wizard) instead of slipping in sideways.
+// Signed-in admins pass — the gate is about anonymous students.
+async function cueolaEntryGateAllows(code, doorLabel = 'This session') {
+  const clean = String(code || '').trim().toUpperCase();
+  if (!clean || !window._firebaseReady) return true;   // local/offline flows keep working
+  if (adminSession) return true;
+  let docData = null;
+  try {
+    const snap = await window._getDoc(window._doc(window._db, 'sessions', clean));
+    docData = snap.exists() ? snap.data() : null;
+  } catch { return true; }   // unreadable → let the flow surface its own error
+  if (!docData || docData.requireLoginCode !== true) return true;
+  const gate = window.CueolaIdentity ? await CueolaIdentity.entrySatisfied(docData, '') : { pass: true };
+  if (gate.pass) return true;
+  toast(`${doorLabel} needs a class key for this session. Sign in or enter your key to continue.`);
+  try {
+    const inp = document.getElementById('stud-code');
+    if (inp) inp.value = clean;
+    showModal('modal-stud');
+    CueolaIdentity?.revealEntryCodeRow?.('stud-entrycode-row');
+  } catch {}
+  return false;
+}
+window.cueolaEntryGateAllows = cueolaEntryGateAllows;   // Outrangutan's module calls this
+
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
   // Retire legacy ?scriptop= links without ever booting a second full Cueola
@@ -20034,15 +20577,22 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
   }
   if (location.hash === '#flowmingo-op' || location.hash === '#flowop' || params.has('flowop') || params.has('operator')) {
     sessionStorage.setItem('cueola_screen', 'entry');
-    setTimeout(() => openFlowmingoOperator(params.get('code') || ''), 0);
+    setTimeout(async () => {
+      const code = params.get('code') || '';
+      // Phase 5: the operator side door honors the class-key gate.
+      if (code && !(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) return;
+      openFlowmingoOperator(code);
+    }, 0);
     return;
   }
   if (location.hash === '#flowmingo' || location.hash === '#promptypus' || params.has('flowmingo') || params.has('prompter') || params.has('promptypus')) {
     sessionStorage.setItem('cueola_screen', 'entry');
-    setTimeout(() => {
+    setTimeout(async () => {
       enterPrompter();
       const code = (params.get('code') || '').trim().toUpperCase();
       if (code) {
+        // Phase 5: the talent-link side door honors the class-key gate.
+        if (!(await cueolaEntryGateAllows(code, 'Flowmingo'))) return;
         const input = ptEl('pt-cueola-code-input');
         if (input) input.value = code;
         ptLoadFromCueolaCode(code);
@@ -20069,7 +20619,10 @@ else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: tr
   const name = stored?.userName || adminSession?.name || '';
   const role = stored?.role || 'instructor';
 
-  const doJoin = () => {
+  const doJoin = async () => {
+    // Phase 5: student-side auto-joins honor the class-key gate (instructor
+    // launches from the signed-in dashboard pass through).
+    if (role !== 'instructor' && !(await cueolaEntryGateAllows(code, 'This link'))) return;
     if (name) {
       session = sessionWithProfileIdentity({
         code, role, userName:name,

@@ -149,9 +149,15 @@
     try { if (PB_AVATAR_ANIMALS && typeof PB_AVATAR_ANIMALS === 'object') return PB_AVATAR_ANIMALS; } catch (e) {}
     return {};
   }
+  // v2.1 D7: the icon manifest is a top-level const in cueola-app.js, read the
+  // same bare-lexical way as PB_AVATAR_ANIMALS.
+  function avatarIcons() {
+    try { if (PB_AVATAR_ICONS && typeof PB_AVATAR_ICONS === 'object') return PB_AVATAR_ICONS; } catch (e) {}
+    return {};
+  }
   function normalizeAvatar(a) {
     var m = window.CueolaAvatarProfile;
-    return (m && m.normalizeAvatar(a, animals())) || { type: 'initials' };
+    return (m && m.normalizeAvatar(a, animals(), avatarIcons())) || { type: 'initials' };
   }
 
   /* ── local device identity ── */
@@ -602,6 +608,16 @@
         grid += '<button type="button" class="id-av' + (sel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'animal\',' + JSON.stringify(k).replace(/"/g, '&quot;') + ')">' +
           '<span class="id-av-chip" style="background:' + esc(av[k].bg) + '"><img src="' + esc(av[k].src) + '" alt=""></span><span>' + esc(av[k].label) + '</span></button>';
       });
+      // v2.1 D7: icon avatars — same manifest as the Planda Bear portal.
+      var icons = avatarIcons();
+      Object.keys(icons).forEach(function (k) {
+        var sel = w.avatar.type === 'icon' && w.avatar.value === k;
+        var inner = icons[k].src
+          ? '<img src="' + esc(icons[k].src) + '" alt="">'
+          : '<span class="sf-symbol" data-symbol="' + esc(icons[k].symbol) + '" aria-hidden="true"></span>';
+        grid += '<button type="button" class="id-av' + (sel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'icon\',' + JSON.stringify(k).replace(/"/g, '&quot;') + ')">' +
+          '<span class="id-av-chip">' + inner + '</span><span>' + esc(icons[k].label) + '</span></button>';
+      });
       var themes = themeIds().map(function (t) {
         return '<option value="' + esc(t) + '"' + (w.theme === t ? ' selected' : '') + '>' + esc(THEME_LABELS[t] || t) + '</option>';
       }).join('');
@@ -658,7 +674,8 @@
   function wizardBack() { if (wizard && wizard.step > 0) { wizard.step--; renderCreate(); } else renderHub(); }
   function wizardPickAvatar(type, value) {
     if (!wizard) return;
-    wizard.avatar = normalizeAvatar(type === 'animal' ? { type: 'animal', value: value } : { type: 'initials' });
+    wizard.avatar = normalizeAvatar(type === 'animal' || type === 'icon'
+      ? { type: type, value: value } : { type: 'initials' });
     renderCreate();
   }
   async function wizardFinish() {

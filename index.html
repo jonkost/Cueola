@@ -1613,6 +1613,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-av-choice:hover{border-color:var(--bord2);color:var(--text)}
 .pb-av-choice.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--s2));color:var(--text)}
 .pb-av-chip{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:15px;font-weight:800;color:#fff;background:var(--s4)}
+/* v2.1 D7 — icon avatars: SF-symbol masks tinted via currentColor (white on
+   the user's hashed chip color; legible across all nine themes) */
+.pb-av-ico{display:flex;align-items:center;justify-content:center;color:#fff}
+.pb-av-ico .sf-symbol{width:22px;height:22px;color:#fff}
+.pb-av-img.pb-av-art{width:72%;height:72%;object-fit:contain}   /* Twemoji art breathes inside the chip */
+.pb-note-avatar .pb-av-ico .sf-symbol{width:18px;height:18px}
+.id-av-chip .sf-symbol{width:20px;height:20px;color:#fff}
 .pb-av-chip .sf-symbol{color:var(--text2);font-size:18px}
 .pb-av-choice-lbl{white-space:nowrap}
 .pb-av-upload{position:relative}
@@ -1836,6 +1843,26 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-preview{background:#fff;color:#111;border-radius:8px;padding:28px;font-family:Helvetica,Arial,sans-serif;max-height:58vh;overflow:auto;letter-spacing:0;font-kerning:normal;text-rendering:geometricPrecision}
 .paper-preview .pb-pkg-optin{display:flex;align-items:center;gap:9px;margin:0 0 18px;padding:11px 14px;border:1px solid #d4d9e6;border-radius:9px;background:#f4f6fb;font-family:-apple-system,system-ui,sans-serif;font-size:13.5px;font-weight:600;color:#31384a;cursor:pointer}
 .paper-preview .pb-pkg-optin input{width:17px;height:17px;accent-color:#5b6ef5;cursor:pointer}
+/* v2.1 D9.1 — hub-side call-sheet export picker */
+.pb-pkg-sheet-picker{border:1px solid var(--border);border-radius:var(--r);background:var(--s1);padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:7px}
+.pb-pkg-sheet-picker-title{font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.pb-pkg-sheet-picker .pb-pkg-optin{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text2);cursor:pointer}
+.pb-pkg-sheet-picker .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+.pb-pkg-sheet-warning{font-size:12.5px;line-height:1.5;color:var(--yellow);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;padding:9px 12px;background:var(--s2)}
+/* v2.1 D2 — group picker + hub group bar */
+.group-chip-grid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.group-chip{padding:10px 18px;border:1px solid var(--border);border-radius:999px;background:var(--s1);color:var(--text);font-size:14px;font-weight:700;cursor:pointer}
+.group-chip.sel{border-color:var(--accent);color:var(--accent)}
+.pb-group-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--s1);margin-bottom:10px;font-size:13px}
+.pb-group-bar-label{font-size:10.5px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.pb-group-bar-note{font-size:11.5px;color:var(--text3)}
+.pb-group-select{max-width:220px;padding:6px 10px;font-size:13px}
+/* v2.1 D9.2 — export progress sheet */
+.paper-progress-status{font-size:13px;color:var(--text2);margin:4px 0 10px;min-height:18px}
+.paper-progress-track{height:8px;border-radius:4px;background:var(--s2);border:1px solid var(--border);overflow:hidden;margin-bottom:14px}
+.paper-progress-bar{height:100%;width:0%;border-radius:4px;background:var(--accent);transition:width .25s ease}
+.paper-progress-bar.indeterminate{width:35%;animation:paper-progress-slide 1.1s ease-in-out infinite alternate}
+@keyframes paper-progress-slide{from{margin-left:0}to{margin-left:65%}}
 .paper-preview *{letter-spacing:0;font-kerning:normal}
 .paper-preview h1{font-size:22px;margin:0 0 4px}
 .paper-preview h2{font-size:14px;margin:18px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}
@@ -1849,6 +1876,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-rundown-grid th,.paper-rundown-grid td{padding:4px}
 .paper-rundown-grid .cue-type{font-weight:700;white-space:nowrap}
 .paper-rundown-grid .cue-muted{color:#777}
+/* v2.1 D9.5 — broadcast preset, running totals, legend */
+.paper-rundown-grid .cue-dept{font-weight:800;font-size:7.5px;letter-spacing:.05em}
+.paper-rundown-grid .cue-total,.paper-rundown-grid td.cue-total{font-variant-numeric:tabular-nums;white-space:nowrap}
+.paper-rundown-grid tfoot td{border-top:2px solid #444;padding:5px 4px}
+.paper-rundown-legend{font-size:8.5px;color:#4e5664;margin:0 0 6px}
+.paper-rundown-legend b{font-weight:800}
 .paper-rundown-grid th.cue-video,.paper-rundown-grid td.cue-video{border-left:3px solid var(--video)}
 .paper-rundown-grid th.cue-audio,.paper-rundown-grid td.cue-audio{border-left:3px solid var(--green)}
 .paper-rundown-grid th.cue-playback,.paper-rundown-grid td.cue-playback{border-left:3px solid var(--red)}
@@ -1870,8 +1903,9 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-export-page,.paper-preview{--video:#2f6fed;--green:#0f8a5f;--red:#d64545;--yellow:#b98a00;--purple:#8a4fc9;--cyan:#0f8a96;--orange:#d65a18;--accent:#2f6fed;--text:#111;--text2:#444;--text3:#777}
 .paper-export-header{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16pt;padding-bottom:7pt;border-bottom:1px solid #cfd3da}
 .paper-export-heading{min-width:0;display:grid;gap:2pt}
-.paper-export-kicker{color:#626a78;font-size:7pt;font-weight:700;line-height:1.2;text-transform:uppercase}
 .paper-export-title{min-width:0;margin:0;color:#111;font-size:18pt;font-weight:700;line-height:1.08;overflow-wrap:anywhere}
+.paper-export-doc{color:#626a78;font-size:9pt;font-weight:700;line-height:1.3;margin-top:2pt}
+.paper-export-cont{caption-side:top;text-align:left;color:#626a78;font-size:8pt;font-style:italic;padding:2pt 0}
 .paper-export-meta{max-width:3.2in;color:#626a78;font-size:7.5pt;line-height:1.35;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .paper-export-source{min-width:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12pt;padding:6pt 8pt;border:1px solid #d9dde4;border-radius:4pt;background:#f4f6f8;color:#4e5664;font-size:7.5pt;line-height:1.35}
 .paper-export-source:empty{display:none}
@@ -1882,6 +1916,18 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-export-body> :last-child{margin-bottom:0}
 .paper-export-page :is(h1,h2,h3,p,ul,ol,figure,table){max-width:100%}
 .paper-export-page h1{margin:0 0 8pt;font-size:17pt;line-height:1.12}
+/* v2.1 D9.8 — per-section accent identities. Hex/rgb ONLY: html2canvas 1.4.1
+   cannot parse oklch/color-mix. */
+.paper-export-page h1.psec-h,.paper-preview h1.psec-h{padding:5pt 8pt;border-radius:4pt;border-left:4pt solid #444;background:#f2f3f5}
+h1.psec-callsheet{border-left-color:#5b6ef5 !important;background:#eef0fe !important;color:#232a66}
+h1.psec-schedule{border-left-color:#0a84ff !important;background:#e9f3ff !important;color:#0a3f75}
+h1.psec-safety{border-left-color:#e5484d !important;background:#fdecec !important;color:#7a1f22}
+h1.psec-register{border-left-color:#8e5cd9 !important;background:#f3edfc !important;color:#4b2d78}
+h1.psec-rundown{border-left-color:#2f855a !important;background:#eaf6ef !important;color:#1d5238}
+h1.psec-video{border-left-color:#d97706 !important;background:#fdf3e3 !important;color:#7c4a08}
+h1.psec-audio{border-left-color:#0d9488 !important;background:#e6f7f5 !important;color:#0b4f49}
+h1.psec-notes{border-left-color:#db2777 !important;background:#fdeef5 !important;color:#801747}
+.paper-day-of-days{display:inline-block;margin:0 0 8pt;padding:2pt 8pt;border-radius:10pt;background:#eef0fe;color:#232a66;font-size:8.5pt;font-weight:800;letter-spacing:.04em}
 .paper-export-page h2{margin:14pt 0 6pt;padding-bottom:3pt;border-bottom:1px solid #d9dde4;font-size:11.5pt;line-height:1.2}
 .paper-export-page h3{margin:10pt 0 4pt;font-size:9.5pt;line-height:1.25}
 .paper-export-page :is(h1,h2,h3){break-after:avoid;page-break-after:avoid}
@@ -4744,9 +4790,11 @@ input.pt-range::-moz-range-thumb,
       <span class="pnb-count" id="paperworkNotesBarCount"></span>
       <span class="pnb-arrow sf-symbol" data-symbol="action.forward" aria-hidden="true"></span>
     </button>
+    <div id="pbGroupBar" class="pb-group-bar" hidden></div>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
+    <div id="packageExportOptions" hidden></div>
     <div class="paperwork-actions">
       <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
       <button class="btn-secondary" onclick="showPreProPackagePreview()">Preview Package</button>
@@ -4754,6 +4802,27 @@ input.pt-range::-moz-range-thumb,
       <button class="btn-secondary" onclick="closePlandaBear()">Close</button>
     </div>
     </div>
+  </div>
+</div>
+
+<!-- v2.1 D2 — group picker (join-time + hub switch) -->
+<div class="modal-wrap" id="groupPickerModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">Pick your group</div>
+    <div class="modal-sub">Each group has its own paperwork workspace. The rundown and Live stay shared with the whole class.</div>
+    <div class="group-chip-grid" id="groupPickerChips"></div>
+    <div class="field-hint" id="groupPickerLockNote" hidden>Groups are locked — ask your instructor if you need to move.</div>
+    <button class="btn-full btn-secondary" onclick="hideModal('groupPickerModal')" style="margin-top:10px">Not now</button>
+  </div>
+</div>
+
+<!-- v2.1 D9.2 — export progress sheet (determinate render stage + cancel) -->
+<div class="modal-wrap" id="paperProgressSheet">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title" id="paperProgressTitle">Exporting PDF</div>
+    <div class="paper-progress-status" id="paperProgressStatus" role="status" aria-live="polite">Preparing…</div>
+    <div class="paper-progress-track"><div class="paper-progress-bar" id="paperProgressBar"></div></div>
+    <button class="btn-full btn-secondary" type="button" onclick="cancelPaperExport()">Cancel</button>
   </div>
 </div>
 
@@ -4791,21 +4860,22 @@ input.pt-range::-moz-range-thumb,
           <select class="field-in" id="pp-call-sheet-select" onchange="switchCallSheet(this.value)"></select>
         </div>
         <button class="call-add-btn" type="button" onclick="addAnotherCallSheet()" style="height:43px;white-space:nowrap">+ Add Call Sheet</button>
+        <button class="call-add-btn call-delete-btn" type="button" onclick="deleteCallSheet()" title="Delete this call sheet (instructor/admin)" style="height:43px;white-space:nowrap;color:var(--red)">Delete</button>
       </div>
       <div class="field" style="margin-top:10px"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="Setup Day, Production Day, Rehearsal Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title">Event Info</div>
       <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80"></div>
+        <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80" placeholder="e.g. Campus News Live"></div>
         <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date" onchange="renderCallSheetWeatherCard()"></div>
         <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time" oninput="renderCallSheetWeatherCard()"></div>
         <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" title="Estimate wrap from show start plus the rundown's total runtime">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" oninput="renderCallSheetWeatherCard()"></div>
-        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160"></div>
-        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120"></div>
+        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" placeholder="e.g. Studio A, Media Building" oninput="renderCallSheetWeatherCard()"></div>
+        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="Street address for maps and parking"></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="Who to text if you're late — name + number"></div>
       </div>
     </div>
     <div class="prepro-section">
@@ -4842,11 +4912,12 @@ input.pt-range::-moz-range-thumb,
     <div class="prepro-section">
       <div class="prepro-section-title">Access and Crew Notes</div>
       <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Parking</label><input class="field-in" id="pp-parking" maxlength="160"></div>
-        <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160"></div>
-        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180"></div>
-        <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120"></div>
-        <div class="field"><label class="field-lbl">Meals Provided</label><select class="field-in" id="pp-meals"><option value="">Select</option><option>Yes</option><option>No</option></select></div>
+        <div class="field"><label class="field-lbl">Parking</label><input class="field-in" id="pp-parking" maxlength="160" placeholder="e.g. Lot C after 4 PM · permits not enforced"></div>
+        <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160" placeholder="e.g. Loading dock door, knock twice"></div>
+        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180" placeholder="Where it streams + who runs it, e.g. YouTube · Stream op: Sam"></div>
+        <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120" placeholder="e.g. Show blacks · closed-toe shoes"></div>
+        <div class="field"><label class="field-lbl">Meal Time</label><input class="field-in" id="pp-meal-time" type="time"></div>
+        <div class="field"><label class="field-lbl">Meals</label><input class="field-in" id="pp-meals" maxlength="120" placeholder="e.g. Pizza in the green room · vegetarian available"></div>
       </div>
     </div>
     <div class="prepro-section">
@@ -4855,6 +4926,7 @@ input.pt-range::-moz-range-thumb,
       <div class="field-hint">Type directly in the row below. Use Add person when you need another row.</div>
       <div class="call-grid" id="pp-crew-grid"></div>
       <button class="call-add-btn" onclick="addCallSheetPerson()"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Add person</span></button>
+      <button class="call-add-btn" onclick="fillCallSheetCrewFromRoster()" title="Add everyone from the saved role assignments in one tap"><span class="sf-symbol" data-symbol="people.group" aria-hidden="true"></span><span>Fill from roster</span></button>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title">Plans and Notes</div>
@@ -4880,22 +4952,24 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="pb-collab" data-pb-collab="safety-plan"></div>
     <div class="prepro-grid">
-      <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120"></div>
+      <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
+      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="Street address — prints on the call sheet too"></div>
+      <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
       <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div></div>
-      <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120"></div>
-      <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120"></div>
+      <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120" placeholder="e.g. Control room shelf, by the door"></div>
+      <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120" placeholder="e.g. Hallway outside Studio A"></div>
       <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
-      <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160"></div>
-      <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80"></div>
-      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120"></div>
+      <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
+      <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
+      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="Auto-fills from the call sheet — who to text if late"></div>
     </div>
     <div class="field">
       <label class="field-lbl">Equipment Needed</label>
-      <textarea class="field-in" id="sp-equipment" rows="3" style="font-size:14px;line-height:1.6"></textarea>
+      <textarea class="field-in" id="sp-equipment" rows="3" style="font-size:14px;line-height:1.6" placeholder="Gear that needs special handling — ladders, rigging, cable runs across walkways"></textarea>
     </div>
     <div class="field">
       <label class="field-lbl">Safety Notes</label>
-      <textarea class="field-in" id="sp-notes" rows="3" style="font-size:14px;line-height:1.6"></textarea>
+      <textarea class="field-in" id="sp-notes" rows="3" style="font-size:14px;line-height:1.6" placeholder="Anything else the crew should know to stay safe"></textarea>
     </div>
     <div id="pbCommentsSafety"></div>
     <div class="paperwork-flow-actions" id="pbNavSafety"></div>
@@ -4931,7 +5005,7 @@ input.pt-range::-moz-range-thumb,
       <div class="prepro-grid">
         <div class="field"><label class="field-lbl">Show Day</label><input class="field-in" id="ps-show-date" type="date"></div>
         <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="ps-doors" type="text" maxlength="40"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="ps-doors" type="time"></div>
         <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="ps-location" maxlength="100"></div>
         <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="ps-address" maxlength="160"></div>
@@ -5124,33 +5198,19 @@ input.pt-range::-moz-range-thumb,
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="adminLoginModal">
   <div class="modal">
-    <div class="modal-title">Session Admin Login</div>
-    <div class="modal-sub">Enter your admin code to use admin tools inside this rundown.</div>
+    <div class="modal-title">Instructor Sign In</div>
+    <div class="modal-sub">Sign in with your instructor account to use admin tools inside this rundown.</div>
     <div class="field">
-      <label class="field-lbl">Admin Code</label>
-      <input class="field-in" id="adminCodeIn" type="password" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')submitAdminLogin()">
+      <label class="field-lbl">Username</label>
+      <input class="field-in" id="adminUserIn" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Your username" onkeydown="if(event.key==='Enter')submitAdminLogin()">
     </div>
-    <div class="modal-err" id="adminLoginErr">Incorrect code. Try again.</div>
-    <button class="btn-primary" id="admin-login-btn" onclick="submitAdminLogin()">Log In</button>
+    <div class="field">
+      <label class="field-lbl">Password</label>
+      <input class="field-in" id="adminPassIn" type="password" autocomplete="current-password" placeholder="Your password" onkeydown="if(event.key==='Enter')submitAdminLogin()">
+    </div>
+    <div class="modal-err" id="adminLoginErr">Wrong username or password.</div>
+    <button class="btn-primary" id="admin-login-btn" onclick="submitAdminLogin()">Sign In</button>
     <button class="btn-secondary" onclick="hideModal('adminLoginModal')">Cancel</button>
-    <div id="adminSetupHint" style="font-size:12px;color:var(--text3);text-align:center;display:none">No admin set up yet. <button onclick="openAdminSetup()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;text-decoration:underline">Set up now</button></div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     ADMIN FIRST-TIME SETUP
-══════════════════════════════════════════ -->
-<div class="modal-wrap" id="adminSetupModal">
-  <div class="modal">
-    <div class="modal-title">Create Super Admin</div>
-    <div class="modal-sub">First-time setup. This becomes the master admin account. Save your code somewhere safe — it cannot be recovered.</div>
-    <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="setupAdminName" type="text" placeholder="e.g. Jon Kost" autocomplete="off"></div>
-    <div class="field"><label class="field-lbl">Owner Bootstrap Code</label><input class="field-in" id="setupOwnerCode" type="password" placeholder="Required to create super admin" autocomplete="off"><div class="field-hint">Only the owner bootstrap code can create the first super admin.</div></div>
-    <div class="field"><label class="field-lbl">Admin Code</label><input class="field-in" id="setupAdminCode" type="password" placeholder="Choose a secure code" autocomplete="new-password"></div>
-    <div class="field"><label class="field-lbl">Confirm Code</label><input class="field-in" id="setupAdminCode2" type="password" placeholder="Re-enter code" autocomplete="new-password"></div>
-    <div class="modal-err" id="setupAdminErr"></div>
-    <button class="btn-primary" onclick="submitAdminSetup()">Create Super Admin</button>
-    <button class="btn-secondary" onclick="hideModal('adminSetupModal')">Cancel</button>
   </div>
 </div>
 
@@ -5371,26 +5431,30 @@ input.pt-range::-moz-range-thumb,
 </div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+<script src="assets/vendor/pdf.min.js"></script>
 <script src="cueola-entitlements.js?v=746c10a762"></script>
-<script src="cueola-avatar-profile.js?v=943c230239"></script>
+<script src="cueola-avatar-profile.js?v=df6d52ce81"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
-<script src="cueola-export-model.js?v=b9bc3293de"></script>
+<script src="cueola-session-clone.js?v=2e1c40da19"></script>
+<script src="cueola-export-model.js?v=9791451f05"></script>
 <script src="cueola-prepro-sync.js?v=2a99ec4a39"></script>
-<script src="cueola-identity.js?v=9c230d2c7a"></script>
+<script src="cueola-identity.js?v=8cc1c37649"></script>
+<script src="cueola-admin-auth.js?v=40de77de6a"></script>
 <script src="cueola-live-session.js?v=6a1ac2f19e"></script>
 <script src="cueola-prompter-session.js?v=1002259f73"></script>
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=09c4032d8d"></script>
-<script src="outrangutan/outrangutan.js?v=72194eed1e"></script>
+<script src="cueola-app.js?v=bd0441af92"></script>
+<script src="outrangutan/outrangutan.js?v=34dcf5d31d"></script>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, waitForPendingWrites, disableNetwork, enableNetwork, collection, getDocs, getDocsFromCache, getDocsFromServer }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
 const APP_CHECK_ENABLED = false;
 const APP_CHECK_DEBUG_LOCAL = false;
@@ -5460,6 +5524,18 @@ window._collection=collection; window._getDocs=getDocs; window._getDocsFromCache
 // Rehearsal drill hooks: simulate venue-Wi-Fi loss from the console.
 window._disableNetwork=() => disableNetwork(db);
 window._enableNetwork=() => enableNetwork(db);
+// v2.1 admin accounts (D1): Auth handles for cueola-admin-auth.js. Default
+// IndexedDB persistence carries the admin session across every same-origin
+// surface (index, dashboard, Outrangutan, Flowmingo) with no re-login.
+const adminAuth = getAuth(app);
+const useAuthEmulator = ['localhost','127.0.0.1','::1'].includes(location.hostname)
+  && new URLSearchParams(location.search).get('authEmulator') === '1';
+if (useAuthEmulator) {
+  connectAuthEmulator(adminAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  console.info('Auth emulator connected · 127.0.0.1:9099');
+}
+window._adminAuth = adminAuth;
+window._authFns = { initializeApp, deleteApp, getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword };
 window._firebaseReady=true;
 window.dispatchEvent(new Event('firebaseReady'));
 </script>

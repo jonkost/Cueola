@@ -1,0 +1,5 @@
+Avatar artwork in this folder: Twemoji 15.1.0
+Copyright 2019 Twitter, Inc and other contributors; maintained fork by
+Justine De Caires (github.com/jdecked/twemoji).
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Files are renamed to Cueola avatar manifest ids; artwork is unmodified.

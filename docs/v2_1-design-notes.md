@@ -185,6 +185,12 @@ Scope: **M** (2–3 days). Open questions: plan decision 7 (capture breadth, tim
 
 ## D4. Stage Plot — drag-and-drop plot diagram (Planda Bear)
 
+> **Status (owner directive 2026-07-16): built LAST in the window, and the phase opens with an
+> owner design consult — the owner advises how the plot paperwork should look and behave at that
+> point.** Everything below is a technically-verified BASELINE (editor technology, data shape,
+> sync strategy, print path), not a locked visual design; the plot-count model, export inclusion,
+> assignability, and v1 cutline are all decided at the consult.
+
 **Decision:** "Stage Plot" as a vanilla SVG-element editor page (no library, no canvas): a new
 PAPERWORK_ITEMS page whose data is ONE new identifier-safe top-level key `prePro.stagePlots` — an
 ARRAY of named plots (min-1), each `{id, items:[{id, type, x_ft, y_ft, rot, scale, w_ft, h_ft,
@@ -544,6 +550,141 @@ once on Safari and never on Chrome; storage.persist() confirmed granted/denied i
 consoles; PDF export from Safari on iPad produces correct letter-size output; installed-PWA
 double-click of a .cueola file opens the importer (Chrome); info popovers read correctly in both
 themes; kit-styled controls pass 44px target + contrast checks.
+
+---
+
+## D11. Live show control system (owner directive 2026-07-17, from the Jul 17 show — recon-verified same day)
+
+**Context that shapes everything here:** one operator runs the entire show — rundown, prompter,
+and playout — across ~6 screens with one keyboard, one mouse, and one Stream Deck, using macOS
+Universal Control to hop the cursor between a Mac Pro (rundown + prompter output) and a MacBook
+Air (playout). Every control decision below is judged against "can a solo op hit this without
+looking, mid-show, on the wrong screen?" Show grade from the owner: B — the gap is control
+ergonomics, not features.
+
+### D11.1 One keycommand system, every surface
+
+The registry already exists and is good: `KEYMAP` (cueola-app.js:5107) is a single table that
+generates both dispatch and the `?` reference overlay, with per-action overrides via
+`localStorage.cueola_keymap`. The gaps:
+
+- It only covers the Live surface. The Script Operator window hand-rolls its own
+  `onControlsKeydown` (script-operator.js:537) and has **no Brake/Boost keys** — the owner's
+  direct ask. Extract the registry into a shared module (`cueola-keymap.js`), give each surface a
+  scope (`live`, `scriptop`, `outrangutan`, `dashboard`), and register Script Op's keys in it —
+  including `J`/`L` hold-to-brake/boost forwarded over the existing control channel
+  (`sendPrompterControl('brake_start'…)` — the hold-safety blur handling at cueola-app.js:5249
+  must ride along).
+- Same-key different-surface conflicts become visible: the shared overlay shows the active
+  scope's map, and a printed **operator cheat card** joins the show pack (Phase 3's print path)
+  so the keys are on paper next to the deck.
+- Keys must work when focus is anywhere reasonable: audit focus traps (the Jul 17 "not
+  intuitive while using the script op" is partly arrows-vs-prompter keys landing in the wrong
+  window — document the split: arrows = rundown, Space/J/K/L = prompter, G/P/S = playout,
+  everywhere).
+
+### D11.2 Prompter decoupled from cue advance (owner directive)
+
+Today, advancing the rundown auto-seeks the prompter: `seek_row_N` fires on cue change via two
+timers (cueola-app.js:9491, 9497). **New model: the prompter is one continuous feed of all
+script cues and never moves on its own.**
+
+- Kill the auto-seek on advance (both timer sites). The feed keeps its row badges — every script
+  cue stays labeled with the rundown row it belongs to.
+- The op lines the prompter up manually. The tools already exist and are kept/promoted:
+  `C` = cue to current row, `T` = top, and the Script Op "Cue Now"/"Cue Next" buttons
+  (cueola-app.js:11105–11106). `seek_row` stays validated (cueola-app.js:9846).
+- Punch-in editing is untouched: `ptApplyCueolaLiveUpdate` (cueola-app.js:11278) already
+  preserves scroll offset and keeps playing through a mid-show edit.
+- **Script Op preview flows with the prompter, with a position arrow.** The talent output
+  already reports position for the mini-preview; render a current-position marker (▶ arrow in
+  the preview gutter) and auto-scroll the preview to keep it in view, so the op always sees
+  where the talent copy is — this is the Jul 17 "couldn't cue it to the beginning" fix in
+  normal operation, and `T`/`C` cover the cold-start case. Cue-to-top gets a preflight
+  affordance so a show never starts mid-scroll again.
+
+### D11.3 "Ready · Track · Roll · Take" — the playback call, as a control
+
+The owner's accidental-trigger problem is operator-shaped, not code-shaped: clicking through
+the rundown to *look* at rows fires linked playout cues. RTRT turns the industry call into the
+interface:
+
+- **Resolved by decision 18 (2026-07-18, owner design):** auto-trigger rows run a **visible
+  automatic call**. On cue advance (GO), the rundown clearly steps READY → TRACK → ROLL over
+  ~3 seconds — big, unmissable state on the row — with the ability to **stop inside that
+  window** (key, click, Stream Deck); if not stopped, TAKE fires the clip automatically. The
+  3-second abort window is the accidental-trigger fix: a wrong GO is recoverable, and
+  browsing/selecting rows never starts the sequence — only the advance/GO path does.
+- A **manual armed-call mode** (op explicitly steps READY, then TAKE fires only on the TAKE
+  action) remains available per row/show for shows with a dedicated playback op.
+- Keyboard: the existing `G` (playout GO) acts as TAKE-now during the countdown (skip the
+  wait) and `S`/abort stops it; Stream Deck pads mirror the four states with color feedback.
+- The countdown state itself publishes on the session doc (same additive-field pattern as
+  D11.4) so every viewer sees READY/TRACK/ROLL/TAKE live, not just the op's machine.
+
+### D11.4 Playout countdown on the rundown, for everyone
+
+Publish once per clip start — `{clipId, rowId, startedAt, durMs}` on the session doc (new
+field, additive; D8 rules 1+7) — and let every client tick the countdown locally. No per-second
+writes. Rundown rows with linked/playing media show live time-remaining (and the og monitor
+already has a clock face to reuse); works whether the clip was auto-triggered, RTRT-taken, or
+fired directly in Outrangutan (the MacBook Air publishes, the Mac Pro rundown renders — that's
+the cross-machine case from Jul 17).
+
+### D11.5 Controls that never lie, never move, never silently refuse
+
+- **No silent refusals.** `activateLiveRundownRow` (cueola-app.js:8821) and `lsNext`
+  (cueola-app.js:8840) return `false` through several guards (`liveCommandDispatchAllowed`,
+  disabled/segment rows, failed-row recovery) with no feedback — that is the Jul 17 "GO button
+  did nothing" and part of "Next didn't always trigger." Every guarded refusal surfaces *why*
+  (toast/status chip), and the guards get a show-mode audit.
+- **Fixed geometry.** The GO/Next control resizes with its label (`.ls-next-btn` is
+  `min-width:90px`, index.html:779, label swaps at index.html:4291) — mid-show, the click
+  target moves under the cursor. All show-critical transport controls get fixed dimensions;
+  labels ellipsize inside, never resize the control. Sweep the Live surface for the same
+  pattern.
+- **Click-row-to-cue works regardless of show-clock state.** Jul 17: clock never started, and
+  row-to-cue wasn't available. Live mode's row click (with D11.3's arming so it can't
+  accidentally fire media) must not depend on the clock or Start Show ceremony.
+
+### D11.6 Playout: reorder on the fly
+
+Drag-reorder of clips in Outrangutan while live (rehearsal and show mode). Reorder is a
+playlist-order write only — it never touches the playing clip, and rundown-linked cues keep
+their links by clip id (not position), so a reorder can't silently retarget a linked row.
+
+### D11.7 One Stream Deck for the whole rig (cross-computer)
+
+Outrangutan already routes MIDI/Stream Deck through one chokepoint, `fireSurfaceAction`
+(outrangutan/outrangutan.js:1571). Generalize the pattern into a **session-scoped control
+bus**: surface actions carry a target (`rundown` / `prompter` / `playout`), and actions whose
+target isn't the local surface publish a command doc over Firestore (the
+script-operator-protocol / output-command-queue pattern — command docs with ids, loop guards,
+and staleness windows already exist to copy). The deck plugged into the Mac Pro then drives
+Outrangutan on the MacBook Air. Constraints: Web MIDI/HID is Chrome-territory (D10.1's
+capability sheet covers the message); command latency budget ~300ms with a stale-command
+discard so a reconnect never replays old GOs; Browser pane denies Web MIDI, so hardware
+verification is an owner errand (the `Outrangutan.midiInject` rehearsal hook simulates for QA).
+
+### D11.8 Pop-out controls that cannot die quietly
+
+Jul 17: the pop-out controls stopped working mid-show. The pop-outs (`_scriptOpWin`,
+cueola-app.js:10105; `_prompterTalentWin`, cueola-app.js:10311) already have a heartbeat
+(PROMPTER_HEARTBEAT_MS/miss-threshold, cueola-app.js:9053) — diagnosis at phase start
+(suspects: lost window reference after long idle, storage-event channel loss, SW update
+mid-show). The fix contract regardless of cause: the owning surface shows a connection chip for
+each pop-out, a dead pop-out triggers an automatic reconnect attempt plus a one-click "Reopen
+controls" recovery, and a reopened window resyncs full state (never a blank slate mid-show).
+
+**Scope:** ~2–2.5 days as Phase 13. **Verify:** solo-op dry run driving all three surfaces from
+one keyboard by keycommand only; script-op J/L brake/boost hold-safety on blur; cue advance
+provably never moves the prompter; preview arrow tracks talent position within one beat;
+RTRT — browsing clicks fire nothing, TAKE fires exactly once; countdown ticks on a second
+machine with the clip fired from Outrangutan; GO/Next fixed-geometry screenshot diff + every
+refusal path toasts; reorder mid-playback leaves the playing clip and row links intact;
+Stream Deck cross-surface action round-trips through Firestore (midiInject sim + owner
+hardware errand); pop-out kill test (close/crash the window) recovers via the chip in <10s.
+Two-browser QA with a stale client per D8 rule 5.
 
 ---
 

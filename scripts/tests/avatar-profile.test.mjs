@@ -78,6 +78,29 @@ test('unknown shapes, arrays, and null fall back to initials', () => {
   }
 });
 
+// v2.1 D7: icon avatars — manifest-lookup only.
+const iconManifest = { play: { symbol: 'media.play' }, camera: { symbol: 'department.video' } };
+
+test('manifest icon round-trips and extra fields are removed', () => {
+  const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals, iconManifest });
+  assert.deepEqual(model.setAvatar({ type: 'icon', value: 'play', extra: true }), { type: 'icon', value: 'play' });
+  assert.deepEqual(model.getProfile(), { avatar: { type: 'icon', value: 'play' } });
+});
+
+test('unknown icon ids and markup-shaped values fall back to initials', () => {
+  const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals, iconManifest });
+  for (const value of ['not-in-manifest', '<svg>', '../path', 42, null]) {
+    assert.deepEqual(model.setAvatar({ type: 'icon', value }), { type: 'initials' });
+  }
+});
+
+test('icon avatars without a manifest fall back to initials (old-client shape safety)', () => {
+  const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals });
+  assert.deepEqual(model.setAvatar({ type: 'icon', value: 'play' }), { type: 'initials' });
+  assert.deepEqual(AvatarProfile.normalizeAvatar({ type: 'icon', value: 'play' }, approvedAnimals, iconManifest),
+    { type: 'icon', value: 'play' });
+});
+
 test('storage read and write failures do not break the live UI contract', () => {
   const storage = {
     getItem() { throw new Error('blocked'); },

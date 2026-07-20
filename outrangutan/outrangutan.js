@@ -2975,7 +2975,7 @@
       .concat(hasPicture ? [{ key: 'picture', icon: 'content.image', label: 'Picture' }] : [])
       .concat([{ key: 'cue', icon: 'action.settings', label: 'Cue' }]);
     let activeTab = 'timing';
-    try { activeTab = localStorage.getItem('og_insp_tab') || 'timing'; } catch (e) {}
+    try { activeTab = localStorage.getItem('cueola_og_insp_tab') || localStorage.getItem('og_insp_tab') || 'timing'; } catch (e) {}
     if (!tabs.some(t => t.key === activeTab)) activeTab = 'timing';
 
     const timingPane =
@@ -3082,7 +3082,7 @@
     Array.prototype.forEach.call(ins.querySelectorAll('.insp-tab'), b => {
       b.onclick = () => {
         const key = b.getAttribute('data-insp');
-        try { localStorage.setItem('og_insp_tab', key); } catch (e) {}
+        try { localStorage.setItem('cueola_og_insp_tab', key); } catch (e) {}
         Array.prototype.forEach.call(ins.querySelectorAll('.insp-tab'), x => {
           const on = x === b;
           x.classList.toggle('on', on);
@@ -4477,6 +4477,12 @@
     const name = (nameEl ? nameEl.value : '').trim();
     if (!code || !name) { if (err) { err.textContent = 'Please fill in both fields.'; err.classList.add('on'); } const f = code ? nameEl : codeEl; if (f) f.focus(); return; }
     if (err) err.classList.remove('on');
+    // v2.1 Phase 5: the Outrangutan side door honors the class-key gate — the
+    // shared helper routes key-holders through the front-door join + wizard.
+    if (window.cueolaEntryGateAllows && !(await window.cueolaEntryGateAllows(code, 'Outrangutan'))) {
+      closeSessionJoin();
+      return;
+    }
     sessionCode = code; sessionUserName = name; mode = 'session';
     reattachLiveControl(); // identity change immediately closes any standalone/stale-session outputs
     try { localStorage.setItem('cueola_outrangutan_code', code); localStorage.setItem('cueola_last_code', code); localStorage.setItem('cueola_last_name', name); } catch (e) {}

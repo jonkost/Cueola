@@ -32,16 +32,53 @@ const SHELL_ASSETS = [
   './design-system/apple/symbols/runtime/light-small/privacyandsecurity/exclamationmark.triangle.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/clock.svg',
   'assets/sf-symbols.css?v=4adcd0fd7c',
-  // PDF export renderers — vendored same-origin so paperwork exports never
-  // depend on CDN reachability during a show (pinned jspdf 2.5.1 / html2canvas 1.4.1).
+  // Vendored libraries — same-origin so imports and paperwork exports never
+  // depend on CDN reachability during a show (pinned jspdf 2.5.1 /
+  // html2canvas 1.4.1 / pdf.js 3.11.174 / mammoth 1.6.0 / jszip 3.10.1).
   'assets/vendor/jspdf.umd.min.js',
   'assets/vendor/html2canvas.min.js',
+  'assets/vendor/pdf.min.js',
+  'assets/vendor/pdf.worker.min.js',
+  'assets/vendor/mammoth.browser.min.js',
+  'assets/vendor/jszip.min.js',
+  // Fun avatar art (Twemoji, CC-BY 4.0) — precached so the portal grid
+  // and note chips render offline during a show.
+  'assets/avatars/alien.svg',
+  'assets/avatars/bunny.svg',
+  'assets/avatars/clapper.svg',
+  'assets/avatars/coffee.svg',
+  'assets/avatars/crown.svg',
+  'assets/avatars/cupcake.svg',
+  'assets/avatars/dice.svg',
+  'assets/avatars/fire.svg',
+  'assets/avatars/flamingo2.svg',
+  'assets/avatars/frog.svg',
+  'assets/avatars/ghost.svg',
+  'assets/avatars/guitar.svg',
+  'assets/avatars/headphones.svg',
+  'assets/avatars/koala2.svg',
+  'assets/avatars/ninja.svg',
+  'assets/avatars/orangutan2.svg',
+  'assets/avatars/paint.svg',
+  'assets/avatars/panda2.svg',
+  'assets/avatars/pizza.svg',
+  'assets/avatars/popcorn.svg',
+  'assets/avatars/rainbow.svg',
+  'assets/avatars/robot.svg',
+  'assets/avatars/rocket.svg',
+  'assets/avatars/shades.svg',
+  'assets/avatars/taco.svg',
+  'assets/avatars/trex.svg',
+  'assets/avatars/turtle.svg',
+  'assets/avatars/unicorn.svg',
   'cueola-entitlements.js?v=746c10a762',
-  'cueola-avatar-profile.js?v=943c230239',
+  'cueola-avatar-profile.js?v=df6d52ce81',
   'cueola-assignment-model.js?v=d81e0cf353',
-  'cueola-export-model.js?v=b9bc3293de',
+  'cueola-session-clone.js?v=2e1c40da19',
+  'cueola-export-model.js?v=9791451f05',
   'cueola-prepro-sync.js?v=2a99ec4a39',
-  'cueola-identity.js?v=9c230d2c7a',
+  'cueola-identity.js?v=8cc1c37649',
+  'cueola-admin-auth.js?v=40de77de6a',
   'cueola-live-session.js?v=6a1ac2f19e',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
@@ -50,9 +87,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=09c4032d8d',
+  'cueola-app.js?v=bd0441af92',
   'outrangutan/outrangutan.css?v=41e3c5379f',
-  'outrangutan/outrangutan.js?v=72194eed1e',
+  'outrangutan/outrangutan.js?v=34dcf5d31d',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -62,7 +99,7 @@ const versionSignature = SHELL_ASSETS
 // Bumped for cache-policy OR page-HTML-only releases: the shell caches
 // index.html/dashboard.html, whose content never feeds versionSignature —
 // an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
-const WORKER_SCHEMA = '5';
+const WORKER_SCHEMA = '6';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
