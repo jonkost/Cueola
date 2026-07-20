@@ -1,9 +1,9 @@
 # Cueola v2.1 — Master Plan
 
-**Written:** 2026-07-16, adversarially reviewed same day · **Revised 2026-07-16 (evening):** owner set the delivery window and added the paperwork/export overhaul + platform/UI scope.
-**Execution window:** Tuesday **July 21** → Sunday **August 2, 2026** (hard deadline, full completion). Show days before the window: Friday July 17 and Monday July 20 — no planned code changes until the window opens.
-**Goal:** v2.1 ships rock solid and 100% professional, needing only basic fixes until 3.0.
-**Companion:** [docs/v2_1-design-notes.md](docs/v2_1-design-notes.md) — architecture decisions **D1–D10** with file:line implementation sketches (D8 = standing engineering rules). Read the design note before starting its phase. Never copy a line number or WORKER_SCHEMA value from a note into code — re-verify against the live file.
+**Written:** 2026-07-16, adversarially reviewed same day · **Revised 2026-07-16 (evening):** owner set the delivery window and added the paperwork/export overhaul + platform/UI scope. · **Revised 2026-07-20 (post-show):** owner directive after the TH2607/P2607 show days — live reliability is now a dedicated, never-cut phase (Phase 1.5); Phase 0 intake is filled and triaged.
+**Execution window:** Tuesday **July 21** → Sunday **August 2, 2026** (hard deadline, full completion). Show days before the window: Friday July 17 and Monday July 20 — no planned code changes until the window opens *(exception invoked: two show-blocking emergency patches shipped to main on Jul 20, logged in Phase 0)*.
+**Goal:** v2.1 ships rock solid and 100% professional, needing only basic fixes until 3.0. **A production day must never again need an emergency patch** — that sentence is the acceptance bar for Phase 1.5.
+**Companion:** [docs/v2_1-design-notes.md](docs/v2_1-design-notes.md) — architecture decisions **D1–D11** with file:line implementation sketches (D8 = standing engineering rules, D11 = live reliability). Read the design note before starting its phase. Never copy a line number or WORKER_SCHEMA value from a note into code — re-verify against the live file.
 **UI references:** [docs/design/2.1_design_reference.md](docs/design/2.1_design_reference.md) + [docs/design/hig-component-kit.md](docs/design/hig-component-kit.md) — references, not hard rules; Cueola's color themes stay.
 
 ---
@@ -27,6 +27,9 @@ deliberate publish, so:
   commits per work item as usual; the owner commits to the branch and pushes it. A branch push
   publishes nothing (Pages serves main) but gives offsite backup — 13 days of work never sits
   uncommitted on one machine. **main stays frozen as the known-good show build** until release.
+  *Baseline note (2026-07-20):* main's known-good build now includes the two Jul 20 emergency
+  patches (`2642acb` show-caller advancement, `46e4fc8` prompter session reclaim) — the `v2.1`
+  branch forks from that point, and Phase 1.5 must not regress either patch.
 - **Shared-infrastructure touches before release are limited to provably inert ones:** console
   toggles (Email/Password provider — no live client has auth code; App Check monitor mode —
   enforces nothing), bootstrap `admins/{uid}` docs (invisible under current rules + current JS).
@@ -47,7 +50,7 @@ straight-to-main habit, for this window only).
 ## How this plan works
 
 - **One phase per work session (or few).** Each phase lists goal, dependencies, work, verification. Don't reorder without checking the "depends on" line.
-- **Rebuild, not patch.** Show-day observations (Jul 17 / Jul 20) go into the Phase 0 intake table and get rebuilt inside the phase that owns that area — the paperwork/export overhaul (Phase 3) is expected to absorb most of them.
+- **Rebuild, not patch.** Show-day observations (Jul 17 / Jul 20) went into the Phase 0 intake table and get rebuilt inside the phase that owns that area — most landed in the new **Phase 1.5 (live reliability)**; the Jul 20 emergency patches (`2642acb`, `46e4fc8`) stopped the bleeding but are stopgaps until Phase 1.5 rebuilds those areas properly.
 - **Standing engineering rules** are design note **D8** and apply to every phase (wire-shape freezes, whitelist-carry, additive-vs-tightening rules deploys, restore re-stamping per document, two-browser QA with a stale client, doc-size budgets, WORKER_SCHEMA discipline, no PII in repo or web root).
 - **Commits:** the owner commits; Claude prepares. Every completed work item ends with a ready-to-paste GitHub commit block — **Title:** `v2.1 <area>: <summary>` (≤72 chars); **Description:** what changed · why · how verified · rollback lever.
 - **Definition of done, per phase:** browser-verified in the preview (screenshots for visual work), **verified in Safari AND Chrome** (new this revision — Safari is ~90% of real usage), two-browser collab QA wherever sync/presence/paperwork is touched, contract tests green, HIG-kit compliance for any UI, docs updated in Phase 11, prepared commit text delivered.
@@ -100,7 +103,11 @@ Answer the rest as their phase approaches. Recommendations are marked.
 14. Where do training videos live — unlisted YouTube links inside lessons (recommended), school LMS, or self-hosted? Lessons and the Quick Start get "Watch the video" slots either way; recording may trail past Aug 2.
 
 **Contingency**
-15. Cut order under deadline pressure (confirm): Stage Plot (Phase 8) slips first, to a post-2.1 point release → Phase 5's presence-avatar stretch drops → groups (Phase 6) slips ONLY to the following between-terms window, never mid-term (if it slips, Phase 10 still lands the inert /groups rules block and docs mark groups "coming soon"). **Never cut:** Phases 1, 2, 3 (paperwork/export), 4, 10, 11, 12 — they are the "rock solid + professional + teachable" promise. The paperwork/export overhaul is explicitly not cuttable.
+15. Cut order under deadline pressure (confirm): Stage Plot (Phase 8) slips first, to a post-2.1 point release → Phase 5's presence-avatar stretch drops → groups (Phase 6) slips ONLY to the following between-terms window, never mid-term (if it slips, Phase 10 still lands the inert /groups rules block and docs mark groups "coming soon"). **Never cut:** Phases 1, **1.5 (live reliability — owner directive 2026-07-20)**, 2, 3 (paperwork/export), 4, 10, 11, 12 — they are the "rock solid + professional + teachable" promise. The paperwork/export overhaul is explicitly not cuttable. *2026-07-20 revision:* inserting Phase 1.5 consumes the remaining slack — Stage Plot's slip to a 2.1.1 fast-follow is now the **expected** outcome, not the contingency, unless days are recovered mid-window.
+
+**Live reliability (D11) — Phase 1.5 opens with these confirmed or defaulted**
+16b. *(numbered to avoid renumbering decision 16 below)* YouTube-chat questions: recommended and specced as a **plain paste lane** — operator pastes text copied from YouTube chat into a question box and pushes it to the talent as a labeled QUESTION card. No YouTube API, no OAuth, nothing to configure on show day. Confirm or redirect.
+16c. Talent overlay budget: clocks/wrap/tech-issue/question banners cap at a **bounded band (~20% of screen height)** so the script always stays readable; full-screen takeover is reserved for the deliberate stand-by slate only. Confirm the band or give a different number at the Phase 1.5 open.
 
 ---
 
@@ -111,16 +118,26 @@ during or right after the show, one line each. Your export experience ("52 pages
 branding) is already captured in D9 — add anything new you hit.
 
 **Exception:** a show-blocking defect found July 17 may get a minimal hotfix before July 20 — still
-logged below, still properly rebuilt in its owning phase.
+logged below, still properly rebuilt in its owning phase. *(Invoked twice on Jul 20 — mid-show-day
+emergency patches `2642acb` and `46e4fc8` went straight to main. Both shows completed.)*
 
-**Triage session — Monday July 20 evening or Tuesday July 21 morning, before Phase 1:** every row
-gets an owning phase, severity, size. Anything too large for its phase forces the decision-15 cut
-order — there is no slack buffer at this pace.
+**Triage — done 2026-07-20 (post-show, owner intake):** every row has an owning phase, severity,
+size. The volume and severity of the live-surface rows is what created **Phase 1.5** — they are one
+coherent rebuild, not nine patches.
 
 | # | Show date | What happened / what was clunky | Area | Severity | Size | Triaged into |
 |---|-----------|--------------------------------|------|----------|------|--------------|
-| 1 |           |                                |      |          |      |              |
-| 2 |           |                                |      |          |      |              |
+| 1 | Jul 20 (TH2607) | Operator rejoined by code → role `student` → GO locked; shared On Air row never moved for anyone while the show clock ran. Emergency patch `2642acb` (admin unlock outranks role; admin profile joins as instructor; honest GO tooltip). | Live / roles | Show-blocking | M | 1.5 (rebuild with Phase 2 accounts) |
+| 2 | Jul 20 (TH2607) | Shared `activeIdx` parked on a leading segment row threw inside the cloud snapshot handler on every update — "Uncaught hit an error" toast storm; presence/prompter/clock adoption silently aborted. Patched in `2642acb` (clamp + containment). | Live / sync | High | S | 1.5 (regression test + handler audit) |
+| 3 | Jul 20 (TH2607) | Prompter split-brain: talent display bound to a rival operator sessionId; both sides silently dropped each other's messages; every cue control queued forever while the talent *looked* connected. Emergency patch `46e4fc8` (caller reclaims the talent's session). | Prompter protocol | Show-blocking | M | 1.5 (single-authority session rebuild) |
+| 4 | Jul 17 + 20 | **Sync isn't solid — systems don't know when they are connected.** No surface can answer "is the talent/playout/cloud link actually alive right now"; a closed talent window looked no different from a healthy one until commands died. | Connection truth | Show-blocking | M | 1.5 (D11.1) |
+| 5 | Jul 17 + 20 | **System status flashes on and off** driven by raw 2s heartbeats — status chips flap between states instead of holding a steady answer. There is room on the main bar for persistent status. | Status UX | High | S–M | 1.5 (D11.1 — main-bar status strip) |
+| 6 | Jul 17 / 20 | **Playback didn't run at first** — first GO after entering live did nothing until poked; cause not yet root-caused (autoplay/AudioContext arming, deck preload, or command-queue readiness are the suspects). | Outrangutan | High | M | 1.5 (D11.4 — root-cause first) |
+| 7 | Jul 20 | **Push-paste broken** — no working way to get a YouTube-chat question in front of the talent. Need dead-simple copy → paste → push. | Prompter UX | High | S–M | 1.5 (D11.6 — paste lane) |
+| 8 | Jul 20 | Prompter needs a **QUESTIONS label** so a pushed question reads as a question, not script. | Prompter UX | Med | S | 1.5 (D11.6) |
+| 9 | Jul 20 | **Clocks + warning overlays block the script** — tech-issue takeover eats the whole talent screen; talent must always be able to keep reading. | Talent UX | High | S | 1.5 (D11.5 — bounded overlay band) |
+| 10 | Jul 20 | **Cannot turn OFF tech-issue / bars / question flags** once raised — off commands lost with no acknowledgement (Flowmingo-Op control lockout is a suspect). | Prompter controls | High | S–M | 1.5 (D11.5 — acknowledged toggles) |
+| 11 | Jul 17 + 20 | **App has gotten bloated** — heavy load and sluggishness on show hardware; everything ships to every surface on every boot. | Performance | High | M–L | 1.5 (D11.7 measure + defer) → Phase 9 sweep |
 
 ---
 
@@ -135,6 +152,59 @@ order — there is no slack buffer at this pace.
 
 **Verify:** deploy-preview diff clean; app loads zero-console-error in Safari + Chrome; import works from vendored copies; legacy-key migration proven.
 **Prepared commits:** one per item.
+
+---
+
+## Phase 1.5 — Live reliability & control-room UX (design D11) — **Wed Jul 22 – Thu Jul 23** *(owner directive 2026-07-20 · NEVER CUT)*
+
+**Why this phase exists:** both July show days needed same-day emergency patches. The owner's bar:
+**a production day must never again need an emergency patch.** Everything below was hit live, on
+air, in TH2607/P2607. This is one coherent rebuild of the live-surface trust model, not nine
+patches. **Depends on:** Phase 1. **Size:** 2 days. Later phase-header dates predate this revision —
+the **Sequencing at a glance** table is the authoritative calendar.
+
+1. **Connection truth (D11.1):** one connection-state model shared by every surface (Cueola live,
+   Flowmingo talent, Flowmingo Op, Script Op, Outrangutan). Each link — cloud, talent, playout,
+   script-op — reports **connected / degraded / lost** from *acknowledged round-trips*, not
+   one-shot heartbeats, with hysteresis: displayed state changes only after N consecutive misses,
+   and recovery shows immediately. **Status lives permanently on the main bar** (owner: "there is
+   room on the main bar") — no more chips that flash in and out with each heartbeat gap. A dead
+   link must LOOK dead within seconds, everywhere, including "talent window closed".
+2. **Prompter session single-authority (D11.2):** rebuild the Jul 20 split-brain patch properly.
+   One authoritative prompter session per production, seeded in the session doc; talent surfaces
+   **join** it instead of minting rivals; explicit, visible takeover semantics when a second
+   operator surface opens (who has the wheel is shown, never silently contested). The `46e4fc8`
+   reclaim becomes the formal recovery path with a regression test.
+3. **Show-caller certainty (D11.3):** joining a session must land the operator with the wheel,
+   deliberately — a visible "show caller" state on the main bar, backed by Phase 2 accounts once
+   they exist. Collapse the three overlapping predicates (`canOwnLiveActiveCue` /
+   `hasInstructorPrivileges` / `isAdminShowCaller`) into one, with the Jul 20 patches as its tests.
+4. **Playback first-GO (D11.4):** root-cause "playback didn't run at first" (suspects: autoplay/
+   AudioContext arming, deck preload, output command-queue readiness), then make GO-readiness
+   explicit: an ARMED indicator on the playout link plus a preflight row that proves the first
+   fire will fire. First GO of the night must behave exactly like the tenth.
+5. **Talent overlay discipline (D11.5):** clocks, wrap, tech-issue, and question banners fit a
+   **bounded band (~20% of screen, decision 16c)** — the script stays readable through every
+   overlay; full-screen is reserved for the deliberate stand-by slate. Every flag (tech issue,
+   bars, questions, clock) gets an **acknowledged on/off toggle** that provably lands from Script
+   Op AND Flowmingo Op — fixing "unable to turn off tech issues and bars and question flags"
+   (audit the Flowmingo-Op control lockout that swallows off-commands).
+6. **Questions lane (D11.6):** a paste box on the operator side — copy from YouTube chat, paste,
+   one keypress pushes it to the talent as a **QUESTION-labeled card** (distinct from script), one
+   keypress clears it. No YouTube API (decision 16b). Root-cause and retire the broken push-paste
+   path rather than carrying both.
+7. **Slim the runtime (D11.7):** measure first — boot cost, live-screen frame health, and timer
+   census on show-class hardware become recorded budgets. Then defer: paperwork/export/PDF vendor
+   code lazy-loads on demand instead of riding every boot; kill redundant renders and orphan
+   intervals found by the census. Budgets carry into Phase 9's sweep and Phase 12's regression
+   gate so the app cannot silently re-bloat.
+
+**Verify:** two-browser + two-machine drill that replays the Jul 20 failures — rejoin-by-code and
+advance; kill the talent window mid-show (status goes lost everywhere, reopening reconnects and
+binds within seconds); open a rival operator surface (takeover is visible, not silent); first GO of
+a fresh session fires media; every overlay on/off lands both directions with the script readable
+throughout; paste → push → clear a question from a real YouTube chat page; budgets recorded.
+**Prepared commits:** `v2.1 live: connection truth + main-bar status` · `v2.1 prompter: single-authority session + question lane + overlay discipline` · `v2.1 playout: first-GO arming` · `v2.1 perf: lazy-load + timer census`.
 
 ---
 
@@ -310,18 +380,20 @@ rollback kit inventory, CHANGELOG, version 2.1.0, release notes.
 ## Sequencing at a glance
 
 ```
-Fri Jul 17 · Mon Jul 20   Phase 0   shows run · intake only · triage Mon evening
-Tue Jul 21                Phase 1   foundations (PII, vendoring, naming)
-Wed 22 – Thu 23           Phase 2   admin accounts + rules (App Check monitor on)
-Thu 23 – Sun 26           Phase 3   PAPERWORK & EXPORT OVERHAUL (+ config + delete)
-Sun 26 – Mon 27           Phase 4   dashboard redesign
-Mon 27 – Tue 28           Phase 5   identity + avatars
-Tue 28 – Wed 29           Phase 6   groups + Start Next Episode
-Thu Jul 30                Phase 7   cloud snapshots
-Thu 30 – Fri 31           Phase 9   platform & UI sweep (continuous before this)
-Fri 31 – Sat Aug 1        Phase 10  security close-out  ·  Phase 11 docs & training
-Sat 1 – Sun 2             Phase 8   Stage Plot — LAST · opens with owner design consult
-Sun Aug 2                 Phase 12  QA + v2.1.0
+Fri Jul 17 · Mon Jul 20   Phase 0    shows run · intake filled + triaged Jul 20 · 2 emergency patches on main
+Tue Jul 21                Phase 1    foundations (PII, vendoring, naming)
+Wed 22 – Thu 23           Phase 1.5  LIVE RELIABILITY (D11) — owner priority · never cut
+Fri 24 – Sat 25           Phase 2    admin accounts + rules (App Check monitor on)
+Sat 25 – Tue 28           Phase 3    PAPERWORK & EXPORT OVERHAUL (+ config + delete)
+Tue 28 – Wed 29           Phase 4    dashboard redesign
+Wed 29 – Thu 30           Phase 5    identity + avatars
+Thu 30 – Fri 31           Phase 6    groups + Start Next Episode
+Fri Jul 31                Phase 7    cloud snapshots
+Sat Aug 1                 Phase 9    platform & UI sweep (continuous before this)
+Sat Aug 1                 Phase 10   security close-out  ·  Phase 11 docs & training
+Sun Aug 2                 Phase 12   QA + v2.1.0
+(post-release)            Phase 8    Stage Plot — expected 2.1.1 fast-follow (decision 15 revision);
+                                     opens with the owner design consult · pulls back in only if days are recovered
 ```
 
 ## Out of scope (3.0 parking lot)

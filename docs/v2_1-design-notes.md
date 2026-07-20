@@ -11,6 +11,10 @@ UI tightening)** from owner direction plus a 3-agent recon of the export pipelin
 compatibility, and paperwork field standards. The delivery window is Jul 21 – Aug 2; plan phases
 were renumbered, so this file refers to phases by descriptive name rather than number.
 
+Revised 2026-07-20 (post-show): added **D11 (Live reliability & control-room UX)** from the owner's
+TH2607/P2607 show-day directive — it backs the plan's new never-cut Phase 1.5, and its file:line
+references were verified against the live code during the Jul 20 emergency-patch work.
+
 Each section is a settled architecture decision with its implementation sketch.
 File:line references were verified on 2026-07-16 and will drift as work lands — **re-verify before
 editing; never copy a line number or a schema number from this note into code without checking the
@@ -565,3 +569,91 @@ themes; kit-styled controls pass 44px target + contrast checks.
 8. **WORKER_SCHEMA discipline:** page-HTML-only changes need a schema bump; JS changes need ?v= bumps in index.html (and sw.js precache list). **Never copy a schema number from a design note or plan — read the current value from sw.js at execution time and increment it.**
 9. **No student PII in the repo or the web root, ever.** Recovery tooling and recovery data stay local-only, outside deployable directories.
 10. **User commits; Claude prepares.** Every completed work item hands over a ready-to-paste GitHub commit title + description. No commits or pushes unless explicitly asked.
+
+---
+
+## D11. Live reliability & control-room UX (owner directive 2026-07-20, from the TH2607/P2607 show days)
+
+Everything here was hit live, on air. The two Jul 20 emergency patches on main are the floor, not
+the fix: `2642acb` (show-caller advancement: admin unlock outranks the joined role;
+`_maybeReclaimPrompterTalentSession` precursor work in the snapshot handler clamps a segment-parked
+`activeIdx`) and `46e4fc8` (operator reclaims a talent bound to a foreign prompter sessionId).
+Phase 1.5 rebuilds the areas those patches touched and must not regress either (both shipped with
+in-browser reproductions that become regression tests).
+
+**D11.1 Connection truth + main-bar status.** One shared link-state model (module or common
+helper) with per-link records `{status: connected|degraded|lost, lastAckAt, detail}` driven by
+*acknowledged round-trips*: cloud = server-confirmed write echo (the Phase-7-era preflight
+round-trip pattern), talent = heartbeat containing our `snapshotId` (already carried —
+`buildHeartbeat` in cueola-prompter-session.js), playout = output command ack (output-command-queue
+already acks), script-op = its protocol heartbeat. Hysteresis lives in the model, not the UI:
+`PROMPTER_MISS_THRESHOLD`-style N-consecutive-miss demotion, instant promotion on any ack. The UI
+is a **persistent status strip on the main live bar** — today's flapping chips
+(`projectPrompterSessionStatus` → transient `ls-stat-*` flips on every heartbeat gap) render FROM
+the model and never disappear; they change color/label only on model transitions. Kill every
+call site that flips displayed status directly from a raw heartbeat event.
+
+**D11.2 Prompter single-authority session.** Root cause of the Jul 20 split-brain: both sides mint
+sessionIds (`ensurePrompterProtocolIdentity` mints unless `IS_PROMPTER_OUTPUT_BOOT`; the in-page
+talent view DOES mint) and `accepts()` (cueola-prompter-session.js:282) hard-drops any message from
+a different sessionId — two surfaces on rival sessions deadlock silently. Rebuild: the session doc
+carries the authoritative prompter session (`prompter.sessionId` written by the show caller's
+surface only); talent views **never mint** — they adopt from the doc (extend the
+`IS_PROMPTER_OUTPUT_BOOT` no-mint rule to every talent-view boot path, incl. `#flowmingo` /
+`?flowmingo=1`); a second operator surface joining the session is a **visible takeover**
+(`connectedOperatorWindows` is already tracked — surface it), never a silent fork. `46e4fc8`'s
+reclaim stays as the recovery path for mixed-fleet/legacy talent and gets a scripted regression
+test (scratchpad verify-prompter harness → scripts/tests).
+
+**D11.3 Show-caller certainty.** Jul 20: joining by code lands role `student`
+(cueola-app.js joinSession) and the caller couldn't advance. Interim patch: admin unlock outranks
+(`canOwnLiveActiveCue`, `isFollowingSelf`). Rebuild: one predicate — `isShowCaller()` — replaces
+the `canOwnLiveActiveCue` / `hasInstructorPrivileges` / `isAdminShowCaller` triangle; caller state
+is visible on the main bar (name + CALLER badge, same data followers already see); Phase 2 admin
+accounts become its backing store. The Jul 20 in-browser scenarios (student locked / admin drives /
+instructor drives) become tests.
+
+**D11.4 Playback first-GO arming.** Symptom (both show days): first GO after entering live did not
+fire; subsequent GOs fine. Root-cause FIRST — suspects in order: (1) browser autoplay /
+AudioContext suspended until a user gesture inside the Outrangutan surface (a GO from the Cueola
+keymap may not count for the output window), (2) cue-ahead preload not armed for cue 1 (preload
+targets "next", possibly never "first"), (3) output command queue not yet `ready` and the command
+dropped rather than queued. Fix at the cause; then surface an **ARMED / NOT ARMED** state on the
+playout link (D11.1 model) and a preflight row that proves first-fire (fire-and-measure into a
+muted sink or readiness assertion, not a heuristic).
+
+**D11.5 Talent overlay discipline + acknowledged toggles.** Owner: overlays must never stop the
+talent reading. All banners (clock, wrap, tech-issue, question) fit a bounded band — default ~20%
+of screen height (decision 16c), sharing the existing overlay size stepper (S/M/L caps the band,
+never full-screen); the deliberate stand-by slate remains the only full-screen state. "Cannot turn
+OFF tech issues / bars / question flags": off-commands are controls like any other — route them
+through the ack'd command path and audit the Flowmingo-Op lockout
+(`isCollaborativePrompterControl` / `flowmingoRemoteOverrideUntil` in cueola-app.js) which
+swallows Script-Op commands during the 30s remote-control window; state-clearing commands must
+ALWAYS pass. Toggle UI shows pending→confirmed (from the ack), so "did that land?" is answerable
+at a glance.
+
+**D11.6 Questions lane (YouTube chat → talent).** Deliberately dumb: a paste box on the Script Op
+panel + live sidebar. Operator copies a message in YouTube chat, pastes, Enter pushes it to the
+talent as a **QUESTION-labeled card** in the overlay band (label styled like the existing
+wrap/clock chips, clearly not script text); Esc/one keypress clears it (an ack'd off-command per
+D11.5). Rides the existing question-flag channel; the broken push-paste path is root-caused and
+deleted, not kept alongside. No YouTube API/OAuth (decision 16b). Multi-question queueing is out of
+scope — one card at a time, last write wins.
+
+**D11.7 Slim the runtime.** Measure, then defer, then gate. (1) Record budgets on show-class
+hardware: boot-to-interactive, live-screen long-task count, interval/timeout census
+(`setInterval` audit — every timer gets an owner and a stop path), listener count after 3
+enter/leave-live cycles (the Phase-1-stabilization leak tests exist — extend them). (2) Defer:
+export/PDF vendor libs (jspdf, html2canvas, pdf.js, mammoth, jszip — already being vendored in
+Phase 1) load on first use, not at boot; paperwork modules likewise on show surfaces. (3) Gate:
+budgets recorded in the repo (scripts/perf-budget) and checked in Phase 12's regression matrix so
+bloat can't silently return. Single-file cueola-app.js splitting is 3.0 territory — 2.1 only
+defers load and kills waste; no architectural rewrite mid-window.
+
+**Verify (Phase 1.5 exit):** the Jul 20 drill — two machines + two browsers: rejoin-by-code and
+advance; kill/reopen the talent window (status truthfully lost/recovered everywhere, rebind within
+seconds); rival operator surface → visible takeover; fresh session first GO fires media; every
+overlay on/off lands from both operator surfaces with script readable throughout; YouTube-chat
+paste → push → clear; recorded perf budgets. Scripted regressions for patches `2642acb`/`46e4fc8`
+land in scripts/tests/.
