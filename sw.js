@@ -45,14 +45,14 @@ const SHELL_ASSETS = [
   'cueola-live-session.js?v=6a1ac2f19e',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
-  'script-operator.js?v=16a55d6bc3',
-  'script-operator.css?v=481da14b43',
+  'script-operator.js?v=02e366509b',
+  'script-operator.css?v=c455a9dec9',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=09c4032d8d',
-  'outrangutan/outrangutan.css?v=41e3c5379f',
-  'outrangutan/outrangutan.js?v=72194eed1e',
+  'cueola-app.js?v=7fda679abe',
+  'outrangutan/outrangutan.css?v=b020d1d384',
+  'outrangutan/outrangutan.js?v=57bf7b65d9',
 ];
 
 const versionSignature = SHELL_ASSETS

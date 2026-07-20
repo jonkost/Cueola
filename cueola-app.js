@@ -282,7 +282,11 @@ function canOwnLiveActiveCue() {
   // class's live cue). Without the solo carve-out, the demo (role:'student')
   // had GO permanently disabled and could never be run.
   if (session.isDemo || session.isExpert || !session.code) return isFollowingSelf();
-  return session.role !== 'student' && isFollowingSelf();
+  // An admin unlock outranks the joined role, same as hasInstructorPrivileges()
+  // and isAdminShowCaller(): rejoining a session by code lands as 'student'
+  // (TH2607 show-day incident — the operator's own device could not advance
+  // the rundown), and the admin device must still be able to call the show.
+  return (session.role !== 'student' || adminSession != null) && isFollowingSelf();
 }
 
 function setOperatorLiveCue(index, reason) {
@@ -3945,7 +3949,11 @@ async function joinSession() {
         errEl.classList.add('on');
         return;
       }
-      session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
+      // Joining by code always landed as 'student' — even for the teacher who
+      // created the session — which silently removed the ability to advance
+      // the live rundown (TH2607). A signed-in admin profile keeps the wheel.
+      const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+      session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
       show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
       beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
       freeTextMode = Boolean(d.freeMode);
@@ -3977,7 +3985,9 @@ async function joinPreProSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking…'; }
   const openLocal = snap => {
     const d = snap.data() || {};
-    session = sessionWithProfileIdentity({ code, role:'student', userName:name, isDemo:false, isExpert:false }, name);
+    // Same role rule as joinSession: an admin profile keeps instructor standing.
+    const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+    session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
@@ -4670,7 +4680,19 @@ function setupFirestore() {
       // The shared show cue is authoritative independently of this device's
       // local/followed selection. Older code folded both values into lsIdx.
       if (Number.isFinite(d.activeIdx)) {
-        adoptLiveActiveCue(d.activeIdx, { select:false, reason:'firestore-active-cue' });
+        // A parked or legacy doc can point the shared cue at a segment marker
+        // or a disabled/deleted row (TH2607: activeIdx 0 on a leading segment
+        // from session creation). The Live run ledger rightly refuses those —
+        // resolve to the next playable row, and contain any residual throw so
+        // one bad index cannot abort the rest of this snapshot handler
+        // (presence, prompter, clock, and rundown updates all ride below).
+        const remoteActiveIdx = liveCueIsDisabled(d.activeIdx)
+          ? liveNextPlayableCueIndex(d.activeIdx)
+          : d.activeIdx;
+        if (remoteActiveIdx >= 0 && remoteActiveIdx < beats.length) {
+          try { adoptLiveActiveCue(remoteActiveIdx, { select:false, reason:'firestore-active-cue' }); }
+          catch (error) { containError('Remote active-cue adoption', error); }
+        }
       }
       // Following: mirror the position of whoever I follow (their broadcast
       // presence.idx). Browsing self keeps my own position. A student who hasn't
@@ -7488,7 +7510,10 @@ function isFollowingSelf() {
   // demo's student role defaulted to "following" a caller that doesn't exist,
   // which kept GO disabled and made the demo rundown unrunnable.
   if (session.isDemo || session.isExpert || !session.code) return true;
-  return session.role !== 'student';    // instructors/experts drive their own position by default
+  // An admin unlock drives its own position by default, same as an instructor:
+  // a device that rejoined by code (role 'student') but holds the admin session
+  // must land with GO live, not parked behind a follow default (TH2607).
+  return session.role !== 'student' || adminSession != null;
 }
 
 // Admin Show Caller = following self AND has any admin session
@@ -8430,7 +8455,12 @@ function updateLiveGoControl(projectedState=null) {
   label.textContent = text;
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
-  button.title = dispatchable ? `GO to ${text}` : failed ? `Recover failed row ${nextIndex + 1} before GO` : nextBeat ? 'Follow the active show caller to use GO' : 'No upcoming cue';
+  const studentLocked = !canOwnLiveActiveCue() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
+  button.title = dispatchable ? `GO to ${text}`
+    : failed ? `Recover failed row ${nextIndex + 1} before GO`
+    : studentLocked ? 'Joined as a student — only the show caller (instructor or admin) advances the rundown'
+    : nextBeat ? 'Follow the active show caller to use GO'
+    : 'No upcoming cue';
   button.setAttribute('aria-label', button.title);
 }
 
