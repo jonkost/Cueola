@@ -401,4 +401,7 @@ Sun Aug 2                 Phase 12   QA + v2.1.0
 Leaf-granular sync re-light (resolved: deferred) · per-group rundowns/Live · group-scoped notes ·
 crew carry-over on clone · Stage Plot advanced tools (walls, image backgrounds, align, cable runs,
 live cursors) · native wrapper for system-wide .cueola/.ogshow Finder icons · student anonymous
-Firebase Auth · pricing/IAP · avatar photo-library raster track.
+Firebase Auth · pricing/IAP · avatar photo-library raster track · **YouTube-chat auto-feed** (the
+official Live Streaming API exists but needs a Google Cloud project, OAuth with the broadcasting
+account, and polling quota — real setup + failure surface on a show day; 2.1 ships the zero-config
+paste lane per decision 16b, and the auto-feed can layer on top of the same question card in 3.0).

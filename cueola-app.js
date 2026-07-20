@@ -7483,7 +7483,7 @@ function enterLiveSessionScreen(liveState) {
   updateLiveClockButton();
   const timerEl = document.getElementById('ls-timer');
   if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
-  updateWallClock();
+  startWallClock();
 }
 
 function showRundown() {
@@ -7493,6 +7493,7 @@ function showRundown() {
 
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
+  stopWallClock();
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
@@ -12945,6 +12946,20 @@ function updateWallClock() {
   const h=now.getHours(), m=now.getMinutes(), s=now.getSeconds();
   const ap=h>=12?'PM':'AM', h12=h%12||12;
   clockEl.textContent=`${h12}:${pad(m)}:${pad(s)} ${ap}`;
+}
+
+// The wall clock previously only ticked inside the show-clock interval, so it
+// sat frozen (or "—") until Start Show was pressed. Time of day must run the
+// whole time the live screen is up (owner directive 2026-07-20).
+let wallClockInterval = null;
+function startWallClock() {
+  clearInterval(wallClockInterval);
+  wallClockInterval = setInterval(updateWallClock, 1000);
+  updateWallClock();
+}
+function stopWallClock() {
+  clearInterval(wallClockInterval);
+  wallClockInterval = null;
 }
 
 function stopTimer(stopPrompter=true) {
