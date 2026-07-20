@@ -620,11 +620,37 @@
     });
   }
 
+  // D12.3 show-caller certainty. ONE pure predicate answers "may this device
+  // move the shared live cue" — the app's isShowCaller()/isFollowingSelf()
+  // wrappers delegate here, and the Jul 20 TH2607 scenarios are its unit
+  // tests. Inputs are plain values so this runs identically in tests.
+  //
+  //   followingSelf — whose position this device is viewing (its own vs. a
+  //                   mirror of someone else); solo surfaces and privileged
+  //                   roles default to driving their own position.
+  //   isShowCaller  — followingSelf AND allowed to move the shared cue:
+  //                   solo surfaces always; in a shared session any
+  //                   non-student role, or ANY role holding an admin unlock
+  //                   (rejoining by code lands as 'student' — the admin
+  //                   device must still be able to call the show).
+  function resolveCallerState(input) {
+    input = input || {};
+    var solo = Boolean(input.isDemo || input.isExpert || !input.code);
+    var privileged = input.role !== 'student' || Boolean(input.hasAdminSession);
+    var followingSelf = Boolean(input.browsingSelf) ||
+      (!input.followTarget && (solo || privileged));
+    return Object.freeze({
+      followingSelf: followingSelf,
+      isShowCaller: followingSelf && (solo || privileged)
+    });
+  }
+
   return Object.freeze({
     LIFECYCLE_STATES: LIFECYCLE_STATES,
     SUBSYSTEM_STATUSES: SUBSYSTEM_STATUSES,
     RUN_EXECUTION_STATES: RUN_EXECUTION_STATES,
     firstPlayableCue: firstPlayableCue,
+    resolveCallerState: resolveCallerState,
     createController: createController
   });
 });

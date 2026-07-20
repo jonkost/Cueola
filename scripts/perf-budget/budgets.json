@@ -1,0 +1,30 @@
+{
+  "$comment": "v2.1 Phase 1.5 (D12.7) runtime budgets. Measured via window.CueolaPerf.report() — boot the app, loadDemo → goLive, three enter/leave-live cycles, then report(). Baseline machine: dev MacBook (Chrome, localhost preview) 2026-07-20. Re-measure on show-class hardware before Phase 12 and tighten; the Phase 12 regression matrix fails a release that exceeds maxima.",
+  "measured": {
+    "machine": "dev-macbook-localhost-2026-07-20",
+    "bootToInteractiveMs": 75,
+    "intervalCountAfterThreeLiveCycles": 6,
+    "longTasksDuringDrill": 0,
+    "jsHeapMB": 15,
+    "vendorLibsAtBoot": 0
+  },
+  "maxima": {
+    "$comment": "Hard ceilings for the Phase 12 gate — generous vs. baseline to absorb show-class hardware, but any breach means an owned regression hunt.",
+    "bootToInteractiveMs": 1500,
+    "intervalCountAfterThreeLiveCycles": 10,
+    "longTasksDuringDrill": 5,
+    "jsHeapMB": 120,
+    "vendorLibsAtBoot": 0
+  },
+  "intervalOwners": {
+    "$comment": "Every interval has an owner and a stop path (D12.7). The census after 3 live cycles must show ONLY owned timers — a growing count is a leak.",
+    "expected": [
+      "local draft autosave (cueola-app.js, 20s)",
+      "Outrangutan build tick (outrangutan.js, 1s)",
+      "Firebase IndexedDB persistence polling (SDK, 800ms)",
+      "live link-state ticker (ensureLiveLinkTicker, 1s — self-stops when no surface is active)",
+      "prompter operator bridge ping (_ensurePrompterOperatorBridge, 5s — cleared by stopPrompterOperatorRuntime)",
+      "live wall clock (startWallClock, 1s — cleared by stopWallClock)"
+    ]
+  }
+}

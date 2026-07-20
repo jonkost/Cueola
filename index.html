@@ -473,9 +473,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ── LIVE SHOW ── */
 #liveshow{background:radial-gradient(circle at 12% 0%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 28%),var(--bg)}
-.ls-bar{position:relative;z-index:60;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand tools return";align-items:center;padding:6px 12px;background:var(--glass-bg-strong);border-bottom:1px solid var(--glass-border);flex-shrink:0;gap:8px;box-shadow:var(--glass-highlight);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%)}
+.ls-bar{position:relative;z-index:60;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-areas:"brand links tools return";align-items:center;padding:6px 12px;background:var(--glass-bg-strong);border-bottom:1px solid var(--glass-border);flex-shrink:0;gap:8px;box-shadow:var(--glass-highlight);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%)}
 .ls-brand{grid-area:brand;font-family:var(--syne);font-size:14px;font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .ls-brand .ls-live{color:var(--red)}
+/* D12.1 connection truth: permanent per-link pills. They never appear or
+   disappear — only color/detail change, and only on model transitions. */
+.ls-links{grid-area:links;display:flex;align-items:center;gap:4px;margin-left:4px}
+.ls-link{--ls-link-health:var(--text3);display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;border:1px solid color-mix(in srgb,var(--ls-link-health) 30%,var(--glass-border));background:color-mix(in srgb,var(--ls-link-health) 8%,transparent);color:var(--text2);font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.07em;white-space:nowrap}
+.ls-link-dot{width:7px;height:7px;border-radius:50%;background:var(--ls-link-health);box-shadow:0 0 0 2px color-mix(in srgb,var(--ls-link-health) 16%,transparent)}
+.ls-link[data-state="off"]{--ls-link-health:var(--text3);opacity:.55}
+.ls-link[data-state="connected"]{--ls-link-health:var(--green);color:var(--text)}
+.ls-link[data-state="degraded"]{--ls-link-health:var(--yellow);color:var(--yellow)}
+.ls-link[data-state="degraded"] .ls-link-dot{animation:og-pulse 1.4s ease-in-out infinite}
+.ls-link[data-state="lost"]{--ls-link-health:var(--red);color:var(--red);background:color-mix(in srgb,var(--red) 14%,transparent)}
+/* D12.3: the caller badge shares the strip's pill language; green = this
+   device has the wheel, neutral = following whoever does. */
+.ls-caller{display:inline-flex;align-items:center;margin-left:2px;padding:3px 9px;border-radius:20px;border:1px solid var(--glass-border);background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text2);font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.07em;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.ls-caller[data-state="caller"]{border-color:color-mix(in srgb,var(--green) 45%,var(--glass-border));background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
 .ls-info{grid-area:tools;min-width:0;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;justify-content:flex-end;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .ls-info::-webkit-scrollbar{display:none}
 .ls-clock{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;margin-right:2px;font-variant-numeric:tabular-nums}
@@ -488,12 +502,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-return-slot{grid-area:return;position:relative;z-index:2;display:flex;align-items:center;justify-content:flex-end;flex:none}
 .ls-return-btn{min-height:40px!important;padding:0 14px!important;font-weight:800!important}
 @media(max-width:900px){
-  #liveshow .ls-bar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand . return" "tools tools tools"}
+  #liveshow .ls-bar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand links return" "tools tools tools"}
+  #liveshow .ls-links{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}
   #liveshow .ls-info{justify-content:flex-start;width:100%;padding-top:1px}
   #liveshow .ls-info .ls-clock{width:auto;flex:0 0 auto;margin:0 2px 0 0;text-align:left}
 }
 @media(max-width:480px){
   #liveshow .ls-brand>span:not(.ls-live){display:none}
+  #liveshow .ls-link .ls-link-word{display:none}
+  #liveshow .ls-link{padding:3px 5px}
   #liveshow .ls-return-btn{padding:0 10px!important;font-size:11.5px}
 }
 .follow-bar{background:var(--glass-bg);border-bottom:1px solid var(--glass-border);padding:5px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%)}
@@ -2382,25 +2399,45 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-bars-bottom span:nth-child(1){background:#00214c}.pt-bars-bottom span:nth-child(2){background:#fff}.pt-bars-bottom span:nth-child(3){background:#32006b}.pt-bars-bottom span:nth-child(4){background:#111}.pt-bars-bottom span:nth-child(5){background:#090909}.pt-bars-bottom span:nth-child(6){background:#030303}.pt-bars-bottom span:nth-child(7){background:#111}.pt-bars-bottom span:nth-child(8){background:#1d1d1d}.pt-bars-bottom span:nth-child(9){background:#000}
 .pt-bars-label{position:absolute;left:50%;bottom:clamp(18px,4vh,42px);transform:translateX(-50%);display:flex;gap:18px;align-items:center;padding:10px 18px;border:1px solid rgba(255,255,255,.34);background:rgba(0,0,0,.68);color:#fff;font-size:clamp(11px,1.8vw,20px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.38)}
 .pt-bars-label span:last-child{opacity:.62}
-.pt-clock-overlay{position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;min-width:min(680px,92vw);max-width:92vw;transform:translateX(-50%);padding:18px 26px;border-radius:18px;text-align:center;background:rgba(0,0,0,.82);color:#fff;border:2px solid rgba(255,255,255,.24);box-shadow:0 18px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.08) inset;font-family:var(--mono);pointer-events:none}
+/* D12.5 overlay discipline (decision 16c): every banner fits a bounded band —
+   ~20% of screen height at its largest — so the script stays readable through
+   any overlay. The size stepper (S/M/L) scales WITHIN the band (vh-capped
+   font preferences); the deliberate stand-by slate stays the only
+   full-screen state. */
+.pt-clock-overlay{position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;min-width:min(680px,92vw);max-width:92vw;max-height:20vh;overflow:hidden;box-sizing:border-box;transform:translateX(-50%);padding:14px 26px;border-radius:18px;text-align:center;background:rgba(0,0,0,.82);color:#fff;border:2px solid rgba(255,255,255,.24);box-shadow:0 18px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.08) inset;font-family:var(--mono);pointer-events:none}
 .pt-clock-overlay.on{display:block}
-.pt-clock-label{font-size:clamp(13px,2vw,22px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.78);line-height:1.15}
-.pt-clock-value{font-size:clamp(42px,9vw,118px);font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 0 18px rgba(255,255,255,.18)}
-.pt-clock-overlay.size-0{min-width:min(480px,88vw);padding:14px 22px}.pt-clock-overlay.size-0 .pt-clock-value{font-size:clamp(34px,7vw,76px)}
-.pt-clock-overlay.size-2{min-width:min(860px,94vw);padding:22px 30px}.pt-clock-overlay.size-2 .pt-clock-value{font-size:clamp(58px,13vw,156px)}
-.pt-clock-overlay.size-3{min-width:min(1100px,96vw);padding:26px 34px}.pt-clock-overlay.size-3 .pt-clock-value{font-size:clamp(72px,18vw,232px)}.pt-clock-overlay.size-3 .pt-clock-label{font-size:clamp(16px,2.6vw,30px)}
-.pt-clock-overlay.size-4{min-width:min(1400px,98vw);padding:30px 40px}.pt-clock-overlay.size-4 .pt-clock-value{font-size:clamp(92px,24vw,340px)}.pt-clock-overlay.size-4 .pt-clock-label{font-size:clamp(18px,3vw,40px)}
+.pt-clock-label{font-size:clamp(13px,min(2vw,2.4vh),22px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.78);line-height:1.15}
+.pt-clock-value{font-size:clamp(38px,min(9vw,9.5vh),118px);font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 0 18px rgba(255,255,255,.18)}
+.pt-clock-overlay.size-0{min-width:min(480px,88vw);padding:10px 22px}.pt-clock-overlay.size-0 .pt-clock-value{font-size:clamp(30px,min(7vw,7.5vh),76px)}
+.pt-clock-overlay.size-2{min-width:min(860px,94vw);padding:16px 30px}.pt-clock-overlay.size-2 .pt-clock-value{font-size:clamp(44px,min(13vw,10.5vh),156px)}
+.pt-clock-overlay.size-3{min-width:min(1100px,96vw);padding:18px 34px}.pt-clock-overlay.size-3 .pt-clock-value{font-size:clamp(50px,min(18vw,11.5vh),232px)}.pt-clock-overlay.size-3 .pt-clock-label{font-size:clamp(16px,min(2.6vw,2.6vh),30px)}
+.pt-clock-overlay.size-4{min-width:min(1400px,98vw);padding:20px 40px}.pt-clock-overlay.size-4 .pt-clock-value{font-size:clamp(56px,min(24vw,12.5vh),340px)}.pt-clock-overlay.size-4 .pt-clock-label{font-size:clamp(18px,min(3vw,2.8vh),40px)}
 .pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:#b31322;border-color:#ffccd2;box-shadow:0 0 0 3px rgba(255,255,255,.12) inset,0 20px 70px rgba(179,19,34,.42)}
-.pt-clock-overlay.wrap .pt-clock-label{font-size:clamp(24px,5vw,54px);color:#fff;letter-spacing:.1em}
-.pt-clock-overlay.wrap .pt-clock-value{font-size:clamp(62px,14vw,170px)}
+.pt-clock-overlay.wrap .pt-clock-label{font-size:clamp(20px,min(5vw,4vh),54px);color:#fff;letter-spacing:.1em}
+.pt-clock-overlay.wrap .pt-clock-value{font-size:clamp(48px,min(14vw,10.5vh),170px)}
 .pt-clock-overlay.expired:not(.timeofday){background:#72101a;border-color:#fff}
-#pt-question-overlay{position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;padding:16px 22px;border-radius:16px;background:#ffd23c;color:#121212;border:2px solid #fff;font-family:var(--syne);font-size:clamp(24px,4.5vw,52px);font-weight:900;line-height:1;box-shadow:0 16px 48px rgba(0,0,0,.35);text-transform:uppercase;letter-spacing:0;pointer-events:none}
-#pt-question-overlay.on{display:block}
+#pt-question-overlay{position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;max-width:min(720px,60vw);max-height:20vh;overflow:hidden;box-sizing:border-box;padding:14px 22px;border-radius:16px;background:#ffd23c;color:#121212;border:2px solid #fff;font-family:var(--syne);font-size:clamp(22px,min(4.5vw,5.5vh),52px);font-weight:900;line-height:1.1;box-shadow:0 16px 48px rgba(0,0,0,.35);text-transform:uppercase;letter-spacing:0;pointer-events:none}
+#pt-question-overlay.on{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+/* D12.6: the QUESTION tag reads as production signage (mono chip, like the
+   wrap/clock labels) so pushed chat text can never be mistaken for script. */
+.pt-question-tag{flex:none;padding:2px 8px;border-radius:12px;background:#121212;color:#ffd23c;font-family:var(--mono);font-size:clamp(10px,1.4vh,14px);font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+.pt-question-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 /* P6: question indicator follows the global overlay size (Decisions #11) */
-#pt-question-overlay.size-0{font-size:clamp(17px,3.2vw,36px)}
-#pt-question-overlay.size-2{font-size:clamp(31px,5.9vw,68px)}
-#pt-question-overlay.size-3{font-size:clamp(41px,7.7vw,88px)}
-#pt-question-overlay.size-4{font-size:clamp(53px,9.9vw,114px)}
+#pt-question-overlay.size-0{font-size:clamp(16px,min(3.2vw,4vh),36px)}
+#pt-question-overlay.size-2{font-size:clamp(26px,min(5.9vw,6.5vh),68px)}
+#pt-question-overlay.size-3{font-size:clamp(30px,min(7.7vw,7.5vh),88px)}
+#pt-question-overlay.size-4{font-size:clamp(34px,min(9.9vw,8.5vh),114px)}
+
+/* D12.6: questions lane — paste box + push, sits under the Question toggle. */
+.pt-question-lane{display:flex;gap:6px;align-items:center;margin-top:6px}
+.pt-question-lane-input{flex:1;min-width:0;height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--border);background:var(--s2);color:var(--text);font:500 12px var(--sans)}
+.pt-question-lane-input::placeholder{color:var(--text3)}
+.pt-question-lane-push{flex:none}
+
+/* D12.5: acknowledged toggles — a sent control shows pending until the talent
+   acks it, and failed (no ack in 5s) reads as a real problem, not a mystery. */
+.pt-ack-pending{position:relative;opacity:.75;animation:og-pulse 1.1s ease-in-out infinite}
+.pt-ack-failed{border-color:var(--red)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--red) 55%,transparent)}
 
 /* Script Op sidebar: prominent live actions + cascading prompter controls */
 .ls-live-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:transparent;border:0;border-radius:0;padding:0;font-family:var(--mono)}
@@ -3762,16 +3799,17 @@ input.pt-range::-moz-range-thumb,
 
 /* The overview keeps the original one-row layout: show card, Now/Next/Remaining,
    and the subsystem chips stacked quietly at the right end. */
+/* D12.1: the legacy subsystem mini-chips are gone — connection truth lives on
+   the main bar (.ls-links); the overview keeps show + Now/Next/Remaining. */
 #liveshow .ls-overview{
-  grid-template-columns:minmax(180px,1.2fr) repeat(3,minmax(112px,.9fr)) auto;
-  grid-template-areas:"show now next timer minis";
+  grid-template-columns:minmax(180px,1.2fr) repeat(3,minmax(112px,.9fr));
+  grid-template-areas:"show now next timer";
   align-items:stretch;
 }
 #liveshow .ls-overview-show{grid-area:show}
 #liveshow .ls-overview-now{grid-area:now}
 #liveshow .ls-overview-next{grid-area:next}
 #liveshow .ls-overview-timer{grid-area:timer}
-#liveshow .ls-overview-minis{grid-area:minis;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px;padding:4px 0}
 #liveshow .ls-overview :is(.ls-show-card,.ls-stat-card){min-height:54px;display:flex;flex-direction:column;justify-content:center}
 #liveshow .ls-overview :is(.ls-show-card,.ls-stat-card):not(:last-child){border-right:1px solid color-mix(in srgb,var(--text) 12%,transparent)!important}
 
@@ -3865,18 +3903,16 @@ input.pt-range::-moz-range-thumb,
   #liveshow .ls-main{padding-inline:14px}
 }
 @media(min-width:901px) and (max-width:1439px){
-  #liveshow .ls-overview{grid-template-columns:minmax(210px,1.2fr) repeat(3,minmax(0,1fr));grid-template-areas:"show now next timer" "show minis minis minis"}
+  #liveshow .ls-overview{grid-template-columns:minmax(210px,1.2fr) repeat(3,minmax(0,1fr));grid-template-areas:"show now next timer"}
   #liveshow .ls-overview-show{justify-content:center}
-  #liveshow .ls-overview-minis{flex-direction:row;justify-content:flex-end;flex-wrap:wrap}
 }
 
 /* At operator-window widths the Script Op becomes a true drawer. The scrim
    intercepts the Live canvas; JS also applies inert while the drawer is open. */
 .ls-drawer-scrim{display:none;border:0;padding:0;background:transparent}
 @media(max-width:900px){
-  #liveshow .ls-overview{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"show show show" "now next timer" "minis minis minis"}
+  #liveshow .ls-overview{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"show show show" "now next timer"}
   #liveshow .ls-overview :is(.ls-show-card,.ls-stat-card){min-height:48px;border-right:1px solid color-mix(in srgb,var(--text) 10%,transparent)!important}
-  #liveshow .ls-overview-minis{flex-direction:row;justify-content:flex-end;flex-wrap:wrap}
   #liveshow .ls-body{position:relative;isolation:isolate}
   #liveshow .ls-sidebar.open{position:absolute;inset:0 0 0 auto;z-index:72;width:min(480px,92vw)!important;max-width:92vw!important;box-shadow:-24px 0 70px rgba(0,0,0,.5)}
   #liveshow:has(.ls-sidebar.open) .ls-drawer-scrim{display:block;position:absolute;inset:0;z-index:70;width:100%;height:100%;background:color-mix(in srgb,var(--bg) 56%,transparent);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);cursor:pointer}
@@ -4206,6 +4242,16 @@ input.pt-range::-moz-range-thumb,
 <div class="screen" id="liveshow">
   <div class="ls-bar">
     <div class="ls-brand"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
+    <!-- D12.1 connection truth: persistent per-link status, rendered ONLY from
+         the shared link-state model (never from raw heartbeat events). -->
+    <div class="ls-links" id="lsLinkStrip" aria-label="Connection status" role="group">
+      <span class="ls-link" id="ls-link-cloud" data-state="off" title="Cloud: not in use"><span class="ls-link-dot" aria-hidden="true"></span><span class="ls-link-word">CLOUD</span></span>
+      <span class="ls-link" id="ls-link-talent" data-state="off" title="Talent: not in use"><span class="ls-link-dot" aria-hidden="true"></span><span class="ls-link-word">TALENT</span></span>
+      <span class="ls-link" id="ls-link-playout" data-state="off" title="Playout: not in use"><span class="ls-link-dot" aria-hidden="true"></span><span class="ls-link-word">PLAYOUT</span></span>
+      <span class="ls-link" id="ls-link-scriptop" data-state="off" title="Script Op: not in use"><span class="ls-link-dot" aria-hidden="true"></span><span class="ls-link-word">SCRIPT</span></span>
+      <!-- D12.3 show-caller certainty: who has the wheel, always visible. -->
+      <span class="ls-caller" id="lsCallerBadge" data-state="viewer" title="Following the show caller">VIEWER</span>
+    </div>
     <div class="ls-info">
       <div class="ls-clock" id="ls-clock">—</div>
       <button class="ls-exit-btn ls-start-btn ls-critical-action" id="liveStartBtn" onclick="liveStartShowPressed()" title="Start or pause the show clock">Start Show</button>
@@ -4236,11 +4282,6 @@ input.pt-range::-moz-range-thumb,
     <div class="ls-stat-card ls-overview-now"><div class="ls-stat-label">Now</div><div class="ls-stat-value live" id="ls-stat-now">—</div></div>
     <div class="ls-stat-card ls-overview-next"><div class="ls-stat-label">Next</div><div class="ls-stat-value ok" id="ls-stat-next">—</div></div>
     <div class="ls-stat-card ls-overview-timer"><div class="ls-stat-label">Remaining</div><div class="ls-stat-value warn" id="ls-stat-remain">—</div></div>
-    <div class="ls-overview-minis">
-      <div class="ls-prompter-mini ls-overview-flowmingo" id="ls-stat-prompter" title="Flowmingo waiting">FLOWMINGO OFF</div>
-      <div class="ls-prompter-mini ls-overview-playback" id="ls-stat-playback" title="Outrangutan playout closed">PLAYOUT CLOSED</div>
-      <div class="ls-prompter-mini ls-overview-script" id="ls-stat-script" title="Script Operator closed">SCRIPT OP CLOSED</div>
-    </div>
     <div class="ls-progress"><div class="ls-progress-fill" id="ls-progress-fill"></div></div>
   </div>
   <section class="ls-status-rail" id="lsStatusRail" aria-label="Live subsystem status and recovery">
@@ -4313,8 +4354,8 @@ input.pt-range::-moz-range-thumb,
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
             <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" title="New paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(false)" title="Paste copied chat text into the script editor"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="pasteClipboardToPrompter(true)" title="Paste copied chat text and push immediately"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
+            <!-- D12.6: chat questions ride the questions lane (Clocks & Alerts tab),
+                 pushed as a QUESTION card — the old Paste/Paste-Push script path is gone. -->
           </div>
         </div>
       </div>
@@ -5431,22 +5472,25 @@ input.pt-range::-moz-range-thumb,
 </div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<script src="assets/vendor/pdf.min.js"></script>
+<!-- D12.7: no vendor library rides boot — pdf.js/jspdf/html2canvas/mammoth/
+     jszip all lazy-load on first use (ptLoadLibrary); the service worker still
+     precaches them for offline shows. -->
 <script src="cueola-entitlements.js?v=746c10a762"></script>
-<script src="cueola-avatar-profile.js?v=df6d52ce81"></script>
+<script src="cueola-avatar-profile.js?v=e56e5e6cd7"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
-<script src="cueola-session-clone.js?v=2e1c40da19"></script>
-<script src="cueola-export-model.js?v=9791451f05"></script>
-<script src="cueola-prepro-sync.js?v=2a99ec4a39"></script>
-<script src="cueola-identity.js?v=8cc1c37649"></script>
-<script src="cueola-admin-auth.js?v=40de77de6a"></script>
-<script src="cueola-live-session.js?v=6a1ac2f19e"></script>
+<script src="cueola-session-clone.js?v=fe05f41dfc"></script>
+<script src="cueola-export-model.js?v=3e21300eb6"></script>
+<script src="cueola-prepro-sync.js?v=98291546f4"></script>
+<script src="cueola-identity.js?v=d5f452410b"></script>
+<script src="cueola-admin-auth.js?v=de859c513b"></script>
+<script src="cueola-live-session.js?v=2352bc00d1"></script>
+<script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-prompter-session.js?v=1002259f73"></script>
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=0215536460"></script>
-<script src="outrangutan/outrangutan.js?v=34dcf5d31d"></script>
+<script src="cueola-app.js?v=f1d56e7a2a"></script>
+<script src="outrangutan/outrangutan.js?v=733cbe7da5"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

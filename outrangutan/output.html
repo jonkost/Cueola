@@ -365,6 +365,18 @@
   function applyTransform(d, m) {
     d.el.style.transform = 'translate(' + (m.posX || 0) + '%,' + (m.posY || 0) + '%) scale(' + (m.scale || 1) + ')';
   }
+  // D12.4: autoplay unlock. This window never receives a gesture before its
+  // first play command, so a NotAllowedError froze the first cue until the
+  // operator happened to click. The blocked play is remembered and retried on
+  // the first gesture anywhere in this window — one interaction, not a mystery.
+  let _blockedPlayRetry = null;
+  function retryBlockedPlayback() {
+    const retry = _blockedPlayRetry;
+    _blockedPlayRetry = null;
+    if (retry) retry();
+  }
+  window.addEventListener('pointerdown', retryBlockedPlayback, true);
+  window.addEventListener('keydown', retryBlockedPlayback, true);
   function requestPlayback(d, paused, context) {
     if (paused) {
       try { d.el.pause(); } catch (e) {}
@@ -380,7 +392,12 @@
     if (started && typeof started.catch === 'function') {
       started.catch((error) => {
         if (!context.isCurrent() || (error && error.name === 'AbortError')) return;
-        rendererError(error && error.name === 'NotAllowedError' ? 'Playback requires operator interaction.' : 'Playback could not start.', d.mediaId, 'operator');
+        if (error && error.name === 'NotAllowedError') {
+          _blockedPlayRetry = () => { if (context.isCurrent()) requestPlayback(d, false, context); };
+          rendererError('Playback requires operator interaction — click or press any key in this window.', d.mediaId, 'operator');
+        } else {
+          rendererError('Playback could not start.', d.mediaId, 'operator');
+        }
       });
     }
     return { ok: true };

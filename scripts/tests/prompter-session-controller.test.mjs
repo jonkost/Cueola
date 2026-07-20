@@ -109,4 +109,45 @@ test('queued recovery commands retarget a replacement output after handshake', (
   assert.equal(queued[0].targetOutputInstanceId, 'output-new');
 });
 
-console.log('PASS 7 Flowmingo session controller tests');
+test('split-brain regression (TH2607 / 46e4fc8): rival sessions deadlock until the caller adopts', () => {
+  const time = clock();
+  const operator = createController({ now: time.now, instanceId: 'operator', productionCode: 'TH2607' });
+  const talent = createController({ now: time.now, instanceId: 'talent-out', productionCode: 'TH2607' });
+  operator.setIdentity({ sessionId: 'session-operator' });
+  talent.setIdentity({ sessionId: 'session-rival' });   // re-seeded by a second surface
+  // The deadlock: same production, different sessionIds — both sides drop
+  // each other's messages forever while the talent looks "connected".
+  const rivalHeartbeat = talent.buildHeartbeat();
+  assert.equal(operator.accepts(rivalHeartbeat), false);
+  // Recovery path: the show-calling surface ADOPTS the talent's session,
+  // binds the output, and re-publishes its state into it.
+  operator.setIdentity({ sessionId: rivalHeartbeat.sessionId });
+  operator.noteOutput('talent-out', 'connected');
+  const snapshot = operator.buildSnapshot({ outputInstanceId: 'talent-out' });
+  assert.equal(talent.accepts(snapshot), true);          // sessionIds now match
+  talent.applySnapshot(snapshot.state, 'talent-out');
+  // The talent's next heartbeat echoes the operator's snapshotId → readiness
+  // and queued commands converge through the normal path.
+  const echo = talent.buildHeartbeat();
+  assert.equal(operator.accepts(echo), true);
+  assert.equal(operator.markStateApplied('talent-out', echo.snapshotId, echo.state), true);
+  assert.equal(operator.isReady('talent-out'), true);
+  const command = operator.buildCommand('seek_row_26');
+  operator.queueCommand(command);
+  assert.equal(operator.takeQueuedCommands('talent-out').length, 1);
+});
+
+test('single-authority: a joining surface adopts the seeded session instead of minting', () => {
+  const time = clock();
+  const joiner = createController({ now: time.now, instanceId: 'second-op', productionCode: 'TH2607' });
+  // The session doc carries the authoritative id; the joiner adopts it and
+  // every message it emits rides that session.
+  joiner.setIdentity({ sessionId: 'session-authoritative' });
+  const ready = joiner.buildReady();
+  assert.equal(ready.sessionId, 'session-authoritative');
+  const caller = createController({ now: time.now, instanceId: 'caller', productionCode: 'TH2607' });
+  caller.setIdentity({ sessionId: 'session-authoritative' });
+  assert.equal(caller.accepts(ready), true);
+});
+
+console.log('PASS 9 Flowmingo session controller tests');

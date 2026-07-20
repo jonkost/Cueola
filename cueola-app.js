@@ -3,6 +3,46 @@
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
 const CUEOLA_VERSION = '2.0.0';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
+
+// ── v2.1 D12.7: runtime budgets — measure, then defer, then gate ────────────
+// Every interval gets an owner and a stop path; this census is how that stays
+// true. setInterval is wrapped BEFORE any app code runs so all timers are
+// counted; window.CueolaPerf.report() is the measurement read on show-class
+// hardware and recorded in scripts/perf-budget/budgets.json (checked again in
+// the Phase 12 regression matrix so the app cannot silently re-bloat).
+window.CueolaPerf = (() => {
+  const intervals = new Map();
+  const nativeSetInterval = window.setInterval.bind(window);
+  const nativeClearInterval = window.clearInterval.bind(window);
+  window.setInterval = function (handler, delay, ...args) {
+    const id = nativeSetInterval(handler, delay, ...args);
+    const site = String(new Error().stack || '').split('\n')[2]?.trim() || 'unknown';
+    intervals.set(id, { delay: Number(delay) || 0, site, startedAt: Date.now() });
+    return id;
+  };
+  window.clearInterval = function (id) {
+    intervals.delete(id);
+    return nativeClearInterval(id);
+  };
+  let longTasks = 0;
+  try {
+    new PerformanceObserver(list => { longTasks += list.getEntries().length; })
+      .observe({ type: 'longtask', buffered: true });
+  } catch { /* longtask observer unsupported — report() says so via null */ }
+  let bootAt = 0;
+  window.addEventListener('DOMContentLoaded', () => { bootAt = Math.round(performance.now()); }, { once: true });
+  return {
+    report() {
+      return {
+        bootToInteractiveMs: bootAt || Math.round(performance.now()),
+        longTasks: typeof PerformanceObserver === 'undefined' ? null : longTasks,
+        intervalCount: intervals.size,
+        intervals: [...intervals.entries()].map(([id, t]) => ({ id, delay: t.delay, ageMs: Date.now() - t.startedAt, site: t.site })),
+        jsHeapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      };
+    },
+  };
+})();
 // The live session code, readable by sibling modules (Outrangutan's join
 // prefill) — `session` is a top-level `let` in a classic script, so it never
 // lands on window by itself.
@@ -154,17 +194,6 @@ function renderLiveStatusItem(name, record) {
   item.setAttribute('aria-label', `${surface.label}: ${detail}`);
   const detailEl = document.getElementById(`${surface.id}-detail`);
   if (detailEl) detailEl.textContent = detail;
-  if (name === 'scriptOperator') {
-    const overview = document.getElementById('ls-stat-script');
-    if (overview) {
-      const label = { active:'ACTIVE', ready:'READY', opening:'OPENING', connecting:'CONNECTING', recovering:'RECOVERING', disconnected:'DISCONNECTED', stalled:'STALLED', error:'ERROR', closed:'CLOSED' }[status] || status.toUpperCase();
-      overview.textContent = `SCRIPT OP ${label}`;
-      overview.title = detail;
-      overview.classList.toggle('connected', ['active','ready'].includes(status));
-      overview.classList.toggle('recovering', liveStatusIsBusy(status));
-      overview.classList.toggle('error', liveStatusNeedsRecovery(status));
-    }
-  }
   const actions = document.getElementById(surface.actions);
   if (!actions) return;
   const actionLabel = liveStatusActionLabel(name, status);
@@ -275,22 +304,25 @@ function adoptLiveActiveCue(index, options={}) {
   return liveSessionState().activeCueIndex;
 }
 
-function canOwnLiveActiveCue() {
-  // Solo surfaces — the demo, expert mode, and an unsynced local workspace —
-  // have no shared show to protect, so the operator always drives. The student
-  // gate only applies inside a real shared session (students must not move the
-  // class's live cue). Without the solo carve-out, the demo (role:'student')
-  // had GO permanently disabled and could never be run.
-  if (session.isDemo || session.isExpert || !session.code) return isFollowingSelf();
-  // An admin unlock outranks the joined role, same as hasInstructorPrivileges()
-  // and isAdminShowCaller(): rejoining a session by code lands as 'student'
-  // (TH2607 show-day incident — the operator's own device could not advance
-  // the rundown), and the admin device must still be able to call the show.
-  return (session.role !== 'student' || adminSession != null) && isFollowingSelf();
+// D12.3: THE show-caller predicate. One answer to "may this device move the
+// shared live cue" — the canOwnLiveActiveCue / hasInstructorPrivileges /
+// isAdminShowCaller triangle collapsed into this single authority (logic
+// lives in CueolaLiveSession.resolveCallerState; the TH2607 Jul 20 scenarios
+// — student locked, admin drives, instructor drives — are its unit tests).
+function _callerStateInputs() {
+  return {
+    browsingSelf, followTarget,
+    isDemo: session.isDemo, isExpert: session.isExpert, code: session.code,
+    role: session.role, hasAdminSession: adminSession != null,
+  };
+}
+
+function isShowCaller() {
+  return window.CueolaLiveSession.resolveCallerState(_callerStateInputs()).isShowCaller;
 }
 
 function setOperatorLiveCue(index, reason) {
-  return setLiveSelectedCue(index, { activate:canOwnLiveActiveCue(), reason });
+  return setLiveSelectedCue(index, { activate:isShowCaller(), reason });
 }
 
 function liveBeatKey(beat, index) {
@@ -362,7 +394,101 @@ function recoverLiveCueFailure(event, index) {
 }
 
 function setLiveSubsystemStatus(name, status, detail='') {
+  // Dedupe: subsystem writes arrive at heartbeat rate from several bridges; a
+  // no-change write re-rendered the whole status rail for nothing (D12.7).
+  const current = liveSessionController.getState().subsystems?.[name];
+  if (current && current.status === status && current.detail === String(detail ?? '')) return current;
   return liveSessionController.setSubsystemStatus(name, status, detail);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Connection truth (v2.1 Phase 1.5 · D12.1). One shared link-state model for
+// the four live links. Status is driven by acknowledged round-trips with
+// hysteresis IN THE MODEL; the main-bar strip and the show log render from
+// model transitions only. Nothing may flip a displayed connection state
+// directly from a raw heartbeat event.
+const liveLinkState = window.CueolaLinkState.createModel({});
+window.CueolaLiveLinks = liveLinkState;
+const LIVE_LINK_LABELS = Object.freeze({ cloud:'CLOUD', talent:'TALENT', playout:'PLAYOUT', scriptop:'SCRIPT' });
+// Firestore echoes only arrive when something writes — no fixed cadence, so no
+// tick watchdog; the cloud link moves on explicit ack/degraded/lost signals.
+liveLinkState.configure('cloud',    { label:'Cloud',    watchdog:false });
+// Talent heartbeats every 2s (PROMPTER_HEARTBEAT_MS). Degrade at 3 misses to
+// match the old watchdog's recovery point; lost at 8 (~16s of silence).
+liveLinkState.configure('talent',   { label:'Talent',   ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
+liveLinkState.configure('playout',  { label:'Playout',  ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
+liveLinkState.configure('scriptop', { label:'Script Op', ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
+
+function renderLiveLinkChip(link) {
+  const chip = document.getElementById(`ls-link-${link.key}`);
+  if (!chip) return;
+  chip.dataset.state = link.status;
+  const detail = link.detail || { off:'Not in use', connected:'Connected', degraded:'Degraded', lost:'Lost' }[link.status];
+  // D12.4: the playout chip carries the ARMED verdict when the link is live.
+  const armedSuffix = link.key === 'playout' && link.status !== 'off' && typeof link.meta?.armed === 'boolean'
+    ? (link.meta.armed ? '' : ' · NOT ARMED') : '';
+  chip.title = `${link.label}: ${detail}${armedSuffix ? ' — first GO is not proven ready' : ''}`;
+  chip.setAttribute('aria-label', `${link.label} link ${link.status}: ${detail}${armedSuffix}`);
+  const text = chip.querySelector('.ls-link-word');
+  if (text) text.textContent = (LIVE_LINK_LABELS[link.key] || link.label.toUpperCase()) + armedSuffix;
+}
+
+function renderLiveLinkStrip() {
+  liveLinkState.getState().forEach(renderLiveLinkChip);
+}
+
+liveLinkState.subscribe((link, previousStatus) => {
+  renderLiveLinkChip(link);
+  if (link.status !== previousStatus) {
+    logShow('link', `${link.label} link ${previousStatus} → ${link.status}${link.detail ? ' · ' + link.detail : ''}`);
+  }
+  if (link.key === 'talent' && link.status !== previousStatus) projectTalentLinkTransition(link, previousStatus);
+});
+
+// Talent link transitions drive the Flowmingo subsystem's connection facet.
+// (Lifecycle — running/paused/ready — still comes from real protocol state.)
+function projectTalentLinkTransition(link, previousStatus) {
+  if (!_prompterOperatorRuntimeActive) return;
+  if (link.status === 'connected') {
+    _setPrompterStatus(true);
+  } else if (link.status === 'degraded') {
+    // Same recovery point as the old watchdog: reset the handshake so the
+    // returning talent re-applies state, and say so without flapping.
+    prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
+    projectPrompterSessionStatus('recovering', 'Talent unresponsive · missed heartbeats');
+  } else if (link.status === 'lost') {
+    prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
+    setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost — no heartbeat');
+  }
+}
+
+// One owned ticker evaluates hysteresis and the definitive death signals
+// (window closed). Started by the surfaces that need it; stops itself when
+// nothing is active (D12.7: every timer has an owner and a stop path).
+let _liveLinkTicker = null;
+function _liveLinksActive() {
+  return _prompterOperatorRuntimeActive
+    || Boolean(_scriptOpHost)
+    || document.getElementById('liveshow')?.classList.contains('on')
+    || false;
+}
+function ensureLiveLinkTicker() {
+  if (_liveLinkTicker) return;
+  _liveLinkTicker = setInterval(() => {
+    if (!_liveLinksActive()) { stopLiveLinkTicker(); return; }
+    // Definitive: a same-device talent window that is closed is not "degraded".
+    if (_prompterTalentWin && _prompterTalentWin.closed && !['lost','off'].includes(liveLinkState.getLink('talent')?.status)) {
+      liveLinkState.noteLost('talent', 'Talent window closed');
+    }
+    liveLinkState.tick();
+    // Playout truth rides Outrangutan's own heartbeat/ack ages — re-derive so
+    // its aging demotes the link even with no fresh publishes.
+    if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
+  }, 1000);
+}
+function stopLiveLinkTicker() {
+  clearInterval(_liveLinkTicker);
+  _liveLinkTicker = null;
 }
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
@@ -403,6 +529,16 @@ const FLOWMINGO_ENDPOINT_ID = (() => {
   }
 })();
 const IS_PROMPTER_OUTPUT_BOOT = new URLSearchParams(location.search).get('prompter') === '1';
+// D12.2 single-authority: EVERY talent-view boot path is a no-mint surface —
+// the dedicated output window (?prompter=1) AND the in-page talent doors
+// (#flowmingo / ?flowmingo=1 / #promptypus / ?promptypus). Talent surfaces
+// JOIN the production's prompter session (from the session doc or the first
+// operator snapshot); minting rivals is how the Jul 20 split-brain started.
+const IS_PROMPTER_TALENT_BOOT = IS_PROMPTER_OUTPUT_BOOT || (() => {
+  const params = new URLSearchParams(location.search);
+  return ['#flowmingo', '#promptypus'].includes(location.hash)
+    || params.has('flowmingo') || params.has('promptypus');
+})();
 const prompterSessionController = window.CueolaPrompterSession.createController({
   instanceId: FLOWMINGO_ENDPOINT_ID,
   productionCode: session.code,
@@ -413,7 +549,10 @@ function ensurePrompterProtocolIdentity(options={}) {
   const code = String(options.productionCode || session.code || '').trim().toUpperCase();
   const current = prompterSessionController.getState();
   let sessionId = options.sessionId || (current.productionCode === code ? current.sessionId : '');
-  if (!sessionId && code && !IS_PROMPTER_OUTPUT_BOOT) {
+  // Only a surface that may call the show may MINT a new prompter session;
+  // everyone else (talent boots, student devices) joins the authoritative one
+  // seeded in the session doc. One production, one prompter session.
+  if (!sessionId && code && !IS_PROMPTER_TALENT_BOOT && isShowCaller()) {
     sessionId = `prompter_${code}_${Date.now().toString(36)}_${CLIENT_ID.slice(-8)}`;
   }
   const activeIndex = liveActiveCueIndex();
@@ -1577,6 +1716,18 @@ function dangerConfirm(message, detail='', opts={}) {
 
 function setCloudSyncState(state='synced', detail='') {
   cloudSyncProjection = { state, detail };
+  // D12.1 cloud link: 'synced' is a server-confirmed echo — the only ack.
+  // 'saving' is not a connection verdict (writes may be queueing offline), so
+  // it leaves the link state alone; reconnect/offline paths degrade it below.
+  if (state === 'synced') liveLinkState.noteAck('cloud', detail || 'Cloud confirmed');
+  else if (state === 'error') liveLinkState.noteDegraded('cloud', detail || 'Cloud sync failed');
+  else if (state === 'local') {
+    // Solo surfaces (demo/expert/no code) run local by design — that is the
+    // link's off state, not a degradation.
+    if (!session.code || session.isDemo || session.isExpert) liveLinkState.noteOff('cloud', detail || 'Local workspace');
+    else liveLinkState.noteDegraded('cloud', detail || 'Saved locally — cloud unavailable');
+  }
+  else if (state === 'off') liveLinkState.noteOff('cloud', detail || 'Local workspace');
   const dot = document.getElementById('syncDot');
   const badge = document.getElementById('topSessionBadge');
   if (dot) {
@@ -4465,6 +4616,7 @@ function setupFirestore() {
           if (document.getElementById('liveshow').classList.contains('on')) renderLive();
         }
       }
+      _adoptDocPrompterSession(d);
       if (d.prompter && typeof d.prompter.text === 'string') {
         const adopted = adoptPrompterSnapshot(d.prompter);
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
@@ -4477,7 +4629,7 @@ function setupFirestore() {
       }
       if (isFlowmingoTalentActive() && d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
         const control = d.prompter.control;
-        if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId) && control.source === 'flowmingo-op') {
+        if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
           flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
         }
       }
@@ -4580,15 +4732,22 @@ let _syncReconnState = false;
 function setSyncReconnecting(on, restoredDetail='Cloud sync restored') {
   const chip = document.getElementById('ls-stat-sync');
   if (chip) chip.hidden = !on;
-  if (on) setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
+  if (on) {
+    setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
+    liveLinkState.noteDegraded('cloud', 'Reconnecting — showing the last confirmed state');
+  }
   if (on !== _syncReconnState) {   // P7: log only the transitions, not every snapshot
     _syncReconnState = on;
     logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : restoredDetail);
   }
   renderLiveStatusRail();
 }
-window.addEventListener('offline', () => { if (session.code && !session.isDemo && !session.isExpert) setSyncReconnecting(true); });
-window.addEventListener('online', () => { /* chip clears on the next server snapshot */ });
+window.addEventListener('offline', () => {
+  if (!session.code || session.isDemo || session.isExpert) return;
+  setSyncReconnecting(true);
+  liveLinkState.noteLost('cloud', 'Network offline — saved state is retained locally');
+});
+window.addEventListener('online', () => { /* chip and link clear on the next server snapshot */ });
 
 function syncToFirestore() {
   saveLocalDraft();
@@ -4629,7 +4788,7 @@ function syncLiveIdx() {
     [`presence.${presenceId}.idx`]: selectedIdx,
     [`presence.${presenceId}.lastSeen`]: Date.now(),
   };
-  if (canOwnLiveActiveCue()) update.activeIdx = liveState.activeCueIndex;
+  if (isShowCaller()) update.activeIdx = liveState.activeCueIndex;
   window._updateDoc(window._doc(window._db,'sessions',session.code), update).catch(()=>{});
 }
 
@@ -6549,16 +6708,21 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
   // detailed degradation retained beside Playback for recovery.
   if (status === 'degraded') status = 'stalled';
   setLiveSubsystemStatus('playback', status, detail);
-  const chip = document.getElementById('ls-stat-playback');
-  if (chip) {
-    const label = { active:'RUNNING', paused:'PAUSED', ready:'READY', opening:'OPENING', connecting:'CONNECTING', stalled:'STALLED', disconnected:'DISCONNECTED', recovering:'RECOVERING', degraded:'DEGRADED', error:'ERROR', closed:'CLOSED' }[status] || 'CLOSED';
-    chip.textContent = `PLAYOUT ${label}`;
-    chip.title = detail;
-    chip.classList.toggle('connected', ['active','paused','ready'].includes(status));
-    chip.classList.toggle('recovering', ['opening','connecting','recovering'].includes(status));
-    chip.classList.toggle('error', ['stalled','disconnected','degraded','error'].includes(status));
-    chip.dataset.playbackStatus = status;
-  }
+  // D12.1 playout link: outputStatus() already embeds heartbeat/ack ages from
+  // the output protocol, so healthy states count as the acknowledged
+  // round-trip; dead states demote without hysteresis (they are verdicts,
+  // not gaps — the protocol already damped them).
+  if (['active','paused','ready'].includes(status)) liveLinkState.noteAck('playout', detail);
+  else if (['stalled','disconnected','error'].includes(status)) liveLinkState.noteLost('playout', detail);
+  else if (status === 'recovering') liveLinkState.noteDegraded('playout', detail);
+  else if (status === 'closed') liveLinkState.noteOff('playout', detail);
+  // opening/connecting: leave the link where it was — no ack yet, no verdict.
+  // D12.4: ARMED truth rides the playout link so "will the first GO fire?" is
+  // answerable from the main bar.
+  try {
+    const armedReport = window.Outrangutan?.playoutArmed?.();
+    if (armedReport) liveLinkState.noteMeta('playout', { armed: armedReport.armed });
+  } catch {}
 }
 
 // Snapshot → local state. Structural changes (the cue set) re-render the visible
@@ -6823,7 +6987,9 @@ function outrangutanCellBadge(d, beatId) {
 async function loadScriptFile(input, targetId) {
   const file = input.files[0]; if (!file) return;
   const target = document.getElementById(targetId||'cc-s-text');
-  if (file.name.toLowerCase().endsWith('.pdf') && window.pdfjsLib) {
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    // D12.7: pdf.js loads on first use — it no longer rides every boot.
+    try { await ptLoadLibrary('assets/vendor/pdf.min.js'); } catch { toast('PDF support could not load.'); return; }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/vendor/pdf.worker.min.js';
     try {
       const ab = await file.arrayBuffer();
@@ -7038,20 +7204,45 @@ function runPreflight(reviewOnly) {
   addPreflightRow({ key: 'Playout media', state: 'pend', detail: 'Checking the Outrangutan library…' });
   addPreflightRow({ key: 'SFX banks', state: 'pend', detail: 'Checking pads…' });
   if (window.Outrangutan?.outputHealth) addPreflightRow({ key: 'Playout outputs', state: 'pend', detail: 'Checking output windows…' });
+  // D12.4: prove the first GO will fire. armPlayback() runs NOW, inside this
+  // click's gesture, so the audio engine resumes and the first cue stages;
+  // the async part reports what was actually achieved.
+  let firstGoArming = null;
+  if (window.Outrangutan?.armPlayback) {
+    addPreflightRow({ key: 'Playout first GO', state: 'pend', detail: 'Arming audio and staging the first cue…' });
+    try { firstGoArming = window.Outrangutan.armPlayback(); } catch (err) { firstGoArming = Promise.reject(err); }
+  }
   if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
     addPreflightRow({ key: 'Cloud round-trip', state: 'pend', detail: 'Writing a ping and waiting for the server echo…' });
   }
   addPreflightRow({ key: 'Theme & brand assets', state: 'pend', detail: 'Checking…' });
   renderPreflightRows();
   showOverlay('goLiveCheckOv');
-  runPreflightAsync(run, links).catch(err => containError('Preflight', err));
+  runPreflightAsync(run, links, firstGoArming).catch(err => containError('Preflight', err));
 }
 
-async function runPreflightAsync(run, links) {
+async function runPreflightAsync(run, links, firstGoArming = null) {
   // 1) Deep-check the Outrangutan library when it shares this tab.
   let deep = null;
   try { deep = window.Outrangutan?.preflight ? await window.Outrangutan.preflight() : null; } catch (e) { deep = null; }
   if (run !== _preflightRun) return;
+
+  // D12.4: the first-GO arming row — what armPlayback() actually achieved.
+  if (firstGoArming) {
+    let armed = null;
+    try { armed = await firstGoArming; } catch { armed = null; }
+    if (run !== _preflightRun) return;
+    if (!armed) {
+      setPreflightRow('Playout first GO', { state:'warn', detail:'Arming failed — fire one GO before air to prove playback' });
+    } else {
+      const bits = [];
+      bits.push(armed.audio === 'running' ? 'audio engine running' : 'audio ' + armed.audio);
+      if (armed.firstCueId) bits.push(armed.firstCueStaged ? 'first cue staged' + (armed.firstCueName ? ' · “' + armed.firstCueName + '”' : '') : 'first cue NOT staged');
+      else bits.push('no armed media cues');
+      if (armed.outputsOpen > 0) bits.push(armed.outputsReady + '/' + armed.outputsOpen + ' output windows ready');
+      setPreflightRow('Playout first GO', { state: armed.armed ? 'ok' : 'warn', detail: bits.join(' · ') });
+    }
+  }
   const pubCues = outrangutanState.cues || {}, pubPads = outrangutanState.pads || {};
   const hasLocal = !!(deep && (deep.cues.length || deep.pads.length));
   const hasRemote = !!(Object.keys(pubCues).length || Object.keys(pubPads).length);
@@ -7223,6 +7414,9 @@ function enterLiveSessionScreen(liveState) {
     containError('Playback Live reattach', error);
     setLiveSubsystemStatus('playback', 'error', String(error?.message || error));
   }
+  // D12.4: entering live is an operator gesture — resume the audio engine and
+  // stage the first armed cue NOW, so the first GO behaves like the tenth.
+  try { window.Outrangutan?.armPlayback?.()?.then?.(() => syncOutrangutanControllerStatus()); } catch (error) { containError('Playback arming', error); }
   liveSessionController.registerCleanup('live-clock', () => stopTimer(false));
   liveSessionController.registerCleanup('prompter-operator', stopPrompterOperatorRuntime);
   liveSessionController.registerCleanup('live-transients', clearLiveTransientRuntime);
@@ -7238,6 +7432,9 @@ function enterLiveSessionScreen(liveState) {
   initPrompter();
   syncOutrangutanControllerStatus();
   syncScriptOperatorSubsystemStatus();
+  ensureLiveLinkTicker();
+  renderLiveLinkStrip();
+  renderShowCallerBadge();
   sendToPrompter(true);
   renderLive();
   syncLiveIdx();
@@ -7265,28 +7462,21 @@ function leaveLiveSessionScreen(liveState, context={}) {
   markResumeState();
 }
 
+// Whose position this device is viewing — its own, or a mirror of someone
+// else. Solo carve-outs and the admin-unlock default live in the shared pure
+// resolver (D12.3), same source as isShowCaller().
 function isFollowingSelf() {
-  if (browsingSelf) return true;        // explicitly browsing on my own
-  if (followTarget) return false;       // mirroring someone else
-  // Solo surfaces — the demo, expert mode, an unsynced local workspace — have
-  // no show caller to follow: the operator IS the show. Without this, the
-  // demo's student role defaulted to "following" a caller that doesn't exist,
-  // which kept GO disabled and made the demo rundown unrunnable.
-  if (session.isDemo || session.isExpert || !session.code) return true;
-  // An admin unlock drives its own position by default, same as an instructor:
-  // a device that rejoined by code (role 'student') but holds the admin session
-  // must land with GO live, not parked behind a follow default (TH2607).
-  return session.role !== 'student' || adminSession != null;
+  return window.CueolaLiveSession.resolveCallerState(_callerStateInputs()).followingSelf;
 }
 
-// Admin Show Caller = following self AND has any admin session
+// Qualifiers derive from the ONE caller predicate — an admin caller can jump
+// anywhere; a standard (instructor) caller drives without admin powers.
 function isAdminShowCaller() {
-  return isFollowingSelf() && adminSession != null;
+  return isShowCaller() && adminSession != null;
 }
 
-// Standard Show Caller = following self, instructor, NO admin session
 function isStandardShowCaller() {
-  return isFollowingSelf() && session.role === 'instructor' && !adminSession;
+  return isShowCaller() && session.role === 'instructor' && !adminSession;
 }
 
 let liveExitTransaction = null;
@@ -7585,7 +7775,7 @@ function liveStartShowPressed() {
   }
   const activeIdx = liveActiveCueIndex();
   const firstIdx = liveNextPlayableCueIndex(-1);
-  if (!liveClockRunning && (!elapsedSecs || !_clockRanThisLoad) && firstIdx >= 0 && activeIdx > firstIdx && canOwnLiveActiveCue()) {
+  if (!liveClockRunning && (!elapsedSecs || !_clockRanThisLoad) && firstIdx >= 0 && activeIdx > firstIdx && isShowCaller()) {
     const hereEl = document.getElementById('lsStartChoiceRow');
     if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} — ${beats[activeIdx]?.info || 'Untitled'}`;
     const topEl = document.getElementById('lsStartChoiceTopLbl');
@@ -7796,17 +7986,10 @@ function projectPrompterSessionStatus(status, detail='') {
   setLiveSubsystemStatus('prompter', normalized, detail || prompterStatusLabel(status));
   const dot = document.getElementById('prompterDot');
   const txt = document.getElementById('prompterStatusTxt');
-  const stat = document.getElementById('ls-stat-prompter');
   const update = document.getElementById('lsPrompterUpdateStatus');
   const healthy = ['ready','running','paused'].includes(status);
   if (dot) dot.className = `ls-prompter-dot${healthy ? '' : ' off'}`;
   if (txt) txt.textContent = detail || prompterStatusLabel(status);
-  if (stat) {
-    stat.textContent = `FLOWMINGO ${status === 'recovering' ? 'RECOVERING' : prompterStatusLabel(status).toUpperCase()}`;
-    stat.title = detail || `Flowmingo ${prompterStatusLabel(status).toLowerCase()}`;
-    stat.classList.toggle('connected', healthy);
-    stat.dataset.prompterStatus = status;
-  }
   if (update && status === 'error') {
     clearTimeout(livePrompterStatusTimer);
     livePrompterStatusTimer = null;
@@ -8080,7 +8263,7 @@ function liveRowPreview(idx) {
   const cueBtn = document.getElementById('lrpCueBtn');
   const cueHint = document.getElementById('lrpCueHint');
   if (cueBtn) {
-    const canCue = canOwnLiveActiveCue()
+    const canCue = isShowCaller()
       && b.style !== 'segment'
       && !liveCueIsDisabled(idx)
       && liveCueExecutionStatus(idx) !== 'failed'
@@ -8212,13 +8395,13 @@ function updateLiveGoControl(projectedState=null) {
   const activeIndex = state.activeCueIndex >= 0 ? state.activeCueIndex : state.selectedCueIndex;
   const nextIndex = liveNextPlayableCueIndex(activeIndex);
   const failed = nextIndex >= 0 && liveCueExecutionStatus(nextIndex) === 'failed';
-  const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && canOwnLiveActiveCue();
+  const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && isShowCaller();
   const nextBeat = nextIndex >= 0 ? beats[nextIndex] : null;
   const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${nextIndex + 1} — ${nextBeat.info || 'Untitled cue'}` : 'End of rundown';
   label.textContent = text;
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
-  const studentLocked = !canOwnLiveActiveCue() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
+  const studentLocked = !isShowCaller() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
   button.title = dispatchable ? `GO to ${text}`
     : failed ? `Recover failed row ${nextIndex + 1} before GO`
     : studentLocked ? 'Joined as a student — only the show caller (instructor or admin) advances the rundown'
@@ -8507,23 +8690,10 @@ function insertLivePanelMarker(text) {
   queueLivePrompterDraftPush();
 }
 
-async function pasteClipboardToPrompter(pushNow=false) {
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch {
-    // Paste-Push should fire straight through — never interrupt with a prompt.
-    if (pushNow) { markLivePrompterStatus('Allow clipboard access to paste', 'busy'); return; }
-    text = prompt('Paste chat text to send to Flowmingo:', '') || '';
-  }
-  text = cleanPrompterText(text);
-  if (!text) {
-    markLivePrompterStatus('Clipboard empty', 'busy');
-    return;
-  }
-  insertLivePanelMarker(`${prompterText || livePrompterEditorText() ? '\n\n' : ''}[CHAT]\n${text}`);
-  if (pushNow) pushToPrompter();
-}
+// The old Paste / Paste-Push chat path is GONE (D12.6): it appended [CHAT]
+// text into the rolling script and re-pushed the whole script mid-read.
+// Audience questions now ride the questions lane (pushChatQuestion) as a
+// QUESTION-labeled overlay card, never script copy.
 
 function insertCueScriptMarker(text) {
   const ta = document.getElementById('cc-s-text');
@@ -8552,9 +8722,9 @@ function saveLiveScript() {
 
 function jumpToLsCue(i, opts = {}) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  // Same gate as GO (canOwnLiveActiveCue): blocks students in shared sessions
+  // Same gate as GO (isShowCaller): blocks students in shared sessions
   // but keeps the solo/demo carve-out where the operator always drives.
-  if (!canOwnLiveActiveCue()) return false;
+  if (!isShowCaller()) return false;
   // Standard show callers advance sequentially UNLESS they explicitly confirmed
   // a jump (the row-preview "Cue here" ask) — that confirm IS the safety rail.
   if (isStandardShowCaller() && !opts.confirmed) return false;
@@ -8715,9 +8885,34 @@ function effectiveFollowedName(presence) {
   return session.userName;
 }
 
+// D12.3: who has the wheel, permanently on the main bar. Renders from the
+// same predicate that gates GO and the same presence data followers see.
+function renderShowCallerBadge() {
+  const badge = document.getElementById('lsCallerBadge');
+  if (!badge) return;
+  let state = 'viewer', text, title;
+  if (isShowCaller()) {
+    state = 'caller';
+    text = 'CALLER · You';
+    title = `${session.userName || 'This device'} is calling the show${adminSession ? ' (admin)' : ''}`;
+  } else if (followTarget) {
+    text = `FOLLOWING · ${followTarget}`;
+    title = `Mirroring ${followTarget}'s position`;
+  } else {
+    const instructor = activePresenceEntries(currentPresence)
+      .find(([, p]) => p?.role === 'instructor' && !sameParticipantName(p.name, session.userName));
+    text = instructor ? `CALLER · ${instructor[1].name}` : 'VIEWER';
+    title = instructor ? `${instructor[1].name} is calling the show` : 'Following the show caller';
+  }
+  badge.dataset.state = state;
+  badge.textContent = text;
+  badge.title = title;
+}
+
 function renderFollowChips() {
   const chips = document.getElementById('followChips');
   if (!chips) return;
+  renderShowCallerBadge();
   const activeName = effectiveFollowedName(currentPresence);
   const seenNames = new Set();
   const others = activePresenceEntries(currentPresence)
@@ -8838,7 +9033,6 @@ let _prompterOperatorRuntimeActive = false;
 let _prompterTalentWin = null;
 let lastTalentPingTs = 0;        // operator-side: when did we last hear from a talent
 let _lastSeenTalentHeartbeatTs = 0; // dedup: last Firestore heartbeat ts we counted
-let _talentWatchdog = null;       // interval that flips FLOWMINGO status if the talent goes silent
 let _lastTalentInitSendBySender = {};
 let _pendingPrompterControls = {};
 let _lastPrompterAckId = '';
@@ -8846,8 +9040,8 @@ let _seenPrompterOperatorMsgIds = [];
 let _activePrompterOutputInstanceId = '';
 let _lastAppliedPrompterSnapshotId = '';
 let _prompterHandshakeTimer = null;
-let _prompterMissCount = 0;
-let _prompterRecoveryAnnounced = false;
+// Talent silence is judged by the shared link model (liveLinkState 'talent':
+// 3 missed 2s heartbeats → degraded, 8 → lost), not by a local watchdog.
 const PROMPTER_HEARTBEAT_MS = 2000;
 const PROMPTER_MISS_THRESHOLD = 3;
 const PROMPTYPUS_CHANNEL = 'promptypus';
@@ -8900,6 +9094,10 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready') {
       'prompter.snapshotId':message.snapshotId,
       'prompter.state':message.state,
       'prompter.updatedAt':message.ts,
+      // Seed writes must carry their writer: takeover detection compares the
+      // doc's senderClient against the local client (D12.2).
+      'prompter.sender':FLOWMINGO_ENDPOINT_ID,
+      'prompter.senderClient':CLIENT_ID,
     }).catch(err => {
       projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Flowmingo state sync failed'));
     });
@@ -8999,18 +9197,17 @@ function _notePrompterTalentSeen(msg={}) {
   if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
-  _prompterMissCount = 0;
   const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
   if (outputId && (!_activePrompterOutputInstanceId || outputId === _activePrompterOutputInstanceId)) {
     _activePrompterOutputInstanceId = outputId;
   }
-  if (prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
-    const state = msg.state || prompterSessionController.getState();
-    projectPrompterSessionStatus(state.running ? 'running' : 'paused', state.running ? 'Talent scrolling' : 'Talent paused');
-  } else {
-    projectPrompterSessionStatus('connected', 'Talent connected · applying state');
-  }
-  startTalentWatchdog(); // operator side: flip the badge loudly if this talent goes silent
+  // D12.1: this is the talent link's acknowledged round-trip. The displayed
+  // status renders from the model transition (projectTalentLinkTransition) —
+  // never directly from this event, which fires at heartbeat rate.
+  const ready = prompterSessionController.isReady(_activePrompterOutputInstanceId);
+  liveLinkState.noteAck('talent', ready ? 'Talent connected' : 'Talent connected · applying state');
+  if (wasSilent) _setPrompterStatus(true);
+  ensureLiveLinkTicker();
   return wasSilent;
 }
 
@@ -9081,16 +9278,16 @@ function _handlePrompterControlAck(msg) {
   if (!ackId || ackId === _lastPrompterAckId) return;
   _lastPrompterAckId = ackId;
   _notePrompterTalentSeen(msg);
-  if (msg.state) {
-    adoptPrompterTalentState(msg.state);
-    projectPrompterSessionStatus(msg.state.running || msg.state.playing ? 'running' : 'paused', msg.state.running || msg.state.playing ? 'Talent scrolling' : 'Talent paused');
-  }
+  // Lifecycle (running/paused) is adopted from the acked state below;
+  // connection status renders from the link model, not from this event.
+  if (msg.state) adoptPrompterTalentState(msg.state);
   const pending = _pendingPrompterControls[msg.controlId];
   if (pending) {
     clearTimeout(pending.waitTimer);
     clearTimeout(pending.failTimer);
     delete _pendingPrompterControls[msg.controlId];
     pending.settle?.({ ok:true, acknowledged:true, state:msg.state || null });
+    markPrompterToggleState(pending.action, 'confirmed');
     const label = flowOpControlLabel(pending.action);
     if (pending.origin === 'flowop') flowOpSetStatus(`${label} applied`);
     else markLivePrompterStatus(`${label} applied`, 'ok');
@@ -9107,6 +9304,38 @@ function _handlePrompterControlAck(msg) {
 // own state into it; the talent then accepts that snapshot (sessionId matches),
 // its next heartbeat carries our snapshotId, and readiness + queued commands
 // converge through the normal path.
+// D12.2 single-authority: the session doc carries THE prompter session for
+// this production (`prompter.sessionId`, written by a show-calling surface).
+// Surfaces without a session join it; a caller whose session was re-seeded by
+// a second operator surface adopts the new one with a VISIBLE takeover notice
+// — who has the wheel is shown, never silently contested.
+let _lastPrompterTakeoverNoticeTs = 0;
+let _lastForeignPrompterSeedSid = '';
+function _adoptDocPrompterSession(d) {
+  const docSid = String(d?.prompter?.sessionId || '').trim();
+  if (!docSid) return;
+  const localSid = String(prompterSessionController.getState().sessionId || '').trim();
+  if (docSid === localSid) { _lastForeignPrompterSeedSid = ''; return; }
+  if (!localSid) {
+    // No session of our own yet — join the seeded one quietly.
+    ensurePrompterProtocolIdentity({ sessionId:docSid });
+    logShow('prompter', `Joined the production's prompter session ${docSid}`);
+    return;
+  }
+  const senderClient = String(d.prompter?.senderClient || '').trim();
+  if (!senderClient || senderClient === CLIENT_ID || isPrompterSelfSender(d.prompter?.sender)) return; // our own write in flight
+  if (docSid === _lastForeignPrompterSeedSid) return; // this seed is already handled
+  _lastForeignPrompterSeedSid = docSid;
+  ensurePrompterProtocolIdentity({ sessionId:docSid });
+  _activePrompterOutputInstanceId = '';   // the talent rebinds inside the adopted session
+  logShow('prompter', `Prompter takeover: another operator surface re-seeded the session (${docSid}) — this window joined it`);
+  if (_prompterOperatorRuntimeActive && Date.now() - _lastPrompterTakeoverNoticeTs > 10000) {
+    _lastPrompterTakeoverNoticeTs = Date.now();
+    toast('Another operator window took the prompter — this window joined their session.');
+    markLivePrompterStatus('Joined the other operator’s prompter session', 'ok');
+  }
+}
+
 let _lastPrompterSessionReclaimTs = 0;
 function _maybeReclaimPrompterTalentSession(msg) {
   if (!['PROMPTER_HEARTBEAT', 'PROMPTER_READY'].includes(msg?.type)) return false;
@@ -9119,7 +9348,7 @@ function _maybeReclaimPrompterTalentSession(msg) {
   // Only the surface actually calling the show may reclaim, and never in a
   // tight loop — two live operator windows must not snapshot-war over talent.
   if (!document.getElementById('liveshow')?.classList.contains('on')) return false;
-  if (!canOwnLiveActiveCue()) return false;
+  if (!isShowCaller()) return false;
   const now = Date.now();
   if (now - _lastPrompterSessionReclaimTs < 10000) return false;
   const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
@@ -9167,7 +9396,6 @@ function _handlePrompterOperatorMessage(msg) {
     if (!prompterSessionController.markStateApplied(outputId, msg.snapshotId, msg.state)) return;
     clearTimeout(_prompterHandshakeTimer);
     _prompterHandshakeTimer = null;
-    _prompterRecoveryAnnounced = false;
     _notePrompterTalentSeen(msg);
     const state = msg.state || prompterSessionController.getState();
     adoptPrompterTalentState(state);
@@ -9226,30 +9454,15 @@ function _ensurePrompterOperatorBridge(startHello=false) {
   }
 }
 
-// Watch the talent's heartbeat — if it goes silent for too long, flip the
-// FLOWMINGO indicator to "Talent disconnected" so a dropout is loud, not silent.
-function startTalentWatchdog() {
-  if (_talentWatchdog) return;
-  _talentWatchdog = setInterval(() => {
-    if (!lastTalentPingTs) return; // never seen one yet — keep "Waiting"
-    const age = Date.now() - lastTalentPingTs;
-    _prompterMissCount = Math.floor(age / PROMPTER_HEARTBEAT_MS);
-    if (_prompterMissCount >= PROMPTER_MISS_THRESHOLD) {
-      if (!_prompterRecoveryAnnounced) {
-        _prompterRecoveryAnnounced = true;
-        prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
-        projectPrompterSessionStatus('recovering', `Talent unresponsive · missed ${_prompterMissCount} heartbeats`);
-        console.warn('Flowmingo heartbeat missed', { outputInstanceId:_activePrompterOutputInstanceId, age });
-      }
-    }
-  }, PROMPTER_HEARTBEAT_MS);
-}
+// Talent silence detection lives in the shared link model (D12.1): the owned
+// ticker demotes the 'talent' link after consecutive missed heartbeats and
+// projectTalentLinkTransition flips the FLOWMINGO status loudly, once.
 
 function initPrompter() {
   _prompterOperatorRuntimeActive = true;
   ensurePrompterProtocolIdentity();
   projectPrompterSessionStatus(_prompterHasRecentTalent() ? 'connected' : 'opening', _prompterHasRecentTalent() ? 'Talent connected · applying state' : 'Waiting for Flowmingo output');
-  startTalentWatchdog();
+  ensureLiveLinkTicker();
   _ensurePrompterOperatorBridge(true);
   _setPrompterStatus(_prompterHasRecentTalent());
 }
@@ -9258,8 +9471,6 @@ function stopPrompterOperatorRuntime() {
   _prompterOperatorRuntimeActive = false;
   clearInterval(_prompterPingInterval);
   _prompterPingInterval = null;
-  clearInterval(_talentWatchdog);
-  _talentWatchdog = null;
   if (_prompterStorageHandler) {
     window.removeEventListener('storage', _prompterStorageHandler);
     _prompterStorageHandler = null;
@@ -9282,8 +9493,7 @@ function stopPrompterOperatorRuntime() {
   _lastTalentInitSendBySender = {};
   _seenPrompterOperatorMsgIds = [];
   _activePrompterOutputInstanceId = '';
-  _prompterMissCount = 0;
-  _prompterRecoveryAnnounced = false;
+  liveLinkState.noteOff('talent', 'Operator bridge closed');
   projectPrompterSessionStatus('closed', 'Live operator bridge closed');
 }
 
@@ -9506,6 +9716,7 @@ function renderLivePrompterControls() {
   patchScriptOpClockControls(clocks);
   patchScriptOpPrompterControls(remote);
   renderPromptOpClockPreview();
+  applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
   lsInspRestoreTab();   // keep the remembered inspector tab active across re-renders
   scriptOperatorPublishState();
 }
@@ -9587,7 +9798,7 @@ function scriptOperatorSnapshot() {
     mirrored:Boolean(ptMirrored),
     techSlateOn:Boolean(ptTechSlateOn),
     colorBarsOn:Boolean(ptColorBarsOn),
-    questionOn:Boolean(ptQuestionOn),
+    questionOn:Boolean(ptQuestionOn), questionText:ptQuestionText || '',
     clockState:{ ...ptClockState },
     clockDurationMinutes:flowClockDurationMin,
     clockCountTime:flowClockCountTime,
@@ -9613,7 +9824,7 @@ function scriptOperatorSnapshot() {
       theme:ptThemeName,
       techSlateOn:Boolean(ptTechSlateOn),
       colorBarsOn:Boolean(ptColorBarsOn),
-      questionOn:Boolean(ptQuestionOn),
+      questionOn:Boolean(ptQuestionOn), questionText:ptQuestionText || '',
       clockState:{ ...ptClockState },
     }
   };
@@ -9839,8 +10050,13 @@ function startScriptOperatorHost(identity) {
       }
       return;
     }
+    // D12.1: a passing protocol heartbeat check is the script-op link's ack;
+    // if beats stop, the shared model demotes it (degraded → lost) on its own.
+    liveLinkState.noteAck('scriptop', status.ready ? 'Script Operator synchronized' : 'Script Operator connected');
+    _scriptOpDisconnectAnnounced = false;
     scriptOperatorPublishState(false);
   }, P.HEARTBEAT_INTERVAL_MS || 2000);
+  ensureLiveLinkTicker();
   liveSessionController.registerCleanup('script-operator-popout', () => {
     stopScriptOperatorHost({ reason:'Live mode closed', closeWindow:true, clearWindow:true, notify:true });
   });
@@ -9869,6 +10085,7 @@ function stopScriptOperatorHost(options={}) {
     try { _scriptOpWin.close(); } catch (error) { containError('Script Operator window cleanup', error); }
   }
   if (options.clearWindow !== false) _scriptOpWin = null;
+  liveLinkState.noteOff('scriptop', reason);
   setLiveSubsystemStatus('scriptOperator', 'closed', reason);
   scriptOperatorSetButton(false, 'Pop out Script Operator');
 }
@@ -10016,9 +10233,9 @@ function clearPrompter() {
   sendToPrompter(true); // reset scroll on clear
 }
 
-function buildPrompterControl(action, source='script-op') {
+function buildPrompterControl(action, source='script-op', payload=null) {
   ensurePrompterProtocolIdentity({ productionCode:source === 'flowmingo-op' ? flowOpCode : session.code });
-  const command = prompterSessionController.buildCommand(action);
+  const command = prompterSessionController.buildCommand(action, payload || {});
   return {
     ...command,
     type:'PROMPTER_COMMAND',
@@ -10073,8 +10290,41 @@ function isCollaborativePrompterControl(action) {
       || action.startsWith('seek_');   // cue to row / scrub position
 }
 
+// D12.5: per-toggle pending→confirmed state, driven by the ack'd command path
+// so "did that land on the talent?" is answerable at a glance. Buttons carry
+// stable selectors; state survives panel re-renders via _ptToggleAckState.
+const _ptToggleAckState = {};
+const PT_TOGGLE_FAMILIES = Object.freeze({
+  question: { prefix:['question_'], selector:'[data-clock-question], .pt-question-btn' },
+  tech:     { prefix:['slate_tech_'], selector:'.pt-tech-btn' },
+  bars:     { prefix:['slate_bars_'], selector:'.pt-bars-btn' },
+  wrap:     { prefix:['wrapup_'], selector:'.pt-wrap-btn' },
+  clock:    { prefix:['clock_'], selector:'[data-clock-mode]' },
+});
+function ptToggleFamily(action) {
+  if (!action) return '';
+  return Object.keys(PT_TOGGLE_FAMILIES).find(name =>
+    PT_TOGGLE_FAMILIES[name].prefix.some(p => action.startsWith(p))) || '';
+}
+function markPrompterToggleState(action, state) {
+  const family = ptToggleFamily(action);
+  if (!family) return;
+  _ptToggleAckState[family] = state;
+  applyPrompterToggleStates();
+}
+function applyPrompterToggleStates() {
+  Object.entries(PT_TOGGLE_FAMILIES).forEach(([family, def]) => {
+    const state = _ptToggleAckState[family] || '';
+    document.querySelectorAll(def.selector).forEach(el => {
+      el.classList.toggle('pt-ack-pending', state === 'pending');
+      el.classList.toggle('pt-ack-failed', state === 'failed');
+    });
+  });
+}
+
 function trackPrompterControl(control, origin='live', quiet=false) {
   if (!control?.controlId || quiet || isQuietPrompterControl(control.action)) return;
+  markPrompterToggleState(control.action, 'pending');
   const label = flowOpControlLabel(control.action);
   clearTimeout(_pendingPrompterControls[control.controlId]?.waitTimer);
   clearTimeout(_pendingPrompterControls[control.controlId]?.failTimer);
@@ -10088,6 +10338,7 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     const pending = _pendingPrompterControls[control.controlId];
     delete _pendingPrompterControls[control.controlId];
     pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
+    markPrompterToggleState(control.action, 'failed');
     if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
     else markLivePrompterStatus('No talent ack', 'busy');
   }, 5000);
@@ -10111,8 +10362,7 @@ function openFlowmingoTalentWindow({ replace=false }={}) {
     _prompterHandshakeTimer = null;
     lastTalentPingTs = 0;
     _activePrompterOutputInstanceId = '';
-    _prompterMissCount = 0;
-    _prompterRecoveryAnnounced = false;
+    liveLinkState.noteOff('talent', 'Replacing the talent window');
   }
   initPrompter(); // make sure this window answers the new tab's pings with the current script
   if (_prompterTalentWin && !_prompterTalentWin.closed) {
@@ -10141,14 +10391,22 @@ function sendPrompterPreviewControl(action) {
   return dispatchPrompterCommand(control, 'live', true);
 }
 
-function sendPrompterControl(action) {
+function sendPrompterControl(action, payload=null) {
   if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return;
   }
   _ensurePrompterOperatorBridge();
-  const control = buildPrompterControl(action, 'script-op');
+  const control = buildPrompterControl(action, 'script-op', payload);
   if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    // D12.5: discrete talent state (clock/wrap/question/slate/seek) is
+    // last-writer-wins and rides the doc channel — it must never sit in the
+    // readiness queue. This is how "can't turn OFF tech issues / bars /
+    // question flags" happened on show day: with the handshake incomplete,
+    // off-commands queued forever instead of reaching the talent.
+    if (isCollaborativePrompterControl(action)) {
+      return dispatchPrompterCommand(control, 'live', isQuietPrompterControl(action));
+    }
     prompterSessionController.queueCommand(control);
     projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for talent to apply state' : 'Waiting for Flowmingo output');
     markLivePrompterStatus(`${flowOpControlLabel(action)} queued`, 'busy');
@@ -10205,6 +10463,8 @@ let ptColorBarsOn = false;    // generated NTSC bars on the talent display
 let flowOpColorBarsOn = false;
 let ptQuestionOn = false;
 let flowOpQuestionOn = false;
+let ptQuestionText = '';       // D12.6: current QUESTION card copy ('' = generic)
+let flowOpQuestionText = '';
 let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
 let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
 let flowOpSessionRenderFingerprint = '';
@@ -10317,7 +10577,7 @@ function ptHandleCueolaMessage(msg) {
     return;
   }
   if (msg.type === 'PROMPTER_COMMAND' && msg.action) {
-    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.commandId || msg.controlId);
+    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.commandId || msg.controlId, msg.payload);
     return;
   }
   if (msg.type === 'cueola_hello') {
@@ -10345,7 +10605,7 @@ function ptHandleCueolaMessage(msg) {
     }
   }
   if (msg.type === 'prompter_control' && msg.action) {
-    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.controlId);
+    applyRemoteControlOnce(msg.action, msg.ts, msg.sender, msg.controlId, msg.payload);
   }
 }
 
@@ -11421,7 +11681,9 @@ function ptEnsureOverlayEls() {
     question = document.createElement('div');
     question.id = 'pt-question-overlay';
     question.setAttribute('aria-live', 'polite');
-    question.textContent = 'Question in chat';
+    // D12.6: a QUESTION-labeled card — the tag makes it read as production
+    // signage, never script copy.
+    question.innerHTML = '<span class="pt-question-tag">Question</span><span class="pt-question-text">Question in chat</span>';
     screen.appendChild(question);
   }
   return { clock, question };
@@ -11455,6 +11717,8 @@ function ptRenderClockOverlay() {
   // P6 (Decisions #11): the question indicator rides the same global overlay
   // size as the clock/wrap banner — one stepper controls all three readouts.
   question.className = 'size-' + Math.max(0, Math.min(4, state.size ?? 1)) + (ptQuestionOn ? ' on' : '');
+  const questionTextEl = question.querySelector('.pt-question-text');
+  if (questionTextEl) questionTextEl.textContent = ptQuestionText || 'Question in chat';
   if (visible && !ptClockInterval) ptClockInterval = setInterval(ptRenderClockOverlay, 500);
   if (!visible && !ptQuestionOn && ptClockInterval) {
     clearInterval(ptClockInterval);
@@ -11496,7 +11760,10 @@ function renderPromptOpClockPreview() {
     const questionEl = mini.querySelector('[data-clock-preview-question]');
     if (labelEl) labelEl.textContent = label;
     if (valueEl) valueEl.textContent = value;
-    if (questionEl) questionEl.hidden = !ptQuestionOn;
+    if (questionEl) {
+      questionEl.hidden = !ptQuestionOn;
+      questionEl.textContent = ptQuestionText ? `“${ptQuestionText.slice(0, 80)}${ptQuestionText.length > 80 ? '…' : ''}”` : 'Question in chat';
+    }
   });
 }
 
@@ -11529,13 +11796,46 @@ function applyClockActionToState(action, target='talent') {
   }
 }
 
-function applyQuestionAction(action, target='talent') {
+// D12.6 questions lane: deliberately dumb — the operator copies a message in
+// YouTube chat, pastes it here, Enter pushes it to the talent as a
+// QUESTION-labeled card, Esc (or Clear question) removes it. One card at a
+// time, last write wins; rides the ack'd question-flag channel (no YouTube
+// API — decision 16b). This REPLACES the old Paste-Push path, which appended
+// chat text into the rolling script and re-pushed the whole script mid-read.
+function questionLaneKeydown(event, scope) {
+  if (event.key === 'Enter') { event.preventDefault(); pushChatQuestion(scope); }
+  else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.target.value = '';
+    clearChatQuestion(scope);
+  }
+}
+
+function pushChatQuestion(scope) {
+  const input = document.getElementById(`${scope}-question-input`);
+  const text = String(input?.value || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+  if (!text) return clearChatQuestion(scope);
+  if (scope === 'flow') flowOpSendControl('question_on', false, { text });
+  else sendPrompterControl('question_on', { text });
+}
+
+function clearChatQuestion(scope) {
+  if (scope === 'flow') flowOpSendControl('question_off');
+  else sendPrompterControl('question_off');
+}
+
+function applyQuestionAction(action, target='talent', text='') {
   const on = action === 'question_on';
+  // D12.6 questions lane: one card at a time, last write wins. A bare
+  // question_on (legacy flag) keeps the generic card text.
+  const card = on ? String(text || '').slice(0, 280) : '';
   if (target === 'flowop') {
     flowOpQuestionOn = on;
+    flowOpQuestionText = card;
     flowOpRenderClockPreview();
   } else {
     ptQuestionOn = on;
+    ptQuestionText = card;
     ptRenderClockOverlay();
     renderPromptOpClockPreview();
   }
@@ -11545,7 +11845,7 @@ function applyQuestionAction(action, target='talent') {
 // Apply a remote control exactly once, no matter how many transports deliver it
 // or how often a Firestore snapshot re-fires. Dedup by a signature instead of a
 // monotonic timestamp so clock skew between devices can't permanently wedge it.
-function applyRemoteControlOnce(action, ts, sender, controlId='') {
+function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) {
   if (!action) return false;
   if (isPrompterSelfSender(sender)) return false;
   const sig = controlId || `${sender || ''}:${ts || 0}:${action}`;
@@ -11559,13 +11859,13 @@ function applyRemoteControlOnce(action, ts, sender, controlId='') {
     });
     return true;
   }
-  ptHandleRemoteControl(action);
+  ptHandleRemoteControl(action, payload);
   prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
   ptPostControlAck(controlId, action, ts, sender);
   return true;
 }
 
-function ptHandleRemoteControl(action) {
+function ptHandleRemoteControl(action, payload=null) {
   if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
@@ -11575,7 +11875,7 @@ function ptHandleRemoteControl(action) {
     return;
   }
   if (action === 'question_on' || action === 'question_off') {
-    applyQuestionAction(action, 'talent');
+    applyQuestionAction(action, 'talent', payload?.text);
     return;
   }
   switch (action) {
@@ -11709,7 +12009,7 @@ function flowOpRenderClockPreview() {
   el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
     <span>${esc(label)}</span>
     <strong>${esc(value)}</strong>
-    ${flowOpQuestionOn ? '<em>Question in chat</em>' : ''}
+    ${flowOpQuestionOn ? `<em>${esc(flowOpQuestionText ? `“${flowOpQuestionText.slice(0, 80)}${flowOpQuestionText.length > 80 ? '…' : ''}”` : 'Question in chat')}</em>` : ''}
   </div>`;
   if (clockOn && !flowOpClockPreviewTimer) flowOpClockPreviewTimer = setInterval(flowOpRenderClockPreview, 500);
   if (!clockOn && flowOpClockPreviewTimer) {
@@ -11718,7 +12018,7 @@ function flowOpRenderClockPreview() {
   }
 }
 
-function flowOpApplyControlPreview(action, quiet=false) {
+function flowOpApplyControlPreview(action, quiet=false, payload=null) {
   if (!action) return;
   if (action.startsWith('speed_set_')) {
     flowOpSetSpeed(action.replace('speed_set_', ''));
@@ -11733,7 +12033,7 @@ function flowOpApplyControlPreview(action, quiet=false) {
   } else if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action.startsWith('clock_until_') || action.startsWith('clock_duration_') || action.startsWith('wrapup_')) {
     applyClockActionToState(action, 'flowop');
   } else if (action === 'question_on' || action === 'question_off') {
-    applyQuestionAction(action, 'flowop');
+    applyQuestionAction(action, 'flowop', payload?.text);
   } else {
     switch (action) {
       case 'slate_tech_on': setFlowOpSlateState('tech'); break;
@@ -11845,6 +12145,12 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
       <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
         ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn', 'data-clock-question')}
       </div>
+      <div class="pt-question-lane" data-question-lane>
+        <input id="${scope}-question-input" class="pt-question-lane-input" type="text" maxlength="280"
+          placeholder="Paste a chat question · Enter pushes · Esc clears"
+          aria-label="Question for the talent" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
+        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" title="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push</span></button>
+      </div>
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
         <div class="ui-stepper">
@@ -11954,6 +12260,7 @@ function flowOpRenderControls(disabled=false) {
   el.dataset.renderCount = String(flowOpControlsRenderCount);
   opInspRestoreTab('flow');   // keep the remembered inspector tab active across re-renders
   flowOpSyncControls();
+  applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
   return true;
 }
 
@@ -12076,7 +12383,7 @@ function flowOpLoadSession(codeOverride='') {
         const control = flowOpData.prompter?.control;
         if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
           flowOpLastRemoteControlTs = control.ts;
-          flowOpApplyControlPreview(control.action, true);
+          flowOpApplyControlPreview(control.action, true, control.payload);
         }
         if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
@@ -12105,15 +12412,20 @@ function flowOpStopListening() {
   if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
 }
 
-function flowOpSendControl(action, quiet=false) {
+function flowOpSendControl(action, quiet=false, payload=null) {
   if (!flowOpCode) {
     flowOpSetStatus('Load a session first', true);
     flowOpEl('flowOpCodeInput')?.focus();
     return;
   }
   _ensurePrompterOperatorBridge(true);
-  const control = buildPrompterControl(action, 'flowmingo-op');
+  const control = buildPrompterControl(action, 'flowmingo-op', payload);
   if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    // D12.5: same bypass as the desk — discrete state toggles (incl. every
+    // off-command) go straight to the doc channel, never the readiness queue.
+    if (isCollaborativePrompterControl(action)) {
+      return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
+    }
     prompterSessionController.queueCommand(control);
     flowOpSetStatus(`${flowOpControlLabel(action)} queued · waiting for talent`);
     return false;
@@ -12333,7 +12645,10 @@ function ptLoadFromCueolaCode(codeOverride='') {
         session.code = code;
         session.isDemo = false;
         session.isExpert = false;
-        ensurePrompterProtocolIdentity({ productionCode:code });
+        // D12.2: the talent JOINS the doc's authoritative prompter session —
+        // it never mints a rival (the Jul 20 split-brain root cause: this call
+        // used to omit sessionId, so a #flowmingo talent minted its own).
+        ensurePrompterProtocolIdentity({ productionCode:code, sessionId:data.prompter?.sessionId || '' });
         ptConnState = 'connected';
         ptConnMessage = '';
         const stateMessage = data.prompter?.stateMessage;
@@ -12389,7 +12704,7 @@ function ptLoadFromCueolaCode(codeOverride='') {
         const control = data.prompter?.control;
         if (control?.action && !isPrompterSelfSender(control.sender)
             && prompterSessionController.accepts(control, { allowLegacy:true })) {
-          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId);
+          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       }, err => {

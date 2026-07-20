@@ -436,6 +436,41 @@ test('emergency recovery tolerates cleanup errors and always reaches builder', (
   assert.equal(controller.getState().lifecycle, 'builder');
 });
 
+test('show-caller predicate: the TH2607 Jul 20 scenarios (D12.3)', () => {
+  const resolve = LiveSession.resolveCallerState;
+  // Student locked: rejoined a shared session by code, no admin unlock —
+  // must NOT be able to move the shared cue (and follows the caller).
+  const student = resolve({ code:'TH07', role:'student', hasAdminSession:false });
+  assert.equal(student.isShowCaller, false);
+  assert.equal(student.followingSelf, false);
+  // Admin drives: same student join, but the device holds an admin session —
+  // the admin unlock outranks the joined role (the Jul 20 patch).
+  const admin = resolve({ code:'TH07', role:'student', hasAdminSession:true });
+  assert.equal(admin.isShowCaller, true);
+  assert.equal(admin.followingSelf, true);
+  // Instructor drives.
+  const instructor = resolve({ code:'TH07', role:'instructor', hasAdminSession:false });
+  assert.equal(instructor.isShowCaller, true);
+});
+
+test('show-caller predicate: solo carve-outs and follow semantics', () => {
+  const resolve = LiveSession.resolveCallerState;
+  // The demo (role student, no code... actually code DEMO1 + isDemo) always drives.
+  assert.equal(resolve({ code:'DEMO1', isDemo:true, role:'student' }).isShowCaller, true);
+  // Expert mode and an unsynced local workspace likewise.
+  assert.equal(resolve({ code:'', role:'student' }).isShowCaller, true);
+  assert.equal(resolve({ code:'X', isExpert:true, role:'student' }).isShowCaller, true);
+  // Mirroring someone else never calls the show, whatever the role.
+  assert.equal(resolve({ code:'X', role:'instructor', followTarget:'Sam' }).isShowCaller, false);
+  // Explicitly browsing on my own restores my own position — but a student
+  // in a shared session still cannot move the SHARED cue.
+  const browsingStudent = resolve({ code:'X', role:'student', browsingSelf:true });
+  assert.equal(browsingStudent.followingSelf, true);
+  assert.equal(browsingStudent.isShowCaller, false);
+  // An instructor browsing self drives.
+  assert.equal(resolve({ code:'X', role:'instructor', browsingSelf:true }).isShowCaller, true);
+});
+
 for (const { name, fn } of tests) {
   await fn();
   console.log('PASS', name);

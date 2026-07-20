@@ -895,9 +895,16 @@
     const rec = outputRecord(id, true), controller = controllerFor(id);
     if (!controller || !rec.outputInstanceId) return false;
     rec.handshakeAt = Date.now(); rec.status = 'connecting'; rec.detail = 'Applying a safe paused program snapshot';
-    const sync = controller.buildSyncState(String(id), desiredOutputState(id), { reason: reason || 'renderer-sync' });
+    const desired = desiredOutputState(id);
+    const sync = controller.buildSyncState(String(id), desired, { reason: reason || 'renderer-sync' });
     if (!sync) return false;
     sync.payload.snapshot = outputProgramSnapshot(id);
+    // First-GO root cause (v2.1 D12.4, TH2607/P2607): the snapshot always
+    // loads PAUSED for safety, and the pre-handshake play intent is dropped as
+    // already-represented — so a cue fired before this window announced itself
+    // sat frozen on frame 0 while the console showed it playing. When program
+    // truth IS playing, arm the post-handshake resume so the mirror rolls.
+    if (desired.playbackStatus === 'playing') rec.resumeAfterSync = true;
     postOutputEnvelope(sync, rec, false);
     updateOutputUI();
     return true;
@@ -2698,28 +2705,65 @@
     preloaded = null;
   }
   async function preloadNext(fromCue) {
+    const next = cueById(nextArmedAfter(fromCue.id));
+    if (!next || !next.mediaId || next.broken) { clearPreload(); return; }
+    return preloadCue(next);
+  }
+  async function preloadCue(cue) {
     try {
-      const next = cueById(nextArmedAfter(fromCue.id));
-      if (!next || !next.mediaId || next.broken) { clearPreload(); return; }
-      if (preloaded && preloaded.cueId === next.id) return;
+      if (!cue || !cue.mediaId || cue.broken) return;
+      if (preloaded && preloaded.cueId === cue.id) return;
       clearPreload();
-      const media = await idbGet(MEDIA_STORE, next.mediaId);
+      const media = await idbGet(MEDIA_STORE, cue.mediaId);
       if (!media || !media.blob) return;
-      if (next.type === 'video' || next.type === 'audio') {
-        const deck = next.type === 'audio' ? decks.audio : freeVideoDeck();
+      if (cue.type === 'video' || cue.type === 'audio') {
+        const deck = cue.type === 'audio' ? decks.audio : freeVideoDeck();
         if (active && deckOf(active) === deck) return;   // never touch the live deck
         if (deck._url) { try { URL.revokeObjectURL(deck._url); } catch (e) {} }
         deck.el.onended = deck.el.ontimeupdate = deck.el.onplay = deck.el.onplaying = deck.el.onerror = null;
         deck._url = URL.createObjectURL(media.blob);
         deck.el.preload = 'auto'; deck.el.src = deck._url;
         try { deck.el.load(); } catch (e) {}
-        preloaded = { cueId: next.id, kind: next.type, deck: deck.id };
-      } else if (next.type === 'image') {
+        preloaded = { cueId: cue.id, kind: cue.type, deck: deck.id };
+      } else if (cue.type === 'image') {
         const url = URL.createObjectURL(media.blob);
         const im = new Image(); im.src = url;   // warms the decode cache
-        preloaded = { cueId: next.id, kind: 'image', url };
+        preloaded = { cueId: cue.id, kind: 'image', url };
       }
     } catch (e) { clearPreload(); }
+  }
+
+  // ── v2.1 D12.4: first-GO arming ────────────────────────────────────────────
+  // Cue-ahead preload only ever staged "the cue after the one that fired", so
+  // the FIRST GO of the night paid the full load cost — and the AudioContext
+  // may still be suspended if no gesture touched this surface. armPlayback()
+  // runs inside an operator gesture (Go Live / preflight): it resumes audio
+  // and stages the first armed cue. playoutArmed() reports the truth for the
+  // ARMED indicator and the preflight row.
+  function firstArmedCue() {
+    return cues.find(c => c.armed !== false && c.mediaId && !c.broken) || null;
+  }
+  async function armPlayback() {
+    ensureAudio();
+    if (!active) {
+      const first = firstArmedCue();
+      if (first) await preloadCue(first);
+    }
+    return playoutArmed();
+  }
+  function playoutArmed() {
+    const first = firstArmedCue();
+    const os = outputStatus();
+    const audio = !audioOK ? 'unavailable' : (ac ? ac.state : 'uninitialized');
+    const firstStaged = !first || !!active || !!(preloaded && preloaded.cueId === first.id);
+    return {
+      audio,
+      firstCueId: first ? first.id : '',
+      firstCueName: first ? (first.name || '') : '',
+      firstCueStaged: firstStaged,
+      outputsOpen: os.open, outputsReady: os.ready, outputsTotal: os.total,
+      armed: firstStaged && audio !== 'suspended' && (os.open === 0 || os.ready > 0),
+    };
   }
 
   function autoFrom(cue) {
@@ -4571,6 +4615,8 @@
     // made the notes-board hand-off unreachable, since the notes modal and the
     // Outrangutan screen can't be on screen at the same time.
     isReady: () => built && showLoaded,
+    armPlayback,                                    // D12.4: gesture-time audio resume + first-cue staging
+    playoutArmed,                                   // D12.4: truth for the ARMED indicator / preflight row
     addAudioPad,                                    // Cueola audio note → SFX pad hand-off
     goToSfx: () => { if (built) { showScreen(); setTab('sfx'); } },
     // Console rehearsal hook: test MIDI mappings (incl. learn mode) without a

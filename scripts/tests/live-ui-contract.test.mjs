@@ -87,7 +87,133 @@ test('a missed Flowmingo heartbeat exposes a fresh-output recovery path', () => 
   assert.match(open, /\{ replace=false \}=\{\}/);
   assert.match(open, /_prompterTalentWin\?\.close\(\)/);
   assert.match(open, /_activePrompterOutputInstanceId = ''/);
-  assert.match(open, /_prompterRecoveryAnnounced = false/);
+  // D12.1: silence detection moved to the shared link model — replacing the
+  // talent window resets the 'talent' link instead of a local watchdog flag.
+  assert.match(open, /liveLinkState\.noteOff\('talent'/);
+});
+
+test('connection truth: displayed link status renders only from the model', () => {
+  // The model exists, every link is configured, and one owned ticker
+  // evaluates hysteresis (D12.1).
+  assert.match(app, /const liveLinkState = window\.CueolaLinkState\.createModel/);
+  for (const key of ['cloud', 'talent', 'playout', 'scriptop']) {
+    assert.match(app, new RegExp(`liveLinkState\\.configure\\('${key}'`));
+  }
+  assert.match(app, /function ensureLiveLinkTicker\(\)/);
+  assert.match(app, /liveLinkState\.tick\(\)/);
+  // The talent heartbeat path acks the model and never flips displayed
+  // status directly; the old watchdog is gone.
+  const seen = app.slice(app.indexOf('function _notePrompterTalentSeen('), app.indexOf('function _shouldSendInitForTalent('));
+  assert.match(seen, /liveLinkState\.noteAck\('talent'/);
+  assert.doesNotMatch(seen, /projectPrompterSessionStatus\(/);
+  assert.doesNotMatch(app, /startTalentWatchdog/);
+  assert.doesNotMatch(app, /_prompterRecoveryAnnounced/);
+  // A closed talent window is a definitive loss, not a heartbeat gap.
+  assert.match(app, /noteLost\('talent', 'Talent window closed'\)/);
+});
+
+test('prompter single-authority: talent never mints, doc session is adopted, takeover is visible', () => {
+  // D12.2: every talent boot door is a no-mint surface.
+  assert.match(app, /const IS_PROMPTER_TALENT_BOOT = IS_PROMPTER_OUTPUT_BOOT \|\|/);
+  assert.match(app, /\['#flowmingo', '#promptypus'\]\.includes\(location\.hash\)/);
+  assert.match(app, /params\.has\('flowmingo'\) \|\| params\.has\('promptypus'\)/);
+  // Minting is reserved for a surface that may call the show.
+  assert.match(app, /!IS_PROMPTER_TALENT_BOOT && isShowCaller\(\)/);
+  // The in-page talent joins the doc's session (the Jul 20 split-brain seed).
+  assert.match(app, /ensurePrompterProtocolIdentity\(\{ productionCode:code, sessionId:data\.prompter\?\.sessionId \|\| '' \}\)/);
+  // Every surface adopts the seeded doc session; foreign re-seeds are a
+  // visible takeover, never a silent fork.
+  assert.match(app, /_adoptDocPrompterSession\(d\)/);
+  const adopt = app.slice(app.indexOf('function _adoptDocPrompterSession('), app.indexOf('let _lastPrompterSessionReclaimTs'));
+  assert.match(adopt, /senderClient === CLIENT_ID/);
+  assert.match(adopt, /toast\('Another operator window took the prompter/);
+  // The 46e4fc8 reclaim recovery path keeps its guards: only a show-calling
+  // surface with the live screen open, rate-limited against snapshot wars.
+  const reclaim = app.slice(app.indexOf('function _maybeReclaimPrompterTalentSession('), app.indexOf('function _handlePrompterOperatorMessage('));
+  assert.match(reclaim, /isShowCaller\(\)/);
+  assert.match(reclaim, /liveshow'\)\?\.classList\.contains\('on'\)/);
+  assert.match(reclaim, /_lastPrompterSessionReclaimTs < 10000/);
+  // Seed writes carry their writer so takeover detection can compare clients.
+  const seed = app.slice(app.indexOf('function sendPrompterStateSnapshot('), app.indexOf('function buildPrompterControl'));
+  assert.match(seed, /'prompter\.senderClient':CLIENT_ID/);
+});
+
+test('overlay discipline: bounded band, off-commands always pass, toggles are acked', () => {
+  // D12.5 / decision 16c: banners live in a ~20% band; only the stand-by
+  // slate is full-screen.
+  assert.match(html, /\.pt-clock-overlay\{[^}]*max-height:20vh/);
+  assert.match(html, /#pt-question-overlay\{[^}]*max-height:20vh/);
+  // Discrete state toggles (incl. every off-command) bypass the readiness
+  // queue on BOTH operator surfaces — the show-day "can't turn off tech
+  // issues / bars / question" swallow.
+  const send = app.slice(app.indexOf('function sendPrompterControl('), app.indexOf('// ─────────────────────────────────────────────────────────────\n// PROMPTYPUS'));
+  assert.match(send, /isCollaborativePrompterControl\(action\)[\s\S]*?dispatchPrompterCommand\(control, 'live'/);
+  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
+  assert.match(flowSend, /isCollaborativePrompterControl\(action\)[\s\S]*?dispatchPrompterCommand\(control, 'flowop'/);
+  // Toggle UI rides the ack path: pending on send, confirmed on control_ack,
+  // failed after the no-ack timeout.
+  assert.match(app, /markPrompterToggleState\(control\.action, 'pending'\)/);
+  assert.match(app, /markPrompterToggleState\(pending\.action, 'confirmed'\)/);
+  assert.match(app, /markPrompterToggleState\(control\.action, 'failed'\)/);
+  assert.match(html, /\.pt-ack-pending\{/);
+});
+
+test('first GO fires like the tenth: resume-after-sync, arming, and unlock (D12.4)', async () => {
+  // A pre-handshake GO leaves the module playing while the safe snapshot loads
+  // paused — syncOutput must arm the post-handshake resume from program truth.
+  const sync = playbackJs.slice(playbackJs.indexOf('function syncOutput('), playbackJs.indexOf('function handleOutputMessage('));
+  assert.match(sync, /desired\.playbackStatus === 'playing'\) rec\.resumeAfterSync = true/);
+  // Gesture-time arming: audio engine resumed and the FIRST armed cue staged
+  // (cue-ahead preload only ever staged "next after fired").
+  assert.match(playbackJs, /async function armPlayback\(\)/);
+  assert.match(playbackJs, /function playoutArmed\(\)/);
+  assert.match(playbackJs, /armPlayback,/);
+  // The operator arms on entering live and the preflight proves it.
+  assert.match(app, /window\.Outrangutan\?\.armPlayback\?\.\(\)/);
+  assert.match(app, /'Playout first GO'/);
+  // The output window retries a NotAllowedError play on its first gesture.
+  const outputHtml = await readFile(new URL('../../outrangutan/output.html', import.meta.url), 'utf8');
+  assert.match(outputHtml, /_blockedPlayRetry = \(\) =>/);
+  assert.match(outputHtml, /addEventListener\('pointerdown', retryBlockedPlayback/);
+});
+
+test('questions lane replaces push-paste: QUESTION card in, script pollution out (D12.6)', () => {
+  // The broken Paste/Paste-Push path is deleted, not kept alongside.
+  assert.doesNotMatch(app, /pasteClipboardToPrompter/);
+  assert.doesNotMatch(html, /pasteClipboardToPrompter/);
+  assert.doesNotMatch(app, /\[CHAT\]\\n/);
+  // The lane: paste box, Enter pushes, Esc clears; both operator scopes send
+  // through the ack'd command path with the text as command payload.
+  assert.match(app, /function questionLaneKeydown\(event, scope\)/);
+  assert.match(app, /function pushChatQuestion\(scope\)/);
+  assert.match(app, /sendPrompterControl\('question_on', \{ text \}\)/);
+  assert.match(app, /flowOpSendControl\('question_on', false, \{ text \}\)/);
+  assert.match(app, /-question-input/);
+  // The talent renders a QUESTION-labeled card (signage, not script) and a
+  // bare legacy question_on still shows the generic card.
+  assert.match(app, /pt-question-tag/);
+  assert.match(app, /ptQuestionText \|\| 'Question in chat'/);
+  assert.match(html, /\.pt-question-tag\{/);
+  // Payload rides the existing command envelope end-to-end.
+  assert.match(app, /function buildPrompterControl\(action, source='script-op', payload=null\)/);
+  assert.match(app, /applyRemoteControlOnce\(control\.action, control\.ts, control\.sender, control\.controlId, control\.payload\)/);
+});
+
+test('runtime stays slim: no boot vendor libs, owned timers, recorded budgets (D12.7)', async () => {
+  // No vendor library rides boot — everything loads on first use.
+  assert.doesNotMatch(html, /<script src="assets\/vendor/);
+  assert.match(app, /await ptLoadLibrary\('assets\/vendor\/pdf\.min\.js'\)/);
+  // The census wrapper exists and installs before any app timer is created.
+  const perfAt = app.indexOf('window.CueolaPerf');
+  assert.ok(perfAt > 0 && perfAt < app.indexOf('setInterval(', perfAt + 2000) || perfAt < 3000,
+    'CueolaPerf must wrap setInterval at the very top of the app');
+  assert.match(app, /window\.CueolaPerf/);
+  assert.match(app, /intervalCount: intervals\.size/);
+  // Budgets are recorded in the repo for the Phase 12 gate.
+  const budgets = JSON.parse(await readFile(new URL('../perf-budget/budgets.json', import.meta.url), 'utf8'));
+  assert.ok(budgets.maxima.bootToInteractiveMs > 0);
+  assert.equal(budgets.maxima.vendorLibsAtBoot, 0);
+  assert.ok(Array.isArray(budgets.intervalOwners.expected) && budgets.intervalOwners.expected.length >= 5);
 });
 
 test('explicit create and ordinary join have separate Firestore authority', () => {
@@ -152,7 +278,7 @@ test('cloud retry performs a server probe and local recovery keeps aliases', () 
   const retry = app.slice(app.indexOf('async function recoverLiveSubsystem'), app.indexOf('function liveSessionState'));
   const probe = app.slice(app.indexOf('async function probeSharedSessionAuthority'), app.indexOf('function nextBeatId'));
   const draft = app.slice(app.indexOf('function saveLocalDraft'), app.indexOf('// ── Local session snapshot history'));
-  const autoJoin = app.slice(app.indexOf("const doJoin = () => {"), app.indexOf('waitForFirebaseReady().then(ready => {', app.indexOf("const doJoin = () => {")));
+  const autoJoin = app.slice(app.indexOf("const doJoin = async () => {"), app.indexOf('waitForFirebaseReady().then(ready => {', app.indexOf("const doJoin = async () => {")));
   assert.match(retry, /await probeSharedSessionAuthority\(\)/);
   assert.match(probe, /window\._getDocFromServer/);
   assert.match(draft, /rundownAliases/);
