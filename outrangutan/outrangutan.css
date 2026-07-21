@@ -833,6 +833,15 @@
 .og-sdk-preview-missing { display: grid; place-items: center; aspect-ratio: 1; min-height: 72px; border-radius: 8px; background: #05070a; color: var(--text3); font-size: 10px; text-align: center; }
 .og-sdk select { min-height: 44px; background: color-mix(in srgb, var(--s1) 80%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
 .og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
+/* Stream Deck + dials & touch strip */
+.og-sd-dials { margin-top: 20px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
+.og-sd-dials h4 { margin: 0 0 10px; font-family: var(--syne); font-size: 14px; }
+.og-sd-lcd-preview { display: block; width: 100%; height: auto; aspect-ratio: 8; border-radius: 8px; background: #05070a; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .09); margin-bottom: 10px; }
+.og-sd-dial-rows { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.og-sdd { border: 1px solid var(--og-edge); border-radius: var(--og-r); background: color-mix(in srgb, var(--s2) 70%, transparent); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.og-sdd.mapped { border-color: color-mix(in srgb, var(--accent) 50%, var(--og-edge)); background: color-mix(in srgb, var(--accent) 9%, var(--s2)); }
+.og-sdd-fn { display: grid; gap: 4px; font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); }
+.og-sdd select { min-height: 44px; background: color-mix(in srgb, var(--s1) 80%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
 .og-sd-proof { margin-top: 20px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
 .og-sd-proof h4 { margin: 0; font-family: var(--syne); font-size: 14px; }
 .og-sd-proof p { margin: 5px 0 12px; color: var(--text2); font-size: 12px; line-height: 1.45; }
@@ -994,6 +1003,7 @@
   .og-theme-pop, .og-tools-pop { right: auto; left: 0; }
   .og-sd-device-tools > * { width: 100%; }
   .og-sd-proof-grid { grid-template-columns: repeat(3, minmax(76px, 1fr)); }
+  .og-sd-dial-rows { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
 }
 @media (max-width: 720px) {
   .og-tabs { width: 100%; }
@@ -1006,5 +1016,5 @@
 @media (forced-colors: active) {
   #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible { outline-color: Highlight; }
   .og-bottom-tab.on { border-color: Highlight; }
-  .og-sdk.mapped, .og-sdk-preview[data-active="true"], .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
+  .og-sdk.mapped, .og-sdd.mapped, .og-sdk-preview[data-active="true"], .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
 }

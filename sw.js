@@ -87,10 +87,10 @@ const SHELL_ASSETS = [
   'script-operator.css?v=c455a9dec9',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
-  'outrangutan/stream-deck-label.js?v=c4ae3df80f',
+  'outrangutan/stream-deck-label.js?v=c7c4b7128a',
   'cueola-app.js?v=f1d56e7a2a',
-  'outrangutan/outrangutan.css?v=b020d1d384',
-  'outrangutan/outrangutan.js?v=733cbe7da5',
+  'outrangutan/outrangutan.css?v=47e5f195bf',
+  'outrangutan/outrangutan.js?v=311bd15c98',
 ];
 
 const versionSignature = SHELL_ASSETS

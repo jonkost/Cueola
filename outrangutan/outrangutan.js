@@ -49,15 +49,25 @@
     0x0080: { name: 'Stream Deck MK.2',   keys: 15, cols: 5, stateOffset: 3, imageProductId: 0x0080, reset: [0x03, 0x02], bright: [0x03, 0x08] },
     0x0063: { name: 'Stream Deck Mini',   keys: 6,  cols: 3, stateOffset: 0, imageProductId: null,   reset: [0x0b, 0x63], bright: [0x05, 0x55, 0xaa, 0xd1, 0x01] },
     0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, stateOffset: 3, imageProductId: 0x006c, reset: [0x03, 0x02], bright: [0x03, 0x08] },
+    0x0084: { name: 'Stream Deck +',      keys: 8,  cols: 4, stateOffset: 3, imageProductId: 0x0084, reset: [0x03, 0x02], bright: [0x03, 0x08], encoders: 4 },
   };
   // actions a Stream Deck key / control surface can fire
   const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…' };
+  // what turning a Stream Deck + dial does (its press shares SD_ACTIONS)
+  const SD_DIAL_FUNCTIONS = { select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness' };
+  // safe out-of-the-box dial layout: nothing destructive, GO/pause on presses
+  const defaultDialMap = () => ({
+    0: { rotate: 'select', action: 'go' },
+    1: { rotate: 'master' },
+    2: { rotate: 'scrub', action: 'pause' },
+    3: { rotate: 'bright' },
+  });
   const OBS_UI = false; // OBS Studio UI hidden until ready — backend stays live for existing shows
 
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
   const DEFAULT_SETTINGS = () => ({
     clockMode: 'remaining', wallClockMode: '24', multiTrigger: true, showLock: false, tab: 'play',
-    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, midiMap: {}, transcode: false,
+    fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, sdDialMap: defaultDialMap(), sdBright: 80, midiMap: {}, transcode: false,
     layout: { wCuelist: 280, wInspector: 280, hEdit: 150 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
@@ -113,6 +123,8 @@
   // ── Stream Deck (Phase 3, WebHID) ────────────────────────────────────────
   let sd = null;                 // { device, model } when connected
   let sdMap = {};                // keyIndex -> { action, ref } (persisted in settings)
+  let sdDialMap = settings.sdDialMap; // Stream Deck + dials: dialIndex -> { rotate, action, ref } (persisted in settings)
+  const sdDialState = [];        // dial pressed booleans — presses fire on the rising edge
   let sdLearn = null;            // keyIndex currently being mapped (learn mode)
   let sdSimulatorProductId = 0x0080;
   let sdPaintError = '';
@@ -1705,11 +1717,13 @@
     }
     sd = { device: dev, model };
     sdState.length = 0;
+    sdDialState.length = 0;
     dev.oninputreport = onSdInput;
     try { navigator.hid.addEventListener('disconnect', onSdDisconnect); } catch (e) {}
-    sdReset(); sdBrightness(80);
+    sdReset(); sdBrightness(settings.sdBright == null ? 80 : settings.sdBright);
     const labelsReady = await scheduleStreamDeckRefresh();
-    toast('Stream Deck connected — ' + model.name + ' (' + model.keys + ' keys)' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
+    const surfaces = model.keys + ' keys' + (model.encoders ? ' · ' + model.encoders + ' dials · touch strip' : '');
+    toast('Stream Deck connected — ' + model.name + ' (' + surfaces + ')' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
     renderStreamDeck();
   }
   function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; sdSetPaintError(''); renderStreamDeck(); toast('Stream Deck disconnected.'); }
@@ -1717,6 +1731,14 @@
   function onSdInput(e) {
     if (!sd) return;
     const data = new Uint8Array(e.data.buffer);
+    // Encoder models (Stream Deck +) multiplex report classes through byte 0:
+    // 0x00 keys, 0x02 touch strip, 0x03 dials. Key-only models must not take
+    // this branch — on gen-1 decks byte 0 is already the first key state.
+    if (sd.model.encoders) {
+      if (data[0] === 0x03) { onSdDialInput(data); return; }
+      if (data[0] === 0x02) { onSdTouchInput(data); return; }
+      if (data[0] !== 0x00) return;
+    }
     const off = sd.model.stateOffset;
     let changed = false;
     for (let i = 0; i < sd.model.keys; i++) {
@@ -1726,6 +1748,54 @@
       if (pressed && !was) sdFireKey(i);
     }
     if (changed) scheduleStreamDeckRefresh();
+  }
+  function onSdDialInput(data) {
+    // data[3] selects the event: 0x00 press/release booleans, 0x01 rotation
+    // as a signed detent count per dial (fast turns arrive as larger steps).
+    if (data[3] === 0x00) {
+      for (let i = 0; i < sd.model.encoders; i++) {
+        const pressed = data[4 + i] !== 0, was = sdDialState[i];
+        sdDialState[i] = pressed;
+        if (pressed && !was) fireSurfaceAction(sdDialMap[i]);
+      }
+      scheduleStreamDeckRefresh();
+    } else if (data[3] === 0x01) {
+      for (let i = 0; i < sd.model.encoders; i++) {
+        const raw = data[4 + i];
+        if (raw) sdDialRotate(i, raw > 127 ? raw - 256 : raw);
+      }
+    }
+  }
+  function onSdTouchInput(data) {
+    // Tap (short 0x01 / long 0x02) on a strip segment = pressing its dial.
+    // Swipes (0x03) are intentionally unmapped — an accidental brush across
+    // the strip during a show must never fire anything.
+    if (data[3] !== 0x01 && data[3] !== 0x02) return;
+    const lcd = sdSupportedProfile(sd.device.productId)?.lcd;
+    if (!lcd) return;
+    const x = data[5] | (data[6] << 8);
+    const segment = clamp(Math.floor(x / lcd.segmentWidth), 0, lcd.segments - 1);
+    fireSurfaceAction(sdDialMap[segment]);
+  }
+  function sdDialRotate(i, ticks) {
+    const fn = sdDialMap[i]?.rotate;
+    if (!fn || !ticks) return;
+    if (fn === 'master') {
+      setMasterGain((settings.masterGain == null ? 1 : settings.masterGain) + ticks * 0.02);
+      scheduleSave();
+    } else if (fn === 'select') {
+      moveSelection(ticks > 0 ? Math.max(1, ticks) : Math.min(-1, ticks));
+    } else if (fn === 'scrub') {
+      if (!active || !active.el || active.kind === 'image') return;
+      const el = active.el;
+      const t = clamp(el.currentTime + ticks, 0, isFinite(el.duration) ? el.duration : el.currentTime + ticks);
+      try { el.currentTime = t; sendOut({ t: 'seek', at: t }, active.cue.output || 1); } catch (e) {}
+    } else if (fn === 'bright') {
+      settings.sdBright = clamp((settings.sdBright == null ? 80 : settings.sdBright) + ticks * 5, 5, 100);
+      sdBrightness(settings.sdBright);
+      scheduleSave();
+    }
+    scheduleStreamDeckRefresh();   // the touch strip shows this dial's live value
   }
   function sdReset() { try { const r = sd.model.reset; sd.device.sendFeatureReport(r[0], new Uint8Array([r[1]])); } catch (e) {} }
   function sdBrightness(pct) { try { const b = sd.model.bright; sd.device.sendFeatureReport(b[0], new Uint8Array([b[1], clamp(pct | 0, 0, 100)])); } catch (e) {} }
@@ -1741,7 +1811,55 @@
       if (target !== sd) return false;
       success = (await sdPaintKey(i, target)) && success;
     }
+    if (target.model.encoders) success = (await sdPaintLcd(target)) && success;
     return success;
+  }
+  // Live values the touch strip shows above each dial (and the panel preview).
+  function sdDialActive(m) {
+    if (!m) return false;
+    if (m.rotate === 'scrub') return !!active && !isActivePaused();
+    return sdKeyIsActive(-1, m);
+  }
+  function sdDialDescriptor(i) {
+    const m = sdDialMap[i];
+    const fn = m?.rotate;
+    let value = '';
+    if (fn === 'master') value = Math.round((settings.masterGain == null ? 1 : settings.masterGain) * 100) + '%';
+    else if (fn === 'select') { const c = cueById(selectedId); value = c ? '#' + c.num + ' ' + c.name : '—'; }
+    else if (fn === 'scrub') value = active && active.el && active.kind !== 'image' ? fmtClock(activeOffset()) : '—';
+    else if (fn === 'bright') value = (settings.sdBright == null ? 80 : settings.sdBright) + '%';
+    else if (m?.action) value = sdActionLabel(m);
+    const title = fn ? SD_DIAL_FUNCTIONS[fn].toUpperCase() : (m?.action ? sdActionLabel(m) : 'DIAL ' + (i + 1));
+    return {
+      title,
+      value,
+      active: sdDialActive(m),
+      backgroundColor: m?.action ? sdKeyColor(m) : undefined,
+      accentColor: '#8ff7bc',
+    };
+  }
+  function sdDialDescriptors(productId = sdCurrentProductId()) {
+    const lcd = sdSupportedProfile(productId)?.lcd;
+    if (!lcd) return [];
+    return Array.from({ length: lcd.segments }, (_, i) => sdDialDescriptor(i));
+  }
+  async function sdPaintLcd(target = sd) {
+    if (!target || target !== sd) return false;
+    if (!sdLabelRenderer || !sdSupportedProfile(target.device.productId)?.lcd) return false;
+    try {
+      const strip = await sdLabelRenderer.renderAndPacketizeLcd(target.device.productId, sdDialDescriptors(target.device.productId));
+      if (target !== sd) return false;
+      for (const packet of strip.packets) {
+        if (target !== sd) return false;
+        await target.device.sendReport(packet.reportId, packet.data);
+      }
+      return true;
+    } catch (error) {
+      const message = 'Touch strip label failed: ' + ((error && error.message) || error || 'unknown image error');
+      sdSetPaintError(message);
+      try { console.warn('[outrangutan] Stream Deck label:', message); } catch (e) {}
+      return false;
+    }
   }
   async function sdPaintKey(i, target = sd) {
     if (!target || target !== sd) return false;
@@ -1921,6 +2039,11 @@
       const sample = samples[Number(canvas.getAttribute('data-sample'))];
       if (sample) sdCopyCanvas(canvas, sdPhysicalFrames(productId, sample.descriptor).simulated);
     });
+    const lcdPreview = $('og-sd-lcd-preview');
+    if (lcdPreview && profile.lcd) {
+      // The strip uploads upright — the simulated view IS the canonical render.
+      sdCopyCanvas(lcdPreview, sdLabelRenderer.renderLcdStrip(productId, sdDialDescriptors(productId)).canvas);
+    }
   }
 
   function scheduleStreamDeckRefresh() {
@@ -1982,7 +2105,7 @@
         }
       };
       drawGrid('SIMULATED PHYSICAL DISPLAY · labels must read upright', 66, 'simulated');
-      drawGrid('RAW HID JPEG FRAME · intentionally pre-rotated 180°', 66 + sectionHeight, 'upload');
+      drawGrid('RAW HID JPEG FRAME · ' + (profile.deviceRotationDegrees ? 'intentionally pre-rotated ' + profile.deviceRotationDegrees + '°' : 'upright — this model applies no device rotation'), 66 + sectionHeight, 'upload');
       const sampleY = 66 + sectionHeight * 2 + 26;
       ctx.fillStyle = '#d8dfeb'; ctx.font = '700 13px -apple-system,system-ui,sans-serif'; ctx.fillText('CONTENT AND STATE CASES · simulated display', edge, sampleY);
       samples.forEach((sample, index) => {
@@ -2027,6 +2150,26 @@
       const preview = profile ? '<canvas class="og-sdk-preview" data-k="' + i + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="Simulated physical display for key ' + (i + 1) + '"></canvas>' : '<div class="og-sdk-preview-missing">No image profile</div>';
       grid += '<div class="og-sdk' + (m.action ? ' mapped' : '') + '"><span class="og-sdk-i">KEY ' + (i + 1) + '</span>' + preview + actSel + refSel + '</div>';
     }
+    const dialCount = connected ? (sd.model.encoders || 0) : (profile?.encoders || 0);
+    let dialRows = '';
+    for (let i = 0; i < dialCount; i++) {
+      const m = sdDialMap[i] || {};
+      const rotSel = '<select class="og-sd-act og-sdd-rot" data-k="' + i + '" aria-label="Dial ' + (i + 1) + ' turn function">' + opt('', '—', m.rotate || '') + Object.keys(SD_DIAL_FUNCTIONS).map(f => opt(f, SD_DIAL_FUNCTIONS[f], m.rotate || '')).join('') + '</select>';
+      const actSel = '<select class="og-sd-act og-sdd-act" data-k="' + i + '" aria-label="Dial ' + (i + 1) + ' press action">' + opt('', '—', m.action || '') + Object.keys(SD_ACTIONS).map(a => opt(a, SD_ACTIONS[a], m.action || '')).join('') + '</select>';
+      let refSel = '';
+      if (m.action === 'cue') refSel = '<select class="og-sd-ref og-sdd-ref" data-k="' + i + '" aria-label="Dial ' + (i + 1) + ' cue"><option value="">Pick cue…</option>' + cues.map(c => '<option value="' + c.id + '"' + (m.ref === c.id ? ' selected' : '') + '>#' + c.num + ' ' + esc(c.name) + '</option>').join('') + '</select>';
+      else if (m.action === 'pad') refSel = '<select class="og-sd-ref og-sdd-ref" data-k="' + i + '" aria-label="Dial ' + (i + 1) + ' SFX pad"><option value="">Pick pad…</option>' + pads.map(p => '<option value="' + p.id + '"' + (m.ref === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
+      dialRows += '<div class="og-sdd' + (m.rotate || m.action ? ' mapped' : '') + '"><span class="og-sdk-i">DIAL ' + (i + 1) + '</span>'
+        + '<label class="og-sdd-fn"><span>Turn</span>' + rotSel + '</label>'
+        + '<label class="og-sdd-fn"><span>Press</span>' + actSel + '</label>' + refSel + '</div>';
+    }
+    const lcdProfile = profile?.lcd || null;
+    const dialsSection = dialCount
+      ? '<section class="og-sd-dials"><h4>Dials &amp; touch strip</h4>'
+        + (lcdProfile ? '<canvas class="og-sd-lcd-preview" id="og-sd-lcd-preview" width="' + lcdProfile.width + '" height="' + lcdProfile.height + '" role="img" aria-label="Simulated touch strip"></canvas>' : '')
+        + '<div class="og-sd-dial-rows">' + dialRows + '</div>'
+        + '<p class="og-sheet-note">Turn a dial for its function (standby cue, master level, scrub, brightness); press it — or tap its touch-strip segment — to fire its press action. Strip swipes are deliberately unmapped so a brush never fires anything mid-show.</p></section>'
+      : '';
     const hasHid = ('hid' in navigator);
     const unsupportedConnectedOption = connected && !profile
       ? '<option value="' + productId + '" selected>' + esc(sd.model.name) + ' · input only — no image profile</option>'
@@ -2044,15 +2187,28 @@
       + '</div>'
       + '<div class="og-sd-device-tools"><label><span>' + (connected ? 'Connected image profile' : 'Preview model') + '</span><select id="og-sd-model"' + (connected ? ' disabled' : '') + '>' + profileOptions + '</select></label><button class="og-bar-btn" id="og-sd-export"' + (profile ? '' : ' disabled') + '>' + sym('action.export') + 'Export orientation proof</button></div>'
       + '<div class="og-sd-error" id="og-sd-error" role="status"' + (sdPaintError ? '' : ' hidden') + '>' + esc(sdPaintError) + '</div>'
-      + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, a cue, or an SFX pad. The preview models the physical display from the same canonical art and verified 180° upload transform used by Classic/MK.2/v2 and XL hardware. It supports rehearsal, but does not replace a physical-device check.</p>'
+      + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, a cue, or an SFX pad. The preview models the physical display from the same canonical art and each model\'s verified upload transform (180° on Classic/MK.2/v2/XL, upright on the Stream Deck +). It supports rehearsal, but does not replace a physical-device check.</p>'
       + '<div class="og-sd-grid" style="--sd-cols:' + cols + '">' + grid + '</div>'
+      + dialsSection
       + (profile ? '<section class="og-sd-proof"><h4>Orientation check</h4><p>These cases round-trip through the raw device frame before display simulation.</p><div class="og-sd-proof-grid">' + proofSamples + '</div></section>' : '');
     if ($('og-sd-conn')) $('og-sd-conn').onclick = sdConnect;
     if ($('og-sd-disc')) $('og-sd-disc').onclick = sdDisconnect;
     if ($('og-sd-export')) $('og-sd-export').onclick = exportStreamDeckProof;
     if ($('og-sd-model')) $('og-sd-model').onchange = e => { sdSimulatorProductId = Number(e.target.value); renderStreamDeck(); };
-    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-act'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); const a = e.target.value; if (!a) delete sdMap[k]; else { sdMap[k] = Object.assign({}, sdMap[k], { action: a }); if (a !== 'cue' && a !== 'pad') delete sdMap[k].ref; } settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
-    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-act:not(.og-sdd-rot):not(.og-sdd-act)'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); const a = e.target.value; if (!a) delete sdMap[k]; else { sdMap[k] = Object.assign({}, sdMap[k], { action: a }); if (a !== 'cue' && a !== 'pad') delete sdMap[k].ref; } settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref:not(.og-sdd-ref)'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
+    const saveDial = (k, patch) => {
+      const next = Object.assign({}, sdDialMap[k], patch);
+      if (!next.rotate) delete next.rotate;
+      if (!next.action) { delete next.action; delete next.ref; }
+      else if (next.action !== 'cue' && next.action !== 'pad') delete next.ref;
+      if (!next.rotate && !next.action) delete sdDialMap[k]; else sdDialMap[k] = next;
+      settings.sdDialMap = sdDialMap;
+      renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave();
+    };
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sdd-rot'), s => { s.onchange = e => saveDial(+s.getAttribute('data-k'), { rotate: e.target.value }); });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sdd-act'), s => { s.onchange = e => saveDial(+s.getAttribute('data-k'), { action: e.target.value }); });
+    Array.prototype.forEach.call(body.querySelectorAll('.og-sdd-ref'), s => { s.onchange = e => saveDial(+s.getAttribute('data-k'), { ref: e.target.value }); });
     renderStreamDeckPreviews();
     sdSetPaintError(sdPaintError);
   }
@@ -3722,7 +3878,7 @@
   }
   async function loadShow() {
     const s = await idbGet(SHOW_STORE, showKey());
-    if (!s || !Array.isArray(s.cues)) { outputs = defaultOutputs(); sdMap = {}; banks = defaultBanks(); currentBankId = banks[0].id; return null; }
+    if (!s || !Array.isArray(s.cues)) { outputs = defaultOutputs(); sdMap = {}; sdDialMap = settings.sdDialMap || defaultDialMap(); banks = defaultBanks(); currentBankId = banks[0].id; return null; }
     cues = s.cues.map(c => Object.assign(makeCue({ type: c.type }), c, { eq: Object.assign({ low: 0, mid: 0, high: 0 }, c.eq || {}) }));
     banks = (Array.isArray(s.banks) && s.banks.length) ? s.banks.slice() : defaultBanks();
     banks.forEach(b => { b.padCount = clampPadCount(b.padCount); });   // missing → 12, stored → clamp [12, 20]
@@ -3734,6 +3890,9 @@
     settings = Object.assign(DEFAULT_SETTINGS(), s.settings || {});
     settings.shortcuts = Object.assign({}, DEFAULT_SHORTCUTS, settings.shortcuts || {});
     sdMap = settings.sdMap = settings.sdMap || {};
+    // pre-Stream-Deck-+ saves get the safe default dial layout; a saved (even
+    // deliberately emptied) map is respected as-is
+    sdDialMap = settings.sdDialMap = settings.sdDialMap || defaultDialMap();
     midiMap = settings.midiMap = settings.midiMap || {};
     Object.values(midiMap).forEach(m => { if (m) delete m.pending; });   // a persisted pending flag must not survive a reload
     renumber();

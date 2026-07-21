@@ -68,6 +68,38 @@ test('state-driven repaint is coalesced and serialized', () => {
   assert.match(app, /function renderPadLive\(id\)[\s\S]*scheduleStreamDeckRefresh\(\)/);
 });
 
+test('the Stream Deck + is a first-class model: keys, dials, and touch strip', () => {
+  // control metadata: gen-2 offsets/commands with four encoders declared
+  assert.match(app, /0x0084: \{ name: 'Stream Deck \+',\s+keys: 8,\s+cols: 4,\s+stateOffset: 3,\s+imageProductId: 0x0084,\s+reset: \[0x03, 0x02\],\s+bright: \[0x03, 0x08\],\s+encoders: 4 \}/);
+  // input reports multiplex through byte 0 only on encoder models
+  const input = app.slice(app.indexOf('function onSdInput('), app.indexOf('function sdDialRotate('));
+  assert.match(input, /if \(sd\.model\.encoders\) \{/);
+  assert.match(input, /data\[0\] === 0x03/);
+  assert.match(input, /data\[0\] === 0x02/);
+  // rotation is a signed detent count; presses fire on the rising edge
+  assert.match(input, /raw > 127 \? raw - 256 : raw/);
+  assert.match(input, /if \(pressed && !was\) fireSurfaceAction\(sdDialMap\[i\]\)/);
+  // strip taps map to the tapped segment's dial; swipes stay unmapped
+  assert.match(input, /data\[3\] !== 0x01 && data\[3\] !== 0x02/);
+  assert.match(input, /Math\.floor\(x \/ lcd\.segmentWidth\)/);
+});
+
+test('dial mappings persist, paint the touch strip, and surface in the panel', () => {
+  assert.match(app, /settings\.sdDialMap = settings\.sdDialMap \|\| defaultDialMap\(\)/);
+  assert.match(app, /const SD_DIAL_FUNCTIONS = \{ select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness' \}/);
+  // the physical strip repaints inside the same serialized repaint owner
+  assert.match(app, /if \(target\.model\.encoders\) success = \(await sdPaintLcd\(target\)\) && success;/);
+  assert.match(app, /renderAndPacketizeLcd\(target\.device\.productId, sdDialDescriptors\(target\.device\.productId\)\)/);
+  assert.match(app, /Touch strip label failed:/);
+  // panel: per-dial turn/press mapping plus a simulated strip preview
+  for (const token of ['og-sdd-rot', 'og-sdd-act', 'og-sdd-ref', 'og-sd-lcd-preview', 'og-sd-dials']) {
+    assert.match(app, new RegExp(token));
+    if (token !== 'og-sd-lcd-preview') assert.match(css, new RegExp(token.replace('og-sdd-rot', 'og-sdd').replace('og-sdd-act', 'og-sdd').replace('og-sdd-ref', 'og-sdd')));
+  }
+  assert.match(css, /og-sd-lcd-preview/);
+  assert.match(app, /renderLcdStrip\(productId, sdDialDescriptors\(productId\)\)/);
+});
+
 test('initial and later paints share one device-bound repaint owner', () => {
   const connect = app.slice(app.indexOf('async function sdConnect()'), app.indexOf('function onSdDisconnect'));
   assert.match(connect, /await scheduleStreamDeckRefresh\(\)/);

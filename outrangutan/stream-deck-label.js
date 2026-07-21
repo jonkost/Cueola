@@ -19,7 +19,10 @@
   var HEADER_SIZE = 8;
   var PAYLOAD_SIZE = PACKET_SIZE - HEADER_SIZE;
 
-  function profile(productId, name, keys, columns, imageSize) {
+  var LCD_HEADER_SIZE = 16;
+
+  function profile(productId, name, keys, columns, imageSize, extras) {
+    extras = extras || {};
     return Object.freeze({
       productId: productId,
       name: name,
@@ -30,8 +33,10 @@
       imageHeight: imageSize,
       imageType: JPEG_TYPE,
       imageQuality: 0.9,
-      deviceRotationDegrees: 180,
+      deviceRotationDegrees: extras.rotationDegrees == null ? 180 : extras.rotationDegrees,
       inputStateOffset: 3,
+      encoders: extras.encoders || 0,
+      lcd: extras.lcd || null,
       packet: Object.freeze({
         reportId: REPORT_ID,
         command: 0x07,
@@ -42,15 +47,41 @@
     });
   }
 
+  // The Stream Deck + touch strip: one 800×100 JPEG panel over four dials.
+  // Uploads use report 0x02 command 0x0c with a 16-byte region header; the
+  // strip renders upright (no device rotation, unlike gen-2 key images).
+  function lcdProfile(width, height, segments) {
+    return Object.freeze({
+      width: width,
+      height: height,
+      segments: segments,
+      segmentWidth: width / segments,
+      imageType: JPEG_TYPE,
+      imageQuality: 0.9,
+      packet: Object.freeze({
+        reportId: REPORT_ID,
+        command: 0x0c,
+        packetSize: PACKET_SIZE,
+        headerSize: LCD_HEADER_SIZE,
+        payloadSize: PACKET_SIZE - LCD_HEADER_SIZE
+      })
+    });
+  }
+
   // These are the JPEG/report-0x02 devices already supported by Outrangutan.
   // Older BMP devices intentionally remain unsupported: silently applying the
   // JPEG framing to an unknown or incompatible device is worse than refusing.
   var MODEL_PROFILES = Object.freeze({
     0x006d: profile(0x006d, 'Stream Deck (v2)', 15, 5, 72),
     0x0080: profile(0x0080, 'Stream Deck MK.2', 15, 5, 72),
-    0x006c: profile(0x006c, 'Stream Deck XL', 32, 8, 96)
+    0x006c: profile(0x006c, 'Stream Deck XL', 32, 8, 96),
+    0x0084: profile(0x0084, 'Stream Deck +', 8, 4, 120, {
+      rotationDegrees: 0,
+      encoders: 4,
+      lcd: lcdProfile(800, 100, 4)
+    })
   });
-  var SUPPORTED_PRODUCT_IDS = Object.freeze([0x006d, 0x0080, 0x006c]);
+  var SUPPORTED_PRODUCT_IDS = Object.freeze([0x006d, 0x0080, 0x006c, 0x0084]);
 
   function productIdOf(value) {
     if (typeof value === 'number' && Number.isInteger(value)) return value;
@@ -256,9 +287,12 @@
       ctx.save();
       try {
         // The device orientation belongs to the model profile. Apply it once to
-        // the completed canonical image; label/layout code never rotates.
-        ctx.translate(width, height);
-        ctx.rotate(model.deviceRotationDegrees * Math.PI / 180);
+        // the completed canonical image; label/layout code never rotates. A 0°
+        // model (Stream Deck +) copies the canonical frame untransformed.
+        if (model.deviceRotationDegrees % 360 !== 0) {
+          ctx.translate(width, height);
+          ctx.rotate(model.deviceRotationDegrees * Math.PI / 180);
+        }
         ctx.drawImage(canonicalCanvas, 0, 0, width, height);
       } finally {
         ctx.restore();
@@ -306,11 +340,81 @@
       return rendered;
     }
 
+    // The touch strip is one canvas of `lcd.segments` equal cells, one per
+    // dial: a small title, a large value, and an accent bar when active. The
+    // strip is upright on the device — no rotation stage exists for it.
+    function renderLcdStrip(modelValue, segments) {
+      var model = getModelProfile(modelValue);
+      var lcd = getLcdProfile(model.productId);
+      var list = Array.isArray(segments) ? segments : [];
+      var canvas = createCanvas(lcd.width, lcd.height);
+      if (!canvas || typeof canvas.getContext !== 'function') throw new Error('createCanvas() must return a canvas-like object.');
+      canvas.width = lcd.width;
+      canvas.height = lcd.height;
+      var ctx = canvas.getContext('2d');
+      resetContext(ctx, lcd.width, lcd.height);
+      var cellWidth = lcd.segmentWidth;
+      ctx.save();
+      try {
+        ctx.fillStyle = '#080b10';
+        ctx.fillRect(0, 0, lcd.width, lcd.height);
+        for (var i = 0; i < lcd.segments; i++) {
+          var data = list[i] && typeof list[i] === 'object' ? list[i] : {};
+          var active = data.active === true;
+          var x = i * cellWidth;
+          var pad = Math.round(cellWidth * 0.06);
+          var maxWidth = cellWidth - pad * 2;
+          ctx.fillStyle = data.backgroundColor || (active ? '#17653a' : '#101418');
+          ctx.fillRect(x + 2, 2, cellWidth - 4, lcd.height - 4);
+          if (active) {
+            ctx.fillStyle = data.accentColor || '#6ff0a5';
+            ctx.fillRect(x + 2, lcd.height - 8, cellWidth - 4, 6);
+          }
+          ctx.fillStyle = data.color || '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          var title = String(data.title == null ? '' : data.title).trim();
+          var value = String(data.value == null ? '' : data.value).trim();
+          if (title) {
+            ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            if (ctx.measureText(title).width > maxWidth) title = ellipsize(ctx, title, maxWidth);
+            ctx.fillText(title, x + cellWidth / 2, value ? lcd.height * 0.26 : lcd.height * 0.5, maxWidth);
+          }
+          if (value) {
+            ctx.font = '700 32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            if (ctx.measureText(value).width > maxWidth) value = ellipsize(ctx, value, maxWidth);
+            ctx.fillText(value, x + cellWidth / 2, title ? lcd.height * 0.64 : lcd.height * 0.5, maxWidth);
+          }
+        }
+      } finally {
+        ctx.restore();
+      }
+      return { canvas: canvas, model: model, lcd: lcd };
+    }
+
+    async function renderAndPacketizeLcd(modelValue, segments) {
+      var strip = renderLcdStrip(modelValue, segments);
+      var encoded = await encode(strip.canvas, {
+        type: strip.lcd.imageType,
+        quality: strip.lcd.imageQuality,
+        productId: strip.model.productId,
+        profile: strip.model
+      });
+      if (encoded && typeof encoded.arrayBuffer === 'function') encoded = await encoded.arrayBuffer();
+      var bytes = toBytes(encoded instanceof ArrayBuffer ? new Uint8Array(encoded) : encoded);
+      if (!bytes.length) throw new Error('Stream Deck touch strip JPEG encoder returned an empty image.');
+      strip.bytes = bytes;
+      strip.packets = packetizeLcd(strip.model.productId, { x: 0, y: 0, width: strip.lcd.width, height: strip.lcd.height }, bytes);
+      return strip;
+    }
+
     return Object.freeze({
       renderCanonical: renderCanonical,
       createDeviceFrame: createDeviceFrame,
       renderKeyImage: renderKeyImage,
-      renderAndPacketize: renderAndPacketize
+      renderAndPacketize: renderAndPacketize,
+      renderLcdStrip: renderLcdStrip,
+      renderAndPacketizeLcd: renderAndPacketizeLcd
     });
   }
 
@@ -319,6 +423,12 @@
     if (value instanceof ArrayBuffer) return new Uint8Array(value);
     if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     throw new TypeError('Stream Deck packetization requires encoded image bytes.');
+  }
+
+  function getLcdProfile(value) {
+    var model = getModelProfile(value);
+    if (!model.lcd) throw new Error(model.name + ' has no touch strip. No LCD image was sent.');
+    return model.lcd;
   }
 
   function packetize(modelValue, keyIndex, encodedImage) {
@@ -358,14 +468,68 @@
     return Object.freeze(packets);
   }
 
+  // Touch strip upload framing (verified against Elgato's published protocol):
+  // 1024-byte packets, 16-byte header — 0x02, 0x0c, x u16LE, y u16LE,
+  // width u16LE, height u16LE, isLast u8, page u16LE, payloadLength u16LE, 0.
+  function packetizeLcd(modelValue, region, encodedImage) {
+    var model = getModelProfile(modelValue);
+    var lcd = getLcdProfile(model.productId);
+    var rect = region && typeof region === 'object' ? region : {};
+    var x = finite(rect.x, 0), y = finite(rect.y, 0);
+    var width = finite(rect.width, lcd.width), height = finite(rect.height, lcd.height);
+    if (x < 0 || y < 0 || width < 1 || height < 1 || x + width > lcd.width || y + height > lcd.height) {
+      throw new RangeError('Touch strip region ' + width + 'x' + height + '@' + x + ',' + y + ' is outside the ' + model.name + ' LCD (' + lcd.width + 'x' + lcd.height + ').');
+    }
+    var bytes = toBytes(encodedImage);
+    if (!bytes.length) throw new Error('Cannot packetize an empty Stream Deck touch strip image.');
+    var config = lcd.packet;
+    var packets = [];
+    var page = 0;
+    var sent = 0;
+    while (sent < bytes.length) {
+      var chunkLength = Math.min(config.payloadSize, bytes.length - sent);
+      var last = sent + chunkLength >= bytes.length;
+      var packet = new Uint8Array(config.packetSize);
+      packet[0] = config.reportId;
+      packet[1] = config.command;
+      packet[2] = x & 0xff;
+      packet[3] = (x >> 8) & 0xff;
+      packet[4] = y & 0xff;
+      packet[5] = (y >> 8) & 0xff;
+      packet[6] = width & 0xff;
+      packet[7] = (width >> 8) & 0xff;
+      packet[8] = height & 0xff;
+      packet[9] = (height >> 8) & 0xff;
+      packet[10] = last ? 1 : 0;
+      packet[11] = page & 0xff;
+      packet[12] = (page >> 8) & 0xff;
+      packet[13] = chunkLength & 0xff;
+      packet[14] = (chunkLength >> 8) & 0xff;
+      packet.set(bytes.subarray(sent, sent + chunkLength), config.headerSize);
+      packets.push(Object.freeze({
+        reportId: config.reportId,
+        data: packet.subarray(1),
+        packet: packet,
+        page: page,
+        last: last,
+        payloadLength: chunkLength
+      }));
+      sent += chunkLength;
+      page += 1;
+    }
+    return Object.freeze(packets);
+  }
+
   return Object.freeze({
     JPEG_TYPE: JPEG_TYPE,
     MODEL_PROFILES: MODEL_PROFILES,
     SUPPORTED_PRODUCT_IDS: SUPPORTED_PRODUCT_IDS,
     supportsModel: supportsModel,
     getModelProfile: getModelProfile,
+    getLcdProfile: getLcdProfile,
     wrapText: wrapText,
     packetize: packetize,
+    packetizeLcd: packetizeLcd,
     createRenderer: createRenderer
   });
 });

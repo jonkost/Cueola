@@ -5,6 +5,53 @@ Newest phase on top.
 
 ---
 
+## Stream Deck + — keys, dials, and the touch display
+
+Full first-class support for the Stream Deck + (product id `0x0084`) over the
+same direct-WebHID path (no Elgato software). Protocol verified against
+Elgato's published wire format (`@elgato-stream-deck/core` 7.6.3) rather than
+guessed — per the existing fail-closed rule that we never send images to a
+model we haven't verified.
+
+- **Keys.** 8 keys (4×2), 120×120 JPEG over the familiar gen-2 report
+  (`0x02`/cmd `0x07`, 1024-byte packets, 8-byte header) — but **upright**:
+  unlike v2/MK.2/XL there is no 180° device rotation. `profile()` grew a
+  rotation override, `createDeviceFrame` copies untransformed at 0°, and the
+  orientation-proof export captions the raw frame correctly for 0° models.
+- **Dials.** Encoder models multiplex input reports through byte 0
+  (`0x00` keys / `0x02` LCD / `0x03` encoders) — key-only models never take
+  that branch (on gen-1 decks byte 0 is already a key state). Rotation arrives
+  as a signed detent count per dial; presses fire on the rising edge. Each
+  dial has a **Turn** function — Standby cue (rides the cue list), Master
+  level (±2 %/detent through `setMasterGain`), Scrub playhead (±1 s/detent,
+  seeks the running cue + its output window), Deck brightness (±5 %/detent,
+  persisted `settings.sdBright`) — and a **Press** action from the same
+  `SD_ACTIONS` set as keys (GO / Stop / Pause / Fade·Stop / PANIC / cue /
+  pad), all through the shared `fireSurfaceAction` switch. Persisted as
+  `settings.sdDialMap`; older saves back-fill a safe default layout
+  (select+GO · master · scrub+pause · bright — nothing destructive).
+- **Touch display.** The 800×100 strip renders as four segments above the
+  dials — function title, live value (level %, standby cue, playhead clock,
+  brightness), press-action colour, active accent — in the label renderer
+  (`renderLcdStrip`/`renderAndPacketizeLcd`, upload via cmd `0x0c` with the
+  16-byte region header), repainted inside the same coalesced/serialized
+  repaint owner as key labels. **Tapping a segment fires that dial's press
+  action; swipes are deliberately unmapped** so a brush across the strip
+  can never fire anything mid-show.
+- **Panel.** The Stream Deck sheet gains a "Dials & touch strip" section:
+  per-dial Turn/Press/ref selects plus a simulated strip preview drawn from
+  the exact canonical strip art; the + also joins the preview-model list
+  (8-key grid renders from its profile automatically).
+- **Verified:** all label/integration tests extended (LCD profile contract,
+  16-byte header packetization, 0° device frame, input dispatch, persistence)
+  and a browser smoke run — panel renders the + grid + dial rows + painted
+  strip preview, remapping persists, no console errors. **Honest limit:** the
+  physical HID round-trip (real key/dial/touch input reports and strip
+  upload) still needs a 2-minute check with the hardware on Chrome/Edge,
+  same as every other model.
+
+---
+
 ## Cueola master-plan P7 — hardening surface (show files, preflight, show log)
 
 - **`.ogshow` show files.** `exportShowFile` saves through the File System Access

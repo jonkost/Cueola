@@ -61,11 +61,12 @@ function names(canvas) { return canvas.operations.map(operation => operation[0])
 function calls(canvas, operation) { return canvas.operations.filter(entry => entry[0] === operation); }
 
 test('publishes immutable, explicit JPEG profiles and fails closed for unknown models', () => {
-  assert.deepEqual(Array.from(StreamDeckLabel.SUPPORTED_PRODUCT_IDS), [0x006d, 0x0080, 0x006c]);
+  assert.deepEqual(Array.from(StreamDeckLabel.SUPPORTED_PRODUCT_IDS), [0x006d, 0x0080, 0x006c, 0x0084]);
   const expected = {
-    0x006d: { keys: 15, columns: 5, imageWidth: 72 },
-    0x0080: { keys: 15, columns: 5, imageWidth: 72 },
-    0x006c: { keys: 32, columns: 8, imageWidth: 96 }
+    0x006d: { keys: 15, columns: 5, imageWidth: 72, rotation: 180 },
+    0x0080: { keys: 15, columns: 5, imageWidth: 72, rotation: 180 },
+    0x006c: { keys: 32, columns: 8, imageWidth: 96, rotation: 180 },
+    0x0084: { keys: 8, columns: 4, imageWidth: 120, rotation: 0 }
   };
   for (const productId of StreamDeckLabel.SUPPORTED_PRODUCT_IDS) {
     const model = StreamDeckLabel.getModelProfile(productId);
@@ -74,7 +75,7 @@ test('publishes immutable, explicit JPEG profiles and fails closed for unknown m
     assert.equal(model.columns, expected[productId].columns);
     assert.equal(model.imageWidth, expected[productId].imageWidth);
     assert.equal(model.imageType, 'image/jpeg');
-    assert.equal(model.deviceRotationDegrees, 180);
+    assert.equal(model.deviceRotationDegrees, expected[productId].rotation);
     assert.ok(Object.isFrozen(model));
     assert.ok(Object.isFrozen(model.packet));
     assert.equal(StreamDeckLabel.supportsModel({ productId }), true);
@@ -83,6 +84,27 @@ test('publishes immutable, explicit JPEG profiles and fails closed for unknown m
   assert.equal(StreamDeckLabel.supportsModel(0x9999), false);
   assert.throws(() => StreamDeckLabel.getModelProfile(0x0060), /unsupported.+no device image was sent/i);
   assert.throws(() => StreamDeckLabel.getModelProfile({ productId: 0x9999 }), /unsupported/i);
+});
+
+test('only the Stream Deck + declares dials and a touch strip, with a frozen LCD contract', () => {
+  for (const productId of [0x006d, 0x0080, 0x006c]) {
+    const model = StreamDeckLabel.getModelProfile(productId);
+    assert.equal(model.encoders, 0);
+    assert.equal(model.lcd, null);
+    assert.throws(() => StreamDeckLabel.getLcdProfile(productId), /no touch strip/i);
+  }
+  const plus = StreamDeckLabel.getModelProfile(0x0084);
+  assert.equal(plus.encoders, 4);
+  const lcd = StreamDeckLabel.getLcdProfile(0x0084);
+  assert.equal(lcd, plus.lcd);
+  assert.ok(Object.isFrozen(lcd));
+  assert.ok(Object.isFrozen(lcd.packet));
+  assert.equal(lcd.width, 800);
+  assert.equal(lcd.height, 100);
+  assert.equal(lcd.segments, 4);
+  assert.equal(lcd.segmentWidth, 200);
+  assert.equal(lcd.imageType, 'image/jpeg');
+  assert.deepEqual({ ...lcd.packet }, { reportId: 0x02, command: 0x0c, packetSize: 1024, headerSize: 16, payloadSize: 1008 });
 });
 
 test('requires dependency-injected canvas and encoder boundaries', () => {
@@ -159,19 +181,26 @@ test('active and inactive states use distinct backgrounds without changing label
   assert.equal(calls(active.canvas, 'rotate').length, 0);
 });
 
-test('device conversion applies exactly one model-owned 180-degree transform to the complete image', () => {
+test('device conversion applies exactly the model-owned transform to the complete image', () => {
   const { renderer } = harness();
   for (const productId of StreamDeckLabel.SUPPORTED_PRODUCT_IDS) {
     const model = StreamDeckLabel.getModelProfile(productId);
     const canonical = renderer.renderCanonical(productId, { icon: '\u25b6', text: 'GO', active: true });
     const device = renderer.createDeviceFrame(productId, canonical.canvas);
     assert.equal(calls(canonical.canvas, 'rotate').length, 0);
-    assert.deepEqual(calls(device.canvas, 'translate'), [['translate', model.imageWidth, model.imageHeight]]);
-    assert.equal(calls(device.canvas, 'rotate').length, 1);
-    assert.equal(calls(device.canvas, 'rotate')[0][1], Math.PI);
+    if (model.deviceRotationDegrees === 180) {
+      assert.deepEqual(calls(device.canvas, 'translate'), [['translate', model.imageWidth, model.imageHeight]]);
+      assert.equal(calls(device.canvas, 'rotate').length, 1);
+      assert.equal(calls(device.canvas, 'rotate')[0][1], Math.PI);
+      assert.ok(names(device.canvas).indexOf('drawImage') > names(device.canvas).indexOf('rotate'));
+    } else {
+      // Stream Deck + keys upload upright \u2014 the device frame must not rotate.
+      assert.equal(model.deviceRotationDegrees, 0);
+      assert.equal(calls(device.canvas, 'translate').length, 0);
+      assert.equal(calls(device.canvas, 'rotate').length, 0);
+    }
     assert.equal(calls(device.canvas, 'drawImage').length, 1);
     assert.equal(calls(device.canvas, 'drawImage')[0][1], canonical.canvas);
-    assert.ok(names(device.canvas).indexOf('drawImage') > names(device.canvas).indexOf('rotate'));
     assert.equal(device.canvas.context.depth(), 0);
   }
 });
@@ -189,9 +218,66 @@ test('renders and accepts every supported key index while rejecting out-of-range
     assert.throws(() => StreamDeckLabel.packetize(productId, -1, new Uint8Array([1])), /outside/i);
     assert.throws(() => StreamDeckLabel.packetize(productId, model.keys, new Uint8Array([1])), /outside/i);
   }
-  assert.equal(encodes.length, 62);
+  assert.equal(encodes.length, 70);
   assert.equal(encodes[0].options.type, 'image/jpeg');
   assert.equal(encodes[0].options.quality, 0.9);
+});
+
+test('renders the touch strip as one upright canvas of four dial segments', () => {
+  const { renderer } = harness();
+  const strip = renderer.renderLcdStrip(0x0084, [
+    { title: 'MASTER', value: '80%' },
+    { title: 'STANDBY CUE', value: '#2 Walk-in', active: true },
+    {},
+    { title: 'BRIGHT', value: '65%' }
+  ]);
+  assert.equal(strip.canvas.width, 800);
+  assert.equal(strip.canvas.height, 100);
+  assert.deepEqual(strip.canvas.operations[0], ['setTransform', 1, 0, 0, 1, 0, 0]);
+  assert.deepEqual(strip.canvas.operations[1], ['clearRect', 0, 0, 800, 100]);
+  assert.equal(calls(strip.canvas, 'rotate').length, 0);
+  assert.equal(calls(strip.canvas, 'translate').length, 0);
+  const texts = calls(strip.canvas, 'fillText').map(call => call[1]);
+  assert.deepEqual(texts, ['MASTER', '80%', 'STANDBY CUE', '#2 Walk-in', 'BRIGHT', '65%']);
+  // strip background + one cell per segment, plus the active segment's accent bar
+  assert.equal(calls(strip.canvas, 'fillRect').length, 1 + 4 + 1);
+  assert.equal(strip.canvas.context.depth(), 0);
+  assert.throws(() => renderer.renderLcdStrip(0x006d, []), /no touch strip/i);
+});
+
+test('packetizes the touch strip with the 16-byte LCD region header', async () => {
+  const encodedSize = 1008 + 100;
+  const { renderer } = harness(encodedSize);
+  const strip = await renderer.renderAndPacketizeLcd(0x0084, [{ title: 'MASTER', value: '100%' }]);
+  assert.equal(strip.bytes.length, encodedSize);
+  assert.equal(strip.packets.length, 2);
+  strip.packets.forEach((entry, page) => {
+    assert.equal(entry.packet.length, 1024);
+    assert.equal(entry.data.length, 1023);
+    assert.equal(entry.reportId, 0x02);
+    assert.equal(entry.packet[0], 0x02);
+    assert.equal(entry.packet[1], 0x0c);
+    assert.equal(entry.packet[2] | (entry.packet[3] << 8), 0);      // x
+    assert.equal(entry.packet[4] | (entry.packet[5] << 8), 0);      // y
+    assert.equal(entry.packet[6] | (entry.packet[7] << 8), 800);    // width
+    assert.equal(entry.packet[8] | (entry.packet[9] << 8), 100);    // height
+    assert.equal(entry.packet[10], page === 1 ? 1 : 0);             // isLast
+    assert.equal(entry.packet[11] | (entry.packet[12] << 8), page);
+    assert.equal(entry.last, page === 1);
+  });
+  assert.deepEqual(strip.packets.map(packet => packet.payloadLength), [1008, 100]);
+  assert.equal(strip.packets[1].packet[13] | (strip.packets[1].packet[14] << 8), 100);
+  assert.equal(strip.packets[1].packet[15], 0);
+  assert.throws(() => StreamDeckLabel.packetizeLcd(0x0084, {}, new Uint8Array()), /empty/i);
+  assert.throws(() => StreamDeckLabel.packetizeLcd(0x006d, {}, new Uint8Array([1])), /no touch strip/i);
+  assert.throws(
+    () => StreamDeckLabel.packetizeLcd(0x0084, { x: 700, width: 200, height: 100 }, new Uint8Array([1])),
+    /outside/i
+  );
+  assert.throws(
+    () => StreamDeckLabel.packetizeLcd(0x0084, { y: 40, width: 800, height: 100 }, new Uint8Array([1])),
+    /outside/i
+  );
 });
 
 test('packetizes all bytes with the correct pages and an explicit final short chunk', async () => {
