@@ -81,16 +81,17 @@ const SHELL_ASSETS = [
   'cueola-admin-auth.js?v=de859c513b',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
+  'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
-  'script-operator.js?v=02e366509b',
+  'script-operator.js?v=98dd3e670d',
   'script-operator.css?v=c455a9dec9',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=f1d56e7a2a',
-  'outrangutan/outrangutan.css?v=b020d1d384',
-  'outrangutan/outrangutan.js?v=733cbe7da5',
+  'cueola-app.js?v=d256cd2fa2',
+  'outrangutan/outrangutan.css?v=794bcd25eb',
+  'outrangutan/outrangutan.js?v=3ec5d3c1d6',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -100,7 +101,9 @@ const versionSignature = SHELL_ASSETS
 // Bumped for cache-policy OR page-HTML-only releases: the shell caches
 // index.html/dashboard.html, whose content never feeds versionSignature —
 // an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
-const WORKER_SCHEMA = '6';
+// 6→7: V2 brand icons — assets/Brand/*.svg are precached UNVERSIONED, so only
+// a schema bump rolls the shell cache and delivers the new artwork.
+const WORKER_SCHEMA = '7';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

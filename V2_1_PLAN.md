@@ -173,7 +173,7 @@ coherent rebuild, not nine patches.
 
 ---
 
-## Phase 1.5 — Live reliability & control-room UX (design D12) — **NEXT UP · owner directive 2026-07-20 · NEVER CUT**
+## Phase 1.5 — Live reliability & control-room UX (design D12) — **✅ CODE-COMPLETE early, Jul 20** *(all seven items built + browser-verified same day; uncommitted. Owed: two-machine/two-browser Jul 20 drill, real-media first-GO on show hardware, show-class budget re-measure, Safari pass)*
 
 **Why this phase exists:** both July show days needed same-day emergency patches. The owner's bar:
 **a production day must never again need an emergency patch.** Everything below was hit live, on
@@ -317,7 +317,7 @@ capture doc actually appears (fire-and-forget writes fail silently otherwise).
 
 ---
 
-## Phase 13 — Live show controls (design D11) — **Tue Jul 28 – Wed Jul 29** *(added Jul 17; owner's declared big focus — never-cut)*
+## Phase 13 — Live show controls (design D11) — **✅ CODE-COMPLETE early, Jul 20** *(all eight items built + browser-verified same day; uncommitted. Owed: solo-op keycommand-only dry run, Stream Deck hardware smoke (midiInject sim passed), drag-reorder with real media, two-machine countdown + control-bus round-trip, pop-out kill test on real windows, Safari)*
 
 **Depends on:** Phase 1 (naming/keymap groundwork); decisions 17–18. Groups (Phase 6) shifts to
 Jul 30–31 and snapshots (Phase 7) to Aug 1 to make room — see decision 17. **Size:** 2–2.5 days.
@@ -443,8 +443,8 @@ rollback kit inventory, CHANGELOG, version 2.1.0, release notes.
 ```
 Fri Jul 17 · Mon Jul 20   Phase 0    shows run · intake filled (Jul 17 + Jul 20) · 2 emergency patches on main
 built early, Jul 17–18    Phases 1–6 ✅ CODE-COMPLETE dark on v2.1 (foundations · admin accounts · paperwork/export · dashboard · identity+avatars · groups+clone)
-Tue Jul 21 – Wed Jul 22   Phase 1.5  LIVE RELIABILITY (D12) — owner priority · never cut · NEXT UP
-Thu Jul 23 – Fri Jul 24   Phase 13   LIVE SHOW CONTROLS (D11) — owner's big focus
+built early, Jul 20       Phase 1.5  ✅ CODE-COMPLETE — LIVE RELIABILITY (D12) all seven items, browser-verified (drill + hardware QA owed)
+built early, Jul 20       Phase 13   ✅ CODE-COMPLETE — LIVE SHOW CONTROLS (D11) all eight items, browser-verified (hardware + two-machine QA owed)
 Sat Jul 25                Phase 7    cloud snapshots
 continuous + Sun Jul 26   Phase 9    platform & UI sweep
 Mon Jul 27                Phase 10   security close-out  ·  Phase 11 docs & training

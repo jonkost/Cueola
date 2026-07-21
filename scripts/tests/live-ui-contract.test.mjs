@@ -216,6 +216,153 @@ test('runtime stays slim: no boot vendor libs, owned timers, recorded budgets (D
   assert.ok(Array.isArray(budgets.intervalOwners.expected) && budgets.intervalOwners.expected.length >= 5);
 });
 
+test('one keycommand system on every surface (D11.1)', async () => {
+  // The Live surface delegates binding grammar, overrides, and hold mechanics
+  // to the shared engine.
+  assert.match(app, /window\.CueolaKeymap\.effectiveBindings/);
+  assert.match(app, /window\.CueolaKeymap\.createHoldTracker/);
+  assert.match(app, /window\.CueolaKeymap\.sectionsForScope\(KEYMAP/);
+  // The Script Operator window registers a real scope — including the owner's
+  // direct ask, J/L hold-to-Brake/Boost — with blur hold-safety.
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  assert.match(scriptOp, /hold: \['brake_start', 'brake_stop'\]/);
+  assert.match(scriptOp, /hold: \['boost_start', 'boost_stop'\]/);
+  assert.match(scriptOp, /operatorHolds\?\.releaseAll\(\)/);
+  assert.match(scriptOp, /operatorKeymapDispatch\(e, 'down'\)/);
+  const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
+  assert.match(scriptOpHtml, /cueola-keymap\.js/);
+  // The printed operator cheat card rides the show pack, generated from the
+  // same registry as dispatch and the "?" overlay.
+  assert.match(app, /'operator-card'\]/);
+  assert.match(app, /function operatorCheatCardHTML/);
+  assert.match(app, /KEYMAP\.filter\(a => a\.scope === 'live'\)\.forEach\(a => \{ \(liveGroups/);
+});
+
+test('cue advance never moves the prompter; the op lines it up deliberately (D11.2)', () => {
+  // The auto-seek is gone from every advance path…
+  const advance = app.slice(app.indexOf('function updatePrompterOnAdvance('), app.indexOf('function cuePrompterToLiveRow('));
+  assert.doesNotMatch(advance, /seek_row/);
+  assert.doesNotMatch(app, /sendToPrompter\(false\)\.then\(pushed => \{ if \(pushed\) cuePrompterToLiveRow\(\); \}\)/);
+  // …while the manual line-up tools stay: C (cue current row), T (top),
+  // Cue Now / Cue Next, and the seek_row validation.
+  assert.match(app, /Cue prompter to current row/);
+  assert.match(app, /function cuePrompterToLiveRow\(\)/);
+  assert.match(app, /data-script-op-cue="now"/);
+  assert.match(app, /data-script-op-cue="next"/);
+  // The ▶ talent-position rail renders from adopted talent state and the
+  // editor follows it unless the op is editing.
+  assert.match(app, /function renderTalentPositionIndicator\(\)/);
+  assert.match(app, /renderTalentPositionIndicator\(\);\s+\/\/ D11\.2/);
+  assert.match(html, /id="lsTalentPos"/);
+  assert.match(html, /id="lsTalentPosFollow"/);
+  // Cue-to-top preflight affordance: a parked talent script warns before doors.
+  assert.match(app, /parked mid-scroll/);
+});
+
+test('Ready·Track·Roll·Take: armed call with an abort window, published for all (D11.3)', () => {
+  // GO on a linked-playout row starts the visible call — never an instant fire.
+  const auto = app.slice(app.indexOf('function fireOutrangutanAutoForBeat('), app.indexOf('function outrangutanCellBadge('));
+  assert.match(auto, /return beginPlayoutCall\(beat, rowIdx\)/);
+  assert.doesNotMatch(auto, /d\.outAuto && d\.outCueId\) fireOutrangutanCommand/);
+  // The 3-second window steps READY → TRACK → ROLL, then TAKE; the browsing
+  // path (selectLiveRundownRow) never begins a call.
+  assert.match(app, /const RTRT_STAGES = \['ready', 'track', 'roll'\]/);
+  assert.match(app, /const RTRT_STAGE_MS = 1000/);
+  const select = app.slice(app.indexOf('function selectLiveRundownRow('), app.indexOf('function lsNext('));
+  assert.doesNotMatch(select, /beginPlayoutCall|fireOutrangutanAutoForBeat/);
+  // G is TAKE-now, S aborts, click buttons exist, leaving live aborts.
+  assert.match(app, /if \(action === 'go'\) return takePlayoutCall\('take-now'\)/);
+  assert.match(app, /return abortPlayoutCall\(action\)/);
+  assert.match(html, /onclick="takePlayoutCall\('button'\)"/);
+  assert.match(html, /onclick="abortPlayoutCall\('button'\)"/);
+  assert.match(app, /abortPlayoutCall\('left-live'\)/);
+  // Every stage publishes on the session doc (additive field) and every
+  // viewer renders it; stale calls are discarded.
+  assert.match(app, /liveCall: \{/);
+  assert.match(app, /applyRemoteLiveCall\(d\.liveCall\)/);
+  assert.match(app, /stageAt > 15000\b|stageAt < |Date\.now\(\) - liveCall\.stageAt > 15000/);
+  // Manual armed-call mode is a show-level setting.
+  assert.match(app, /cueola_rtrt_manual/);
+  assert.match(app, /setLiveCallManualArm/);
+});
+
+test('playout countdown publishes once per start and ticks locally everywhere (D11.4)', () => {
+  // Outrangutan publishes ONE additive write per clip start — no per-second writes.
+  assert.match(playbackJs, /function publishPlayingStart\(cue\)/);
+  assert.match(playbackJs, /'outrangutan\.playingStart'/);
+  const starts = playbackJs.match(/publishPlayingStart\(cue\)/g) || [];
+  assert.ok(starts.length >= 2, 'both beginMedia and beginImage publish the start');
+  // Every client ingests it stamp-guarded and ticks locally with an owned timer.
+  assert.match(app, /outrangutanState\.playingStart = og\.playingStart/);
+  assert.match(app, /function outCountdownText\(cueId\)/);
+  assert.match(app, /function syncOutCountdownTicker\(\)/);
+  assert.match(app, /data-outremain/);
+  assert.match(html, /\.cue-out-remain\{/);
+});
+
+test('controls never lie, never move, never silently refuse (D11.5)', () => {
+  // Every guarded refusal in the GO/row-activation paths surfaces why.
+  const activate = app.slice(app.indexOf('function activateLiveRundownRow('), app.indexOf('function detachIfFollowing('));
+  assert.match(activate, /toast\('That row no longer exists\.'\)/);
+  assert.match(activate, /Segment headers organize the rundown/);
+  assert.match(activate, /is disabled — enable it in the rundown/);
+  const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
+  assert.match(next, /toast\('End of rundown — there is no next row\.'\)/);
+  assert.match(app, /Live commands are paused — the show screen is still settling/);
+  // Fixed geometry: the GO control has a fixed width and its label ellipsizes.
+  assert.match(html, /\.ls-go-primary\{[^}]*width:min\(38vw,380px\)/);
+  assert.match(html, /\.ls-go-primary \.ls-go-label\{[^}]*text-overflow:ellipsis/);
+  assert.match(html, /\.ls-start-btn\{[^}]*min-width:112px/);
+  // Click-row-to-cue is independent of the show clock — no clock state feeds
+  // the activation path.
+  assert.doesNotMatch(activate, /liveClockRunning|_clockRanThisLoad|elapsedSecs/);
+});
+
+test('playout live reorder is an order-only write that respects the playing clip (D11.6)', async () => {
+  assert.match(playbackJs, /function reorderCue\(dragId, targetId, before\)/);
+  const reorder = playbackJs.slice(playbackJs.indexOf('function reorderCue('), playbackJs.indexOf('function renderInspector('));
+  // Order-only: splice + renumber; the active deck is never touched, and the
+  // TRUE next cue is restaged after the order changes.
+  assert.match(reorder, /cues\.splice\(from, 1\)/);
+  assert.match(reorder, /renumber\(\)/);
+  assert.match(reorder, /if \(active\) preloadNext\(active\.cue\)/);
+  assert.doesNotMatch(reorder, /stopDeck|active =|active\.cue =/);
+  // Drag affordances exist on the cue list.
+  assert.match(playbackJs, /el\.draggable = true/);
+  assert.match(playbackJs, /og-drop-before/);
+  const ogCss = await readFile(new URL('../../outrangutan/outrangutan.css', import.meta.url), 'utf8');
+  assert.match(ogCss, /\.og-cue\.og-drop-before/);
+});
+
+test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11.8)', () => {
+  // Connection chips: both pop-outs ride the D12.1 link model permanently.
+  assert.match(html, /id="ls-link-talent"/);
+  assert.match(html, /id="ls-link-scriptop"/);
+  // Automatic reconnect attempts on loss, one per announcement.
+  assert.match(app, /automatic resync attempt/);
+  assert.match(app, /try \{ scriptOperatorPublishState\(true\); \} catch \{\}/);
+  assert.match(app, /automatic reconnect attempt'\);\s*\n\s*try \{ _postPrompterHello\(\); \} catch \{\}/);
+  // One-click reopen with full state resync stays wired to the rail.
+  assert.match(app, /if \(name === 'scriptOperator'\) return openScriptOpPopout\(\)/);
+  assert.match(app, /return openFlowmingoTalentWindow\(\{ replace:true \}\)/);
+});
+
+test('one Stream Deck drives the whole rig over the session control bus (D11.7)', () => {
+  // The deck's chokepoint gains target-qualified actions with a same-tab fast
+  // path and a Firestore command doc for cross-machine targets.
+  assert.match(playbackJs, /const CONTROL_BUS_ACTIONS = \{/);
+  assert.match(playbackJs, /window\.cueolaControlBus === 'function'/);
+  assert.match(playbackJs, /controlBus: \{ target: cmd\.target/);
+  assert.match(playbackJs, /rundown_go: 'Rundown GO'/);
+  // Cueola executes only on the show-calling surface with live open, dedupes
+  // by id, and discards stale commands so a reconnect never replays a GO.
+  assert.match(app, /function runControlBusAction\(target, action/);
+  assert.match(app, /if \(!isShowCaller\(\)\) return false/);
+  assert.match(app, /cmd\.id === _lastControlBusId/);
+  assert.match(app, /Date\.now\(\) - cmd\.ts > 5000/);
+  assert.match(app, /applyControlBusCommand\(d\.controlBus\)/);
+});
+
 test('explicit create and ordinary join have separate Firestore authority', () => {
   const create = app.slice(app.indexOf('async function createSession()'), app.indexOf('function enterAsInstructor'));
   const createOnly = app.slice(app.indexOf('async function createSessionDocumentIfMissing'), app.indexOf('async function restoreMissingSessionDocument'));

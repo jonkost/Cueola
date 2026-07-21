@@ -1008,3 +1008,9 @@
   .og-bottom-tab.on { border-color: Highlight; }
   .og-sdk.mapped, .og-sdk-preview[data-active="true"], .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
 }
+
+/* v2.1 D11.6: live drag-reorder — insertion edge on the drop target. */
+.og-cue { cursor: grab; }
+.og-cue:active { cursor: grabbing; }
+.og-cue.og-drop-before { box-shadow: 0 -2px 0 0 var(--og-accent, #f97316); }
+.og-cue.og-drop-after { box-shadow: 0 2px 0 0 var(--og-accent, #f97316); }

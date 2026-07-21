@@ -86,6 +86,14 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') releaseAllHolds();
     });
+    // D11.1: window-level keycommands (J/L brake/boost, Space/K, ?, sizes)
+    // with the same blur hold-safety as the pointer holds above.
+    document.addEventListener('keydown', e => operatorKeymapDispatch(e, 'down'));
+    document.addEventListener('keyup', e => operatorKeymapDispatch(e, 'up'));
+    window.addEventListener('blur', () => operatorHolds?.releaseAll());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') operatorHolds?.releaseAll();
+    });
 
     controlsRoot.addEventListener('click', onDelegatedClick);
     controlsRoot.addEventListener('input', onDelegatedInput);
@@ -568,6 +576,73 @@
     if (!hold || hold.keyboardKey !== event.key) return;
     event.preventDefault();
     releaseHold(holdButton, null);
+  }
+
+  // ── D11.1: window-level keycommands via the shared engine ─────────────────
+  // The desk finally gets registered keys — including the owner's direct ask,
+  // J/L hold-to-Brake/Boost — dispatched through cueola-keymap.js so bindings,
+  // overrides, and the "?" reference match the Live surface exactly.
+  const keymapApi = window.CueolaKeymap || null;
+  const OPERATOR_KEYMAP = [
+    { id: 'scriptop.playpause',  scope: 'scriptop', group: 'Prompter', keys: ['Space', 'K'], label: 'Play / pause',
+      run: () => sendIntent('control', { action: document.getElementById('playButton')?.dataset.action || 'resume' }) },
+    { id: 'scriptop.brake',      scope: 'scriptop', group: 'Prompter', keys: ['J'], label: 'Brake (hold)', hold: ['brake_start', 'brake_stop'] },
+    { id: 'scriptop.boost',      scope: 'scriptop', group: 'Prompter', keys: ['L'], label: 'Boost (hold)', hold: ['boost_start', 'boost_stop'] },
+    { id: 'scriptop.size.down',  scope: 'scriptop', group: 'Prompter', keys: ['-'], label: 'Text smaller', run: () => sendIntent('control', { action: 'size_down' }) },
+    { id: 'scriptop.size.up',    scope: 'scriptop', group: 'Prompter', keys: ['='], label: 'Text bigger',  run: () => sendIntent('control', { action: 'size_up' }) },
+    { id: 'scriptop.speed.down', scope: 'scriptop', group: 'Prompter', keys: ['['], label: 'Speed down',   run: () => sendIntent('control', { action: 'speed_down' }) },
+    { id: 'scriptop.speed.up',   scope: 'scriptop', group: 'Prompter', keys: [']'], label: 'Speed up',     run: () => sendIntent('control', { action: 'speed_up' }) },
+    { id: 'scriptop.ref',        scope: 'scriptop', group: 'Reference', keys: ['?'], label: 'This shortcut reference', run: () => toggleOperatorKeymapRef() },
+  ];
+  const operatorHolds = keymapApi
+    ? keymapApi.createHoldTracker(action => sendIntent('control', { action }))
+    : null;
+
+  // Buttons, tabs, and fields own their native keys (Space clicks a focused
+  // button; the hold buttons have their own Space/Enter handling above).
+  function isOperatorInteractiveTarget(target) {
+    return Boolean(target?.closest?.('textarea, input, select, button, [role="tab"], [contenteditable="true"]'));
+  }
+
+  function operatorKeymapDispatch(event, phase) {
+    if (!keymapApi || event.metaKey || event.ctrlKey || event.defaultPrevented) return false;
+    if (isOperatorInteractiveTarget(event.target)) {
+      // Releasing a held key while focus sits in a field must still send the
+      // stop control — same blur-safety contract as the Live surface.
+      if (phase === 'up' && operatorHolds.size()) operatorHolds.upByEvent(OPERATOR_KEYMAP, event);
+      return false;
+    }
+    for (const action of OPERATOR_KEYMAP) {
+      if (!keymapApi.actionMatches(action, event)) continue;
+      if (action.hold) {
+        event.preventDefault();
+        if (phase === 'down') operatorHolds.down(action, event);
+        else operatorHolds.up(action);
+        return true;
+      }
+      if (phase !== 'down' || event.repeat) { if (phase === 'down') event.preventDefault(); return true; }
+      event.preventDefault();
+      action.run();
+      return true;
+    }
+    return false;
+  }
+
+  function toggleOperatorKeymapRef() {
+    let ov = document.getElementById('keymapRefOv');
+    if (ov && !ov.hidden) { ov.hidden = true; return; }
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'keymapRefOv'; ov.className = 'km-ov';
+      ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.km-x')) ov.hidden = true; });
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = keymapApi.referenceHTML({
+      title: 'Keyboard shortcuts — Script Operator',
+      sections: keymapApi.sectionsForScope(OPERATOR_KEYMAP, 'scriptop'),
+      foot: 'Arrows drive the rundown on the main Cueola window; Space/J/K/L drive the prompter from this desk. Typing in any field suppresses shortcuts.',
+    });
+    ov.hidden = false;
   }
 
   function queueDraft() {

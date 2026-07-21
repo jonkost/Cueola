@@ -51,7 +51,10 @@
     0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, stateOffset: 3, imageProductId: 0x006c, reset: [0x03, 0x02], bright: [0x03, 0x08] },
   };
   // actions a Stream Deck key / control surface can fire
-  const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…' };
+  const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…',
+    // v2.1 D11.7: cross-surface actions — one deck drives the whole rig.
+    rundown_go: 'Rundown GO', rundown_back: 'Rundown Back', rtrt_take: 'TAKE call', rtrt_abort: 'ABORT call',
+    prompter_toggle: 'Prompter ▶⏸', prompter_top: 'Prompter Top', prompter_cue: 'Prompter Cue Row' };
   const OBS_UI = false; // OBS Studio UI hidden until ready — backend stays live for existing shows
 
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
@@ -1575,6 +1578,31 @@
   }
   // One action switch for every control surface (Stream Deck keys, MIDI pads,
   // keyboard-shortcut parity) — V2 Phase 5 item 4 hangs Web MIDI off this too.
+  // v2.1 D11.7: the session control bus. Surface actions carry a target —
+  // playout actions run locally; rundown/prompter actions go same-tab direct
+  // (the one-operator setup) or over a Firestore command doc (the deck plugged
+  // into the Mac Pro drives Outrangutan on the MacBook Air, and vice versa).
+  // Command docs carry ids + timestamps; consumers discard stale commands so a
+  // reconnect can never replay an old GO.
+  const CONTROL_BUS_ACTIONS = {
+    rundown_go: { target: 'rundown', action: 'go' },
+    rundown_back: { target: 'rundown', action: 'back' },
+    rtrt_take: { target: 'rundown', action: 'take' },
+    rtrt_abort: { target: 'rundown', action: 'abort' },
+    prompter_toggle: { target: 'prompter', action: 'toggle' },
+    prompter_top: { target: 'prompter', action: 'top' },
+    prompter_cue: { target: 'prompter', action: 'cue_current' },
+  };
+  function fireControlBusAction(key) {
+    const cmd = CONTROL_BUS_ACTIONS[key];
+    if (!cmd) return;
+    // Same-tab fast path (<30 ms), mirroring the rundown→playout local path.
+    try { if (typeof window.cueolaControlBus === 'function' && window.cueolaControlBus(cmd.target, cmd.action, 'local-deck')) return; } catch (e) {}
+    if (mode !== 'session' || !sessionCode || !fbReady()) { toast('Cross-surface keys need a linked session.'); return; }
+    try {
+      window._updateDoc(sessionRef(), { controlBus: { target: cmd.target, action: cmd.action, id: rid('cb_'), ts: Date.now(), sender: OG_SENDER } });
+    } catch (e) {}
+  }
   function fireSurfaceAction(m) {
     if (!m || !m.action) return;
     if (m.action === 'go') go();
@@ -1584,6 +1612,7 @@
     else if (m.action === 'panic') panic();
     else if (m.action === 'cue') { const c = cueById(m.ref); if (c) { selectedId = c.id; go(); } }
     else if (m.action === 'pad') { const p = padById(m.ref); if (p) firePad(p); }
+    else if (CONTROL_BUS_ACTIONS[m.action]) fireControlBusAction(m.action);
   }
   function sdFireKey(i) { fireSurfaceAction(sdMap[i]); }
 
@@ -2633,7 +2662,28 @@
     }
     applyKeyForActive();          // Phase 5: keying on/off for this cue (control + output)
     fireObsForCue(cue);           // Phase 5: any OBS action programmed on this cue
+    publishPlayingStart(cue);     // v2.1 D11.4: one write per start — clients tick locally
     preloadNext(cue);             // Phase 2 (master plan): stage the next armed cue for an instant GO
+  }
+
+  // v2.1 D11.4: the cross-machine countdown. Published ONCE per clip start
+  // (additive field, no per-second writes) — every rundown client renders live
+  // time-remaining by ticking locally from startedAt/durMs. Works whether the
+  // clip was auto-triggered, RTRT-taken, or fired directly here (the MacBook
+  // Air publishes; the Mac Pro rundown renders).
+  let _playingStartSeq = 0;
+  function publishPlayingStart(cue) {
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    const durS = Math.max(0, (cue.trimOut != null ? cue.trimOut : (cue.duration || 0)) - (cue.trimIn || 0));
+    try {
+      window._updateDoc(sessionRef(), {
+        'outrangutan.playingStart': {
+          cueId: cue.id, name: cue.name || '', startedAt: Date.now(),
+          durMs: Math.round(durS * 1000), loop: !!cue.loop,
+          sender: OG_SENDER, seq: ++_playingStartSeq, ts: Date.now(),
+        },
+      });
+    } catch (e) {}
   }
 
   // ── Phase 2 (master plan): stills as first-class playout items ───────────
@@ -2666,6 +2716,7 @@
     armCueSfxTie(cue);
     applyKeyForActive();          // stills never key — this also stops a leftover key loop
     fireObsForCue(cue);
+    publishPlayingStart(cue);     // v2.1 D11.4
     preloadNext(cue);
   }
   function armImageTimer() {
@@ -2997,7 +3048,41 @@
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
       el.onclick = () => { selectedId = el.getAttribute('data-id'); renderCueList(); renderInspector(); renderEditArea(); if (!active && !preInfo) renderClock(); };
       el.ondblclick = () => { selectedId = el.getAttribute('data-id'); go(); };
+      // v2.1 D11.6: live drag-reorder — a playlist-order write only. The
+      // playing clip is never touched (the active deck holds its own cue
+      // reference) and rundown links ride cue IDs, so a reorder can never
+      // silently retarget a linked row. Allowed in rehearsal AND show mode.
+      el.draggable = true;
+      el.ondragstart = e => { _dragCueId = el.getAttribute('data-id'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', _dragCueId); } catch (err) {} };
+      el.ondragover = e => { e.preventDefault(); const r = el.getBoundingClientRect(); el.classList.toggle('og-drop-before', e.clientY < r.top + r.height / 2); el.classList.toggle('og-drop-after', e.clientY >= r.top + r.height / 2); };
+      el.ondragleave = () => el.classList.remove('og-drop-before', 'og-drop-after');
+      el.ondrop = e => {
+        e.preventDefault();
+        const before = el.classList.contains('og-drop-before');
+        el.classList.remove('og-drop-before', 'og-drop-after');
+        reorderCue(_dragCueId, el.getAttribute('data-id'), before);
+        _dragCueId = null;
+      };
+      el.ondragend = () => { _dragCueId = null; Array.prototype.forEach.call(wrap.querySelectorAll('.og-drop-before,.og-drop-after'), n => n.classList.remove('og-drop-before', 'og-drop-after')); };
     });
+  }
+
+  let _dragCueId = null;
+  function reorderCue(dragId, targetId, before) {
+    if (!dragId || !targetId || dragId === targetId) return;
+    const from = cueIndex(dragId);
+    if (from < 0) return;
+    const item = cues[from];
+    cues.splice(from, 1);
+    let to = cueIndex(targetId);
+    if (to < 0) { cues.splice(from, 0, item); return; }
+    if (!before) to += 1;
+    cues.splice(to, 0, item);
+    renumber();                              // order changed → staged next-cue is stale (cleared inside)
+    if (active) preloadNext(active.cue);     // restage the TRUE next after the playing clip
+    renderCueList(); renderInspector(); renderEditArea();
+    scheduleSave();
+    slog('info', 'Reordered “' + item.name + '” to position ' + (cueIndex(item.id) + 1) + (active ? ' — playing clip untouched' : ''));
   }
 
   function renderInspector() {
