@@ -5116,6 +5116,31 @@ function releaseLiveCommandHolds() {
   _keymapHolds.clear();
 }
 
+// ── Hardware control-surface bridge (Outrangutan Stream Deck / MIDI) ────────
+// Physical surfaces fire the SAME live actions as the keyboard — one KEYMAP
+// registry, one liveCommandDispatchAllowed gate, so a Stream Deck key can
+// never do something the documented shortcut couldn't. state() feeds the
+// Stream Deck + touch strip (live row, prompter transport/speed); it must
+// stay cheap — the surface polls it.
+window.CueolaSurfaceControl = {
+  fire(id) {
+    const action = KEYMAP.find(a => a.id === id && a.scope === 'live' && typeof a.run === 'function');
+    if (!action || !liveCommandDispatchAllowed()) return false;
+    try { action.run(); } catch (error) { containError('Surface action ' + id, error); return false; }
+    return true;
+  },
+  state() {
+    const live = liveSessionState().lifecycle === 'live';
+    return {
+      live,
+      row: live ? Math.max(liveActiveCueIndex(), 0) + 1 : 0,
+      rows: Array.isArray(beats) ? beats.length : 0,
+      prompterPlaying: live && !!ptPlaying,
+      prompterSpeed: typeof ptTargetSpeed === 'number' ? ptTargetSpeed : null,
+    };
+  },
+};
+
 function keymapDispatch(e, phase) {
   const scope = keymapScopeNow();
   if (!scope) return false;

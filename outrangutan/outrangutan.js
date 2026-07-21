@@ -52,9 +52,24 @@
     0x0084: { name: 'Stream Deck +',      keys: 8,  cols: 4, stateOffset: 3, imageProductId: 0x0084, reset: [0x03, 0x02], bright: [0x03, 0x08], encoders: 4 },
   };
   // actions a Stream Deck key / control surface can fire
-  const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…' };
+  const SD_ACTIONS = {
+    go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…',
+    rdNext: 'Rundown · Next row', rdBack: 'Rundown · Back row',
+    ptToggle: 'Prompter · Play/Pause', ptCue: 'Prompter · Cue to live row', ptTop: 'Prompter · To top',
+  };
+  // Cueola-wide actions ride the rundown's own KEYMAP registry through the
+  // window.CueolaSurfaceControl bridge (same tab, same live gating as the
+  // keyboard) — the Stream Deck can never do what the shortcut couldn't.
+  const SD_CUEOLA_ACTIONS = {
+    rdNext: 'rundown.next', rdBack: 'rundown.back',
+    ptToggle: 'prompter.playpause', ptCue: 'prompter.cue.current', ptTop: 'prompter.top',
+  };
+  const SD_CUEOLA_KEY_LABELS = { rdNext: 'NEXT ROW', rdBack: 'BACK ROW', ptToggle: 'PROMPTER', ptCue: 'CUE SCRIPT', ptTop: 'SCRIPT TOP' };
   // what turning a Stream Deck + dial does (its press shares SD_ACTIONS)
-  const SD_DIAL_FUNCTIONS = { select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness' };
+  const SD_DIAL_FUNCTIONS = {
+    select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness',
+    rundown: 'Rundown row', ptSpeed: 'Prompter speed',
+  };
   // safe out-of-the-box dial layout: nothing destructive, GO/pause on presses
   const defaultDialMap = () => ({
     0: { rotate: 'select', action: 'go' },
@@ -1547,6 +1562,21 @@
       } else if (action === 'pad') {
         ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(57, 25); ctx.lineTo(57, 61); ctx.lineTo(72, 55); ctx.stroke();
         ctx.beginPath(); ctx.arc(45, 67, 11, 0, Math.PI * 2); ctx.fill();
+      } else if (action === 'rdNext' || action === 'rdBack') {
+        ctx.save();
+        if (action === 'rdBack') { ctx.translate(96, 0); ctx.scale(-1, 1); }
+        ctx.beginPath(); ctx.moveTo(26, 27); ctx.lineTo(58, 48); ctx.lineTo(26, 69); ctx.closePath(); ctx.fill();
+        ctx.fillRect(64, 27, 8, 42);
+        ctx.restore();
+      } else if (action === 'ptToggle') {
+        ctx.beginPath(); ctx.moveTo(24, 27); ctx.lineTo(48, 48); ctx.lineTo(24, 69); ctx.closePath(); ctx.fill();
+        ctx.fillRect(57, 27, 7, 42); ctx.fillRect(69, 27, 7, 42);
+      } else if (action === 'ptCue') {
+        ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(34, 30); ctx.lineTo(78, 30); ctx.moveTo(46, 48); ctx.lineTo(78, 48); ctx.moveTo(34, 66); ctx.lineTo(78, 66); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(18, 39); ctx.lineTo(36, 48); ctx.lineTo(18, 57); ctx.closePath(); ctx.fill();
+      } else if (action === 'ptTop') {
+        ctx.fillRect(27, 22, 42, 8);
+        ctx.beginPath(); ctx.moveTo(48, 38); ctx.lineTo(67, 62); ctx.lineTo(29, 62); ctx.closePath(); ctx.fill();
       }
     } finally {
       ctx.restore();
@@ -1561,6 +1591,7 @@
     if (mapping.action === 'pause') return isActivePaused();
     if (mapping.action === 'cue') return !!active && active.cue?.id === mapping.ref;
     if (mapping.action === 'pad') return !!padRT.get(mapping.ref)?.voices?.length;
+    if (mapping.action === 'ptToggle') return !!cueolaSurfaceState()?.prompterPlaying;
     return false;
   }
   function sdKeyDescriptor(index, mapping, productId=sdCurrentProductId(), overrides={}) {
@@ -1583,7 +1614,23 @@
     if (!m || !m.action) return '';
     if (m.action === 'cue') { const c = cueById(m.ref); return c ? ('CUE ' + c.num) : 'CUE ?'; }
     if (m.action === 'pad') { const p = padById(m.ref); return p ? (p.name || 'PAD') : 'PAD ?'; }
+    if (SD_CUEOLA_KEY_LABELS[m.action]) return SD_CUEOLA_KEY_LABELS[m.action];
     return (SD_ACTIONS[m.action] || m.action).toUpperCase();
+  }
+  // Rundown/prompter state for surface labels — null when cueola-app is not on
+  // this page (output windows) or the bridge predates this build.
+  function cueolaSurfaceState() {
+    try { return window.CueolaSurfaceControl?.state?.() || null; } catch (e) { return null; }
+  }
+  let sdCueolaWarnedAt = 0;
+  function fireCueolaBridge(id, quiet) {
+    let ok = false;
+    try { ok = window.CueolaSurfaceControl?.fire?.(id) === true; } catch (e) { ok = false; }
+    if (!ok && !quiet && Date.now() - sdCueolaWarnedAt > 3000) {
+      sdCueolaWarnedAt = Date.now();
+      toast('Rundown/prompter controls need Cueola live in this tab.');
+    }
+    return ok;
   }
   // One action switch for every control surface (Stream Deck keys, MIDI pads,
   // keyboard-shortcut parity) — V2 Phase 5 item 4 hangs Web MIDI off this too.
@@ -1596,6 +1643,7 @@
     else if (m.action === 'panic') panic();
     else if (m.action === 'cue') { const c = cueById(m.ref); if (c) { selectedId = c.id; go(); } }
     else if (m.action === 'pad') { const p = padById(m.ref); if (p) firePad(p); }
+    else if (SD_CUEOLA_ACTIONS[m.action]) fireCueolaBridge(SD_CUEOLA_ACTIONS[m.action]);
   }
   function sdFireKey(i) { fireSurfaceAction(sdMap[i]); }
 
@@ -1721,13 +1769,32 @@
     dev.oninputreport = onSdInput;
     try { navigator.hid.addEventListener('disconnect', onSdDisconnect); } catch (e) {}
     sdReset(); sdBrightness(settings.sdBright == null ? 80 : settings.sdBright);
+    sdCueolaPollStart();
     const labelsReady = await scheduleStreamDeckRefresh();
     const surfaces = model.keys + ' keys' + (model.encoders ? ' · ' + model.encoders + ' dials · touch strip' : '');
     toast('Stream Deck connected — ' + model.name + ' (' + surfaces + ')' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
     renderStreamDeck();
   }
-  function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; sdSetPaintError(''); renderStreamDeck(); toast('Stream Deck disconnected.'); }
-  function sdDisconnect() { if (sd && sd.device) { try { sdReset(); } catch (e) {} try { sd.device.close(); } catch (e) {} } sd = null; sdSetPaintError(''); renderStreamDeck(); }
+  function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; sdCueolaPollStop(); sdSetPaintError(''); renderStreamDeck(); toast('Stream Deck disconnected.'); }
+  function sdDisconnect() { if (sd && sd.device) { try { sdReset(); } catch (e) {} try { sd.device.close(); } catch (e) {} } sd = null; sdCueolaPollStop(); sdSetPaintError(''); renderStreamDeck(); }
+  // Rundown/prompter changes happen in cueola-app with no callback into this
+  // module, so while a deck is connected AND something is mapped to a Cueola
+  // action, poll the bridge at 1 Hz and repaint only when the snapshot moved.
+  let sdCueolaPollTimer = null, sdCueolaSnapshot = '';
+  function sdCueolaMapped() {
+    const maps = [...Object.values(sdMap), ...Object.values(sdDialMap)];
+    return maps.some(m => m && (SD_CUEOLA_ACTIONS[m.action] || m.rotate === 'rundown' || m.rotate === 'ptSpeed'));
+  }
+  function sdCueolaPollStart() {
+    if (sdCueolaPollTimer) return;
+    sdCueolaPollTimer = setInterval(() => {
+      if (!sd || !sdCueolaMapped()) return;
+      const s = cueolaSurfaceState();
+      const key = s ? [s.live, s.row, s.rows, s.prompterPlaying, s.prompterSpeed].join('|') : '';
+      if (key !== sdCueolaSnapshot) { sdCueolaSnapshot = key; scheduleStreamDeckRefresh(); }
+    }, 1000);
+  }
+  function sdCueolaPollStop() { if (sdCueolaPollTimer) clearInterval(sdCueolaPollTimer); sdCueolaPollTimer = null; }
   function onSdInput(e) {
     if (!sd) return;
     const data = new Uint8Array(e.data.buffer);
@@ -1794,6 +1861,13 @@
       settings.sdBright = clamp((settings.sdBright == null ? 80 : settings.sdBright) + ticks * 5, 5, 100);
       sdBrightness(settings.sdBright);
       scheduleSave();
+    } else if (fn === 'rundown') {
+      // one row per input report, whatever the detent count — a fast flick
+      // must never skip rundown rows on air
+      fireCueolaBridge(ticks > 0 ? 'rundown.next' : 'rundown.back');
+    } else if (fn === 'ptSpeed') {
+      const id = ticks > 0 ? 'prompter.speed.up' : 'prompter.speed.down';
+      for (let k = Math.min(5, Math.abs(ticks)); k > 0; k--) { if (!fireCueolaBridge(id)) break; }
     }
     scheduleStreamDeckRefresh();   // the touch strip shows this dial's live value
   }
@@ -1818,6 +1892,8 @@
   function sdDialActive(m) {
     if (!m) return false;
     if (m.rotate === 'scrub') return !!active && !isActivePaused();
+    if (m.rotate === 'rundown') return !!cueolaSurfaceState()?.live;
+    if (m.rotate === 'ptSpeed') return !!cueolaSurfaceState()?.prompterPlaying;
     return sdKeyIsActive(-1, m);
   }
   function sdDialDescriptor(i) {
@@ -1828,6 +1904,8 @@
     else if (fn === 'select') { const c = cueById(selectedId); value = c ? '#' + c.num + ' ' + c.name : '—'; }
     else if (fn === 'scrub') value = active && active.el && active.kind !== 'image' ? fmtClock(activeOffset()) : '—';
     else if (fn === 'bright') value = (settings.sdBright == null ? 80 : settings.sdBright) + '%';
+    else if (fn === 'rundown') { const s = cueolaSurfaceState(); value = s?.live ? 'ROW ' + s.row + '/' + s.rows : '—'; }
+    else if (fn === 'ptSpeed') { const s = cueolaSurfaceState(); value = s?.live && s.prompterSpeed != null ? s.prompterSpeed + (s.prompterPlaying ? ' ▶' : ' ⏸') : '—'; }
     else if (m?.action) value = sdActionLabel(m);
     const title = fn ? SD_DIAL_FUNCTIONS[fn].toUpperCase() : (m?.action ? sdActionLabel(m) : 'DIAL ' + (i + 1));
     return {
@@ -1879,7 +1957,7 @@
       return false;
     }
   }
-  function sdKeyColor(m) { return ({ go: '#1c7a3e', stop: '#2e3640', pause: '#5a4a12', fadeStop: '#243a66', panic: '#8a1f1f', cue: '#234a8a', pad: '#5a2a8a' })[m.action] || '#234a8a'; }
+  function sdKeyColor(m) { return ({ go: '#1c7a3e', stop: '#2e3640', pause: '#5a4a12', fadeStop: '#243a66', panic: '#8a1f1f', cue: '#234a8a', pad: '#5a2a8a', rdNext: '#7a4b16', rdBack: '#7a4b16', ptToggle: '#116a67', ptCue: '#116a67', ptTop: '#116a67' })[m.action] || '#234a8a'; }
 
   // ── Outputs panel ─────────────────────────────────────────────────────────
   async function openOutputsPanel() { $('og-outputs').classList.add('on'); renderOutputs(); audioDevs = await listAudioOutputs(); renderOutputs(); }
@@ -2168,7 +2246,7 @@
       ? '<section class="og-sd-dials"><h4>Dials &amp; touch strip</h4>'
         + (lcdProfile ? '<canvas class="og-sd-lcd-preview" id="og-sd-lcd-preview" width="' + lcdProfile.width + '" height="' + lcdProfile.height + '" role="img" aria-label="Simulated touch strip"></canvas>' : '')
         + '<div class="og-sd-dial-rows">' + dialRows + '</div>'
-        + '<p class="og-sheet-note">Turn a dial for its function (standby cue, master level, scrub, brightness); press it — or tap its touch-strip segment — to fire its press action. Strip swipes are deliberately unmapped so a brush never fires anything mid-show.</p></section>'
+        + '<p class="og-sheet-note">Turn a dial for its function (standby cue, master level, scrub, brightness — or the Cueola rundown row and Flowmingo prompter speed); press it — or tap its touch-strip segment — to fire its press action. The rundown dial moves one row per detent, no matter how fast it spins. Strip swipes are deliberately unmapped so a brush never fires anything mid-show.</p></section>'
       : '';
     const hasHid = ('hid' in navigator);
     const unsupportedConnectedOption = connected && !profile
@@ -2187,7 +2265,7 @@
       + '</div>'
       + '<div class="og-sd-device-tools"><label><span>' + (connected ? 'Connected image profile' : 'Preview model') + '</span><select id="og-sd-model"' + (connected ? ' disabled' : '') + '>' + profileOptions + '</select></label><button class="og-bar-btn" id="og-sd-export"' + (profile ? '' : ' disabled') + '>' + sym('action.export') + 'Export orientation proof</button></div>'
       + '<div class="og-sd-error" id="og-sd-error" role="status"' + (sdPaintError ? '' : ' hidden') + '>' + esc(sdPaintError) + '</div>'
-      + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, a cue, or an SFX pad. The preview models the physical display from the same canonical art and each model\'s verified upload transform (180° on Classic/MK.2/v2/XL, upright on the Stream Deck +). It supports rehearsal, but does not replace a physical-device check.</p>'
+      + '<p class="og-sheet-note">Map each key to playback (GO / Stop / Pause / Fade·Stop / PANIC, a cue, an SFX pad) or to the wider show: advance/back the <strong>rundown</strong>, drive the <strong>Flowmingo prompter</strong> (play/pause, cue to the live row, top). Rundown &amp; prompter actions fire through Cueola\'s own live keymap, so they need the Cueola live session running in this tab. The preview models the physical display from the same canonical art and each model\'s verified upload transform (180° on Classic/MK.2/v2/XL, upright on the Stream Deck +). It supports rehearsal, but does not replace a physical-device check.</p>'
       + '<div class="og-sd-grid" style="--sd-cols:' + cols + '">' + grid + '</div>'
       + dialsSection
       + (profile ? '<section class="og-sd-proof"><h4>Orientation check</h4><p>These cases round-trip through the raw device frame before display simulation.</p><div class="og-sd-proof-grid">' + proofSamples + '</div></section>' : '');

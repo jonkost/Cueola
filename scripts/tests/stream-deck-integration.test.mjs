@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [app, css, html, worker, bump, contracts] = await Promise.all([
+const [app, css, html, worker, bump, contracts, cueola] = await Promise.all([
   readFile(new URL('../../outrangutan/outrangutan.js', import.meta.url), 'utf8'),
   readFile(new URL('../../outrangutan/outrangutan.css', import.meta.url), 'utf8'),
   readFile(new URL('../../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../../sw.js', import.meta.url), 'utf8'),
   readFile(new URL('../bump-cache.mjs', import.meta.url), 'utf8'),
   readFile(new URL('../check-contracts.mjs', import.meta.url), 'utf8'),
+  readFile(new URL('../../cueola-app.js', import.meta.url), 'utf8'),
 ]);
 
 const tests = [];
@@ -86,7 +87,7 @@ test('the Stream Deck + is a first-class model: keys, dials, and touch strip', (
 
 test('dial mappings persist, paint the touch strip, and surface in the panel', () => {
   assert.match(app, /settings\.sdDialMap = settings\.sdDialMap \|\| defaultDialMap\(\)/);
-  assert.match(app, /const SD_DIAL_FUNCTIONS = \{ select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness' \}/);
+  assert.match(app, /select: 'Standby cue', master: 'Master level', scrub: 'Scrub playhead', bright: 'Deck brightness',\s*\n\s*rundown: 'Rundown row', ptSpeed: 'Prompter speed',/);
   // the physical strip repaints inside the same serialized repaint owner
   assert.match(app, /if \(target\.model\.encoders\) success = \(await sdPaintLcd\(target\)\) && success;/);
   assert.match(app, /renderAndPacketizeLcd\(target\.device\.productId, sdDialDescriptors\(target\.device\.productId\)\)/);
@@ -98,6 +99,39 @@ test('dial mappings persist, paint the touch strip, and surface in the panel', (
   }
   assert.match(css, /og-sd-lcd-preview/);
   assert.match(app, /renderLcdStrip\(productId, sdDialDescriptors\(productId\)\)/);
+});
+
+test('the surface bridge drives rundown and prompter through the live keymap only', () => {
+  // cueola-app side: one registry, one gate — fire() must resolve actions from
+  // KEYMAP and refuse outside the live lifecycle; state() feeds the strip.
+  const bridge = cueola.slice(cueola.indexOf('window.CueolaSurfaceControl = {'), cueola.indexOf('function keymapDispatch('));
+  assert.ok(bridge.length > 0, 'bridge must be defined before keymapDispatch');
+  assert.match(bridge, /KEYMAP\.find\(a => a\.id === id && a\.scope === 'live'/);
+  assert.match(bridge, /if \(!action \|\| !liveCommandDispatchAllowed\(\)\) return false;/);
+  assert.match(bridge, /prompterPlaying: live && !!ptPlaying/);
+  assert.match(bridge, /prompterSpeed: typeof ptTargetSpeed === 'number' \? ptTargetSpeed : null/);
+  // every id Outrangutan can fire exists in the KEYMAP registry
+  const keymap = cueola.slice(cueola.indexOf('const KEYMAP = ['), cueola.indexOf('function keymapBindings'));
+  for (const id of ['rundown.next', 'rundown.back', 'prompter.playpause', 'prompter.cue.current', 'prompter.top', 'prompter.speed.up', 'prompter.speed.down']) {
+    assert.ok(keymap.includes(`'${id}'`), `KEYMAP must define ${id}`);
+    assert.ok(app.includes(`'${id}'`), `Outrangutan must reference ${id}`);
+  }
+});
+
+test('Outrangutan maps whole-show actions onto keys, dials, taps, and MIDI alike', () => {
+  assert.match(app, /rdNext: 'rundown\.next', rdBack: 'rundown\.back',/);
+  assert.match(app, /ptToggle: 'prompter\.playpause', ptCue: 'prompter\.cue\.current', ptTop: 'prompter\.top',/);
+  // the shared action switch is the single dispatch point for bridge actions
+  assert.match(app, /else if \(SD_CUEOLA_ACTIONS\[m\.action\]\) fireCueolaBridge\(SD_CUEOLA_ACTIONS\[m\.action\]\);/);
+  // the rundown dial advances exactly one row per input report
+  assert.match(app, /fireCueolaBridge\(ticks > 0 \? 'rundown\.next' : 'rundown\.back'\);/);
+  // failed bridge fires warn the operator, throttled
+  assert.match(app, /Rundown\/prompter controls need Cueola live in this tab\./);
+  // strip state stays fresh via a gated 1 Hz poll that dies with the device
+  assert.match(app, /function sdCueolaPollStart\(\)/);
+  assert.match(app, /if \(!sd \|\| !sdCueolaMapped\(\)\) return;/);
+  const disc = app.slice(app.indexOf('function onSdDisconnect'), app.indexOf('// Rundown/prompter changes'));
+  assert.match(disc, /sdCueolaPollStop\(\)/);
 });
 
 test('initial and later paints share one device-bound repaint owner', () => {

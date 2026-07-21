@@ -5,6 +5,41 @@ Newest phase on top.
 
 ---
 
+## Whole-show surface control — one Stream Deck for rundown + prompter + playback
+
+The owner wants one Stream Deck + running everything: advance the Cueola
+rundown, drive the Flowmingo prompter, and fire Outrangutan playback/SFX.
+
+- **`window.CueolaSurfaceControl`** (cueola-app.js, next to the P5 keymap):
+  `fire(id)` resolves live-scope actions from the **same KEYMAP registry as
+  the keyboard** and refuses outside `liveCommandDispatchAllowed()` — a
+  Stream Deck key can never do what the documented shortcut couldn't.
+  `state()` cheaply reports `{ live, row, rows, prompterPlaying,
+  prompterSpeed }` for surface labels.
+- **Outrangutan side:** `SD_ACTIONS` gains Rundown · Next/Back row and
+  Prompter · Play/Pause / Cue to live row / To top (usable from **keys, dial
+  presses, strip taps, and Web MIDI** — all through the one
+  `fireSurfaceAction` switch). Dial turn functions gain **Rundown row**
+  (hard-clamped to one row per input report — a flick must never skip rows
+  on air) and **Prompter speed** (`speed_up`/`speed_down` per detent,
+  capped at 5). The touch strip shows `ROW n/m` and the prompter speed with
+  a ▶/⏸ transport marker.
+- **Freshness:** rundown/prompter state changes in cueola-app with no
+  callback into this module, so a **gated 1 Hz poll** (device connected AND
+  a Cueola action actually mapped) diffs the bridge snapshot and reuses the
+  coalesced repaint owner. Poll dies with the device on both disconnect
+  paths.
+- **Honest limits:** the bridge is same-tab — rundown/prompter actions need
+  the Cueola live session running in the tab that owns the Stream Deck
+  (a throttled toast says exactly that when they can't fire). Prompter
+  commands then ride the existing prompter-session sync to the talent
+  device like any Script Op input. Verified: contract tests both sides
+  (bridge gating, KEYMAP id existence, one-row clamp, poll lifecycle) +
+  browser smoke — bridge refuses when not live, all new actions render in
+  the panel selects, strip paints ROW/SPEED segments, no console errors.
+
+---
+
 ## Stream Deck + — keys, dials, and the touch display
 
 Full first-class support for the Stream Deck + (product id `0x0084`) over the
