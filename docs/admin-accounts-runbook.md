@@ -61,8 +61,11 @@ read-only for one release, then removed.
 1. Hosting ships (new JS, `?v=` + WORKER_SCHEMA bumps) → fleet refreshes.
 2. Owner mints instructor accounts with temp passwords (they can sign in
    immediately — Auth is live even before rules tighten).
-3. THEN deploy the full staged `firestore.rules` via the REST script.
-   Rollback copy: `docs/rules-rollback-2026-07-18-pre-admin-auth.rules`.
+3. THEN deploy the full staged `firestore.rules` — Firebase CLI where it
+   exists, otherwise the local-only Rules REST tooling used for the
+   2026-07-15 deploy (kept out of the repo on purpose; app-check-rollout.md
+   records that deploy). Rollback copy:
+   `docs/rules-rollback-2026-07-18-pre-admin-auth.rules`.
 
 **Rollback:** revert hosting via `?v=`/WORKER_SCHEMA, redeploy the rollback
 rules. The legacy honor-system admin flow resumes on old JS; Auth users and

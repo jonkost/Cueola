@@ -46,6 +46,9 @@ export function spokenForm(text) {
     .replace(/Shift\+Esc/g, 'Shift Escape')
     .replace(/\.ogshow/g, ' dot ogshow')
     .replace(/\.cueola/g, ' dot Cueola')
+    // "an .ogshow" became "an dot ogshow" — repair the article (the token
+    // replacements above leave doubled whitespace until the collapse below)
+    .replace(/\ban(?=\s+dot\b)/g, 'a')
     .replace(/@-?mention(s?)/gi, 'at mention$1')
     // "play/pause" → "play and pause" (word pairs only; no URLs in lessons)
     .replace(/\b([A-Za-z]+)\/([A-Za-z]+)\b/g, '$1 and $2')

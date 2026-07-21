@@ -3,8 +3,9 @@
 // hand-maintained copy drifted twice: a missing outrangutan row and a stale
 // plandabear one), and pins every cross-reference a lesson edit can break.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile, access } from 'node:fs/promises';
-import { extractLessons, buildDoc, narrationText } from '../generate-content-reference.mjs';
+import { extractLessons, buildDoc, narrationText, spokenForm } from '../generate-content-reference.mjs';
 
 const app = await readFile(new URL('../../cueola-app.js', import.meta.url), 'utf8');
 const lessons = extractLessons(app);
@@ -26,18 +27,26 @@ test('the generator narration template mirrors learningNarrationText()', () => {
   assert.match(body, /Where to go \$\{i \+ 1\}\. \$\{item\}/);
   assert.match(body, /Step \$\{i \+ 1\}\. \$\{step\}/);
   assert.match(body, /\$\{title\}\. \$\{text\}/);
-  assert.match(body, /\$\{lesson\.title\}\. \$\{lesson\.intro\} \$\{navigation\} \$\{steps\} \$\{callouts\}/);
+  // Anchored to the closing backtick-semicolon — an unanchored match let a
+  // SUFFIX addition (e.g. appending ${checks}) slip past the whole suite.
+  assert.match(body, /return `\$\{lesson\.title\}\. \$\{lesson\.intro\} \$\{navigation\} \$\{steps\} \$\{callouts\}`;/);
   const sample = lessons[0];
   assert.ok(narrationText(sample).startsWith(`${sample.title}. ${sample.intro}`));
 });
 
-test('every lesson has narration audio in the manifest and on disk', async () => {
+test('every lesson has narration audio in the manifest, on disk, and FRESH', async () => {
   const manifest = JSON.parse(await readFile(new URL('../../assets/narration/af_heart/manifest.json', import.meta.url), 'utf8'));
   const listed = new Set(manifest.files);
   for (const lesson of lessons) {
     const refId = `LH-${lesson.id}.lesson`;
     assert.ok(listed.has(refId), `manifest.json is missing ${refId} — run the Kokoro batch`);
     await access(new URL(`../../assets/narration/af_heart/${refId}.mp3`, import.meta.url));
+    // Freshness: the manifest records the row-text hash each MP3 was
+    // synthesized from; a lesson edit without --force-ref leaves the old
+    // hash behind and fails here instead of shipping stale audio silently.
+    const expected = createHash('sha256').update(spokenForm(narrationText(lesson))).digest('hex').slice(0, 12);
+    assert.equal(manifest.texts?.[refId], expected,
+      `${refId} audio is STALE — regenerate with: .venv-kokoro/bin/python scripts/generate_cueola_narration.py --force-ref ${refId}`);
   }
 });
 

@@ -66,7 +66,9 @@ firebase emulators:exec --project cueola-rules-test --only firestore \
 
 The suite covers main-app session create/read/update, the highest-frequency
 live writes verbatim (presence maps, Planda Bear notes/activity, preflight
-pings, rundown transaction batches), dashboard list/delete and admin roster,
+pings, rundown transaction batches), dashboard list/delete and admin roster
+(incl. the Phase 10 list tightening: anonymous sessions/accessCodes lists
+denied, admin lists allowed, profiles list open),
 Flowmingo/Prompt-Up prompter updates, Outrangutan updates, legacy attachment
 documents, read-only entitlements, deny-by-default behavior, type/bound
 denials (list/map types, showName bounds, attachment chunk caps, unknown

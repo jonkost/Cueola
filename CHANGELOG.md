@@ -68,6 +68,31 @@ code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
 *(Release-day: flip CUEOLA_VERSION to 2.1.0, final ?v= sweep, staged deploys
 per D8 rule 3 — see docs/V2_1_CHECKOUT.md.)*
 
+## v2.0.0 — Identity & collaboration build (2026-07-14) *(entry written retroactively 2026-07-21)*
+
+The `V2_PLAN` run (phases 1–5) plus the pre-launch ship sweep. Shipped to
+cueola.live 2026-07-14; this entry was reconstructed afterward — v2.0.0
+originally went out without a changelog entry.
+
+- **Data safety & deploy gap:** staged shape-validating Firestore rules
+  (deployed 2026-07-15), vendored CDN libraries, offline shell service worker
+  with the WORKER_SCHEMA release lever, session-history snapshots with
+  re-stamping restore discipline.
+- **Show-day armor:** import-time media probing, black-slate graceful failure,
+  resume-after-crash, show log, preflight panel.
+- **Profiles & login-code identity:** passwordless student profiles minted by
+  class login codes (university no-password rule enforced structurally),
+  avatars, per-session portals.
+- **Collaboration backbone:** per-note subcollection migration (dual-mode with
+  self-retiring legacy fallback), mentions, checklists with per-item owners,
+  read receipts, attachments, who-owes-what instructor view.
+- **Playout depth:** .ogshow STORE-zip show container (raw media blobs),
+  waveform trim editors, Web MIDI learn-mode + Stream Deck (WebHID), show-pack
+  print, rundown Outrangutan column; QLab integration removed entirely (owner
+  decision).
+- **Ship sweep:** collab-refresh clobber fixes, paper polish, cross-app seam
+  fixes, 8-lesson Learning Hub with Kokoro narration, OPERATOR_CARD.
+
 ## v1.0.0 — Production-readiness build (2026-07-05)
 
 The complete `CUEOLA MASTER PLAN` run (phases 0–8), hardening the app after the

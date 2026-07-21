@@ -85,11 +85,14 @@ One extra device (phone/laptop) for the Flowmingo follower.
       **Expected:** TALENT goes dark within seconds; System status shows the
       failure truthfully; **Recover Flowmingo** opens a fresh talent window and
       the strip returns within seconds of it connecting.
-- [ ] **Automatic call.** GO on a row with linked media. **Expected:** the call
-      banner runs **READY → TRACK → ROLL → TAKE** and the clip fires; run it
-      again and press **S** mid-call — nothing fires, banner clears.
-- [ ] **Manual TAKE.** Toggle **Manual TAKE (armed call)**. **Expected:** GO
-      arms the clip (banner holds at READY), **TAKE · G** fires it.
+- [ ] **Automatic call.** ADVANCE onto a row with linked media (arrow keys or
+      the on-screen GO button — NOT the G key, which fires instantly).
+      **Expected:** the call banner runs **READY → TRACK → ROLL → TAKE** and
+      the clip fires; run it again and press **S** mid-call — nothing fires,
+      banner clears.
+- [ ] **Manual TAKE.** Toggle **Manual TAKE (armed call)**. **Expected:**
+      advancing onto the row arms the clip (banner holds), **TAKE · G**
+      fires it.
 - [ ] **Playout ARMED proof.** Fresh session, media linked, before any GO.
       **Expected:** PLAYOUT reads **· NOT ARMED** and preflight's "Playout
       first GO" row explains why; after arming, first GO fires media (sound

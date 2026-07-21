@@ -929,10 +929,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .del-btn:hover{background:color-mix(in srgb,var(--red) 18%,transparent)}
 
 /* ── MODALS ── */
-.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);z-index:300;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s var(--ease) both}
+.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);z-index:300;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s var(--ease) both;overflow-y:auto}
 .modal-wrap.on{display:flex}
 #paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
-.modal{background:linear-gradient(145deg,color-mix(in srgb,var(--s1) 97%,transparent),color-mix(in srgb,var(--s1) 88%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));border:1px solid var(--liquid-edge);border-radius:18px;padding:28px 26px;width:100%;max-width:440px;display:flex;flex-direction:column;gap:18px;box-shadow:0 32px 80px rgba(0,0,0,.40),inset 0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .28s var(--ease) both}
+/* margin:auto (not just flex centering): a modal TALLER than the viewport
+   scrolls inside the overflow-y wrap from its top edge — plain flex centering
+   clips both ends off-screen and strands the action buttons (the avatar-grid
+   mouse-trap, checkout fix 2026-07-21). Short modals center identically. */
+.modal{background:linear-gradient(145deg,color-mix(in srgb,var(--s1) 97%,transparent),color-mix(in srgb,var(--s1) 88%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));border:1px solid var(--liquid-edge);border-radius:18px;padding:28px 26px;width:100%;max-width:440px;margin:auto;display:flex;flex-direction:column;gap:18px;box-shadow:0 32px 80px rgba(0,0,0,.40),inset 0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .28s var(--ease) both}
 #paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#patchSheetModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
 .modal-title{font-family:var(--syne);font-size:24px;font-weight:700;letter-spacing:0;line-height:1.15}
 .modal-sub{font-size:14px;color:var(--text2);line-height:1.5;margin-top:-8px;letter-spacing:0}
@@ -1605,6 +1609,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-portal-who span{font-size:12px;color:var(--text3)}
 .pb-portal-label{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
 .pb-av-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+/* Checkout fix 2026-07-21: the D7 manifest grew this grid to 58 chips — the
+   modal must cap its height and scroll the CHOICES, keeping Save/Cancel
+   pinned and reachable (HIG sheet anatomy). Wider modal halves scroll depth. */
+#userPortalModal .modal{max-height:min(88vh,820px);max-height:min(88dvh,820px);max-width:560px}
+#userPortalModal .pb-portal-body{overflow-y:auto;min-height:0}
+#userPortalModal .pb-av-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.id-modal{max-height:min(88vh,820px);max-height:min(88dvh,820px)}
+#identityBody{overflow-y:auto;min-height:0}
 /* ── Identity layer (profiles + login codes) ── */
 .join-identity-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:12.5px;color:var(--text2)}
 .join-identity-strip[hidden],.join-entrycode[hidden]{display:none!important}
@@ -1666,7 +1678,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-note-avatar .pb-av-ico .sf-symbol{width:18px;height:18px}
 .id-av-chip .sf-symbol{width:20px;height:20px;color:#fff}
 .pb-av-chip .sf-symbol{color:var(--text2);font-size:18px}
-.pb-av-choice-lbl{white-space:nowrap}
+.pb-av-choice-lbl{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .pb-av-upload{position:relative}
 .pb-note-who{display:flex;flex-direction:column;gap:1px;min-width:0}
 .pb-note-byline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -1875,7 +1887,9 @@ button.pb-todo-check:hover{border-color:var(--green)}
   .pb-cl-input{padding:10px 12px}
   /* Mention menu + portal fit phone width */
   .pb-mention-menu{left:8px!important;right:8px;max-width:none;width:auto}
-  .pb-av-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  /* ID-scoped so it outranks the desktop 4-col rule (review fix: the 4-col
+     grid min-content overflows a phone-width modal behind a nested h-scroll) */
+  .pb-av-grid,#userPortalModal .pb-av-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   .pb-collapse-btn{top:7px;right:7px;width:34px;height:34px}
   /* keep the step nav inside the modal on phones so it never covers the board */
   #productionNotesModal .modal{padding-bottom:14px!important;gap:10px}
@@ -5736,13 +5750,13 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=a385d04b86"></script>
+<script src="cueola-app.js?v=e7f1cb5035"></script>
 <script src="outrangutan/outrangutan.js?v=eedbddd361"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, waitForPendingWrites, disableNetwork, enableNetwork, collection, getDocs, getDocsFromCache, getDocsFromServer }
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, waitForPendingWrites, disableNetwork, enableNetwork, collection, getDocs, getDocsFromCache, getDocsFromServer, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -5807,7 +5821,7 @@ if (useFirestoreEmulator) {
   console.info('Firestore emulator connected · 127.0.0.1:8080');
 }
 window._db=db; window._doc=doc; window._setDoc=setDoc; window._getDoc=getDoc; window._getDocFromCache=getDocFromCache; window._getDocFromServer=getDocFromServer;
-window._onSnapshot=onSnapshot; window._updateDoc=updateDoc; window._deleteDoc=deleteDoc;
+window._onSnapshot=onSnapshot; window._updateDoc=updateDoc; window._deleteDoc=deleteDoc; window._writeBatch=writeBatch;
 window._serverTimestamp=serverTimestamp; window._deleteField=deleteField;
 window._arrayUnion=arrayUnion; window._arrayRemove=arrayRemove;
 window._runTransaction=runTransaction; window._waitForPendingWrites=()=>waitForPendingWrites(db);

@@ -37,10 +37,12 @@ predate the staged ones — deploy the current `firestore.rules` first
 ### A2. Cloud-snapshot wipe for KEPT sessions
 
 Purged sessions lose their snapshots with the purge. For sessions you keep
-across the boundary, prune the cloud trail: Session History → cloud rows →
-delete old captures (each shows reason + timestamp). Snapshots are the one
-place old rosters linger invisibly — an April snapshot restored in November
-resurrects April's student names. Keep at most the latest known-good capture.
+across the boundary, prune the cloud trail: open the session signed-in as an
+admin → **Settings ▸ File ▸ History** → each "Cloud" row carries a **Delete**
+button (admin-only; local rows on other devices are untouched). Snapshots are
+the one place old rosters linger invisibly — an April snapshot restored in
+November resurrects April's student names. Keep at most the latest known-good
+capture.
 
 ### A3. Revoke the term's class keys
 
@@ -73,11 +75,23 @@ If `firestore.rules` in the repo is ahead of the deployed ruleset (it is at
 Phase 10: admin-gated `list` on `sessions` and `accessCodes`), deploy in this
 order only:
 
+0. **ADDITIVE pre-step first, if not already live:** the Phase 7 block
+   (/groups, /snapshots, validSnapshotDocument, admins/isAdmin) deploys
+   **BEFORE** hosting — shipping the JS first means every cloud snapshot
+   capture fails silently (fire-and-forget). Full procedure:
+   admin-accounts-runbook.md step 0. Verify by watching a capture doc appear
+   in `sessions/{code}/snapshots` on the next join.
 1. Hosting deploy (clients that understand the tightened rules).
 2. Fleet refresh (every show machine reloads — WORKER_SCHEMA bump covers it).
 3. Instructor/admin accounts confirmed working (sign-in on the dashboard).
-4. Rules deploy (REST API path documented in app-check-rollout.md §2).
-5. Smoke: student join + export still work; dashboard code panel still lists;
+4. Rules deploy — `firebase deploy --only firestore:rules` where the CLI
+   exists; this machine has no CLI/Java, so past deploys used the Rules REST
+   API via local-only tooling that is deliberately NOT in the repo (P2607
+   discipline) — app-check-rollout.md §2 records that history. Gate the
+   deploy on the emulator suite passing (`scripts/test-rules.mjs`, needs the
+   CLI's emulator, i.e. a machine with Java).
+5. Smoke: student join + export still work; the dashboard session browser
+   and Class Keys panel still list (both are signed-in `list` dependents);
    a signed-OUT browser can no longer enumerate `sessions` or `accessCodes`
    from the console.
 

@@ -30,6 +30,19 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
 
 ## 2 · Solo browser QA (~45 min, any Chrome)
 
+> **Re-testing a fix on a machine that already saw the bug?** The offline
+> shell serves the OLD page until the update applies — take the "Cueola
+> update ready → Reload" toast (or unregister the SW + clear caches in
+> DevTools) BEFORE judging a fix. This bit us on the avatar-modal fix
+> (WORKER_SCHEMA is now 9 for exactly this reason).
+
+- [ ] **Avatar screens (fixed 2026-07-21):** notes-board chip → portal and
+      Create-profile step 3 — grid scrolls inside the modal, Save/Cancel and
+      Continue/Back always visible; upload rejects a >15 MB image politely.
+- [ ] **Big-board open:** on a session with a large notes board, opening
+      Production Notes then the avatar chip stays responsive (read receipts
+      now batch; renders coalesce).
+
 - [ ] Admin sign-in everywhere: dashboard, in-app **Instructor Sign In**,
       Accounts panel (mint a standard account, temp-password flow).
 - [ ] Entry gate: Entry Requirement on → student without profile blocked;
@@ -38,7 +51,8 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
       production shows all.
 - [ ] Cloud snapshots (after §1 rules deploy): capture on join; Session
       History shows Cloud rows; restore replaces + re-stamps; recovery copy
-      appears; non-admin gets no cloud rows.
+      appears; **Delete on a cloud row removes it (chunked snapshots too)**;
+      non-admin gets no cloud rows.
 - [ ] Phase 9 spot checks: ⓘ popovers in both themes (open one inside
       Settings, scroll — it should dismiss), Learning Hub → new **Your
       Profile And Portal** lesson + voice-over plays for all 9 lessons
@@ -106,28 +120,38 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
 Run in order — details in [term-boundary-runbook.md](term-boundary-runbook.md) §B:
 
 1. [ ] Fix round: anything the sections above surfaced (bring me the list).
-2. [ ] `CUEOLA_VERSION` → `'2.1.0'` (cueola-app.js:4) + finalize the
-       CHANGELOG draft header (remove DRAFT).
+2. [ ] Version flip — THREE spots: `CUEOLA_VERSION` → `'2.1.0'`
+       (cueola-app.js:4) **plus the two hardcoded "v2.0.0" strings in
+       index.html** (the Settings-sheet `.settings-version` and the
+       entry-screen version line — nothing reads the JS const, these are what
+       users see). Finalize the CHANGELOG draft header (remove DRAFT). The
+       index.html edit makes step 3's WORKER_SCHEMA bump apply.
 3. [ ] `node scripts/bump-cache.mjs` final ?v= sweep; WORKER_SCHEMA is
        already 8 — bump to 9 ONLY if page-HTML/manifest/icon files changed
        during the fix round.
 4. [ ] Rollback kit check: snapshot the LIVE ruleset text to
        `docs/rules-rollback-<date>.rules`; confirm `.cueola`/`.ogshow`
        backups of any real production; note the current deployed ?v= set.
-5. [ ] Hosting deploy → fleet refresh → instructors minted → **rules round 2
-       deploy** (tightened lists) → five-surface smoke.
-6. [ ] App Check **Enforce** (if the term date says now) + negative check.
-7. [ ] Tag/commit v2.1.0 (your commits, per prepared blocks in the plan).
+5. [ ] Emulator rules suite green on a Java-capable machine:
+       `firebase emulators:exec --only firestore "node scripts/test-rules.mjs"`
+       (the suite now covers the Phase 10 list tightening; do not deploy
+       rules without its PASS).
+6. [ ] Hosting deploy → fleet refresh → instructors minted → **rules round 2
+       deploy** (tightened lists) → five-surface smoke incl. the dashboard
+       session browser + Class Keys panel (both are signed-in list
+       dependents).
+7. [ ] App Check **Enforce** (if the term date says now) + negative check.
+8. [ ] Tag/commit v2.1.0 (your commits, per prepared blocks in the plan).
 
 ## Parked / known
 
 - **Phase 8 Stage Plot** — waits on your design consult (decision 17 keeps
-  it; natural slip to a point release). Its lesson text + PB sheet slot are
-  ready to take it.
+  it; natural slip to a point release). **The consult brief is ready:
+  [stage-plot-consult.md](stage-plot-consult.md) — seven one-line answers
+  and the build starts.** Its lesson text + PB sheet slot are ready to take it.
 - **profiles `list` stays open** — documented residual (student exports need
   it); 3.0 = server-resolved roster.
 - **paper-export-contract.test.mjs** — broken pre-existing (chip filed).
-- **CHANGELOG has no v2.0.0 entry** — v2.0.0 shipped without one; write it
-  retroactively or fold its story into the 2.1.0 entry.
+- ~~CHANGELOG has no v2.0.0 entry~~ — retroactive entry written 2026-07-21.
 - **OBS integration** — UI dark behind `OBS_UI=false`; its Safari
   loopback-block toast is misleading but unreachable (3.0).

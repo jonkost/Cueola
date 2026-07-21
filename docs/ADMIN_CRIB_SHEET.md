@@ -35,8 +35,10 @@ labels. Deeper procedures: [admin-accounts-runbook.md](admin-accounts-runbook.md
    snapshots (the PII wipe).
 3. **Cloud restore** during a crisis: Session History → pick the snapshot →
    Restore (everyone gets it; recovery copy saved first).
-4. **App Check / rules deploys** at term boundaries — follow the runbooks;
-   never deploy rules ahead of the hosting sequence.
+4. **App Check / rules deploys** at term boundaries — follow the runbooks.
+   The order depends on the change: ADDITIVE rules blocks (new collections)
+   deploy **before** hosting; TIGHTENING changes deploy **after** the fleet
+   is refreshed and signed in (term-boundary-runbook §B2 has the sequence).
 
 ## When a student says "it won't let me in"
 

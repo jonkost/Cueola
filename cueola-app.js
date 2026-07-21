@@ -1095,8 +1095,47 @@ async function openSessionHistory() {
   list.innerHTML = records.length ? records.map(record => `
     <div class="snap-row">
       <div class="snap-main"><div><span class="snap-time">${esc(new Date(record.createdAt).toLocaleString())}</span><span class="snap-reason">${esc(sessionSnapshotReasonLabel(record.reason))}</span><span class="snap-origin snap-origin-${record.origin}">${record.origin === 'cloud' ? 'Cloud' : 'This device'}</span></div><div class="snap-summary">${esc(record.summary || 'Session recovery snapshot')}</div></div>
-      <div class="snap-actions"><button class="btn-secondary export-action" onclick="exportSessionSnapshot('${record.id}')">Export</button><button class="btn-secondary" onclick="restoreSessionSnapshot('${record.id}')">Restore</button></div>
+      <div class="snap-actions"><button class="btn-secondary export-action" onclick="exportSessionSnapshot('${record.id}')">Export</button><button class="btn-secondary" onclick="restoreSessionSnapshot('${record.id}')">Restore</button>${record.origin === 'cloud' ? `<button class="btn-secondary snap-delete" onclick="deleteCloudSessionSnapshot('${record.id}')">Delete</button>` : ''}</div>
     </div>`).join('') : '<div class="snap-empty">No snapshots yet. Cueola saves one when you join, every two minutes while the session changes, when you go live, and when you leave.</div>';
+}
+
+// Phase 10 term-boundary A2: cloud snapshots must be prunable by hand — the
+// rules always allowed admin delete (PII retention), the modal just never had
+// the control. Cloud rows only render for admin-readable clients, so the
+// button's presence is itself the permission signal. Chunks go first so an
+// interrupted delete never strands a headless chunk trail.
+async function deleteCloudSessionSnapshot(id) {
+  const headId = String(id).startsWith('cloud:') ? String(id).slice(6) : String(id);
+  // The row cache is nulled by every background capture (and at the 20-cap
+  // that's the steady state), so it may be COLD by the time Delete is
+  // clicked — fetch the head for the confirm stamp instead of trusting it.
+  let record = (_cloudSnapshotCache.rows || []).find(r => r.id === headId) || null;
+  if (!record) {
+    try {
+      const snap = await window._getDoc(window._doc(window._db, 'sessions', session.code, 'snapshots', headId));
+      if (snap.exists()) record = snap.data();
+    } catch {}
+  }
+  const stamp = record?.createdAt ? new Date(record.createdAt).toLocaleString() : headId;
+  if (!window.confirm(`Delete the ${stamp} cloud snapshot?\n\nThis removes it from the cloud trail for every admin. Local copies on any device are not touched.`)) return;
+  try {
+    // Sweep ALL possible chunk docs, not record.chunkCount — a stale/cold
+    // record under-counting once would orphan _cN payload docs (student PII)
+    // that no list or prune path can ever reach again. deleteDoc on a
+    // missing doc is a no-op, and chunks go before the head so a mid-loop
+    // failure leaves a listed, retryable snapshot instead of a headless trail.
+    for (let n = 1; n < 8; n++) {
+      await window._deleteDoc(window._doc(window._db, 'sessions', session.code, 'snapshots', `${headId}_c${n}`));
+    }
+    await window._deleteDoc(window._doc(window._db, 'sessions', session.code, 'snapshots', headId));
+    _cloudSnapshotCache = { code: '', rows: null };
+    logShow('session', 'Cloud snapshot deleted — ' + stamp);
+    toast('Cloud snapshot deleted.');
+    openSessionHistory();
+  } catch (err) {
+    toast('Could not delete the cloud snapshot.');
+    console.warn('Cloud snapshot delete failed', err);
+  }
 }
 
 // D3: one resolver for both trails — 'cloud:snap_{fpHash}' ids fetch the head
@@ -2174,7 +2213,7 @@ const LEARNING_LESSONS = [
     time:'4 min',
     intro:'One profile follows you through every session — no password, just the class login code your instructor gave the class. Your portal gathers your sessions, your position, and everything assigned to you.',
     navigation:[
-      'Tap the profile button in the top corner of the home screen to open Your Cueola profile.',
+      'Tap the profile button in the centered row under the Cueola wordmark on the home screen to open Your Cueola profile.',
       'First time? Choose Create profile. Coming back? Choose I have a username and type it — there is no password to remember.',
       'From your portal, open any session card to jump straight in, or open Notes to see the crew board.'
     ],
@@ -2234,12 +2273,12 @@ const LEARNING_LESSONS = [
       'Press Go Live after your rows and script cues are ready.',
       'Review the pre-live checks — including Playout first GO, which proves the first media cue is armed and ready.',
       'Use Prev and Next, or click a row, to move the show one row at a time.',
-      'GO on a row with linked media runs the automatic call: READY, TRACK, ROLL, then TAKE — press S to abort before it fires. Prefer to fire it yourself? Turn on Manual TAKE, and GO arms the clip while TAKE fires it.',
+      'Advancing onto a row with linked media — the GO button or the arrow keys — runs the automatic call: READY, TRACK, ROLL, then TAKE. Press S to abort before it fires. The G key skips the call and fires the readied cue immediately. Prefer to pull the trigger yourself? Turn on Manual TAKE: advancing arms the clip, TAKE fires it.',
       'Paste an audience question into the question lane — Enter pushes it to the talent as a QUESTION card, Escape clears it.',
-      'If a link word goes dark, open System status and press its Recover button — Flowmingo, Playback, Script Operator, and cloud sync each have one.'
+      'If a link word turns red, the System status rail appears beside the rundown with a repair button for each subsystem — Recover Flowmingo, Recover Playback, Recover Script Operator, or Retry cloud sync. A dimmed word just means that surface is closed; reopen it from the live bar.'
     ],
     callouts:[
-      ['Who is calling','The caller badge reads CALLER when you have the wheel, FOLLOWING when someone else does, and VIEWER when you are watching. If another operator window takes the prompter, this one tells you and follows.'],
+      ['Who is calling','The badge names the wheel: CALLER · You when it is yours, or CALLER with the calling instructor’s name. Pick someone on the follow chips and it reads FOLLOWING; VIEWER means no caller is present. If another operator window takes the prompter, this one says so and follows.'],
       ['Remote confidence','A sent command is not enough. The app waits for the talent display to acknowledge applied controls.']
     ],
     checks:['I know where Now and Next are.','I know what the link strip and caller badge tell me.','I know how the automatic call runs and how to abort it.'],
@@ -2370,7 +2409,7 @@ const LEARNING_LESSONS = [
       'If the remote says sent but not applied, reload the Talent Display and enter the same code again.',
       'If the wrong row is live, use Prev or Next until Now matches the room.',
       'If paperwork looks stale, reopen Planda Bear and check the activity and comments area.',
-      'If the rundown itself is damaged, open Settings, then File, then History. Session History lists snapshots from this device and the cloud trail — restoring one replaces the live rundown for everyone in the session, and a recovery copy of the current state is saved first.'
+      'If the rundown itself is damaged, open Settings, then File, then History. Session History lists snapshots from this device — and on an instructor’s signed-in machine, the cloud trail too. Restoring one replaces the live rundown for everyone in the session, and a recovery copy of the current state is saved first.'
     ],
     callouts:[
       ['Fast rehearsal check','Before doors open: open Talent Display, open Remote Op, press Play, Reset, Mirror, then Reset again.'],
@@ -2655,6 +2694,11 @@ function openLearningHub(lessonId='', sectionId='') {
   const idx = LEARNING_LESSONS.findIndex(l => l.id === lessonId);
   if (idx >= 0) activeLearningLesson = idx;
   renderLearningHub();
+  // Stacked modal-wraps share one z-index and paint in DOM order — the hub
+  // sits EARLIER in the DOM than every ⓘ host modal, so opening it under one
+  // left the guide invisible and the visible modal inert. Close any open
+  // dialog first (the Settings Guide button already used this pattern).
+  [...activeDialogStack].forEach(el => { if (el.id && el.id !== 'learningHubModal') hideModal(el.id); });
   showModal('learningHubModal');
   // Phase 11: ⓘ "Learn more" deep links land on the relevant section, not just
   // the lesson top. Section ids are the four fixed render anchors
@@ -16106,6 +16150,10 @@ function pbPortalUpload(input) {
   const file = input.files && input.files[0];
   if (!file) return;
   if (!/^image\//.test(file.type)) { toast('Pick an image file.'); return; }
+  // Guard BEFORE decode: a phone photo can be 50+ MB, and the decode+draw
+  // below is synchronous on the main thread — on lab hardware that reads as
+  // the app locking up. The avatar ends up 96px; nobody needs more than this.
+  if (file.size > 15 * 1024 * 1024) { toast('That image is too large — pick one under 15 MB.'); input.value = ''; return; }
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
@@ -16597,6 +16645,7 @@ async function pbLoadNoteFile(fileId) {
     if (local) { pbNoteFileCache.set(fileId, local); return local; }
   } catch {}
   if (!window._firebaseReady || !session.code || session.isDemo) return '';
+  let readThrew = false;
   const readChunks = async refForChunk => {
     const snap = await window._getDoc(refForChunk(0));
     if (!snap.exists()) return null;
@@ -16616,14 +16665,20 @@ async function pbLoadNoteFile(fileId) {
       pbNoteFileCache.set(fileId, current);
       return current;
     }
-  } catch {}
+  } catch { readThrew = true; }
   try {
     const legacy = await readChunks(chunk => pbLegacyFileRef(fileId, chunk));
     if (legacy !== null) {
       pbNoteFileCache.set(fileId, legacy);
       return legacy;
     }
-  } catch {}
+  } catch { readThrew = true; }
+  // Checkout fix 2026-07-21 (hardened by review): cache the MISS — a deleted
+  // attachment used to re-issue its reads on EVERY board render — but ONLY
+  // when both reads genuinely resolved "doc absent". A THROWN read (offline
+  // blip, permission race) must stay retryable, or ten seconds of dead venue
+  // Wi-Fi breaks every not-yet-cached attachment until a hard reload.
+  if (!readThrew) pbNoteFileCache.set(fileId, '');
   return '';
 }
 
@@ -17837,19 +17892,58 @@ function pbMarkNotesSeen() {
   const me = (session.userName || '').trim();
   const key = pbSeenKey(me);
   if (!me || !key) return;
+  const pending = [];
   for (const n of plandaBearNotes) {
     if (pbIsMine(n) || _pbSeenMarkedIds.has(n.id)) continue;
     if (n.seenBy && n.seenBy[key]) { _pbSeenMarkedIds.add(n.id); continue; }
+    // Legacy zombies (merged from the stale legacy array, no live sub doc)
+    // have nothing to update — and one missing doc fails a whole atomic
+    // batch below. Mark them locally and skip the write.
+    if (!_pbSubNotes.has(n.id)) { _pbSeenMarkedIds.add(n.id); continue; }
     _pbSeenMarkedIds.add(n.id);
     const receipt = { name: me, at: Date.now() };
     n.seenBy = { ...(n.seenBy || {}), [key]: receipt };
     const sub = _pbSubNotes.get(n.id);
     if (sub) sub.seenBy = n.seenBy;
-    window._updateDoc(pbNoteDocRef(n.id), { [`seenBy.${key}`]: receipt }).catch(err => {
-      _pbSeenMarkedIds.delete(n.id);
+    pending.push({ id: n.id, receipt });
+  }
+  if (!pending.length) return;
+  // Checkout fix 2026-07-21: one BATCH commit instead of N loose updates. A
+  // first board-open marks the whole board; N loose writes come back as up to
+  // N latency-compensated snapshot deliveries, each re-rendering the board —
+  // seconds of saturated main thread on a big board. One batch = one echo.
+  // (Chunked: Firestore caps a batch at 500 writes.)
+  if (typeof window._writeBatch === 'function') {
+    for (let i = 0; i < pending.length; i += 400) {
+      const batch = window._writeBatch(window._db);
+      const chunk = pending.slice(i, i + 400);
+      chunk.forEach(p => batch.update(pbNoteDocRef(p.id), { [`seenBy.${key}`]: p.receipt }));
+      batch.commit().catch(err => {
+        if (pbIsPermissionDenied(err)) {
+          chunk.forEach(p => _pbSeenMarkedIds.delete(p.id));
+          pbDropToLegacyNotes(err, 'seen-by');
+          return;
+        }
+        // Atomic batch: ONE missing doc (delete race) rejects every sibling
+        // receipt in the chunk. Fall back per-note so siblings still land
+        // and only the genuinely dead doc fails.
+        chunk.forEach(p => {
+          window._updateDoc(pbNoteDocRef(p.id), { [`seenBy.${key}`]: p.receipt }).catch(e2 => {
+            _pbSeenMarkedIds.delete(p.id);
+            if (pbIsPermissionDenied(e2)) pbDropToLegacyNotes(e2, 'seen-by');
+          });
+        });
+      });
+    }
+    return;
+  }
+  // Stale-shell fallback (no _writeBatch export yet): the old per-note path.
+  pending.forEach(p => {
+    window._updateDoc(pbNoteDocRef(p.id), { [`seenBy.${key}`]: p.receipt }).catch(err => {
+      _pbSeenMarkedIds.delete(p.id);
       if (pbIsPermissionDenied(err)) pbDropToLegacyNotes(err, 'seen-by');
     });
-  }
+  });
 }
 
 
@@ -17998,6 +18092,13 @@ function onRemoteProductionNotes(raw) {
 // Shared tail for both live sources (subcollection listener + legacy array
 // pushes): merge, notify once per note id, refresh whatever surface is open.
 // The first delivery per session only seeds known ids — history must not toast.
+// Checkout fix 2026-07-21: snapshot deliveries arrive in BURSTS (receipt
+// batches, another client's receipts, latency-compensated echoes) and each
+// used to run the full O(board) save+rebuild synchronously — on a big board
+// that saturated the main thread for seconds. The heavy tail (localStorage
+// save + full innerHTML render) now coalesces on a short trailing debounce;
+// notifications/badges still process per delivery so nothing is missed.
+let _pbIngestSettleTimer = null;
 function pbIngestRemoteNotes() {
   if (pbNotifySessionCode !== (session?.code || null)) {
     pbNotifySessionCode = session?.code || null;
@@ -18005,7 +18106,6 @@ function pbIngestRemoteNotes() {
     pbKnownNoteIds.clear();
   }
   plandaBearNotes = pbMergedNotes();
-  saveLocalPlandaBearNotes(plandaBearNotes);
   annotatePlandaBearNoteCards();
 
   if (!pbNotifySeeded) {
@@ -18018,8 +18118,12 @@ function pbIngestRemoteNotes() {
   }
   if (pbNotesBoardOpen()) pbMarkNotesRead(); else pbUpdatePlandaBearBadge();
 
-  if (pbEditingNoteId) return;
-  if (pbNotesBoardOpen()) renderPlandaBearNotes();
+  clearTimeout(_pbIngestSettleTimer);
+  _pbIngestSettleTimer = setTimeout(() => {
+    saveLocalPlandaBearNotes(plandaBearNotes);
+    if (pbEditingNoteId) return;
+    if (pbNotesBoardOpen()) renderPlandaBearNotes();
+  }, 150);
 }
 
 /* ── Note-taking guide / suggestions ── */

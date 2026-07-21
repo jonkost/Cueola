@@ -101,7 +101,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=a385d04b86',
+  'cueola-app.js?v=e7f1cb5035',
   'outrangutan/outrangutan.css?v=718e619254',
   'outrangutan/outrangutan.js?v=eedbddd361',
 ];
@@ -117,7 +117,10 @@ const versionSignature = SHELL_ASSETS
 // a schema bump rolls the shell cache and delivers the new artwork.
 // 7→8: Phase 9 PWA icons + manifest file_handlers — new unversioned PNGs and
 // a manifest.webmanifest change (both precached unversioned) need the roll.
-const WORKER_SCHEMA = '8';
+// 8→9: avatar-modal mouse-trap fix is page-HTML CSS — the shell serves
+// index.html cache-first forever, so installed clients only get the fix when
+// the cache name rolls (per this file's own HTML-only-change rule).
+const WORKER_SCHEMA = '9';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

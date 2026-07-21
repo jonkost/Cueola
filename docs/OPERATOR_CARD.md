@@ -39,9 +39,13 @@ from the same registry and includes any of your own rebinds; override keys via
 **Playout (Outrangutan — from the Cueola live screen)**
 | Key | Action |
 |---|---|
-| G | GO *(on a linked row this starts the automatic call: READY · TRACK · ROLL · TAKE)* |
+| G | GO — fires the readied cue **immediately** (no call, no abort window) |
 | G *(during an armed call)* | TAKE — fire the readied clip now |
 | S *(during a call)* | ABORT — stop the call, nothing fires |
+
+*The automatic call (READY · TRACK · ROLL · TAKE) runs when you **advance onto
+a row with linked media** — arrow keys or the on-screen GO button — never from
+the G key.*
 | P | Pause / resume |
 | S | Stop |
 | Shift+S | Fade-stop |
@@ -99,7 +103,8 @@ your position, open to-dos, and unseen notes per session.
   Recover Flowmingo · Recover Playback · Recover Script Operator · Retry cloud
   sync. Use it the moment a link word goes dark.
 - **Session History** (Settings ▸ File ▸ **History**): timestamped snapshots
-  from **this device AND the cloud trail** (badged "Cloud" / "This device";
+  from **this device — plus the cloud trail on an admin-signed-in machine**
+  (students see the local rows only; badged "Cloud" / "This device";
   saved on join, every two minutes while things change, on go-live, and on
   leave). **Restore replaces the rundown for everyone** — it re-stamps as the
   newest change so an offline machine can't undo it, and a recovery copy of

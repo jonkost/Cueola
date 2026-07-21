@@ -8,6 +8,7 @@ assets/narration/af_heart/manifest.json for the browser player.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -75,12 +76,46 @@ def read_manifest_files() -> list[str]:
     return [str(item).removesuffix(".mp3") for item in data.get("files", [])]
 
 
-def write_manifest(files: list[str]) -> None:
+def read_manifest_texts() -> dict[str, str]:
+    if not MANIFEST.exists():
+        return {}
+    try:
+        data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    texts = data.get("texts", {})
+    return texts if isinstance(texts, dict) else {}
+
+
+def text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def build_texts(rows: list[dict[str, str]], files: set[str], generated: set[str], old_texts: dict[str, str]) -> dict[str, str]:
+    """Per-file hash of the ROW TEXT each MP3 was synthesized from.
+
+    Freshness guard (Phase 11 review): a skipped file keeps its OLD hash, so a
+    lesson edit that forgot --force-ref makes the contract test fail instead of
+    shipping stale audio silently. Files with no recorded hash (bootstrap)
+    adopt the current text — today's assets were verified fresh.
+    """
+    texts: dict[str, str] = {}
+    for row in rows:
+        rid = row["refId"]
+        if rid not in files:
+            continue
+        current = text_hash(row["text"])
+        texts[rid] = current if rid in generated else old_texts.get(rid, current)
+    return texts
+
+
+def write_manifest(files: list[str], texts: dict[str, str]) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     data = {
         "voice": VOICE,
         "format": "mp3",
         "files": sorted(dict.fromkeys(files)),
+        "texts": {key: texts[key] for key in sorted(texts)},
     }
     MANIFEST.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
@@ -133,7 +168,7 @@ def main() -> None:
         missing = missing[: args.limit]
 
     if not missing:
-        write_manifest(sorted(known_files))
+        write_manifest(sorted(known_files), build_texts(rows, known_files, set(), read_manifest_texts()))
         print("No missing Kokoro MP3 files.")
         return
 
@@ -146,8 +181,9 @@ def main() -> None:
         if generate_one(model, row["refId"], row["text"], args.speed, force=force):
             generated.append(row["refId"])
 
-    final_files = sorted(known_files | set(generated))
-    write_manifest(final_files)
+    final_set = known_files | set(generated)
+    final_files = sorted(final_set)
+    write_manifest(final_files, build_texts(rows, final_set, set(generated), read_manifest_texts()))
     print(f"Generated {len(generated)} file(s). Manifest now has {len(final_files)} file(s).")
 
 

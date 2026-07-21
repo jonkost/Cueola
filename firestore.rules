@@ -297,11 +297,12 @@ service cloud.firestore {
     // current way to distinguish Cueola clients from arbitrary callers.
     match /sessions/{code} {
       allow get: if validSessionId(code);
-      // v2.1 Phase 10: enumerating sessions is admin-only. No shipped surface
-      // lists this collection today (the dashboard tracks known codes and
-      // reads them individually), so this closes pure recon: an accepted
-      // client could otherwise walk every production. (TIGHTENING —
-      // release-day deploy.)
+      // v2.1 Phase 10: enumerating sessions is admin-only. The dashboard's
+      // session browser IS a list dependent (loadSessions + the purge sweep
+      // both query this collection) — it runs signed-in, which is exactly why
+      // the deploy order is fleet-signed-in BEFORE rules. For everything else
+      // this closes pure recon: an accepted client could otherwise walk every
+      // production. (TIGHTENING — release-day deploy.)
       allow list: if isAdmin();
       allow create, update: if validSessionId(code) && validSessionDocument(code, request.resource.data);
       // v2.1 (D1): destroying a session is admin-only. (TIGHTENING —

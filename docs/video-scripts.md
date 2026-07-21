@@ -25,7 +25,8 @@ pause a beat on every toast. Demo content: **Load Demo** unless stated.
    session code".
 
 ## V2 · Your Profile And Portal — `LH-profile` (~2.5 min)
-1. Front page → profile button (top corner) → **Your Cueola profile**.
+1. Front page → profile button (centered pill row under the wordmark) →
+   **Your Cueola profile**.
 2. **Create profile**: type a class login code, name, username; pick avatar +
    theme (wizard steps in order).
 3. Sign out → **I have a username** → type it → straight in (no password —
@@ -46,9 +47,9 @@ pause a beat on every toast. Demo content: **Load Demo** unless stated.
    first GO**.
 2. Show the link strip (CLOUD · TALENT · PLAYOUT · SCRIPT) + caller badge.
 3. Advance with arrows; click a row.
-4. GO on a linked row → automatic call READY · TRACK · ROLL · TAKE; run it
-   again and abort with **S**.
-5. Toggle **Manual TAKE (armed call)**: GO arms, **TAKE · G** fires.
+4. Advance onto a linked row (GO button or arrows) → automatic call READY ·
+   TRACK · ROLL · TAKE; run it again and abort with **S**.
+5. Toggle **Manual TAKE (armed call)**: advancing arms, **TAKE · G** fires.
 6. Paste a line into the question lane → Enter → talent shows the QUESTION
    card → Esc clears.
 7. Kill the talent window → TALENT dark → **System status** → **Recover

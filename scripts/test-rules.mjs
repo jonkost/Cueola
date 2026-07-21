@@ -94,7 +94,11 @@ allowed(await write('sessions/BOOTSTRAP1', {
   rundownUpdatedAt: 1, rundownUpdatedBy: 'Recovery Operator', createdAt: 1,
 }), 'explicit create or History recovery writes a complete session document');
 allowed(await request('sessions/RULES1'), 'Cueola/Flowmingo reads session');
-allowed(await request('sessions?pageSize=20'), 'dashboard lists sessions');
+// v2.1 Phase 10: enumerating sessions is admin-only now — the dashboard's
+// session browser runs signed-in; anonymous listing is pure recon and denied.
+// (Admin-authed list coverage lives with the accessCodes cases below, after
+// the admins fixtures exist.)
+denied(await request('sessions?pageSize=20'), 'anonymous sessions list denied (Phase 10)');
 allowed(await write('sessions/RULES1', { prompter: { text: 'Prompt-Up update' } }, ['prompter']), 'Prompt-Up updates prompter');
 allowed(await write('sessions/RULES1', { outrangutan: { live: { status: 'playing' } } }, ['outrangutan']), 'Outrangutan updates state');
 
@@ -202,6 +206,15 @@ allowed(await write('accessCodes/CLASS2026', { active: false, revokedAt: 5, revo
 denied(await write('accessCodes/CLASS2026', { active: false, revokedAt: 'yesterday' },
   ['active', 'revokedAt']), 'revokedAt must be an int');
 allowed(await write('accessCodes/CLASS2026', { active: true }, ['active']), 'dashboard reactivate patch');
+// v2.1 Phase 10 list tightening: sessions + accessCodes enumerate only for
+// admins (dashboard browser / Class Keys panel); profiles list stays OPEN —
+// the documented residual: student crew exports read the whole collection
+// with no Auth (rules header).
+allowed(await request('sessions?pageSize=20'), 'admin lists sessions (dashboard browser)');
+allowed(await request('accessCodes?pageSize=20'), 'admin lists class codes (Class Keys panel)');
+setAuth(null);
+denied(await request('accessCodes?pageSize=20'), 'anonymous accessCodes list denied (Phase 10)');
+allowed(await request('profiles?pageSize=20'), 'profiles list stays open (student export residual)');
 setAuth(null);   // student flows below stay anonymous — the university rule
 
 const profile = {
