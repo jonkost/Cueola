@@ -1,10 +1,12 @@
 # Changelog
 
-## v2.1.0 — Term-boundary build (DRAFT — pending owner QA; target Aug 2026)
+## v2.1.0: Term-boundary build (live on cueola.live 2026-07-21; owner QA in progress)
 
 The `V2_1_PLAN` window between terms: accounts and identity hardening, live
 reliability, cloud recovery, and platform polish. Phases 1–7, 9–11, 13 + 1.5
 code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
+Version flip to 2.1.0 done 2026-07-21. Owner QA (docs/V2_1_CHECKOUT.md) and
+the Firebase console errands in its §1 are still open.
 
 ### Foundations & security (Phases 1, 2, 10)
 - PII/private artifacts out of the web root; internal docs hosting-ignored;
@@ -12,7 +14,7 @@ code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
 - Admin accounts on Firebase Auth (synthetic emails, uid-keyed `admins/`);
   admin-gated accessCodes minting + session delete; dashboard Accounts panel.
 - Rules round 2: admin-gated `list` on `sessions` + `accessCodes` (profiles
-  list stays open — student exports need it; documented residual).
+  list stays open; student exports need it, a documented residual).
 - `docs/term-boundary-runbook.md`: key rotation, snapshot wipe, session
   archive/purge, App Check enforcement flip.
 - Session-doc hygiene: preProActivity cap, purge cascade over all five
@@ -66,9 +68,9 @@ code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
   Start, Admin Crib Sheet, 10 video click-path scripts.
 
 *(Release-day: flip CUEOLA_VERSION to 2.1.0, final ?v= sweep, staged deploys
-per D8 rule 3 — see docs/V2_1_CHECKOUT.md.)*
+per D8 rule 3; see docs/V2_1_CHECKOUT.md.)*
 
-## v2.0.0 — Identity & collaboration build (2026-07-14) *(entry written retroactively 2026-07-21)*
+## v2.0.0: Identity & collaboration build (2026-07-14) *(entry written retroactively 2026-07-21)*
 
 The `V2_PLAN` run (phases 1–5) plus the pre-launch ship sweep. Shipped to
 cueola.live 2026-07-14; this entry was reconstructed afterward — v2.0.0
@@ -93,7 +95,7 @@ originally went out without a changelog entry.
 - **Ship sweep:** collab-refresh clobber fixes, paper polish, cross-app seam
   fixes, 8-lesson Learning Hub with Kokoro narration, OPERATOR_CARD.
 
-## v1.0.0 — Production-readiness build (2026-07-05)
+## v1.0.0: Production-readiness build (2026-07-05)
 
 The complete `CUEOLA MASTER PLAN` run (phases 0–8), hardening the app after the
 AVT Lab live run. One operator, one machine, keyboard-first, nothing hangs the

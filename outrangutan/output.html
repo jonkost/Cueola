@@ -31,7 +31,7 @@
 </style>
 </head>
 <body>
-  <div id="waiting">OUTRANGUTAN OUTPUT — waiting…</div>
+  <div id="waiting">OUTRANGUTAN OUTPUT · waiting…</div>
   <video id="va" class="deck front" playsinline></video>
   <video id="vb" class="deck" playsinline></video>
   <img id="vimg" class="deck" alt="">
@@ -68,12 +68,12 @@
 
   document.title = 'Outrangutan Output ' + OUTPUT_ID;
   if (!Protocol || !CommandQueue) {
-    waiting.textContent = 'OUTPUT ERROR — protocol unavailable';
+    waiting.textContent = 'OUTPUT ERROR: protocol unavailable';
     waiting.style.color = '#a33';
     return;
   }
   if (!PRODUCTION_SESSION_ID || !CONTROLLER_INSTANCE_ID) {
-    waiting.textContent = 'OUTPUT ERROR — session identity missing';
+    waiting.textContent = 'OUTPUT ERROR: session identity missing';
     waiting.style.color = '#a33';
     return;
   }
@@ -438,7 +438,7 @@
             if (muted && typeof muted.catch === 'function') muted.catch(() => {});
           }
           showUnlock(restoreSound ? 'Tap or press a key for sound' : 'Tap or press a key to start playback');
-          rendererError('Playback requires operator interaction — click or press any key in this window.', d.mediaId, 'operator');
+          rendererError('Playback requires operator interaction. Click or press any key in this window.', d.mediaId, 'operator');
         } else {
           rendererError('Playback could not start.', d.mediaId, 'operator');
         }
@@ -685,7 +685,7 @@
         return { ok: true };
       case 'replaced':
         clearProgram();
-        waiting.textContent = 'OUTPUT REPLACED — close this window';
+        waiting.textContent = 'OUTPUT REPLACED: close this window';
         waiting.style.display = 'grid';
         runtime.recoverability = 'unrecoverable';
         return { ok: true };

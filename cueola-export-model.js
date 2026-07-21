@@ -221,8 +221,8 @@
 
   function authorityLabel(authority) {
     authority = normalizeAuthority(authority);
-    if (authority === AUTHORITY.LOCAL) return 'LOCAL DRAFT — NOT CLOUD CONFIRMED';
-    if (authority === AUTHORITY.UNPUBLISHED) return 'UNPUBLISHED DRAFT — NOT SAVED';
+    if (authority === AUTHORITY.LOCAL) return 'LOCAL DRAFT: NOT CLOUD CONFIRMED';
+    if (authority === AUTHORITY.UNPUBLISHED) return 'UNPUBLISHED DRAFT: NOT SAVED';
     return 'SERVER-CONFIRMED EXPORT';
   }
 

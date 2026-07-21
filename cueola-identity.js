@@ -255,14 +255,14 @@
 
   async function signIn(rawUsername) {
     var username = normalizeUsername(rawUsername);
-    if (!username) return { ok: false, msg: 'Usernames are 3–40 characters: letters, numbers, dots, dashes.' };
-    var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready — try again in a moment.' };
+    if (!username) return { ok: false, msg: 'Usernames are 3 to 40 characters: letters, numbers, dots, dashes.' };
+    var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
     var p;
     try { p = await fetchProfile(username); }
     catch (e) { return { ok: false, msg: 'Could not reach the profile service. Check the connection.' }; }
     if (!p) return { ok: false, msg: 'No profile with that username. Check the spelling, or create one with your class login code.' };
-    if (p.renamedTo) return { ok: false, msg: 'This username was renamed — sign in as “' + esc(p.renamedTo) + '”.' };
-    if (p.mergedInto) return { ok: false, msg: 'This profile was merged into “' + esc(p.mergedInto) + '” — use that username.' };
+    if (p.renamedTo) return { ok: false, msg: 'This username was renamed. Sign in as “' + esc(p.renamedTo) + '”.' };
+    if (p.mergedInto) return { ok: false, msg: 'This profile was merged into “' + esc(p.mergedInto) + '”. Use that username.' };
     if (p.active === false) return { ok: false, msg: 'This profile was deactivated by an instructor.' };
     rememberIdentity(username, p);
     cachedProfile = p;
@@ -302,13 +302,13 @@
   }
 
   async function createProfile(input) {
-    var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready — try again in a moment.' };
+    var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
     var code = normalizeCode(input.code);
     if (!code) return { ok: false, msg: 'Enter the class login code your instructor gave you.' };
     var fullName = String(input.fullName || '').trim().replace(/\s+/g, ' ');
     if (!fullName || fullName.length > 120) return { ok: false, msg: 'Enter your full name (up to 120 characters).' };
     var username = normalizeUsername(input.username);
-    if (!username) return { ok: false, msg: 'Pick a username: 3–40 characters, lowercase letters, numbers, dots or dashes, starting with a letter or number.' };
+    if (!username) return { ok: false, msg: 'Pick a username: 3 to 40 characters, lowercase letters, numbers, dots or dashes, starting with a letter or number.' };
 
     var codeDoc;
     try { codeDoc = await fetchCode(code); }
@@ -318,7 +318,7 @@
 
     var existing;
     try { existing = await fetchProfile(username); } catch (e) { existing = null; }
-    if (existing) return { ok: false, msg: '“' + esc(username) + '” is taken — pick another username.' };
+    if (existing) return { ok: false, msg: '“' + esc(username) + '” is taken. Pick another username.' };
 
     var sessions = [];
     String(input.sessions || '').split(/[\s,]+/).forEach(function (raw) {
@@ -343,7 +343,7 @@
       await w._setDoc(w._doc(w._db, 'profiles', username), doc);
     } catch (e) {
       return { ok: false, msg: e && e.code === 'permission-denied'
-        ? 'The profile was rejected — the login code may have just been revoked.'
+        ? 'The profile was rejected. The login code may have just been revoked.'
         : 'Could not save the profile. Check the connection and try again.' };
     }
     rememberIdentity(username, doc);
@@ -518,15 +518,15 @@
   }
 
   function renderHub() {
-    setTitle('Your Cueola profile', 'One profile for every session — no password, just your class login code.');
+    setTitle('Your Cueola profile', 'One profile for every session. No password, just your class login code.');
     body().innerHTML =
       '<div class="id-choice-grid">' +
       '  <button type="button" class="id-choice" onclick="CueolaIdentity.startCreate()">' +
       '    <span class="id-choice-title">Create profile</span>' +
-      '    <span class="id-choice-sub">First time here — I have a login code from my instructor.</span></button>' +
+      '    <span class="id-choice-sub">First time here. I have a login code from my instructor.</span></button>' +
       '  <button type="button" class="id-choice" onclick="CueolaIdentity.renderSignIn()">' +
       '    <span class="id-choice-title">I have a username</span>' +
-      '    <span class="id-choice-sub">Sign in on this device — no password needed.</span></button>' +
+      '    <span class="id-choice-sub">Sign in on this device. No password needed.</span></button>' +
       '  <button type="button" class="id-choice ghost" onclick="CueolaIdentity.deviceOnlyLook()">' +
       '    <span class="id-choice-title">Just pick an avatar</span>' +
       '    <span class="id-choice-sub">Device-only look for the notes board, no profile.</span></button>' +
@@ -538,7 +538,7 @@
   }
 
   function renderSignIn() {
-    setTitle('Sign in with your username', 'No password — usernames are managed by your instructors.');
+    setTitle('Sign in with your username', 'No password. Usernames are managed by your instructors.');
     body().innerHTML =
       '<div class="field"><label class="field-lbl">Username</label>' +
       '<input class="field-in" id="id-signin-username" type="text" maxlength="40" placeholder="e.g. alex.j" autocapitalize="none" autocomplete="off"></div>' +
@@ -579,7 +579,7 @@
     var html = '<div class="id-steps">' + dots + '</div>';
 
     if (w.step === 0) {
-      setTitle('Create your profile', 'Step 1 — the login code your instructor gave the class.');
+      setTitle('Create your profile', 'Step 1: the login code your instructor gave the class.');
       html +=
         '<div class="field"><label class="field-lbl">Class login code</label>' +
         '<input class="field-in id-code-in" id="id-create-code" type="text" maxlength="80" placeholder="e.g. FALL26TV" autocapitalize="characters" autocomplete="off" value="' + esc(w.code) + '"></div>' +
@@ -587,7 +587,7 @@
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.renderHub()">Back</button>';
     } else if (w.step === 1) {
-      setTitle('Create your profile', 'Step 2 — how you appear to the crew, and your username.');
+      setTitle('Create your profile', 'Step 2: how you appear to the crew, and your username.');
       html +=
         '<div class="field"><label class="field-lbl">Full name</label>' +
         '<input class="field-in" id="id-create-fullname" type="text" maxlength="120" placeholder="e.g. Alex Johnson" value="' + esc(w.fullName) + '"></div>' +
@@ -598,7 +598,7 @@
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     } else if (w.step === 2) {
-      setTitle('Create your profile', 'Step 3 — pick your look and theme (changeable later).');
+      setTitle('Create your profile', 'Step 3: pick your look and theme (changeable later).');
       var av = animals();
       var initialSel = w.avatar.type === 'initials';
       var grid = '<button type="button" class="id-av' + (initialSel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'initials\')">' +
@@ -628,7 +628,7 @@
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     } else {
-      setTitle('Create your profile', 'Step 4 — the session codes you have been given (optional).');
+      setTitle('Create your profile', 'Step 4: the session codes you have been given (optional).');
       html +=
         '<div class="field"><label class="field-lbl">Session codes</label>' +
         '<input class="field-in" id="id-create-sessions" type="text" placeholder="e.g. SHOW42, NEWS7 (optional)" autocapitalize="characters" value="' + esc(w.sessions) + '">' +
@@ -652,16 +652,16 @@
       if (!code) return wizardErr('Enter the login code your instructor gave you.');
       var codeDoc = await fetchCode(code).catch(function () { return null; });
       if (!codeDoc) return wizardErr('That login code does not exist. Check it with your instructor.');
-      if (codeDoc.active !== true) return wizardErr('That login code has been revoked — ask your instructor for the current one.');
+      if (codeDoc.active !== true) return wizardErr('That login code has been revoked. Ask your instructor for the current one.');
       w.code = code; w.codeRole = codeDoc.role; w.codeLabel = codeDoc.label;
       w.step = 1;
     } else if (w.step === 1) {
       w.fullName = String((document.getElementById('id-create-fullname') || {}).value || '').trim().replace(/\s+/g, ' ');
       var u = normalizeUsername((document.getElementById('id-create-username') || {}).value);
       if (!w.fullName) return wizardErr('Enter your full name.');
-      if (!u) return wizardErr('Usernames are 3–40 characters: lowercase letters, numbers, dots and dashes.');
+      if (!u) return wizardErr('Usernames are 3 to 40 characters: lowercase letters, numbers, dots and dashes.');
       var taken = await fetchProfile(u).catch(function () { return null; });
-      if (taken) return wizardErr('“' + esc(u) + '” is taken — pick another username.');
+      if (taken) return wizardErr('“' + esc(u) + '” is taken. Pick another username.');
       w.username = u;
       w.step = 2;
     } else if (w.step === 2) {
@@ -687,7 +687,7 @@
     if (btn) { btn.disabled = false; btn.textContent = 'Create profile'; }
     if (!res.ok) return wizardErr(res.msg);
     wizard = null;
-    say('Welcome, ' + res.profile.fullName + ' — profile created.');
+    say('Welcome, ' + res.profile.fullName + '. Profile created.');
     renderPortal();
   }
 
@@ -993,7 +993,7 @@
     if (p.active === false) return renderPortalProfileProblem(id.username, 'denied', 'This profile was deactivated by an instructor.');
     cachedProfile = p;
     rememberIdentity(id.username, p);
-    setTitle('Hi, ' + esc(p.fullName.split(' ')[0]), '@' + p.username + (p.role === 'admin' ? ' · admin' : '') + ' — your sessions and what needs you.');
+    setTitle('Hi, ' + esc(p.fullName.split(' ')[0]), '@' + p.username + (p.role === 'admin' ? ' · admin' : '') + '. Your sessions and what needs you.');
     var codes = (p.sessions || []).slice(0, 30);
     var profileWarnings = p._profileReadStatus === 'offline'
       ? '<div class="id-portal-empty">This profile was loaded from offline cache and may be out of date. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>'
@@ -1004,7 +1004,7 @@
     body().innerHTML = profileWarnings +
       '<div class="id-portal-cards" id="id-portal-cards">' +
       (codes.length ? '<div class="id-portal-loading">Checking your sessions…</div>'
-                    : '<div class="id-portal-empty">No sessions on your profile yet — add a session code below.</div>') +
+                    : '<div class="id-portal-empty">No sessions on your profile yet. Add a session code below.</div>') +
       '</div>' +
       '<div class="id-addcode-row"><input class="field-in" id="id-portal-addcode" type="text" placeholder="Add a session code…" autocapitalize="characters">' +
       '<button type="button" class="jis-btn" onclick="CueolaIdentity.portalAddCode()">Add</button></div>' +

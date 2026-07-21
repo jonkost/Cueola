@@ -503,7 +503,7 @@
     const el = document.createElement(kind);
     const mime = t || (/\.(webm|weba)$/.test(n) ? kind + '/webm' : kind === 'audio' ? 'audio/ogg' : 'video/ogg');
     if (!el.canPlayType || el.canPlayType(mime) !== '') return '';
-    return 'this browser can’t decode ' + (/webm|weba/.test(t + ' ' + n) ? 'WebM' : 'Ogg/Opus') + ' — use MP4 (H.264) or MP3/AAC/WAV, or import in Chrome/Edge';
+    return 'this browser can’t decode ' + (/webm|weba/.test(t + ' ' + n) ? 'WebM' : 'Ogg/Opus') + ': use MP4 (H.264) or MP3/AAC/WAV, or import in Chrome/Edge';
   }
   async function storeFile(file) {       // import one file → MEDIA_STORE, return { mediaId, kind, duration, thumb, name }
     // Phase 5: transcode-on-upload — normalize non-web-playable video to H.264 MP4.
@@ -521,13 +521,13 @@
         : /\.(mp3|m4a|aac|wav|ogg|opus|weba|flac)$/.test(n) ? 'audio'
         : /\.(png|jpe?g|gif|webp|bmp)$/.test(n) ? 'image' : null;
     }
-    if (!kind) { toast('Skipped "' + file.name + '" — not a video, audio, or image file.'); return null; }
+    if (!kind) { toast('Skipped "' + file.name + '": not a video, audio, or image file.'); return null; }
     const blob = file.slice(0, file.size, file.type);
     const probe = kind === 'image' ? await probeImage(blob) : await probeMedia(blob, kind);
     if (!probe.ok) {
       const hint = containerUnsupportedHint(file, kind);
-      slog('media', 'Import rejected: “' + file.name + '” — ' + (hint || probe.error || 'unsupported or damaged'));
-      toast('⚠ "' + file.name + '" can’t play in this browser (' + (hint || probe.error || 'unsupported or damaged') + ') — not added.');
+      slog('media', 'Import rejected: “' + file.name + '” (' + (hint || probe.error || 'unsupported or damaged') + ')');
+      toast('⚠ "' + file.name + '" can’t play in this browser (' + (hint || probe.error || 'unsupported or damaged') + '). Not added.');
       return null;
     }
     const mediaId = rid('m_');
@@ -565,7 +565,7 @@
     cues.push(cue);
     selectedId = cue.id;
     renumber(); renderAll(); scheduleSave();
-    toast('Matte added — holds a full-screen ' + color.toUpperCase() + ' until advanced.');
+    toast('Matte added. Holds a full-screen ' + color.toUpperCase() + ' until advanced.');
   }
 
   // Colors/thumbs from an imported .ogshow are attacker-controllable — a crafted
@@ -716,7 +716,7 @@
     disarmCueSfxTie(true);                       // a new clip replaces any previous tie
     if (!cue || !cue.sfxPadId) return;
     const pad = padById(cue.sfxPadId);
-    if (!pad || !pad.mediaId) { slog('sfx', 'Tied pad missing for “' + cue.name + '” — tie skipped'); return; }
+    if (!pad || !pad.mediaId) { slog('sfx', 'Tied pad missing for “' + cue.name + '” (tie skipped)'); return; }
     const delayMs = Math.max(0, Number(cue.sfxDelay) || 0) * 1000;
     sfxTie = { cueId: cue.id, padId: pad.id, timer: null };
     const fire = () => { slog('sfx', 'Tie · “' + (pad.name || 'Pad') + '” with “' + cue.name + '”'); firePad(pad); };
@@ -824,7 +824,7 @@
       rec.status = 'recovering'; rec.detail = state.error || 'Renderer needs recovery';
     } else if (state.communicationStatus === 'ready') {
       rec.status = 'ready';
-      rec.detail = state.recoverability === 'operator' ? 'Program restored paused — operator resume required' : 'Renderer ready and acknowledging commands';
+      rec.detail = state.recoverability === 'operator' ? 'Program restored paused. Operator resume required' : 'Renderer ready and acknowledging commands';
     } else {
       rec.status = 'connecting'; rec.detail = 'Renderer connected; waiting for state sync';
     }
@@ -1075,7 +1075,7 @@
     const win = window.open(launchUrl, popupName, feats);
     if (!win) {
       const rec = outputRecord(o.id, true); rec.status = 'error'; rec.error = 'Pop-up blocked'; rec.detail = 'Allow pop-ups, then Open again';
-      toast('Output window blocked — allow pop-ups for Outrangutan.'); updateOutputUI(); return null;
+      toast('Output window blocked. Allow pop-ups for Outrangutan.'); updateOutputUI(); return null;
     }
     const rec = outputRecord(o.id, true);
     clearAckTimers(rec);
@@ -1149,13 +1149,13 @@
     scheduleSave(); renderOutputs(); renderInspector();
   }
   async function detectScreens() {
-    if (!window.CueolaCaps?.windowManagement) { toast('Window Management needs Chrome/Edge — for now drag output windows to displays manually.'); return; }
+    if (!window.CueolaCaps?.windowManagement) { toast('Window Management needs Chrome or Edge. For now, drag output windows to displays manually.'); return; }
     try {
       const det = await window.getScreenDetails();
       screensCache = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
       toast('Found ' + screensCache.length + ' display' + (screensCache.length === 1 ? '' : 's') + '.');
       renderOutputs();
-    } catch (e) { toast('Display access denied — allow “Window management” for this site.'); }
+    } catch (e) { toast('Display access denied. Allow “Window management” for this site.'); }
   }
 
   // audio-device routing (setSinkId) — per output + master (control) bus
@@ -1666,17 +1666,17 @@
     if (!window.CueolaCaps?.webMidi) { toast('Web MIDI needs Chrome/Edge.'); return; }
     // One MIDIAccess only — a second connect would create parallel MIDIInput
     // objects that each dispatch onMidiMessage, firing every action twice.
-    if (midi) { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); renderMidi(); toast('MIDI already connected — ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.'); return; }
+    if (midi) { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); renderMidi(); toast('MIDI already connected: ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.'); return; }
     if (midiConnecting) return;
     midiConnecting = true;
     try { midi = await navigator.requestMIDIAccess({ sysex: false }); }
-    catch (e) { toast('MIDI access was blocked — allow it in the site settings.'); return; }
+    catch (e) { toast('MIDI access was blocked. Allow it in the site settings.'); return; }
     finally { midiConnecting = false; }
     const hook = () => { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); };
     midi.onstatechange = () => { hook(); renderMidi(); };   // hot-plug: new boxes just work
     hook();
     renderMidi();
-    toast('MIDI connected — ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.');
+    toast('MIDI connected: ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.');
   }
   function onMidiMessage(e) {
     const [status, d1, d2] = e.data;
@@ -1692,7 +1692,7 @@
       settings.midiMap = midiMap;
       midiLearn = false;
       renderMidi(); scheduleSave();
-      toast('Learned ' + midiKeyLabel(key) + ' — pick its action below.');
+      toast('Learned ' + midiKeyLabel(key) + '. Pick its action below.');
       return;
     }
     const m = midiMap[key];
@@ -1730,12 +1730,12 @@
     }).join('');
     body.innerHTML =
       (hasApi ? '' : '<div class="og-edit-empty">Web MIDI needs Chrome or Edge.</div>')
-      + '<div class="og-midi-rows">' + (rows || '<div class="og-edit-empty">No mappings yet — connect a box and learn its controls.</div>') + '</div>'
+      + '<div class="og-midi-rows">' + (rows || '<div class="og-edit-empty">No mappings yet. Connect a box and learn its controls.</div>') + '</div>'
       + '<div class="og-midi-actions">'
       + (midi ? '<span class="og-midi-status">● ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '</span>'
               : '<button class="og-bar-btn" id="og-midi-conn"' + (hasApi ? '' : ' disabled') + '>Connect MIDI</button>')
       + '<button class="og-bar-btn' + (midiLearn ? ' danger' : '') + '" id="og-midi-learn">'
-      + (midiLearn ? 'Waiting — touch a control…' : '+ Learn a control') + '</button>'
+      + (midiLearn ? 'Waiting: touch a control…' : '+ Learn a control') + '</button>'
       + '</div>';
     if ($('og-midi-conn')) $('og-midi-conn').onclick = midiConnect;
     if ($('og-midi-learn')) $('og-midi-learn').onclick = () => { midiLearn = !midiLearn; renderMidi(); };
@@ -1744,7 +1744,7 @@
     Array.prototype.forEach.call(body.querySelectorAll('.og-midi-del'), b => { b.onclick = () => { delete midiMap[b.getAttribute('data-mk')]; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
   }
   async function sdConnect() {
-    if (!window.CueolaCaps?.webHid) { toast('WebHID needs Chrome/Edge — Stream Deck control is Chromium-only.'); return; }
+    if (!window.CueolaCaps?.webHid) { toast('WebHID needs Chrome or Edge. Stream Deck control is Chromium-only.'); return; }
     let dev;
     try {
       const have = (await navigator.hid.getDevices()).filter(d => d.vendorId === ELGATO_VID);
@@ -1765,7 +1765,7 @@
     try { navigator.hid.addEventListener('disconnect', onSdDisconnect); } catch (e) {}
     sdReset(); sdBrightness(80);
     const labelsReady = await scheduleStreamDeckRefresh();
-    toast('Stream Deck connected — ' + model.name + ' (' + model.keys + ' keys)' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
+    toast('Stream Deck connected: ' + model.name + ' (' + model.keys + ' keys)' + (labelsReady ? '.' : '; controls work, but image labels are unavailable.'));
     renderStreamDeck();
   }
   function onSdDisconnect(e) { if (!sd) return; if (e && e.device && e.device !== sd.device) return; sd = null; sdSetPaintError(''); renderStreamDeck(); toast('Stream Deck disconnected.'); }
@@ -1844,7 +1844,7 @@
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
           : '<span class="og-out-note">Detect displays to place this on a screen</span>';
         return '<div class="og-out-row">'
-          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' title="Not responding — the window may be frozen"' : '') + '></span>'
+          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' title="Not responding: the window may be frozen"' : '') + '></span>'
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
             + '<button class="og-bar-btn og-out-open" data-o="' + o.id + '">' + (open ? 'Focus' : 'Open') + '</button>'
             + '<button class="og-bar-btn og-out-id" data-o="' + o.id + '">Identify</button>'
@@ -1885,7 +1885,7 @@
     const body = $('og-integrations-body'); if (!body) return;
     // OBS
     const obsConn = obs.connected;
-    const sceneBtns = obs.scenes.map(s => '<button class="og-bar-btn og-obs-scene' + (s === obs.current ? ' on' : '') + '" data-scene="' + esc(s) + '">' + esc(s) + '</button>').join('') || '<span class="og-out-note">No scenes — connect to load.</span>';
+    const sceneBtns = obs.scenes.map(s => '<button class="og-bar-btn og-obs-scene' + (s === obs.current ? ' on' : '') + '" data-scene="' + esc(s) + '">' + esc(s) + '</button>').join('') || '<span class="og-out-note">No scenes. Connect to load.</span>';
     const obsHTML =
       '<div class="og-intg-sect"><div class="og-intg-head">' + sym('content.display') + ' OBS Studio <span class="og-out-note">obs-websocket v5</span><span class="og-out-dot' + (obsConn ? ' live' : '') + '" style="margin-left:auto"></span></div>'
       + (obsConn
@@ -1903,7 +1903,7 @@
       '<div class="og-intg-sect"><div class="og-intg-head">' + sym('action.down') + ' Dropbox</div>'
       + '<div class="og-intg-row"><input class="og-intg-in" id="og-dbx-token" type="password" placeholder="access token" value="' + esc(dbx.token) + '"><input class="og-intg-in" id="og-dbx-folder" placeholder="/folder (blank = root)" value="' + esc(dbx.folder) + '"><button class="og-bar-btn" id="og-dbx-list">List media</button></div>'
       + (fileRows ? '<div class="og-dbx-files">' + fileRows + '<button class="og-bar-btn og-dbx-pullall" id="og-dbx-pullall">Pull all ' + dbx.files.length + '</button></div>' : '')
-      + '<p class="og-sheet-note">Paste a Dropbox <em>access token</em> (from a Dropbox app). Full OAuth needs a registered redirect — deferred. Files download into local cues (IndexedDB).</p></div>';
+      + '<p class="og-sheet-note">Paste a Dropbox <em>access token</em> (from a Dropbox app). Full OAuth needs a registered redirect (deferred). Files download into local cues (IndexedDB).</p></div>';
     // Transcode
     const intgHTML =
       '<div class="og-intg-sect"><div class="og-intg-head">' + sym('action.settings') + ' Transcode on upload</div>'
@@ -2085,7 +2085,7 @@
     }
     const hasHid = Boolean(window.CueolaCaps?.webHid);
     const unsupportedConnectedOption = connected && !profile
-      ? '<option value="' + productId + '" selected>' + esc(sd.model.name) + ' · input only — no image profile</option>'
+      ? '<option value="' + productId + '" selected>' + esc(sd.model.name) + ' · input only, no image profile</option>'
       : '';
     const profileOptions = unsupportedConnectedOption + (SD_LABELS ? SD_LABELS.SUPPORTED_PRODUCT_IDS.map(id => {
       const item = SD_LABELS.getModelProfile(id);
@@ -2094,7 +2094,7 @@
     const proofSamples = profile ? sdProofSamples(productId).map((sample, index) => '<div class="og-sd-proof-sample"><canvas class="og-sd-proof-preview" data-sample="' + index + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="' + esc(sample.label) + ' orientation sample"></canvas><span>' + esc(sample.label) + '</span></div>').join('') : '';
     body.innerHTML =
       '<div class="og-sd-status">'
-        + (connected ? '<span class="og-out-dot live"></span> Connected — ' + esc(sd.model.name) + ' (' + sd.model.keys + ' keys)' : (hasHid ? '<span class="og-out-dot"></span> Not connected' : 'WebHID unavailable — needs Chrome/Edge'))
+        + (connected ? '<span class="og-out-dot live"></span> Connected: ' + esc(sd.model.name) + ' (' + sd.model.keys + ' keys)' : (hasHid ? '<span class="og-out-dot"></span> Not connected' : 'WebHID unavailable (needs Chrome or Edge)'))
         + '<div class="og-bar-spacer"></div>'
         + (connected ? '<button class="og-bar-btn danger" id="og-sd-disc">Disconnect</button>' : '<button class="og-bar-btn" id="og-sd-conn"' + (hasHid ? '' : ' disabled') + '>Connect Stream Deck</button>')
       + '</div>'
@@ -2397,7 +2397,7 @@
     // Not a Chromium-only feature (WebGL1 works on Safari) — a null keyer
     // means WebGL itself failed to start (graphics acceleration off, GPU
     // blocklist, headless), so say that instead of blaming the browser brand.
-    if (!keyer || !keyer.ok) { toast('Keying is unavailable — WebGL failed to start (check that graphics acceleration is on).'); return; }
+    if (!keyer || !keyer.ok) { toast('Keying is unavailable. WebGL failed to start (check that graphics acceleration is on).'); return; }
     cv.classList.add('on');
     if (keyRAF) return;
     const loop = () => {
@@ -2429,7 +2429,7 @@
     let ws; try { ws = new WebSocket('ws://' + obs.cfg.host + ':' + obs.cfg.port); } catch (e) { toast('OBS: invalid address.'); return; }
     obs.ws = ws;
     ws.onclose = () => { obs.connected = false; renderIntegrations(); };
-    ws.onerror = () => { toast('OBS: connection failed — enable the WebSocket server in OBS.'); };
+    ws.onerror = () => { toast('OBS: connection failed. Enable the WebSocket server in OBS.'); };
     ws.onmessage = async (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.op === 0) {
@@ -2477,7 +2477,7 @@
     if (!dbx.token) { toast('Paste a Dropbox access token first.'); return; }
     try {
       const res = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers: { 'Authorization': 'Bearer ' + dbx.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dbx.folder === '/' ? '' : (dbx.folder || ''), recursive: false }) });
-      if (!res.ok) { toast('Dropbox: ' + res.status + ' — check the token/folder.'); return; }
+      if (!res.ok) { toast('Dropbox: ' + res.status + '. Check the token/folder.'); return; }
       const j = await res.json();
       dbx.files = (j.entries || []).filter(e => e['.tag'] === 'file' && /\.(mp4|webm|mov|m4v|mp3|wav|aac|m4a|ogg|opus)$/i.test(e.name));
       toast('Dropbox: ' + dbx.files.length + ' media file' + (dbx.files.length === 1 ? '' : 's') + ' found.');
@@ -2520,7 +2520,7 @@
   }
   async function transcodeFile(file) {
     const ff = await loadFFmpeg();
-    if (!ff) { toast('Transcoder unavailable — storing “' + file.name + '” as-is.'); return file; }
+    if (!ff) { toast('Transcoder unavailable. Storing “' + file.name + '” as-is.'); return file; }
     try {
       toast('Transcoding “' + file.name + '” → web-playable MP4…');
       const inName = 'in_' + Date.now(), outName = 'out.mp4';
@@ -2530,7 +2530,7 @@
       try { ff.FS('unlink', inName); ff.FS('unlink', outName); } catch (e) {}
       toast('Transcoded “' + file.name + '”.');
       return new File([data.buffer], file.name.replace(/\.[^.]+$/, '') + '.mp4', { type: 'video/mp4' });
-    } catch (e) { toast('Transcode failed — storing as-is.'); return file; }
+    } catch (e) { toast('Transcode failed. Storing as-is.'); return file; }
   }
 
   // ── program decks (transport) ────────────────────────────────────────────
@@ -2652,7 +2652,7 @@
       if (e && e.name === 'NotAllowedError') {
         // Autoplay blocked: nothing is on air — do NOT report ON AIR, notify the
         // output, or advance. Re-arm this cue so GO genuinely retries it.
-        toast('Playback blocked by the browser — press GO again.');
+        toast('Playback blocked by the browser. Press GO again.');
         active = prev;
         if (!isAudio && prev && prev.kind === 'video') showDeck(deckOf(prev));
         selectedId = cue.id;
@@ -2771,8 +2771,8 @@
     setStatus('idle');
     if (cue.type === 'video' || cue.type === 'image') sendOut({ t: 'black', ms: 0 }, cue.output || 1);
     renderCueList(); scheduleSave();
-    slog('error', '“' + cue.name + '” failed to play — cut to black slate' + (err && err.message ? ' (' + err.message + ')' : ''));
-    toast('⚠ “' + cue.name + '” failed to play — black slate. Show continues; cue is marked.');
+    slog('error', '“' + cue.name + '” failed to play. Cut to black slate' + (err && err.message ? ' (' + err.message + ')' : ''));
+    toast('⚠ “' + cue.name + '” failed to play. Black slate. The show continues and the cue is marked.');
   }
 
   // ── Phase 2 (master plan): cue-ahead preload ──────────────────────────────
@@ -2884,8 +2884,8 @@
     fades.forEach((r) => cancelAnimationFrame(r)); fades.clear();
     stopAllDecks(); stopAllPads(); stopKeyLoop();
     setStatus('idle'); sendOut({ t: 'stop' }); cueToTop(); renderCueList(); renderInspector(); renderEditArea();
-    slog('media', 'PANIC — everything stopped');
-    toast('PANIC — all stopped.');
+    slog('media', 'PANIC: everything stopped');
+    toast('PANIC: all stopped.');
   }
   function pauseResume() {
     if (active && active.held) return;   // a held-last-frame cue is finished — nothing to pause or resume
@@ -3072,7 +3072,7 @@
         + '<span class="og-cue-num">' + c.num + '</span>'
         + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : c.type === 'image' ? 'content.image' : 'department.video') + '</span>'
         + '<span class="og-cue-name">' + esc(c.name) + '</span>'
-        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time — replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" title="Tied SFX pad — fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
+        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time. Replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" title="Tied SFX pad: fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
@@ -3112,7 +3112,7 @@
     if (active) preloadNext(active.cue);     // restage the TRUE next after the playing clip
     renderCueList(); renderInspector(); renderEditArea();
     scheduleSave();
-    slog('info', 'Reordered “' + item.name + '” to position ' + (cueIndex(item.id) + 1) + (active ? ' — playing clip untouched' : ''));
+    slog('info', 'Reordered “' + item.name + '” to position ' + (cueIndex(item.id) + 1) + (active ? ' (playing clip untouched)' : ''));
   }
 
   function renderInspector() {
@@ -3143,7 +3143,7 @@
         field('Continue', '<select id="og-i-continue">' +
           opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Continue', c.continueMode) + opt('auto_follow', 'Follow', c.continueMode) + '</select>') +
         (c.type === 'image' ?
-          field('Duration (s) — 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
+          field('Duration (s), 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
           field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
         : '')
       ) +
@@ -3204,7 +3204,7 @@
         field('Notes', '<input id="og-i-notes" type="text" value="' + esc(c.notes || '') + '">')
       ) +
       (function () {   // Clip→SFX tie: pick a pad, optionally delay its fire
-        if (!pads.length) return sec('SFX', '<div class="og-insp-meta">No SFX pads yet — build one on the SFX Board, then tie it here.</div>');
+        if (!pads.length) return sec('SFX', '<div class="og-insp-meta">No SFX pads yet. Build one on the SFX Board, then tie it here.</div>');
         const padOpts = opt('', '—', c.sfxPadId || '') + pads.map(p => {
           const bank = banks.find(b => b.id === p.bank);
           return opt(p.id, (p.name || 'Pad') + (bank && banks.length > 1 ? ' · ' + bank.name : ''), c.sfxPadId || '');
@@ -3213,7 +3213,7 @@
           field('Tied pad', '<select id="og-i-sfxpad">' + padOpts + '</select>') +
           (c.sfxPadId
             ? field('Delay (s)', '<input id="og-i-sfxdelay" type="number" min="0" step="0.5" value="' + (c.sfxDelay || 0) + '">') +
-              '<div class="og-insp-meta">Fires with this cue and fades out when the clip ends or stops — a rundown-linked fire brings it too.</div>'
+              '<div class="og-insp-meta">Fires with this cue and fades out when the clip ends or stops. A rundown-linked fire brings it too.</div>'
             : ''));
       })() +
       (function () { if (!OBS_UI) return ''; const ob = c.obs || (c.obs = { action: 'none', scene: '' });
@@ -3373,7 +3373,7 @@
     const body = $('og-edit-body'), acts = $('og-edit-actions'); if (!body) return;
     const c = cueById(selectedId);
     if (!c) { body.innerHTML = '<div class="og-edit-empty">Select a cue to trim and scrub it.</div>'; if (acts) acts.innerHTML = ''; return; }
-    if (c.type === 'image') { body.innerHTML = '<div class="og-edit-empty">Stills have no timeline — set an optional duration in the Inspector (0 holds until advanced).</div>'; if (acts) acts.innerHTML = ''; return; }
+    if (c.type === 'image') { body.innerHTML = '<div class="og-edit-empty">Stills have no timeline. Set an optional duration in the Inspector (0 holds until advanced).</div>'; if (acts) acts.innerHTML = ''; return; }
     const dur = editClipDuration(c) || 0;
     const tin = clamp(c.trimIn || 0, 0, dur || 1e9);
     const tout = (c.trimOut == null ? dur : clamp(c.trimOut, 0, dur || 1e9)) || dur;
@@ -3897,7 +3897,7 @@
       const nameBytes = te.encode(e.name);
       const crc = await blobCrc32(e.blob);
       const size = e.blob.size;
-      if (size > 0xFFFFFFFE || offset + size > 0xFFFFFFFE) throw new Error('over 4GB — too large for the .ogshow container');
+      if (size > 0xFFFFFFFE || offset + size > 0xFFFFFFFE) throw new Error('over 4GB: too large for the .ogshow container');
       const lh = new DataView(new ArrayBuffer(30));
       lh.setUint32(0, 0x04034b50, true);
       lh.setUint16(4, 20, true);                       // version needed to extract
@@ -3996,7 +3996,7 @@
       sessionCode: sessionCode || '',
       exportedAt: new Date().toISOString(),
     });
-    if (!snapshot.cues.length && !snapshot.pads.length) { toast('Nothing to print yet — add a cue or pad first.'); return; }
+    if (!snapshot.cues.length && !snapshot.pads.length) { toast('Nothing to print yet. Add a cue or pad first.'); return; }
     if (typeof window.exportPaperHTMLAsPDF !== 'function') { toast('The print pipeline is not available here.'); return; }
     const contLabel = c => c.continueMode === 'auto_follow' ? 'Follow' : c.continueMode === 'auto_continue' ? 'Continue' : 'Manual';
     const trimLabel = c => (c.trimIn || c.trimOut != null) ? fmtClock(c.trimIn || 0) + ' to ' + (c.trimOut == null ? 'end' : fmtClock(c.trimOut)) : 'None';
@@ -4058,7 +4058,7 @@
 
   async function exportShowFile() {
     try {
-      if (!cues.length && !pads.length) { toast('Nothing to save yet — add a cue or pad first.'); return; }
+      if (!cues.length && !pads.length) { toast('Nothing to save yet. Add a cue or pad first.'); return; }
       const ids = new Set();
       cues.forEach(c => { if (c.mediaId) ids.add(c.mediaId); });
       pads.forEach(p => { if (p.mediaId) ids.add(p.mediaId); });
@@ -4089,7 +4089,7 @@
           await w.write(showBlob);
           await w.close();
           slog('session', 'Show saved → ' + showFileHandle.name + ' (' + summary + ')');
-          toast('Saved — ' + showFileHandle.name);
+          toast('Saved: ' + showFileHandle.name);
           return;
         } catch (e) {
           if (e && e.name === 'AbortError') return;   // user cancelled the picker
@@ -4102,7 +4102,7 @@
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       slog('session', 'Show downloaded → ' + showFileName() + ' (' + summary + ')');
-      toast('Show saved — ' + summary + '.');
+      toast('Show saved: ' + summary + '.');
     } catch (e) { toast(e && /4GB/.test(String(e.message)) ? 'Too big: the .ogshow container caps at 4 GB.' : 'Could not save the show file.'); }
   }
   async function openShowFilePicker() {
@@ -4147,8 +4147,8 @@
     await loadShow();
     renderAll();
     scheduleSave();
-    slog('session', 'Show opened from file — ' + cues.length + ' cues · ' + pads.length + ' pads');
-    toast('Show opened — ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
+    slog('session', 'Show opened from file: ' + cues.length + ' cues · ' + pads.length + ' pads');
+    toast('Show opened: ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + '.');
     return true;
   }
 
@@ -4202,7 +4202,7 @@
     const at = t && t.offset > 0 ? ' at ' + fmtClock(t.offset) : '';
     $('og-recovery-text').textContent = wasPlaying
       ? 'Recovered ' + cw + '. The show was mid-playback (“' + wasPlaying.name + '”' + at + ') when it stopped.'
-      : 'Recovered your previous show — ' + cw + '.';
+      : 'Recovered your previous show: ' + cw + '.';
     const standbyBtn = $('og-recovery-standby');
     standbyBtn.style.display = wasPlaying ? '' : 'none';
     standbyBtn.textContent = t && t.offset > 0 ? 'Standby at ' + fmtClock(t.offset) : 'Standby that cue';
@@ -4267,7 +4267,7 @@
   function closeHelp() { $('og-help').classList.remove('on'); }
 
   // ── lock / footer ─────────────────────────────────────────────────────────
-  function toggleLock() { settings.showLock = !settings.showLock; $('outrangutan').classList.toggle('locked', settings.showLock); $('og-lock-btn').classList.toggle('on', settings.showLock); toast(settings.showLock ? 'Show mode locked — edits disabled.' : 'Show mode unlocked.'); scheduleSave(); }
+  function toggleLock() { settings.showLock = !settings.showLock; $('outrangutan').classList.toggle('locked', settings.showLock); $('og-lock-btn').classList.toggle('on', settings.showLock); toast(settings.showLock ? 'Show mode locked. Edits disabled.' : 'Show mode unlocked.'); scheduleSave(); }
   function renderFoot() {
     const f = $('og-foot-keys'); if (!f) return;
     const sc = settings.shortcuts;
@@ -4302,7 +4302,7 @@
             + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
             + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
             + '<button class="og-bar-btn" id="og-midi-btn" title="MIDI control surfaces (Web MIDI)">' + sym('action.grid') + 'MIDI</button>'
-            + '<button class="og-bar-btn" id="og-print-btn" title="Print the show-day pack — cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
+            + '<button class="og-bar-btn" id="og-print-btn" title="Print the show-day pack: cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
             + '<button class="og-bar-btn" id="og-pro-btn" title="' + (OBS_UI ? 'OBS · ' : '') + 'Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
             + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
@@ -4354,7 +4354,7 @@
                 + '<div class="og-tctl"><button class="og-tbtn" id="og-fade" title="Fade out" aria-label="Fade out">' + sym('media.waveform.low') + '</button><span class="og-tcap">Fade <span class="og-tbtn-key" id="og-k-fade"></span></span></div>'
                 + '<div class="og-tctl"><button class="og-tbtn" id="og-next" title="Next cue" aria-label="Next cue">' + sym('chevron.right') + '</button><span class="og-tcap">Next <span class="og-tbtn-key">↓</span></span></div>'
               + '</div>'
-              + '<div class="og-tctl og-tctl-panic"><button class="og-tbtn og-tbtn-panic" id="og-panic" title="Panic — stop everything" aria-label="Panic — stop everything">' + sym('action.power') + '</button><span class="og-tcap">Panic <span class="og-tbtn-key" id="og-k-panic"></span></span></div>'
+              + '<div class="og-tctl og-tctl-panic"><button class="og-tbtn og-tbtn-panic" id="og-panic" title="Panic: stop everything" aria-label="Panic: stop everything">' + sym('action.power') + '</button><span class="og-tcap">Panic <span class="og-tbtn-key" id="og-k-panic"></span></span></div>'
             + '</div>'
           + '</div>'
           + '<div class="og-pane og-inspector-pane" id="og-inspector-pane">'
@@ -4417,7 +4417,7 @@
           + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" title="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
           + '<label class="og-matte-swatch og-matte-custom" title="Custom color"><input type="color" id="og-matte-color" value="#1e3a8a"><span>Custom…</span></label>'
         + '</div>'
-        + '<p class="og-sheet-note">A matte is a full-screen solid color that holds until you advance — use it for blackouts, backgrounds, and key fills. It becomes a normal still cue: set duration, fades, or an output in the Inspector.</p>'
+        + '<p class="og-sheet-note">A matte is a full-screen solid color that holds until you advance. Use it for blackouts, backgrounds, and key fills. It becomes a normal still cue: set duration, fades, or an output in the Inspector.</p>'
       + '</div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
@@ -4740,7 +4740,7 @@
       if (!m || !m.blob) { ok = false; issue = 'media missing from the library'; }
       else if (c.broken) { ok = false; issue = 'failed at its last play (⚠)'; }
       else if (c.type !== 'image' && !(m.duration > 0)) { ok = false; issue = 'no decodable duration'; }
-      else if (c.type !== 'audio' && !(m.width > 0 && m.height > 0)) { ok = false; issue = 'unknown dimensions — re-import to probe'; }
+      else if (c.type !== 'audio' && !(m.width > 0 && m.height > 0)) { ok = false; issue = 'unknown dimensions: re-import to probe'; }
       report.cues.push({ id: c.id, num: c.num, name: c.name, ok, checked: true, issue, dims: (m && m.width) ? m.width + '×' + m.height : '', dur: (m && m.duration) || 0 });
     }
     for (const p of rPads) {
@@ -4757,7 +4757,7 @@
     }
     report.banks = rBanks.map(b => ({ id: b.id, name: b.name, padCount: rPads.filter(p => p.bank === b.id && p.mediaId).length }));
     const badC = report.cues.filter(c => !c.ok).length, badP = report.pads.filter(p => !p.ok).length;
-    slog('preflight', 'Deep check — ' + report.cues.length + ' cues (' + badC + ' bad) · ' + report.pads.length + ' pads (' + badP + ' bad)');
+    slog('preflight', 'Deep check: ' + report.cues.length + ' cues (' + badC + ' bad) · ' + report.pads.length + ' pads (' + badP + ' bad)');
     return report;
   }
 

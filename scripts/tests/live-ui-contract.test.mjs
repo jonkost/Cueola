@@ -305,10 +305,10 @@ test('controls never lie, never move, never silently refuse (D11.5)', () => {
   const activate = app.slice(app.indexOf('function activateLiveRundownRow('), app.indexOf('function detachIfFollowing('));
   assert.match(activate, /toast\('That row no longer exists\.'\)/);
   assert.match(activate, /Segment headers organize the rundown/);
-  assert.match(activate, /is disabled — enable it in the rundown/);
+  assert.match(activate, /is disabled\. Enable it in the rundown/);
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
-  assert.match(next, /toast\('End of rundown — there is no next row\.'\)/);
-  assert.match(app, /Live commands are paused — the show screen is still settling/);
+  assert.match(next, /toast\('End of rundown\. There is no next row\.'\)/);
+  assert.match(app, /Live commands are paused\. The show screen is still settling/);
   // Fixed geometry: the GO control has a fixed width and its label ellipsizes.
   assert.match(html, /\.ls-go-primary\{[^}]*width:min\(38vw,380px\)/);
   assert.match(html, /\.ls-go-primary \.ls-go-label\{[^}]*text-overflow:ellipsis/);
@@ -341,7 +341,7 @@ test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11
   // Automatic reconnect attempts on loss, one per announcement.
   assert.match(app, /automatic resync attempt/);
   assert.match(app, /try \{ scriptOperatorPublishState\(true\); \} catch \{\}/);
-  assert.match(app, /automatic reconnect attempt'\);\s*\n\s*try \{ _postPrompterHello\(\); \} catch \{\}/);
+  assert.match(app, /Automatic reconnect attempt'\);\s*\n\s*try \{ _postPrompterHello\(\); \} catch \{\}/);
   // One-click reopen with full state resync stays wired to the rail.
   assert.match(app, /if \(name === 'scriptOperator'\) return openScriptOpPopout\(\)/);
   assert.match(app, /return openFlowmingoTalentWindow\(\{ replace:true \}\)/);

@@ -38,7 +38,7 @@
     "action.volume.up": "speaker.plus",
     "action.volume.down": "speaker.minus",
     "action.volume.mute": "speaker.slash",
-    "state.info": "info.circle",
+    "state.info": "info",
     "info.circle": "info.circle",
     "info.square": "info.circle",
     "state.warning": "exclamationmark.triangle",

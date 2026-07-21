@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '2.0.0';
+const CUEOLA_VERSION = '2.1.0';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 
 // ── v2.1 D12.7: runtime budgets — measure, then defer, then gate ────────────
@@ -240,7 +240,7 @@ function liveSyncStatusRecord() {
   if (reconnecting || navigator.onLine === false) {
     return {
       status:navigator.onLine === false ? 'disconnected' : 'recovering',
-      detail:navigator.onLine === false ? 'Network offline — saved state is retained locally' : 'Reconnecting — showing the last confirmed state',
+      detail:navigator.onLine === false ? 'Network offline. Saved state is retained locally' : 'Reconnecting. Showing the last confirmed state',
     };
   }
   if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'Local workspace' };
@@ -447,7 +447,7 @@ function renderLiveLinkChip(link) {
   // D12.4: the playout chip carries the ARMED verdict when the link is live.
   const armedSuffix = link.key === 'playout' && link.status !== 'off' && typeof link.meta?.armed === 'boolean'
     ? (link.meta.armed ? '' : ' · NOT ARMED') : '';
-  chip.title = `${link.label}: ${detail}${armedSuffix ? ' — first GO is not proven ready' : ''}`;
+  chip.title = `${link.label}: ${detail}${armedSuffix ? ' (first GO is not proven ready)' : ''}`;
   chip.setAttribute('aria-label', `${link.label} link ${link.status}: ${detail}${armedSuffix}`);
   const text = chip.querySelector('.ls-link-word');
   if (text) text.textContent = (LIVE_LINK_LABELS[link.key] || link.label.toUpperCase()) + armedSuffix;
@@ -478,12 +478,12 @@ function projectTalentLinkTransition(link, previousStatus) {
     projectPrompterSessionStatus('recovering', 'Talent unresponsive · missed heartbeats');
   } else if (link.status === 'lost') {
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
-    setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost — no heartbeat');
+    setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost: no heartbeat');
     // D11.8: a same-device talent window that is OPEN but silent gets one
     // automatic reconnect nudge (hello → READY → full state resync). A closed
     // window keeps the chip + one-click reopen (rail: Recover Flowmingo).
     if (_prompterTalentWin && !_prompterTalentWin.closed) {
-      logShow('prompter', 'Talent silent with its window open — automatic reconnect attempt');
+      logShow('prompter', 'Talent silent with its window open. Automatic reconnect attempt');
       try { _postPrompterHello(); } catch {}
     }
   }
@@ -813,7 +813,7 @@ async function decodeSessionSnapshot(record) {
   // Streams-capable browser must fail with a readable message elsewhere,
   // not a bare TypeError mid-restore.
   if (/^gzip/.test(record.encoding || '') && !window.CueolaCaps.compressionStreams) {
-    throw new Error('This browser can’t decompress cloud snapshots — restore from Chrome, Edge, or Safari 16.4+.');
+    throw new Error('This browser can’t decompress cloud snapshots. Restore from Chrome, Edge, or Safari 16.4+.');
   }
   if (record.encoding === 'gzip') {
     const json = await new Response(record.data.stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -1129,7 +1129,7 @@ async function deleteCloudSessionSnapshot(id) {
     }
     await window._deleteDoc(window._doc(window._db, 'sessions', session.code, 'snapshots', headId));
     _cloudSnapshotCache = { code: '', rows: null };
-    logShow('session', 'Cloud snapshot deleted — ' + stamp);
+    logShow('session', 'Cloud snapshot deleted: ' + stamp);
     toast('Cloud snapshot deleted.');
     openSessionHistory();
   } catch (err) {
@@ -1372,7 +1372,7 @@ async function exportRundownFile() {
       await w.write(json);
       await w.close();
       logShow('session', 'Rundown saved → ' + _cueolaFileHandle.name);
-      toast('Saved — ' + _cueolaFileHandle.name);
+      toast('Saved: ' + _cueolaFileHandle.name);
       return;
     } catch (e) {
       if (e && e.name === 'AbortError') return;   // user cancelled the picker
@@ -1387,7 +1387,7 @@ async function exportRundownFile() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     logShow('session', 'Rundown downloaded → ' + rundownFileName());
-    toast('Rundown saved — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
+    toast('Rundown saved: ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
   } catch (e) { toast('Could not save the rundown file.'); }
 }
 async function openRundownFilePicker() {
@@ -1417,8 +1417,8 @@ async function importRundownFile(file) {
     freeTextMode = Boolean(payload.freeTextMode);
     renderRundown();
     syncToFirestore();
-    logShow('session', 'Rundown opened from file — ' + beats.length + ' rows');
-    toast('Rundown opened — ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
+    logShow('session', 'Rundown opened from file: ' + beats.length + ' rows');
+    toast('Rundown opened: ' + beats.length + ' row' + (beats.length === 1 ? '' : 's') + '.');
     return true;
   } catch (e) { toast('Could not open the rundown file.'); return false; }
 }
@@ -1500,7 +1500,7 @@ function openShowLog() {
 }
 function exportShowLog() {
   if (!showLogEntries.length) { toast('The show log is empty.'); return; }
-  const head = 'Cueola show log — ' + (session?.code ? 'session ' + session.code : 'local') + ' — exported ' + new Date().toLocaleString() + '\n\n';
+  const head = 'Cueola show log · ' + (session?.code ? 'session ' + session.code : 'local') + ' · exported ' + new Date().toLocaleString() + '\n\n';
   const lines = showLogEntries.map(e => `${new Date(e.t).toLocaleDateString()} ${showLogTime(e.t)}  [${e.cat}]  ${e.msg}${e.data ? '  ' + JSON.stringify(e.data) : ''}`);
   const blob = new Blob([head + lines.join('\n') + '\n'], { type: 'text/plain' });
   const a = document.createElement('a');
@@ -1508,7 +1508,7 @@ function exportShowLog() {
   a.download = 'Cueola Show Log ' + (session?.code || 'local') + ' ' + new Date().toISOString().slice(0, 10) + '.txt';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  toast('Show log exported — ' + showLogEntries.length + ' events.');
+  toast('Show log exported: ' + showLogEntries.length + ' events.');
 }
 function clearShowLog() {
   if (!window.confirm('Clear the show log for ' + (session?.code ? 'session ' + session.code : 'this workspace') + '?')) return;
@@ -1531,7 +1531,7 @@ function containError(label, err) {
     const now = Date.now();
     if (now - _errToastTs > 4000) {   // throttled: an error loop must not bury the operator in toasts
       _errToastTs = now;
-      toast('⚠ ' + label + ' hit an error — logged to the show log. The show keeps running.', 3500);
+      toast('⚠ ' + label + ' hit an error (logged to the show log). The show keeps running.', 3500);
     }
   } catch {}
 }
@@ -1899,7 +1899,7 @@ async function consumePendingLaunchFile() {
   if (session.isDemo) {
     // Keep it queued — the entry toast promised it opens in a real session,
     // and consuming here would silently drop the file on the demo refusal.
-    toast('Demo mode — “' + pending.file.name + '” will open when you enter a real session.');
+    toast('Demo mode: “' + pending.file.name + '” will open when you enter a real session.');
     return;
   }
   // A session import must wait for the cloud baseline: importing before the
@@ -1909,7 +1909,7 @@ async function consumePendingLaunchFile() {
     pending.waits = (pending.waits || 0) + 1;
     if (pending.waits < 100) { setTimeout(consumePendingLaunchFile, 300); return; }
     _pendingLaunchFile = null;
-    toast('This session hasn’t finished syncing — re-open “' + pending.file.name + '” once it loads.');
+    toast('This session hasn’t finished syncing. Re-open “' + pending.file.name + '” once it loads.');
     return;
   }
   _pendingLaunchFile = null;
@@ -1928,7 +1928,7 @@ async function consumeLaunchHandle(handle) {
     // before any consent dialog could appear.
     const ogSession = window.Outrangutan?._local?.session?.();
     if (ogSession) {
-      toast('Outrangutan is joined to session ' + ogSession + ' — leave the session before opening a show file.');
+      toast('Outrangutan is joined to session ' + ogSession + '. Leave the session before opening a show file.');
       return;
     }
     if (typeof window.enterOutrangutan === 'function') await window.enterOutrangutan('standalone');
@@ -2141,7 +2141,7 @@ function setCloudSyncState(state='synced', detail='') {
     // Solo surfaces (demo/expert/no code) run local by design — that is the
     // link's off state, not a degradation.
     if (!session.code || session.isDemo || session.isExpert) liveLinkState.noteOff('cloud', detail || 'Local workspace');
-    else liveLinkState.noteDegraded('cloud', detail || 'Saved locally — cloud unavailable');
+    else liveLinkState.noteDegraded('cloud', detail || 'Saved locally (cloud unavailable)');
   }
   else if (state === 'off') liveLinkState.noteOff('cloud', detail || 'Local workspace');
   const dot = document.getElementById('syncDot');
@@ -2164,12 +2164,12 @@ function reportCloudWriteFailure(context='Cloud save', err=null) {
   // an error dot + toast; the next server snapshot clears it.
   const code = err?.code || '';
   if (code === 'unavailable' || code === 'deadline-exceeded' || !navigator.onLine) {
-    if (!_syncReconnState) logShow('sync', context + ' queued — cloud unreachable' + (code ? ' (' + code + ')' : ''));
+    if (!_syncReconnState) logShow('sync', context + ' queued: cloud unreachable' + (code ? ' (' + code + ')' : ''));
     setSyncReconnecting(true);
     return;
   }
   console.warn(`${context} failed.`, err);
-  logShow('sync', context + ' failed — local draft kept' + (code ? ' (' + code + ')' : ''));
+  logShow('sync', context + ' failed. Local draft kept' + (code ? ' (' + code + ')' : ''));
   setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
   const now = Date.now();
   if (now - _lastCloudErrorToastAt > 8000) {
@@ -2211,21 +2211,21 @@ const LEARNING_LESSONS = [
     area:'Start',
     title:'Your Profile And Portal',
     time:'4 min',
-    intro:'One profile follows you through every session — no password, just the class login code your instructor gave the class. Your portal gathers your sessions, your position, and everything assigned to you.',
+    intro:'One profile follows you through every session: no password, just the class login code your instructor gave the class. Your portal gathers your sessions, your position, and everything assigned to you.',
     navigation:[
       'Tap the profile button in the centered row under the Cueola wordmark on the home screen to open Your Cueola profile.',
-      'First time? Choose Create profile. Coming back? Choose I have a username and type it — there is no password to remember.',
+      'First time? Choose Create profile. Coming back? Choose I have a username and type it. There is no password to remember.',
       'From your portal, open any session card to jump straight in, or open Notes to see the crew board.'
     ],
     steps:[
       'Create your profile once: enter the class login code, pick your name and username, then choose your look and theme.',
-      'Sign in anywhere by typing just your username — the same profile works in Cueola, Planda Bear, and the prompter tools.',
+      'Sign in anywhere by typing just your username. The same profile works in Cueola, Planda Bear, and the prompter tools.',
       'Read your portal: each session card shows your position for that show, plus badges for open to-dos and unseen notes.',
       'Clear your open items: a to-do or checklist item assigned to you lands on your portal until you mark it done.',
-      'If a session asks for a class key at the door, that is the same class login code — sessions can require it before entry.'
+      'If a session asks for a class key at the door, that is the same class login code. Sessions can require it before entry.'
     ],
     callouts:[
-      ['No passwords','Usernames are managed by your instructors. If yours stops working, ask them — codes rotate between terms.'],
+      ['No passwords','Usernames are managed by your instructors. If yours stops working, ask them. Codes rotate between terms.'],
       ['Everything that needs you','Mentions, assigned checklist items, and to-dos follow your profile, so checking your portal before call time clears surprises.']
     ],
     checks:['I can open my profile from the home screen.','I know my username works without a password.','I know where my open to-dos and unseen notes appear.'],
@@ -2248,7 +2248,7 @@ const LEARNING_LESSONS = [
       'Choose Timed when the row has a known duration. Choose Flex when it can breathe.',
       'Click any cue cell to add Video, Audio, Playback, GFX, Lighting, or Script instructions.',
       'Use Edit when you need to reorder rows, clean labels, or remove old beats.',
-      'Running a series? On the instructor dashboard, open the finished session and press Start Next Episode — the new session carries the rundown and paperwork forward and names itself, so Ep 12 becomes Ep 13.'
+      'Running a series? On the instructor dashboard, open the finished session and press Start Next Episode. The new session carries the rundown and paperwork forward and names itself, so Ep 12 becomes Ep 13.'
     ],
     callouts:[
       ['Rows are beats','Think in production moments, not spreadsheet lines. One row should tell the room what happens next.'],
@@ -2271,11 +2271,11 @@ const LEARNING_LESSONS = [
     ],
     steps:[
       'Press Go Live after your rows and script cues are ready.',
-      'Review the pre-live checks — including Playout first GO, which proves the first media cue is armed and ready.',
+      'Review the pre-live checks, including Playout first GO, which proves the first media cue is armed and ready.',
       'Use Prev and Next, or click a row, to move the show one row at a time.',
-      'Advancing onto a row with linked media — the GO button or the arrow keys — runs the automatic call: READY, TRACK, ROLL, then TAKE. Press S to abort before it fires. The G key skips the call and fires the readied cue immediately. Prefer to pull the trigger yourself? Turn on Manual TAKE: advancing arms the clip, TAKE fires it.',
-      'Paste an audience question into the question lane — Enter pushes it to the talent as a QUESTION card, Escape clears it.',
-      'If a link word turns red, the System status rail appears beside the rundown with a repair button for each subsystem — Recover Flowmingo, Recover Playback, Recover Script Operator, or Retry cloud sync. A dimmed word just means that surface is closed; reopen it from the live bar.'
+      'Advancing onto a row with linked media (the GO button or the arrow keys) runs the automatic call: READY, TRACK, ROLL, then TAKE. Press S to abort before it fires. The G key skips the call and fires the readied cue immediately. Prefer to pull the trigger yourself? Turn on Manual TAKE: advancing arms the clip, TAKE fires it.',
+      'Paste an audience question into the question lane. Enter pushes it to the talent as a QUESTION card, Escape clears it.',
+      'If a link word turns red, the System status rail appears beside the rundown with a repair button for each subsystem: Recover Flowmingo, Recover Playback, Recover Script Operator, or Retry cloud sync. A dimmed word just means that surface is closed; reopen it from the live bar.'
     ],
     callouts:[
       ['Who is calling','The badge names the wheel: CALLER · You when it is yours, or CALLER with the calling instructor’s name. Pick someone on the follow chips and it reads FOLLOWING; VIEWER means no caller is present. If another operator window takes the prompter, this one says so and follows.'],
@@ -2289,26 +2289,26 @@ const LEARNING_LESSONS = [
     area:'Planda Bear',
     title:'Prep The Show Package',
     time:'7 min',
-    intro:'Planda Bear keeps the production paperwork and the crew conversation in the same workspace as the rundown — and with a profile, everything that needs you follows you.',
+    intro:'Planda Bear keeps the production paperwork and the crew conversation in the same workspace as the rundown. And with a profile, everything that needs you follows you.',
     navigation:[
-      'Enter with your profile: tap the profile button on the front page, sign in with your username (no password — your class login code created it), and open a session from your list.',
+      'Enter with your profile: tap the profile button on the front page, sign in with your username (no password: your class login code created it), and open a session from your list.',
       'Open Planda Bear from the home screen card or the topbar button; the notes button on the front page goes straight to the Production Notes board.',
       'Move through Call Sheet, Schedule, Safety Plan, patch sheets, comments, and export from the paperwork hub.'
     ],
     steps:[
-      'First visit? Create your profile with the login code your instructor gave the class — pick a username, look, and theme. After that, entering any app is just your username.',
+      'First visit? Create your profile with the login code your instructor gave the class: pick a username, look, and theme. After that, entering any app is just your username.',
       'Start with the Call Sheet: production name, date, call time, location, contacts, access, crew, and talent.',
       'Fill the Production Schedule, Safety Plan, and the patch sheets before the room gets busy.',
       'Open Production Notes: post what changed, tag the department, and reply in threads. @-mention someone and they get notified; their position chip shows beside their name.',
-      'Post a To-Do with an assignee, or add a checklist to one note and assign each item — assigned items land on that person’s profile portal, and instructors can open "Open items" to see who owes what.',
-      'Pinned notes show instructors who has not read them yet — "Seen by" on every note tracks reads across devices.',
-      'Working in groups? Pick your group when the door asks — each group keeps its own paperwork, and exports follow the group picker. Instructors review any group from the Reviewing menu; you can Switch group until the instructor locks groups.',
-      'Only some sheets showing? That is the session’s paperwork setup — instructors choose it on the dashboard, where Intro course keeps the starter sheets and Full production shows everything.',
+      'Post a To-Do with an assignee, or add a checklist to one note and assign each item. Assigned items land on that person’s profile portal, and instructors can open "Open items" to see who owes what.',
+      'Pinned notes show instructors who has not read them yet. "Seen by" on every note tracks reads across devices.',
+      'Working in groups? Pick your group when the door asks. Each group keeps its own paperwork, and exports follow the group picker. Instructors review any group from the Reviewing menu; you can Switch group until the instructor locks groups.',
+      'Only some sheets showing? That is the session’s paperwork setup. Instructors choose it on the dashboard, where Intro course keeps the starter sheets and Full production shows everything.',
       'Preview or export the PDF package when the paperwork is ready to share.'
     ],
     callouts:[
-      ['Profiles','One profile per person, created with a class login code — no passwords. Your portal lists your sessions, your position, open to-dos, and unseen notes.'],
-      ['Notes that assign work','Department tags, threaded replies, likes, @mentions, per-item checklist owners, and read receipts — the board is the crew’s single source of truth.'],
+      ['Profiles','One profile per person, created with a class login code. No passwords. Your portal lists your sessions, your position, open to-dos, and unseen notes.'],
+      ['Notes that assign work','Department tags, threaded replies, likes, @mentions, per-item checklist owners, and read receipts. The board is the crew’s single source of truth.'],
       ['One package','Export PDF Package gathers the paperwork, production notes, and rendered rundown into one shareable file.']
     ],
     checks:['I can enter with my username.','I can post a note with a tagged department and an assigned checklist item.','I know where my open to-dos show up.'],
@@ -2369,25 +2369,25 @@ const LEARNING_LESSONS = [
     area:'Outrangutan',
     title:'Cue And Play Media',
     time:'6 min',
-    intro:'Outrangutan is the playback deck: video and sound cues in a list, an SFX pad board, and an output window for the program display. It runs local-first — media lives on this machine, so dead venue Wi-Fi cannot stop playback.',
+    intro:'Outrangutan is the playback deck: video and sound cues in a list, an SFX pad board, and an output window for the program display. It runs local-first: media lives on this machine, so dead venue Wi-Fi cannot stop playback.',
     navigation:[
-      'Open Outrangutan from the home screen card — Session mode ties it to the rundown’s code, Standalone runs it alone.',
+      'Open Outrangutan from the home screen card. Session mode ties it to the rundown’s code, Standalone runs it alone.',
       'Playback tab is the cue list and transport; SFX Board is the pad grid; the gear opens outputs and settings.',
       'From the Cueola live screen you can drive it without switching: G / P / S and the pads keep working.'
     ],
     steps:[
-      'Drop video, audio, or stills into the cue list — each file becomes a cue. Trim with the clip editor; audio shows its waveform so you can see where the hit lands.',
+      'Drop video, audio, or stills into the cue list. Each file becomes a cue. Trim with the clip editor; audio shows its waveform so you can see where the hit lands.',
       'Set each cue’s Continue mode: Manual waits for GO, Continue rolls into the next cue, Follow starts it alongside.',
-      'Build the SFX board: drop sounds on pads, name them, give them hotkeys. Trim a pad in its editor — the waveform shows there too.',
+      'Build the SFX board: drop sounds on pads, name them, give them hotkeys. Trim a pad in its editor. The waveform shows there too.',
       'Open the output window onto the program display and use Identify to confirm the screen. If an output ever freezes, Cueola’s watchdog flags it and re-syncs it when it comes back.',
-      'Link rundown rows to cues and pads in Cueola’s cue editor, with auto-fire when the row advances — the printed rundown shows those links in its Outrangutan column.',
-      'Hook up a control surface: Stream Deck over WebHID, or any MIDI pad/fader box — arm “+ Learn a control”, touch the control, pick its action. A fader mapped to Master level rides the master gain.',
-      'Save the show as an .ogshow (Cmd+S saves in place) and print the show pack — cue sheet plus pad map — before doors.'
+      'Link rundown rows to cues and pads in Cueola’s cue editor, with auto-fire when the row advances. The printed rundown shows those links in its Outrangutan column.',
+      'Hook up a control surface: Stream Deck over WebHID, or any MIDI pad/fader box. Arm “+ Learn a control”, touch the control, pick its action. A fader mapped to Master level rides the master gain.',
+      'Save the show as an .ogshow (Cmd+S saves in place) and print the show pack (cue sheet plus pad map) before doors.'
     ],
     callouts:[
       ['PANIC','Esc on the Outrangutan screen (Shift+Esc from Cueola live) stops everything, instantly. It is always safe to hit.'],
-      ['.ogshow files','One file carries the whole show — cues, pads, and the media itself — so it opens on any machine. Old .ogshow files still open.'],
-      ['No hardware handy?','Outrangutan.midiInject(0x90, 60, 127) in the console fires a mapped control — rehearse the mapping before the box arrives.']
+      ['.ogshow files','One file carries the whole show (cues, pads, and the media itself), so it opens on any machine. Old .ogshow files still open.'],
+      ['No hardware handy?','Outrangutan.midiInject(0x90, 60, 127) in the console fires a mapped control. Rehearse the mapping before the box arrives.']
     ],
     checks:['I can add a cue and trim it.','I can fire a pad from its hotkey.','I know what PANIC does and where the output window lives.'],
     actions:[['Open Outrangutan','outrangutan']]
@@ -2409,11 +2409,11 @@ const LEARNING_LESSONS = [
       'If the remote says sent but not applied, reload the Talent Display and enter the same code again.',
       'If the wrong row is live, use Prev or Next until Now matches the room.',
       'If paperwork looks stale, reopen Planda Bear and check the activity and comments area.',
-      'If the rundown itself is damaged, open Settings, then File, then History. Session History lists snapshots from this device — and on an instructor’s signed-in machine, the cloud trail too. Restoring one replaces the live rundown for everyone in the session, and a recovery copy of the current state is saved first.'
+      'If the rundown itself is damaged, open Settings, then File, then History. Session History lists snapshots from this device, and on an instructor’s signed-in machine, the cloud trail too. Restoring one replaces the live rundown for everyone in the session, and a recovery copy of the current state is saved first.'
     ],
     callouts:[
       ['Fast rehearsal check','Before doors open: open Talent Display, open Remote Op, press Play, Reset, Mirror, then Reset again.'],
-      ['Snapshot cadence','Cueola saves a snapshot when you join, every two minutes while the session changes, when you go live, and when you leave — admins also get a cloud copy that survives the machine.'],
+      ['Snapshot cadence','Cueola saves a snapshot when you join, every two minutes while the session changes, when you go live, and when you leave. Admins also get a cloud copy that survives the machine.'],
       ['When in doubt','A clean reload plus the same session code should reconnect the show, paperwork, and prompter surfaces.']
     ],
     checks:['I know the first three things to check: code, script, talent connection.','I know how to recover Flowmingo without touching the live talent window.','I know where Session History lives and what restore replaces.'],
@@ -3058,7 +3058,7 @@ function renderAdminBody() {
   if (session.code || session.isExpert) {
     html += `<div class="admin-section" style="margin-top:16px">
       <div class="admin-section-label">Show Clock</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Reset the elapsed clock to 0:00 and jump back to the first row — take the show from the top.</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
       <button class="admin-act-btn danger" onclick="restartShowClock()">↺ Restart Show Clock</button>
     </div>`;
   }
@@ -3100,13 +3100,13 @@ function renderAdminBody() {
         </div>`;
       }).join('') + `</div>`
       : `<div style="font-size:11px;color:var(--text3)">No one is connected right now.</div>`}
-      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-top:8px">Remove disconnects that person's device from this code. They can rejoin with the same code — move the session to a new code to keep them out.</div>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-top:8px">Remove disconnects that person's device from this code. They can rejoin with the same code. Move the session to a new code to keep them out.</div>
     </div>`;
 
     // ── Session rescue: move the whole show to a fresh code ──
     html += `<div class="admin-section" style="margin-top:16px">
       <div class="admin-section-label">Session Code</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Current code: <b style="color:var(--text);font-family:var(--mono)">${esc(session.code)}</b>. If there's a problem with this session — a leaked code, stale data, or someone who keeps rejoining — move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Current code: <b style="color:var(--text);font-family:var(--mono)">${esc(session.code)}</b>. If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
       <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move Session to a New Code</button>
     </div>`;
   }
@@ -3871,7 +3871,7 @@ function shareSessionInvite(name='') {
 // session to a fresh code is the hard lock-out.
 async function removePersonFromSession(name) {
   if (!session.code || !window._firebaseReady) { toast('A cloud session is required to remove people.'); return; }
-  if (!dangerConfirm(`Remove "${name}" from this session?`, 'Their device is disconnected from this session code. They can rejoin with the same code — use "Move Session to a New Code" to keep them out for good.')) return;
+  if (!dangerConfirm(`Remove "${name}" from this session?`, 'Their device is disconnected from this session code. They can rejoin with the same code. Use "Move Session to a New Code" to keep them out for good.')) return;
   try {
     const ref = window._doc(window._db, 'sessions', session.code);
     const updates = {};
@@ -3888,7 +3888,7 @@ async function removePersonFromSession(name) {
     toast(`${name} removed from ${session.code}.`);
     renderAdminBody();
   } catch {
-    toast('Could not remove — check the connection and try again.');
+    toast('Could not remove. Check the connection and try again.');
   }
 }
 
@@ -3896,7 +3896,7 @@ async function removePersonFromSession(name) {
 // the old doc. Every connected client sees `movedTo` and follows automatically.
 async function moveSessionToNewCode() {
   if (!session.code || !window._firebaseReady || session.isDemo || session.isExpert) { toast('A cloud session is required to move codes.'); return; }
-  if (!dangerConfirm('Move this session to a new code?', 'Cueola copies the whole show — rundown, Planda Bear paperwork, and notes — to a fresh session code. Everyone connected right now follows automatically. The old code stops updating, and anyone joining later needs the new code.')) return;
+  if (!dangerConfirm('Move this session to a new code?', 'Cueola copies the whole show (rundown, Planda Bear paperwork, and notes) to a fresh session code. Everyone connected right now follows automatically. The old code stops updating, and anyone joining later needs the new code.')) return;
   const oldCode = session.code;
   try {
     let newCode = '';
@@ -3906,7 +3906,7 @@ async function moveSessionToNewCode() {
       const taken = await window._getDoc(window._doc(window._db, 'sessions', candidate));
       if (!taken.exists()) newCode = candidate;
     }
-    if (!newCode) { toast('Could not find a free code — try again.'); return; }
+    if (!newCode) { toast('Could not find a free code. Try again.'); return; }
 
     const oldRef = window._doc(window._db, 'sessions', oldCode);
     const snap = await window._getDoc(oldRef);
@@ -3930,7 +3930,7 @@ async function moveSessionToNewCode() {
     hideOverlay('adminPanel');
     followSessionMove(newCode, true);
   } catch {
-    toast('Could not move the session — check the connection and try again.');
+    toast('Could not move the session. Check the connection and try again.');
   }
 }
 
@@ -3946,7 +3946,7 @@ function followSessionMove(newCode, isMover = false) {
   if (wasLive) setTimeout(goLive, 300);
   if (isMover) {
     copySessionCode();
-    toast(`Session moved — new code ${session.code} copied. Share it with anyone joining later.`);
+    toast(`Session moved. New code ${session.code} copied. Share it with anyone joining later.`);
   } else {
     toast(`This session moved to a new code: ${session.code}`);
   }
@@ -4478,7 +4478,7 @@ async function startBlankSlate() {
 
 function loadDemo() {
   session = { code:'DEMO1', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
-  show = { name:'Campus News — Demo Show', start:'19:00' };
+  show = { name:'Campus News: Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
   freeTextMode = false;
   enterRundown();
@@ -5204,19 +5204,19 @@ function setSyncReconnecting(on, restoredDetail='Cloud sync restored') {
   const chip = document.getElementById('ls-stat-sync');
   if (chip) chip.hidden = !on;
   if (on) {
-    setCloudSyncState('saving', 'Cloud sync reconnecting — showing last known state…');
-    liveLinkState.noteDegraded('cloud', 'Reconnecting — showing the last confirmed state');
+    setCloudSyncState('saving', 'Cloud sync reconnecting. Showing last known state…');
+    liveLinkState.noteDegraded('cloud', 'Reconnecting. Showing the last confirmed state');
   }
   if (on !== _syncReconnState) {   // P7: log only the transitions, not every snapshot
     _syncReconnState = on;
-    logShow('sync', on ? 'Cloud sync reconnecting — showing last known state' : restoredDetail);
+    logShow('sync', on ? 'Cloud sync reconnecting. Showing last known state' : restoredDetail);
   }
   renderLiveStatusRail();
 }
 window.addEventListener('offline', () => {
   if (!session.code || session.isDemo || session.isExpert) return;
   setSyncReconnecting(true);
-  liveLinkState.noteLost('cloud', 'Network offline — saved state is retained locally');
+  liveLinkState.noteLost('cloud', 'Network offline. Saved state is retained locally');
 });
 window.addEventListener('online', () => { /* chip and link clear on the next server snapshot */ });
 
@@ -5365,7 +5365,7 @@ function renderPresence(map) {
     active.map(p=>{
       const col=p.role==='instructor'?'var(--accent)':'var(--green)';
       const pos = pbPositionFor(p.name);
-      return `<div class="p-tip-row" title="${esc(p.name)}${pos?` — ${esc(pos)}`:''}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span>${pos?`<span class="p-tip-pos">${esc(pos)}</span>`:''}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+      return `<div class="p-tip-row" title="${esc(p.name)}${pos?` · ${esc(pos)}`:''}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span>${pos?`<span class="p-tip-pos">${esc(pos)}</span>`:''}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
   refreshAdminBodyForSessionPeople();
 }
@@ -5410,7 +5410,7 @@ async function openPersonInfo(name) {
     <div class="pi-card">${assignment && (assignment.position || assignment.paperwork.length)
       ? `${assignment.position ? `Position: <b>${esc(assignment.position)}</b>` : 'No position picked yet'}
          ${assignment.paperwork.length ? `<div class="pi-chips">${assignment.paperwork.map(p => `<span class="admin-src-chip">${esc(p)}</span>`).join('')}</div>` : ''}`
-      : 'No assignment yet — set one in Admin → Role and Planda Bear Assignments.'}</div>`;
+      : 'No assignment yet. Set one in Admin → Role and Planda Bear Assignments.'}</div>`;
 
   body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
   actions.innerHTML = `
@@ -5559,7 +5559,7 @@ function liveCommandDispatchAllowed(options={}) {
       status.textContent = 'Live commands are paused while Cueola returns to the rundown.';
     } else {
       // D11.5: no silent refusals — a swallowed GO mid-show must say why.
-      toast('Live commands are paused — the show screen is still settling.');
+      toast('Live commands are paused. The show screen is still settling.');
     }
   }
   return allowed;
@@ -5651,9 +5651,9 @@ function toggleKeymapRef() {
     });
   }
   ov.innerHTML = window.CueolaKeymap.referenceHTML({
-    title: scope === 'live' ? 'Keyboard shortcuts — live screen' : 'Keyboard shortcuts — rundown builder',
+    title: scope === 'live' ? 'Keyboard shortcuts: live screen' : 'Keyboard shortcuts: rundown builder',
     sections,
-    foot: 'Typing in any field suppresses shortcuts. Override a binding via <code>localStorage.cueola_keymap</code>, e.g. <code>{"playout.go":["G"]}</code> — ids match the registry.',
+    foot: 'Typing in any field suppresses shortcuts. Override a binding via <code>localStorage.cueola_keymap</code>, e.g. <code>{"playout.go":["G"]}</code> (ids match the registry).',
   });
   ov.hidden = false;
 }
@@ -5797,17 +5797,17 @@ const INFO_POPS = {
   'export-package': {
     title: 'What’s in the export',
     lesson: 'plandabear', section: 'steps',
-    body: 'The PDF package bundles a call sheet for every included group plus the rundown — the checkboxes pick sheets, and the option below adds Production Notes. A preview that hasn’t been saved is stamped “UNVERIFIED PREVIEW”; a saved export carries the session and time it came from, so a printed sheet can always be traced.',
+    body: 'The PDF package bundles a call sheet for every included group plus the rundown. The checkboxes pick sheets, and the option below adds Production Notes. A preview that hasn’t been saved is stamped “UNVERIFIED PREVIEW”; a saved export carries the session and time it came from, so a printed sheet can always be traced.',
   },
   'cueola-file': {
     title: 'The .cueola show file',
     lesson: 'cueola-build', section: 'know',
-    body: 'A .cueola file holds this show’s rundown — rows, timing, custom sources, and the show name. It opens in Cueola on any machine, and after the first save Cmd+S saves back into the same file. Planda Bear paperwork and Outrangutan media are not inside it.',
+    body: 'A .cueola file holds this show’s rundown: rows, timing, custom sources, and the show name. It opens in Cueola on any machine, and after the first save Cmd+S saves back into the same file. Planda Bear paperwork and Outrangutan media are not inside it.',
   },
   'ogshow-file': {
     title: 'The .ogshow show file',
     lesson: 'outrangutan', section: 'know',
-    body: 'An .ogshow file packs the whole playback show — cues, SFX pads, banks, output layouts, and the media itself — into one file (up to 4 GB). It opens in Outrangutan on any machine; older JSON show files still open too.',
+    body: 'An .ogshow file packs the whole playback show (cues, SFX pads, banks, output layouts, and the media itself) into one file (up to 4 GB). It opens in Outrangutan on any machine; older JSON show files still open too.',
   },
   'session-history': {
     title: 'What restore does',
@@ -5817,7 +5817,7 @@ const INFO_POPS = {
   'join-session': {
     title: 'Joining a session',
     lesson: 'start', section: 'steps',
-    body: 'The session code is the production you’re joining — everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
+    body: 'The session code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
   },
 };
 let _infoPopOpenId = '';
@@ -6238,7 +6238,7 @@ function openAddRow() {
   const suggestionGrid = document.querySelector('#ar-step-1 .chip-grid');
   if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
   const stepLabel = document.querySelector('#ar-step-1 .ar-step-label');
-  if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row — Step 1 of 2';
+  if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row: Step 1 of 2';
   const nextBtn = document.getElementById('ar-next-1');
   if (nextBtn) nextBtn.innerHTML = `<span>${freeTextMode ? 'Add Row' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
   document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
@@ -6500,7 +6500,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 — Wide" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 · Wide" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -6552,7 +6552,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic — Host" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic · Host" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -6575,7 +6575,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic — Host" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic · Host" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ PLAYBACK ════════════════════════════════════════
@@ -6607,14 +6607,14 @@ function buildCueConfigFields(type, d) {
           </div>
         </div>
         <div class="field" style="margin-top:10px">
-          <label class="field-lbl">SMPTE Timecode <span style="color:var(--text3);font-weight:400">— HH:MM:SS:FF</span></label>
+          <label class="field-lbl">SMPTE Timecode <span style="color:var(--text3);font-weight:400">(HH:MM:SS:FF)</span></label>
           <input class="field-in" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" style="font-family:var(--mono)" oninput="ccPOnBuild()">
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 — 0:45 TRT" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 · 0:45 TRT" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -6635,7 +6635,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK — Take CAM 1" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK · Take CAM 1" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ GFX ═════════════════════════════════════════════
@@ -6671,13 +6671,13 @@ function buildCueConfigFields(type, d) {
         </div>
       </div>
       <div class="field">
-        <label class="field-lbl">Content <span style="color:var(--text3);font-weight:400">— what it reads / shows</span></label>
+        <label class="field-lbl">Content <span style="color:var(--text3);font-weight:400">(what it reads / shows)</span></label>
         <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, sponsor bug, intro card" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On — Lower 3rd GFX" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On · Lower 3rd GFX" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -6698,7 +6698,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It — Lower 3rd" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It · Lower 3rd" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ LIGHTING ════════════════════════════════════════
@@ -6744,16 +6744,16 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-section" id="lOn-gobo-row" style="display:none">
         <div class="cc-section-lbl">Gobo</div>
-        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 — Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
+        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 · Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
       </div>
       <div class="field">
-        <label class="field-lbl">Lighting notes <span style="color:var(--text3);font-weight:400">— cue numbers, focus, wash details</span></label>
-        <textarea class="field-in" id="cc-l-notes-detail" rows="2" style="font-size:12px;line-height:1.5" placeholder="e.g. Cue 14.5 — Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
+        <label class="field-lbl">Lighting notes <span style="color:var(--text3);font-weight:400">(cue numbers, focus, wash details)</span></label>
+        <textarea class="field-in" id="cc-l-notes-detail" rows="2" style="font-size:12px;line-height:1.5" placeholder="e.g. Cue 14.5: Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key — Cue On" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key · Cue On" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = `
@@ -6784,7 +6784,7 @@ function buildCueConfigFields(type, d) {
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key — Fade Out" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key · Fade Out" maxlength="120" autocomplete="off">
       </div>`;
 
   // ══ SCRIPT ══════════════════════════════════════════
@@ -6817,7 +6817,7 @@ function buildCueConfigFields(type, d) {
       ${step(2,'What will you do with it?')}
       <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
         <div class="field">
-          <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">— feeds Flowmingo</span></label>
+          <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">(feeds Flowmingo)</span></label>
           <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
           <div class="marker-chip-row">
             <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
@@ -6833,14 +6833,14 @@ function buildCueConfigFields(type, d) {
       </div>
       <div id="sOn-dialogue-panel" style="${isDialogue?'':'display:none'}">
         <div class="field">
-          <label class="field-lbl">Dialogue note <span style="color:var(--text3);font-weight:400">— brief description only</span></label>
-          <input class="field-in" id="cc-s-dialogue" value="${esc(d.dialogueNote||'')}" placeholder="e.g. Host and guest discuss the segment topic — unscripted" maxlength="160" autocomplete="off">
+          <label class="field-lbl">Dialogue note <span style="color:var(--text3);font-weight:400">(brief description only)</span></label>
+          <input class="field-in" id="cc-s-dialogue" value="${esc(d.dialogueNote||'')}" placeholder="e.g. Host and guest discuss the segment topic (unscripted)" maxlength="160" autocomplete="off">
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
         <label class="field-lbl cc-result-lbl">▶ SCRIPT CUE</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host — Begin" maxlength="120" autocomplete="off">
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host · Begin" maxlength="120" autocomplete="off">
       </div>`;
 
     offPanel = '';
@@ -6859,7 +6859,7 @@ function buildCueConfigFields(type, d) {
     ${isScript ? '' : `<div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>`}
     <div class="cc-divider"></div>
     <div class="field">
-      <label class="field-lbl">Notes <span style="color:var(--text3);font-weight:400">— for your crew</span></label>
+      <label class="field-lbl">Notes <span style="color:var(--text3);font-weight:400">(for your crew)</span></label>
       <textarea class="field-in" id="cc-notes" rows="2" placeholder="Add context, reminders, or crew instructions…" style="font-size:13px;line-height:1.6">${esc(notes)}</textarea>
     </div>`;
 }
@@ -6887,7 +6887,7 @@ function _ccVOnBuild() {
   const src  = document.getElementById('cc-v-custom')?.style.display!=='none'
     ? (document.getElementById('cc-v-custom')?.value||_vOnSrc) : _vOnSrc;
   const act  = _vOnAct || 'Set';
-  const shot = _vOnShot ? ` — ${_vOnShot}` : '';
+  const shot = _vOnShot ? ` · ${_vOnShot}` : '';
   const el   = document.getElementById('cc-on-text');
   if (el) el.value = `${act} ${src}${shot}`;
 }
@@ -6919,7 +6919,7 @@ function _ccAOnBuild() {
   const cue = (cueCustomEl?.style.display!=='none' && cueCustomEl?.value) ? cueCustomEl.value : _aOnCueType;
   const el  = document.getElementById('cc-on-text'); if(!el) return;
   const parts=[cue,src].filter(Boolean);
-  el.value = parts.join(' — ');
+  el.value = parts.join(' · ');
 }
 
 // ══ AUDIO Off helpers ═══════════════════════════════
@@ -6934,7 +6934,7 @@ function _ccAOffBuild() {
     ? (document.getElementById('cc-a-off-custom')?.value||_aOffSrc) : _aOffSrc;
   const el=document.getElementById('cc-off-text'); if(!el) return;
   const parts=[_aOffCall,src].filter(Boolean);
-  el.value = parts.join(' — ');
+  el.value = parts.join(' · ');
 }
 
 // ══ PLAYBACK On helpers ═════════════════════════════
@@ -6949,7 +6949,7 @@ function ccPOnBuild(){
   const min=parseInt(document.getElementById('cc-play-min')?.value)||0;
   const sec=parseInt(document.getElementById('cc-play-sec')?.value)||0;
   const smpte=document.getElementById('cc-play-smpte')?.value?.trim()||'';
-  const trt=(min||sec)?` — ${min}:${sec.toString().padStart(2,'0')} TRT`:'';
+  const trt=(min||sec)?` · ${min}:${sec.toString().padStart(2,'0')} TRT`:'';
   const smpteStr=smpte?` [${smpte}]`:'';
   const act=_pOnAction||'Roll';
   const el=document.getElementById('cc-on-text'); if(!el) return;
@@ -6963,7 +6963,7 @@ function ccPOffReturn(v) { _pOffRet=v; ccSelChip('pOff-ret',v); _ccPOffBuild(); 
 function _ccPOffBuild(){
   const el=document.getElementById('cc-off-text'); if(!el) return;
   const parts=[_pOffHow,_pOffRet?`Take ${_pOffRet}`:''].filter(Boolean);
-  el.value=parts.join(' — ')||_pOffHow;
+  el.value=parts.join(' · ')||_pOffHow;
 }
 
 // ══ GFX On helpers ══════════════════════════════════
@@ -6978,7 +6978,7 @@ function ccGOnBuild(){
   const trans=_gOnTrans||'Cut';
   const el=document.getElementById('cc-on-text'); if(!el) return;
   const parts=[trans,type||(content?'GFX':''),content?`(${content})`:''].filter(Boolean);
-  el.value=parts.join(' — ');
+  el.value=parts.join(' · ');
 }
 
 // ══ GFX Off helpers ═════════════════════════════════
@@ -6992,7 +6992,7 @@ function _ccGOffBuild(){
   const el=document.getElementById('cc-off-text'); if(!el) return;
   const label=(_gOffType&&_gOffType!=='This GFX')?_gOffType:'';
   const parts=[_gOffHow,label].filter(Boolean);
-  el.value=parts.join(' — ')||_gOffHow;
+  el.value=parts.join(' · ')||_gOffHow;
 }
 
 // ══ LIGHTING On helpers ═════════════════════════════
@@ -7056,7 +7056,7 @@ function _ccLOnBuild(){
     detail=gob?`Gobo: ${gob}`:'Gobo';
   }
   const parts=[fix,detail||act].filter(Boolean);
-  el.value=parts.join(' — ');
+  el.value=parts.join(' · ');
 }
 
 // ══ LIGHTING Off helpers ════════════════════════════
@@ -7090,7 +7090,7 @@ function _ccLOffBuild(){
     el.value=val?`Go to Cue ${val}`:'Go to Cue'; return;
   }
   const parts=[_lOffFix,_lOffHow].filter(Boolean);
-  el.value=parts.join(' — ')||_lOffHow;
+  el.value=parts.join(' · ')||_lOffHow;
 }
 
 // ══ SCRIPT tag helpers ══════════════════════════════
@@ -7118,7 +7118,7 @@ function _ccSOnBuild(){
   const src=document.getElementById('cc-s-custom')?.style.display!=='none'
     ? (document.getElementById('cc-s-custom')?.value||_sOnSrc) : _sOnSrc;
   const el=document.getElementById('cc-on-text'); if(!el) return;
-  el.value=src?`${src} — Begin`:'Begin';
+  el.value=src?`${src} · Begin`:'Begin';
 }
 
 
@@ -7363,7 +7363,7 @@ function outrangutanFmtDur(sec) {
 function outrangutanCueOptions(cur) {
   const map = outrangutanState.cues || {};
   const ids = Object.keys(map).sort((a, b) => (map[a].num || 0) - (map[b].num || 0));
-  let html = `<option value="">— none —</option>`;
+  let html = `<option value="">None</option>`;
   for (const id of ids) html += `<option value="${esc(id)}" ${cur === id ? 'selected' : ''}>#${esc(String(map[id].num ?? ''))} ${esc(map[id].name || 'Cue')}</option>`;
   if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked cue (offline)</option>`;
   return html;
@@ -7373,7 +7373,7 @@ function outrangutanCueOptions(cur) {
 function outrangutanPadOptions(cur) {
   const map = outrangutanState.pads || {};
   const ids = Object.keys(map).sort((a, b) => (map[a].bank + map[a].name).localeCompare(map[b].bank + map[b].name));
-  let html = `<option value="">— none —</option>`;
+  let html = `<option value="">None</option>`;
   ids.forEach(id => {
     const p = map[id];
     html += `<option value="${esc(id)}"${cur === id ? ' selected' : ''}>${esc((p.emoji ? p.emoji + ' ' : '') + p.name + (p.bank ? ' · ' + p.bank : ''))}</option>`;
@@ -7409,7 +7409,7 @@ function outrangutanCueFields(type, d) {
       <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
   return `
     <div class="field cc-trigger cc-outrangutan">
-      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">— optional</span></div>
+      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">(optional)</span></div>
       ${cuePart}
       ${sfxPart}
       <div class="cc-trigger-actions">
@@ -7456,7 +7456,7 @@ function outrangutanEverConnected() {
 function outrangutanSendToast(kind) {
   toast(outrangutanEverConnected()
     ? `Outrangutan: ${kind} sent.`
-    : `${kind} queued — open Outrangutan on the playout machine to receive it.`);
+    : `${kind} queued. Open Outrangutan on the playout machine to receive it.`);
 }
 
 function fireOutrangutanFromModal() {
@@ -7544,7 +7544,7 @@ function liveCallManualArm() {
 }
 function setLiveCallManualArm(on) {
   try { localStorage.setItem('cueola_rtrt_manual', on ? '1' : '0'); } catch {}
-  toast(on ? 'Manual TAKE armed — GO readies the clip, TAKE fires it.' : 'Automatic call — GO runs READY · TRACK · ROLL, then TAKE.');
+  toast(on ? 'Manual TAKE armed: GO readies the clip, TAKE fires it.' : 'Automatic call: GO runs READY · TRACK · ROLL, then TAKE.');
   renderLivePrompterControls();
 }
 
@@ -7629,7 +7629,7 @@ function abortPlayoutCall(source='abort') {
   const call = _rtrtCall;
   _rtrtCall = null;
   logShow('media', `Playback call ABORTED · row ${call.rowIdx + 1} (${source})`);
-  toast('Playback call aborted — nothing fired.');
+  toast('Playback call aborted. Nothing fired.');
   publishLiveCall('abort', call);
   renderLiveCallBanner('abort', call);
   return true;
@@ -7745,7 +7745,7 @@ async function loadScriptFile(input, targetId) {
         if (i<pdf.numPages) text+='\n\n';
       }
       if (target) target.value = text.trim();
-    } catch { toast('PDF read failed — try a .txt file'); }
+    } catch { toast('PDF read failed. Try a .txt file'); }
     return;
   }
   const reader = new FileReader();
@@ -7854,7 +7854,7 @@ function preLiveCheck() {
   const cloudLabel = isDemo
     ? 'Demo mode · same-browser sync only'
     : !session.code
-      ? 'No session code — cross-device sync off'
+      ? 'No session code: cross-device sync off'
       : cloudReady
         ? `Syncing · ${session.code}`
         : 'Cloud not connected';
@@ -7900,8 +7900,8 @@ function renderPreflightRows() {
   if (goBtn) goBtn.textContent = _preflightReviewOnly ? 'Done' : (fails || warns ? 'Continue Anyway' : 'Go Live');
   const note = document.getElementById('goLiveCheckNote');
   if (note) note.textContent = pending ? 'Running preflight checks…'
-    : fails ? fails + ' check' + (fails === 1 ? '' : 's') + ' failed — jump to the item to fix it before going live.'
-    : warns ? 'A couple of things aren\'t set yet — review before going live.'
+    : fails ? fails + ' check' + (fails === 1 ? '' : 's') + ' failed. Jump to the item to fix it before going live.'
+    : warns ? 'A couple of things aren\'t set yet. Review before going live.'
     : 'Every check passed. You\'re clear to go live.';
   const title = document.getElementById('goLiveCheckTitle');
   if (title) title.textContent = _preflightReviewOnly ? 'Show preflight' : 'Ready to go live?';
@@ -7943,7 +7943,7 @@ function runPreflight(reviewOnly) {
   if (_prompterHasRecentTalent()) {
     const parkedPct = ptProgressPct();
     _preflightRows.push(parkedPct > 2
-      ? { key: 'Prompter position', state: 'warn', detail: `Talent script is parked mid-scroll (${parkedPct}%) — press T (top) or C (cue current row) before doors` }
+      ? { key: 'Prompter position', state: 'warn', detail: `Talent script is parked mid-scroll (${parkedPct}%). Press T (top) or C (cue current row) before doors` }
       : { key: 'Prompter position', state: 'ok', detail: 'Talent script is at the top' });
   }
   const links = collectPlayoutLinks();
@@ -7980,7 +7980,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
     try { armed = await firstGoArming; } catch { armed = null; }
     if (run !== _preflightRun) return;
     if (!armed) {
-      setPreflightRow('Playout first GO', { state:'warn', detail:'Arming failed — fire one GO before air to prove playback' });
+      setPreflightRow('Playout first GO', { state:'warn', detail:'Arming failed. Fire one GO before air to prove playback' });
     } else {
       const bits = [];
       bits.push(armed.audio === 'running' ? 'audio engine running' : 'audio ' + armed.audio);
@@ -8001,12 +8001,12 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
     const bad = [];
     links.cues.forEach(l => {
       const local = cueMap[l.id];
-      if (local && !local.ok) bad.push({ ...l, why: '“' + local.name + '” — ' + local.issue });
+      if (local && !local.ok) bad.push({ ...l, why: '“' + local.name + '”: ' + local.issue });
       else if (!local && !pubCues[l.id]) bad.push({ ...l, why: 'linked playout cue not found' });
     });
     links.pads.forEach(l => {
       const local = padMap[l.id];
-      if (local && !local.ok) bad.push({ ...l, why: 'SFX “' + local.name + '” — ' + local.issue });
+      if (local && !local.ok) bad.push({ ...l, why: 'SFX “' + local.name + '”: ' + local.issue });
       else if (!local && !pubPads[l.id]) bad.push({ ...l, why: 'linked SFX pad not found' });
     });
     if (!bad.length) setPreflightRow('Playout links', { state: 'ok', detail: (links.cues.length + links.pads.length) + ' link' + (links.cues.length + links.pads.length === 1 ? '' : 's') + ' verified' });
@@ -8024,9 +8024,9 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
     const media = deep.cues.filter(c => c.checked);
     const badMedia = media.filter(c => !c.ok);
     if (!badMedia.length) setPreflightRow('Playout media', { state: 'ok', detail: media.length + ' cue' + (media.length === 1 ? '' : 's') + ' present & decodable, dimensions known' });
-    else setPreflightRow('Playout media', { state: 'fail', detail: badMedia.slice(0, 3).map(c => '#' + c.num + ' “' + c.name + '” — ' + c.issue).join(' · ') + (badMedia.length > 3 ? ' · +' + (badMedia.length - 3) + ' more' : '') });
+    else setPreflightRow('Playout media', { state: 'fail', detail: badMedia.slice(0, 3).map(c => '#' + c.num + ' “' + c.name + '”: ' + c.issue).join(' · ') + (badMedia.length > 3 ? ' · +' + (badMedia.length - 3) + ' more' : '') });
   } else if (hasRemote) {
-    setPreflightRow('Playout media', { state: 'warn', detail: 'Outrangutan runs on another machine — run its preflight there for the media deep-check' });
+    setPreflightRow('Playout media', { state: 'warn', detail: 'Outrangutan runs on another machine. Run its preflight there for the media deep-check' });
   } else {
     setPreflightRow('Playout media', { state: 'ok', detail: 'No playout in this show' });
   }
@@ -8035,7 +8035,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   if (hasLocal) {
     const badPads = deep.pads.filter(p => !p.ok);
     const emptyBanks = deep.banks.filter(b => !b.padCount);
-    if (badPads.length) setPreflightRow('SFX banks', { state: 'fail', detail: badPads.slice(0, 3).map(p => '“' + p.name + '” (' + p.bank + ') — ' + p.issue).join(' · ') + (badPads.length > 3 ? ' · +' + (badPads.length - 3) + ' more' : '') });
+    if (badPads.length) setPreflightRow('SFX banks', { state: 'fail', detail: badPads.slice(0, 3).map(p => '“' + p.name + '” (' + p.bank + '): ' + p.issue).join(' · ') + (badPads.length > 3 ? ' · +' + (badPads.length - 3) + ' more' : '') });
     else if (!deep.pads.length) setPreflightRow('SFX banks', { state: 'ok', detail: 'No SFX pads in this show' });
     else setPreflightRow('SFX banks', { state: emptyBanks.length ? 'warn' : 'ok', detail: deep.pads.length + ' pad' + (deep.pads.length === 1 ? '' : 's') + ' load & decode' + (emptyBanks.length ? ' · empty bank: ' + emptyBanks.map(b => '“' + b.name + '”').join(', ') : '') });
   } else if (Object.keys(pubPads).length) {
@@ -8051,10 +8051,10 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
     if (!oh) {
       setPreflightRow('Playout outputs', { state: 'warn', detail: 'Could not read output status' });
     } else if (oh.dead.length) {
-      setPreflightRow('Playout outputs', { state: 'fail', detail: oh.dead.join(', ') + ' not responding — the window may be frozen. Close and reopen it.' });
+      setPreflightRow('Playout outputs', { state: 'fail', detail: oh.dead.join(', ') + ' not responding. The window may be frozen. Close and reopen it.' });
     } else if (oh.open === 0) {
       const showHasVideo = links.cues.length > 0 || hasLocal && deep.cues.length > 0;
-      setPreflightRow('Playout outputs', { state: showHasVideo ? 'warn' : 'ok', detail: showHasVideo ? 'No output window open — open one before doors if this show plays video' : 'No output windows open' });
+      setPreflightRow('Playout outputs', { state: showHasVideo ? 'warn' : 'ok', detail: showHasVideo ? 'No output window open. Open one before doors if this show plays video' : 'No output windows open' });
     } else {
       setPreflightRow('Playout outputs', { state: 'ok', detail: oh.healthy + ' of ' + oh.open + ' output window' + (oh.open === 1 ? '' : 's') + ' responding to the heartbeat' });
     }
@@ -8066,7 +8066,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
     const rtt = await preflightCloudRoundTrip();
     if (run !== _preflightRun) return;
     if (rtt >= 0) setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Write → server ack in ' + rtt + ' ms' });
-    else setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Write failed — check the connection' : 'No server echo within 8 s — sync may be degraded' });
+    else setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Write failed. Check the connection' : 'No server echo within 8 s. Sync may be degraded' });
     renderPreflightRows();
   }
 
@@ -8075,7 +8075,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   if (run !== _preflightRun) return;
   setPreflightRow('Theme & brand assets', themes);
   const { fails, warns } = renderPreflightRows();
-  logShow('preflight', 'Preflight finished — ' + fails + ' fail · ' + warns + ' warn · ' + _preflightRows.filter(r => r.state === 'ok').length + ' ok');
+  logShow('preflight', 'Preflight finished: ' + fails + ' fail · ' + warns + ' warn · ' + _preflightRows.filter(r => r.state === 'ok').length + ' ok');
 }
 
 function preflightCloudRoundTrip() {
@@ -8109,7 +8109,7 @@ async function preflightThemeAssets() {
   try {
     const r = await fetch('assets/Brand/Cueola_Icon.svg', { method: 'HEAD', cache: 'no-store' });
     if (!r.ok) notes.push('brand SVG returned ' + r.status);
-  } catch (e) { svgWarn = 'brand SVG unreachable (offline?) — in-page sprite still renders'; }
+  } catch (e) { svgWarn = 'brand SVG unreachable (offline?). In-page sprite still renders'; }
   if (notes.length) return { state: 'fail', detail: notes.join(' · ') };
   if (svgWarn) return { state: 'warn', detail: svgWarn };
   return { state: 'ok', detail: 'Theme “' + currentTheme + '” tokens live · brand sprite + SVG present' };
@@ -8126,7 +8126,7 @@ function preflightJump(beatId) {
   if (!document.getElementById('rundown')?.classList.contains('on')) return;
   setTimeout(() => {   // let the screen swap paint first (not rAF — headless previews starve it)
     const row = document.querySelector(`#rdBody tr[data-id="${beatId}"]`) || document.querySelector(`tr[data-id="${beatId}"]`);
-    if (!row) { toast('Row not found — it may have been deleted.'); return; }
+    if (!row) { toast('Row not found. It may have been deleted.'); return; }
     row.scrollIntoView({ block: 'center', behavior: 'smooth' });
     row.classList.add('preflight-hit');
     setTimeout(() => row.classList.remove('preflight-hit'), 2600);
@@ -8525,7 +8525,7 @@ function liveStartShowPressed() {
   const firstIdx = liveNextPlayableCueIndex(-1);
   if (!liveClockRunning && (!elapsedSecs || !_clockRanThisLoad) && firstIdx >= 0 && activeIdx > firstIdx && isShowCaller()) {
     const hereEl = document.getElementById('lsStartChoiceRow');
-    if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} — ${beats[activeIdx]?.info || 'Untitled'}`;
+    if (hereEl) hereEl.textContent = `Row ${activeIdx + 1} · ${beats[activeIdx]?.info || 'Untitled'}`;
     const topEl = document.getElementById('lsStartChoiceTopLbl');
     if (topEl) topEl.textContent = `Row ${firstIdx + 1}`;
     const hereLbl = document.getElementById('lsStartChoiceHereLbl');
@@ -8553,7 +8553,7 @@ function lsStartFromTop() {
   updateLiveOverview();
   updateLiveRemain();
   broadcastShowClock();
-  toast(`Show started from the top — Row ${firstIdx + 1}.`);
+  toast(`Show started from the top (Row ${firstIdx + 1}).`);
   return true;
 }
 
@@ -8585,7 +8585,7 @@ function restartShowClock() {
   syncLiveIdx();
   broadcastShowClock();  // reset everyone's clock to 0:00 / stopped
   closeAdminPanel();
-  toast('Show restarted — clock at 0:00, back to the top.');
+  toast('Show restarted: clock at 0:00, back to the top.');
 }
 
 function getPrompterPayload(isInit=false) {
@@ -8678,7 +8678,7 @@ function scriptSpeakerLabel(d) {
   const explicit = d?.speaker || d?.customSrc || d?.who || '';
   if (explicit) return explicit;
   const cue = getCueOff(d) || getCueOn(d);
-  return String(cue || '').replace(/\s+—\s*Begin\s*$/i, '').trim();
+  return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').trim();
 }
 
 function assemblePrompterScriptFromBeats(list=beats) {
@@ -8941,7 +8941,7 @@ function renderLiveCurrent(b, i) {
     </div>`;
   }).join('');
   return `<div class="lv-cur-card">
-    <div class="lv-cur-badge">● NOW — Row ${i+1}</div>
+    <div class="lv-cur-badge">● NOW · Row ${i+1}</div>
     <div class="lv-cur-name">${esc(b.info||'—')}</div>
     ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
     ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
@@ -9028,7 +9028,7 @@ function lrpCueHere() {
   const idx = previewRowIdx;
   hideOverlay('lsRowPreviewOv');
   if (jumpToLsCue(idx, { confirmed:true })) {
-    toast(`Cued to Row ${idx + 1} — ${beats[idx]?.info || ''}`.trim());
+    toast(`Cued to Row ${idx + 1} · ${beats[idx]?.info || ''}`.trim());
   }
 }
 
@@ -9152,14 +9152,14 @@ function updateLiveGoControl(projectedState=null) {
   const failed = nextIndex >= 0 && liveCueExecutionStatus(nextIndex) === 'failed';
   const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && isShowCaller();
   const nextBeat = nextIndex >= 0 ? beats[nextIndex] : null;
-  const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${nextIndex + 1} — ${nextBeat.info || 'Untitled cue'}` : 'End of rundown';
+  const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${nextIndex + 1} · ${nextBeat.info || 'Untitled cue'}` : 'End of rundown';
   label.textContent = text;
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
   const studentLocked = !isShowCaller() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
   button.title = dispatchable ? `GO to ${text}`
     : failed ? `Recover failed row ${nextIndex + 1} before GO`
-    : studentLocked ? 'Joined as a student — only the show caller (instructor or admin) advances the rundown'
+    : studentLocked ? 'Joined as a student: only the show caller (instructor or admin) advances the rundown'
     : nextBeat ? 'Follow the active show caller to use GO'
     : 'No upcoming cue';
   button.setAttribute('aria-label', button.title);
@@ -9201,7 +9201,7 @@ function renderLiveFocus() {
       <span class="lf-next-time">${fmtDur(next)}</span>
     </div>`;
   } else {
-    html += `<div class="lf-next lf-next-last"><span class="lf-next-badge">END</span><span class="lf-next-name">Last row — show ends after this</span></div>`;
+    html += `<div class="lf-next lf-next-last"><span class="lf-next-badge">END</span><span class="lf-next-name">Last row (show ends after this)</span></div>`;
   }
 
   const restStart = nextBeatIdx >= 0 ? nextBeatIdx + 1 : beats.length;
@@ -9529,8 +9529,8 @@ function activateLiveRundownRow(event, i) {
   // D11.5: every guarded refusal says why — "GO did nothing" is a show-day
   // incident, not a UX choice.
   if (!Number.isFinite(i) || !beats[i]) { toast('That row no longer exists.'); return false; }
-  if (beats[i]?.style === 'segment') { toast('Segment headers organize the rundown — they can\'t go on air.'); return false; }
-  if (liveCueIsDisabled(i)) { toast(`Row ${i + 1} is disabled — enable it in the rundown to make it active.`); return false; }
+  if (beats[i]?.style === 'segment') { toast('Segment headers organize the rundown. They can\'t go on air.'); return false; }
+  if (liveCueIsDisabled(i)) { toast(`Row ${i + 1} is disabled. Enable it in the rundown to make it active.`); return false; }
   return jumpToLsCue(i);
 }
 
@@ -9551,7 +9551,7 @@ function lsNext() {
   const activeIdx = liveActiveCueIndex();
   const prev = beats[activeIdx];
   const ni = liveNextPlayableCueIndex(activeIdx);
-  if (ni < 0) { toast('End of rundown — there is no next row.'); updateLiveGoControl(); return false; }
+  if (ni < 0) { toast('End of rundown. There is no next row.'); updateLiveGoControl(); return false; }
   if (liveCueExecutionStatus(ni) === 'failed') {
     toast(`Recover failed row ${ni + 1} before GO.`);
     updateLiveGoControl();
@@ -10093,10 +10093,10 @@ function _adoptDocPrompterSession(d) {
   _lastForeignPrompterSeedSid = docSid;
   ensurePrompterProtocolIdentity({ sessionId:docSid });
   _activePrompterOutputInstanceId = '';   // the talent rebinds inside the adopted session
-  logShow('prompter', `Prompter takeover: another operator surface re-seeded the session (${docSid}) — this window joined it`);
+  logShow('prompter', `Prompter takeover: another operator surface re-seeded the session (${docSid}). This window joined it`);
   if (_prompterOperatorRuntimeActive && Date.now() - _lastPrompterTakeoverNoticeTs > 10000) {
     _lastPrompterTakeoverNoticeTs = Date.now();
-    toast('Another operator window took the prompter — this window joined their session.');
+    toast('Another operator window took the prompter. This window joined their session.');
     markLivePrompterStatus('Joined the other operator’s prompter session', 'ok');
   }
 }
@@ -10123,7 +10123,7 @@ function _maybeReclaimPrompterTalentSession(msg) {
   _activePrompterOutputInstanceId = outputId;
   prompterSessionController.noteOutput(outputId, 'connected');
   _notePrompterTalentSeen(msg);
-  logShow('prompter', `Reclaimed talent output ${outputId} — adopted prompter session ${remoteSession} (was ${localSession}) and re-sent state`);
+  logShow('prompter', `Reclaimed talent output ${outputId}: adopted prompter session ${remoteSession} (was ${localSession}) and re-sent state`);
   sendPrompterStateSnapshot(outputId, 'recovery');
   return true;
 }
@@ -10845,8 +10845,8 @@ function startScriptOperatorHost(identity) {
     if (!_scriptOpHost.checkHeartbeat()) {
       if (!_scriptOpDisconnectAnnounced) {
         _scriptOpDisconnectAnnounced = true;
-        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost — resyncing');
-        logShow('error', 'Script Operator disconnected · missed three heartbeats — automatic resync attempt');
+        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost, resyncing');
+        logShow('error', 'Script Operator disconnected · missed three heartbeats · automatic resync attempt');
         console.warn('[Script Operator] Heartbeat lost', status);
         // D11.8 (Jul 17 pop-out death): the window is open but deaf —
         // suspects are a dropped BroadcastChannel after long idle or an SW
@@ -10947,14 +10947,14 @@ function openScriptOpPopout() {
   if (!_scriptOpWin) {
     stopScriptOperatorHost({ reason:'Popup blocked', closeWindow:false, clearWindow:true, notify:false });
     setLiveSubsystemStatus('scriptOperator', 'error', 'Popup blocked');
-    toast('Pop-out blocked — allow pop-ups for Cueola.');
+    toast('Pop-out blocked. Allow pop-ups for Cueola.');
     return;
   }
   const button = document.getElementById('lsPopoutBtn');
   if (button) button.dataset.popupUrl = url.toString();
   setLiveSubsystemStatus('scriptOperator', 'connecting', 'Waiting for Script Operator ready');
   scriptOperatorSetButton(true, 'Focus Script Operator window');
-  toast('Script Op opened in a new window — drag it to another monitor.');
+  toast('Script Op opened in a new window. Drag it to another monitor.');
   return _scriptOpWin;
 }
 
@@ -11000,6 +11000,25 @@ function _scriptHeightEnd() {
   const ta = document.getElementById('lsPrompterText');
   try { if (ta) localStorage.setItem('cueola_scriptOpHeight', parseFloat(ta.style.flexBasis) || ''); } catch (e) {}
 }
+
+// Live reading-surface text size (A− / A+ in the Script Op head). One zoom
+// factor covers the Script Op sidebar, the NOW/NEXT cue preview cards, the
+// follower cue strip, and the Flowmingo op overlay, so every reading surface
+// grows together. Buttons scale with their panel: the whole control gets
+// bigger, not just the type inside it.
+const LIVE_TEXT_ZOOM_MIN = 0.85, LIVE_TEXT_ZOOM_MAX = 1.5;
+function applyLiveTextZoom(z) {
+  const zoom = Math.min(LIVE_TEXT_ZOOM_MAX, Math.max(LIVE_TEXT_ZOOM_MIN, Number(z) || 1));
+  document.documentElement.style.setProperty('--live-zoom', String(zoom));
+  return zoom;
+}
+function stepLiveTextZoom(delta) {
+  const current = parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1;
+  const zoom = applyLiveTextZoom(Math.round((current + Number(delta)) * 20) / 20);
+  try { localStorage.setItem('cueola_liveTextZoom', String(zoom)); } catch (e) {}
+  toast(`Live panel text ${Math.round(zoom * 100)}%`);
+}
+try { const _savedLiveZoom = parseFloat(localStorage.getItem('cueola_liveTextZoom')); if (_savedLiveZoom) applyLiveTextZoom(_savedLiveZoom); } catch (e) {}
 
 // The Cue scrubber should show WHERE it is in the script, not just move the
 // talent screen — mirror the scrub position into the Script Op editor so the
@@ -12367,7 +12386,7 @@ function ptUpdateReady() {
   const hasScript = ptHasScript();
   let state, text;
   if (ptConnState === 'connecting')      { state = 'connecting'; text = 'Connecting…'; }
-  else if (ptConnState === 'notfound')   { state = 'bad';        text = 'Show not found — check the code'; }
+  else if (ptConnState === 'notfound')   { state = 'bad';        text = 'Show not found. Check the code'; }
   else if (ptConnState === 'error')      { state = 'warn';       text = ptConnMessage || (code ? 'Reconnecting…' : 'Connection issue'); }
   else if (code && hasScript)            { state = 'ready';      text = 'READY · ' + code; }
   else if (code)                         { state = 'warn';       text = 'Connected · ' + code + ' · waiting for script'; }
@@ -13407,7 +13426,7 @@ function ptLoadFromCueola() {
     ptCloseEdit();
     toast('Loaded script from Cueola');
   } else {
-    toast('No script in Cueola yet — add script cues and push to Flowmingo from the live view.');
+    toast('No script in Cueola yet. Add script cues and push to Flowmingo from the live view.');
   }
 }
 
@@ -13996,13 +14015,13 @@ window.showModal = function(id) {
 // CALL SHEET
 // ─────────────────────────────────────────────────────────────
 const PAPERWORK_ITEMS = [
-  { order:1, id:'call-sheet', title:'Call Sheet', sub:'Who, where, and when — the sheet the whole crew works from.' },
+  { order:1, id:'call-sheet', title:'Call Sheet', sub:'Who, where, and when: the sheet the whole crew works from.' },
   { order:2, id:'production-scheduler', title:'Production Schedule', sub:'Setup day and show day, hour by hour, ending in the last checks before doors.' },
-  { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safe locations, weather, and equipment — sorted before you need it.' },
+  { order:3, id:'safety-plan', title:'Safety Plan', sub:'Emergency contacts, safe locations, weather, and equipment, sorted before you need it.' },
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
-  { order:7, id:'production-notes', title:'Production Notes', sub:'The crew’s message board — tag a department and the thread stays with the show.' },
+  { order:7, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
 ];
 // ── v2.1 D6: per-session paperwork config (sparse override map on the parent
 // session doc's prePro — identifier-safe underscore keys, MISSING = ENABLED,
@@ -14189,7 +14208,7 @@ function selectGroup(gid, opts = {}) {
   if (gid && !groups.some(g => g.id === gid)) { toast('That group no longer exists.'); return false; }
   const isCrew = Boolean(adminSession) || session.role === 'instructor';
   if (!opts.force && !isCrew && groupsLocked() && groupActive() && gid !== activeGroupId) {
-    toast('Groups are locked — ask your instructor to move you.');
+    toast('Groups are locked. Ask your instructor to move you.');
     return false;
   }
   setActiveGroupId(gid);
@@ -14366,7 +14385,7 @@ function updatePbSaveStatus() {
   if (!chips.length) return;
   const state = pbSaveStatusState();
   const label = state === 'saving' ? 'Saving…'
-    : state === 'offline' ? 'Saved on this device — reconnecting'
+    : state === 'offline' ? 'Saved on this device, reconnecting'
     : state === 'local' ? 'Saved on this device'
     : 'All changes saved';
   const icon = state === 'saving' ? sfIcon('time.clock')
@@ -15460,7 +15479,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
               ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Remove</button>` : ''}
             </div>
           </div>`;
-        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet — notes you leave show up here for the whole group.</div>' : '')}
+        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet. Notes you leave show up here for the whole group.</div>' : '')}
       </div>
       ${canComment ? `<div class="pb-comment-form">
         ${sectionSelect}
@@ -16153,7 +16172,7 @@ function pbPortalUpload(input) {
   // Guard BEFORE decode: a phone photo can be 50+ MB, and the decode+draw
   // below is synchronous on the main thread — on lab hardware that reads as
   // the app locking up. The avatar ends up 96px; nobody needs more than this.
-  if (file.size > 15 * 1024 * 1024) { toast('That image is too large — pick one under 15 MB.'); input.value = ''; return; }
+  if (file.size > 15 * 1024 * 1024) { toast('That image is too large. Pick one under 15 MB.'); input.value = ''; return; }
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
@@ -16164,7 +16183,7 @@ function pbPortalUpload(input) {
       const side = Math.min(img.width, img.height);
       ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
       const dataUrl = c.toDataURL('image/jpeg', 0.72);
-      if (dataUrl.length > 60000) { toast('That image is too large after compression — try a simpler one.'); return; }
+      if (dataUrl.length > 60000) { toast('That image is too large after compression. Try a simpler one.'); return; }
       _pbPortalDraft = { type: 'image', value: dataUrl };
       pbRenderUserPortal();
     };
@@ -16628,13 +16647,13 @@ async function pbSaveNoteFile(att) {
       // attachments keep working; this branch self-retires once the staged
       // rules are deployed and the subcollection write succeeds again.
       if (err?.code !== 'permission-denied') throw err;
-      logShow('sync', 'Attachment stored via legacy path — deploy the staged firestore.rules to finish the files migration');
+      logShow('sync', 'Attachment stored via legacy path. Deploy the staged firestore.rules to finish the files migration');
       await writeAll(pbLegacyFileRef, pbFileDocId);
     }
     return;
   }
   try { localStorage.setItem(pbLocalFileKey(att.fileId), att.dataUrl); }
-  catch { toast('Attachment is too large to keep offline — it will only last this visit.'); }
+  catch { toast('Attachment is too large to keep offline. It will only last this visit.'); }
 }
 
 async function pbLoadNoteFile(fileId) {
@@ -16730,7 +16749,7 @@ async function pbDownloadNoteFile(fileId) {
 
 async function pbOpenLightbox(fileId) {
   const dataUrl = await pbLoadNoteFile(fileId);
-  if (!dataUrl) { toast('Image is still loading — try again in a second.'); return; }
+  if (!dataUrl) { toast('Image is still loading. Try again in a second.'); return; }
   const box = document.getElementById('pbLightbox');
   const img = document.getElementById('pbLightboxImg');
   if (!box || !img) return;
@@ -17230,7 +17249,7 @@ async function pbSaveEditNote(id) {
   await loadPlandaBearNotes();
   const original = plandaBearNotes.find(n => n.id === id);
   if (!original) { pbCancelEditNote(); return; }
-  if (!text && !(original.attachments || []).length) { toast('A note needs some text — or delete it instead.'); return; }
+  if (!text && !(original.attachments || []).length) { toast('A note needs some text, or delete it instead.'); return; }
   const editedAt = text !== original.text ? Date.now() : original.editedAt;
   const next = plandaBearNotes.map(n => n.id === id ? { ...n, text, editedAt } : n);
   pbEditingNoteId = null;
@@ -17278,7 +17297,7 @@ async function publishPlandaBearNote() {
   } catch (err) {
     // Upload or write failed — keep the composer contents so nothing is lost, but say so.
     console.warn('[plandabear] note publish failed', err);
-    toast('⚠ Could not post the note — check your connection and try again.');
+    toast('⚠ Could not post the note. Check your connection and try again.');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -17357,7 +17376,7 @@ async function pbSendAudioToOutrangutan(fileId, name) {
   const fname = name || 'audio';
   let dataUrl;
   try { dataUrl = await pbLoadNoteFile(fileId); } catch { dataUrl = null; }
-  if (!dataUrl || !/^data:audio\//i.test(dataUrl)) { toast('That audio isn’t ready yet — try again in a moment.'); return; }
+  if (!dataUrl || !/^data:audio\//i.test(dataUrl)) { toast('That audio isn’t ready yet. Try again in a moment.'); return; }
   let blob;
   try { blob = pbDataURLtoBlob(dataUrl); } catch { toast('Could not read that audio file.'); return; }
   // 1) Always download a local copy — the safe, universal hand-off path.
@@ -17524,7 +17543,7 @@ function pbCollectOpenItems() {
  * skipped, so pushing twice is safe. */
 function pushTodoToProductionSchedule(itemText, sourceName) {
   const item = String(itemText || '').trim();
-  if (!item) { toast('Nothing to add — the to-do has no text.'); return false; }
+  if (!item) { toast('Nothing to add: the to-do has no text.'); return false; }
   const data = loadPreProData();
   const raw = { ...(data.productionSchedule || {}) };
   const rows = (Array.isArray(raw.checklist) && raw.checklist.length ? raw.checklist : defaultProductionSchedule().checklist)
@@ -17542,7 +17561,7 @@ function pushTodoToProductionSchedule(itemText, sourceName) {
   raw.checklist = rows;
   persistPreProData({ productionSchedule: raw }, 'Production Schedule');
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) renderProductionChecklist(rows);
-  toast('Added to the Production Schedule — Ready Before Show.');
+  toast('Added to the Production Schedule: Ready Before Show.');
   return true;
 }
 
@@ -17586,7 +17605,7 @@ function pbRenderOwes() {
   if (!slot || !document.getElementById('pbOwesModal')?.classList.contains('on')) return;
   const rows = pbCollectOpenItems();
   if (!rows.length) {
-    slot.innerHTML = '<div class="pb-owes-empty">Nothing open — every to-do and checklist item is checked off.</div>';
+    slot.innerHTML = '<div class="pb-owes-empty">Nothing open. Every to-do and checklist item is checked off.</div>';
     return;
   }
   slot.innerHTML = rows.map(r => `
@@ -17689,7 +17708,7 @@ function pbReplyComposerHTML(root) {
   return `<div class="pb-reply-compose">
     <div class="pb-attach-tray" id="pbReplyAttachTray" hidden></div>
     <div class="pb-reply-compose-row">
-      <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}… — @ to mention" oninput="pbAutosizeNoteInput(this);pbMentionOnInput(this,'reply')" onkeydown="pbReplyKeydown(event,'${root.id}')" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'reply')"></textarea>
+      <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}… Type @ to mention someone." oninput="pbAutosizeNoteInput(this);pbMentionOnInput(this,'reply')" onkeydown="pbReplyKeydown(event,'${root.id}')" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'reply')"></textarea>
       <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" title="Attach to reply" aria-label="Attach to reply">${sfIcon('action.attach')}</button>
       <input type="file" id="pbReplyFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'reply')">
       <button type="button" class="pb-post-btn small" onclick="pbPostReply('${root.id}')"><span>Reply</span>${sfIcon('action.forward')}</button>
@@ -17766,7 +17785,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   pbRenderNoteFilters(threads);
 
   if (!total) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board — post a note, a photo, or a file. Everyone in this session sees it live.</span></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board: post a note, a photo, or a file. Everyone in this session sees it live.</span></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -18051,7 +18070,7 @@ function pbUpdateBellBtn() {
   btn.setAttribute('aria-pressed', String(on));
   setSymbolButtonLabel(btn, pbNotificationSymbol(unread, !on), on ? 'Alerts on' : 'Alerts off');
   btn.title = on
-    ? 'Browser notifications are on — click to turn off'
+    ? 'Browser notifications are on. Click to turn off'
     : 'Get a browser notification when teammates post (works while this tab is open in the background)';
 }
 
@@ -18070,7 +18089,7 @@ function pbToggleBrowserNotify() {
   } else if (Notification.permission !== 'denied') {
     Notification.requestPermission().then(p => {
       if (p === 'granted') { set(true); toast('Browser alerts on.'); }
-      else toast('Notifications blocked — you will still see in-app alerts.');
+      else toast('Notifications blocked. You will still see in-app alerts.');
       pbUpdateBellBtn();
     });
   } else {
@@ -18131,10 +18150,10 @@ const PRODUCTION_NOTE_GUIDES = [
   ['Lead with the moment', 'Start with the row, cue, or timecode the note is about so anyone scanning the board finds it fast.'],
   ['One note, one idea', 'Keep each note to a single change, problem, or decision. Post separate notes instead of one long wall.'],
   ['Tag the department', 'Pick Audio, Video, or Lighting so the right crew can filter straight to their notes.'],
-  ['Use To-Do for actions', 'Tag action items as a To-Do — they get a checkbox and stay counted until someone checks them off.'],
+  ['Use To-Do for actions', 'Tag action items as a To-Do. They get a checkbox and stay counted until someone checks them off.'],
   ['Reply under the note', 'Answers, fixes, and follow-ups belong as replies, so the whole story stays in one thread.'],
   ['Like to acknowledge', 'Tap the heart to say "got it" or "agreed" without adding a reply that clutters the thread.'],
-  ['Attach the evidence', 'Use Attach — or just paste/drop a screenshot — to share the patch photo or document you mean.'],
+  ['Attach the evidence', 'Use Attach (or just paste/drop a screenshot) to share the patch photo or document you mean.'],
   ['Pin what matters', 'Instructors can pin a note so it holds the top of the board until it is unpinned.'],
 ];
 
@@ -18346,7 +18365,7 @@ function renderPnPanel() {
   ).join('');
   const targetControl = beats.length
     ? `<select class="pn-target-select" onchange="pnSetTarget(this.value)" aria-label="Target row">
-        <option value=""${!pnTargetBeatId ? ' selected' : ''}>— Pick a row —</option>
+        <option value=""${!pnTargetBeatId ? ' selected' : ''}>Pick a row…</option>
         ${rowOpts}
        </select>`
     : `<span class="pn-no-rows">Add a row first</span>`;
@@ -18456,7 +18475,7 @@ function pnAddAsNewRow(noteId) {
   pnTargetBeatId = newId;
   renderRundown();
   syncToFirestore();
-  toast('New row added from note — now the target row.');
+  toast('New row added from note (now the target row).');
   renderPnPanel();
 }
 
@@ -18892,7 +18911,7 @@ function paperExportOptionsForSnapshot(snapshot, options={}) {
       productionCode:snapshot.production.sessionCode || snapshot.production.productionId || 'LOCAL',
       // D2: grouped exports carry the group name in the printed header.
       documentTitle:[PAPER_EXPORT_DOCUMENT_TITLES[snapshot.options?.documentType] || '',
-        snapshot.options?.groupName || ''].filter(Boolean).join(' — '),
+        snapshot.options?.groupName || ''].filter(Boolean).join(' · '),
       exportedAt:new Date(snapshot.exportedAt).toISOString(),
       sourceLabel:snapshot.labels.authority,
       revisionLabel:revBits.join(' · '),
@@ -19174,6 +19193,10 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     mealTime: normalizeTimeValue(sheet.mealTime) || normalizeTimeValue(fallback.mealTime) || '',
     people: Array.isArray(sheet.people) ? sheet.people : (Array.isArray(fallback.people) ? fallback.people : []),
     notes: sheet.notes || fallback.notes || '',
+    // Explicit-creation marker: sheets added via "+ Add Call Sheet" carry it so
+    // the near-duplicate collapse can tell an intentional new day (same crew,
+    // schedule not filled in yet) from a P2607-style corruption duplicate.
+    userCreated: sheet.userCreated === true,
   };
 }
 
@@ -19221,6 +19244,11 @@ function callSheetContentKey(sheet) {
 // later (newer) entry. Runs at the getCallSheets boundary, so any healthy
 // client's next save republishes the healed array.
 function callSheetNearDuplicates(a, b) {
+  // A sheet the user explicitly added never folds: content similarity cannot
+  // distinguish a brand-new same-crew day (blank schedule) from a corruption
+  // duplicate, but the "+ Add Call Sheet" click can. Exact-copy duplicates are
+  // still caught upstream by the callSheetContentKey pass.
+  if (a.userCreated === true || b.userCreated === true) return false;
   const fields = ['date', 'call', 'showStart', 'wrap', 'doors', 'location', 'address', 'notes'];
   for (const key of fields) {
     const va = String(a[key] || '').trim().toLowerCase();
@@ -19247,9 +19275,19 @@ function callSheetContentScore(sheet) {
 
 function sanitizeCallSheets(sheets) {
   const seen = new Set();
+  const seenIds = new Set();
   const out = [];
   for (const sheet of sheets) {
     const clean = { ...sheet, people: dedupeCallSheetPeople(sheet.people) };
+    // User-created sheets dedupe by id, not content: two intentionally added
+    // days are legitimately content-identical until their schedules get filled
+    // in (same crew, everything else blank).
+    if (clean.userCreated === true) {
+      if (seenIds.has(clean.id)) continue;
+      seenIds.add(clean.id);
+      out.push(clean);
+      continue;
+    }
     const key = callSheetContentKey(clean);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -19602,7 +19640,7 @@ function renderCallSheetWeatherCard() {
     // An auto forecast fetched for a different date than the current shoot date
     // is stale — say so loudly instead of quietly showing the wrong day's weather.
     if (w.source === 'auto' && w.forecastDate && date && w.forecastDate !== date) {
-      setWeatherStatus(`This forecast is for ${callSheetDayLabel(w.forecastDate) || w.forecastDate} — tap Get forecast to refresh it for the new shoot date.`, true);
+      setWeatherStatus(`This forecast is for ${callSheetDayLabel(w.forecastDate) || w.forecastDate}. Tap Get forecast to refresh it for the new shoot date.`, true);
     } else {
       setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
     }
@@ -19699,7 +19737,7 @@ async function fetchCallSheetWeather() {
     if (!fRes.ok) throw new Error('forecast');
     const d = (await fRes.json())?.daily;
     if (!d?.time?.length || d.temperature_2m_max?.[0] == null) {
-      setWeatherStatus('That date is outside the 16-day forecast window — enter weather manually below.', true);
+      setWeatherStatus('That date is outside the 16-day forecast window. Enter weather manually below.', true);
       return;
     }
     const wx = wmoWeather(d.weather_code?.[0]);
@@ -19805,14 +19843,24 @@ function addAnotherCallSheet() {
   const sheets = getCallSheets(data);
   const source = sheets[resolveActiveCallSheetIndex(sheets)] || sheets[0] || legacyCallSheetFromData(data);
   // Copy the venue + crew roster, but start the schedule fresh so the new day's
-  // sheet doesn't inherit the previous day's call/show/wrap times.
+  // sheet doesn't inherit the previous day's call/show/wrap times. Seed the date
+  // to the day after the source so the two sheets actively disagree on a
+  // schedule field even if the near-duplicate flag is ever stripped in transit.
+  const nextDate = (() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(source.date || '').trim())) return '';
+    const d = new Date(`${source.date}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
   const nextSheet = normalizeCallSheet({
     ...source,
     id: '',   // never inherit the source's paperwork id — a duplicate id makes the two sheets inseparable in role assignments
     label: `Call Sheet ${sheets.length + 1}`,
-    date: '', call: '', showStart: '', wrap: '', doors: '',
+    date: nextDate, call: '', showStart: '', wrap: '', doors: '',
     weather: null, // new day → fetch fresh forecast; venue carries over from source
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
+    userCreated: true,
   }, sheets.length);
   sheets.push(nextSheet);
   storeActiveCallSheetIndex(sheets.length - 1, sheets);
@@ -19904,7 +19952,7 @@ function callSheetPreviewHTML(data, prePro=loadPreProData()) {
   const hospitalBits = [safety.hospital, safety.hospitalAddress, safety.hospitalPhone]
     .map(v => String(v || '').trim()).filter(Boolean);
   const meals = [data.mealTime ? paperTime(data.mealTime) : '', String(data.meals || '').trim()]
-    .filter(Boolean).join(' — ');
+    .filter(Boolean).join(' · ');
   return `
     <h1 class="psec-h psec-callsheet">${esc(title)}</h1>
     ${dayOfDays ? `<div class="paper-day-of-days">${esc(dayOfDays)}</div>` : ''}
@@ -20240,14 +20288,14 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
   const s = productionScheduleWithCallSheet(schedule || {}, data);
   const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
   const setupBody = s.setupNA
-    ? `<tr><td>No separate setup day — setup happens on show day.</td></tr>`
+    ? `<tr><td>No separate setup day. Setup happens on show day.</td></tr>`
     : `<tr><th>Setup Date</th><td>${esc(paperDate(s.date))}</td></tr>
       <tr><th>Setup Start</th><td>${esc(paperTime(s.setup))}</td></tr>
       <tr><th>Setup Wrap</th><td>${esc(paperTime(s.wrap))}</td></tr>
       <tr><th>Setup Notes</th><td>${esc(s.setupNotes || '')}</td></tr>`;
   return `
     <h1 class="psec-h psec-schedule">${paperSectionTitle(sectionNumber, 'Production Schedule')}</h1>
-    <h2>Setup Day${s.setupNA ? ' — N/A' : ''}</h2>
+    <h2>Setup Day${s.setupNA ? ' (N/A)' : ''}</h2>
     <table><tbody>
       ${setupBody}
     </tbody></table>
@@ -20543,7 +20591,7 @@ function renderPackageSheetPicker() {
   const includedCount = sheets.filter(sheet => !pbPackageSheetExcludes.has(sheet.id)).length || 1;
   // An unusual sheet count is the honest tell for a corrupted doc (D9.1).
   const warning = sheets.length > 6
-    ? `<div class="pb-pkg-sheet-warning">This package includes ${sheets.length} call sheets — that is unusually many. Uncheck any that should not print.</div>`
+    ? `<div class="pb-pkg-sheet-warning">This package includes ${sheets.length} call sheets. That is unusually many. Uncheck any that should not print.</div>`
     : '';
   host.hidden = false;
   host.innerHTML = `
@@ -20697,7 +20745,7 @@ function operatorCheatCardHTML(sectionNumber=paperworkSectionNumber('operator-ca
   ].map(([keys, label]) => `<tr><td class="paper-keys-k">${keyChips(keys)}</td><td>${esc(label)}</td></tr>`).join('');
   return `
     <h1 class="psec-h psec-operator">${paperSectionTitle(sectionNumber, 'Operator Cheat Card')}</h1>
-    <div class="paper-key-rule">Arrows drive the <b>rundown</b> · Space/J/K/L drive the <b>prompter</b> · G/P/S drive <b>playout</b> — from any window.</div>
+    <div class="paper-key-rule">Arrows drive the <b>rundown</b> · Space/J/K/L drive the <b>prompter</b> · G/P/S drive <b>playout</b>, from any window.</div>
     <div class="paper-keycols">
       ${liveCols}
       <div class="paper-keygroup">
@@ -20720,7 +20768,7 @@ function paperExportMeta(opts={}) {
     productionCode:String(productionCode).slice(0,80),
     documentTitle:String(supplied.documentTitle || '').slice(0,120),
     exportedAt,
-    sourceLabel:String(hasSourceLabel ? supplied.sourceLabel : 'UNVERIFIED PREVIEW — NOT A SAVED EXPORT').slice(0,240),
+    sourceLabel:String(hasSourceLabel ? supplied.sourceLabel : 'UNVERIFIED PREVIEW: NOT A SAVED EXPORT').slice(0,240),
     revisionLabel:String(supplied.revisionLabel || '').slice(0,240),
     draftLabel:String(hasDraftLabel ? supplied.draftLabel : 'PREVIEW ONLY').slice(0,80),
   };
@@ -21169,7 +21217,7 @@ function downloadBlobFile(blob, fileName) {
   const a = document.createElement('a');
   if (typeof a.download === 'undefined') {
     const win = window.open(url, '_blank');
-    if (!win) toast('Download window blocked — allow pop-ups for this site, then export again.');
+    if (!win) toast('Download window blocked. Allow pop-ups for this site, then export again.');
   } else {
     a.href = url;
     a.download = fileName;
@@ -21233,7 +21281,7 @@ async function exportPaperHTMLAsPDF(html, fileName, opts={}) {
     const meta = paperExportMeta(opts);
     // D9.3: neutral document metadata — no app branding in the PDF file.
     doc.setProperties({
-      title:meta.documentTitle ? `${meta.productionName} — ${meta.documentTitle}` : meta.productionName,
+      title:meta.documentTitle ? `${meta.productionName} · ${meta.documentTitle}` : meta.productionName,
       subject:meta.documentTitle || 'Production paperwork',
       author:meta.productionName,
       creator:meta.productionName,
@@ -21373,6 +21421,10 @@ function getPreProData() {
   // renumbers the array can't make the open form overwrite a different sheet.
   resolveActiveCallSheetIndex(sheets);
   const active = currentCallSheetFromForm();
+  // The form carries no userCreated field, so a rebuild would silently drop
+  // the explicit-creation marker and let the near-duplicate collapse eat the
+  // sheet on its next pass. Carry it through from the stored sheet.
+  if (sheets[activeCallSheetIndex]?.userCreated === true) active.userCreated = true;
   sheets[activeCallSheetIndex] = active;
   return {
     ...active,
@@ -21530,7 +21582,7 @@ function addCallSheetPerson() {
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
-  if (!roster.length) { toast('No saved role assignments yet — assign positions in Admin first.'); return; }
+  if (!roster.length) { toast('No saved role assignments yet. Assign positions in Admin first.'); return; }
   const have = new Set(callSheetPeople.map(p => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
   const defaultCall = timeInputValue('pp-call');
   let added = 0;
@@ -21717,15 +21769,15 @@ const DEMO_BEATS = [
     audio: { on:'Ready Theme Full',off:'Play Theme Full' },
     gfx:   { on:'Ready Title',     off:'Take Title' },
   }},
-  { id:3, style:'timed', info:'Anchor Wide — Welcome', notes:'', min:0, sec:20, done:false, cues:{
+  { id:3, style:'timed', info:'Anchor Wide: Welcome', notes:'', min:0, sec:20, done:false, cues:{
     video:  { on:'Ready CAM 1',     off:'Take CAM 1' },
     audio:  { on:'Ready Anchor Mics', off:'Open Mics 1+2' },
-    script: { on:'Standby Host', off:'Cue Host', text:"Good evening and welcome to Campus News. I'm your anchor — tonight, three big stories from around campus." },
+    script: { on:'Standby Host', off:'Cue Host', text:"Good evening and welcome to Campus News. I'm your anchor. Tonight, three big stories from around campus." },
   }},
   { id:4, style:'timed', info:'Anchor Lower Third', notes:'Name / Title', min:0, sec:5, done:false, cues:{
     gfx: { on:'Set Lower Third', off:'Dissolve L3' },
   }},
-  { id:5, style:'timed', info:'PKG — Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
+  { id:5, style:'timed', info:'PKG: Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
     video:    { on:'Set FULL SCREEN', off:'Dissolve to PKG' },
     playback: { on:'Ready SC_042',    off:'Roll SC_042' },
     audio:    { on:'Ready PKG Audio', off:'Take PKG SOT' },
@@ -21737,7 +21789,7 @@ const DEMO_BEATS = [
   { id:7, style:'flex', info:'Guest Conversation', notes:'"What surprised you most?"', min:5, sec:0, done:false, cues:{
     video:  { on:'Set 2-SHOT',    off:'Dissolve 2-SHOT' },
     audio:  { on:'Ready Guest Mic', off:'Open Guest Mic' },
-    script: { on:'Standby Host', off:'Cue Host', text:'Guest conversation — ad-lib topic: the student budget vote and what it means for clubs.' },
+    script: { on:'Standby Host', off:'Cue Host', text:'Guest conversation. Ad-lib topic: the student budget vote and what it means for clubs.' },
   }},
   { id:8, style:'timed', info:'Sports Highlight', notes:'', min:1, sec:30, done:false, cues:{
     playback: { on:'Ready SPT_HL', off:'Roll SPT_HL' },

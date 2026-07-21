@@ -205,7 +205,7 @@ test('local authority permits an explicitly labeled local copy while surfacing c
   assert.equal(result.canExport, true);
   assert.equal(result.authoritative, false);
   assert.equal(result.requiresLabel, true);
-  assert.equal(result.label, 'LOCAL DRAFT — NOT CLOUD CONFIRMED');
+  assert.equal(result.label, 'LOCAL DRAFT: NOT CLOUD CONFIRMED');
   assert.deepEqual(result.warnings.map(issue => `${issue.scope}:${issue.code}`), [
     'notes:cache', 'notes:denied', 'assignments:unavailable',
   ]);
@@ -256,19 +256,19 @@ test('unpublished and local snapshots carry unavoidable document labels', () => 
   }));
   assert.equal(unpublished.publicationStatus, 'unpublished-draft');
   assert.equal(unpublished.unpublished, true);
-  assert.equal(unpublished.labels.authority, 'UNPUBLISHED DRAFT — NOT SAVED');
-  assert.equal(unpublished.labels.document, 'UNPUBLISHED DRAFT — NOT SAVED');
+  assert.equal(unpublished.labels.authority, 'UNPUBLISHED DRAFT: NOT SAVED');
+  assert.equal(unpublished.labels.document, 'UNPUBLISHED DRAFT: NOT SAVED');
   assert.equal(unpublished.readiness.status, 'unpublished');
 
   const local = ExportModel.createSnapshot(snapshotInput({ authority: 'expert' }));
   assert.equal(local.publicationStatus, 'local-draft');
   assert.equal(local.localOnly, true);
-  assert.equal(local.labels.document, 'LOCAL DRAFT — NOT CLOUD CONFIRMED');
+  assert.equal(local.labels.document, 'LOCAL DRAFT: NOT CLOUD CONFIRMED');
 
   const namedDraft = ExportModel.createSnapshot(snapshotInput({
     authority: 'unpublished', documentLabel: 'Production Note',
   }));
-  assert.equal(namedDraft.labels.document, 'UNPUBLISHED DRAFT — NOT SAVED · Production Note');
+  assert.equal(namedDraft.labels.document, 'UNPUBLISHED DRAFT: NOT SAVED · Production Note');
 });
 
 test('difficult Unicode, special characters, long text, and empty fields are lossless', () => {

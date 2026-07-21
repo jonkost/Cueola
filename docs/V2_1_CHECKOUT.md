@@ -130,12 +130,15 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
 Run in order — details in [term-boundary-runbook.md](term-boundary-runbook.md) §B:
 
 1. [ ] Fix round: anything the sections above surfaced (bring me the list).
-2. [ ] Version flip — THREE spots: `CUEOLA_VERSION` → `'2.1.0'`
+2. [x] Version flip — THREE spots: `CUEOLA_VERSION` → `'2.1.0'`
        (cueola-app.js:4) **plus the two hardcoded "v2.0.0" strings in
        index.html** (the Settings-sheet `.settings-version` and the
        entry-screen version line — nothing reads the JS const, these are what
        users see). Finalize the CHANGELOG draft header (remove DRAFT). The
        index.html edit makes step 3's WORKER_SCHEMA bump apply.
+       **DONE 2026-07-21 (pulled ahead of the QA sections because hosting was
+       already live and showing v2.0.0; CHANGELOG finalized in the same pass —
+       see docs/V2_1_SUMMARY.md §5 for the whole fix round).**
 3. [ ] `node scripts/bump-cache.mjs` final ?v= sweep; WORKER_SCHEMA is
        already 8 — bump to 9 ONLY if page-HTML/manifest/icon files changed
        during the fix round.

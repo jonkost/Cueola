@@ -39,11 +39,11 @@ const SHELL_ASSETS = [
   './design-system/apple/symbols/runtime/light-small/media/stop.circle.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/bell.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/bell.badge.svg',
-  './design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg',
+  './design-system/apple/symbols/runtime/light-small/objectsandtools/info.svg',
   './design-system/apple/symbols/runtime/light-small/time/timer.svg',
   './design-system/apple/symbols/runtime/light-small/privacyandsecurity/exclamationmark.triangle.svg',
   './design-system/apple/symbols/runtime/light-small/objectsandtools/clock.svg',
-  'assets/sf-symbols.css?v=4adcd0fd7c',
+  'assets/sf-symbols.css?v=a5c5015e64',
   // Vendored libraries — same-origin so imports and paperwork exports never
   // depend on CDN reachability during a show (pinned jspdf 2.5.1 /
   // html2canvas 1.4.1 / pdf.js 3.11.174 / mammoth 1.6.0 / jszip 3.10.1).
@@ -87,23 +87,23 @@ const SHELL_ASSETS = [
   'cueola-avatar-profile.js?v=e56e5e6cd7',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=fe05f41dfc',
-  'cueola-export-model.js?v=3e21300eb6',
+  'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=d5f452410b',
-  'cueola-admin-auth.js?v=de859c513b',
+  'cueola-identity.js?v=81570be11a',
+  'cueola-admin-auth.js?v=2d94c57e93',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
-  'script-operator.js?v=98dd3e670d',
-  'script-operator.css?v=c455a9dec9',
+  'script-operator.js?v=f3efd29fc5',
+  'script-operator.css?v=cad0bcf104',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=e7f1cb5035',
+  'cueola-app.js?v=e96b613672',
   'outrangutan/outrangutan.css?v=718e619254',
-  'outrangutan/outrangutan.js?v=eedbddd361',
+  'outrangutan/outrangutan.js?v=9efc6c6f2a',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -120,7 +120,9 @@ const versionSignature = SHELL_ASSETS
 // 8→9: avatar-modal mouse-trap fix is page-HTML CSS — the shell serves
 // index.html cache-first forever, so installed clients only get the fix when
 // the cache name rolls (per this file's own HTML-only-change rule).
-const WORKER_SCHEMA = '9';
+// 9→10: 2.1.0 version flip + shape-token sweep + em-dash copy sweep are
+// page-HTML changes, and the info glyph moved to the unversioned info.svg.
+const WORKER_SCHEMA = '10';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

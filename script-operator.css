@@ -185,6 +185,9 @@ button:disabled, input:disabled, textarea:disabled { cursor: not-allowed; opacit
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding: 14px;
+  /* Operator-set panel size (Formatting tab): scales the whole workspace,
+     buttons included, for reading distance. */
+  zoom: var(--op-zoom, 1);
 }
 .script-workspace, .inspector { max-width: 760px; margin: 0 auto; }
 .script-workspace { padding-bottom: 16px; }

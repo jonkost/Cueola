@@ -9,11 +9,11 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/app/cueola-32.png">
   <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
   <meta name="theme-color" content="#080b12">
-  <link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
-  <link rel="stylesheet" href="script-operator.css?v=c455a9dec9">
+  <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
+  <link rel="stylesheet" href="script-operator.css?v=cad0bcf104">
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=209555b4d7" defer></script>
-  <script src="script-operator.js?v=98dd3e670d" defer></script>
+  <script src="script-operator.js?v=f3efd29fc5" defer></script>
 </head>
 <body>
   <main class="script-operator" id="scriptOperatorRoot" data-render-count="1">
@@ -255,6 +255,16 @@
               <button class="format-button" type="button" data-insert="&#10;&#10;" title="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
               <button class="format-button" type="button" data-paste data-requires-state><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
               <button class="format-button" type="button" data-paste-push data-requires-state><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
+            </div>
+          </section>
+          <section class="control-section">
+            <h2>Panel Text</h2>
+            <p class="section-help">Sizes this control panel and the script editor for your reading distance. The talent's prompter size is set under Prompter.</p>
+            <div class="slider-row">
+              <label for="panelZoomRange">Size <output id="panelZoomValue" for="panelZoomRange">100%</output></label>
+              <button class="step-button" type="button" id="panelZoomDown" aria-label="Smaller panel text">−</button>
+              <input id="panelZoomRange" type="range" min="85" max="150" step="5" value="100" aria-label="Panel text size">
+              <button class="step-button" type="button" id="panelZoomUp" aria-label="Larger panel text">+</button>
             </div>
           </section>
         </div>

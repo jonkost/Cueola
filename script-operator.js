@@ -54,6 +54,7 @@
 
   function init() {
     restoreTab();
+    restorePanelZoom();
     bindEvents();
     setCommandAvailability(false);
 
@@ -939,6 +940,31 @@
     const queryTheme = normalizeTheme(params.get('theme'));
     if (queryTheme) return queryTheme;
     try { return normalizeTheme(localStorage.getItem('cueola_theme')) || 'cool'; } catch { return 'cool'; }
+  }
+
+  // Panel Text size (Formatting tab): local-only, works while disconnected.
+  // Percent zoom on .operator-scroll so buttons and labels scale together.
+  function applyPanelZoom(percent) {
+    const clamped = Math.min(150, Math.max(85, Math.round((Number(percent) || 100) / 5) * 5));
+    document.documentElement.style.setProperty('--op-zoom', String(clamped / 100));
+    const range = document.getElementById('panelZoomRange');
+    const value = document.getElementById('panelZoomValue');
+    if (range) range.value = String(clamped);
+    if (value) value.textContent = `${clamped}%`;
+    try { localStorage.setItem('cueola_op_panel_zoom', String(clamped)); } catch {}
+    return clamped;
+  }
+
+  function restorePanelZoom() {
+    let saved = 100;
+    try { saved = parseInt(localStorage.getItem('cueola_op_panel_zoom'), 10) || 100; } catch {}
+    applyPanelZoom(saved);
+    const range = document.getElementById('panelZoomRange');
+    if (range) range.addEventListener('input', () => applyPanelZoom(range.value));
+    const down = document.getElementById('panelZoomDown');
+    const up = document.getElementById('panelZoomUp');
+    if (down) down.addEventListener('click', () => applyPanelZoom((parseInt(range?.value, 10) || 100) - 5));
+    if (up) up.addEventListener('click', () => applyPanelZoom((parseInt(range?.value, 10) || 100) + 5));
   }
 
   function cleanup() {

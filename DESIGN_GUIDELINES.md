@@ -114,11 +114,13 @@ These make the principles enforceable in this codebase.
     A casual dismissal (Esc, click-outside) must never destroy unsaved work
     (`data-esc-hold` exists for exactly that). Outrangutan sheets follow the
     same shape with `.og-sheet-head` + trailing Done.
-11. **The ⓘ pattern.** Explaining a surface takes a 22px `.info-btn` circle
-    that opens the shared `#infoPop` popover (`toggleInfoPop`) — a short,
-    plain-language explanation plus a "Learn more" deep link into the matching
-    Learning Hub lesson (`openLearningHub('<id>')`). Never a modal, never
-    navigation; copy lives in the `INFO_POPS` registry (single source).
+11. **The info pattern.** Explaining a surface takes a bare accent-colored
+    "i" glyph (`.info-btn`, no ring or circle around it, owner decision
+    2026-07-21) that opens the shared `#infoPop` popover (`toggleInfoPop`):
+    a short, plain-language explanation plus a "Learn more" deep link into
+    the matching Learning Hub lesson (`openLearningHub('<id>')`). Never a
+    modal, never navigation; copy lives in the `INFO_POPS` registry (single
+    source). Coarse pointers still get a 32px hit target via padding.
 
 ---
 

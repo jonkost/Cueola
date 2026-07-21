@@ -134,7 +134,7 @@
         code.indexOf('user-not-found') >= 0 || code.indexOf('invalid-email') >= 0) {
       return 'Wrong username or password.';
     }
-    if (code.indexOf('too-many-requests') >= 0) return 'Too many attempts — wait a minute and try again.';
+    if (code.indexOf('too-many-requests') >= 0) return 'Too many attempts. Wait a minute and try again.';
     if (code.indexOf('network-request-failed') >= 0) return 'No connection to the sign-in service.';
     if (code.indexOf('operation-not-allowed') >= 0) return 'Sign-in is not enabled yet (console errand pending).';
     return (err && err.message) || 'Sign-in failed.';
@@ -142,8 +142,8 @@
 
   function signIn(username, password) {
     var clean = normalizeUsername(username);
-    if (!validUsername(clean)) return Promise.reject(new Error('Usernames are 3–40 characters: letters, numbers, dots, dashes.'));
-    if (!auth() || !fns()) return Promise.reject(new Error('Sign-in service is still loading — try again in a moment.'));
+    if (!validUsername(clean)) return Promise.reject(new Error('Usernames are 3 to 40 characters: letters, numbers, dots, dashes.'));
+    if (!auth() || !fns()) return Promise.reject(new Error('Sign-in service is still loading. Try again in a moment.'));
     return fns().signInWithEmailAndPassword(auth(), usernameToEmail(clean), String(password || ''))
       .then(function (cred) { return resolveSession(cred.user); })
       .then(function (session) {
@@ -187,11 +187,11 @@
     var level = LEVELS.indexOf(opts.level) >= 0 ? opts.level : 'standard';
     var password = String(opts.password || '');
     if (!current() || current().level !== 'super') return Promise.reject(new Error('Only a super admin can create accounts.'));
-    if (!validUsername(username)) return Promise.reject(new Error('Usernames are 3–40 characters: letters, numbers, dots, dashes.'));
+    if (!validUsername(username)) return Promise.reject(new Error('Usernames are 3 to 40 characters: letters, numbers, dots, dashes.'));
     if (password.length < 8) return Promise.reject(new Error('Temporary password needs at least 8 characters.'));
     var f = fns();
     if (!f || !f.initializeApp || !f.getAuth || !f.createUserWithEmailAndPassword) {
-      return Promise.reject(new Error('Sign-in service is still loading — try again in a moment.'));
+      return Promise.reject(new Error('Sign-in service is still loading. Try again in a moment.'));
     }
     var mintName = 'adminMint-' + Date.now();
     var mintApp = f.initializeApp(auth().app.options, mintName);

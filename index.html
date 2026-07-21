@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=718e619254">
 <style>
 :root {
@@ -156,7 +156,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ec-desc{font-size:14px;color:var(--text2);line-height:1.5;letter-spacing:0}
 /* Metadata tag — hugs its text (no full-width stretch in the flex column) and
    never wraps, so it reads as a tidy single-line label, HIG-style. */
-.ec-pill{align-self:flex-start;display:inline-flex;align-items:center;width:auto;max-width:100%;white-space:nowrap;font-size:11.5px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;padding:4px 10px;border-radius:7px;margin-top:4px;text-transform:uppercase;line-height:1}
+.ec-pill{align-self:flex-start;display:inline-flex;align-items:center;width:auto;max-width:100%;white-space:nowrap;font-size:11.5px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;padding:4px 10px;border-radius:999px;margin-top:4px;text-transform:uppercase;line-height:1}
 .ec-actions{align-self:flex-start;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
 .ec-mini-btn{border:1px solid transparent;background:color-mix(in srgb,var(--oc,var(--accent)) 14%,transparent);color:var(--oc,var(--accent));border-radius:999px;padding:3px 10px;font-size:12px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
 .ec-mini-btn:hover{background:color-mix(in srgb,var(--oc,var(--accent)) 24%,transparent);color:var(--text);transform:translateY(-1px)}
@@ -187,7 +187,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(max-width:900px){.tb-right{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}}
 .tb-right::-webkit-scrollbar{display:none}
 .tb-divider{width:1px;height:24px;background:var(--bord2);flex-shrink:0;opacity:.6;margin:0 2px}
-.tbtn{padding:7px 14px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.tbtn{padding:7px 14px;border-radius:var(--ui-radius-control);font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
 .tbtn:active{transform:scale(.96)}
 .tbtn:focus:not(:focus-visible){outline:none}
 .tbtn-ghost{background:var(--btn-fill);color:var(--btn-ink);border:var(--btn-hairline)}.tbtn-ghost:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
@@ -406,7 +406,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
 .empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
 .empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2);text-align:center}
-.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer}
+.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer}
 .empty-rundown-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
 /* ── BOT BAR ── */
@@ -649,6 +649,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-body{flex:1;overflow:hidden;display:flex;min-height:0}
 .ls-main{flex:1;overflow-y:auto;padding:8px 10px 12px;display:flex;flex-direction:column;gap:6px}
 .ls-sidebar{width:360px;flex-shrink:0;background:var(--glass-bg-strong);border-left:1px solid var(--glass-border);display:none;flex-direction:column;overflow:hidden;position:relative;box-shadow:var(--glass-highlight);backdrop-filter:blur(24px) saturate(155%);-webkit-backdrop-filter:blur(24px) saturate(155%)}
+/* Live reading surfaces honor the operator's text-size setting (A− / A+ in the Script Op head). */
+.ls-sidebar,.lv-cur-card,.lv-next-card,.lf-cue,.prompt-op-panel{zoom:var(--live-zoom,1)}
 .ls-sidebar.open{display:flex}
 .ls-resizer{width:7px;cursor:col-resize;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--cyan) 22%,transparent),transparent);border-left:1px solid var(--glass-border);display:none;flex-shrink:0}
 .ls-resizer.on{display:block}
@@ -780,7 +782,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Prompter remote controls */
 .prompter-remote-stack{display:flex;flex-direction:column;gap:8px}
 .prompter-remote-row{display:flex;gap:5px}
-.prompter-remote-btn{flex:1;min-width:0;padding:7px 4px;border-radius:7px;font-size:14px;cursor:pointer;border:1px solid transparent;background:var(--btn-fill-2);color:var(--btn-ink);transition:all .15s;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;user-select:none}
+.prompter-remote-btn{flex:1;min-width:0;padding:7px 4px;border-radius:var(--ui-radius-control);font-size:14px;cursor:pointer;border:1px solid transparent;background:var(--btn-fill-2);color:var(--btn-ink);transition:all .15s;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;user-select:none}
 .prompter-remote-btn:hover{border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,var(--s3));color:var(--btn-ink-hover)}
 .prompter-remote-btn.active{border-color:var(--cyan);background:rgba(34,211,211,.15);color:var(--cyan)}
 .prompter-remote-lbl{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
@@ -800,7 +802,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-bot-sep{width:1px;height:30px;background:var(--border)}
 @media(max-width:560px){.ls-timer{font-size:22px}.ls-remain{font-size:18px}.ls-bot-clocks{gap:11px}}
 .ls-nav{display:flex;gap:6px}
-.ls-btn{padding:7px 16px;border-radius:7px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;border:none;transition:all .15s}
+.ls-btn{padding:7px 16px;border-radius:var(--ui-radius-control);font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;border:none;transition:all .15s}
 .ls-prev{background:var(--green);color:#03130e;border:1px solid rgba(34,211,160,.55)}
 .ls-prev:hover{filter:brightness(1.08)}
 .ls-next-btn{background:var(--red);color:#fff;min-width:90px}.ls-next-btn:hover{filter:brightness(1.08)}
@@ -906,7 +908,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cue-on-dot{color:var(--green);font-size:10px;font-weight:700;flex-shrink:0;line-height:1}
 .cue-off-dot{color:var(--red);font-size:10px;font-weight:700;flex-shrink:0;line-height:1}
 .ar-cue-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
-.ar-type-btn{padding:8px 6px;border-radius:9px;font-size:12px;font-family:var(--mono);cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--text3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+.ar-type-btn{padding:8px 6px;border-radius:var(--ui-radius-control);font-size:12px;font-family:var(--mono);cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--text3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
 .ar-type-btn:hover{border-color:transparent;color:var(--oc,var(--accent));background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .ar-type-btn.active{border-color:transparent;color:var(--oc);background:var(--ob)}
 .ar-cue-block{margin-top:6px;padding:10px 12px;border-radius:0 8px 8px 0;background:var(--s2)}
@@ -944,7 +946,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .field{display:flex;flex-direction:column;gap:6px}
 .field-group{display:flex;flex-direction:column;gap:7px}
 .field-lbl{font-size:12px;font-family:var(--sans);font-weight:600;letter-spacing:.01em;color:var(--text2);text-transform:none}
-.field-in{background:var(--s2);border:1.5px solid var(--bord2);border-radius:11px;color:var(--text);font-family:var(--sans);font-size:15px;padding:12px 14px;outline:none;width:100%;transition:border-color .15s var(--ease),box-shadow .2s var(--ease),background .15s var(--ease);letter-spacing:0;line-height:1.4}
+.field-in{background:var(--s2);border:1.5px solid var(--bord2);border-radius:var(--ui-radius-control);color:var(--text);font-family:var(--sans);font-size:15px;padding:12px 14px;outline:none;width:100%;transition:border-color .15s var(--ease),box-shadow .2s var(--ease),background .15s var(--ease);letter-spacing:0;line-height:1.4}
 .field-in:hover{border-color:color-mix(in srgb,var(--bord2) 60%,var(--text2))}
 .field-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--s2) 92%,var(--bg))}
 .field-in::placeholder{color:var(--text3);font-weight:400}
@@ -965,7 +967,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sp-weather-shell.has-weather-summary:focus-within .sp-weather-entry{position:static;height:auto;padding:12px 0;opacity:1;caret-color:var(--accent)}
 .field-with-action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
 .field-with-action .field-in{min-width:0}
-.field-action-btn{height:100%;min-height:45px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:11px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
+.field-action-btn{height:100%;min-height:45px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
 .field-action-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .field-action-btn.on{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,var(--s2));color:var(--text)}
 .field-in:disabled{opacity:.72;color:var(--text2);cursor:not-allowed;background:color-mix(in srgb,var(--s2) 70%,var(--bg))}
@@ -979,11 +981,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    explanation in a popover — never navigation. One shared #infoPop element,
    filled + positioned by toggleInfoPop(); dismissed via the uiDismiss registry
    (click-outside/Esc). "Learn more" deep-links into the Learning Hub lesson. */
-.info-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--accent) 70%,transparent);background:transparent;color:var(--accent);cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle;margin-left:7px;transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
-.info-btn .sf-symbol{font-size:12px}
-.info-btn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent)}
+.info-btn{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:6px;border:none;background:transparent;color:var(--accent);cursor:pointer;flex-shrink:0;padding:0 3px;vertical-align:middle;margin-left:6px;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.info-btn .sf-symbol{font-size:14px}
+.info-btn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .info-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media(pointer:coarse){.info-btn{width:32px;height:32px}}
+@media(pointer:coarse){.info-btn{min-width:32px;height:32px}}
 #infoPop{position:fixed;z-index:400;width:min(340px,calc(100vw - 32px));background:var(--glass-bg-strong);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-group);box-shadow:var(--liquid-shadow-raised);padding:var(--sp-4);animation:rise .18s var(--ease) both}
 #infoPop[hidden]{display:none}
 .info-pop-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:7px}
@@ -1103,7 +1105,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-head{padding:20px 20px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .admin-head-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .admin-title{font-family:var(--syne);font-size:22px;font-weight:800}
-.admin-close-btn{width:32px;height:32px;border-radius:8px;background:var(--btn-fill-2);border:1px solid transparent;color:var(--btn-ink);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.admin-close-btn{width:32px;height:32px;border-radius:var(--ui-radius-control);background:var(--btn-fill-2);border:1px solid transparent;color:var(--btn-ink);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .admin-close-btn:hover{color:var(--btn-ink-hover);background:var(--btn-fill-2-hover)}
 .admin-who{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px}
 .admin-level-chip{padding:3px 9px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.06em}
@@ -1128,10 +1130,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-in{background:var(--s3);border:1.5px solid var(--bord2);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:10px 12px;outline:none;width:100%;transition:border .15s}
 .admin-in:focus{border-color:var(--accent)}.admin-in::placeholder{color:var(--text3)}
 .admin-level-row{display:flex;gap:6px}
-.admin-level-btn{flex:1;padding:7px;border-radius:7px;font-size:11px;font-family:var(--mono);font-weight:600;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--text3);transition:all .15s}
+.admin-level-btn{flex:1;padding:7px;border-radius:var(--ui-radius-control);font-size:11px;font-family:var(--mono);font-weight:600;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--text3);transition:all .15s}
 .admin-level-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .admin-level-btn.sel{border-color:transparent;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
-.admin-add-btn{padding:9px;border-radius:11px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
+.admin-add-btn{padding:9px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
 .admin-add-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .admin-sources-grid{display:flex;flex-direction:column;gap:8px}
 .admin-src-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1325,7 +1327,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .call-grid .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .call-row-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .call-row-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
-.call-add-btn{width:100%;padding:10px;border-radius:8px;border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer}
+.call-add-btn{width:100%;padding:10px;border-radius:var(--ui-radius-control);border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer}
 .call-add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .patch-table{display:grid;gap:0;margin-top:8px;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2)}
 .patch-table.video,.patch-table.audio{grid-template-columns:1fr 1fr 1fr 1fr 1.2fr 34px 38px}
@@ -1350,14 +1352,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .readiness-row-top{display:grid;grid-template-columns:auto auto minmax(150px,.9fr) minmax(240px,1.4fr) auto;gap:9px;align-items:start}
 .readiness-row-head{display:grid;grid-template-columns:auto auto minmax(150px,.9fr) minmax(240px,1.4fr) auto;gap:9px;align-items:center;padding:0 12px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 .readiness-num{width:28px;height:28px;border-radius:8px;background:var(--s3);border:1px solid var(--bord2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--text2);font-weight:800}
-.readiness-row .field-in{font-size:13px;padding:10px 11px;border-radius:8px}
+.readiness-row .field-in{font-size:13px;padding:10px 11px}
 .readiness-check-text{min-height:50px;resize:vertical;line-height:1.5}
 .readiness-prompt{display:none}
 .readiness-done-cell{display:flex;align-items:flex-start;justify-content:center}
 .readiness-done{display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:12px;color:var(--text2);border:1px solid var(--bord2);background:var(--s3);border-radius:8px;padding:10px 11px;min-height:41px}
 .readiness-simple-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:center;padding:0 12px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 .readiness-simple-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:center;border:1px solid var(--border);background:var(--s2);border-radius:10px;padding:10px 12px}
-.readiness-simple-row .field-in{font-size:14px;padding:10px 11px;border-radius:8px}
+.readiness-simple-row .field-in{font-size:14px;padding:10px 11px}
 .readiness-remove{width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:color-mix(in srgb,var(--red) 11%,transparent);color:var(--red);cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .readiness-item-wrap{display:flex;flex-direction:column;gap:5px;min-width:0}
 .readiness-signoff{font-size:11px;font-family:var(--mono);color:var(--green);letter-spacing:.02em;padding-left:2px}
@@ -1366,7 +1368,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .paperwork-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .paperwork-flow-actions{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:520;width:min(calc(100vw - 48px),1020px);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 22px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s1) 94%,transparent);box-shadow:0 18px 50px rgba(0,0,0,.38);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .paperwork-flow-left,.paperwork-flow-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.paperwork-flow-actions button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:background .15s var(--ease),color .15s var(--ease)}
+.paperwork-flow-actions button{border-radius:var(--ui-radius-control);padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:background .15s var(--ease),color .15s var(--ease)}
 .paperwork-flow-actions button:hover:not(:disabled){border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .paperwork-flow-actions button:disabled{opacity:.35;cursor:not-allowed}
 .paperwork-flow-actions .primary{background:linear-gradient(135deg,var(--accent),var(--acg));border-color:transparent;color:#fff}
@@ -1841,7 +1843,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-reply-attach{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-reply-attach:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .pb-editbox{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
-.pb-editbox textarea{width:100%;background:var(--s2);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--bord2));border-radius:9px;color:var(--text);font-size:13px;line-height:1.5;font-family:var(--sans);padding:8px 10px;resize:vertical;outline:0;min-height:54px}
+.pb-editbox textarea{width:100%;background:var(--s2);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--bord2));border-radius:var(--ui-radius-control);color:var(--text);font-size:13px;line-height:1.5;font-family:var(--sans);padding:8px 10px;resize:vertical;outline:0;min-height:54px}
 .pb-editbtns{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .pb-mini-btn{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:7px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-mini-btn:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
@@ -2534,7 +2536,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-live-actions .pt-live-slate{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ls-live-actions :is(.pt-tech-btn,.pt-bars-btn){width:100%;min-height:38px;padding:9px;font-size:12px;border-radius:10px}
 .ls-live-actions .pt-live-rowcue{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ls-live-actions .pt-live-rowcue .pt-btn{min-height:36px;padding:9px;font-size:13px;border-radius:10px;border-color:transparent;background:color-mix(in srgb,var(--pt-accent,var(--accent)) 14%,transparent);color:var(--pt-accent,var(--accent))}
+.ls-live-actions .pt-live-rowcue .pt-btn{min-height:36px;padding:9px;font-size:13px;border-radius:var(--ui-radius-control);border-color:transparent;background:color-mix(in srgb,var(--pt-accent,var(--accent)) 14%,transparent);color:var(--pt-accent,var(--accent))}
 /* Let long labels (e.g. "Tech Difficulty") wrap instead of overflowing the half-width cell. */
 .ls-live-actions .pt-btn{white-space:normal}
 .ls-live-actions .pt-btn>span{white-space:normal;overflow-wrap:anywhere;line-height:1.08}
@@ -2827,7 +2829,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-sidebar .flow-clock-modes,.ls-sidebar .flow-wrap-grid{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important}
 .ls-sidebar .flow-clock-fields{grid-template-columns:1fr 1fr}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(auto-fit,minmax(84px,1fr))}
-.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:36px;padding:6px 8px;font-size:13px;border-radius:11px}
+.ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:36px;padding:6px 8px;font-size:13px;border-radius:var(--ui-radius-control)}
 .ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{width:40px;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:50%}
 .ls-sidebar .flow-control-section{padding:9px 11px;gap:7px}
 .ls-sidebar .flow-clock-preview{padding:7px 12px}
@@ -4330,22 +4332,22 @@ input.pt-range::-moz-range-thumb,
           <div class="entry-theme-info">
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Front-page theme carries into the main app. Sub-app settings can still choose their own look.</span></div>
             <div class="entry-theme-info-row"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Autosave uses this browser on this device.</span></div>
-            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live?subject=Cueola%20support"><span class="sf-symbol" data-symbol="info.bug" aria-hidden="true"></span><span><b>Support</b> — bugs, questions &amp; help<em>support@cueola.live</em></span></a>
-            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span><span><b>Say hello</b> — info &amp; everything else<em>hello@cueola.live</em></span></a>
+            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live?subject=Cueola%20support"><span class="sf-symbol" data-symbol="info.bug" aria-hidden="true"></span><span><b>Support</b>: bugs, questions &amp; help<em>support@cueola.live</em></span></a>
+            <a class="entry-theme-info-row entry-contact-row" href="mailto:hello@cueola.live"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span><span><b>Say hello</b>: info &amp; everything else<em>hello@cueola.live</em></span></a>
             <details class="themes-submenu license-submenu">
               <summary class="themes-row"><span class="sf-symbol tr-license-ico" data-symbol="content.script" aria-hidden="true"></span><span class="tr-lbl">License</span><span class="tr-val">BY-NC-ND<span class="tr-chev" aria-hidden="true">›</span></span></summary>
               <div class="license-body">
                 <div class="license-title">Creative Commons BY-NC-ND 4.0</div>
                 <p>Copyright © 2026 Jon Kost. Free to use and share for non-commercial educational purposes with attribution. No derivatives or commercial use permitted.</p>
                 <ul>
-                  <li><b>Attribution</b> — credit must be given to Jon Kost</li>
-                  <li><b>NonCommercial</b> — no commercial use</li>
-                  <li><b>NoDerivatives</b> — no modified versions may be distributed</li>
+                  <li><b>Attribution</b>: credit must be given to Jon Kost</li>
+                  <li><b>NonCommercial</b>: no commercial use</li>
+                  <li><b>NoDerivatives</b>: no modified versions may be distributed</li>
                 </ul>
                 <a class="license-link" href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">Full license text</a>
               </div>
             </details>
-            <div class="entry-theme-meta"><span>Cueola</span><b>v2.0.0</b></div>
+            <div class="entry-theme-meta"><span>Cueola</span><b>v2.1.0</b></div>
           </div>
         </div>
       </div>
@@ -4406,7 +4408,7 @@ input.pt-range::-moz-range-thumb,
      RUNDOWN SCREEN
 ══════════════════════════════════════════ -->
 <div class="screen" id="rundown">
-  <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE — Pre-built example. Changes won't be saved.</div>
+  <div class="demo-banner" id="demoBanner" style="display:none">▶ DEMO MODE: Pre-built example. Changes won't be saved.</div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:8px">
       <button class="brand" onclick="goHome()" title="Back to home" aria-label="Back to home" style="background:none;border:none;cursor:pointer;color:inherit;padding:6px 4px"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="hi">ola</span></span></button>
@@ -4534,7 +4536,7 @@ input.pt-range::-moz-range-thumb,
     <span class="ls-call-stage" id="lsCallStage">READY</span>
     <span class="ls-call-name" id="lsCallName">—</span>
     <button type="button" class="ls-call-take" onclick="takePlayoutCall('button')" title="Fire the clip now (G)">TAKE · G</button>
-    <button type="button" class="ls-call-abort" onclick="abortPlayoutCall('button')" title="Stop the call — nothing fires (S)">ABORT · S</button>
+    <button type="button" class="ls-call-abort" onclick="abortPlayoutCall('button')" title="Stop the call. Nothing fires. (S)">ABORT · S</button>
   </div>
   <section class="ls-status-rail" id="lsStatusRail" aria-label="Live subsystem status and recovery">
     <h2 class="ls-status-rail-title">System status</h2>
@@ -4558,7 +4560,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="ls-sr-only" id="lsStatusAnnouncement" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="ls-status-transients" aria-live="polite" aria-atomic="true">
-      <div class="ls-prompter-mini ls-sync-mini" id="ls-stat-sync" title="Cloud sync lost — showing the last known state and reconnecting" hidden>SYNC RECONNECTING…</div>
+      <div class="ls-prompter-mini ls-sync-mini" id="ls-stat-sync" title="Cloud sync lost. Showing the last known state and reconnecting." hidden>SYNC RECONNECTING…</div>
       <div class="ls-prompter-mini ls-sfx-mini" id="ls-stat-sfx" title="An SFX pad just fired" hidden>SFX</div>
     </div>
   </section>
@@ -4570,6 +4572,8 @@ input.pt-range::-moz-range-thumb,
       <div class="ls-sidebar-head" id="lsSidebarHead">
         <div class="ls-sidebar-head-row">
           <div class="ls-sidebar-title">Script Op</div>
+          <button class="ls-popout-btn" onclick="stepLiveTextZoom(-0.05)" title="Smaller panel and cue preview text" aria-label="Decrease Live panel text size"><span style="font-size:10px;font-weight:800">A</span></button>
+          <button class="ls-popout-btn" onclick="stepLiveTextZoom(0.05)" title="Larger panel and cue preview text" aria-label="Increase Live panel text size"><span style="font-size:14px;font-weight:800">A</span></button>
           <button class="ls-popout-btn" id="lsPopoutBtn" onclick="toggleScriptOpPopout()" title="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
           <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" title="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
@@ -4852,7 +4856,7 @@ input.pt-range::-moz-range-thumb,
 
       <!-- Step 1: Cue Name + Style -->
       <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">New Row — Step 1 of 2</div>
+        <div class="ar-step-label">New Row: Step 1 of 2</div>
         <div class="ar-heading">Add a row</div>
         <div class="field">
           <label class="field-lbl">Cue Name / Label</label>
@@ -5020,7 +5024,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div id="lrpBody"></div>
     <button id="lrpCueBtn" class="lrp-cue-btn" onclick="lrpCueHere()" hidden><span class="sf-symbol" data-symbol="state.success" aria-hidden="true"></span><span id="lrpCueBtnLabel">Cue to this row</span></button>
-    <div class="lrp-cue-hint" id="lrpCueHint" hidden>Makes this the current row and cues the prompter — playout does not auto-fire.</div>
+    <div class="lrp-cue-hint" id="lrpCueHint" hidden>Makes this the current row and cues the prompter. Playout does not auto-fire.</div>
     <div class="lrp-nav">
       <button id="lrpPrevBtn" onclick="previewRelativeRow(-1)"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Previous row</span></button>
       <button id="lrpNextBtn" onclick="previewRelativeRow(1)"><span>Next row</span><span class="sf-symbol" data-symbol="chevron.right" aria-hidden="true"></span></button>
@@ -5036,9 +5040,9 @@ input.pt-range::-moz-range-thumb,
       <div class="warn-title" style="font-size:18px;margin:0">Start the show from…</div>
       <button class="ov-close-x" onclick="hideOverlay('lsStartChoiceOv')" title="Cancel" aria-label="Cancel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
     </div>
-    <div style="color:var(--text2);font-size:13px;line-height:1.5;margin-bottom:16px">This session is parked on <strong id="lsStartChoiceRow" style="color:var(--text)"></strong> with the clock at 0:00 — likely left over from a previous run.</div>
-    <button class="btn-primary" style="width:100%;margin-bottom:8px" onclick="lsStartFromTop()"><span class="sf-symbol" data-symbol="chevron.up" aria-hidden="true"></span> Take it from the top — <span id="lsStartChoiceTopLbl"></span></button>
-    <button class="btn-secondary" style="width:100%" onclick="lsStartFromHere()">Start here — <span id="lsStartChoiceHereLbl"></span></button>
+    <div style="color:var(--text2);font-size:13px;line-height:1.5;margin-bottom:16px">This session is parked on <strong id="lsStartChoiceRow" style="color:var(--text)"></strong> with the clock at 0:00, likely left over from a previous run.</div>
+    <button class="btn-primary" style="width:100%;margin-bottom:8px" onclick="lsStartFromTop()"><span class="sf-symbol" data-symbol="chevron.up" aria-hidden="true"></span> Take it from the top: <span id="lsStartChoiceTopLbl"></span></button>
+    <button class="btn-secondary" style="width:100%" onclick="lsStartFromHere()">Start here: <span id="lsStartChoiceHereLbl"></span></button>
   </div>
 </div>
 
@@ -5085,7 +5089,7 @@ input.pt-range::-moz-range-thumb,
       <span class="pnb-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
       <span class="pnb-text">
         <span class="pnb-title">Production Notes</span>
-        <span class="pnb-sub">The crew’s message board — tag a department and the thread stays with the show.</span>
+        <span class="pnb-sub">The crew’s message board. Tag a department and the thread stays with the show.</span>
       </span>
       <span class="pnb-count" id="paperworkNotesBarCount"></span>
       <span class="pnb-arrow sf-symbol" data-symbol="action.forward" aria-hidden="true"></span>
@@ -5111,7 +5115,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-title">Pick your group</div>
     <div class="modal-sub">Each group has its own paperwork workspace. The rundown and Live stay shared with the whole class.</div>
     <div class="group-chip-grid" id="groupPickerChips"></div>
-    <div class="field-hint" id="groupPickerLockNote" hidden>Groups are locked — ask your instructor if you need to move.</div>
+    <div class="field-hint" id="groupPickerLockNote" hidden>Groups are locked. Ask your instructor if you need to move.</div>
     <button class="btn-full btn-secondary" onclick="hideModal('groupPickerModal')" style="margin-top:10px">Not now</button>
   </div>
 </div>
@@ -5175,7 +5179,7 @@ input.pt-range::-moz-range-thumb,
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" placeholder="e.g. Studio A, Media Building" oninput="renderCallSheetWeatherCard()"></div>
         <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="Street address for maps and parking"></div>
-        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="Who to text if you're late — name + number"></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="Who to text if you're late (name and number)"></div>
       </div>
     </div>
     <div class="prepro-section">
@@ -5253,7 +5257,7 @@ input.pt-range::-moz-range-thumb,
     <div class="pb-collab" data-pb-collab="safety-plan"></div>
     <div class="prepro-grid">
       <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
-      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="Street address — prints on the call sheet too"></div>
+      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="Street address. Prints on the call sheet too."></div>
       <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
       <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div></div>
       <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120" placeholder="e.g. Control room shelf, by the door"></div>
@@ -5261,11 +5265,11 @@ input.pt-range::-moz-range-thumb,
       <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
       <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
       <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
-      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="Auto-fills from the call sheet — who to text if late"></div>
+      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="Auto-fills from the call sheet (who to text if late)"></div>
     </div>
     <div class="field">
       <label class="field-lbl">Equipment Needed</label>
-      <textarea class="field-in" id="sp-equipment" rows="3" style="font-size:14px;line-height:1.6" placeholder="Gear that needs special handling — ladders, rigging, cable runs across walkways"></textarea>
+      <textarea class="field-in" id="sp-equipment" rows="3" style="font-size:14px;line-height:1.6" placeholder="Gear that needs special handling: ladders, rigging, cable runs across walkways"></textarea>
     </div>
     <div class="field">
       <label class="field-lbl">Safety Notes</label>
@@ -5352,7 +5356,7 @@ input.pt-range::-moz-range-thumb,
 
     <div class="pb-board" id="pbBoard">
       <div class="pb-board-toolbar">
-        <button type="button" class="pb-portal-chip" id="pbPortalChip" onclick="openUserPortal()" title="Your profile — change your avatar" aria-label="Your profile"></button>
+        <button type="button" class="pb-portal-chip" id="pbPortalChip" onclick="openUserPortal()" title="Your profile: change your avatar" aria-label="Your profile"></button>
         <span class="pb-note-count" id="pbNotesCount">0 notes</span>
         <input type="search" class="pb-board-search" id="pbNotesSearch" placeholder="Search notes &amp; authors…" oninput="pbSetNotesSearch(this.value)">
         <div class="pb-board-tools">
@@ -5389,7 +5393,7 @@ input.pt-range::-moz-range-thumb,
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(false)" title="Bulleted list">•&nbsp;List</button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(true)" title="Numbered list">1.&nbsp;List</button>
           </div>
-          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew — type @ to mention someone" oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
+          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
           <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
           <div>
@@ -5401,7 +5405,7 @@ input.pt-range::-moz-range-thumb,
             <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" title="Export this note as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
             <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
             <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
-            <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post — ⌘/Ctrl+Enter"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
+            <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" title="Post (⌘/Ctrl+Enter)"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
           </div>
         </div>
       </div>
@@ -5627,7 +5631,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-title">Settings</div>
     <div class="settings-section">
       <div class="settings-sec-label">Show</div>
-      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none"><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span> Locked — only an admin can change this.</div></div>
+      <div class="field"><label class="field-lbl">Show Name</label><input class="field-in" id="set-showname" type="text" maxlength="60"><div class="field-hint" id="showname-locked-hint" style="display:none"><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span> Locked: only an admin can change this.</div></div>
       <div class="field"><label class="field-lbl">Start Time <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="set-starttime" type="time"></div>
       <div class="field">
         <label class="field-lbl">Production Clock Frame Rate</label>
@@ -5678,7 +5682,7 @@ input.pt-range::-moz-range-thumb,
 	    <div class="settings-section" style="margin-top:12px">
 	      <div class="settings-sec-label">Production</div>
 	      <div class="settings-file-grid">
-        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openPreflightPanel()" title="Validate the whole show — media, links, SFX, sync, theme — before going live"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Preflight</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openPreflightPanel()" title="Validate the whole show (media, links, SFX, sync, theme) before going live"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Preflight</span></button>
         <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openShowLog()" title="Timestamped record of cue fires, media and sync events, and errors"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Show Log</span></button>
       </div>
     </div>
@@ -5686,7 +5690,7 @@ input.pt-range::-moz-range-thumb,
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save Changes</button>
     </div>
-    <div class="settings-version" style="margin-top:10px;text-align:center;font-size:10.5px;color:var(--text3);font-family:var(--mono)">Cueola v2.0.0</div>
+    <div class="settings-version" style="margin-top:10px;text-align:center;font-size:10.5px;color:var(--text3);font-family:var(--mono)">Cueola v2.1.0</div>
   </div>
 </div>
 
@@ -5739,10 +5743,10 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-avatar-profile.js?v=e56e5e6cd7"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=fe05f41dfc"></script>
-<script src="cueola-export-model.js?v=3e21300eb6"></script>
+<script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=d5f452410b"></script>
-<script src="cueola-admin-auth.js?v=de859c513b"></script>
+<script src="cueola-identity.js?v=81570be11a"></script>
+<script src="cueola-admin-auth.js?v=2d94c57e93"></script>
 <script src="cueola-live-session.js?v=2352bc00d1"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
@@ -5750,8 +5754,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=e7f1cb5035"></script>
-<script src="outrangutan/outrangutan.js?v=eedbddd361"></script>
+<script src="cueola-app.js?v=e96b613672"></script>
+<script src="outrangutan/outrangutan.js?v=9efc6c6f2a"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Cueola — Instructor Dashboard</title>
+<title>Cueola Instructor Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/app/cueola-32.png">
 <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
 <meta name="theme-color" content="#080b12">
-<link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
+<link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
 <style>
 :root {
   --bg:     #080b12;
@@ -732,7 +732,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="ns-icon">+</div>
     <div class="ns-body">
       <div class="ns-title">Create a New Session</div>
-      <div class="ns-desc">Cueola generates the show code automatically — share it with your crew.</div>
+      <div class="ns-desc">Cueola generates the show code automatically. Share it with your crew.</div>
     </div>
   </div>
 
@@ -864,8 +864,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="field">
         <label class="field-lbl">Entry Requirement <span class="vocab-hint" title="A class key is the term-long key students use to create their profile and sign in.">ⓘ</span></label>
         <select class="field-in" id="new-entrycode">
-          <option value="off">Show code only — anyone with the code joins</option>
-          <option value="on">Show code + class key — students must sign in with a profile</option>
+          <option value="off">Show code only: anyone with the code joins</option>
+          <option value="on">Show code + class key: students must sign in with a profile</option>
         </select>
       </div>
     </div>
@@ -873,7 +873,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="modal-sub">Pick the paperwork this class will use. Nothing is deleted by turning a type off.</div>
       <div class="field">
         <div id="new-paperwork-fieldset"></div>
-        <div class="field-hint">Presets fill the checkboxes — change this later in Session Setup.</div>
+        <div class="field-hint">Presets fill the checkboxes. Change this later in Session Setup.</div>
       </div>
     </div>
     <div class="modal-err" id="new-err">Could not connect. Check your internet and try again.</div>
@@ -885,7 +885,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <!-- ── MODAL: READ-ONLY RUNDOWN PEEK (Phase 4 item 5) ── -->
 <div class="modal-wrap" id="modal-peek">
   <div class="modal peek-modal">
-    <div class="modal-title">Rundown — <span id="peekTitle" style="font-family:var(--mono);letter-spacing:.08em"></span></div>
+    <div class="modal-title">Rundown: <span id="peekTitle" style="font-family:var(--mono);letter-spacing:.08em"></span></div>
     <div class="modal-sub">Read-only live view. The highlighted row is where the show is right now.</div>
     <div class="peek-body" id="peekBody"></div>
     <button class="btn-full btn-secondary" onclick="closeRundownPeek()" style="margin-top:10px">Close</button>
@@ -936,7 +936,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
             <div class="detail-panel-head">
               <div>
                 <div class="detail-panel-title">Session Setup</div>
-                <div class="detail-panel-sub">Three quick tasks — one Save Session button updates them all.</div>
+                <div class="detail-panel-sub">Three quick tasks. One Save Session button updates them all.</div>
               </div>
             </div>
             <!-- v2.1 Phase 4: the monolithic form is split into instructor tasks -->
@@ -954,8 +954,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
                 <div class="field">
                   <label class="field-lbl">Status</label>
                   <select class="field-in" id="detail-status-input">
-                    <option value="idle">Idle — between shows</option>
-                    <option value="active">Active — show day</option>
+                    <option value="idle">Idle: between shows</option>
+                    <option value="active">Active: show day</option>
                   </select>
                 </div>
               </div>
@@ -978,14 +978,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
                 <div class="field">
                   <label class="field-lbl">Groups <span class="vocab-hint" title="Split the class into per-group paperwork workspaces. The rundown and Live stay shared with everyone.">ⓘ</span></label>
                   <select class="field-in" id="detail-groups-toggle" onchange="document.getElementById('detail-groups-config').hidden = this.value !== 'on'">
-                    <option value="off">Whole class — one paperwork workspace</option>
+                    <option value="off">Whole class: one paperwork workspace</option>
                     <option value="on">Break into groups</option>
                   </select>
                 </div>
                 <div class="field" id="detail-groups-config" hidden>
                   <label class="field-lbl">Group Names <span style="color:var(--text3)">(one per line)</span></label>
                   <textarea class="field-in" id="detail-groups-names" rows="4" placeholder="Group 1&#10;Group 2&#10;Group 3"></textarea>
-                  <label class="pw-type-row" style="margin-top:6px"><input type="checkbox" id="detail-groups-lock"> <span>Lock groups — students can no longer switch</span></label>
+                  <label class="pw-type-row" style="margin-top:6px"><input type="checkbox" id="detail-groups-lock"> <span>Lock groups: students can no longer switch</span></label>
                 </div>
               </div>
             </div>
@@ -993,7 +993,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
               <div class="detail-task-title">3 · Paperwork</div>
               <div class="field">
                 <div id="detail-paperwork-fieldset"></div>
-                <div class="field-hint">Turning a type off hides it everywhere for this session — nothing is deleted, re-enabling restores it.</div>
+                <div class="field-hint">Turning a type off hides it everywhere for this session. Nothing is deleted, and re-enabling restores it.</div>
               </div>
             </div>
             <div class="session-detail">
@@ -1037,7 +1037,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
           <div>
             <div class="detail-panel-title">Next Episode</div>
           </div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px">Fork this show into a fresh episode: the rundown skeleton, cue columns, paperwork structure, crew grid, and settings carry — notes, roles, script, and dates start clean.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px">Fork this show into a fresh episode: the rundown skeleton, cue columns, paperwork structure, crew grid, and settings carry. Notes, roles, script, and dates start clean.</div>
           <button class="btn-full btn-accent" onclick="startNextEpisode()" id="detail-next-episode-btn">Start Next Episode →</button>
           <div class="detail-panel-head" style="margin-top:18px">
             <div class="detail-panel-title">Danger Zone</div>
@@ -1090,7 +1090,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=fe05f41dfc"></script>
-<script src="cueola-admin-auth.js?v=de859c513b"></script>
+<script src="cueola-admin-auth.js?v=2d94c57e93"></script>
 <script>
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
@@ -1207,7 +1207,7 @@ let _adminDirectoryState = 'idle'; // 'idle' | 'loading' | 'ready' | 'error'
 function initAdminAuth() {
   const btn = document.getElementById('login-btn');
   if (!window.CueolaAdminAuth) {
-    showErr('login-err', 'Sign-in module failed to load — refresh the page.');
+    showErr('login-err', 'Sign-in module failed to load. Refresh the page.');
     return;
   }
   CueolaAdminAuth.onChange(session => {
@@ -1536,7 +1536,7 @@ function openRundownPeek(code) {
     }
     renderRundownPeek(snap.data() || {});
   }, () => {
-    document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Live view unavailable — check the connection.</div>`;
+    document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Live view unavailable. Check the connection.</div>`;
   });
 }
 
@@ -1622,7 +1622,7 @@ async function startNextEpisode() {
         if (e?.code !== 'code-collision') throw e;
       }
     }
-    if (!code) { showToast('Could not find a free show code this month — set one manually via New Session.'); return; }
+    if (!code) { showToast('Could not find a free show code this month. Set one manually via New Session.'); return; }
     // D5 grouped-source fix: each group's OWN living paperwork structure
     // carries into fresh group docs — never the stale pre-group master copy.
     if (Array.isArray(source.groups) && source.groups.length) {
@@ -1673,7 +1673,7 @@ function renderSessions() {
         <div class="empty-title">${mineEmpty ? 'No sessions of yours yet' : 'No sessions yet'}</div>
         <div class="empty-sub">${mineEmpty
           ? `Sessions you create appear here.<br>Switch to <b>All</b> to see the other ${sessions.length} session${sessions.length===1?'':'s'}.`
-          : `Create your first session and share its code —<br>that's how your crew joins.`}</div>
+          : `Create your first session and share its code.<br>That's how your crew joins.`}</div>
       </div>`;
     return;
   }
@@ -1900,7 +1900,7 @@ function genLoginCode() {
 async function mintLoginCode() {
   const label = document.getElementById('newLoginCodeLabel').value.trim();
   const role = document.getElementById('newLoginCodeRole').value === 'admin' ? 'admin' : 'student';
-  if (!label) { showToast('Give the code a label — e.g. the class name.'); return; }
+  if (!label) { showToast('Give the code a label (e.g. the class name).'); return; }
   const code = genLoginCode();
   try {
     await window._setDoc(window._doc(db(), 'accessCodes', code), {
@@ -1908,7 +1908,7 @@ async function mintLoginCode() {
     });
   } catch (e) { showToast('Mint failed: ' + e.message); return; }
   document.getElementById('newLoginCodeLabel').value = '';
-  showToast(`Class key ${code} minted — share it with the class.`);
+  showToast(`Class key ${code} minted. Share it with the class.`);
   await loadIdentityAdminData();
 }
 
@@ -1922,14 +1922,14 @@ async function toggleLoginCode(code) {
       : { active: false, revokedAt: Date.now(), revokedBy: adminSession.name };
     await window._updateDoc(window._doc(db(), 'accessCodes', code), patch);
   } catch (e) { showToast('Update failed: ' + e.message); return; }
-  showToast(makeActive ? `${code} reactivated.` : `${code} revoked — existing profiles keep working; new sign-ups stop.`);
+  showToast(makeActive ? `${code} reactivated.` : `${code} revoked. Existing profiles keep working; new sign-ups stop.`);
   await loadIdentityAdminData();
 }
 
 function copyLoginCode(code) {
   navigator.clipboard?.writeText(code).then(
     () => showToast(`${code} copied.`),
-    () => dashPrompt('Copy this class key', 'Copy it manually — the clipboard was blocked.', code, { okLabel:'Done' })
+    () => dashPrompt('Copy this class key', 'Copy it manually. The clipboard was blocked.', code, { okLabel:'Done' })
   );
 }
 
@@ -1937,7 +1937,7 @@ function renderLoginCodes() {
   const el = document.getElementById('loginCodesList');
   if (!el) return;
   if (!identityCodes.length) {
-    el.innerHTML = '<div class="roster-empty">No class keys yet — mint one and share it with the class.</div>';
+    el.innerHTML = '<div class="roster-empty">No class keys yet. Mint one and share it with the class.</div>';
     return;
   }
   el.innerHTML = identityCodes.map(c => {
@@ -1971,7 +1971,7 @@ function renderRoster() {
   if (!el) return;
   const live = identityProfiles.filter(p => !p.renamedTo && !p.mergedInto);
   if (!live.length) {
-    el.innerHTML = '<div class="roster-empty">No profiles yet — students appear here once they sign up with a class key.</div>';
+    el.innerHTML = '<div class="roster-empty">No profiles yet. Students appear here once they sign up with a class key.</div>';
     return;
   }
   el.innerHTML = live.map(p => {
@@ -2001,7 +2001,7 @@ async function rosterToggleActive(username) {
   try {
     await window._updateDoc(window._doc(db(), 'profiles', username), { active: makeActive });
   } catch (e) { showToast('Update failed: ' + e.message); return; }
-  showToast(makeActive ? `@${username} reactivated.` : `@${username} deactivated — they can no longer sign in.`);
+  showToast(makeActive ? `@${username} reactivated.` : `@${username} deactivated. They can no longer sign in.`);
   await loadIdentityAdminData();
 }
 
@@ -2010,7 +2010,7 @@ async function rosterRename(username) {
   const next = await dashPrompt('Rename profile', `New username for ${p.fullName || username}. The old name becomes a pointer to the new one.`, username, { okLabel:'Rename' });
   if (!next || next === username) return;
   const clean = String(next).trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(clean)) { showToast('Usernames are 3–40 chars: lowercase letters, numbers, dots, dashes.'); return; }
+  if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(clean)) { showToast('Usernames are 3 to 40 characters: lowercase letters, numbers, dots, dashes.'); return; }
   if (rosterProfile(clean)) { showToast(`@${clean} is already taken.`); return; }
   try {
     // New doc first (rules re-check the login code is active), then tombstone.
@@ -2024,7 +2024,7 @@ async function rosterRename(username) {
     });
   } catch (e) {
     showToast(e.code === 'permission-denied'
-      ? 'Rename blocked — their class key is revoked. Reactivate it first.' : 'Rename failed: ' + e.message);
+      ? 'Rename blocked: their class key is revoked. Reactivate it first.' : 'Rename failed: ' + e.message);
     return;
   }
   showToast(`@${username} → @${clean}. Their next sign-in points them to the new name.`);
@@ -2100,7 +2100,7 @@ function renderAdminOverview() {
     return;
   }
   if (_adminDirectoryState === 'error') {
-    listEl.innerHTML = '<div class="empty-sub">Instructor accounts are unavailable — sign in with an admin account (and note this list stays offline until the v2.1 rules deploy).</div>';
+    listEl.innerHTML = '<div class="empty-sub">Instructor accounts are unavailable. Sign in with an admin account (and note this list stays offline until the v2.1 rules deploy).</div>';
     return;
   }
   listEl.innerHTML = admins.length ? admins.map(a => `
@@ -2124,7 +2124,7 @@ function renderAdminOverview() {
           <button class="admin-mini-btn danger" onclick="removeDashboardAdmin('${escapeHtml(a.uid)}')">Remove</button>
         </div>
       </div>
-    </div>`).join('') : '<div class="empty-sub">No instructor accounts yet — create the first one above.</div>';
+    </div>`).join('') : '<div class="empty-sub">No instructor accounts yet. Create the first one above.</div>';
 }
 
 function addDashboardAdmin() {
@@ -2138,7 +2138,7 @@ function addDashboardAdmin() {
     document.getElementById('newAdminUsername').value = '';
     document.getElementById('newAdminCode').value = '';
     loadAdminDirectory();
-    showToast(`Instructor "${created.username}" created — share the temp password and have them change it.`);
+    showToast(`Instructor "${created.username}" created. Share the temp password and have them change it.`);
   }).catch(err => {
     showToast(err?.message || 'Could not create the account.');
   });
@@ -2250,7 +2250,7 @@ async function createNewSession() {
     const { getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const existing = await getDoc(window._doc(db(), 'sessions', code));
     if (existing.exists()) {
-      showErr('new-err', `Code ${code} is already in use — pick a different code or delete that session first.`);
+      showErr('new-err', `Code ${code} is already in use. Pick a different code or delete that session first.`);
       btn.textContent = 'Create Session →'; btn.disabled = false;
       return;
     }
@@ -2444,7 +2444,7 @@ function assignmentLoadErrorState(error) {
   const code = String(error?.code || '').split('/').pop();
   if (code === 'permission-denied') return {
     status:'denied',
-    detail:'The saved roles could not be loaded (permissions). Nothing was changed — try again after the next rules deploy.',
+    detail:'The saved roles could not be loaded (permissions). Nothing was changed. Try again after the next rules deploy.',
   };
   if (code === 'unavailable' || code === 'deadline-exceeded' || navigator.onLine === false) return {
     status:'offline',
@@ -2494,7 +2494,7 @@ async function hydrateDashboardAssignments(code) {
   const requestId = ++detailAssignmentLoadId;
   const sessionDoc = sessions.find(item => (item.code || item.id) === code);
   if (!sessionDoc || !dashboardAssignmentModel()) {
-    setDashboardAssignmentDisplayState('error', 'Role assignments are unavailable right now — reload the page.');
+    setDashboardAssignmentDisplayState('error', 'Role assignments are unavailable right now. Reload the page.');
     return false;
   }
   detailAssignmentState = {
@@ -2549,7 +2549,7 @@ async function hydrateDashboardAssignments(code) {
       detail = `${ordered.length} saved role${ordered.length === 1 ? '' : 's'} confirmed · save #${Math.max(0, Number(latestSession.assignmentRevision) || 0)}.`;
     } else if (hasLegacy) {
       status = 'unsaved';
-      detail = 'Older role selections are shown for review — press Save Assignments to upgrade them to saved roles.';
+      detail = 'Older role selections are shown for review. Press Save Assignments to upgrade them to saved roles.';
     }
     detailAssignmentState = {
       code, status, detail, profiles, records:ordered,
@@ -3084,7 +3084,7 @@ async function saveDetailMetadata(showToastOnSave=true) {
       // needs the rollback runbook (capture group docs first). Keep config.
       patch.groups = priorGroups;
       patch.groupsLocked = s0.groupsLocked === true;
-      showToast('Turning groups off needs the rollback runbook — group paperwork was kept.');
+      showToast('Turning groups off needs the rollback runbook. Group paperwork was kept.');
     }
   }
   if (adminSession?.level === 'super') {
@@ -3117,7 +3117,7 @@ async function saveDetailMetadata(showToastOnSave=true) {
         await window._setDoc(window._doc(db(), 'sessions', activeCode, 'groups', seedFirstGroupFrom.gid),
           { prePro: seedFirstGroupFrom.prePro, updatedAt: Date.now() }, { merge: true });
       } catch (e) {
-        showToast('Group 1 seed needs the v2.1 rules deploy — groups start blank until then.');
+        showToast('Group 1 seed needs the v2.1 rules deploy. Groups start blank until then.');
       }
     }
     document.getElementById('detail-title').textContent = nextTitle;
@@ -3175,7 +3175,7 @@ async function saveLearnerAssignments(showToastOnSave=true) {
   const sessionDoc = sessions.find(item => (item.code || item.id) === activeCode);
   if (!model || !sessionDoc || !window._runTransaction || !window._collection || !window._getDocs) {
     setDashboardAssignmentDisplayState('error', 'Canonical cloud saving is unavailable. The role draft remains unchanged.', { dirty:true });
-    showToast('Assignments unavailable — draft kept');
+    showToast('Assignments unavailable. Draft kept.');
     return false;
   }
   if (detailAssignmentState.code !== activeCode || ['idle','loading'].includes(detailAssignmentState.status)) {
@@ -3210,7 +3210,7 @@ async function saveLearnerAssignments(showToastOnSave=true) {
     }
     if (select.dataset.profileId !== link.profileId) {
       setDashboardAssignmentDisplayState('conflict', 'A participant profile link changed while this editor was open. The draft remains; load the server copy before saving.', { dirty:true });
-      showToast('Profile link changed — draft kept');
+      showToast('Profile link changed. Draft kept.');
       return false;
     }
 
@@ -3358,10 +3358,10 @@ async function saveLearnerAssignments(showToastOnSave=true) {
     const errorState = assignmentLoadErrorState(e);
     if (e?.code === 'assignment-conflict') {
       setDashboardAssignmentDisplayState('conflict', `${e.message} The draft remains in the controls; load the server copy before deciding what to reapply.`, { dirty:true });
-      showToast('Assignments changed elsewhere — draft kept');
+      showToast('Assignments changed elsewhere. Draft kept.');
     } else {
       setDashboardAssignmentDisplayState(errorState.status, `${errorState.detail} The draft remains and nothing was labeled Saved.`, { dirty:true });
-      showToast(errorState.status === 'denied' ? 'Assignment write denied — draft kept' : 'Assignment save failed — draft kept');
+      showToast(errorState.status === 'denied' ? 'Assignment write denied. Draft kept.' : 'Assignment save failed. Draft kept.');
     }
     console.warn('Dashboard assignment save failed.', e);
     return false;
@@ -3528,7 +3528,7 @@ async function deleteSession() {
         deletedAt: Date.now(),
         deletedBy: adminSession?.name || 'Unknown admin',
       });
-      showToast(`Session ${code} moved to Recently Deleted — restore within 30 days`);
+      showToast(`Session ${code} moved to Recently Deleted. Restore within 30 days.`);
     }
     hideModal('modal-delete');
     await loadSessions();

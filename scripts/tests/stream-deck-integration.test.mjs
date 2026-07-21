@@ -76,7 +76,7 @@ test('initial and later paints share one device-bound repaint owner', () => {
   assert.match(app, /async function sdPaintKey\(i, target = sd\)/);
   assert.match(app, /if \(!target \|\| target !== sd\) return false;/);
   assert.match(app, /for \(const packet of rendered\.packets\) \{[\s\S]*if \(target !== sd\) return false;[\s\S]*target\.device\.sendReport/);
-  assert.match(app, /input only — no image profile/);
+  assert.match(app, /input only, no image profile/);
 });
 
 for (const { name, run } of tests) {

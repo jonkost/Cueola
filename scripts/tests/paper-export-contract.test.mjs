@@ -45,7 +45,7 @@ assert.match(app, /pbPackageIncludeNotes\s*\?\s*lastPackageExportSnapshot/);
 assert.match(app, /snapshot \? snapshot\.options\?\.includeNotes === true : pbPackageIncludeNotes/);
 assert.match(app, /<section><div class="paper-landscape">\s*\n\s*<h1>5\. Full Rendered Rundown/);
 assert.match(app, /source\.querySelectorAll\('\.sf-symbol'\)/);
-assert.match(app, /UNVERIFIED PREVIEW — NOT A SAVED EXPORT/);
+assert.match(app, /UNVERIFIED PREVIEW: NOT A SAVED EXPORT/);
 assert.match(app, /Image attachment: \$\{esc\(a\.name\)\} \(open the saved original in Cueola\)/);
 
 const formalExports = [
