@@ -1,5 +1,14 @@
 # V2.1 Checkout List (2026-07-21)
 
+> **LIVE since 2026-07-21 14:25 (commit 7362f3a):** cueola.live serves the
+> full v2.1 build (verified: matching hashes, WORKER_SCHEMA 9, zero console
+> errors, PWA manifest/icons/narration serving, avatar fix live). The version
+> string stays 2.0.0 until §7. Machines that used the old site get the
+> "Cueola update ready → Reload" toast on next visit — take it before testing.
+> Because hosting shipped while no admin account could exist, the §1 additive
+> rules deploy is re-pinned: it must land **before your first admin sign-in**
+> (that's when cloud captures first become possible), not before hosting.
+
 Everything left between "code-complete" and "shipped" — every owed QA item,
 console errand, drill, and release step across the whole v2.1 window, grouped
 by the kind of session it takes. Work through a section when you have that
@@ -20,9 +29,10 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
       script-operator, Flowmingo talent, Outrangutan output). Enforcement
       waits for monitor data + term date.
 - [ ] **Mint your admin account** (bootstrap script — run together with me).
-- [ ] **Deploy the ADDITIVE Phase 7 rules block BEFORE the next hosting
-      deploy** (runbook pre-step) — then watch a capture doc appear in
-      `sessions/{code}/snapshots` on join.
+- [ ] **Deploy the ADDITIVE Phase 7 rules block BEFORE your first admin
+      sign-in** (hosting already shipped 7/21 while no admin could exist, so
+      this now gates the sign-in instead) — then watch a capture doc appear
+      in `sessions/{code}/snapshots` on join.
 - [ ] **Decision 0:** term start date → sets App Check enforce timing + rules
       round-2 deploy day.
 - [ ] **Decision 14:** where training videos live (unlisted YouTube
