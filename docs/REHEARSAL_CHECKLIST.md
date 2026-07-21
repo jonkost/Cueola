@@ -79,6 +79,45 @@ One extra device (phone/laptop) for the Flowmingo follower.
 - [ ] Leave the session deliberately (Exit → front page). Reopen the app.
       **Expected:** **no** resume banner (intentional leave never offers recovery).
 
+## 4 · v2.1 drills (10 min) — *(added Phase 11, 2026-07)*
+
+- [ ] **Link strip death + recovery.** Close the talent window mid-run.
+      **Expected:** TALENT goes dark within seconds; System status shows the
+      failure truthfully; **Recover Flowmingo** opens a fresh talent window and
+      the strip returns within seconds of it connecting.
+- [ ] **Automatic call.** GO on a row with linked media. **Expected:** the call
+      banner runs **READY → TRACK → ROLL → TAKE** and the clip fires; run it
+      again and press **S** mid-call — nothing fires, banner clears.
+- [ ] **Manual TAKE.** Toggle **Manual TAKE (armed call)**. **Expected:** GO
+      arms the clip (banner holds at READY), **TAKE · G** fires it.
+- [ ] **Playout ARMED proof.** Fresh session, media linked, before any GO.
+      **Expected:** PLAYOUT reads **· NOT ARMED** and preflight's "Playout
+      first GO" row explains why; after arming, first GO fires media (sound
+      included) with no second press.
+- [ ] **Question lane.** Paste a line from a real chat, **Enter**.
+      **Expected:** talent shows the QUESTION card inside the bounded band
+      (script still readable); **Esc** clears it everywhere.
+- [ ] **Overlay toggles, both directions.** Question / **NTSC Bars** → "Back on
+      air" / clock chips from BOTH operator surfaces. **Expected:** every
+      on/off lands on talent, script readable throughout.
+- [ ] **Rival operator.** Open a second operator window and take the prompter.
+      **Expected:** first window toasts the takeover, badge flips to
+      FOLLOWING — no silent split-brain.
+- [ ] **Cloud restore vs a stale client.** Leave one browser on an old rundown
+      state (offline), restore a cloud snapshot from Session History on the
+      other. **Expected:** restore wins everywhere when the stale client
+      reconnects — re-stamped, never reverted; a recovery copy of the
+      pre-restore state appears in History.
+- [ ] **Instructor Sign In.** Admin tools locked until sign-in; wrong password
+      refused; signed-in dashboard lists sessions and codes.
+- [ ] **Groups.** Break into groups on the dashboard; student picks at the
+      door; instructor's Reviewing picker flips paperwork + exports; **Lock
+      groups** removes the student's Switch group option.
+- [ ] **Start Next Episode.** Clone a finished session from the dashboard.
+      **Expected:** name auto-increments ("Ep 12" → "Ep 13"), rundown +
+      paperwork carried, "↳ From" chip present, crew joins fresh with the new
+      code.
+
 ## Pass bar
 
 All boxes checked with expected results, **zero console errors**, and the punch

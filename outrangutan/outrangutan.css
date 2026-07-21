@@ -785,6 +785,11 @@
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.5; margin: 14px 0 0; max-width: 68ch; }
 .og-sheet-note code { font-family: var(--mono-num, monospace); background: var(--s3); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 
+/* Phase 9 (D10.1): one-time non-Chromium capability sheet */
+.og-chrome-card { max-width: 460px; padding-bottom: 16px; }
+.og-chrome-body { padding: 18px 20px 0; font-size: 14px; line-height: 1.6; color: var(--text); }
+.og-chrome-card .og-sheet-note { margin: 10px 20px 0; }
+
 /* New Matte sheet */
 .og-matte-card { max-width: 420px; padding-bottom: 16px; }
 .og-matte-card .og-matte-swatches, .og-matte-card .og-sheet-note { margin-inline: 20px; }
@@ -1014,3 +1019,12 @@
 .og-cue:active { cursor: grabbing; }
 .og-cue.og-drop-before { box-shadow: 0 -2px 0 0 var(--og-accent, #f97316); }
 .og-cue.og-drop-after { box-shadow: 0 2px 0 0 var(--og-accent, #f97316); }
+
+/* Phase 9 (D10.4): coarse-pointer touch targets — appended LAST on purpose so
+   the hardcoded compact rows above (settings-pop 34px, pane-head 30px) can't
+   defeat the 44px minimum by source order; the base .og-bar-btn already rides
+   the --ui-control-height-compact var bumped in index.html's coarse block. */
+@media (pointer: coarse) {
+  .og-settings-pop .theme-swatch, .og-settings-pop .og-tools-pop-inline .og-bar-btn { min-height: 44px; }
+  .og-pane-head .og-bar-btn { min-height: 44px; }
+}

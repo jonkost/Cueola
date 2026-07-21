@@ -1,5 +1,73 @@
 # Changelog
 
+## v2.1.0 — Term-boundary build (DRAFT — pending owner QA; target Aug 2026)
+
+The `V2_1_PLAN` window between terms: accounts and identity hardening, live
+reliability, cloud recovery, and platform polish. Phases 1–7, 9–11, 13 + 1.5
+code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
+
+### Foundations & security (Phases 1, 2, 10)
+- PII/private artifacts out of the web root; internal docs hosting-ignored;
+  cdnjs vendored same-origin (jspdf, html2canvas, pdf.js, mammoth, jszip).
+- Admin accounts on Firebase Auth (synthetic emails, uid-keyed `admins/`);
+  admin-gated accessCodes minting + session delete; dashboard Accounts panel.
+- Rules round 2: admin-gated `list` on `sessions` + `accessCodes` (profiles
+  list stays open — student exports need it; documented residual).
+- `docs/term-boundary-runbook.md`: key rotation, snapshot wipe, session
+  archive/purge, App Check enforcement flip.
+- Session-doc hygiene: preProActivity cap, purge cascade over all five
+  subcollections.
+
+### Identity, dashboard, groups (Phases 3–6)
+- Profiles + portal (class login codes, no passwords), avatars, entry gate.
+- Instructor dashboard: session browser, Class Keys, paperwork presets
+  (Intro course / Full production), Entry Requirement, soft-delete/restore.
+- Groups: per-group paperwork workspaces, group picker, Reviewing picker,
+  lock; exports follow the group. Start Next Episode session clone
+  ("Ep 12" → "Ep 13", ↳ From lineage).
+- Paperwork/export overhaul: per-group packages, verified stamps, preview.
+
+### Live reliability & show controls (Phases 1.5, 13)
+- Link strip (CLOUD · TALENT · PLAYOUT · SCRIPT), CALLER/FOLLOWING/VIEWER
+  badge, System status rail with per-subsystem Recover buttons, rival-operator
+  takeover honesty, ARMED first-GO proof + preflight row.
+- RTRT automatic call (READY·TRACK·ROLL·TAKE, S aborts) with Manual TAKE
+  (decision 18); question lane (paste → Enter pushes QUESTION card, Esc
+  clears); bounded talent overlay band; printed operator cheat card from the
+  keymap registry; live drag-reorder.
+- Runtime slimmed: perf budgets recorded, timers owned, leak tests extended.
+
+### Cloud snapshots (Phase 7)
+- `sessions/{code}/snapshots` cloud trail: gzip-chunked, content-hash-deduped,
+  admin-gated; Session History merges local + cloud rows; restore re-stamps
+  through the one restore body; purge sweeps the trail.
+
+### Platform & UI (Phase 9)
+- CueolaCaps capability helper (no UA sniffing); Outrangutan one-time
+  non-Chromium sheet; WebGL toast honesty.
+- Safari: `storage.persist()` at boot in both apps; webm/ogg/opus import
+  warnings via canPlayType; PDF export labeled as the Safari print path;
+  popup-blocked guidance; -webkit-backdrop-filter sweep; output-window
+  mute-first autoplay fallback with a hardened tap-to-unmute lifecycle.
+- PWA: full PNG icon set + apple-touch-icons, manifest `file_handlers` for
+  .cueola/.ogshow with launchQueue import (installed Chromium),
+  WORKER_SCHEMA 8.
+- HIG kit: capsule primaries, coarse-pointer 44px targets, motion tokens +
+  reduced-motion, ⓘ info popovers with Learn-more lesson deep links;
+  DESIGN_GUIDELINES.md updated with the kit + mac/iPad steer.
+- Vendor libs defer to first use on show surfaces (intake 25).
+
+### Guides & training (Phase 11)
+- New "Your Profile & Portal" lesson (9 lessons); build/live/PB/support
+  lessons updated to v2.1; per-section lesson anchors.
+- Dual-authoring killed: `content-reference.md` generated from
+  LEARNING_LESSONS (+ contract suite); full Kokoro narration set (9/9).
+- OPERATOR_CARD V2.1, REHEARSAL_CHECKLIST v2.1 drills, Instructor Quick
+  Start, Admin Crib Sheet, 10 video click-path scripts.
+
+*(Release-day: flip CUEOLA_VERSION to 2.1.0, final ?v= sweep, staged deploys
+per D8 rule 3 — see docs/V2_1_CHECKOUT.md.)*
+
 ## v1.0.0 — Production-readiness build (2026-07-05)
 
 The complete `CUEOLA MASTER PLAN` run (phases 0–8), hardening the app after the

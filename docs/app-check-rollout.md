@@ -1,5 +1,11 @@
 # Cueola Firestore Rules and App Check Owner Runbook
 
+> **v2.1 Phase 10 (2026-07-21):** the repo rules now carry a second TIGHTENING
+> round — admin-gated `list` on `sessions` and `accessCodes` (profiles list
+> stays open on purpose; rationale in the rules header). Deploy them in the
+> release-day sequence, and see [term-boundary-runbook.md](term-boundary-runbook.md)
+> for the term-rotation and enforcement-flip procedure.
+
 The repository contains staged, shape-validating Firestore rules and optional
 Firebase App Check bootstrap in both `index.html` and `dashboard.html`. Nothing
 in this runbook is deployed automatically. The owner controls every Firebase

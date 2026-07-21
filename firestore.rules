@@ -9,9 +9,18 @@ rules_version = '2';
 // accepted client from creating arbitrary collections or unbounded structures.
 //
 // DEPLOY DISCIPLINE (D8 rule 3): this file contains TIGHTENING changes
-// (admin-gated accessCodes minting + session delete). Deploy only in the
-// release-day sequence: hosting first → fleet refresh → instructors minted →
-// then these rules. Rollback copy: docs/rules-rollback-2026-07-18-pre-admin-auth.rules
+// (admin-gated accessCodes minting + session delete; Phase 10 adds admin-gated
+// LIST on sessions and accessCodes). Deploy only in the release-day sequence:
+// hosting first → fleet refresh → instructors minted → then these rules.
+// Rollback copy: docs/rules-rollback-2026-07-18-pre-admin-auth.rules
+//
+// Phase 10 residual, recorded on purpose: profiles LIST stays open. The
+// student-side paperwork export and roster hydration (hydrateRoleAssignments →
+// full profiles read, cueola-app.js) run for crew members with no Auth — the
+// university rule prohibits student sign-in, and Firestore list rules cannot
+// express "only profiles sharing a session with the caller". Scoping it to
+// isAdmin() breaks student exports. Perimeter control is App Check; the
+// long-term fix (server-resolved roster) is 3.0 territory.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -101,6 +110,29 @@ service cloud.firestore {
         && (!data.keys().hasAny(['size']) || (data.size is int && data.size >= 0 && data.size <= 10485760))
         && (!data.keys().hasAny(['chunkCount']) || (data.chunkCount is int && data.chunkCount >= 1 && data.chunkCount <= 8))
         && (!data.keys().hasAny(['chunkIndex']) || (data.chunkIndex is int && data.chunkIndex >= 1 && data.chunkIndex < 8))
+        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 800000));
+    }
+
+    // v2.1 Phase 7 (D3): cloud snapshot docs — mirrors validFileDocument's
+    // shape discipline for the chunked gzip+base64 payload.
+    function validSnapshotDocument(code, data) {
+      return data is map
+        && data.keys().hasOnly([
+          'kind', 'sessionCode', 'createdAt', 'reason', 'summary', 'fpHash',
+          'encoding', 'bytes', 'chunkCount', 'chunkIndex', 'createdBy', 'data'
+        ])
+        && shortString(data.kind, 40)
+        && data.kind in ['sessionSnapshot', 'sessionSnapshotChunk']
+        && (!data.keys().hasAny(['sessionCode']) || data.sessionCode == code)
+        && (!data.keys().hasAny(['createdAt']) || data.createdAt is number)
+        && optionalShortString(data, 'reason', 40)
+        && optionalShortString(data, 'summary', 500)
+        && (!data.keys().hasAny(['fpHash']) || (data.fpHash is string && data.fpHash.matches('^[a-f0-9]{16}$')))
+        && (!data.keys().hasAny(['encoding']) || data.encoding in ['gzip-b64', 'json-b64'])
+        && (!data.keys().hasAny(['bytes']) || (data.bytes is int && data.bytes >= 0 && data.bytes <= 10485760))
+        && (!data.keys().hasAny(['chunkCount']) || (data.chunkCount is int && data.chunkCount >= 1 && data.chunkCount <= 8))
+        && (!data.keys().hasAny(['chunkIndex']) || (data.chunkIndex is int && data.chunkIndex >= 1 && data.chunkIndex < 8))
+        && optionalShortString(data, 'createdBy', 160)
         && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 800000));
     }
 
@@ -265,7 +297,12 @@ service cloud.firestore {
     // current way to distinguish Cueola clients from arbitrary callers.
     match /sessions/{code} {
       allow get: if validSessionId(code);
-      allow list: if true;
+      // v2.1 Phase 10: enumerating sessions is admin-only. No shipped surface
+      // lists this collection today (the dashboard tracks known codes and
+      // reads them individually), so this closes pure recon: an accepted
+      // client could otherwise walk every production. (TIGHTENING —
+      // release-day deploy.)
+      allow list: if isAdmin();
       allow create, update: if validSessionId(code) && validSessionDocument(code, request.resource.data);
       // v2.1 (D1): destroying a session is admin-only. (TIGHTENING —
       // release-day deploy; the dashboard purge runs signed-in.)
@@ -311,6 +348,23 @@ service cloud.firestore {
                       && validAssignment(assignmentId, code, request.resource.data)
                       && immutableAssignmentIdentity();
       }
+
+      // v2.1 Phase 7 (D3): cloud snapshot trail — the ONE subcollection with
+      // zero student-read requirement. Snapshots embed the full session
+      // (student names in paperwork), so everything is admin-gated from day
+      // one; delete stays allowed because snapshots MUST be purgeable (PII
+      // retention). `update` carries the same checks as create: content-hash
+      // ids make identical concurrent captures converge onto one doc via
+      // idempotent setDoc. ADDITIVE — deploys BEFORE the JS ships to hosting
+      // (D8 rule 3): cloudSnapshotPut is fire-and-forget, so shipping the JS
+      // first would produce silently-failing cloud captures.
+      match /snapshots/{snapId} {
+        allow read, delete: if validSessionId(code) && isAdmin()
+          && snapId.matches('^snap_[a-f0-9]{16}(_c[1-7])?$');
+        allow create, update: if validSessionId(code) && isAdmin()
+          && snapId.matches('^snap_[a-f0-9]{16}(_c[1-7])?$')
+          && validSnapshotDocument(code, request.resource.data);
+      }
     }
 
     match /admins/{docId} {
@@ -338,7 +392,11 @@ service cloud.firestore {
     // Firebase Auth an accepted client can still mint an access-code document.
     match /accessCodes/{code} {
       allow get: if code.matches('^[A-Za-z0-9_-]{4,80}$');
-      allow list: if true;
+      // v2.1 Phase 10: kills the open list — an accepted client could walk
+      // every class key. Entry gates `get` a specific code; only the signed-in
+      // dashboard lists them (mint/revoke panel). (TIGHTENING — release-day
+      // deploy.)
+      allow list: if isAdmin();
       // v2.1 (D1): minting/updating class codes is admin-only — kills the
       // public admin-code minting hole. (TIGHTENING — release-day deploy.)
       allow create, update: if isAdmin()
@@ -349,6 +407,10 @@ service cloud.firestore {
 
     match /profiles/{username} {
       allow get: if validUsername(username);
+      // Phase 10 decision: list stays OPEN (see header). Student crew exports
+      // and roster hydration read the whole collection without Auth; tightening
+      // this to isAdmin() breaks them. Do not "clean this up" without moving
+      // roster resolution server-side first.
       allow list: if true;
       allow create: if validProfile(username, request.resource.data)
                     && activeCodeForProfile(request.resource.data);

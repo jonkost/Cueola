@@ -363,6 +363,42 @@ test('one Stream Deck drives the whole rig over the session control bus (D11.7)'
   assert.match(app, /applyControlBusCommand\(d\.controlBus\)/);
 });
 
+test('cloud snapshots: group-aware capture, hashed dedupe, merged history, one restore body (Phase 7/D3)', async () => {
+  // Capture wraps session doc + /groups subdocs + per-note subcollection and
+  // fingerprints ALL of it (a group-only edit must advance the trail).
+  assert.match(app, /kind:'sessionSnapshot\.v2', session:doc, groups, notes/);
+  assert.match(app, /captureSessionGroupDocs\(targetSessionCode, doc\)/);
+  assert.match(app, /const fpHash = await snapshotFpHash\(fingerprint\)/);
+  // Decode accepts every encoding ever shipped, forever.
+  ['gzip', 'gzip-b64', 'json-b64'].forEach(tag => assert.match(app, new RegExp(`record\\.encoding === '${tag}'`)));
+  // The cloud mirror is fire-and-forget, chunked at the deployed files
+  // ceiling, capped at 8 chunks, content-hash ids for idempotent dedupe.
+  assert.match(app, /cloudSnapshotPut\(cloudMeta, cloudData\)/);
+  assert.match(app, /i \+= PB_FILE_CHUNK_CHARS/);
+  assert.match(app, /chunks\.length > 8/);
+  assert.match(app, /snap_\$\{meta\.fpHash\}/);
+  // Merged history with origin badges; ONE resolver serves both trails.
+  assert.match(app, /function mergedSessionHistoryRows/);
+  assert.match(app, /snap-origin-\$\{record\.origin\}/);
+  assert.match(app, /startsWith\('cloud:'\)/);
+  // ONE restore body: the shared re-stamp helper covers the session doc AND
+  // every captured group doc (P2607 discipline can never fork).
+  assert.match(app, /function restampPreProForRestore/);
+  const restoreBody = app.slice(app.indexOf('async function restoreSessionSnapshot('), app.indexOf('// Save / open a rundown as a file'));
+  assert.match(restoreBody, /restampPreProForRestore\(restoredGroup\.prePro\)/);
+  assert.match(restoreBody, /liveIds\.has\(nid\)/);   // notes recreate-only, never overwrite
+  // Cache clears on session change; Delete Forever sweeps /snapshots.
+  assert.match(app, /_cloudSnapshotCache = \{ code: '', rows: null \};   \/\/ D3/);
+  const dash = await readFile(new URL('../../dashboard.html', import.meta.url), 'utf8');
+  assert.match(dash, /'groups', 'snapshots'\]/);
+  // Rules: admin-gated /snapshots with shape checks, additive-first deploy.
+  const rules = await readFile(new URL('../../firestore.rules', import.meta.url), 'utf8');
+  assert.match(rules, /match \/snapshots\/\{snapId\}/);
+  assert.match(rules, /function validSnapshotDocument/);
+  assert.match(rules, /'sessionSnapshot', 'sessionSnapshotChunk'/);
+  assert.match(rules, /allow read, delete: if validSessionId\(code\) && isAdmin\(\)/);
+});
+
 test('explicit create and ordinary join have separate Firestore authority', () => {
   const create = app.slice(app.indexOf('async function createSession()'), app.indexOf('function enterAsInstructor'));
   const createOnly = app.slice(app.indexOf('async function createSessionDocumentIfMissing'), app.indexOf('async function restoreMissingSessionDocument'));
@@ -453,6 +489,20 @@ test('Outrangutan has reachable narrow, medium, and wide modes', () => {
     assert.match(playbackCss, new RegExp(`\\.og-lay-${mode}`));
   }
   assert.match(playbackJs, /ResizeObserver/);
+});
+
+test('Phase 10: list tightening is admin-gated and the profiles residual stays documented', async () => {
+  const rules = await readFile(new URL('../../firestore.rules', import.meta.url), 'utf8');
+  const sessionsBlock = rules.slice(rules.indexOf('match /sessions/{code} {'), rules.indexOf('match /files/{fileId}'));
+  assert.match(sessionsBlock, /allow list: if isAdmin\(\);/);
+  const codesBlock = rules.slice(rules.indexOf('match /accessCodes/{code} {'), rules.indexOf('match /profiles/{username}'));
+  assert.match(codesBlock, /allow list: if isAdmin\(\);/);
+  // profiles list is deliberately open: student crew exports and roster
+  // hydration read it without Auth. The rationale comment must survive —
+  // a silent "cleanup" to isAdmin() breaks student exports.
+  const profilesBlock = rules.slice(rules.indexOf('match /profiles/{username} {'), rules.indexOf('match /{document=**}'));
+  assert.match(profilesBlock, /allow list: if true;/);
+  assert.match(rules, /Phase 10 residual/);
 });
 
 for (const { name, run } of tests) {

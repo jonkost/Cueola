@@ -139,7 +139,7 @@
   const $ = (id) => document.getElementById(id);
   const rid = (p) => p + Math.random().toString(36).slice(2, 9);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  function toast(msg) { try { if (typeof window.toast === 'function') return window.toast(msg); } catch (e) {} console.log('[outrangutan]', msg); }
+  function toast(msg, dur) { try { if (typeof window.toast === 'function') return window.toast(msg, dur); } catch (e) {} console.log('[outrangutan]', msg); }
   // P7: same-tab bridge into Cueola's structured show log — cue fires, media
   // failures, and transport hits land in the same per-session record.
   function slog(cat, msg) { try { window.CueolaShowLog && window.CueolaShowLog.add(cat, '[Outrangutan] ' + msg); } catch (e) {} }
@@ -492,17 +492,44 @@
     filmstripJobs.set(mediaId, job);
     return job;
   }
+  // Phase 9 (D10.2): when Safari rejects a webm/ogg/opus import, name the real
+  // reason — canPlayType says the container is the problem, not a damaged file
+  // (Chromium plays these, so the generic wording sent people hunting for
+  // corruption that wasn't there).
+  function containerUnsupportedHint(file, kind) {
+    if (kind !== 'video' && kind !== 'audio') return '';
+    const t = (file.type || '').toLowerCase(), n = (file.name || '').toLowerCase();
+    if (!/webm|ogg|ogv|opus|weba/.test(t + ' ' + n)) return '';
+    const el = document.createElement(kind);
+    const mime = t || (/\.(webm|weba)$/.test(n) ? kind + '/webm' : kind === 'audio' ? 'audio/ogg' : 'video/ogg');
+    if (!el.canPlayType || el.canPlayType(mime) !== '') return '';
+    return 'this browser can’t decode ' + (/webm|weba/.test(t + ' ' + n) ? 'WebM' : 'Ogg/Opus') + ' — use MP4 (H.264) or MP3/AAC/WAV, or import in Chrome/Edge';
+  }
   async function storeFile(file) {       // import one file → MEDIA_STORE, return { mediaId, kind, duration, thumb, name }
     // Phase 5: transcode-on-upload — normalize non-web-playable video to H.264 MP4.
     if (settings.transcode && !webPlayable(file) && ((file.type || '').startsWith('video') || /\.(mov|mkv|avi|mxf|m2ts|ts)$/i.test(file.name || ''))) {
       file = await transcodeFile(file);
     }
     const t = file.type || '';
-    const kind = t.startsWith('video') ? 'video' : t.startsWith('audio') ? 'audio' : t.startsWith('image') ? 'image' : null;
+    let kind = t.startsWith('video') ? 'video' : t.startsWith('audio') ? 'audio' : t.startsWith('image') ? 'image' : null;
+    // Extension fallback: macOS hands over .opus/.weba/.ogv (and friends) with
+    // an EMPTY MIME type — without this they died on the generic "not a media
+    // file" toast before the probe or the Safari container hint could run.
+    if (!kind) {
+      const n = (file.name || '').toLowerCase();
+      kind = /\.(mp4|m4v|webm|ogv|mov)$/.test(n) ? 'video'
+        : /\.(mp3|m4a|aac|wav|ogg|opus|weba|flac)$/.test(n) ? 'audio'
+        : /\.(png|jpe?g|gif|webp|bmp)$/.test(n) ? 'image' : null;
+    }
     if (!kind) { toast('Skipped "' + file.name + '" — not a video, audio, or image file.'); return null; }
     const blob = file.slice(0, file.size, file.type);
     const probe = kind === 'image' ? await probeImage(blob) : await probeMedia(blob, kind);
-    if (!probe.ok) { slog('media', 'Import rejected: “' + file.name + '” — ' + (probe.error || 'unsupported or damaged')); toast('⚠ "' + file.name + '" can’t play in this browser (' + (probe.error || 'unsupported or damaged') + ') — not added.'); return null; }
+    if (!probe.ok) {
+      const hint = containerUnsupportedHint(file, kind);
+      slog('media', 'Import rejected: “' + file.name + '” — ' + (hint || probe.error || 'unsupported or damaged'));
+      toast('⚠ "' + file.name + '" can’t play in this browser (' + (hint || probe.error || 'unsupported or damaged') + ') — not added.');
+      return null;
+    }
     const mediaId = rid('m_');
     await idbPut(MEDIA_STORE, mediaId, { blob, name: file.name, mime: file.type, kind, duration: probe.duration, thumb: probe.thumb, width: probe.width || 0, height: probe.height || 0 });
     return { mediaId, kind, duration: probe.duration, thumb: probe.thumb, name: file.name, width: probe.width || 0, height: probe.height || 0 };
@@ -1122,7 +1149,7 @@
     scheduleSave(); renderOutputs(); renderInspector();
   }
   async function detectScreens() {
-    if (!('getScreenDetails' in window)) { toast('Window Management needs Chrome/Edge — for now drag output windows to displays manually.'); return; }
+    if (!window.CueolaCaps?.windowManagement) { toast('Window Management needs Chrome/Edge — for now drag output windows to displays manually.'); return; }
     try {
       const det = await window.getScreenDetails();
       screensCache = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
@@ -1636,7 +1663,7 @@
   }
   let midiConnecting = false;
   async function midiConnect() {
-    if (!('requestMIDIAccess' in navigator)) { toast('Web MIDI needs Chrome/Edge.'); return; }
+    if (!window.CueolaCaps?.webMidi) { toast('Web MIDI needs Chrome/Edge.'); return; }
     // One MIDIAccess only — a second connect would create parallel MIDIInput
     // objects that each dispatch onMidiMessage, firing every action twice.
     if (midi) { midi.inputs.forEach(inp => { inp.onmidimessage = onMidiMessage; }); renderMidi(); toast('MIDI already connected — ' + midi.inputs.size + ' input' + (midi.inputs.size === 1 ? '' : 's') + '.'); return; }
@@ -1688,7 +1715,7 @@
   function closeMidiPanel() { midiLearn = false; $('og-midi').classList.remove('on'); }
   function renderMidi() {
     const body = $('og-midi-body'); if (!body) return;
-    const hasApi = 'requestMIDIAccess' in navigator;
+    const hasApi = Boolean(window.CueolaCaps?.webMidi);
     const keys = Object.keys(midiMap);
     const rows = keys.map(key => {
       const m = midiMap[key] || {};
@@ -1717,7 +1744,7 @@
     Array.prototype.forEach.call(body.querySelectorAll('.og-midi-del'), b => { b.onclick = () => { delete midiMap[b.getAttribute('data-mk')]; settings.midiMap = midiMap; renderMidi(); scheduleSave(); }; });
   }
   async function sdConnect() {
-    if (!('hid' in navigator)) { toast('WebHID needs Chrome/Edge — Stream Deck control is Chromium-only.'); return; }
+    if (!window.CueolaCaps?.webHid) { toast('WebHID needs Chrome/Edge — Stream Deck control is Chromium-only.'); return; }
     let dev;
     try {
       const have = (await navigator.hid.getDevices()).filter(d => d.vendorId === ELGATO_VID);
@@ -2056,7 +2083,7 @@
       const preview = profile ? '<canvas class="og-sdk-preview" data-k="' + i + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="Simulated physical display for key ' + (i + 1) + '"></canvas>' : '<div class="og-sdk-preview-missing">No image profile</div>';
       grid += '<div class="og-sdk' + (m.action ? ' mapped' : '') + '"><span class="og-sdk-i">KEY ' + (i + 1) + '</span>' + preview + actSel + refSel + '</div>';
     }
-    const hasHid = ('hid' in navigator);
+    const hasHid = Boolean(window.CueolaCaps?.webHid);
     const unsupportedConnectedOption = connected && !profile
       ? '<option value="' + productId + '" selected>' + esc(sd.model.name) + ' · input only — no image profile</option>'
       : '';
@@ -2367,7 +2394,10 @@
   function startKeyLoop() {
     const cv = $('og-key-canvas'); if (!cv) return;
     if (!keyer) keyer = makeKeyer(cv);
-    if (!keyer || !keyer.ok) { toast('Keying needs WebGL (Chrome/Edge).'); return; }
+    // Not a Chromium-only feature (WebGL1 works on Safari) — a null keyer
+    // means WebGL itself failed to start (graphics acceleration off, GPU
+    // blocklist, headless), so say that instead of blaming the browser brand.
+    if (!keyer || !keyer.ok) { toast('Keying is unavailable — WebGL failed to start (check that graphics acceleration is on).'); return; }
     cv.classList.add('on');
     if (keyRAF) return;
     const loop = () => {
@@ -4018,7 +4048,7 @@
       try {
         if (typeof window.printPaperHTML !== 'function') throw error;
         const result = await window.printPaperHTML(html, options);
-        toast('PDF renderer unavailable. Print preview opened - ' + result.pageCount + ' pages.');
+        toast('PDF renderer unavailable. Print preview opened - ' + result.pageCount + ' pages. Safari tip: pick Letter + orientation in the dialog.', 4200);
       } catch (printError) {
         console.error('[Outrangutan] Show pack print fallback failed.', printError);
         toast('Could not build the show pack PDF.');
@@ -4047,7 +4077,7 @@
       const showBlob = await buildZipBlob(zipEntries);
       const nMedia = Object.keys(mediaIndex).length;
       const summary = cues.length + ' cue' + (cues.length === 1 ? '' : 's') + (pads.length ? ' · ' + pads.length + ' pad' + (pads.length === 1 ? '' : 's') : '') + (nMedia ? ' · ' + nMedia + ' media' : '');
-      if (window.showSaveFilePicker) {
+      if (window.CueolaCaps?.fileSystemAccess) {
         try {
           if (!showFileHandle) {
             showFileHandle = await window.showSaveFilePicker({
@@ -4076,7 +4106,7 @@
     } catch (e) { toast(e && /4GB/.test(String(e.message)) ? 'Too big: the .ogshow container caps at 4 GB.' : 'Could not save the show file.'); }
   }
   async function openShowFilePicker() {
-    if (window.showOpenFilePicker) {
+    if (window.CueolaCaps?.fileSystemAccess) {
       try {
         const [h] = await window.showOpenFilePicker({
           types: [{ description: 'Outrangutan Show', accept: { 'application/zip': ['.ogshow'], 'application/json': ['.json'] } }],
@@ -4193,6 +4223,7 @@
     if ($('og-outputs').classList.contains('on')) { if (e.key === 'Escape') closeOutputsPanel(); return; }
     if ($('og-sd').classList.contains('on')) { if (e.key === 'Escape') closeSdPanel(); return; }
     if ($('og-integrations').classList.contains('on')) { if (e.key === 'Escape') closeIntegrations(); return; }
+    if ($('og-chrome') && $('og-chrome').classList.contains('on')) { if (e.key === 'Escape') closeChromePrompt(); return; }
     if ($('og-join') && $('og-join').classList.contains('on')) return;
     if (typingTarget(e)) return;
     const sc = settings.shortcuts, k = e.key;
@@ -4277,6 +4308,8 @@
             + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
             + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
             + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
+            // Phase 9 (D10.4): ⓘ — what an .ogshow contains (shared popover in cueola-app.js)
+            + '<button type="button" class="info-btn" id="og-file-info" aria-label="About the .ogshow show file">' + sym('state.info') + '</button>'
           + '</div>'
         + '</div></details>'
         + '<input type="file" id="og-showfile-input" accept=".ogshow,.json,application/json" hidden>'
@@ -4373,6 +4406,12 @@
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
       + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="og-sheet-x" id="og-midi-x">Done</button></div><div id="og-midi-body"></div></div></div>'
       + '<div class="og-sheet" id="og-integrations"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.more') + ' Integrations</h3><button class="og-sheet-x" id="og-integrations-x">Done</button></div><div id="og-integrations-body"></div></div></div>'
+      // Phase 9 (D10.1): one-time capability sheet for non-Chromium browsers —
+      // shown once (localStorage-gated), only when the hardware trio is missing.
+      + '<div class="og-sheet" id="og-chrome"><div class="og-sheet-card og-chrome-card"><div class="og-sheet-head"><h3>' + sym('action.guide') + ' About this browser</h3><button class="og-sheet-x" id="og-chrome-x">Done</button></div>'
+        + '<div class="og-chrome-body" id="og-chrome-body">MIDI controllers, Stream Deck, and automatic multi-display placement need <strong>a desktop Chromium browser (Chrome or Edge)</strong>; playback, cues, outputs, and show files all work here.</div>'
+        + '<p class="og-sheet-note">You won’t see this again on this machine.</p>'
+      + '</div></div>'
       + '<div class="og-sheet" id="og-matte"><div class="og-sheet-card og-matte-card"><div class="og-sheet-head"><h3>' + sym('content.image') + ' New Matte</h3><button class="og-sheet-x" id="og-matte-x">Done</button></div>'
         + '<div class="og-matte-swatches" id="og-matte-swatches">'
           + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" title="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
@@ -4429,6 +4468,8 @@
     $('og-lock-btn').onclick = toggleLock;
     $('og-help-btn').onclick = openHelp;
     $('og-save-file-btn').onclick = exportShowFile;
+    const ogFileInfo = $('og-file-info');
+    if (ogFileInfo) ogFileInfo.onclick = e => { if (typeof window.toggleInfoPop === 'function') window.toggleInfoPop(e, 'ogshow-file'); };
     const showFileInput = $('og-showfile-input');
     $('og-open-file-btn').onclick = openShowFilePicker;
     showFileInput.onchange = () => { if (showFileInput.files[0]) importShowFile(showFileInput.files[0]); showFileInput.value = ''; };
@@ -4436,6 +4477,7 @@
     $('og-outputs-x').onclick = closeOutputsPanel;
     $('og-sd-x').onclick = closeSdPanel;
     $('og-integrations-x').onclick = closeIntegrations;
+    $('og-chrome-x').onclick = closeChromePrompt;
     $('og-join-go').onclick = joinSession;
     $('og-join-skip').onclick = exitOutrangutan;   // Cancel → back to the front page (standalone is its own card button)
     const ogJoinKey = e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); exitOutrangutan(); } };
@@ -4569,6 +4611,38 @@
     } catch (e) { return { ok: false, reason: 'error' }; }
   }
   let returnScreenId = 'entry';   // where Exit goes back to — the screen the operator came FROM
+  // Phase 9 (D10.1): the one-time non-Chromium sheet. Feature-checked via
+  // CueolaCaps (never UA-sniffed), so Chrome/Edge never see it; a missing
+  // CueolaCaps also shows nothing — wrongly showing it on Chrome is the
+  // failure mode the verify list calls out. Standalone entry shows it after
+  // applyShow; session entry waits for the join modal to resolve (joinSession)
+  // so the two overlays never stack.
+  const OG_CHROME_PROMPT_KEY = 'cueola_og_chrome_prompt_dismissed';
+  function maybeShowChromePrompt() {
+    if (!isOpen()) return;   // the entry may have been cancelled while a join await was in flight
+    try { if (localStorage.getItem(OG_CHROME_PROMPT_KEY) === '1') return; } catch (e) {}
+    const c = window.CueolaCaps;
+    if (!c || c.chromiumHardware) return;
+    const sheet = $('og-chrome');
+    if (!sheet) return;
+    // Name only what's actually missing — Firefox ships Web MIDI, so the
+    // static owner copy would wrongly tell a Firefox operator their working
+    // controller needs Chrome.
+    const body = $('og-chrome-body');
+    if (body) {
+      const missing = [];
+      if (!c.webMidi) missing.push('MIDI controllers');
+      if (!c.webHid) missing.push('Stream Deck');
+      if (!c.windowManagement) missing.push('automatic multi-display placement');
+      const list = missing.length > 2 ? missing.slice(0, -1).join(', ') + ', and ' + missing[missing.length - 1] : missing.join(' and ');
+      body.innerHTML = list + (missing.length === 1 ? ' needs' : ' need') + ' <strong>a desktop Chromium browser (Chrome or Edge)</strong>; playback, cues, outputs, and show files all work here.';
+    }
+    sheet.classList.add('on');
+  }
+  function closeChromePrompt() {
+    const sheet = $('og-chrome'); if (sheet) sheet.classList.remove('on');
+    try { localStorage.setItem(OG_CHROME_PROMPT_KEY, '1'); } catch (e) {}
+  }
   async function enterOutrangutan(m) {
     const current = document.querySelector('.screen.on');
     returnScreenId = (current && current.id && current.id !== 'outrangutan') ? current.id : 'entry';
@@ -4578,7 +4652,7 @@
     reattachLiveControl();
     showScreen();
     if (m === 'session') openSessionJoin();
-    else { closeSessionJoin(); await applyShow(); }
+    else { closeSessionJoin(); await applyShow(); maybeShowChromePrompt(); }
   }
 
   function openSessionJoin() {
@@ -4618,6 +4692,7 @@
     closeSessionJoin(); await applyShow();
     slog('session', 'Joined session ' + code);
     toast('Joined session ' + code + '.');
+    maybeShowChromePrompt();
   }
 
   function exitOutrangutan() {
@@ -4625,6 +4700,9 @@
     outputs.forEach(o => { const r = outputWins.get(o.id); if (r && r.identify) identifyOutput(o.id, false); });
     cleanupOutputRuntime(true);
     closeOutputsPanel(); closeSdPanel();
+    // Hide (don't dismiss) a pending Chrome sheet — exiting mid-entry must not
+    // latch it against the hidden screen or burn the one-time flag unseen.
+    const ogChrome = $('og-chrome'); if (ogChrome) ogChrome.classList.remove('on');
     $('outrangutan').classList.remove('on');
     // Return to the screen the operator came from (rundown, Live, …) — always
     // dumping them on the front page threw away their place mid-show.
@@ -4694,6 +4772,15 @@
     applyLiveExit,                                  // acknowledged stop or transport-neutral controller detach
     reattachLiveControl,                            // idempotently reclaim detached output/session listeners
     saveShowFile: () => { exportShowFile(); },      // P7: Cmd+S save-in-place hook
+    // Phase 9 (D10.3): a double-clicked .ogshow handed over by Cueola's
+    // launchQueue consumer (which enters standalone first, so the UI is built).
+    // Keeps the launch handle so Cmd+S saves back into the launched file.
+    openLaunchFile: async (file, handle) => {
+      if (!built) build();
+      const ok = await importShowFile(file);
+      if (ok && handle && typeof handle.createWritable === 'function') showFileHandle = handle;
+      return ok;
+    },
     // Safe to receive an external SFX pad: the module has loaded its show into
     // memory (writes go through the live state, never blind-clobber the saved
     // record). The screen does NOT have to be the visible one — requiring that

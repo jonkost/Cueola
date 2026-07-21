@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cueola</title>
 <link rel="icon" type="image/svg+xml" href="assets/Brand/Cueola_Icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/app/cueola-32.png">
+<link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=4adcd0fd7c">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=794bcd25eb">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=718e619254">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -65,6 +67,12 @@
   --shadow-md:0 0 0 0 transparent;
   --shadow-lg:0 0 0 0 transparent;
   --ease:cubic-bezier(.4,0,.2,1);
+  /* Phase 9 (D10.4) HIG kit tokens — durations for new work (existing
+     hardcoded .12–.28s values migrate opportunistically), spacing steps on
+     the 8px grid (4px subdivisions). --s1..--s4 are SURFACE colors here, so
+     spacing uses --sp-N. */
+  --dur-fast:.15s;--dur-normal:.25s;--dur-slow:.35s;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;letter-spacing:0;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow:hidden;scroll-behavior:smooth}
@@ -241,7 +249,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .col-time{width:92px}.col-cue{width:12%}.col-script-c{width:14%}.col-acts{width:58px}
 .rd-scroll{width:100%}
 .rd-table{min-width:1280px}
-.rd-head th{background:color-mix(in srgb,var(--s2) 96%,black);backdrop-filter:blur(12px);font-size:11px;font-family:var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--text2);padding:11px 10px;white-space:nowrap;font-weight:700;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border);box-shadow:inset 0 -1px rgba(255,255,255,.025)}
+.rd-head th{background:color-mix(in srgb,var(--s2) 96%,black);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);font-size:11px;font-family:var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--text2);padding:11px 10px;white-space:nowrap;font-weight:700;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--border);box-shadow:inset 0 -1px rgba(255,255,255,.025)}
 /* Pinned left columns: one solid, uniform background across all three so there's
    no seam, and the third carries the only right-edge shadow. Backgrounds must be
    fully opaque so horizontally-scrolling cue cells never bleed through. */
@@ -805,7 +813,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sync-dot.off,.sync-dot.local{background:var(--text3);animation:none}
 
 /* ── OVERLAYS ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(8,11,18,.88);backdrop-filter:blur(8px);z-index:200;align-items:flex-end;justify-content:center}
+.overlay{display:none;position:fixed;inset:0;background:rgba(8,11,18,.88);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);z-index:200;align-items:flex-end;justify-content:center}
 .overlay.on{display:flex}
 .sheet{background:var(--s1);border:1px solid var(--bord2);border-radius:20px 20px 0 0;padding:20px 18px 36px;width:100%;max-width:580px;animation:sheetUp .25s cubic-bezier(.16,1,.3,1) both;max-height:90vh;overflow-y:auto}
 @keyframes sheetUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -914,7 +922,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── EDIT SHEET ── */
 .edit-sheet{max-height:85vh;overflow-y:auto;padding-bottom:16px}
 .edit-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
-.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:11px;color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
+.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:999px;color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);box-shadow:var(--shadow-sm)}
 .save-btn:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:var(--shadow-md)}
 .save-btn:active{transform:translateY(0) scale(.99);filter:brightness(.96)}
 .del-btn{width:100%;padding:9px;background:color-mix(in srgb,var(--red) 11%,transparent);border:1px solid transparent;border-radius:var(--r);color:var(--red);font-size:14px;font-family:var(--sans);cursor:pointer;transition:all .15s;margin-top:6px}
@@ -962,10 +970,28 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .field-err.on{display:block}
 .modal-err{font-size:13px;color:var(--red);background:color-mix(in srgb,var(--red) 10%,transparent);border:1px solid color-mix(in srgb,var(--red) 22%,transparent);border-radius:9px;padding:10px 13px;display:none;font-weight:500}
 .modal-err.on{display:block}
+/* ── Phase 9 (D10.4): ⓘ info buttons + anchored popover ──
+   HIG list-item info pattern: a 22px circle that reveals a short plain-language
+   explanation in a popover — never navigation. One shared #infoPop element,
+   filled + positioned by toggleInfoPop(); dismissed via the uiDismiss registry
+   (click-outside/Esc). "Learn more" deep-links into the Learning Hub lesson. */
+.info-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--accent) 70%,transparent);background:transparent;color:var(--accent);cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle;margin-left:7px;transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.info-btn .sf-symbol{font-size:12px}
+.info-btn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent)}
+.info-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(pointer:coarse){.info-btn{width:32px;height:32px}}
+#infoPop{position:fixed;z-index:400;width:min(340px,calc(100vw - 32px));background:var(--glass-bg-strong);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-group);box-shadow:var(--liquid-shadow-raised);padding:var(--sp-4);animation:rise .18s var(--ease) both}
+#infoPop[hidden]{display:none}
+.info-pop-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.info-pop-title .sf-symbol{color:var(--accent);font-size:13px}
+.info-pop-body{font-size:13px;line-height:1.55;color:var(--text2)}
+.info-pop-learn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;border:none;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:700;font-family:var(--sans);cursor:pointer;min-height:30px;transition:background var(--dur-fast) var(--ease)}
+.info-pop-learn:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.info-pop-learn .sf-symbol{font-size:10px}
 .modal-actions{display:flex;gap:10px;margin-top:6px}
 .modal-actions .btn-secondary{flex:0 0 auto;width:auto;padding:12px 20px}
 .modal-actions .btn-primary{flex:1}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;padding:12px 18px;border-radius:11px;font-size:16px;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);width:100%;box-shadow:var(--shadow-sm)}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;padding:12px 18px;border-radius:999px;font-size:16px;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease),box-shadow .2s var(--ease);width:100%;box-shadow:var(--shadow-sm)}
 .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:var(--shadow-md)}
 .btn-primary:active{transform:translateY(0) scale(.99);filter:brightness(.96)}
 [data-theme="white"] .btn-primary{background:linear-gradient(135deg,#e50000,#b50000);color:#fff}
@@ -985,7 +1011,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.lrp-cue-btn):hover{filter:brightness(1.2)}
 [data-theme="koala"] .p-avatar.inst,[data-theme="panda"] .p-avatar.inst{background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 [data-theme="koala"] .p-avatar.stud,[data-theme="panda"] .p-avatar.stud{background:#7a7a7a;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.3) inset}
-.btn-secondary{background:var(--btn-fill);border:var(--btn-hairline);color:var(--btn-ink);padding:11px 16px;border-radius:11px;font-size:15px;font-weight:500;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);width:100%}
+.btn-secondary{background:var(--btn-fill);border:var(--btn-hairline);color:var(--btn-ink);padding:11px 16px;border-radius:999px;font-size:15px;font-weight:500;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);width:100%}
 .btn-secondary:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .btn-secondary:active{transform:scale(.99)}
 .btn-danger{background:color-mix(in srgb,var(--red) 12%,transparent);border:1px solid transparent;color:var(--red);padding:11px 16px;border-radius:11px;font-size:15px;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease);width:100%}
@@ -1233,7 +1259,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prompt-op-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#7eb8c8)}
 .prompt-op-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#7eb8c8)}
 .prompt-op-info{position:absolute;top:16px;left:20px;z-index:6;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--pt-accent,#7eb8c8);background:var(--pt-ui-bg,rgba(15,15,25,.92));border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:10px;padding:10px 14px}
-.prompt-op-panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:7;background:var(--pt-ui-bg,rgba(15,15,25,.92));border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:7px;font-family:var(--mono);width:min(640px,94vw);backdrop-filter:blur(20px)}
+.prompt-op-panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:7;background:var(--pt-ui-bg,rgba(15,15,25,.92));border:1px solid var(--pt-ui-border,rgba(126,184,200,.25));border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:7px;font-family:var(--mono);width:min(640px,94vw);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 .prompt-op-active .prompt-op-panel{flex-direction:row;align-items:center;justify-content:center;flex-wrap:wrap}
 .prompt-op-active .prompt-op-panel .pt-ctrl-group{display:flex}
 .prompt-op-panel .pt-ctrl-group{min-width:0}
@@ -1510,7 +1536,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-board.composing .pb-compose-sheet{transform:none;pointer-events:auto}
 /* a tall composer (long note + checklist) scrolls itself — it must never force the board to scroll */
 .pb-compose-sheet .pb-compose-card{min-height:0;overflow-y:auto}
-.pb-compose-backdrop{position:absolute;inset:0;z-index:25;background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:blur(1px);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+.pb-compose-backdrop{position:absolute;inset:0;z-index:25;background:color-mix(in srgb,var(--bg) 55%,transparent);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
 .pb-board.composing .pb-compose-backdrop{opacity:1;pointer-events:auto}
 .pb-compose-card{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--bord2));border-radius:18px;background:color-mix(in srgb,var(--s2) 98%,transparent)}
 .pb-compose-card.dragover{border-color:var(--accent);border-style:dashed;background:color-mix(in srgb,var(--accent) 10%,var(--s2))}
@@ -2104,6 +2130,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .snap-list{max-height:48vh;overflow-y:auto;margin-top:10px;border-top:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
 .snap-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 2px;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent);align-items:center}
 .snap-main{min-width:0}.snap-time{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700}.snap-reason{margin-left:7px;color:var(--accent);font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+/* D3: origin badge — which trail a snapshot lives on. */
+.snap-origin{margin-left:7px;padding:1px 6px;border-radius:8px;font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--border);color:var(--text3)}
+.snap-origin-cloud{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .snap-summary{color:var(--text2);font-size:12px;line-height:1.45;margin-top:4px}.snap-actions{display:flex;gap:7px}.snap-actions button{width:auto;padding:7px 11px;font-size:11px}
 .snap-empty{padding:28px 12px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.5}
 @media(max-width:560px){.snap-row{grid-template-columns:1fr}.snap-actions{justify-content:flex-end}}
@@ -2179,6 +2208,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .print-table tr:nth-child(even) td{background:#fafafa}
   .pt-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:700}
 }
+/* Named @page rules are Chromium-only — Safari ignores them and prints at the
+   dialog's paper size, which is why the PDF export is the primary path there
+   (the print fallback toast says so). */
 @page cueola-portrait{size:letter portrait;margin:0}
 @page cueola-landscape{size:letter landscape;margin:0}
 #printArea{display:none}
@@ -2246,6 +2278,10 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
+
+/* Phase 9 (D10.4): the pointer:coarse touch-target block lives at the very END
+   of this stylesheet — media queries add no specificity, so it must follow the
+   framecheck/compact layers it overrides (source order decides ties). */
 
 /* ─────────────────────────────────────────────────────────────
    PROMPTYPUS — native teleprompter screen
@@ -2817,6 +2853,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .tbtn-live{
   background:#e9433a;
   color:#fff;
+  border-radius:999px;   /* Phase 9 (D10.4): the toolbar's one prominent action is a capsule (HIG) */
   border-color:color-mix(in srgb,#ff453a 58%,transparent);
   box-shadow:0 10px 24px rgba(255,69,58,.24),inset 0 1px 0 rgba(255,255,255,.25);
 }
@@ -3107,7 +3144,7 @@ input.pt-range::-moz-range-thumb,
 
 /* Standalone Flowmingo Op */
 #flowOp{background:var(--pt-bg,#08090f);color:var(--pt-text,#d6e8f0);--pt-bg:#08090f;--pt-text:#d6e8f0;--pt-accent:#7eb8c8;--pt-ui-bg:rgba(15,15,25,.92);--pt-ui-border:rgba(126,184,200,.25);--pt-size:52px;--pt-align:center}
-.flowop-top{min-height:56px;display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(280px,440px) auto;gap:12px;align-items:center;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));border-bottom:1px solid var(--pt-ui-border);background:var(--pt-ui-bg);backdrop-filter:blur(18px);position:relative;z-index:10}
+.flowop-top{min-height:56px;display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(280px,440px) auto;gap:12px;align-items:center;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));border-bottom:1px solid var(--pt-ui-border);background:var(--pt-ui-bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);position:relative;z-index:10}
 .flowop-title-wrap{min-width:0}
 .flowop-kicker{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-accent);opacity:.72;line-height:1.2}
 .flowop-title{font-family:var(--syne);font-size:18px;font-weight:800;color:var(--pt-text);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -3978,7 +4015,29 @@ input.pt-range::-moz-range-thumb,
   .ls-status-item::before{border:1px solid CanvasText;box-shadow:none}
 }
 
-
+/* Phase 9 (D10.4): HIG's 44px minimum is a TOUCH rule — pointer-precision
+   desktop keeps its compact menu/toolbar density (a deliberate mac-app idiom,
+   recorded in DESIGN_GUIDELINES.md), and coarse pointers (iPad) get the full
+   target size. This block sits LAST in the stylesheet on purpose: media
+   queries add no specificity, so only source order lets these beat the
+   framecheck/compact layers above. Live-surface entries change hit size only,
+   never the V2 skin (owner decision) — circles grow on both axes so they stay
+   circles instead of stretching into ellipses. Dense chip clouds
+   (.chip/.cc-chip) are exempt: spacing keeps them separable and inflating
+   them breaks the config grids. */
+@media(pointer:coarse){
+  :root{--ui-control-height:44px;--ui-control-height-compact:44px}
+  .tbtn{min-height:44px}
+  .tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:44px;height:44px}
+  .ec-mini-btn{min-height:44px}
+  .guide-mini-btn{min-height:44px}
+  .e-footer-link{display:inline-flex;align-items:center;min-height:44px}
+  :is(.entry-theme-panel,#modal-settings .settings-sheet,.plandabear-theme-bar) .settings-file-btn{min-height:44px}
+  .ls-exit-btn,.ls-pact-btn,.ls-btn,.marker-chip,.follow-chip{min-height:44px}
+  .fmt-btn{width:44px;height:44px}
+  .ls-pact-circle{width:44px;height:44px}
+  #liveshow .ls-exit-btn.icon-only{width:44px;height:44px}
+}
 </style>
 </head>
 <body>
@@ -5056,7 +5115,7 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="paperPreviewModal">
   <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
     <div class="paperwork-modal-head">
-      <div class="modal-title" id="paperPreviewTitle">Preview</div>
+      <div class="modal-title" id="paperPreviewTitle"><span id="paperPreviewTitleText">Preview</span><button type="button" class="info-btn" aria-label="About exports and the verified stamp" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="paper-preview" id="paperPreviewBody"></div>
@@ -5358,7 +5417,7 @@ input.pt-range::-moz-range-thumb,
 
 <div class="modal-wrap" id="modal-prepro-join">
   <div class="modal">
-    <div class="modal-title">Open Planda Bear</div>
+    <div class="modal-title">Open Planda Bear<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub">Enter the session code to work on the Planda Bear package.</div>
     <div class="join-identity-strip" id="pp-identity-strip" hidden></div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="pp-join-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
@@ -5523,7 +5582,7 @@ input.pt-range::-moz-range-thumb,
 
 <div class="modal-wrap" id="modal-stud">
   <div class="modal">
-    <div class="modal-title">Join a Session</div>
+    <div class="modal-title">Join a Session<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub">Enter the session code your director gave you.</div>
     <div class="join-identity-strip" id="stud-identity-strip" hidden></div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="stud-code" type="text" placeholder="Session code" maxlength="20" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>
@@ -5583,7 +5642,7 @@ input.pt-range::-moz-range-thumb,
       </details>
     </div>
 	    <div class="settings-section" style="margin-top:12px">
-	      <div class="settings-sec-label">File</div>
+	      <div class="settings-sec-label">File<button type="button" class="info-btn" aria-label="About the .cueola show file" onclick="toggleInfoPop(event,'cueola-file')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
 	      <div class="settings-file-grid">
 	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" title="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" title="Save this rundown as a .cueola show file (Cmd+S re-saves it in place)"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
@@ -5633,7 +5692,7 @@ input.pt-range::-moz-range-thumb,
 
 <div class="modal-wrap" id="modal-session-history">
   <div class="modal settings-sheet slog-modal">
-    <div class="modal-title">Session History</div>
+    <div class="modal-title">Session History<button type="button" class="info-btn" aria-label="About restore" onclick="toggleInfoPop(event,'session-history')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub" id="sessionHistorySub">Local recovery snapshots for this session.</div>
     <div class="snap-list" id="sessionHistoryList" aria-live="polite"></div>
     <div class="modal-actions">
@@ -5656,6 +5715,7 @@ input.pt-range::-moz-range-thumb,
   <button class="btn-primary" type="button" onclick="applyCueolaUpdate()">Reload</button>
   <button class="app-update-dismiss" type="button" onclick="dismissCueolaUpdate()" aria-label="Dismiss update notice">Later</button>
 </div>
+<div id="infoPop" hidden></div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- D12.7: no vendor library rides boot — pdf.js/jspdf/html2canvas/mammoth/
@@ -5676,8 +5736,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df80f"></script>
-<script src="cueola-app.js?v=d256cd2fa2"></script>
-<script src="outrangutan/outrangutan.js?v=3ec5d3c1d6"></script>
+<script src="cueola-app.js?v=a385d04b86"></script>
+<script src="outrangutan/outrangutan.js?v=eedbddd361"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

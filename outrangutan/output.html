@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Outrangutan Output</title>
 <link rel="icon" type="image/svg+xml" href="../assets/Brand/Outrangutan_icon.svg">
+<link rel="apple-touch-icon" href="../assets/icons/app/outrangutan-touch-180.png">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
   .deck { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: 0; }
@@ -19,6 +20,14 @@
   #keycv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 3; display: none; }
   #keycv.on { display: block; }
   #vimg { z-index: 3; }   /* still image sits above the video decks while shown */
+  /* Phase 9 (D10.2): local tap-to-unmute chip — Safari can refuse un-muted
+     command-driven play (and pause on programmatic unmute) with no local
+     gesture; this window has no toast system, so the affordance lives here. */
+  #unlock { position: absolute; left: 50%; bottom: 6vh; transform: translateX(-50%); display: none; z-index: 6;
+    padding: 12px 22px; border-radius: 999px; background: rgba(0,0,0,.72); border: 1px solid rgba(255,255,255,.28);
+    color: #fff; font: 600 15px -apple-system, system-ui, sans-serif; letter-spacing: .02em; white-space: nowrap; }
+  #unlock.on { display: block; }
+  body.unlock-visible { cursor: default; }
 </style>
 </head>
 <body>
@@ -36,6 +45,7 @@
     </div>
     <div id="idlabel">Output</div>
   </div>
+  <div id="unlock" role="button">Tap or press a key for sound</div>
 
 <script src="../outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="../outrangutan/output-command-queue.js?v=d3ef82b3a4"></script>
@@ -205,6 +215,10 @@
     clearDeckCallbacks(decks.b);
     vimg.onerror = null;
     stopKeyLoop();
+    // Any destructive command retires the pending unlock: a stale gesture
+    // retry must never force-play the NEXT cue, and the mute-first fallback's
+    // muted deck must not leak silence into later cues on that deck.
+    clearPendingUnlock();
   }
 
   function openDB() {
@@ -370,10 +384,24 @@
   // operator happened to click. The blocked play is remembered and retried on
   // the first gesture anywhere in this window — one interaction, not a mystery.
   let _blockedPlayRetry = null;
-  function retryBlockedPlayback() {
-    const retry = _blockedPlayRetry;
+  let _mutedFallbackDeck = null;   // deck the mute-first fallback muted, pending a gesture unmute
+  const unlockEl = document.getElementById('unlock');
+  function showUnlock(msg) { if (!unlockEl) return; unlockEl.textContent = msg; unlockEl.classList.add('on'); document.body.classList.add('unlock-visible'); }
+  function hideUnlock() { if (!unlockEl) return; unlockEl.classList.remove('on'); document.body.classList.remove('unlock-visible'); }
+  function clearPendingUnlock() {
     _blockedPlayRetry = null;
+    if (_mutedFallbackDeck) { _mutedFallbackDeck.el.muted = false; _mutedFallbackDeck = null; }
+    hideUnlock();
+  }
+  function retryBlockedPlayback() {
+    hideUnlock();
+    const retry = _blockedPlayRetry, dk = _mutedFallbackDeck;
+    _blockedPlayRetry = null;
+    _mutedFallbackDeck = null;
     if (retry) retry();
+    // If the retry declined (superseded context/deck) the temporary mute must
+    // not linger on the deck. The re-arm path re-tracks asynchronously.
+    if (dk && dk.el.muted && _mutedFallbackDeck !== dk) dk.el.muted = false;
   }
   window.addEventListener('pointerdown', retryBlockedPlayback, true);
   window.addEventListener('keydown', retryBlockedPlayback, true);
@@ -393,7 +421,23 @@
       started.catch((error) => {
         if (!context.isCurrent() || (error && error.name === 'AbortError')) return;
         if (error && error.name === 'NotAllowedError') {
-          _blockedPlayRetry = () => { if (context.isCurrent()) requestPlayback(d, false, context); };
+          // Phase 9 (D10.2): mute-first fallback — retry muted so the picture
+          // is never dark, and put the sound behind one local gesture. The
+          // temporary mute is tracked so destructive commands (via
+          // clearPendingUnlock) can restore it instead of leaking silence.
+          const restoreSound = !d.el.muted;
+          _blockedPlayRetry = () => {
+            if (!context.isCurrent()) return;
+            if (restoreSound) d.el.muted = false;
+            requestPlayback(d, false, context);
+          };
+          if (restoreSound) {
+            d.el.muted = true;
+            _mutedFallbackDeck = d;
+            const muted = d.el.play();
+            if (muted && typeof muted.catch === 'function') muted.catch(() => {});
+          }
+          showUnlock(restoreSound ? 'Tap or press a key for sound' : 'Tap or press a key to start playback');
           rendererError('Playback requires operator interaction — click or press any key in this window.', d.mediaId, 'operator');
         } else {
           rendererError('Playback could not start.', d.mediaId, 'operator');
@@ -498,6 +542,9 @@
 
   async function applyAudio(m, context) {
     const on = !!m.on;
+    // Routing takes over mute ownership — a tracked fallback mute must not be
+    // "restored" to un-muted later against an explicit audio-off.
+    _mutedFallbackDeck = null;
     for (const d of [decks.a, decks.b]) {
       if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
       d.el.muted = !on;
@@ -512,10 +559,43 @@
       }
     }
     if (runtime.error.indexOf('Audio output routing failed:') === 0) { runtime.error = ''; runtime.recoverability = runtime.recoveryNeedsResume ? 'operator' : 'none'; }
+    // Phase 9 (D10.2): Safari may pause a playing deck when it's un-muted
+    // without a local gesture. Detect the stall, fall back to muted playback,
+    // and put the sound behind the tap-to-unmute chip. The deck is captured
+    // (front can swap before the timer or gesture fires) and the retry re-arms
+    // itself when a non-activating key (Esc) consumed the gesture without
+    // granting activation — otherwise the chip died and sound never returned.
+    if (on) setTimeout(() => {
+      if (!context.isCurrent()) return;
+      if (runtime.playbackStatus !== 'playing' || !front || !front.el.paused) return;
+      const dk = front;
+      dk.el.muted = true;
+      _mutedFallbackDeck = dk;
+      const resumed = dk.el.play();
+      if (resumed && typeof resumed.catch === 'function') resumed.catch(() => {});
+      const retrySound = () => {
+        if (!context.isCurrent() || dk !== front) return;
+        dk.el.muted = false;
+        const p = dk.el.play();
+        if (p && typeof p.catch === 'function') p.catch(err => {
+          if (err && err.name === 'NotAllowedError') {
+            dk.el.muted = true;
+            const again = dk.el.play();
+            if (again && typeof again.catch === 'function') again.catch(() => {});
+            _blockedPlayRetry = retrySound;
+            _mutedFallbackDeck = dk;
+            showUnlock('Tap or press a key for sound');
+          }
+        });
+      };
+      _blockedPlayRetry = retrySound;
+      showUnlock('Tap or press a key for sound');
+    }, 120);
     return { ok: true };
   }
 
   function clearProgram() {
+    clearPendingUnlock();   // stop/black/replaced must not leave the chip on the program feed
     clearImage(0);
     stopDeck(decks.a);
     stopDeck(decks.b);
@@ -614,6 +694,7 @@
         runtime.playbackStatus = front.mediaId ? 'paused' : runtime.playbackStatus;
         return { ok: true };
       case 'identify':
+        if (m.on) clearPendingUnlock();   // the chip must not float over the test bars
         idEl.classList.toggle('on', !!m.on);
         idLabel.textContent = m.label || ('Output ' + OUTPUT_ID);
         return { ok: true };
@@ -830,6 +911,10 @@
 
   publishDomState(outputProtocol.getState());
   send(outputProtocol.buildReady());
+  // Phase 9 (D10.2): defensive persist() — this window reads the media library
+  // straight from IndexedDB; the grant is origin-wide (main app asks too) and
+  // the result is advisory only.
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   window.__OUTRANGUTAN_OUTPUT_V2__ = Object.freeze({
     outputId: OUTPUT_ID,
     outputInstanceId: outputProtocol.outputInstanceId,

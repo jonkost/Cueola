@@ -7,6 +7,18 @@ const SHELL_ASSETS = [
   './outrangutan/output.html',
   './manifest.webmanifest',
   './assets/Brand/Cueola_Icon.svg',
+  './assets/Brand/Outrangutan_icon.svg',
+  // PWA icon set (Phase 9 / D10.3) — PNG install + touch icons, unversioned
+  // like the Brand SVGs: artwork changes ride a WORKER_SCHEMA bump.
+  './assets/icons/app/cueola-32.png',
+  './assets/icons/app/cueola-192.png',
+  './assets/icons/app/cueola-512.png',
+  './assets/icons/app/cueola-maskable-192.png',
+  './assets/icons/app/cueola-maskable-512.png',
+  './assets/icons/app/apple-touch-icon.png',
+  './assets/icons/app/cueola-file-256.png',
+  './assets/icons/app/outrangutan-file-256.png',
+  './assets/icons/app/outrangutan-touch-180.png',
   // Script Operator controls must retain deterministic SF Symbol masks when
   // the dedicated window is opened for the first time while offline.
   './design-system/apple/symbols/runtime/light-small/objectsandtools/paperclip.svg',
@@ -89,9 +101,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=d256cd2fa2',
-  'outrangutan/outrangutan.css?v=794bcd25eb',
-  'outrangutan/outrangutan.js?v=3ec5d3c1d6',
+  'cueola-app.js?v=a385d04b86',
+  'outrangutan/outrangutan.css?v=718e619254',
+  'outrangutan/outrangutan.js?v=eedbddd361',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -103,7 +115,9 @@ const versionSignature = SHELL_ASSETS
 // an HTML-only change must roll the cache name here (V2 Phase 3 learning d).
 // 6→7: V2 brand icons — assets/Brand/*.svg are precached UNVERSIONED, so only
 // a schema bump rolls the shell cache and delivers the new artwork.
-const WORKER_SCHEMA = '7';
+// 7→8: Phase 9 PWA icons + manifest file_handlers — new unversioned PNGs and
+// a manifest.webmanifest change (both precached unversioned) need the roll.
+const WORKER_SCHEMA = '8';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

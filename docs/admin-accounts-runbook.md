@@ -46,10 +46,22 @@ read-only for one release, then removed.
 
 ## Release-day deploy order (D8 rule 3 — TIGHTENING, do not reorder)
 
+0. **ADDITIVE pre-step (any time BEFORE hosting ships — Phases 6 + 7):**
+   deploy an intermediate rules file = the currently deployed (2026-07-15)
+   rules PLUS, copied verbatim from the staged `firestore.rules`: the
+   `match /groups/{groupId}` block, the `match /snapshots/{snapId}` block,
+   `validSnapshotDocument`, and the `isAdmin()`/`isSuperAdmin()` helpers with
+   their `match /admins/{docId}` block. All of it only ADDS collections/grants
+   — harmless to the live fleet — and it must exist before the new JS ships:
+   `cloudSnapshotPut` is fire-and-forget, so JS-first means cloud captures
+   fail silently (the worst failure for a safety feature). **Verify by
+   watching a capture doc actually appear** under
+   `sessions/{code}/snapshots/` in the console, not by absence of errors.
+   Keep a dated rollback copy of whatever was deployed before this step.
 1. Hosting ships (new JS, `?v=` + WORKER_SCHEMA bumps) → fleet refreshes.
 2. Owner mints instructor accounts with temp passwords (they can sign in
    immediately — Auth is live even before rules tighten).
-3. THEN deploy `firestore.rules` via the REST script.
+3. THEN deploy the full staged `firestore.rules` via the REST script.
    Rollback copy: `docs/rules-rollback-2026-07-18-pre-admin-auth.rules`.
 
 **Rollback:** revert hosting via `?v=`/WORKER_SCHEMA, redeploy the rollback

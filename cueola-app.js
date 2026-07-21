@@ -50,6 +50,26 @@ Object.defineProperty(window, 'cueolaActiveSessionCode', {
   get() { try { return (session && session.code && !session.isDemo && !session.isExpert) ? session.code : ''; } catch { return ''; } },
 });
 
+// ─────────────────────────────────────────────────────────────
+// Phase 9 (D10.1): CueolaCaps — the one place browser-capability truth lives,
+// for Cueola and Outrangutan both (this file loads first). Feature checks
+// only, never userAgent sniffing (the Chromium-first/degrade-gracefully
+// doctrine at outrangutan.js top). Getters, not booleans captured at boot:
+// what matters is the answer at the moment of use.
+// ─────────────────────────────────────────────────────────────
+window.CueolaCaps = {
+  get webMidi()           { return 'requestMIDIAccess' in navigator; },
+  get webHid()            { return 'hid' in navigator; },
+  get windowManagement()  { return 'getScreenDetails' in window; },
+  get fileSystemAccess()  { return typeof window.showOpenFilePicker === 'function' && typeof window.showSaveFilePicker === 'function'; },
+  get compressionStreams(){ return typeof CompressionStream === 'function' && typeof DecompressionStream === 'function'; },
+  get notifications()     { return 'Notification' in window; },
+  get persistentStorage() { return Boolean(navigator.storage && navigator.storage.persist); },
+  get launchQueue()       { return 'launchQueue' in window; },
+  // The Chromium-only hardware trio the Outrangutan one-time sheet describes.
+  get chromiumHardware()  { return this.webMidi && this.webHid && this.windowManagement; },
+};
+
 function sfIcon(symbol, className='') {
   const classes = className ? `sf-symbol ${className}` : 'sf-symbol';
   return `<span class="${classes}" data-symbol="${symbol}" aria-hidden="true"></span>`;
@@ -780,15 +800,186 @@ async function sessionHistoryPut(record) {
 
 async function encodeSessionSnapshot(doc) {
   const json = JSON.stringify(doc);
-  if (typeof CompressionStream === 'undefined') return { encoding:'json', data:json, bytes:new Blob([json]).size };
+  if (!window.CueolaCaps.compressionStreams) return { encoding:'json', data:json, bytes:new Blob([json]).size };
   const blob = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
   return { encoding:'gzip', data:blob, bytes:blob.size };
 }
 
+// Decode accepts every encoding ever shipped, forever (D3): 'json' (raw
+// string), 'gzip' (Blob, local IndexedDB), and the Firestore-string legs
+// 'json-b64' / 'gzip-b64' added for the cloud trail.
 async function decodeSessionSnapshot(record) {
-  if (record.encoding !== 'gzip') return JSON.parse(record.data);
-  const json = await new Response(record.data.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-  return JSON.parse(json);
+  // Symmetry guard with the encoder above: a gzip snapshot written by a
+  // Streams-capable browser must fail with a readable message elsewhere,
+  // not a bare TypeError mid-restore.
+  if (/^gzip/.test(record.encoding || '') && !window.CueolaCaps.compressionStreams) {
+    throw new Error('This browser can’t decompress cloud snapshots — restore from Chrome, Edge, or Safari 16.4+.');
+  }
+  if (record.encoding === 'gzip') {
+    const json = await new Response(record.data.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    return JSON.parse(json);
+  }
+  if (record.encoding === 'gzip-b64') {
+    const blob = snapshotBase64ToBlob(record.data);
+    const json = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    return JSON.parse(json);
+  }
+  if (record.encoding === 'json-b64') {
+    return JSON.parse(new TextDecoder().decode(snapshotBase64ToBytes(record.data)));
+  }
+  return JSON.parse(record.data);
+}
+
+// ── v2.1 Phase 7 (D3): cloud snapshot trail ─────────────────────────────────
+// sessions/{code}/snapshots mirrors the local capture funnel: gzip+base64
+// payloads chunked on the deployed files pattern, deterministic content-hash
+// ids for idempotent dedupe, admin-gated reads (snapshots embed student data),
+// 20-record prune, and every restore routed through the ONE existing
+// restoreSessionSnapshot body so the P2607 re-stamp discipline can never fork.
+
+async function snapshotFpHash(fingerprint) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+function snapshotBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function snapshotBase64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function snapshotBase64ToBlob(b64) {
+  return new Blob([snapshotBase64ToBytes(b64)]);
+}
+
+// A decoded payload is either the legacy bare session doc or the v2 wrapper
+// carrying groups + per-note subcollection content (the under-capture gap D3
+// closes in BOTH trails).
+function unwrapSnapshotPayload(decoded) {
+  if (decoded && decoded.kind === 'sessionSnapshot.v2') {
+    return {
+      session: decoded.session || {},
+      groups: decoded.groups && typeof decoded.groups === 'object' ? decoded.groups : {},
+      notes: Array.isArray(decoded.notes) ? decoded.notes : [],
+    };
+  }
+  return { session: decoded || {}, groups: {}, notes: [] };
+}
+
+// Fetch every /groups/{gid} subdoc named by the session doc (ids come from the
+// doc itself, so no list permission is needed).
+async function captureSessionGroupDocs(code, doc) {
+  const ids = Array.isArray(doc?.groups)
+    ? doc.groups.map(g => g && typeof g.id === 'string' ? g.id : '').filter(id => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(id))
+    : [];
+  if (!ids.length || !window._firebaseReady || !window._getDoc) return {};
+  const groups = {};
+  await Promise.all(ids.map(async id => {
+    try {
+      const snap = await window._getDoc(window._doc(window._db, 'sessions', code, 'groups', id));
+      if (snap.exists()) groups[id] = snap.data();
+    } catch { /* a missing/refused group doc must not block capture */ }
+  }));
+  return groups;
+}
+
+const CLOUD_SNAPSHOT_HEAD_RE = /^snap_[a-f0-9]{16}$/;
+let _cloudSnapshotCache = { code: '', rows: null };
+
+function cloudSnapshotAllowed() {
+  return Boolean(window._firebaseReady && session.code && !session.isDemo && !session.isExpert
+    && (session.role === 'instructor' || Boolean(adminSession)));
+}
+
+// Fire-and-forget cloud mirror (D3 deploy-order warning): the /snapshots rules
+// block must be DEPLOYED BEFORE this ships to hosting, or captures fail
+// silently — verification must confirm a doc actually appears in Firestore.
+async function cloudSnapshotPut(meta, base64Data) {
+  try {
+    const chunks = [];
+    for (let i = 0; i < base64Data.length; i += PB_FILE_CHUNK_CHARS) chunks.push(base64Data.slice(i, i + PB_FILE_CHUNK_CHARS));
+    if (!chunks.length) chunks.push('');
+    if (chunks.length > 8) { console.warn('Cloud snapshot skipped — payload exceeds the 8-chunk ceiling', meta.fpHash); return; }
+    const headRef = window._doc(window._db, 'sessions', meta.sessionCode, 'snapshots', `snap_${meta.fpHash}`);
+    await window._setDoc(headRef, {
+      kind: 'sessionSnapshot', sessionCode: meta.sessionCode, createdAt: meta.createdAt,
+      reason: meta.reason, summary: meta.summary, fpHash: meta.fpHash,
+      encoding: meta.encoding, bytes: meta.bytes, chunkCount: chunks.length,
+      createdBy: session.userName || '', data: chunks[0],
+    });
+    for (let n = 1; n < chunks.length; n++) {
+      await window._setDoc(window._doc(window._db, 'sessions', meta.sessionCode, 'snapshots', `snap_${meta.fpHash}_c${n}`), {
+        kind: 'sessionSnapshotChunk', fpHash: meta.fpHash, chunkIndex: n, data: chunks[n],
+      });
+    }
+    _cloudSnapshotCache = { code: '', rows: null };
+    cloudSnapshotPrune(meta.sessionCode).catch(() => {});
+  } catch (err) {
+    console.warn('Cloud snapshot mirror failed (local copy is safe)', err);
+  }
+}
+
+async function cloudSnapshotList(code = session.code) {
+  if (!code || !window._firebaseReady || !window._getDocs) return [];
+  if (_cloudSnapshotCache.code === code && Array.isArray(_cloudSnapshotCache.rows)) return _cloudSnapshotCache.rows;
+  try {
+    const snap = await window._getDocs(window._collection(window._db, 'sessions', code, 'snapshots'));
+    const rows = [];
+    snap.forEach(docSnap => {
+      const d = docSnap.data() || {};
+      if (d.kind === 'sessionSnapshot' && CLOUD_SNAPSHOT_HEAD_RE.test(docSnap.id)) rows.push({ ...d, id: docSnap.id });
+    });
+    rows.sort((a, b) => b.createdAt - a.createdAt);
+    _cloudSnapshotCache = { code, rows };
+    return rows;
+  } catch {
+    // Non-admin clients are refused reads by design (PII gate) — the modal
+    // simply shows the local trail.
+    _cloudSnapshotCache = { code, rows: [] };
+    return [];
+  }
+}
+
+async function fetchCloudSnapshotRecord(headId, code = session.code) {
+  const headSnap = await window._getDoc(window._doc(window._db, 'sessions', code, 'snapshots', headId));
+  if (!headSnap.exists()) return null;
+  const head = headSnap.data();
+  let data = head.data || '';
+  const chunkCount = Math.max(1, Math.min(8, Number(head.chunkCount) || 1));
+  for (let n = 1; n < chunkCount; n++) {
+    const part = await window._getDoc(window._doc(window._db, 'sessions', code, 'snapshots', `${headId}_c${n}`));
+    if (!part.exists()) throw new Error(`Cloud snapshot chunk ${n} is missing`);
+    data += part.data().data || '';
+  }
+  return { ...head, data };
+}
+
+// 20-cap retention, matching sessionHistoryPut. Prune needs list permission
+// (admin), so it is best-effort — a non-admin capture client leaves pruning to
+// the next admin visit.
+async function cloudSnapshotPrune(code) {
+  const rows = await cloudSnapshotList(code);
+  const excess = rows.slice(SESSION_HISTORY_LIMIT);
+  for (const row of excess) {
+    try {
+      const chunkCount = Math.max(1, Math.min(8, Number(row.chunkCount) || 1));
+      for (let n = 1; n < chunkCount; n++) {
+        await window._deleteDoc(window._doc(window._db, 'sessions', code, 'snapshots', `${row.id}_c${n}`));
+      }
+      await window._deleteDoc(window._doc(window._db, 'sessions', code, 'snapshots', row.id));
+    } catch { break; }
+  }
+  if (excess.length) _cloudSnapshotCache = { code: '', rows: null };
 }
 
 function sessionSnapshotSummary(doc, previousDoc) {
@@ -823,16 +1014,39 @@ async function captureSessionSnapshot(reason='interval', force=false) {
     const existing = await sessionHistoryList(targetSessionCode);
     const latest = existing[0];
     const doc = cloneRundownValue(sessionSnapshotLatestDoc);
-    const fingerprint = stableStringify(doc);
-    if (!force && latest?.fingerprint === fingerprint) { sessionSnapshotLastAt = now; return; }
-    const previousDoc = latest ? await decodeSessionSnapshot(latest) : null;
-    const encoded = await encodeSessionSnapshot(doc);
+    // D3: group-aware capture — the payload carries the session doc PLUS every
+    // /groups subdoc PLUS the per-note subcollection (both were under-captured
+    // before). The fingerprint incorporates the group docs' content, else a
+    // group-only edit computes the same hash and the trail silently stops
+    // advancing exactly when groups are in use.
+    const groups = await captureSessionGroupDocs(targetSessionCode, doc);
+    const notes = cloneRundownValue(Array.isArray(plandaBearNotes) ? plandaBearNotes : []);
+    const payload = { kind:'sessionSnapshot.v2', session:doc, groups, notes };
+    const fingerprint = stableStringify(payload);
+    const fpHash = await snapshotFpHash(fingerprint);
+    if (!force && (latest?.fpHash === fpHash || latest?.fingerprint === fingerprint)) { sessionSnapshotLastAt = now; return; }
+    const previousDoc = latest ? unwrapSnapshotPayload(await decodeSessionSnapshot(latest)).session : null;
+    const encoded = await encodeSessionSnapshot(payload);
+    const summary = sessionSnapshotSummary(doc, previousDoc)
+      + (Object.keys(groups).length ? ` · ${Object.keys(groups).length} group${Object.keys(groups).length === 1 ? '' : 's'}` : '');
+    // fpHash only, never the raw fingerprint (it duplicates the whole doc).
     await sessionHistoryPut({
       id:`${targetSessionCode}_${now}_${Math.random().toString(36).slice(2,7)}`,
-      sessionCode:targetSessionCode, createdAt:now, reason, fingerprint,
-      summary:sessionSnapshotSummary(doc, previousDoc), ...encoded,
+      sessionCode:targetSessionCode, createdAt:now, reason, fpHash,
+      summary, ...encoded,
     });
     sessionSnapshotLastAt = now;
+    // Cloud mirror — fire-and-forget; the cloud must never block local capture.
+    if (cloudSnapshotAllowed()) {
+      const base64 = encoded.encoding === 'gzip' ? await snapshotBlobToBase64(encoded.data) : null;
+      const cloudMeta = {
+        sessionCode: targetSessionCode, createdAt: now, reason, summary, fpHash,
+        encoding: encoded.encoding === 'gzip' ? 'gzip-b64' : 'json-b64',
+        bytes: encoded.bytes,
+      };
+      const cloudData = base64 !== null ? base64 : await snapshotBlobToBase64(new Blob([encoded.data]));
+      cloudSnapshotPut(cloudMeta, cloudData);
+    }
   } catch (err) {
     console.warn('Session history snapshot unavailable', err);
   } finally {
@@ -852,27 +1066,46 @@ function sessionSnapshotReasonLabel(reason) {
   })[reason] || reason;
 }
 
+// D3: ONE merged history — local IndexedDB rows (per-device offline authority)
+// plus the admin-gated cloud trail, deduped by content hash, newest first.
+async function mergedSessionHistoryRows() {
+  const local = await sessionHistoryList();
+  const cloud = await cloudSnapshotList();
+  const localHashes = new Set(local.map(r => r.fpHash).filter(Boolean));
+  const rows = local.map(r => ({ ...r, origin:'local' }));
+  cloud.forEach(r => { if (!localHashes.has(r.fpHash)) rows.push({ ...r, origin:'cloud', id:`cloud:${r.id}` }); });
+  rows.sort((a, b) => b.createdAt - a.createdAt);
+  return rows;
+}
+
 async function openSessionHistory() {
   showModal('modal-session-history');
   const list = document.getElementById('sessionHistoryList');
   const sub = document.getElementById('sessionHistorySub');
-  list.innerHTML = '<div class="snap-empty">Loading local recovery snapshots…</div>';
-  const records = await sessionHistoryList();
+  list.innerHTML = '<div class="snap-empty">Loading recovery snapshots…</div>';
+  const records = await mergedSessionHistoryRows();
+  const cloudCount = records.filter(r => r.origin === 'cloud').length;
   const canRestoreLocal = Boolean(rundownSyncBlockedMissing && session.role === 'instructor' && session.code);
   sub.textContent = canRestoreLocal
-    ? `${records.length} of ${SESSION_HISTORY_LIMIT} snapshots · current local copy has ${beats.length} row${beats.length === 1 ? '' : 's'}`
-    : `${records.length} of ${SESSION_HISTORY_LIMIT} local recovery snapshots · newest first`;
+    ? `${records.length} snapshots · current local copy has ${beats.length} row${beats.length === 1 ? '' : 's'}`
+    : `${records.length} recovery snapshot${records.length === 1 ? '' : 's'} · newest first${cloudCount ? ` · ${cloudCount} from the cloud trail` : ''}`;
   const restoreLocal = document.getElementById('sessionHistoryRestoreLocal');
   if (restoreLocal) restoreLocal.hidden = !canRestoreLocal;
   document.getElementById('sessionHistoryExportAll').disabled = !records.length;
   list.innerHTML = records.length ? records.map(record => `
     <div class="snap-row">
-      <div class="snap-main"><div><span class="snap-time">${esc(new Date(record.createdAt).toLocaleString())}</span><span class="snap-reason">${esc(sessionSnapshotReasonLabel(record.reason))}</span></div><div class="snap-summary">${esc(record.summary || 'Session recovery snapshot')}</div></div>
+      <div class="snap-main"><div><span class="snap-time">${esc(new Date(record.createdAt).toLocaleString())}</span><span class="snap-reason">${esc(sessionSnapshotReasonLabel(record.reason))}</span><span class="snap-origin snap-origin-${record.origin}">${record.origin === 'cloud' ? 'Cloud' : 'This device'}</span></div><div class="snap-summary">${esc(record.summary || 'Session recovery snapshot')}</div></div>
       <div class="snap-actions"><button class="btn-secondary export-action" onclick="exportSessionSnapshot('${record.id}')">Export</button><button class="btn-secondary" onclick="restoreSessionSnapshot('${record.id}')">Restore</button></div>
     </div>`).join('') : '<div class="snap-empty">No snapshots yet. Cueola saves one when you join, every two minutes while the session changes, when you go live, and when you leave.</div>';
 }
 
+// D3: one resolver for both trails — 'cloud:snap_{fpHash}' ids fetch the head
+// doc + continuation chunks and reassemble; everything else is local IndexedDB.
 async function getSessionSnapshotRecord(id) {
+  if (String(id).startsWith('cloud:')) {
+    try { return await fetchCloudSnapshotRecord(String(id).slice(6)); }
+    catch (err) { console.warn('Cloud snapshot fetch failed', err); return null; }
+  }
   const db = await openSessionHistoryDB();
   return new Promise(resolve => {
     const request = db.transaction(SESSION_HISTORY_STORE, 'readonly').objectStore(SESSION_HISTORY_STORE).get(id);
@@ -890,14 +1123,24 @@ function downloadSessionHistoryJSON(value, filename) {
 async function exportSessionSnapshot(id) {
   const record = await getSessionSnapshotRecord(id);
   if (!record) { toast('Snapshot not found.'); return; }
-  const doc = await decodeSessionSnapshot(record);
-  downloadSessionHistoryJSON({ sessionCode:record.sessionCode, createdAt:record.createdAt, reason:record.reason, summary:record.summary, session:doc }, `Cueola Snapshot ${record.sessionCode} ${new Date(record.createdAt).toISOString().replace(/[:.]/g,'-')}.json`);
+  const payload = unwrapSnapshotPayload(await decodeSessionSnapshot(record));
+  downloadSessionHistoryJSON({ sessionCode:record.sessionCode, createdAt:record.createdAt, reason:record.reason, summary:record.summary, session:payload.session, groups:payload.groups, notes:payload.notes }, `Cueola Snapshot ${record.sessionCode} ${new Date(record.createdAt).toISOString().replace(/[:.]/g,'-')}.json`);
   toast('Snapshot exported.');
 }
 
+// Export All covers BOTH trails (D3): every merged row decodes through the
+// same resolver, so cloud-only snapshots land in the file too.
 async function exportAllSessionSnapshots() {
-  const records = await sessionHistoryList();
-  const snapshots = await Promise.all(records.map(async record => ({ createdAt:record.createdAt, reason:record.reason, summary:record.summary, session:await decodeSessionSnapshot(record) })));
+  const records = await mergedSessionHistoryRows();
+  const snapshots = [];
+  for (const row of records) {
+    try {
+      const record = row.origin === 'cloud' ? await getSessionSnapshotRecord(row.id) : row;
+      if (!record) continue;
+      const payload = unwrapSnapshotPayload(await decodeSessionSnapshot(record));
+      snapshots.push({ createdAt:row.createdAt, reason:row.reason, summary:row.summary, origin:row.origin || 'local', session:payload.session, groups:payload.groups, notes:payload.notes });
+    } catch (err) { console.warn('Snapshot export skipped one record', err); }
+  }
   downloadSessionHistoryJSON({ sessionCode:session.code, exportedAt:Date.now(), snapshots }, `Cueola History ${session.code} ${new Date().toISOString().slice(0,10)}.json`);
   toast('Session history exported.');
 }
@@ -959,25 +1202,31 @@ async function restoreCurrentLocalSessionToCloud() {
   }
 }
 
+// Restored paperwork must WIN against every device's cached copy: re-stamp
+// prePro as newest, else a stale-but-newer-stamped local mirror silently
+// re-clobbers the restore within seconds (P2607 incident, 2026-07-15). ONE
+// helper — the session doc and every group doc get the identical discipline.
+function restampPreProForRestore(prePro, now = Date.now()) {
+  const restamped = cloneRundownValue(prePro);
+  delete restamped._stamps;
+  restamped.updatedAt = now;
+  restamped._fieldUpdatedAt = {};
+  for (const k of Object.keys(restamped)) {
+    if (k !== 'updatedAt' && k !== '_fieldUpdatedAt' && k !== 'activeCallSheetIndex') restamped._fieldUpdatedAt[k] = now;
+  }
+  return restamped;
+}
+
 async function restoreSessionSnapshot(id) {
   const record = await getSessionSnapshotRecord(id);
   if (!record) { toast('Snapshot not found.'); return; }
-  if (!confirm(`Restore the ${new Date(record.createdAt).toLocaleString()} snapshot?\n\nCurrent rundown content will be replaced through normal cloud sync. A recovery copy of the current session will be saved first.`)) return;
+  const fromCloud = String(id).startsWith('cloud:');
+  if (!confirm(`Restore the ${new Date(record.createdAt).toLocaleString()} snapshot${fromCloud ? ' from the cloud trail' : ''}?\n\nCurrent rundown content will be replaced through normal cloud sync. A recovery copy of the current session will be saved first.`)) return;
   await captureSessionSnapshot('interval', true);
-  const doc = await decodeSessionSnapshot(record);
-  // Restored paperwork must WIN against every device's cached copy: re-stamp
-  // prePro as newest, else a stale-but-newer-stamped local mirror silently
-  // re-clobbers the restore within seconds (P2607 incident, 2026-07-15).
+  const payload = unwrapSnapshotPayload(await decodeSessionSnapshot(record));
+  const doc = payload.session;
   if (doc.prePro && typeof doc.prePro === 'object') {
-    const now = Date.now();
-    const restamped = cloneRundownValue(doc.prePro);
-    delete restamped._stamps;
-    restamped.updatedAt = now;
-    restamped._fieldUpdatedAt = {};
-    for (const k of Object.keys(restamped)) {
-      if (k !== 'updatedAt' && k !== '_fieldUpdatedAt' && k !== 'activeCallSheetIndex') restamped._fieldUpdatedAt[k] = now;
-    }
-    doc.prePro = restamped;
+    doc.prePro = restampPreProForRestore(doc.prePro);
   }
   const sharedCloud = window._firebaseReady && session.code && !session.isDemo && !session.isExpert;
   let recreatedSession = false;
@@ -1019,10 +1268,36 @@ async function restoreSessionSnapshot(id) {
     try { await window._updateDoc(window._doc(window._db,'sessions',session.code), updates); }
     catch (err) { reportCloudWriteFailure('Snapshot restore', err); return; }
   }
+  // D3: group-aware restore — every captured /groups subdoc is written back
+  // through the SAME re-stamp discipline as the session doc, so a restore
+  // beats every group's live stale client too.
+  if (sharedCloud && payload.groups && Object.keys(payload.groups).length) {
+    for (const [gid, groupDoc] of Object.entries(payload.groups)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(gid)) continue;
+      try {
+        const restoredGroup = cloneRundownValue(groupDoc || {});
+        if (restoredGroup.prePro && typeof restoredGroup.prePro === 'object') {
+          restoredGroup.prePro = restampPreProForRestore(restoredGroup.prePro);
+        }
+        await window._setDoc(window._doc(window._db, 'sessions', session.code, 'groups', gid), restoredGroup);
+      } catch (err) { console.warn(`Group ${gid} restore failed`, err); }
+    }
+  }
+  // Captured per-note docs: recreate ones that no longer exist (a restore may
+  // deliberately resurrect); never overwrite a live note.
+  if (sharedCloud && Array.isArray(payload.notes) && payload.notes.length) {
+    const liveIds = new Set((Array.isArray(plandaBearNotes) ? plandaBearNotes : []).map(n => String(n?.id || '')));
+    for (const note of payload.notes) {
+      const nid = String(note?.id || '');
+      if (!nid || liveIds.has(nid)) continue;
+      try { await window._setDoc(window._doc(window._db, 'sessions', session.code, 'notes', nid), cloneRundownValue(note)); }
+      catch (err) { console.warn(`Note ${nid} restore failed`, err); }
+    }
+  }
   hideModal('modal-session-history');
   sessionSnapshotLatestDoc = { ...(sessionSnapshotLatestDoc || {}), ...cloneRundownValue(doc) };
   await captureSessionSnapshot('restored', true);
-  toast(`Restored snapshot from ${new Date(record.createdAt).toLocaleTimeString()}.`);
+  toast(`Restored snapshot from ${new Date(record.createdAt).toLocaleTimeString()}${fromCloud ? ' (cloud trail)' : ''}.`);
 }
 
 // Save / open a rundown as a file on the user's computer (portable backup).
@@ -1046,7 +1321,7 @@ function rundownFileName() {
 async function exportRundownFile() {
   if (!beats.length) { toast('Add a row before saving the rundown.'); return; }
   const json = JSON.stringify(rundownFilePayload());
-  if (window.showSaveFilePicker) {
+  if (window.CueolaCaps.fileSystemAccess) {
     try {
       if (!_cueolaFileHandle) {
         _cueolaFileHandle = await window.showSaveFilePicker({
@@ -1077,7 +1352,7 @@ async function exportRundownFile() {
   } catch (e) { toast('Could not save the rundown file.'); }
 }
 async function openRundownFilePicker() {
-  if (window.showOpenFilePicker) {
+  if (window.CueolaCaps.fileSystemAccess) {
     try {
       const [h] = await window.showOpenFilePicker({
         types: [{ description: 'Cueola Show', accept: { 'application/json': ['.cueola', '.json'] } }],
@@ -1555,6 +1830,97 @@ function initCueolaServiceWorker() {
 
 window.addEventListener('load', initCueolaServiceWorker, { once:true });
 
+// Phase 9 (D10.2): ask the browser to protect this origin's storage. Without
+// it, Safari's 7-day ITP eviction can silently wipe Outrangutan's IndexedDB
+// media library and Cueola's snapshot history. The result is advisory only —
+// Safari may deny without prompting (it grants for installed/Dock apps) — so
+// nothing gates on it; the console line is the QA check.
+function initCueolaStoragePersist() {
+  if (!window.CueolaCaps.persistentStorage) return;
+  navigator.storage.persist().then(granted => {
+    console.info('[cueola] persistent storage ' + (granted ? 'granted' : 'not granted — Safari may evict site data after 7 days unused; add to Dock/Home Screen to protect the media library'));
+  }).catch(() => {});
+}
+window.addEventListener('load', initCueolaStoragePersist, { once:true });
+
+// ─────────────────────────────────────────────────────────────
+// Phase 9 (D10.3): installed-PWA file handling. Double-clicked .cueola/.ogshow
+// files arrive here via launchQueue (manifest file_handlers — installed
+// Chromium PWAs only; system-wide Finder/Safari document icons are 3.0
+// native-wrapper territory). .ogshow enters Outrangutan standalone and imports
+// right away; .cueola waits until the operator is through the entry gate —
+// importRundownFile needs a session (and refuses demo mode) — with the file
+// handle kept so Cmd+S saves back into the double-clicked file.
+// ─────────────────────────────────────────────────────────────
+let _pendingLaunchFile = null;   // { file, handle } — .cueola queued until the rundown surface is live
+let _rundownBaselineSeen = false; // first complete session snapshot arrived (setupFirestore)
+async function consumePendingLaunchFile() {
+  const pending = _pendingLaunchFile;
+  if (!pending) return;
+  if (session.isDemo) {
+    // Keep it queued — the entry toast promised it opens in a real session,
+    // and consuming here would silently drop the file on the demo refusal.
+    toast('Demo mode — “' + pending.file.name + '” will open when you enter a real session.');
+    return;
+  }
+  // A session import must wait for the cloud baseline: importing before the
+  // first snapshot lands sees zero rows, skips the replace-confirm, and the
+  // sync diff silently MERGES the file into the session's existing rundown.
+  if (session.code && !session.isExpert && !_rundownBaselineSeen) {
+    pending.waits = (pending.waits || 0) + 1;
+    if (pending.waits < 100) { setTimeout(consumePendingLaunchFile, 300); return; }
+    _pendingLaunchFile = null;
+    toast('This session hasn’t finished syncing — re-open “' + pending.file.name + '” once it loads.');
+    return;
+  }
+  _pendingLaunchFile = null;
+  const ok = await importRundownFile(pending.file);
+  if (ok && pending.handle && typeof pending.handle.createWritable === 'function') {
+    _cueolaFileHandle = pending.handle;   // Cmd+S now saves back into the launched file
+  }
+}
+async function consumeLaunchHandle(handle) {
+  let file;
+  try { file = await handle.getFile(); } catch (e) { return; }
+  const name = String(file.name || '').toLowerCase();
+  if (name.endsWith('.ogshow')) {
+    // Never yank a session-joined playback machine standalone over a stray
+    // double-click — that would close its live outputs and detach the session
+    // before any consent dialog could appear.
+    const ogSession = window.Outrangutan?._local?.session?.();
+    if (ogSession) {
+      toast('Outrangutan is joined to session ' + ogSession + ' — leave the session before opening a show file.');
+      return;
+    }
+    if (typeof window.enterOutrangutan === 'function') await window.enterOutrangutan('standalone');
+    // false covers both cancel and failure: the import paths toast their own
+    // specific errors, and a deliberate Cancel must not read as a corrupt file.
+    await window.Outrangutan?.openLaunchFile?.(file, handle);
+    return;
+  }
+  _pendingLaunchFile = { file, handle };
+  // Consume only when the operator is actually on the rundown surface — an
+  // "entry is off" heuristic misfires on the Outrangutan/Flowmingo screens
+  // and would import into no session (clobbering the local-workspace draft).
+  const onRundown = document.getElementById('rundown')?.classList.contains('on')
+    || document.getElementById('liveshow')?.classList.contains('on');
+  if (onRundown) await consumePendingLaunchFile();
+  else toast('“' + file.name + '” will open once you enter a session.');
+}
+let _launchChain = Promise.resolve();   // serializes launches — the last-launched file wins
+function initCueolaLaunchQueue() {
+  if (!('launchQueue' in window) || typeof window.launchQueue.setConsumer !== 'function') return;
+  try {
+    window.launchQueue.setConsumer(params => {
+      const handles = (params && params.files) || [];
+      for (const handle of handles) {
+        _launchChain = _launchChain.then(() => consumeLaunchHandle(handle)).catch(() => {});
+      }
+    });
+  } catch (e) { /* launch handling is progressive enhancement — never block boot */ }
+}
+window.addEventListener('load', initCueolaLaunchQueue, { once:true });
+
 const DIALOG_FOCUSABLE = [
   'a[href]',
   'area[href]',
@@ -1624,6 +1990,10 @@ function setCueolaInert(el, on) {
 function syncDialogInert() {
   const top = topDialog();
   Array.from(document.body.children).forEach(child => {
+    // The ⓘ popover and the toast float ABOVE the dialog layer and must stay
+    // live — inert-ing #infoPop made its Learn-more link dead to mouse,
+    // keyboard, and screen readers whenever a modal was open (D10.4).
+    if (child.id === 'infoPop' || child.id === 'toast') return;
     const keepActive = top && (child === top || child.contains(top));
     setCueolaInert(child, !!top && !keepActive);
   });
@@ -1798,6 +2168,31 @@ const LEARNING_LESSONS = [
     actions:[['Load Demo','demo'],['Open Blank Slate','blank']]
   },
   {
+    id:'profile',
+    area:'Start',
+    title:'Your Profile And Portal',
+    time:'4 min',
+    intro:'One profile follows you through every session — no password, just the class login code your instructor gave the class. Your portal gathers your sessions, your position, and everything assigned to you.',
+    navigation:[
+      'Tap the profile button in the top corner of the home screen to open Your Cueola profile.',
+      'First time? Choose Create profile. Coming back? Choose I have a username and type it — there is no password to remember.',
+      'From your portal, open any session card to jump straight in, or open Notes to see the crew board.'
+    ],
+    steps:[
+      'Create your profile once: enter the class login code, pick your name and username, then choose your look and theme.',
+      'Sign in anywhere by typing just your username — the same profile works in Cueola, Planda Bear, and the prompter tools.',
+      'Read your portal: each session card shows your position for that show, plus badges for open to-dos and unseen notes.',
+      'Clear your open items: a to-do or checklist item assigned to you lands on your portal until you mark it done.',
+      'If a session asks for a class key at the door, that is the same class login code — sessions can require it before entry.'
+    ],
+    callouts:[
+      ['No passwords','Usernames are managed by your instructors. If yours stops working, ask them — codes rotate between terms.'],
+      ['Everything that needs you','Mentions, assigned checklist items, and to-dos follow your profile, so checking your portal before call time clears surprises.']
+    ],
+    checks:['I can open my profile from the home screen.','I know my username works without a password.','I know where my open to-dos and unseen notes appear.'],
+    actions:[['Open Your Profile','profile']]
+  },
+  {
     id:'cueola-build',
     area:'Cueola',
     title:'Build A Rundown',
@@ -1813,11 +2208,13 @@ const LEARNING_LESSONS = [
       'Add a row for each show beat: open, intro, segment, package, conversation, outro, or any custom label.',
       'Choose Timed when the row has a known duration. Choose Flex when it can breathe.',
       'Click any cue cell to add Video, Audio, Playback, GFX, Lighting, or Script instructions.',
-      'Use Edit when you need to reorder rows, clean labels, or remove old beats.'
+      'Use Edit when you need to reorder rows, clean labels, or remove old beats.',
+      'Running a series? On the instructor dashboard, open the finished session and press Start Next Episode — the new session carries the rundown and paperwork forward and names itself, so Ep 12 becomes Ep 13.'
     ],
     callouts:[
       ['Rows are beats','Think in production moments, not spreadsheet lines. One row should tell the room what happens next.'],
-      ['Script feeds Flowmingo','Anything typed into a Script cue can be assembled and pushed to the talent display.']
+      ['Script feeds Flowmingo','Anything typed into a Script cue can be assembled and pushed to the talent display.'],
+      ['Next Episode','A cloned session shows a From chip pointing back at the original, and crew join it fresh with the new code.']
     ],
     checks:['I can add a row.','I can add at least one cue cell.','I can tell Timed and Flex rows apart.'],
     actions:[['Open Blank Slate','blank'],['Load Demo','demo']]
@@ -1830,21 +2227,22 @@ const LEARNING_LESSONS = [
     intro:'Live mode turns the rundown into a show-caller surface. It highlights now, next, remaining time, and Flowmingo connection state.',
     navigation:[
       'From the rundown topbar, press Go Live when the rows and script cues are ready.',
-      'Use the live bar for Start Show, Script Op, Flowmingo Op, Guide, fullscreen, and Exit.',
-      'Use Prev and Next in the live controls to move the Now row without touching the talent display.'
+      'Use the live bar for Start Show, Full Grid, Script Op, Flowmingo Op, Guide, fullscreen, and Exit.',
+      'Watch the link strip above the bar: CLOUD, TALENT, PLAYOUT, and SCRIPT show every connection at a glance, and the caller badge shows who has the wheel.'
     ],
     steps:[
       'Press Go Live after your rows and script cues are ready.',
-      'Review the pre-live checks for script, Flowmingo talent, and cloud sync.',
-      'Use Prev and Next to move the show one row at a time.',
-      'Use the Script Op panel to edit the live script and push updates to Flowmingo.',
-      'Watch the Flowmingo status badge. Connected means talent is sending heartbeats; applied controls confirm the remote worked.'
+      'Review the pre-live checks — including Playout first GO, which proves the first media cue is armed and ready.',
+      'Use Prev and Next, or click a row, to move the show one row at a time.',
+      'GO on a row with linked media runs the automatic call: READY, TRACK, ROLL, then TAKE — press S to abort before it fires. Prefer to fire it yourself? Turn on Manual TAKE, and GO arms the clip while TAKE fires it.',
+      'Paste an audience question into the question lane — Enter pushes it to the talent as a QUESTION card, Escape clears it.',
+      'If a link word goes dark, open System status and press its Recover button — Flowmingo, Playback, Script Operator, and cloud sync each have one.'
     ],
     callouts:[
-      ['Operator view','Flowmingo Op mode focuses the live screen on prompter controls and script preview.'],
-      ['Remote confidence','A sent command is not enough. The app now waits for the talent display to acknowledge applied controls.']
+      ['Who is calling','The caller badge reads CALLER when you have the wheel, FOLLOWING when someone else does, and VIEWER when you are watching. If another operator window takes the prompter, this one tells you and follows.'],
+      ['Remote confidence','A sent command is not enough. The app waits for the talent display to acknowledge applied controls.']
     ],
-    checks:['I know where Now and Next are.','I know how to push script updates.','I know what Flowmingo connected/applied status means.'],
+    checks:['I know where Now and Next are.','I know what the link strip and caller badge tell me.','I know how the automatic call runs and how to abort it.'],
     actions:[['Load Demo','demo']]
   },
   {
@@ -1865,6 +2263,8 @@ const LEARNING_LESSONS = [
       'Open Production Notes: post what changed, tag the department, and reply in threads. @-mention someone and they get notified; their position chip shows beside their name.',
       'Post a To-Do with an assignee, or add a checklist to one note and assign each item — assigned items land on that person’s profile portal, and instructors can open "Open items" to see who owes what.',
       'Pinned notes show instructors who has not read them yet — "Seen by" on every note tracks reads across devices.',
+      'Working in groups? Pick your group when the door asks — each group keeps its own paperwork, and exports follow the group picker. Instructors review any group from the Reviewing menu; you can Switch group until the instructor locks groups.',
+      'Only some sheets showing? That is the session’s paperwork setup — instructors choose it on the dashboard, where Intro course keeps the starter sheets and Full production shows everything.',
       'Preview or export the PDF package when the paperwork is ready to share.'
     ],
     callouts:[
@@ -1969,13 +2369,15 @@ const LEARNING_LESSONS = [
       'If Flowmingo is blank, confirm there is Script cue text and push to Flowmingo from live Script Op.',
       'If the remote says sent but not applied, reload the Talent Display and enter the same code again.',
       'If the wrong row is live, use Prev or Next until Now matches the room.',
-      'If paperwork looks stale, reopen Planda Bear and check the activity and comments area.'
+      'If paperwork looks stale, reopen Planda Bear and check the activity and comments area.',
+      'If the rundown itself is damaged, open Settings, then File, then History. Session History lists snapshots from this device and the cloud trail — restoring one replaces the live rundown for everyone in the session, and a recovery copy of the current state is saved first.'
     ],
     callouts:[
       ['Fast rehearsal check','Before doors open: open Talent Display, open Remote Op, press Play, Reset, Mirror, then Reset again.'],
+      ['Snapshot cadence','Cueola saves a snapshot when you join, every two minutes while the session changes, when you go live, and when you leave — admins also get a cloud copy that survives the machine.'],
       ['When in doubt','A clean reload plus the same session code should reconnect the show, paperwork, and prompter surfaces.']
     ],
-    checks:['I know the first three things to check: code, script, talent connection.','I know how to recover Flowmingo without touching the live talent window.'],
+    checks:['I know the first three things to check: code, script, talent connection.','I know how to recover Flowmingo without touching the live talent window.','I know where Session History lives and what restore replaces.'],
     actions:[['Open Guide Start','start']]
   }
 ];
@@ -2249,11 +2651,17 @@ function writeLearningProgress(progress) {
   try { localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify(progress)); } catch {}
 }
 
-function openLearningHub(lessonId='') {
+function openLearningHub(lessonId='', sectionId='') {
   const idx = LEARNING_LESSONS.findIndex(l => l.id === lessonId);
   if (idx >= 0) activeLearningLesson = idx;
   renderLearningHub();
   showModal('learningHubModal');
+  // Phase 11: ⓘ "Learn more" deep links land on the relevant section, not just
+  // the lesson top. Section ids are the four fixed render anchors
+  // (where/steps/know/check).
+  if (sectionId) setTimeout(() => {
+    document.getElementById(`guide-sec-${sectionId}`)?.scrollIntoView({ block:'start', behavior:'smooth' });
+  }, 60);
   if (!cueolaTTS.muted) setTimeout(() => speakActiveLearningLesson(true), 120);
 }
 
@@ -2296,8 +2704,11 @@ function renderLearningLesson() {
       <div class="guide-lesson-time">${esc(lesson.time)}</div>
     </div>
     <div class="guide-lesson-copy">${esc(lesson.intro)}</div>
+    ${lesson.video ? `
+    <div class="guide-video-slot"><a class="guide-mini-btn" href="${esc(lesson.video)}" target="_blank" rel="noopener">▶ Watch the video</a></div>
+    ` : ''}
     ${(lesson.navigation || []).length ? `
-    <section class="guide-section guide-nav-section">
+    <section class="guide-section guide-nav-section" id="guide-sec-where">
       <div class="guide-section-title">Where To Go</div>
       <div class="guide-routes">
         ${lesson.navigation.map((item, i) => `
@@ -2309,7 +2720,7 @@ function renderLearningLesson() {
       </div>
     </section>
     ` : ''}
-    <section class="guide-section">
+    <section class="guide-section" id="guide-sec-steps">
       <div class="guide-section-title">Do This</div>
       <div class="guide-steps">
         ${lesson.steps.map((step, i) => `
@@ -2320,13 +2731,13 @@ function renderLearningLesson() {
         `).join('')}
       </div>
     </section>
-    <section class="guide-section">
+    <section class="guide-section" id="guide-sec-know">
       <div class="guide-section-title">Know This</div>
       <div class="guide-callouts">
         ${lesson.callouts.map(([title, text]) => `<div class="guide-callout"><strong>${esc(title)}</strong><span>${esc(text)}</span></div>`).join('')}
       </div>
     </section>
-    <section class="guide-section">
+    <section class="guide-section" id="guide-sec-check">
       <div class="guide-section-title">Check Yourself</div>
       <div class="guide-checklist">
         ${lesson.checks.map((check, i) => `
@@ -2387,6 +2798,7 @@ function openGuideAction(action) {
   hideModal('learningHubModal');
   if (action === 'demo') loadDemo();
   else if (action === 'blank') openBlankSlateSetup();
+  else if (action === 'profile') window.CueolaIdentity?.openHub?.();
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
   else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
@@ -4080,6 +4492,9 @@ function enterRundown() {
 
   renderRundown();
   joinPresence();
+  // A .cueola double-clicked before the entry gate imports now that a session
+  // exists (small delay so the build screen paints before any replace-confirm).
+  if (_pendingLaunchFile) setTimeout(consumePendingLaunchFile, 400);
   // Restore last screen
   if (resumeScreen === 'live') setTimeout(goLive, 300);
 }
@@ -4513,6 +4928,8 @@ function setupFirestore() {
       sessionSnapshotLastAt = 0;
       sessionSnapshotLatestDoc = null;
       sessionSnapshotPendingForceReason = '';
+      _cloudSnapshotCache = { code: '', rows: null };   // D3: cloud trail is per-session
+      _rundownBaselineSeen = false;   // D10.3: queued launch imports wait for the first snapshot
     }
     if (firestoreUnsub) firestoreUnsub();
     pbStartNotesListener();   // per-note live push (resets itself on session change)
@@ -4534,6 +4951,7 @@ function setupFirestore() {
       }
       rundownSyncBlockedMissing = false;
       missingSessionNoticeCode = '';
+      _rundownBaselineSeen = true;   // D10.3: a complete session doc is in — launch imports may proceed
       // Only a server-confirmed snapshot may claim "connected"; a cached one
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
@@ -5324,6 +5742,92 @@ document.addEventListener('keydown', e => {
   closeDialog(top.id);
 });
 uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeEntryThemes(), { isOpen: el => !el.hasAttribute('hidden'), ignore: ['#entryThemeGear'] });
+
+// ─────────────────────────────────────────────────────────────
+// Phase 9 (D10.4): ⓘ info popovers — the HIG info pattern. Copy lives here as
+// the single source; each entry deep-links into its Learning Hub lesson.
+// A popover, never navigation, never a modal (a modal-wrap per ⓘ would stack
+// on the dialog Esc-stack and fight data-esc-hold panels).
+// ─────────────────────────────────────────────────────────────
+const INFO_POPS = {
+  'export-package': {
+    title: 'What’s in the export',
+    lesson: 'plandabear', section: 'steps',
+    body: 'The PDF package bundles a call sheet for every included group plus the rundown — the checkboxes pick sheets, and the option below adds Production Notes. A preview that hasn’t been saved is stamped “UNVERIFIED PREVIEW”; a saved export carries the session and time it came from, so a printed sheet can always be traced.',
+  },
+  'cueola-file': {
+    title: 'The .cueola show file',
+    lesson: 'cueola-build', section: 'know',
+    body: 'A .cueola file holds this show’s rundown — rows, timing, custom sources, and the show name. It opens in Cueola on any machine, and after the first save Cmd+S saves back into the same file. Planda Bear paperwork and Outrangutan media are not inside it.',
+  },
+  'ogshow-file': {
+    title: 'The .ogshow show file',
+    lesson: 'outrangutan', section: 'know',
+    body: 'An .ogshow file packs the whole playback show — cues, SFX pads, banks, output layouts, and the media itself — into one file (up to 4 GB). It opens in Outrangutan on any machine; older JSON show files still open too.',
+  },
+  'session-history': {
+    title: 'What restore does',
+    lesson: 'support', section: 'steps',
+    body: 'Restore replaces the live rundown for everyone in this session with the snapshot you pick. The restore is re-stamped as the newest change, so a machine that was offline can’t undo it when it reconnects. Export a snapshot first if you want a file copy.',
+  },
+  'join-session': {
+    title: 'Joining a session',
+    lesson: 'start', section: 'steps',
+    body: 'The session code is the production you’re joining — everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
+  },
+};
+let _infoPopOpenId = '';
+let _infoPopTrigger = null;
+function closeInfoPop() {
+  const el = document.getElementById('infoPop');
+  // Hand focus back to the ⓘ only when it currently sits inside the popover —
+  // a click-outside dismissal must not steal focus from what was clicked.
+  if (el && !el.hidden && el.contains(document.activeElement) && _infoPopTrigger?.isConnected) {
+    _infoPopTrigger.focus({ preventScroll: true });
+  }
+  if (el) el.hidden = true;
+  _infoPopOpenId = '';
+  _infoPopTrigger = null;
+}
+function toggleInfoPop(ev, id) {
+  ev.preventDefault(); ev.stopPropagation();
+  const el = document.getElementById('infoPop'), def = INFO_POPS[id];
+  if (!el || !def) return;
+  if (_infoPopOpenId === id && !el.hidden) { closeInfoPop(); return; }
+  _infoPopOpenId = id;
+  _infoPopTrigger = ev.currentTarget;
+  el.innerHTML = `<div class="info-pop-title">${sfIcon('state.info')}${def.title}</div>`
+    + `<div class="info-pop-body">${def.body}</div>`
+    + (def.lesson ? `<button type="button" class="info-pop-learn" onclick="closeInfoPop();openLearningHub('${def.lesson}','${def.section || ''}')">Learn more${sfIcon('chevron.right')}</button>` : '');
+  el.hidden = false;
+  // Anchor under the ⓘ, clamped to the viewport; flip above when cramped.
+  const r = ev.currentTarget.getBoundingClientRect();
+  el.style.left = '0px'; el.style.top = '0px';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  if (!r.width && !r.height) {
+    // Degenerate anchor (button not laid out — can't happen from a real
+    // pointer, but scripted/keyboard paths can race layout): center instead.
+    el.style.left = Math.max(12, (window.innerWidth - w) / 2) + 'px';
+    el.style.top = Math.max(12, (window.innerHeight - h) / 2) + 'px';
+    return;
+  }
+  const x = Math.min(Math.max(12, r.left + r.width / 2 - w / 2), window.innerWidth - w - 12);
+  let y = r.bottom + 8;
+  if (y + h > window.innerHeight - 12) y = Math.max(12, r.top - h - 8);
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  // Move focus to the one action so keyboard users can Enter it immediately —
+  // the modal focus trap doesn't know about the popover, so focus must be
+  // placed there explicitly (closeInfoPop hands it back to the ⓘ).
+  el.querySelector('.info-pop-learn')?.focus({ preventScroll: true });
+}
+uiDismissRegister(() => document.getElementById('infoPop'), () => closeInfoPop(), { ignore: ['.info-btn'] });
+// A fixed-position popover detaches from its anchor the moment the sheet under
+// it scrolls (wheel/trackpad fires no pointerdown) — standard popover behavior
+// is dismiss-on-scroll.
+document.addEventListener('scroll', e => {
+  const el = document.getElementById('infoPop');
+  if (el && !el.hidden && !(e.target instanceof Node && el.contains(e.target))) closeInfoPop();
+}, { capture: true, passive: true });
 
 // Owns ALL keys while open (called first from keymapDispatch).
 function jogScrubHandleKey(e, phase) {
@@ -11620,15 +12124,23 @@ function ptApplyCueolaLiveUpdate(text) {
   ptUpdateFromCueola(text || '');   // preserves ptOffset + keeps scrolling if playing
 }
 
+// Phase 9 (D12.7 tightening): dedupe on the load PROMISE, not the script tag —
+// tag-presence resolved a second concurrent caller immediately while the first
+// load was still in flight, handing it an undefined global (rapid double
+// export, or a .pages import chaining into the PDF path). A failed load is
+// forgotten so a retry can create a fresh tag.
+const _ptLibraryLoads = new Map();
 function ptLoadLibrary(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+  if (_ptLibraryLoads.has(src)) return _ptLibraryLoads.get(src);
+  const load = new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = src;
     s.onload = resolve;
     s.onerror = () => reject(new Error('Could not load import support.'));
     document.head.appendChild(s);
-  });
+  }).catch(err => { _ptLibraryLoads.delete(src); throw err; });
+  _ptLibraryLoads.set(src, load);
+  return load;
 }
 
 async function ptExtractFromPDF(arrayBuffer) {
@@ -15801,7 +16313,7 @@ async function pbExportDraftPDF() {
     console.warn('Paged PDF renderer unavailable; opening the identical unpublished-note print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
       toast(`Could not render the unpublished note: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -17432,7 +17944,7 @@ function pbOpenFromNotify() {
 function pbBrowserNotifyEnabled() {
   try {
     return localStorage.getItem('cueola_pb_browser_notify') === '1'
-      && 'Notification' in window && Notification.permission === 'granted';
+      && window.CueolaCaps.notifications && Notification.permission === 'granted';
   } catch { return false; }
 }
 
@@ -17450,7 +17962,7 @@ function pbUpdateBellBtn() {
 }
 
 function pbToggleBrowserNotify() {
-  if (!('Notification' in window)) { toast('This browser does not support notifications.'); return; }
+  if (!window.CueolaCaps.notifications) { toast('This browser does not support notifications.'); return; }
   const enabled = (() => { try { return localStorage.getItem('cueola_pb_browser_notify') === '1'; } catch { return false; } })();
   const set = (v) => { try { localStorage.setItem('cueola_pb_browser_notify', v ? '1' : '0'); } catch {} };
   if (enabled) {
@@ -17647,7 +18159,7 @@ async function exportProductionNoteById(id) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical production-note print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     }
   } catch (error) {
     toast(`Note export blocked: ${paperworkExportFailureMessage(error)}`);
@@ -17694,7 +18206,7 @@ async function exportProductionNotesPDF() {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     }
   } catch (error) {
     toast(`Notes export blocked: ${paperworkExportFailureMessage(error)}`);
@@ -18308,7 +18820,9 @@ function dismissPaperPreview() {
 }
 
 function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismissPaperPreview()", flowId=null, exportOptions={}) {
-  document.getElementById('paperPreviewTitle').textContent = title;
+  // Title text lives in its own span — writing textContent on the container
+  // would delete the D10.4 info button sitting beside it.
+  document.getElementById('paperPreviewTitleText').textContent = title;
   const previewBody = document.getElementById('paperPreviewBody');
   const sequence = ++paperPreviewBuildSequence;
   const staging = document.createElement('div');
@@ -19930,7 +20444,7 @@ function renderPackageSheetPicker() {
   host.hidden = false;
   host.innerHTML = `
     <div class="pb-pkg-sheet-picker">
-      <div class="pb-pkg-sheet-picker-title">Call sheets in the package · ${includedCount} of ${sheets.length}</div>
+      <div class="pb-pkg-sheet-picker-title">Call sheets in the package · ${includedCount} of ${sheets.length}<button type="button" class="info-btn" aria-label="What’s in the export package" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       ${warning}
       ${sheets.map((sheet, i) => `
         <label class="pb-pkg-optin">
@@ -20550,7 +21064,8 @@ function downloadBlobFile(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   if (typeof a.download === 'undefined') {
-    window.open(url, '_blank');
+    const win = window.open(url, '_blank');
+    if (!win) toast('Download window blocked — allow pop-ups for this site, then export again.');
   } else {
     a.href = url;
     a.download = fileName;
@@ -20983,7 +21498,7 @@ async function downloadCallSheetPDF() {
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved call sheet: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -21025,7 +21540,7 @@ async function exportPreProPackagePDF() {
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved package: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -21065,7 +21580,7 @@ async function exportPDF() {
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages.`);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved rundown: ${paperworkExportFailureMessage(printError)}`);
     }

@@ -1,7 +1,7 @@
 # Cueola — Operator Card
 
 One page. Print it, tape it to the desk. Extracted from the app's keymap registry
-(V2, 2026-07) — press **?** in the app any time for the live version (it is generated
+(V2.1, 2026-07) — press **?** in the app any time for the live version (it is generated
 from the same registry and includes any of your own rebinds; override keys via
 `localStorage.cueola_keymap`). Typing in any text field suppresses all shortcuts.
 
@@ -39,11 +39,22 @@ from the same registry and includes any of your own rebinds; override keys via
 **Playout (Outrangutan — from the Cueola live screen)**
 | Key | Action |
 |---|---|
-| G | GO |
+| G | GO *(on a linked row this starts the automatic call: READY · TRACK · ROLL · TAKE)* |
+| G *(during an armed call)* | TAKE — fire the readied clip now |
+| S *(during a call)* | ABORT — stop the call, nothing fires |
 | P | Pause / resume |
 | S | Stop |
 | Shift+S | Fade-stop |
 | **Shift+Esc** | **PANIC — all stop** |
+
+*Prefer to pull the trigger yourself? Toggle **Manual TAKE (armed call)** in the
+live prompter controls: GO readies the clip, TAKE fires it.*
+
+**Questions lane (live)**
+| Key | Action |
+|---|---|
+| Enter *(in the lane)* | Push the pasted question to talent as a QUESTION card |
+| Esc | Clear the question card |
 
 **Scrub & reference**
 | Key | Action |
@@ -77,9 +88,24 @@ ride Master level). Rehearse mappings without hardware:
 no passwords; profiles come from the class **login code**. Your portal shows
 your position, open to-dos, and unseen notes per session.
 
-**Recovery:** Settings ▸ File ▸ **History** holds timestamped session snapshots
-with one-click restore. Notes, likes, and checklist ticks sync per-note — a
-reload on dead Wi-Fi still boots the show from the local cache.
+**Recovery — read this row before panicking:**
+
+- **Link strip** (above the live bar): CLOUD · TALENT · PLAYOUT · SCRIPT show
+  every connection at a glance; PLAYOUT adds **· NOT ARMED** until the first GO
+  is proven ready. The **CALLER / FOLLOWING / VIEWER** badge says who has the
+  wheel; if another operator window takes the prompter, this one says so and
+  follows.
+- **System status** rail (live screen): one **Recover** button per subsystem —
+  Recover Flowmingo · Recover Playback · Recover Script Operator · Retry cloud
+  sync. Use it the moment a link word goes dark.
+- **Session History** (Settings ▸ File ▸ **History**): timestamped snapshots
+  from **this device AND the cloud trail** (badged "Cloud" / "This device";
+  saved on join, every two minutes while things change, on go-live, and on
+  leave). **Restore replaces the rundown for everyone** — it re-stamps as the
+  newest change so an offline machine can't undo it, and a recovery copy of
+  the current state is saved first. Export any snapshot for a file copy.
+- Notes, likes, and checklist ticks sync per-note — a reload on dead Wi-Fi
+  still boots the show from the local cache.
 
 ---
 
