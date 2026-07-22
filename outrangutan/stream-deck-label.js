@@ -52,6 +52,39 @@
   });
   var SUPPORTED_PRODUCT_IDS = Object.freeze([0x006d, 0x0080, 0x006c]);
 
+  // Runtime-registered models (e.g. a probed Stream Deck + XL whose product id
+  // is newer than this table). These are consulted before the static table and
+  // never mutate it, so Outrangutan's built-in devices are unaffected.
+  var RUNTIME_PROFILES = {};
+  function registerModel(spec) {
+    if (!spec || !Number.isInteger(spec.productId)) throw new TypeError('registerModel needs an integer productId.');
+    var columns = spec.columns || spec.cols || 5;
+    var keys = spec.keys || 15;
+    var size = spec.imageWidth || spec.imageSize || 72;
+    var pkt = spec.packet || {};
+    var packetSize = pkt.packetSize || PACKET_SIZE;
+    var headerSize = pkt.headerSize || HEADER_SIZE;
+    var prof = Object.freeze({
+      productId: spec.productId,
+      name: spec.name || ('Stream Deck 0x' + spec.productId.toString(16)),
+      keys: keys, columns: columns, rows: Math.ceil(keys / columns),
+      imageWidth: size, imageHeight: spec.imageHeight || size,
+      imageType: spec.imageType || JPEG_TYPE,
+      imageQuality: spec.imageQuality || 0.9,
+      deviceRotationDegrees: spec.deviceRotationDegrees == null ? 180 : spec.deviceRotationDegrees,
+      inputStateOffset: spec.inputStateOffset == null ? 3 : spec.inputStateOffset,
+      packet: Object.freeze({
+        reportId: pkt.reportId || REPORT_ID,
+        command: pkt.command || 0x07,
+        packetSize: packetSize,
+        headerSize: headerSize,
+        payloadSize: packetSize - headerSize
+      })
+    });
+    RUNTIME_PROFILES[spec.productId] = prof;
+    return prof;
+  }
+
   function productIdOf(value) {
     if (typeof value === 'number' && Number.isInteger(value)) return value;
     if (value && typeof value === 'object' && Number.isInteger(value.productId)) return value.productId;
@@ -59,12 +92,14 @@
   }
 
   function supportsModel(value) {
-    return Object.prototype.hasOwnProperty.call(MODEL_PROFILES, productIdOf(value));
+    var pid = productIdOf(value);
+    return Object.prototype.hasOwnProperty.call(RUNTIME_PROFILES, pid)
+      || Object.prototype.hasOwnProperty.call(MODEL_PROFILES, pid);
   }
 
   function getModelProfile(value) {
     var productId = productIdOf(value);
-    var result = MODEL_PROFILES[productId];
+    var result = RUNTIME_PROFILES[productId] || MODEL_PROFILES[productId];
     if (!result) {
       var printable = Number.isFinite(productId) ? '0x' + productId.toString(16).padStart(4, '0') : String(value);
       throw new Error('Unsupported Stream Deck model: ' + printable + '. No device image was sent.');
@@ -364,6 +399,7 @@
     SUPPORTED_PRODUCT_IDS: SUPPORTED_PRODUCT_IDS,
     supportsModel: supportsModel,
     getModelProfile: getModelProfile,
+    registerModel: registerModel,
     wrapText: wrapText,
     packetize: packetize,
     createRenderer: createRenderer

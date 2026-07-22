@@ -5624,6 +5624,51 @@ document.addEventListener('keyup', e => { keymapDispatch(e, 'up'); });
 // Losing window focus mid-hold must never leave the prompter braking/boosting.
 window.addEventListener('blur', releaseLiveCommandHolds);
 
+// ── Control-surface bridge (cueola-streamdeck.js) ───────────────────────────
+// The single, documented seam a physical Stream Deck talks through. It never
+// reaches into app internals directly: it runs KEYMAP actions (inheriting every
+// guard the keyboard path has), forwards prompter/playout/clock verbs, and
+// hands back one flat snapshot for painting lamps and dial readouts. Same-tab
+// (Phase 1) dispatch is synchronous; a Phase-2 cloud mode would swap runAction
+// for a controlBus write behind this same interface.
+function _sdBeatName(b) { return b ? (b.title || b.name || b.label || b.segment || '') : ''; }
+function _sdSafe(fn, d) { try { var v = fn(); return v == null ? d : v; } catch (e) { return d; } }
+window.cueolaSurfaceBridge = {
+  keymap: () => KEYMAP.map(a => ({ id: a.id, label: a.label, group: a.group, scope: a.scope, hold: !!a.hold })),
+  runAction: (id) => { const a = KEYMAP.find(x => x.id === id); if (a && typeof a.run === 'function') a.run(); },
+  holdStart: (id) => { const a = KEYMAP.find(x => x.id === id); if (a && a.hold) sendPrompterControl(a.hold[0]); },
+  holdStop:  (id) => { const a = KEYMAP.find(x => x.id === id); if (a && a.hold) sendPrompterControl(a.hold[1]); },
+  prompter: (action) => sendPrompterControl(action),
+  controlBus: (target, action) => { try { return window.cueolaControlBus(target, action, 'deck'); } catch (e) { return false; } },
+  playoutCue: (id) => fireOutrangutanCommand('cue', id),
+  playoutPad: (id) => fireOutrangutanCommand('pad', id),
+  goLive: () => { try { goLive(); } catch (e) {} },
+  showClockToggle: () => { try { toggleShowClock(); } catch (e) {} },
+  liveSelect: (index, take) => { try { take ? setOperatorLiveCue(index, 'deck') : setLiveSelectedCue(index, { source: 'deck' }); } catch (e) {} },
+  masterGain: () => { try { return window.Outrangutan && window.Outrangutan.masterGain ? window.Outrangutan.masterGain() : 0; } catch (e) { return 0; } },
+  setMasterGain: (v) => { try { window.Outrangutan && window.Outrangutan.setMasterGain && window.Outrangutan.setMasterGain(v); } catch (e) {} },
+  state: () => {
+    const live = _sdSafe(() => outrangutanState.live, null) || {};
+    const ai = _sdSafe(() => liveActiveCueIndex(), -1);
+    const sel = _sdSafe(() => (typeof liveSessionState === 'function' ? liveSessionState().selectedCueIndex : null), null);
+    return {
+      session: { code: _sdSafe(() => session.code, ''), isDemo: _sdSafe(() => session.isDemo, false), active: !!_sdSafe(() => session.code, '') },
+      playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
+      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false) },
+      clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
+      live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') }
+    };
+  }
+};
+
+// Login-gated entry from the front-page Control Surface card. The gate + screen
+// switch live in the module; this just forwards (and warns if it failed to load).
+function openControlSurface() {
+  if (window.CueolaStreamDeck && typeof window.CueolaStreamDeck.open === 'function') { window.CueolaStreamDeck.open(); return; }
+  toast('The control surface needs Chrome or Edge, and did not load.');
+}
+window.openControlSurface = openControlSurface;
+
 // ── P5: shortcut reference (?) — generated from KEYMAP so it cannot drift ────
 function toggleKeymapRef() {
   let ov = document.getElementById('keymapRefOv');

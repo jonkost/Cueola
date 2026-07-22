@@ -4794,6 +4794,10 @@
     // Console rehearsal hook: test MIDI mappings (incl. learn mode) without a
     // box plugged in — Outrangutan.midiInject(0x90, 60, 127) is a C4 note-on.
     midiInject: (status, d1, d2) => onMidiMessage({ data: [status, d1, d2 || 0] }),
+    // Control-surface continuous hooks: the Cueola Stream Deck volume dial reads
+    // and drives program master gain (0..1.2) when Outrangutan shares this tab.
+    masterGain: () => settings.masterGain,
+    setMasterGain: (v) => setMasterGain(v, 'streamdeck'),
     _state: () => ({ cues, pads, banks, currentBankId, outputs, outputStatus: outputStatus(), sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
     _outputUrl: id => outputUrl(id || 1),             // live-preview rehearsal hook; carries exact protocol identity
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,

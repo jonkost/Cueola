@@ -100,10 +100,12 @@ const SHELL_ASSETS = [
   'script-operator.css?v=cad0bcf104',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
-  'outrangutan/stream-deck-label.js?v=c4ae3df80f',
-  'cueola-app.js?v=e96b613672',
+  'outrangutan/stream-deck-label.js?v=c4ae3df8f0',
+  'cueola-app.js?v=e96b6136f2',
   'outrangutan/outrangutan.css?v=718e619254',
-  'outrangutan/outrangutan.js?v=9efc6c6f2a',
+  'outrangutan/outrangutan.js?v=9efc6c6f2b',
+  'cueola-streamdeck-device.js?v=5d1c0e7a10',
+  'cueola-streamdeck.js?v=5d1c0e7a2b',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -122,7 +124,10 @@ const versionSignature = SHELL_ASSETS
 // the cache name rolls (per this file's own HTML-only-change rule).
 // 9→10: 2.1.0 version flip + shape-token sweep + em-dash copy sweep are
 // page-HTML changes, and the info glyph moved to the unversioned info.svg.
-const WORKER_SCHEMA = '10';
+// 10→11: Control Surface (Stream Deck + XL) — new #streamdeck screen markup +
+// styles + launcher card in index.html (an HTML change the shell caches), plus
+// two new precached modules (cueola-streamdeck-device.js / cueola-streamdeck.js).
+const WORKER_SCHEMA = '11';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
