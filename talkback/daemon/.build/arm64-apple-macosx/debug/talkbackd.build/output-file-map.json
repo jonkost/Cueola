@@ -1,0 +1,33 @@
+{
+  "": {
+    "swift-dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/primary.swiftdeps"
+  },
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/AudioEngine.swift": {
+    "dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.d",
+    "object": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swift.o",
+    "swiftmodule": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swiftdeps",
+    "diagnostics": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.dia"
+  },
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/ControlState.swift": {
+    "dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.d",
+    "object": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swift.o",
+    "swiftmodule": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState~partial.swiftmodule",
+    "swift-dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swiftdeps",
+    "diagnostics": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.dia"
+  },
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/WSServer.swift": {
+    "dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.d",
+    "object": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swift.o",
+    "swiftmodule": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer~partial.swiftmodule",
+    "swift-dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swiftdeps",
+    "diagnostics": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.dia"
+  },
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/main.swift": {
+    "dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.d",
+    "object": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swift.o",
+    "swiftmodule": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swiftdeps",
+    "diagnostics": "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.dia"
+  }
+}

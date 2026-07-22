@@ -1,0 +1,40 @@
+{
+  "Name": "Cueola Talkback",
+  "Description": "Momentary push-to-talk routing to output pair A (outs 1-2) or B (outs 3-4) via the talkbackd daemon. Hold to talk, release to stop.",
+  "Author": "Cueola",
+  "Version": "1.0.0",
+  "UUID": "com.cueola.talkback",
+  "Icon": "images/plugin",
+  "CodePath": "index.html",
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "6.0" },
+  "OS": [{ "Platform": "mac", "MinimumVersion": "12" }],
+  "Category": "Cueola Talkback",
+  "CategoryIcon": "images/plugin",
+  "Actions": [
+    {
+      "UUID": "com.cueola.talkback.talk-a",
+      "Name": "Talk A (outs 1-2)",
+      "Icon": "images/a-off",
+      "Tooltip": "Hold to route the mic to output pair A (physical outs 1-2). Release to stop.",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "States": [
+        { "Image": "images/a-off" },
+        { "Image": "images/a-on" }
+      ]
+    },
+    {
+      "UUID": "com.cueola.talkback.talk-b",
+      "Name": "Talk B (outs 3-4)",
+      "Icon": "images/b-off",
+      "Tooltip": "Hold to route the mic to output pair B (physical outs 3-4). Release to stop.",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "States": [
+        { "Image": "images/b-off" },
+        { "Image": "images/b-on" }
+      ]
+    }
+  ]
+}

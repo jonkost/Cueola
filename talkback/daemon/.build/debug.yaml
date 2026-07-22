@@ -1,0 +1,81 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<talkbackd-arm64-apple-macosx-debug.exe>","<talkbackd-arm64-apple-macosx-debug.module>"]
+  "talkbackd-arm64-apple-macosx-debug.exe": ["<talkbackd-arm64-apple-macosx-debug.exe>"]
+  "talkbackd-arm64-apple-macosx-debug.module": ["<talkbackd-arm64-apple-macosx-debug.module>"]
+  "test": ["<talkbackd-arm64-apple-macosx-debug.exe>","<talkbackd-arm64-apple-macosx-debug.module>"]
+default: "main"
+nodes:
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd":
+    is-mutated: true
+commands:
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Library/Developer/CommandLineTools/usr/bin/swiftc"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd-entitlement.plist":
+    tool: write-auxiliary-file
+    inputs: ["<entitlement-plist>","<com.apple.security.get-task-allow>"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd-entitlement.plist"]
+    description: "Write auxiliary file /Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd-entitlement.plist"
+
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/AudioEngine.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/ControlState.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/WSServer.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/main.swift"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/sources"]
+    description: "Write auxiliary file /Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/sources"
+
+  "/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swift.o"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.product/Objects.LinkFileList"
+
+  "<talkbackd-arm64-apple-macosx-debug.exe>":
+    tool: phony
+    inputs: ["<talkbackd-arm64-apple-macosx-debug.exe-CodeSigning>"]
+    outputs: ["<talkbackd-arm64-apple-macosx-debug.exe>"]
+
+  "<talkbackd-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/Modules/talkbackd.swiftmodule"]
+    outputs: ["<talkbackd-arm64-apple-macosx-debug.module>"]
+
+  "C.talkbackd-arm64-apple-macosx-debug.exe":
+    tool: shell
+    inputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.product/Objects.LinkFileList"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/talkbackd"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-L","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug","-o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd","-module-name","talkbackd","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-alias","-Xlinker","_talkbackd_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Library/Developer/CommandLineTools/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx13.0","-Xlinker","-add_ast_path","-Xlinker","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/Modules/talkbackd.swiftmodule","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.talkbackd-arm64-apple-macosx-debug.exe-entitlements":
+    tool: shell
+    inputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd-entitlement.plist"]
+    outputs: ["<talkbackd-arm64-apple-macosx-debug.exe-CodeSigning>"]
+    description: "Applying debug entitlements to ./.build/arm64-apple-macosx/debug/talkbackd"
+    args: ["codesign","--force","--sign","-","--entitlements","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd-entitlement.plist","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd"]
+
+  "C.talkbackd-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/AudioEngine.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/ControlState.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/WSServer.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/main.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/sources"]
+    outputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/AudioEngine.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/ControlState.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/WSServer.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/main.swift.o","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/Modules/talkbackd.swiftmodule"]
+    description: "Compiling Swift Module 'talkbackd' (4 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","talkbackd","-emit-dependencies","-emit-module","-emit-module-path","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/Modules/talkbackd.swiftmodule","-output-file-map","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/output-file-map.json","-incremental","-c","@/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/talkbackd.build/sources","-I","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx13.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","talkbackd_main","-swift-version","5","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","daemon"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Sources/talkbackd/","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Package.swift","/Users/jonkost/Documents/GitHub/Cueola/talkback/daemon/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
