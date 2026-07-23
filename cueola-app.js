@@ -5675,7 +5675,7 @@ window.cueolaSurfaceBridge = {
 // switch live in the module; this just forwards (and warns if it failed to load).
 function openControlSurface() {
   if (window.CueolaStreamDeck && typeof window.CueolaStreamDeck.open === 'function') { window.CueolaStreamDeck.open(); return; }
-  toast('KeyWi needs Chrome or Edge, and did not load.');
+  toast('KeyWi Bird needs Chrome or Edge, and did not load.');
 }
 window.openControlSurface = openControlSurface;
 

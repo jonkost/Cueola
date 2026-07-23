@@ -1,4 +1,4 @@
-/* Cueola KeyWi (control surface). One Stream Deck + XL drives the whole rig.
+/* Cueola KeyWi Bird (control surface). One Stream Deck + XL drives the whole rig.
  *
  * This is the browser-side controller that sits on top of three things that
  * already exist:
@@ -905,7 +905,7 @@
 
   function render() {
     var r = root(); if (!r) return;
-    if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
+    if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi Bird needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
     var showGrid = device || previewMode;
     r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) : connectHelp());
     wire(); renderStatus(); updateLiveBadge();
@@ -931,9 +931,9 @@
   function connectHelp() {
     var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
     return '<div class="sd-setup">'
-      + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
+      + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi Bird reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
       + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button>')
-      + stepRow(2, tbOn, 'Talkback (optional)', tbOn ? 'Daemon connected. TALK A and TALK B are live, hold to talk.' : 'For TALK A / TALK B keys, start the talkbackd daemon on this machine. KeyWi finds it by itself and this dot turns green.', '')
+      + stepRow(2, tbOn, 'Talkback (optional)', tbOn ? 'Daemon connected. TALK A and TALK B are live, hold to talk.' : 'For TALK A / TALK B keys, start the talkbackd daemon on this machine. KeyWi Bird finds it by itself and this dot turns green.', '')
       + stepRow(3, obsOn, 'OBS (optional)', obsOn ? 'OBS connected. Stream, record, and scene keys are live.' : 'For stream, record, and scene keys: in OBS enable Tools &rsaquo; WebSocket Server Settings, then connect below once the deck is on.', '')
       + '<div class="sd-setup-foot">Everything runs from this tab. Keep Cueola open here while you run the show.</div>'
       + '</div>';
@@ -1005,10 +1005,10 @@
     html += legendCard();
     return html;
   }
-  // "How KeyWi works": flat inspector-style rows, hairline-separated (no boxes
+  // "How KeyWi Bird works": flat inspector-style rows, hairline-separated (no boxes
   // in boxes, per the design guidelines).
   function legendCard() {
-    return '<details class="sd-legend"><summary>How KeyWi works</summary><div class="sd-legend-body">'
+    return '<details class="sd-legend"><summary>How KeyWi Bird works</summary><div class="sd-legend-body">'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><div><b>Keys</b> press to fire the action printed on them. Keys with a glowing ring are ON (a toggle that is active, a cue that is playing, the scene on air). BRAKE, BOOST, TALK A and TALK B are hold keys: press and hold, release to stop.</div></div>'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><div><b>Dials</b> do two things each: turning adjusts the value, pressing the dial in fires its second action. Both are written on the dial card above.</div></div>'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><div><b>Touch strip</b> is a live dashboard over the dials. Tap a zone to fire that dial’s press action; flick along it for a fast turn.</div></div>'
@@ -1143,7 +1143,7 @@
   // ── Entry / gating ──────────────────────────────────────────────────────────
   function open() {
     var id = window.CueolaIdentity;
-    if (id && typeof id.identity === 'function' && !id.identity()) { try { id.openSignIn && id.openSignIn(); } catch (e) {} toast('Sign in to open KeyWi.'); return false; }
+    if (id && typeof id.identity === 'function' && !id.identity()) { try { id.openSignIn && id.openSignIn(); } catch (e) {} toast('Sign in to open KeyWi Bird.'); return false; }
     showScreen(); buildCatalog(); loadTheme();
     try { brightness = Math.max(0, Math.min(100, parseInt(localStorage.getItem(BRIGHTNESS_KEY), 10) || 80)); } catch (e) {}
     talkbackConnect();

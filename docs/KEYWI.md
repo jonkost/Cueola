@@ -1,8 +1,8 @@
-# KeyWi (Cueola control surface for the Stream Deck + XL)
+# KeyWi Bird (Cueola control surface for the Stream Deck + XL)
 
 One Stream Deck + XL (36 keys, 6 dials, 6 touch zones) drives the whole rig:
 playback and SFX (Outrangutan), the rundown, the Flowmingo prompter, Talkback
-A/B, and OBS Studio. It is reached from the front page under **KeyWi**, gated
+A/B, and OBS Studio. It is reached from the front page under **KeyWi Bird**, gated
 behind a normal user sign in.
 
 ## How it works
@@ -10,7 +10,7 @@ behind a normal user sign in.
 The deck talks to the browser directly over **WebHID**. There is no Elgato
 software, no plugin to install, and no separate daemon for the deck itself. The
 operator signs in, clicks **Connect deck**, grants the one time HID permission,
-and KeyWi self configures from the device.
+and KeyWi Bird self configures from the device.
 
 Everything runs in the operator's own Cueola tab (Phase 1, same machine). A key
 press runs the same code the keyboard shortcut runs, so it inherits every guard
@@ -24,7 +24,7 @@ Stream Deck app must be quit** because it claims the USB device exclusively.
 
 ## Any Stream Deck, sensible out of the box
 
-KeyWi works with any Stream Deck: Mini (6), Stream Deck + (8), classic/MK.2 (15),
+KeyWi Bird works with any Stream Deck: Mini (6), Stream Deck + (8), classic/MK.2 (15),
 XL (32), and the + XL (36 keys, 6 dials, touch strip). Each size gets its own
 curated default layout: the Mini gets the survival kit (GO, STOP, PANIC, NEXT,
 TALK A, CLOCK), the + XL gets the full spread. On connect the deck plays a quick
@@ -63,7 +63,7 @@ exclamation triangle for PANIC, a hare and a tortoise for speed up/down,
 waveforms for SFX pads, scene frames for OBS scenes, microphones for talkback,
 and so on. Symbols are fetched once and drawn as native canvas paths (crisp at
 any size, tinted to the key ink), with a built-in vector fallback so a key is
-never blank while a symbol loads. To use a symbol KeyWi does not map yet, add
+never blank while a symbol loads. To use a symbol KeyWi Bird does not map yet, add
 the SVG under the runtime folder and point the action at it in `symbolFor()`.
 
 Pick a **theme** from the top of the setup panel to reskin the whole deck:
@@ -89,7 +89,7 @@ Everything is customisable, live:
   are stored per device in the browser.
 - **Per-key custom look.** Click a key to set its action, a custom label, one of
   twelve colours (or Auto), and key art from the emoji palette (or type your
-  own). SFX pads get 🔊 automatically; every binding shows a plain-language
+  own). SFX pads get a waveform icon automatically; every binding shows a plain-language
   description of what it does, and TOGGLE/HOLD chips where they apply.
 - **Bind by name.** The key editor's "This show" and "This OBS" sections list the
   loaded show's cues and pads and OBS's scenes and audio inputs, so a key can fire
@@ -107,8 +107,8 @@ Everything is customisable, live:
 
 OBS Studio 28+ ships obs-websocket. In OBS: Tools, WebSocket Server Settings,
 enable the server (default port `4455`), and copy the password if one is set.
-In KeyWi, open the **OBS** row at the top of the setup panel, enter
-`ws://localhost:4455` and the password, and click **Connect OBS**. KeyWi
+In KeyWi Bird, open the **OBS** row at the top of the setup panel, enter
+`ws://localhost:4455` and the password, and click **Connect OBS**. KeyWi Bird
 reconnects automatically next time.
 
 Available OBS actions (all remappable): STREAM (start/stop), REC (start/stop),
@@ -124,12 +124,13 @@ pixel size, touch strip dimensions, image rotation) is confirmed from your real
 unit rather than assumed. Do this once:
 
 1. Quit the Elgato Stream Deck app. Plug the deck in. Open Cueola in Chrome or
-   Edge, sign in, open **KeyWi**, click **Connect deck**, pick the device.
-2. KeyWi reads the device's own descriptor (HID Get Unit Information, feature
+   Edge, sign in, open **KeyWi Bird**, click **Connect deck**, pick the device.
+2. KeyWi Bird reads the device's own descriptor (HID Get Unit Information, feature
    report `0x08`) for geometry, and remembers the product id.
 3. Click **Test pattern**. Each key should show its number, right way up. If it
-   is upside down, open **Connect & Learn** and tick the flip 180 box, then Apply.
-   If the grid shape is wrong, set the correct Columns there.
+   reads sideways or upside down, open **Connect & Learn** and tap the Key
+   rotation buttons (0/90/180/270) until it is upright. If the grid shape is
+   wrong, set the correct Columns there.
 4. Turn each dial and press the touch zones, confirm the paired action fires.
 5. Confirm the touch strip shows the six readouts. The strip image path follows
    the shipping Stream Deck + protocol (report `0x02` / command `0x0C`); if the

@@ -4384,8 +4384,8 @@ input.pt-range::-moz-range-thumb,
         </div>
       </div>
       <button type="button" class="e-card e-card-full" onclick="openControlSurface()" style="--oc:#6ff0a5;--ob:color-mix(in srgb,#6ff0a5 8%,transparent)">
-        <div class="ec-icon"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span></div>
-        <div class="ec-title">KeyWi</div>
+        <div class="ec-icon"><img class="brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true"></div>
+        <div class="ec-title">KeyWi Bird</div>
         <div class="ec-desc">Run playback, rundown, prompter, and talkback from one Stream Deck + XL. Sign in, then connect. Best in Chrome or Edge.</div>
         <span class="ec-pill">Stream Deck + XL</span>
       </button>
@@ -5749,7 +5749,7 @@ input.pt-range::-moz-range-thumb,
      CONTROL SURFACE SCREEN (Stream Deck + XL)
 ══════════════════════════════════════════ -->
 <style>
-/* KeyWi: token-driven per DESIGN_GUIDELINES.md. Surfaces ride --s1..s3, text
+/* KeyWi Bird: token-driven per DESIGN_GUIDELINES.md. Surfaces ride --s1..s3, text
    rides --text*, radii ride the --ui-radius tiers, spacing rides --sp-*, and
    the accent follows the active theme. Hardware key faces (canvas) keep their
    curated dark palette, same exemption as the LED clock faces. */
@@ -5894,10 +5894,13 @@ input.pt-range::-moz-range-thumb,
 .sd-tune-lbl { font-weight:700; font-size:13px; }
 .sd-rot-btns { display:flex; gap:6px; }
 .sd-rot-btn.cur { border-color:var(--accent) !important; background:color-mix(in srgb,var(--accent) 18%,var(--s1)) !important; color:var(--text) !important; }
+.sd-brand-ico { width:34px; height:34px; border-radius:22.5%; flex:0 0 auto; display:block; }
+.ec-icon img.brand-ico { width:1em; height:1em; object-fit:contain; }
 </style>
 <div class="screen" id="streamdeck">
   <div class="sd-head">
-    <div><h2 class="sd-wordmark">Key<span>Wi</span></h2><div class="sd-sub">Playback &middot; rundown &middot; prompter &middot; talkback &middot; OBS &middot; one deck</div></div>
+    <img class="sd-brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true">
+    <div><h2 class="sd-wordmark">Key<span>Wi</span> Bird</h2><div class="sd-sub">Playback &middot; rundown &middot; prompter &middot; talkback &middot; OBS &middot; one deck</div></div>
     <span class="sd-livebadge" id="sd-livebadge"></span>
     <div class="sd-spacer"></div>
     <button class="btn-secondary" onclick="CueolaStreamDeck && CueolaStreamDeck.close()">Close</button>
@@ -5922,11 +5925,11 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df8f0"></script>
-<script src="cueola-app.js?v=e96b6137a3"></script>
+<script src="cueola-app.js?v=e96b6137a4"></script>
 <script src="outrangutan/outrangutan.js?v=9efc6c6f2b"></script>
 <script src="cueola-streamdeck-device.js?v=5d1c0e7a10"></script>
 <script src="cueola-obs.js?v=5d1c0e7a41"></script>
-<script src="cueola-streamdeck.js?v=5d1c0e7a5d"></script>
+<script src="cueola-streamdeck.js?v=5d1c0e7a5e"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

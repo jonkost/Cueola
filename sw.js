@@ -8,6 +8,7 @@ const SHELL_ASSETS = [
   './manifest.webmanifest',
   './assets/Brand/Cueola_Icon.svg',
   './assets/Brand/Outrangutan_icon.svg',
+  './assets/Brand/KeyWi_icon.svg',
   // PWA icon set (Phase 9 / D10.3) — PNG install + touch icons, unversioned
   // like the Brand SVGs: artwork changes ride a WORKER_SCHEMA bump.
   './assets/icons/app/cueola-32.png',
@@ -101,12 +102,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df8f0',
-  'cueola-app.js?v=e96b6137a3',
+  'cueola-app.js?v=e96b6137a4',
   'outrangutan/outrangutan.css?v=718e619254',
   'outrangutan/outrangutan.js?v=9efc6c6f2b',
   'cueola-streamdeck-device.js?v=5d1c0e7a10',
   'cueola-obs.js?v=5d1c0e7a41',
-  'cueola-streamdeck.js?v=5d1c0e7a5d',
+  'cueola-streamdeck.js?v=5d1c0e7a5e',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -131,7 +132,9 @@ const versionSignature = SHELL_ASSETS
 // 11->12: KeyWi rounds 3-5 (streamer-deck key art, deck themes, preview mode,
 // SF Symbols on keys) change index.html markup/CSS and cueola-app/streamdeck/obs
 // JS; roll the shell so a plain reload picks it all up.
-const WORKER_SCHEMA = '12';
+// 12->13: renamed to "KeyWi Bird" + new brand icon assets/Brand/KeyWi_icon.svg
+// (precached unversioned) on the front-page card and the screen header.
+const WORKER_SCHEMA = '13';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
