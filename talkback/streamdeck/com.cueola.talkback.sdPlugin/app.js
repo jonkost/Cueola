@@ -1,4 +1,4 @@
-/* Cueola Talkback: Stream Deck plugin.
+/* Cueola Micochondria (talkback): Stream Deck plugin. TKB = bus A, VofU = bus B.
  * keyDown → "<bus> on", keyUp → "<bus> off" over the talkbackd WebSocket.
  * State pushes from the daemon light the button (state 1 = live).
  */

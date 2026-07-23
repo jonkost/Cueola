@@ -12,8 +12,9 @@
  * the keyboard shortcut runs (so every guard, every cross-device write, every
  * bit of Live single-authority is inherited for free). Dials send relative
  * ticks into continuous controls. The touch strip shows a live readout above
- * each dial and taps fire that dial's press action. Talkback A/B speak the
- * talkbackd loopback socket directly, momentary, with an all-off safety net.
+ * each dial and taps fire that dial's press action. Micochondria's two mics —
+ * TKB (bus A) and VofU (bus B) — speak the talkbackd loopback socket directly,
+ * momentary, with an all-off safety net.
  *
  * Deck Studio (the setup screen) adds named profiles, per-key custom
  * label/colour/icon, import/export to a file, and live-learn (press a control
@@ -113,9 +114,13 @@
     registerAction({ id: 'clock.start', kind: 'clock', verb: 'start', group: 'Show clock', color: '#1c7a3e', label: 'CLOCK GO', full: 'Show clock: start', desc: 'Starts the shared show clock. Quiet no-op if already running.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
     registerAction({ id: 'clock.pause', kind: 'clock', verb: 'pause', group: 'Show clock', color: '#5a4a12', label: 'CLOCK ❚❚', full: 'Show clock: pause', desc: 'Pauses the shared show clock. Quiet no-op if already paused.', lamp: function (s) { return !!(s.clock && !s.clock.running && s.clock.elapsed > 0); } });
     registerAction({ id: 'clock.resume', kind: 'clock', verb: 'resume', group: 'Show clock', color: '#0f4c81', label: 'CLOCK ▶', full: 'Show clock: resume', desc: 'Resumes a paused show clock from where it stopped.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
-    registerAction({ id: 'talk.a', kind: 'talkback', bus: 'A', momentary: true, group: 'Talkback', color: '#17653a', label: 'TALK A', full: 'Talk A (outs 1-2), hold', desc: 'HOLD to talk to output pair A. Mic cuts the moment you release.', lamp: function () { return talkbackState.A; } });
-    registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Talkback', color: '#1c4a86', label: 'TALK B', full: 'Talk B (outs 3-4), hold', desc: 'HOLD to talk to output pair B. Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
-    registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Talkback', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both talkback buses', desc: 'Cuts both talkback buses instantly. The off-air safety.' });
+    // Micochondria — the powerhouse for the talkbacks. Two hold-to-talk mics:
+    // TKB (Talkback, crew comms on outs 1-2) and VofU (Voice of the Universe, the
+    // god-mic to the room on outs 3-4), plus one off-air panic. Action ids, kind,
+    // and bus letters are the wire contract with the plugin + daemon — never rename.
+    registerAction({ id: 'talk.a', kind: 'talkback', bus: 'A', momentary: true, group: 'Micochondria', color: '#17653a', label: 'TKB', full: 'Talkback (outs 1-2), hold', desc: 'HOLD to talk to the crew on the Talkback bus (outs 1-2). Mic cuts the moment you release.', lamp: function () { return talkbackState.A; } });
+    registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe — the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
+    registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics — TKB and VofU — instantly. The off-air safety.' });
     // Layouts as pages: a key can jump straight to a saved layout, or cycle them.
     registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next saved layout', desc: 'Cycles to the next saved layout. Turns the deck into pages.' });
     registerAction({ id: 'layoutRef', kind: 'layoutRef', group: 'Layouts', color: '#2e3640', label: 'PAGE', full: 'Jump to a layout (by name)', desc: 'Switches the whole deck to one specific saved layout.', lamp: function (s, slot) { return !!(slot && slot.ref && mapping().name === slot.ref); } });
@@ -175,7 +180,16 @@
     brightness: { label: 'Deck light', hue: '#f5b731', turnLabel: 'Brighter / dimmer', pressLabel: 'Reset to 80%',
       desc: 'Turn: the physical deck backlight. Press: back to the default brightness.',
       readout: function () { return pct(brightness / 100); }, bar: function () { return brightness / 100; },
-      tick: function (d) { setBrightness(brightness + d * 5); }, press: function () { setBrightness(80); } }
+      tick: function (d) { setBrightness(brightness + d * 5); }, press: function () { setBrightness(80); } },
+    // Silly-but-why-not: the live OBS program, right on the touch strip. It is a
+    // low-fps monitor glance (a screenshot every ~¼s over the websocket), not
+    // smooth video, but it turns a strip zone into a program preview. Press to
+    // start / stop the OBS stream.
+    obsProgram: { label: 'OBS program', hue: '#e2477b', turnLabel: 'Nothing (monitor)', pressLabel: 'Start / stop stream', obsFrame: true,
+      desc: 'Turn: nothing — this zone is a live OBS program monitor. Press: start or stop the OBS stream.',
+      readout: function () { var st = obsState(); return st.streaming ? 'LIVE' : (st.currentScene ? 'ON' : 'off'); },
+      bar: function () { return null; }, live: function () { return !!obsState().streaming; },
+      tick: function () {}, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (bottom of the setup panel).'); } }
   };
   var DEFAULT_DIALS = ['master', 'prompterSpeed', 'prompterSize', 'prompterScrub', 'rundownSelect', 'showClock'];
   function fmtClock(secs) { secs = Math.max(0, Math.round(secs || 0)); var m = Math.floor(secs / 60), s = secs % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
@@ -693,7 +707,10 @@
   function offCanvas(z) { if (!_off) _off = document.createElement('canvas'); if (_off.width !== z) { _off.width = z; _off.height = z; } return _off; }
   function rotCanvas(z) { if (!_rot) _rot = document.createElement('canvas'); if (_rot.width !== z) { _rot.width = z; _rot.height = z; } return _rot; }
   async function keyJpegFromCanvas(cv, z) {
-    var out = cv, deg = (((profile.rotation || 0) % 360) + 360) % 360;
+    // Effective rotation = what the operator picked (0 = upright) + the fixed
+    // hardware mount offset. On the + XL the mount offset is 270, so the default
+    // user rotation of 0 lands upright ("270 is actually 0").
+    var out = cv, deg = ((((profile.rotation || 0) + (profile.mountRotation || 0)) % 360) + 360) % 360;
     if (deg) { var rc = rotCanvas(z), rx = rc.getContext('2d'); rx.clearRect(0, 0, z, z); rx.save(); rx.translate(z / 2, z / 2); rx.rotate(deg * Math.PI / 180); rx.translate(-z / 2, -z / 2); rx.drawImage(cv, 0, 0); rx.restore(); out = rc; }
     var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
@@ -765,45 +782,106 @@
         title: c ? c.label : '', value: c ? String(c.readout(s)) : '', tap: c ? c.pressLabel : '',
         hue: (c && c.hue) || '#5b8df8',
         bar: c && c.bar ? Math.max(0, Math.min(1, c.bar(s) || 0)) : null,
-        live: !!(c && c.live && c.live(s))
+        live: !!(c && c.live && c.live(s)),
+        obsFrame: !!(c && c.obsFrame)
       });
     }
+    ensureObsFrameLoop();
     var sig = JSON.stringify(cells); if (!force && sig === lastStripSig) return; lastStripSig = sig;
     try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+  }
+  // ── OBS-on-the-strip: a low-fps program monitor in any strip zone ────────────
+  var obsFrameImg = null, obsFrameBusy = false, obsFrameLoop = null;
+  function stripHasObsFrame() {
+    if (!profile || !profile.strip) return false;
+    var m = mapping();
+    for (var z = 0; z < profile.strip.zones; z++) { var c = DIAL_CONTROLLERS[m.dials[(m.touch[z] || { dial: z }).dial]]; if (c && c.obsFrame) return true; }
+    return false;
+  }
+  function ensureObsFrameLoop() {
+    var want = !!(device && isSurfaceVisible() && stripHasObsFrame());
+    if (want && !obsFrameLoop) obsFrameLoop = setInterval(pollObsFrame, 250);
+    else if (!want && obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } }
+  }
+  async function pollObsFrame() {
+    if (!device || !isSurfaceVisible() || !stripHasObsFrame()) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
+    if (obsFrameBusy || !profile || !profile.strip) return;
+    var o = OBSc();
+    if (!o || !o.isReady || !o.isReady()) { if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } return; }
+    var scene = obsState().currentScene; if (!scene) return;
+    obsFrameBusy = true;
+    try {
+      var rd = await o.request('GetSourceScreenshot', { sourceName: scene, imageFormat: 'jpg', imageWidth: 480, imageHeight: 270 });
+      var data = rd && rd.imageData;
+      if (data) { await new Promise(function (res) { var img = new Image(); img.onload = function () { obsFrameImg = img; res(); }; img.onerror = function () { res(); }; img.src = data; }); await paintStrip(true); }
+    } catch (e) { /* stalled OBS: skip this frame, keep last image */ }
+    obsFrameBusy = false;
   }
   // The strip is a glanceable dashboard: one zone per dial. Accent line in the
   // dial's hue, the big value in tabular digits, a progress bar for continuous
   // things, a breathing dot when its thing is running, and the press action in
   // small type so nobody has to remember what a tap does.
-  async function renderStripJpeg(cells) {
-    var w = profile.strip.w, h = profile.strip.h;
-    var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    var ctx = cv.getContext('2d'); if (!ctx) return null;
-    ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, w, h);
-    var zw = w / cells.length;
+  // Draw the strip's glanceable dashboard into a context sized cw×ch (the
+  // "upright" content frame). Kept separate from device orientation so the same
+  // layout can be composed at any strip rotation.
+  function drawStripContent(ctx, cells, cw, ch) {
+    ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, cw, ch);
+    var zw = cw / cells.length;
     cells.forEach(function (cell, i) {
       var x0 = i * zw, x = x0 + zw / 2;
+      if (cell.obsFrame) {
+        // Live OBS program monitor for this zone (cover-fit the latest frame).
+        if (obsFrameImg && obsFrameImg.width) {
+          var iw = obsFrameImg.width, ih = obsFrameImg.height, zr = (zw - 4) / (ch - 4), ir = iw / ih, sw, sh, sx, sy;
+          if (ir > zr) { sh = ih; sw = ih * zr; sx = (iw - sw) / 2; sy = 0; } else { sw = iw; sh = iw / zr; sx = 0; sy = (ih - sh) / 2; }
+          try { ctx.drawImage(obsFrameImg, sx, sy, sw, sh, x0 + 2, 2, zw - 4, ch - 4); } catch (e) {}
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
+          ctx.textAlign = 'center'; ctx.fillStyle = '#6b7690'; ctx.font = '600 13px -apple-system, "Segoe UI", sans-serif';
+          ctx.fillText(cell.value === 'off' ? 'OBS off' : 'OBS…', x, ch / 2 + 4);
+        }
+        if (cell.live) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2; ctx.strokeRect(x0 + 3, 3, zw - 6, ch - 6); ctx.textAlign = 'left'; ctx.fillStyle = '#ff3b3b'; ctx.font = '700 12px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('● LIVE', x0 + 8, 17); }
+        return;
+      }
       // zone plate with a faint hue wash so zones read as separate touch targets
-      var grad = ctx.createLinearGradient(x0, 0, x0, h);
+      var grad = ctx.createLinearGradient(x0, 0, x0, ch);
       grad.addColorStop(0, 'rgba(255,255,255,0.05)'); grad.addColorStop(1, 'rgba(255,255,255,0.0)');
-      ctx.fillStyle = grad; ctx.fillRect(x0 + 3, 3, zw - 6, h - 6);
+      ctx.fillStyle = grad; ctx.fillRect(x0 + 3, 3, zw - 6, ch - 6);
       ctx.fillStyle = cell.hue; ctx.fillRect(x0 + 10, 4, zw - 20, 3);       // accent line
       if (cell.live) { ctx.beginPath(); ctx.arc(x0 + zw - 14, 16, 5, 0, Math.PI * 2); ctx.fill(); }
       ctx.textAlign = 'center';
       ctx.fillStyle = '#98a2b8'; ctx.font = '600 14px -apple-system, "Segoe UI", sans-serif';
-      ctx.fillText(cell.title.toUpperCase(), x, 25);
+      ctx.fillText(String(cell.title || '').toUpperCase(), x, 25);
       ctx.fillStyle = '#ffffff'; ctx.font = '700 36px ui-monospace, "SF Mono", Menlo, monospace';
       ctx.fillText(cell.value, x, 63);
       if (cell.bar != null) {
-        var bw = zw - 28, bx = x0 + 14, by = h - 26;
+        var bw = zw - 28, bx = x0 + 14, by = ch - 26;
         ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx, by, bw, 5);
         ctx.fillStyle = cell.hue; ctx.fillRect(bx, by, Math.round(bw * cell.bar), 5);
       }
-      ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif';
-      ctx.fillText('tap: ' + cell.tap, x, h - 8);
+      if (cell.tap) { ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('tap: ' + cell.tap, x, ch - 8); }
     });
-    var blob = await new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.85); });
+  }
+  // Compose an upright content canvas into the device's fixed w×h LCD buffer,
+  // applying the strip's calibrated rotation. 90/270 swap the content's axes so
+  // zones still run along the strip's long edge.
+  async function stripBytesFromContent(drawFn) {
+    var w = profile.strip.w, h = profile.strip.h;
+    var rot = (((profile.strip.rot || 0) % 360) + 360) % 360;
+    var swap = (rot === 90 || rot === 270);
+    var cw = swap ? h : w, ch = swap ? w : h;
+    var content = document.createElement('canvas'); content.width = cw; content.height = ch;
+    var cctx = content.getContext('2d'); if (!cctx) return null;
+    drawFn(cctx, cw, ch);
+    var dev = document.createElement('canvas'); dev.width = w; dev.height = h;
+    var dctx = dev.getContext('2d'); if (!dctx) return null;
+    dctx.fillStyle = '#07090d'; dctx.fillRect(0, 0, w, h);
+    dctx.save(); dctx.translate(w / 2, h / 2); dctx.rotate(rot * Math.PI / 180); dctx.drawImage(content, -cw / 2, -ch / 2); dctx.restore();
+    var blob = await new Promise(function (res) { dev.toBlob(res, 'image/jpeg', 0.85); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+  }
+  async function renderStripJpeg(cells) {
+    return stripBytesFromContent(function (ctx, cw, ch) { drawStripContent(ctx, cells, cw, ch); });
   }
   function sendFeature(rep) { if (device) { try { device.hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} } }
   function setBrightness(pctVal) {
@@ -836,6 +914,10 @@
       defaultProfileId = raw.defaultProfile && profiles[raw.defaultProfile] ? raw.defaultProfile : activeProfileId;
       activeProfileId = defaultProfileId || activeProfileId;
     }
+    // Rotation model v2: user rotation is now 0 = upright, with a fixed per-device
+    // mount offset (see PLUS_XL_DEFAULT). Clear any pre-v2 stored key rotation once
+    // so it doesn't stack on top of the new mount offset (e.g. an old manual 270).
+    if (overrides._rotModel !== 2) { if (overrides.rotation != null) delete overrides.rotation; overrides._rotModel = 2; }
     return { overrides: overrides };
   }
   function toSlot(s) { return (typeof s === 'string') ? { a: s } : (s && typeof s === 'object' ? s : { a: 'none' }); }
@@ -918,12 +1000,15 @@
     var s = surfaceState();
     return '<div class="sd-status">'
       + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : 'Not connected'), device ? 'ok' : 'off')
-      + statusChip('Talkback', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off')
+      + statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off')
       + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
       + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : '<button class="btn-primary" id="sd-connect">Connect deck</button>')
       + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
-      + '<button class="btn-secondary" id="sd-talkoff">All talk off</button></div></div>';
+      // The off-air panic (kills both mics) only makes sense once a deck/preview
+      // is up or the talkback daemon is live — hide it on the cold setup page.
+      + ((talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" title="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + '</div></div>';
   }
   function statusChip(label, value, cls) { return '<div class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
   // First-run setup: a guided stepper. Step 1 is required; talkback and OBS are
@@ -933,7 +1018,7 @@
     return '<div class="sd-setup">'
       + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi Bird reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
       + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button>')
-      + stepRow(2, tbOn, 'Talkback (optional)', tbOn ? 'Daemon connected. TALK A and TALK B are live, hold to talk.' : 'For TALK A / TALK B keys, start the talkbackd daemon on this machine. KeyWi Bird finds it by itself and this dot turns green.', '')
+      + stepRow(2, tbOn, 'Micochondria — talkback (optional)', tbOn ? 'Daemon connected. TKB and VofU are live, hold to talk.' : 'For the TKB (Talkback) and VofU (Voice of the Universe) mic keys, start the talkbackd daemon on this machine. KeyWi Bird finds it by itself and this dot turns green.', '')
       + stepRow(3, obsOn, 'OBS (optional)', obsOn ? 'OBS connected. Stream, record, and scene keys are live.' : 'For stream, record, and scene keys: in OBS enable Tools &rsaquo; WebSocket Server Settings, then connect below once the deck is on.', '')
       + '<div class="sd-setup-foot">Everything runs from this tab. Keep Cueola open here while you run the show.</div>'
       + '</div>';
@@ -1000,7 +1085,7 @@
           + '</div>';
       }
       html += '</div>';
-      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors these six: accent bar, live value, and a progress bar. Tap a zone = press its dial. Flick left or right = a big turn.</div>';
+      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors your ' + profile.strip.zones + ' dials: accent bar, live value, and a progress bar. Tap a zone = press its dial. Flick left or right = a big turn. If it looks blank or misaligned, calibrate it in <b>Connect &amp; Learn</b> below.</div>';
     }
     html += legendCard();
     return html;
@@ -1009,7 +1094,7 @@
   // in boxes, per the design guidelines).
   function legendCard() {
     return '<details class="sd-legend"><summary>How KeyWi Bird works</summary><div class="sd-legend-body">'
-      + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><div><b>Keys</b> press to fire the action printed on them. Keys with a glowing ring are ON (a toggle that is active, a cue that is playing, the scene on air). BRAKE, BOOST, TALK A and TALK B are hold keys: press and hold, release to stop.</div></div>'
+      + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.grid" aria-hidden="true"></span><div><b>Keys</b> press to fire the action printed on them. Keys with a glowing ring are ON (a toggle that is active, a cue that is playing, the scene on air). BRAKE, BOOST, TKB and VofU are hold keys: press and hold, release to stop.</div></div>'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><div><b>Dials</b> do two things each: turning adjusts the value, pressing the dial in fires its second action. Both are written on the dial card above.</div></div>'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><div><b>Touch strip</b> is a live dashboard over the dials. Tap a zone to fire that dial’s press action; flick along it for a fast turn.</div></div>'
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.repeat" aria-hidden="true"></span><div><b>Layouts</b> are whole pages of key assignments. Save one per situation (rehearsal, live, OBS-heavy) and jump between them with a PAGE key, right from the deck.</div></div>'
@@ -1017,15 +1102,28 @@
   }
   function learnPanel() {
     var u = device.unitInfo || {};
+    var sr = (profile.strip && profile.strip.rot) || 0;
+    var stripCal = profile.strip ? (''
+      + '<div class="sd-learn-tune sd-strip-cal"><span class="sd-tune-lbl">Touch strip</span>'
+      + '<label>W <input type="number" id="sd-strip-w" min="100" max="2000" value="' + profile.strip.w + '"></label>'
+      + '<label>H <input type="number" id="sd-strip-h" min="40" max="480" value="' + profile.strip.h + '"></label>'
+      + '<label>Zones <input type="number" id="sd-strip-z" min="1" max="8" value="' + profile.strip.zones + '"></label>'
+      + '<span class="sd-tune-lbl">turn</span><div class="sd-rot-btns">'
+      + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-srot-btn' + (sr === d ? ' cur' : '') + '" data-srot="' + d + '">' + d + '&deg;</button>'; }).join('')
+      + '</div><button class="btn-secondary" id="sd-strip-apply">Apply strip</button>'
+      + '<button class="btn-secondary" id="sd-strip-test">Test strip</button></div>'
+      + '<span class="sd-note">Strip blank or showing just a small block? Tap <b>Test strip</b> — it paints a numbered ruler at the current size. Set <b>W</b>/<b>H</b> to match the area that actually fills your strip, then <b>Apply strip</b>. Use the °&nbsp;buttons if it reads sideways or upside-down.</span>') : '';
     return '<details class="sd-learn" open><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
       + '<div class="sd-rotate-row"><span class="sd-tune-lbl">Key rotation</span><div class="sd-rot-btns">'
       + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-rot-btn' + ((profile.rotation || 0) === d ? ' cur' : '') + '" data-rot="' + d + '">' + d + '&deg;</button>'; }).join('')
-      + '</div><span class="sd-note">If the keys read sideways or upside down, tap through these until they are upright on the deck.</span></div>'
+      + '</div><span class="sd-note">Keys are upright at <b>0°</b>. If they read sideways or upside down, tap through these until they are upright on the deck.</span></div>'
       + '<div class="sd-learn-grid">'
       + learnField('Product id', '0x' + profile.productId.toString(16)) + learnField('Keys', profile.keys + (u.keys ? ' (device says ' + u.keys + ')' : '')) + learnField('Columns', profile.cols)
-      + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones') : 'none') + '</div>'
+      + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Mount offset', (profile.mountRotation || 0) + '°' + (profile.adaptive ? ' (+ XL)' : ''))
+      + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (sr ? ', ' + sr + '°' : '')) : 'none') + '</div>'
       + '<div class="sd-learn-tune"><label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
-      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button></div></div></details>';
+      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button></div>'
+      + stripCal + '</div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
   function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Daemon connected' : 'Not running'; } }
@@ -1127,6 +1225,9 @@
     r.querySelectorAll('.sd-rot-btn').forEach(function (b) { b.onclick = function () { setRotation(+b.getAttribute('data-rot')); }; });
     var relearn = document.getElementById('sd-relearn');
     if (relearn) relearn.onclick = function () { var cols = +document.getElementById('sd-cols').value; if (cols >= 3 && cols <= 12) overrides.cols = cols; persist(); profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides }); device.profile = profile; registerLabelModel(profile); ensureProfilesShape(); paintAll(); render(); };
+    r.querySelectorAll('.sd-srot-btn').forEach(function (b) { b.onclick = function () { applyStrip({ stripRotation: +b.getAttribute('data-srot') }); }; });
+    bind('sd-strip-apply', function () { var v = function (id) { var el = document.getElementById(id); return el ? +el.value : 0; }; applyStrip({ stripW: v('sd-strip-w'), stripH: v('sd-strip-h'), stripZones: v('sd-strip-z') }); });
+    bind('sd-strip-test', testStrip);
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
@@ -1137,7 +1238,51 @@
     var z = profile.keyPx;
     for (var i = 0; i < profile.keys; i++) { var cv = offCanvas(z); drawKeyInto(cv, { color: '#243a66', label: String(i + 1), active: (i % 2 === 0) }, z); try { var bytes = await keyJpegFromCanvas(cv, z); var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {} }
     lastPainted = new Array(profile.keys).fill('test');
-    toast('Test pattern sent. If the numbers read upside-down, tick the flip box in Connect & Learn.');
+    toast('Test pattern sent. Keys should read upright at 0° — adjust Key rotation in Connect & Learn if not.');
+  }
+  // Live strip re-calibration. The + XL is unpublished hardware, so W/H/zones/rot
+  // are owner-adjustable; a stored override rebuilds the frozen profile in place.
+  function applyStrip(patch) {
+    if (!device || !profile || !profile.strip) return;
+    if (patch.stripW && patch.stripW >= 100 && patch.stripW <= 2000) overrides.stripW = Math.round(patch.stripW);
+    if (patch.stripH && patch.stripH >= 40 && patch.stripH <= 480) overrides.stripH = Math.round(patch.stripH);
+    if (patch.stripZones && patch.stripZones >= 1 && patch.stripZones <= 8) overrides.stripZones = Math.round(patch.stripZones);
+    if (patch.stripRotation != null) overrides.stripRotation = (((patch.stripRotation % 360) + 360) % 360);
+    persist();
+    profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides });
+    device.profile = profile; ensureProfilesShape(); registerLabelModel(profile); lastStripSig = ''; paintAll(); render();
+    toast('Strip set to ' + profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (profile.strip.rot ? ', ' + profile.strip.rot + '°' : '') + '.');
+  }
+  // A calibration ruler for the touch LCD: red border on the outermost pixels,
+  // yellow squares in all four corners, 100px ticks, green zone dividers, and the
+  // pixel dimensions in the middle. From the deck (or a recording) you can read
+  // exactly how much of the strip the current W/H fills, then dial it in.
+  async function testStrip() {
+    if (!device || !profile || !profile.strip) { toast('Connect a deck that has a touch strip first.'); return; }
+    var zones = profile.strip.zones;
+    lastStripSig = '';
+    try {
+      var bytes = await stripBytesFromContent(function (ctx, cw, ch) {
+        ctx.fillStyle = '#0b0f16'; ctx.fillRect(0, 0, cw, ch);
+        ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, cw - 2, ch - 2);
+        ctx.textAlign = 'center';
+        for (var gx = 0; gx <= cw; gx += 100) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(gx + 0.5, 0); ctx.lineTo(gx + 0.5, ch); ctx.stroke();
+          if (gx < cw) { ctx.fillStyle = '#7ea6ff'; ctx.font = '600 12px ui-monospace, monospace'; ctx.fillText(String(gx), gx + 18, ch - 6); }
+        }
+        var zw = cw / zones;
+        for (var zi = 0; zi < zones; zi++) {
+          ctx.strokeStyle = 'rgba(34,211,160,0.9)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(zi * zw + 0.5, 0); ctx.lineTo(zi * zw + 0.5, ch); ctx.stroke();
+          ctx.fillStyle = '#22d3a0'; ctx.font = '700 15px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('Z' + (zi + 1), zi * zw + zw / 2, 22);
+        }
+        ctx.fillStyle = '#f5b731'; ctx.fillRect(0, 0, 12, 12); ctx.fillRect(cw - 12, 0, 12, 12); ctx.fillRect(0, ch - 12, 12, 12); ctx.fillRect(cw - 12, ch - 12, 12, 12);
+        ctx.fillStyle = '#ffffff'; ctx.font = '700 22px ui-monospace, monospace'; ctx.fillText(cw + ' × ' + ch, cw / 2, ch / 2 + 8);
+      });
+      if (!bytes) { toast('Could not build the strip test image.'); return; }
+      var packets = Device.stripImagePackets(profile, bytes);
+      for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
+      toast('Strip test sent at ' + profile.strip.w + '×' + profile.strip.h + '. On the deck: 4 yellow corners + a full red border = correct size. If only part fills, shrink W/H to match and Apply strip.');
+    } catch (e) { toast('Could not draw the strip test.'); }
   }
 
   // ── Entry / gating ──────────────────────────────────────────────────────────

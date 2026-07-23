@@ -85,8 +85,14 @@
   // 6-zone touch strip. Used when the connected Elgato device reports a product
   // id we do not recognise (the likely case until the id is published), refined
   // by the Unit Information descriptor and by Connect & Learn.
+  //
+  // `rotation` is the USER-facing key rotation (0 = upright, what the owner picks
+  // in Connect & Learn). `mountRotation` is a FIXED per-device offset that models
+  // how this hardware's key images are physically oriented, so that user 0 = truly
+  // upright. The + XL panel reads upright only when its key art is pre-rotated 270°
+  // ("270 is actually 0"), so its mount offset is 270 and its user default is 0.
   var PLUS_XL_DEFAULT = {
-    name: 'Stream Deck + XL', keys: 36, cols: 9, keyPx: 96, stateOffset: 3, rotation: 180,
+    name: 'Stream Deck + XL', keys: 36, cols: 9, keyPx: 96, stateOffset: 3, rotation: 0, mountRotation: 270,
     reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 6,
     strip: { w: 1200, h: 100, zones: 6 }
   };
@@ -148,6 +154,10 @@
         w: (ov.stripW || info.stripW || stripBase.w),
         h: (ov.stripH || stripBase.h),
         zones: (ov.stripZones || stripBase.zones || Math.max(dials, 1)),
+        // Independent strip orientation. Key art and the LCD strip can need
+        // different rotations, so the strip carries its own (calibrated in
+        // Connect & Learn), rather than blindly inheriting the key rotation.
+        rot: (((Number(ov.stripRotation != null ? ov.stripRotation : (stripBase.rot || 0)) % 360) + 360) % 360),
         reportId: IMG_REPORT, command: IMG_LCD_REGION, packetSize: PACKET_SIZE, headerSize: LCD_HEADER
       };
     }
@@ -159,6 +169,9 @@
       keyPx: pick('keyPx', 48, 240),
       stateOffset: ov.stateOffset != null ? Number(ov.stateOffset) : base.stateOffset,
       rotation: ov.rotation != null ? Number(ov.rotation) : base.rotation,
+      // Fixed hardware mount offset (see PLUS_XL_DEFAULT). Folded together with
+      // `rotation` at render time so user-facing 0 means truly upright.
+      mountRotation: ov.mountRotation != null ? Number(ov.mountRotation) : (base.mountRotation || 0),
       reset: base.reset, bright: base.bright,
       dials: dials,
       strip: strip,
