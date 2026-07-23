@@ -101,10 +101,10 @@
       var entry = km.find(function (a) { return a.id === id; });
       registerAction({ id: 'km:' + id, kind: 'keymap', keymapId: id, hold: !!(entry && entry.hold), group: (entry && entry.group) || 'Show', color: color, label: short, full: (entry && entry.label) || id, desc: KEYMAP_DESCS[id] || '', toggle: !!KEYMAP_TOGGLES[id], lamp: lampFor(id) });
     });
-    for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'SFX pads (by slot)', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, icon: '🔊', desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
+    for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'SFX pads (by slot)', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
     for (var c = 1; c <= 8; c++) registerAction({ id: 'cue:' + c, kind: 'cue', slot: c, group: 'Cues (by slot)', color: '#234a8a', label: 'CUE ' + c, full: 'Playout cue slot ' + c, desc: 'Fires cue number ' + c + ' of the loaded show.' });
     // Named cue/pad refs are bound from the live show list in the key editor.
-    registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', icon: '🔊', desc: 'Fires one specific SFX pad, picked by name.' });
+    registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', desc: 'Fires one specific SFX pad, picked by name.' });
     registerAction({ id: 'cueRef', kind: 'cueRef', group: 'This show', color: '#234a8a', label: 'CUE', full: 'Cue (by name)', desc: 'Fires one specific cue, picked by name.' });
     registerAction({ id: 'golive', kind: 'golive', group: 'Show', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
     // The clock suite: one toggle plus explicit Start / Pause / Resume verbs.
@@ -129,6 +129,8 @@
     for (var sc = 1; sc <= 6; sc++) registerAction({ id: 'obs.scene:' + sc, kind: 'obsScene', slot: sc, group: 'OBS scenes (by slot)', color: '#0f4c81', label: 'SCN ' + sc, full: 'OBS scene slot ' + sc, desc: 'Switches OBS to scene ' + sc + ' in the scene list. Glows when on air.', lamp: obsSceneSlotLamp(sc) });
     registerAction({ id: 'obs.sceneRef', kind: 'obsSceneRef', group: 'This OBS', color: '#0f4c81', label: 'SCENE', full: 'OBS scene (by name)', desc: 'Switches OBS to one specific scene, picked by name. Glows when on air.', lamp: function (s, slot) { return !!(slot && slot.ref && obsState().currentScene === slot.ref); } });
     registerAction({ id: 'obs.muteRef', kind: 'obsMuteRef', group: 'This OBS', color: '#5a4a12', label: 'MUTE', full: 'OBS mute (by name)', desc: 'Mutes or unmutes one OBS audio input. Glows while muted. Toggle.', toggle: true, lamp: function (s, slot) { return !!(slot && slot.ref && obsState().mutes && obsState().mutes[slot.ref]); } });
+    // Fun.
+    registerAction({ id: 'fx.hype', kind: 'fx', op: 'hype', group: 'Fun', color: '#b06ef8', label: 'HYPE', full: 'Rainbow hype burst', desc: 'A rainbow light show ripples across the whole deck. Pure fun, worth a press.' });
   }
   function obsSceneSlotLamp(sc) { return function () { var st = obsState(); return !!(st.currentScene && st.currentScene === (st.scenes || [])[sc - 1]); }; }
   function lampFor(id) {
@@ -216,6 +218,9 @@
   var keyState = [], dialPress = [], lastPainted = [], lastStripSig = '';
   var brightness = 80, paintTimer = null, jogAccum = 0, muteMemory = null;
   var learnArmed = false, editingKey = -1;
+  var previewMode = false;            // on-screen deck with no hardware, for playing with layouts + themes
+  var animTimer = null, animPhase = 0, hypeRunning = false;
+  var PREVIEW_PID = 0xf1f1;
   var mode = 'local';
 
   var tbSocket = null, tbUrlIndex = 0, tbReconnect = null;
@@ -257,6 +262,7 @@
       case 'obsScene': if (phase === 'down') obsSceneSlot(a.slot); break;
       case 'obsSceneRef': if (phase === 'down' && slot.ref) obsDo2('setScene', slot.ref); break;
       case 'obsMuteRef': if (phase === 'down' && slot.ref) obsDo2('toggleMute', slot.ref); break;
+      case 'fx': if (phase === 'down' && a.op === 'hype') hypeShow(); break;
     }
   }
   function dispatchCloud() { return false; }
@@ -321,8 +327,10 @@
     try { navigator.hid.addEventListener('disconnect', onDisconnect); } catch (e) {}
     sendFeature(Device.resetReport(profile));
     setBrightness(brightness);
+    previewMode = false;
     render();
     startPaintLoop();
+    startAnim();
     connectLightShow().then(function () { return paintAll(); });
     toast('Connected: ' + profile.name + ' (' + profile.keys + ' keys, ' + profile.dials + ' dials).');
     return true;
@@ -333,9 +341,7 @@
   async function connectLightShow() {
     if (!device || !profile) return;
     try { if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) {}
-    var renderer = getRenderer();
-    if (!renderer) return;
-    var target = device;
+    var target = device, z = profile.keyPx;
     var order = [];
     for (var i = 0; i < profile.keys; i++) order.push(i);
     order.sort(function (a, b) { return ((a % profile.cols) + Math.floor(a / profile.cols)) - ((b % profile.cols) + Math.floor(b / profile.cols)); });
@@ -343,9 +349,10 @@
       if (device !== target) return;                       // unplugged mid-show
       var idx = order[k];
       var hue = Math.round(((idx % profile.cols) + Math.floor(idx / profile.cols)) / (profile.cols + profile.rows) * 300);
+      var cv = offCanvas(z), cx = cv.getContext('2d'); cx.clearRect(0, 0, z, z); cx.fillStyle = 'hsl(' + hue + ', 85%, 45%)'; rr(cx, 0, 0, z, z, z * 0.15); cx.fill();
       try {
-        var rendered = await renderer.renderKeyImage(profile.productId, idx, { text: '', backgroundColor: 'hsl(' + hue + ', 80%, 42%)' });
-        var packets = Device.keyImagePackets(profile, idx, rendered.bytes);
+        var bytes = await keyJpegFromCanvas(cv, z);
+        var packets = Device.keyImagePackets(profile, idx, bytes);
         for (var pk = 0; pk < packets.length; pk++) { if (device !== target) return; await target.hid.sendReport(packets[pk].reportId, packets[pk].data); }
       } catch (e) { return; }
     }
@@ -354,7 +361,21 @@
 
   function onDisconnect(e) { if (!device) return; if (e && e.device && e.device !== device.hid) return; teardownDevice(); toast('Stream Deck disconnected.'); render(); }
   function disconnect() { if (device && device.hid) { try { sendFeature(Device.resetReport(profile)); } catch (e) {} try { device.hid.close(); } catch (e) {} } teardownDevice(); render(); }
-  function teardownDevice() { stopPaintLoop(); device = null; profile = null; keyState = []; dialPress = []; }
+  function teardownDevice() { stopPaintLoop(); stopAnim(); device = null; if (!previewMode) profile = null; keyState = []; dialPress = []; }
+
+  // Preview mode: a virtual + XL on screen so the deck can be explored, themed,
+  // and laid out with no hardware plugged in. Real Connect takes over instantly.
+  function startPreview() {
+    if (device) return;
+    previewMode = true;
+    loadConfig(PREVIEW_PID);
+    profile = Device.makeProfile(PREVIEW_PID, { overrides: overrides });
+    keyState = new Array(profile.keys).fill(false);
+    ensureProfilesShape();
+    render(); paintMirror(); startAnim();
+    toast('Preview mode: this is your deck on screen. Connect real hardware any time.');
+  }
+  function stopPreview() { previewMode = false; profile = null; stopAnim(); render(); }
 
   function onInputReport(e) {
     if (!device) return;
@@ -395,6 +416,245 @@
   }
   function slotActive(slot, s) { var a = slotAction(slot); return !!(a.lamp && a.lamp(s, slot)); }
 
+  // ── Rich key art: every key is a little illustrated keycap ──────────────────
+  // The SAME canvas art drives the physical deck (JPEG over HID) and the on-screen
+  // preview tile, so what you see is exactly what lands on the hardware. Themes
+  // reskin the whole deck; glyphs give crisp graphics; widgets add live data.
+  var THEME_KEY = 'cueola_streamdeck_theme';
+  var deckTheme = 'broadcast';
+  function loadTheme() { try { deckTheme = localStorage.getItem(THEME_KEY) || 'broadcast'; } catch (e) {} if (!DECK_THEMES[deckTheme]) deckTheme = 'broadcast'; }
+  function setTheme(id) { if (!DECK_THEMES[id]) return; deckTheme = id; try { localStorage.setItem(THEME_KEY, id); } catch (e) {} render(); paintMirror(); paintAll(); }
+  function theme() { return DECK_THEMES[deckTheme] || DECK_THEMES.broadcast; }
+
+  function hx(c) { c = String(c || '#000').replace('#', ''); if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]; return [parseInt(c.slice(0, 2), 16) || 0, parseInt(c.slice(2, 4), 16) || 0, parseInt(c.slice(4, 6), 16) || 0]; }
+  function rgba(c, a) { var r = hx(c); return 'rgba(' + r[0] + ',' + r[1] + ',' + r[2] + ',' + a + ')'; }
+  function mix(c1, c2, t) { var a = hx(c1), b = hx(c2); return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * t) + ',' + Math.round(a[1] + (b[1] - a[1]) * t) + ',' + Math.round(a[2] + (b[2] - a[2]) * t) + ')'; }
+  function lighten(c, t) { return mix(c, '#ffffff', t); }
+  function darken(c, t) { return mix(c, '#000000', t); }
+  function rr(ctx, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  // Crisp vector glyphs (cx, cy, r=half-size, color). Reads far better than text.
+  var GLYPHS = {
+    play: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x - r * 0.5, y - r * 0.78); c.lineTo(x - r * 0.5, y + r * 0.78); c.lineTo(x + r * 0.82, y); c.closePath(); c.fill(); },
+    pause: function (c, x, y, r, col) { c.fillStyle = col; rr(c, x - r * 0.62, y - r * 0.8, r * 0.42, r * 1.6, r * 0.12); c.fill(); rr(c, x + r * 0.2, y - r * 0.8, r * 0.42, r * 1.6, r * 0.12); c.fill(); },
+    stop: function (c, x, y, r, col) { c.fillStyle = col; rr(c, x - r * 0.7, y - r * 0.7, r * 1.4, r * 1.4, r * 0.2); c.fill(); },
+    record: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.arc(x, y, r * 0.72, 0, 7); c.fill(); },
+    fade: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x - r * 0.85, y + r * 0.7); c.lineTo(x + r * 0.85, y + r * 0.7); c.lineTo(x + r * 0.85, y - r * 0.7); c.closePath(); c.fill(); },
+    panic: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x, y - r * 0.85); c.lineTo(x + r * 0.92, y + r * 0.72); c.lineTo(x - r * 0.92, y + r * 0.72); c.closePath(); c.fill(); c.fillStyle = 'rgba(0,0,0,0.72)'; rr(c, x - r * 0.11, y - r * 0.28, r * 0.22, r * 0.5, r * 0.08); c.fill(); c.beginPath(); c.arc(x, y + r * 0.5, r * 0.12, 0, 7); c.fill(); },
+    next: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x - r * 0.75, y - r * 0.7); c.lineTo(x + r * 0.15, y); c.lineTo(x - r * 0.75, y + r * 0.7); c.closePath(); c.fill(); rr(c, x + r * 0.35, y - r * 0.7, r * 0.28, r * 1.4, r * 0.06); c.fill(); },
+    prev: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x + r * 0.75, y - r * 0.7); c.lineTo(x - r * 0.15, y); c.lineTo(x + r * 0.75, y + r * 0.7); c.closePath(); c.fill(); rr(c, x - r * 0.63, y - r * 0.7, r * 0.28, r * 1.4, r * 0.06); c.fill(); },
+    mic: function (c, x, y, r, col) { c.fillStyle = col; rr(c, x - r * 0.3, y - r * 0.85, r * 0.6, r * 1.05, r * 0.3); c.fill(); c.strokeStyle = col; c.lineWidth = r * 0.14; c.lineCap = 'round'; c.beginPath(); c.arc(x, y - r * 0.1, r * 0.55, 0.12 * Math.PI, 0.88 * Math.PI); c.stroke(); c.beginPath(); c.moveTo(x, y + r * 0.5); c.lineTo(x, y + r * 0.85); c.stroke(); },
+    clock: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.12; c.lineCap = 'round'; c.beginPath(); c.arc(x, y, r * 0.82, 0, 7); c.stroke(); c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - r * 0.5); c.moveTo(x, y); c.lineTo(x + r * 0.42, y + r * 0.1); c.stroke(); },
+    scene: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.11; rr(c, x - r * 0.85, y - r * 0.62, r * 1.7, r * 1.24, r * 0.16); c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(x + r * 0.32, y - r * 0.16, r * 0.2, 0, 7); c.fill(); c.beginPath(); c.moveTo(x - r * 0.72, y + r * 0.5); c.lineTo(x - r * 0.1, y - r * 0.1); c.lineTo(x + r * 0.2, y + r * 0.2); c.lineTo(x + r * 0.5, y - r * 0.1); c.lineTo(x + r * 0.8, y + r * 0.5); c.closePath(); c.fill(); },
+    broadcast: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.arc(x, y, r * 0.22, 0, 7); c.fill(); c.strokeStyle = col; c.lineWidth = r * 0.13; for (var i = 1; i <= 2; i++) { c.beginPath(); c.arc(x, y, r * 0.22 + i * r * 0.32, -0.32 * Math.PI, 0.32 * Math.PI); c.stroke(); c.beginPath(); c.arc(x, y, r * 0.22 + i * r * 0.32, 0.68 * Math.PI, 1.32 * Math.PI); c.stroke(); } },
+    cam: function (c, x, y, r, col) { c.fillStyle = col; rr(c, x - r * 0.85, y - r * 0.5, r * 1.2, r * 1.0, r * 0.16); c.fill(); c.beginPath(); c.moveTo(x + r * 0.4, y - r * 0.12); c.lineTo(x + r * 0.85, y - r * 0.42); c.lineTo(x + r * 0.85, y + r * 0.42); c.lineTo(x + r * 0.4, y + r * 0.12); c.closePath(); c.fill(); },
+    pages: function (c, x, y, r, col) { c.fillStyle = rgba(col, 0.5); rr(c, x - r * 0.25, y - r * 0.72, r * 1.0, r * 1.35, r * 0.12); c.fill(); c.fillStyle = col; rr(c, x - r * 0.72, y - r * 0.42, r * 1.0, r * 1.35, r * 0.12); c.fill(); },
+    mirror: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.09; c.beginPath(); c.moveTo(x, y - r * 0.82); c.lineTo(x, y + r * 0.82); c.stroke(); c.fillStyle = col; c.globalAlpha = 0.95; c.beginPath(); c.moveTo(x - r * 0.18, y - r * 0.6); c.lineTo(x - r * 0.72, y); c.lineTo(x - r * 0.18, y + r * 0.6); c.closePath(); c.fill(); c.globalAlpha = 0.4; c.beginPath(); c.moveTo(x + r * 0.18, y - r * 0.6); c.lineTo(x + r * 0.72, y); c.lineTo(x + r * 0.18, y + r * 0.6); c.closePath(); c.fill(); c.globalAlpha = 1; },
+    top: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.14; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - r * 0.6, y - r * 0.7); c.lineTo(x + r * 0.6, y - r * 0.7); c.stroke(); c.beginPath(); c.moveTo(x, y + r * 0.75); c.lineTo(x, y - r * 0.35); c.moveTo(x, y - r * 0.35); c.lineTo(x - r * 0.4, y + r * 0.05); c.moveTo(x, y - r * 0.35); c.lineTo(x + r * 0.4, y + r * 0.05); c.stroke(); },
+    target: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.12; c.beginPath(); c.arc(x, y, r * 0.75, 0, 7); c.stroke(); c.beginPath(); c.arc(x, y, r * 0.35, 0, 7); c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(x, y, r * 0.12, 0, 7); c.fill(); },
+    sfx: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x - r * 0.75, y - r * 0.28); c.lineTo(x - r * 0.35, y - r * 0.28); c.lineTo(x + r * 0.05, y - r * 0.62); c.lineTo(x + r * 0.05, y + r * 0.62); c.lineTo(x - r * 0.35, y + r * 0.28); c.lineTo(x - r * 0.75, y + r * 0.28); c.closePath(); c.fill(); c.strokeStyle = col; c.lineWidth = r * 0.12; c.lineCap = 'round'; c.beginPath(); c.arc(x + r * 0.1, y, r * 0.5, -0.35 * Math.PI, 0.35 * Math.PI); c.stroke(); c.beginPath(); c.arc(x + r * 0.1, y, r * 0.82, -0.32 * Math.PI, 0.32 * Math.PI); c.stroke(); },
+    cue: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.1; rr(c, x - r * 0.82, y - r * 0.62, r * 1.64, r * 1.24, r * 0.12); c.stroke(); c.fillStyle = col; for (var i = 0; i < 4; i++) { rr(c, x - r * 0.7, y - r * 0.5 + i * r * 0.36, r * 0.18, r * 0.18, r * 0.04); c.fill(); rr(c, x + r * 0.52, y - r * 0.5 + i * r * 0.36, r * 0.18, r * 0.18, r * 0.04); c.fill(); } },
+    up: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.16; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(x - r * 0.55, y + r * 0.15); c.lineTo(x, y - r * 0.5); c.lineTo(x + r * 0.55, y + r * 0.15); c.stroke(); },
+    down: function (c, x, y, r, col) { c.strokeStyle = col; c.lineWidth = r * 0.16; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(x - r * 0.55, y - r * 0.15); c.lineTo(x, y + r * 0.5); c.lineTo(x + r * 0.55, y - r * 0.15); c.stroke(); },
+    star: function (c, x, y, r, col) { c.fillStyle = col; c.beginPath(); for (var i = 0; i < 10; i++) { var ang = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * 0.42 : r * 0.9; c.lineTo(x + Math.cos(ang) * rad, y + Math.sin(ang) * rad); } c.closePath(); c.fill(); },
+    help: function (c, x, y, r, col) { c.fillStyle = col; c.font = '900 ' + Math.round(r * 1.7) + 'px -apple-system,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', x, y + r * 0.08); }
+  };
+
+  // Theme = a background painter + ink/ring palette + font. Key faces stay a
+  // curated dark palette (like the LED clocks), independent of the app theme.
+  var DECK_THEMES = {
+    broadcast: {
+      name: 'Broadcast', ink: '#ffffff', sub: '#e6edfb', ring: '#8ff7bc', labelWeight: 800,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px -apple-system,'SF Pro Display','Segoe UI',sans-serif"; },
+      bg: function (c, z, sp) {
+        var col = sp.color, g = c.createLinearGradient(0, 0, 0, z);
+        g.addColorStop(0, sp.active ? lighten(col, 0.36) : lighten(col, 0.16)); g.addColorStop(1, darken(col, 0.4));
+        c.fillStyle = g; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        var sh = c.createLinearGradient(0, 0, 0, z * 0.52); sh.addColorStop(0, 'rgba(255,255,255,0.2)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+        c.fillStyle = sh; rr(c, z * 0.04, z * 0.04, z * 0.92, z * 0.46, z * 0.12); c.fill();
+        var v = c.createRadialGradient(z / 2, z * 0.4, z * 0.08, z / 2, z / 2, z * 0.78); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.3)');
+        c.fillStyle = v; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+      }
+    },
+    neon: {
+      name: 'Neon', ink: '#ffffff', sub: '#a9bce0', ring: '#00e5ff', labelWeight: 800, glow: true,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px 'SF Pro Display',-apple-system,sans-serif"; },
+      bg: function (c, z, sp) {
+        c.fillStyle = '#0a0c16'; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        var g = c.createRadialGradient(z / 2, z / 2, 0, z / 2, z / 2, z * 0.72); g.addColorStop(0, rgba(sp.color, sp.active ? 0.4 : 0.18)); g.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = g; c.fillRect(0, 0, z, z);
+        c.save(); c.shadowColor = sp.color; c.shadowBlur = z * (sp.active ? 0.22 : 0.13); c.strokeStyle = sp.active ? lighten(sp.color, 0.3) : sp.color; c.lineWidth = z * 0.05; rr(c, z * 0.08, z * 0.08, z * 0.84, z * 0.84, z * 0.12); c.stroke(); c.restore();
+      }
+    },
+    synthwave: {
+      name: 'Synthwave', ink: '#ffe6fb', sub: '#ff9ae8', ring: '#22d3ff', glyphColor: '#ff5ff0', labelWeight: 800,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px 'SF Pro Display',-apple-system,sans-serif"; },
+      bg: function (c, z, sp) {
+        var g = c.createLinearGradient(0, 0, 0, z); g.addColorStop(0, '#3a1069'); g.addColorStop(0.55, '#7d1f7f'); g.addColorStop(1, '#140720');
+        c.fillStyle = g; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        c.save(); rr(c, 0, 0, z, z, z * 0.15); c.clip();
+        c.fillStyle = rgba(sp.color, 0.9); c.beginPath(); c.arc(z / 2, z * 0.42, z * 0.17, 0, 7); c.fill();
+        c.strokeStyle = rgba('#ff5ff0', 0.45); c.lineWidth = 1; var hy = z * 0.62;
+        for (var gy = hy; gy < z; gy += z * 0.1) { c.beginPath(); c.moveTo(0, gy); c.lineTo(z, gy); c.stroke(); }
+        for (var vx = -3; vx <= 3; vx++) { c.beginPath(); c.moveTo(z / 2, hy); c.lineTo(z / 2 + vx * z * 0.42, z); c.stroke(); }
+        c.restore();
+        if (sp.active) { c.strokeStyle = '#22d3ff'; c.lineWidth = z * 0.045; rr(c, z * 0.05, z * 0.05, z * 0.9, z * 0.9, z * 0.12); c.stroke(); }
+      }
+    },
+    terminal: {
+      name: 'Terminal', ink: '#43ff9a', sub: '#1f9f5f', ring: '#43ff9a', glyphColor: '#43ff9a', labelWeight: 700, mono: true,
+      font: function (s, w) { return (w || 700) + ' ' + s + "px ui-monospace,'SF Mono',Menlo,monospace"; },
+      bg: function (c, z, sp) {
+        c.fillStyle = '#02100a'; rr(c, 0, 0, z, z, z * 0.1); c.fill();
+        if (sp.active) { c.fillStyle = rgba('#43ff9a', 0.1); rr(c, 0, 0, z, z, z * 0.1); c.fill(); }
+        c.fillStyle = 'rgba(67,255,154,0.06)'; for (var y = 2; y < z; y += 3) c.fillRect(0, y, z, 1);
+        c.strokeStyle = rgba('#43ff9a', sp.active ? 0.95 : 0.45); c.lineWidth = z * 0.035; rr(c, z * 0.06, z * 0.06, z * 0.88, z * 0.88, z * 0.06); c.stroke();
+      }
+    },
+    aurora: {
+      name: 'Aurora', ink: '#ffffff', sub: '#d4e6ff', ring: '#7cf7d4', labelWeight: 800,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px 'SF Pro Display',-apple-system,sans-serif"; },
+      bg: function (c, z, sp) {
+        var g = c.createLinearGradient(0, 0, z, z); g.addColorStop(0, lighten(sp.color, sp.active ? 0.25 : 0.05)); g.addColorStop(0.5, '#173059'); g.addColorStop(1, '#0a6b63');
+        c.fillStyle = g; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        var g2 = c.createRadialGradient(z * 0.3, z * 0.24, 0, z * 0.3, z * 0.24, z * 0.85); g2.addColorStop(0, rgba(sp.color, 0.55)); g2.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = g2; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        if (sp.active) { c.strokeStyle = '#7cf7d4'; c.lineWidth = z * 0.045; rr(c, z * 0.05, z * 0.05, z * 0.9, z * 0.9, z * 0.12); c.stroke(); }
+      }
+    }
+  };
+
+  function glyphFor(a) {
+    var id = a.keymapId || a.id || '';
+    var m = { 'playout.go': 'play', 'playout.pause': 'pause', 'playout.stop': 'stop', 'playout.fade': 'fade', 'playout.panic': 'panic', 'rundown.next': 'next', 'rundown.back': 'prev', 'prompter.playpause': 'play', 'prompter.top': 'top', 'prompter.mirror': 'mirror', 'prompter.cue.current': 'target', 'prompter.size.up': 'up', 'prompter.size.down': 'down', 'prompter.speed.up': 'up', 'prompter.speed.down': 'down', 'ref.open': 'help' };
+    if (m[id]) return m[id];
+    switch (a.kind) {
+      case 'talkback': return 'mic'; case 'talkbackPanic': return 'mic';
+      case 'clock': return 'clock';
+      case 'obs': return a.op === 'toggleStream' ? 'broadcast' : (a.op === 'toggleRecord' || a.op === 'pauseRecord' ? 'record' : (a.op === 'toggleVirtualCam' ? 'cam' : null));
+      case 'obsScene': case 'obsSceneRef': return 'scene';
+      case 'pad': case 'padRef': return 'sfx';
+      case 'cue': case 'cueRef': return 'cue';
+      case 'golive': return 'record';
+      case 'layoutNext': case 'layoutRef': return 'pages';
+      case 'fx': return 'star';
+    }
+    return null;
+  }
+
+  function fmtClockBig(secs) { secs = Math.max(0, Math.round(secs || 0)); var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60, p = function (n) { return (n < 10 ? '0' : '') + n; }; return h ? (h + ':' + p(m) + ':' + p(s)) : (m + ':' + p(s)); }
+
+  // ── SF Symbols (the repo's design-system library) drawn onto the keys ───────
+  // Runtime SVGs are monochrome mask shapes; we load, tint to the key ink, and
+  // cache. Until a symbol loads, the vector glyph shows, so a key is never blank.
+  var SYMBOL_BASE = 'design-system/apple/symbols/runtime/light-small/';
+  var SYMBOL_KM = {
+    'playout.go': 'media/play.fill.svg', 'playout.pause': 'media/pause.svg', 'playout.stop': 'media/stop.fill.svg',
+    'playout.fade': 'editing/slider.vertical.3.svg', 'playout.panic': 'privacyandsecurity/exclamationmark.triangle.svg',
+    'rundown.next': 'arrows/arrowshape.turn.up.right.fill.svg', 'rundown.back': 'arrows/arrowshape.turn.up.left.fill.svg',
+    'prompter.playpause': 'textformatting/scroll.svg', 'prompter.top': 'arrows/arrow.up.to.line.svg',
+    'prompter.size.up': 'objectsandtools/plus.magnifyingglass.svg', 'prompter.size.down': 'objectsandtools/minus.magnifyingglass.svg',
+    'prompter.speed.up': 'nature/hare.svg', 'prompter.speed.down': 'nature/tortoise.svg',
+    'prompter.dir.fwd': 'arrows/arrowshape.right.svg', 'prompter.dir.rev': 'arrows/arrowshape.left.svg',
+    'prompter.fullscreen': 'arrows/square.arrowtriangle.4.outward.svg', 'prompter.hideui': 'arrows/arrow.up.right.and.arrow.down.left.svg',
+    'prompter.mirror': 'media/display.2.svg', 'prompter.brake': 'nature/tortoise.svg', 'prompter.boost': 'nature/hare.svg',
+    'prompter.nudge.back': 'arrows/chevron.left.svg', 'prompter.nudge.fwd': 'arrows/chevron.right.svg',
+    'prompter.editscript': 'editing/pencil.svg', 'prompter.cue.current': 'textformatting/text.line.first.and.arrowtriangle.forward.svg',
+    'ref.open': 'communication/questionmark.circle.fill.svg', 'scrub.open': 'media/waveform.path.svg'
+  };
+  function symbolFor(a) {
+    var id = a.keymapId || '';
+    if (SYMBOL_KM[id]) return SYMBOL_KM[id];
+    switch (a.kind) {
+      case 'talkback': return 'editing/microphone.svg';
+      case 'talkbackPanic': return 'media/speaker.slash.svg';
+      case 'clock': return a.id === 'clock' ? null : 'objectsandtools/clock.svg';
+      case 'golive': return 'media/play.display.svg';
+      case 'pad': case 'padRef': return 'media/waveform.path.svg';
+      case 'cue': case 'cueRef': return 'media/movieclapper.svg';
+      case 'layoutNext': return 'objectsandtools/repeat.svg';
+      case 'layoutRef': return 'objectsandtools/square.stack.3d.up.svg';
+      case 'obs': return a.op === 'toggleStream' ? 'media/waveform.circle.svg' : a.op === 'toggleRecord' ? 'objectsandtools/circle.fill.svg' : a.op === 'pauseRecord' ? 'media/pause.svg' : a.op === 'toggleVirtualCam' ? 'cameraandphotos/plus.viewfinder.svg' : a.op === 'saveReplay' ? 'editing/scissors.svg' : a.op === 'studioTransition' ? 'arrows/arrow.up.right.and.arrow.down.left.svg' : null;
+      case 'obsScene': case 'obsSceneRef': return 'cameraandphotos/photo.artframe.svg';
+      case 'obsMuteRef': return 'media/speaker.slash.svg';
+      case 'fx': return 'editing/sparkles.svg';
+    }
+    return null;
+  }
+  // Fetch the SVG text and draw its paths natively with Path2D. This is crisp at
+  // any size and, unlike drawing an <img>, can NEVER taint the canvas, so the
+  // device's toBlob() encode always works.
+  var _sym = {};   // path -> { vb:[minX,minY,w,h], paths:[d...] } | 'loading' | 'error'
+  function loadSymbol(path) {
+    if (_sym[path] !== undefined) return;
+    _sym[path] = 'loading';
+    fetch(SYMBOL_BASE + path).then(function (r) { return r.ok ? r.text() : Promise.reject(); }).then(function (text) {
+      var vb = /viewBox="([^"]+)"/.exec(text);
+      var nums = vb ? vb[1].trim().split(/[\s,]+/).map(Number) : [0, 0, 100, 100];
+      var paths = [], re = /<path[^>]*\sd="([^"]+)"/g, m;
+      while ((m = re.exec(text))) paths.push(m[1]);
+      _sym[path] = { vb: nums, paths: paths };
+      schedulePaint(); paintMirror();
+    }).catch(function () { _sym[path] = 'error'; });
+  }
+  function symbolReady(path) { var v = _sym[path]; return !!(v && v !== 'loading' && v !== 'error'); }
+  function drawSymbolPath(ctx, path, cx, cy, box, color) {
+    var sym = _sym[path]; if (!sym || !sym.paths || !sym.paths.length) return false;
+    var vb = sym.vb, vw = vb[2] || 1, vh = vb[3] || 1, scale = box / Math.max(vw, vh);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-(vb[0] + vw / 2), -(vb[1] + vh / 2));
+    ctx.fillStyle = color;
+    for (var k = 0; k < sym.paths.length; k++) { try { ctx.fill(new Path2D(sym.paths[k])); } catch (e) {} }
+    ctx.restore(); return true;
+  }
+  function ensureSymbols() { var m = mapping(); if (!m || !m.keys) return; m.keys.forEach(function (slot) { var a = catalog[(typeof slot === 'string' ? slot : slot.a)]; if (a) { var p = symbolFor(a); if (p) loadSymbol(p); } }); }
+
+  function keyArtSpec(i, s) {
+    var slot = slotAt(i), a = slotAction(slot);
+    var active = slotActive(slot, s) || keyState[i];
+    var spec = { color: slotColor(slot), label: slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
+    spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
+    if (!spec.emoji) { spec.symbol = symbolFor(a); spec.glyph = glyphFor(a); }
+    if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
+    if (a.keymapId === 'playout.go' && s.playout && s.playout.status === 'play' && s.playout.dur) spec.progress = Math.max(0, Math.min(1, 1 - (s.playout.remaining || 0) / s.playout.dur));
+    if (active && ((a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord')) || a.kind === 'golive' || a.kind === 'talkback')) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#f5b731' : (a.kind === 'talkback' ? '#22d3a0' : '#ff3b3b'); }
+    return spec;
+  }
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), deckTheme].join('|'); }
+
+  function drawKeyInto(canvas, spec, z) {
+    var ctx = canvas.getContext('2d'); if (!ctx) return;
+    var t = theme();
+    ctx.clearRect(0, 0, z, z);
+    ctx.save(); try { t.bg(ctx, z, spec); } catch (e) {} ctx.restore();
+    var ink = t.ink, gcol = spec.glyphColor || t.glyphColor || ink;
+    if (spec.widget === 'clock') {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.13), 700); ctx.fillText(spec.clockRunning ? 'ON AIR' : 'CLOCK', z / 2, z * 0.24);
+      ctx.fillStyle = ink; ctx.font = t.font(Math.round(z * 0.24), 800); ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.52);
+      if (spec.clockRunning) { var ph = (spec.pulsePhase || 0); var al = 0.45 + 0.45 * Math.sin(ph * 0.5); ctx.fillStyle = rgba('#ff3b3b', al); ctx.beginPath(); ctx.arc(z / 2, z * 0.76, z * 0.06, 0, 7); ctx.fill(); }
+    } else {
+      var hasLabel = spec.label && spec.label.length;
+      var gy = hasLabel ? z * 0.37 : z * 0.5, gr = z * (hasLabel ? 0.2 : 0.26);
+      var drew = false;
+      if (spec.emoji) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = Math.round(z * (hasLabel ? 0.4 : 0.56)) + "px -apple-system,'Apple Color Emoji','Segoe UI Emoji'"; ctx.fillText(spec.emoji, z / 2, gy); drew = true; }
+      else if (spec.symbol) { if (symbolReady(spec.symbol)) drew = drawSymbolPath(ctx, spec.symbol, z / 2, gy, z * (hasLabel ? 0.46 : 0.62), gcol); else loadSymbol(spec.symbol); }
+      if (!drew && spec.glyph && GLYPHS[spec.glyph]) { ctx.save(); try { GLYPHS[spec.glyph](ctx, z / 2, gy, gr, gcol); } catch (e) {} ctx.restore(); }
+      if (hasLabel) {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = ink;
+        var lines = String(spec.label).split('\n'); var fs = Math.round(z * (lines.length > 1 ? 0.15 : 0.17));
+        var maxw = z * 0.86; ctx.font = t.font(fs, t.labelWeight);
+        while (fs > 9 && lines.some(function (ln) { return ctx.measureText(ln).width > maxw; })) { fs -= 1; ctx.font = t.font(fs, t.labelWeight); }
+        var baseY = z * ((spec.glyph || spec.emoji || spec.symbol) ? 0.8 : 0.5) - (lines.length - 1) * fs * 0.6;
+        lines.forEach(function (ln, k) { ctx.fillText(ln, z / 2, baseY + k * fs * 1.15); });
+      }
+      if (spec.progress != null) { var bw = z * 0.76, bx = z * 0.12, by = z * 0.9; ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, bx, by, bw, z * 0.05, z * 0.025); ctx.fill(); ctx.fillStyle = t.ring; rr(ctx, bx, by, bw * spec.progress, z * 0.05, z * 0.025); ctx.fill(); }
+    }
+    if (spec.toggle) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
+    if (spec.pulse) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03, z * 0.03, z * 0.94, z * 0.94, z * 0.14); ctx.stroke(); }
+    if (spec.pressed) { ctx.fillStyle = 'rgba(255,255,255,0.22)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
+  }
+
   // ── Painting ──────────────────────────────────────────────────────────────
   // The label module is a factory: it needs a canvas source and a JPEG encoder
   // injected (same pattern Outrangutan uses). Built once, lazily.
@@ -428,24 +688,72 @@
       if (c && knob) { var v = String(c.readout(s)); if (knob.textContent !== v) knob.textContent = v; }
     });
   }
-  function keySignature(i, s) { var slot = slotAt(i); var active = slotActive(slot, s) || keyState[i] || (i === editingKey); return active + '|' + slotLabel(slot, s) + '|' + slotColor(slot) + '|' + (slot.icon || ''); }
-  async function paintAll() { lastPainted = new Array(profile ? profile.keys : 0).fill(null); await paintChanged(); await paintStrip(true); }
-  async function paintChanged() {
-    if (!device || !profile) return;
-    var s = surfaceState();
-    for (var i = 0; i < profile.keys; i++) { var sig = keySignature(i, s); if (sig === lastPainted[i]) continue; lastPainted[i] = sig; await paintKey(i, s); }
-    await paintStrip(false);
+  // Offscreen canvases for device encoding (upright + rotated).
+  var _off = null, _rot = null;
+  function offCanvas(z) { if (!_off) _off = document.createElement('canvas'); if (_off.width !== z) { _off.width = z; _off.height = z; } return _off; }
+  function rotCanvas(z) { if (!_rot) _rot = document.createElement('canvas'); if (_rot.width !== z) { _rot.width = z; _rot.height = z; } return _rot; }
+  async function keyJpegFromCanvas(cv, z) {
+    var out = cv, deg = (((profile.rotation || 0) % 360) + 360) % 360;
+    if (deg) { var rc = rotCanvas(z), rx = rc.getContext('2d'); rx.clearRect(0, 0, z, z); rx.save(); rx.translate(z / 2, z / 2); rx.rotate(deg * Math.PI / 180); rx.translate(-z / 2, -z / 2); rx.drawImage(cv, 0, 0); rx.restore(); out = rc; }
+    var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
   }
-  async function paintKey(i, s) {
-    var renderer = getRenderer();
-    if (!renderer || !device) return;
-    var slot = slotAt(i);
-    var active = !!(slotActive(slot, s) || keyState[i] || (i === editingKey));
-    try {
-      var rendered = await renderer.renderKeyImage(profile.productId, i, { text: slotLabel(slot, s), icon: slot.icon || '', active: active, backgroundColor: slotColor(slot), accentColor: '#8ff7bc', maxLines: 3 });
-      var packets = Device.keyImagePackets(profile, i, rendered.bytes);
-      for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
-    } catch (e) {}
+  // Set the key-image rotation live (device repaints so you can step to upright).
+  function setRotation(deg) {
+    if (!device) return;
+    overrides.rotation = ((deg % 360) + 360) % 360; persist();
+    profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides });
+    device.profile = profile; registerLabelModel(profile); paintAll();
+    var r = root(); if (r) r.querySelectorAll('.sd-rot-btn').forEach(function (b) { b.classList.toggle('cur', +b.getAttribute('data-rot') === overrides.rotation); });
+  }
+  async function paintKeyDevice(i, spec) {
+    if (!device || !profile) return;
+    var z = profile.keyPx, cv = offCanvas(z);
+    drawKeyInto(cv, spec, z);
+    try { var bytes = await keyJpegFromCanvas(cv, z); if (!bytes) return; var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+  }
+  function mirrorCanvasFor(i) { var r = root(); if (!r) return null; var btn = r.querySelector('.sd-key[data-key="' + i + '"]'); return btn ? btn.querySelector('canvas') : null; }
+  // The on-screen grid shows the SAME art the hardware shows: true WYSIWYG.
+  function paintMirror() { var cur = profile; if (!cur) return; var s = surfaceState(); for (var i = 0; i < cur.keys; i++) { var cv = mirrorCanvasFor(i); if (cv) { var spec = keyArtSpec(i, s); spec.editing = (i === editingKey); drawKeyInto(cv, spec, cv.width); } } }
+  async function paintAll() { var cur = profile; ensureSymbols(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); paintMirror(); await paintChanged(); if (device) await paintStrip(true); }
+  async function paintChanged() {
+    var cur = profile; if (!cur) return;
+    var s = surfaceState();
+    for (var i = 0; i < cur.keys; i++) {
+      var spec = keyArtSpec(i, s); var sig = specSig(spec, i);
+      if (sig === lastPainted[i]) continue; lastPainted[i] = sig;
+      var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width);
+      if (device) await paintKeyDevice(i, spec);
+    }
+    if (device) await paintStrip(false);
+  }
+  // Animation loop: clock ticks and REC/LIVE/scene keys breathe. Only animated
+  // keys repaint, on-screen every ~7fps and to the device throttled to ~4fps.
+  function startAnim() { stopAnim(); animTimer = setInterval(animateKeys, 130); }
+  function stopAnim() { if (animTimer) clearInterval(animTimer); animTimer = null; }
+  function isSurfaceVisible() { var scr = document.getElementById('streamdeck'); return !!(scr && scr.classList.contains('on')); }
+  function animateKeys() {
+    if (!profile || hypeRunning || !isSurfaceVisible()) return;
+    animPhase++;
+    var s = surfaceState(), cur = profile, r = root();
+    for (var i = 0; i < cur.keys; i++) {
+      var spec = keyArtSpec(i, s);
+      if (!(spec.widget === 'clock' && spec.clockRunning) && !spec.pulse) continue;
+      spec.pulsePhase = animPhase;
+      if (r) { var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width); }
+      if (device && animPhase % 2 === 0) paintKeyDevice(i, spec);
+    }
+  }
+  // The HYPE key: a rainbow ripple parties across the whole deck, then restores.
+  async function hypeShow() {
+    var cur = profile; if (!cur || hypeRunning) return; hypeRunning = true;
+    for (var f = 0; f < 16 && (device || previewMode); f++) {
+      for (var i = 0; i < cur.keys; i++) { var hue = (((i % cur.cols) + Math.floor(i / cur.cols)) * 22 + f * 45) % 360; var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, { color: 'hsl(' + hue + ',85%,52%)', label: '' }, cv.width); }
+      await new Promise(function (r) { setTimeout(r, 55); });
+    }
+    hypeRunning = false; lastPainted = new Array(cur.keys).fill(null); paintMirror();
+    if (device) connectLightShow().then(function () { return paintAll(); }); else paintAll();
+    toast('🎉 HYPE!');
   }
   async function paintStrip(force) {
     if (!device || !profile || !profile.strip) return;
@@ -598,17 +906,23 @@
   function render() {
     var r = root(); if (!r) return;
     if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
-    r.innerHTML = statusBar() + (device ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + learnPanel() : connectHelp());
+    var showGrid = device || previewMode;
+    r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) : connectHelp());
     wire(); renderStatus(); updateLiveBadge();
+    if (showGrid) paintMirror();
+  }
+  function previewBanner() {
+    return '<div class="sd-preview-banner"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><div>Preview mode: a virtual Stream Deck + XL so you can lay it out, pick a theme, and press keys on screen. Plug in real hardware and hit <b>Connect real deck</b> to drive the show.</div><button class="btn-secondary" id="sd-preview-connect">Connect real deck</button></div>';
   }
   function statusBar() {
     var s = surfaceState();
     return '<div class="sd-status">'
-      + statusChip('Device', device ? profile.name : 'Not connected', device ? 'ok' : 'off')
+      + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : 'Not connected'), device ? 'ok' : 'off')
       + statusChip('Talkback', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off')
       + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
       + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : '<button class="btn-primary" id="sd-connect">Connect deck</button>')
+      + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
       + '<button class="btn-secondary" id="sd-talkoff">All talk off</button></div></div>';
   }
   function statusChip(label, value, cls) { return '<div class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
@@ -618,7 +932,7 @@
     var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
     return '<div class="sd-setup">'
       + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
-      + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button>')
+      + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button>')
       + stepRow(2, tbOn, 'Talkback (optional)', tbOn ? 'Daemon connected. TALK A and TALK B are live, hold to talk.' : 'For TALK A / TALK B keys, start the talkbackd daemon on this machine. KeyWi finds it by itself and this dot turns green.', '')
       + stepRow(3, obsOn, 'OBS (optional)', obsOn ? 'OBS connected. Stream, record, and scene keys are live.' : 'For stream, record, and scene keys: in OBS enable Tools &rsaquo; WebSocket Server Settings, then connect below once the deck is on.', '')
       + '<div class="sd-setup-foot">Everything runs from this tab. Keep Cueola open here while you run the show.</div>'
@@ -643,10 +957,13 @@
       + '<input type="file" id="sd-pf-file" accept="application/json,.json" hidden></div>';
   }
   function toolsRow() {
+    var themeOpts = Object.keys(DECK_THEMES).map(function (id) { return '<option value="' + id + '"' + (id === deckTheme ? ' selected' : '') + '>' + esc(DECK_THEMES[id].name) + '</option>'; }).join('');
     return '<div class="sd-bright-row">'
+      + '<label>Theme</label><select id="sd-theme" title="Reskin the whole deck">' + themeOpts + '</select>'
       + '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>'
-      + '<label>Deck brightness</label><input type="range" id="sd-bright" min="0" max="100" value="' + brightness + '"><span id="sd-bright-val">' + brightness + '%</span>'
-      + '<button class="btn-secondary" id="sd-test">Test pattern</button><button class="btn-secondary" id="sd-reset">Reset this layout</button></div>';
+      + (device ? '<label>Brightness</label><input type="range" id="sd-bright" min="0" max="100" value="' + brightness + '"><span id="sd-bright-val">' + brightness + '%</span>' : '')
+      + (device ? '<button class="btn-secondary" id="sd-test">Test pattern</button>' : '')
+      + '<button class="btn-secondary" id="sd-reset">Reset this layout</button></div>';
   }
   function obsBar() {
     var o = OBSc(), ready = !!(o && o.isReady && o.isReady()), cfg = (o && o.config && o.config()) || { url: 'ws://localhost:4455', password: '' }, st = obsState(), err = (o && o.lastError && o.lastError()) || '';
@@ -665,12 +982,9 @@
     var html = '<div class="sd-sect-t">Keys <span class="sd-sect-hint">click a key to change what it does and how it looks</span></div>';
     html += '<div class="sd-keys" style="grid-template-columns:repeat(' + profile.cols + ',1fr)">';
     for (var i = 0; i < profile.keys; i++) {
-      var slot = slotAt(i), a = slotAction(slot), active = !!(slotActive(slot, s) || keyState[i] || i === editingKey);
-      var icon = slot.icon != null ? slot.icon : (a.icon || '');
+      var slot = slotAt(i), a = slotAction(slot);
       var tip = (a.full || a.label || 'blank') + (a.toggle ? ' · toggle' : '') + (a.hold ? ' · hold' : '') + (a.desc ? '. ' + a.desc : '');
-      html += '<button class="sd-key' + (active ? ' on' : '') + (a.kind === 'none' ? ' blank' : '') + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" style="--kc:' + slotColor(slot) + '" title="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '">'
-        + (icon ? '<span class="sd-key-ic">' + esc(icon) + '</span>' : '') + '<span class="sd-key-lbl">' + esc(slotLabel(slot, s) || '') + '</span>'
-        + (a.toggle ? '<span class="sd-key-tog' + (active ? ' on' : '') + '">' + (active ? 'ON' : 'OFF') + '</span>' : '') + '</button>';
+      html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" title="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="132" height="132"></canvas></button>';
     }
     html += '</div>';
     if (profile.dials) {
@@ -703,14 +1017,15 @@
   }
   function learnPanel() {
     var u = device.unitInfo || {};
-    return '<details class="sd-learn"><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
-      + '<p class="sd-note">The Stream Deck + XL is new enough that its exact USB profile is confirmed here from your actual unit. Adjust only if the test pattern looks wrong.</p>'
+    return '<details class="sd-learn" open><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
+      + '<div class="sd-rotate-row"><span class="sd-tune-lbl">Key rotation</span><div class="sd-rot-btns">'
+      + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-rot-btn' + ((profile.rotation || 0) === d ? ' cur' : '') + '" data-rot="' + d + '">' + d + '&deg;</button>'; }).join('')
+      + '</div><span class="sd-note">If the keys read sideways or upside down, tap through these until they are upright on the deck.</span></div>'
       + '<div class="sd-learn-grid">'
       + learnField('Product id', '0x' + profile.productId.toString(16)) + learnField('Keys', profile.keys + (u.keys ? ' (device says ' + u.keys + ')' : '')) + learnField('Columns', profile.cols)
       + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones') : 'none') + '</div>'
-      + '<div class="sd-learn-tune"><label><input type="checkbox" id="sd-flip"' + (profile.rotation ? ' checked' : '') + '> Key images upside-down (flip 180°)</label>'
-      + '<label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
-      + '<button class="btn-secondary" id="sd-relearn">Apply &amp; repaint</button></div></div></details>';
+      + '<div class="sd-learn-tune"><label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
+      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button></div></div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
   function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Daemon connected' : 'Not running'; } }
@@ -759,7 +1074,7 @@
     o.querySelectorAll('.sd-picker-opt').forEach(function (btn) {
       btn.onclick = function () {
         var slot = slotAt(index), refKind = btn.getAttribute('data-ref');
-        if (refKind) { slot.a = refKind; slot.ref = btn.getAttribute('data-refid'); slot.refName = btn.getAttribute('data-refname'); if (refKind === 'padRef' && !slot.icon) slot.icon = '🔊'; }
+        if (refKind) { slot.a = refKind; slot.ref = btn.getAttribute('data-refid'); slot.refName = btn.getAttribute('data-refname'); }
         else { slot.a = btn.getAttribute('data-pick'); delete slot.ref; delete slot.refName; }
         mapping().keys[index] = slot; persist(); openKeyEditor(index);
       };
@@ -772,8 +1087,9 @@
     var done = document.getElementById('sd-ed-done'); if (done) done.onclick = closeOverlay;
   }
   function refreshKey(index) {
-    var tile = root() && root().querySelector('.sd-key[data-key="' + index + '"]'); if (!tile) { render(); }
-    else { var slot = slotAt(index), s = surfaceState(); tile.style.setProperty('--kc', slotColor(slot)); tile.querySelector('.sd-key-lbl').textContent = slotLabel(slot, s) || ''; }
+    var cv = mirrorCanvasFor(index);
+    if (cv) drawKeyInto(cv, keyArtSpec(index, surfaceState()), cv.width);
+    else render();
     schedulePaint();
   }
   function openDialEditor(index, fromLearn) {
@@ -806,8 +1122,11 @@
     bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
     bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
+    var th = document.getElementById('sd-theme'); if (th) th.onchange = function () { setTheme(th.value); };
+    bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
+    r.querySelectorAll('.sd-rot-btn').forEach(function (b) { b.onclick = function () { setRotation(+b.getAttribute('data-rot')); }; });
     var relearn = document.getElementById('sd-relearn');
-    if (relearn) relearn.onclick = function () { overrides.rotation = document.getElementById('sd-flip').checked ? 180 : 0; var cols = +document.getElementById('sd-cols').value; if (cols >= 3 && cols <= 12) overrides.cols = cols; persist(); profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides }); device.profile = profile; registerLabelModel(profile); ensureProfilesShape(); paintAll(); render(); };
+    if (relearn) relearn.onclick = function () { var cols = +document.getElementById('sd-cols').value; if (cols >= 3 && cols <= 12) overrides.cols = cols; persist(); profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides }); device.profile = profile; registerLabelModel(profile); ensureProfilesShape(); paintAll(); render(); };
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
@@ -815,9 +1134,8 @@
 
   async function testPattern() {
     if (!device) return;
-    var r = getRenderer();
-    if (!r) return;
-    for (var i = 0; i < profile.keys; i++) { try { var rendered = await r.renderKeyImage(profile.productId, i, { text: String(i + 1), active: (i % 2 === 0), backgroundColor: '#243a66' }); var packets = Device.keyImagePackets(profile, i, rendered.bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {} }
+    var z = profile.keyPx;
+    for (var i = 0; i < profile.keys; i++) { var cv = offCanvas(z); drawKeyInto(cv, { color: '#243a66', label: String(i + 1), active: (i % 2 === 0) }, z); try { var bytes = await keyJpegFromCanvas(cv, z); var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {} }
     lastPainted = new Array(profile.keys).fill('test');
     toast('Test pattern sent. If the numbers read upside-down, tick the flip box in Connect & Learn.');
   }
@@ -826,7 +1144,7 @@
   function open() {
     var id = window.CueolaIdentity;
     if (id && typeof id.identity === 'function' && !id.identity()) { try { id.openSignIn && id.openSignIn(); } catch (e) {} toast('Sign in to open KeyWi.'); return false; }
-    showScreen(); buildCatalog();
+    showScreen(); buildCatalog(); loadTheme();
     try { brightness = Math.max(0, Math.min(100, parseInt(localStorage.getItem(BRIGHTNESS_KEY), 10) || 80)); } catch (e) {}
     talkbackConnect();
     // OBS: repaint on state changes, and reconnect automatically if the operator

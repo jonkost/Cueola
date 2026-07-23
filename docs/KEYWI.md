@@ -50,6 +50,36 @@ screen and glow on the deck while active. The show clock has explicit Start,
 Pause, and Resume keys plus a one-key toggle; a verb that matches the current
 state is a quiet no-op, so a nervous double-press never double-fires.
 
+## Look and feel (streamer deck)
+
+Every key is an illustrated keycap, not flat text: a gradient face, a crisp
+icon, a soft glow, a toggle pip when it is on, and live mini-graphics. GO shows
+a progress bar as a clip plays; the clock keys show a running ON AIR time;
+STREAM, REC, GO LIVE and the TALK keys breathe while active.
+
+Key icons come from the repo's **SF Symbol library**
+(`design-system/apple/symbols/runtime/`): play/pause/stop, a fader for FADE, an
+exclamation triangle for PANIC, a hare and a tortoise for speed up/down,
+waveforms for SFX pads, scene frames for OBS scenes, microphones for talkback,
+and so on. Symbols are fetched once and drawn as native canvas paths (crisp at
+any size, tinted to the key ink), with a built-in vector fallback so a key is
+never blank while a symbol loads. To use a symbol KeyWi does not map yet, add
+the SVG under the runtime folder and point the action at it in `symbolFor()`.
+
+Pick a **theme** from the top of the setup panel to reskin the whole deck:
+Broadcast (clean, category colours), Neon (glowing edges on black), Synthwave
+(sunset grids), Terminal (green-on-black with scanlines), or Aurora. The theme
+applies to the physical keys and the on-screen preview alike.
+
+The **on-screen grid is exactly what the hardware shows**: the same canvas art
+drives both, so you can lay out and theme the deck and see the real result. And
+**Preview mode** (See it on screen) gives you a full virtual + XL with no
+hardware plugged in, so you can build layouts and try themes any time, then hit
+Connect to drive the real deck.
+
+There is a **HYPE** key too (under Fun): a rainbow ripple parties across the
+whole deck and settles back. Because a big panel of buttons should be fun.
+
 ## Deck Studio (the setup screen)
 
 Everything is customisable, live:

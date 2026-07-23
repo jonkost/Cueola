@@ -101,12 +101,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=c4ae3df8f0',
-  'cueola-app.js?v=e96b6136f2',
+  'cueola-app.js?v=e96b6137a3',
   'outrangutan/outrangutan.css?v=718e619254',
   'outrangutan/outrangutan.js?v=9efc6c6f2b',
   'cueola-streamdeck-device.js?v=5d1c0e7a10',
-  'cueola-obs.js?v=5d1c0e7a30',
-  'cueola-streamdeck.js?v=5d1c0e7a2b',
+  'cueola-obs.js?v=5d1c0e7a41',
+  'cueola-streamdeck.js?v=5d1c0e7a5d',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -128,7 +128,10 @@ const versionSignature = SHELL_ASSETS
 // 10→11: Control Surface (Stream Deck + XL) — new #streamdeck screen markup +
 // styles + launcher card in index.html (an HTML change the shell caches), plus
 // two new precached modules (cueola-streamdeck-device.js / cueola-streamdeck.js).
-const WORKER_SCHEMA = '11';
+// 11->12: KeyWi rounds 3-5 (streamer-deck key art, deck themes, preview mode,
+// SF Symbols on keys) change index.html markup/CSS and cueola-app/streamdeck/obs
+// JS; roll the shell so a plain reload picks it all up.
+const WORKER_SCHEMA = '12';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

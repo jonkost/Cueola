@@ -5663,7 +5663,7 @@ window.cueolaSurfaceBridge = {
     const sel = _sdSafe(() => (typeof liveSessionState === 'function' ? liveSessionState().selectedCueIndex : null), null);
     return {
       session: { code: _sdSafe(() => session.code, ''), isDemo: _sdSafe(() => session.isDemo, false), active: !!_sdSafe(() => session.code, '') },
-      playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
+      playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', remaining: (live.remaining != null ? live.remaining : null), dur: (live.dur != null ? live.dur : null), cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
       prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
       live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') }

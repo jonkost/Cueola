@@ -5877,6 +5877,23 @@ input.pt-range::-moz-range-thumb,
 #sd-toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:var(--s3); color:var(--text); border:1px solid var(--bord2); padding:11px 18px; border-radius:var(--ui-radius-control,12px); opacity:0; pointer-events:none; transition:opacity var(--dur-normal,.2s) var(--ease,ease), transform var(--dur-normal,.2s) var(--ease,ease); z-index:60; max-width:80vw; text-align:center; }
 #sd-toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
 @media (pointer:coarse) { .sd-mini, .sd-em { min-height:44px; min-width:44px; } .sd-picker-opt { min-height:44px; } }
+
+/* ── Streamer-deck key art: the canvas draws each keycap (gradient, glyph, glow),
+   so the tile is just a transparent frame around it. True WYSIWYG with hardware. */
+.sd-key { position:relative; aspect-ratio:1/1; background:transparent !important; border:0 !important; padding:0 !important; border-radius:14px; overflow:visible; cursor:pointer; transition:transform var(--dur-fast,.1s) var(--ease,ease); }
+.sd-key canvas { width:100%; height:100%; display:block; border-radius:14px; box-shadow:0 2px 7px rgba(0,0,0,.4); }
+.sd-key:hover { transform:translateY(-2px) scale(1.03); z-index:1; }
+.sd-key:hover canvas { box-shadow:0 8px 20px rgba(0,0,0,.55); }
+.sd-key.on { box-shadow:none; animation:none; }
+.sd-key.editing { outline:2px dashed var(--accent); outline-offset:3px; }
+.sd-keys { gap:10px; }
+#sd-theme { background:var(--s1); color:var(--text); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:7px 10px; font-size:14px; font-weight:600; }
+.sd-preview-banner { display:flex; gap:12px; align-items:center; margin-top:16px; padding:12px 16px; background:color-mix(in srgb,var(--accent) 9%,var(--s1)); border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border)); border-radius:var(--ui-radius-group,16px); font-size:13px; color:var(--text2); line-height:1.5; }
+.sd-preview-banner .btn-secondary { margin-left:auto; flex:0 0 auto; width:auto; white-space:nowrap; }
+.sd-rotate-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid color-mix(in srgb,var(--text) 8%,transparent); }
+.sd-tune-lbl { font-weight:700; font-size:13px; }
+.sd-rot-btns { display:flex; gap:6px; }
+.sd-rot-btn.cur { border-color:var(--accent) !important; background:color-mix(in srgb,var(--accent) 18%,var(--s1)) !important; color:var(--text) !important; }
 </style>
 <div class="screen" id="streamdeck">
   <div class="sd-head">
@@ -5905,11 +5922,11 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=c4ae3df8f0"></script>
-<script src="cueola-app.js?v=e96b6136f2"></script>
+<script src="cueola-app.js?v=e96b6137a3"></script>
 <script src="outrangutan/outrangutan.js?v=9efc6c6f2b"></script>
 <script src="cueola-streamdeck-device.js?v=5d1c0e7a10"></script>
-<script src="cueola-obs.js?v=5d1c0e7a30"></script>
-<script src="cueola-streamdeck.js?v=5d1c0e7a2b"></script>
+<script src="cueola-obs.js?v=5d1c0e7a41"></script>
+<script src="cueola-streamdeck.js?v=5d1c0e7a5d"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
