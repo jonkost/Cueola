@@ -105,6 +105,7 @@ const SHELL_ASSETS = [
   'outrangutan/outrangutan.css?v=718e619254',
   'outrangutan/outrangutan.js?v=9efc6c6f2b',
   'cueola-streamdeck-device.js?v=5d1c0e7a10',
+  'cueola-obs.js?v=5d1c0e7a30',
   'cueola-streamdeck.js?v=5d1c0e7a2b',
 ];
 

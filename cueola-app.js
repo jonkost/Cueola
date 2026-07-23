@@ -5644,6 +5644,16 @@ window.cueolaSurfaceBridge = {
   playoutPad: (id) => fireOutrangutanCommand('pad', id),
   goLive: () => { try { goLive(); } catch (e) {} },
   showClockToggle: () => { try { toggleShowClock(); } catch (e) {} },
+  // Explicit clock verbs for the deck's Start/Pause/Resume keys. All ride the
+  // existing guarded toggle so the show-caller/broadcast rules stay intact:
+  // a verb that matches the current state is a quiet no-op, never a double-fire.
+  showClock: (verb) => {
+    try {
+      if (verb === 'start' || verb === 'resume') { if (!liveClockRunning) toggleShowClock(); }
+      else if (verb === 'pause') { if (liveClockRunning) toggleShowClock(); }
+      else toggleShowClock();
+    } catch (e) {}
+  },
   liveSelect: (index, take) => { try { take ? setOperatorLiveCue(index, 'deck') : setLiveSelectedCue(index, { source: 'deck' }); } catch (e) {} },
   masterGain: () => { try { return window.Outrangutan && window.Outrangutan.masterGain ? window.Outrangutan.masterGain() : 0; } catch (e) { return 0; } },
   setMasterGain: (v) => { try { window.Outrangutan && window.Outrangutan.setMasterGain && window.Outrangutan.setMasterGain(v); } catch (e) {} },
@@ -5654,7 +5664,7 @@ window.cueolaSurfaceBridge = {
     return {
       session: { code: _sdSafe(() => session.code, ''), isDemo: _sdSafe(() => session.isDemo, false), active: !!_sdSafe(() => session.code, '') },
       playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
-      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false) },
+      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
       live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') }
     };
@@ -5665,7 +5675,7 @@ window.cueolaSurfaceBridge = {
 // switch live in the module; this just forwards (and warns if it failed to load).
 function openControlSurface() {
   if (window.CueolaStreamDeck && typeof window.CueolaStreamDeck.open === 'function') { window.CueolaStreamDeck.open(); return; }
-  toast('The control surface needs Chrome or Edge, and did not load.');
+  toast('KeyWi needs Chrome or Edge, and did not load.');
 }
 window.openControlSurface = openControlSurface;
 
