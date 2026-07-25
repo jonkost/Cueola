@@ -706,22 +706,16 @@
   var _off = null, _rot = null;
   function offCanvas(z) { if (!_off) _off = document.createElement('canvas'); if (_off.width !== z) { _off.width = z; _off.height = z; } return _off; }
   function rotCanvas(z) { if (!_rot) _rot = document.createElement('canvas'); if (_rot.width !== z) { _rot.width = z; _rot.height = z; } return _rot; }
+  // The one source of truth for how key art is rotated on its way to the deck:
+  // the model's own orientation plus its fixed mount offset. Deliberately NOT
+  // operator-adjustable — 270 is the + XL's real physical orientation, and any
+  // other value just paints the keys wrong.
+  function keyDeg() { return profile ? ((((profile.rotation || 0) + (profile.mountRotation || 0)) % 360) + 360) % 360 : 0; }
   async function keyJpegFromCanvas(cv, z) {
-    // Effective rotation = what the operator picked (0 = upright) + the fixed
-    // hardware mount offset. On the + XL the mount offset is 270, so the default
-    // user rotation of 0 lands upright ("270 is actually 0").
-    var out = cv, deg = ((((profile.rotation || 0) + (profile.mountRotation || 0)) % 360) + 360) % 360;
+    var out = cv, deg = keyDeg();
     if (deg) { var rc = rotCanvas(z), rx = rc.getContext('2d'); rx.clearRect(0, 0, z, z); rx.save(); rx.translate(z / 2, z / 2); rx.rotate(deg * Math.PI / 180); rx.translate(-z / 2, -z / 2); rx.drawImage(cv, 0, 0); rx.restore(); out = rc; }
     var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
-  }
-  // Set the key-image rotation live (device repaints so you can step to upright).
-  function setRotation(deg) {
-    if (!device) return;
-    overrides.rotation = ((deg % 360) + 360) % 360; persist();
-    profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides });
-    device.profile = profile; registerLabelModel(profile); paintAll();
-    var r = root(); if (r) r.querySelectorAll('.sd-rot-btn').forEach(function (b) { b.classList.toggle('cur', +b.getAttribute('data-rot') === overrides.rotation); });
   }
   async function paintKeyDevice(i, spec) {
     if (!device || !profile) return;
@@ -893,7 +887,7 @@
   }
   function registerLabelModel(prof) {
     var r = window.CueolaStreamDeckLabel; if (!r || typeof r.registerModel !== 'function') return;
-    try { r.registerModel({ productId: prof.productId, name: prof.name, keys: prof.keys, columns: prof.cols, imageWidth: prof.keyPx, imageHeight: prof.keyPx, imageType: 'image/jpeg', imageQuality: 0.9, deviceRotationDegrees: prof.rotation, inputStateOffset: prof.stateOffset, packet: { reportId: prof.keyImage.reportId, command: prof.keyImage.command, packetSize: prof.keyImage.packetSize, headerSize: prof.keyImage.headerSize, payloadSize: prof.keyImage.packetSize - prof.keyImage.headerSize } }); } catch (e) {}
+    try { r.registerModel({ productId: prof.productId, name: prof.name, keys: prof.keys, columns: prof.cols, imageWidth: prof.keyPx, imageHeight: prof.keyPx, imageType: 'image/jpeg', imageQuality: 0.9, deviceRotationDegrees: ((((prof.rotation || 0) + (prof.mountRotation || 0)) % 360) + 360) % 360, inputStateOffset: prof.stateOffset, packet: { reportId: prof.keyImage.reportId, command: prof.keyImage.command, packetSize: prof.keyImage.packetSize, headerSize: prof.keyImage.headerSize, payloadSize: prof.keyImage.packetSize - prof.keyImage.headerSize } }); } catch (e) {}
   }
 
   // ── Profile config persistence ─────────────────────────────────────────────
@@ -914,10 +908,10 @@
       defaultProfileId = raw.defaultProfile && profiles[raw.defaultProfile] ? raw.defaultProfile : activeProfileId;
       activeProfileId = defaultProfileId || activeProfileId;
     }
-    // Rotation model v2: user rotation is now 0 = upright, with a fixed per-device
-    // mount offset (see PLUS_XL_DEFAULT). Clear any pre-v2 stored key rotation once
-    // so it doesn't stack on top of the new mount offset (e.g. an old manual 270).
-    if (overrides._rotModel !== 2) { if (overrides.rotation != null) delete overrides.rotation; overrides._rotModel = 2; }
+    // Key rotation is a fixed property of the hardware (model orientation + mount
+    // offset), not a preference. Drop any rotation an older build stored, so it can
+    // never stack on top of the mount offset and paint the keys wrong.
+    if (overrides.rotation != null) delete overrides.rotation;
     return { overrides: overrides };
   }
   function toSlot(s) { return (typeof s === 'string') ? { a: s } : (s && typeof s === 'object' ? s : { a: 'none' }); }
@@ -1123,12 +1117,9 @@
       + '<button class="sd-mini" id="sd-strip-off" title="This deck has no touch strip">Turn off</button></div>'
       + '<span class="sd-note">Strip blank or showing just a small block? Tap <b>Test strip</b> — it paints a numbered ruler at the current size. Set <b>W</b>/<b>H</b> to match the area that actually fills your strip, then <b>Apply strip</b>. Use the °&nbsp;buttons if it reads sideways or upside-down.</span>');
     return '<details class="sd-learn" open><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
-      + '<div class="sd-rotate-row"><span class="sd-tune-lbl">Key rotation</span><div class="sd-rot-btns">'
-      + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-rot-btn' + ((profile.rotation || 0) === d ? ' cur' : '') + '" data-rot="' + d + '">' + d + '&deg;</button>'; }).join('')
-      + '</div><span class="sd-note">Keys are upright at <b>0°</b>. If they read sideways or upside down, tap through these until they are upright on the deck.</span></div>'
       + '<div class="sd-learn-grid">'
       + learnField('Product id', '0x' + profile.productId.toString(16)) + learnField('Keys', profile.keys + (u.keys ? ' (device says ' + u.keys + ')' : '')) + learnField('Columns', profile.cols)
-      + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Mount offset', (profile.mountRotation || 0) + '°' + (profile.adaptive ? ' (+ XL)' : ''))
+      + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Key rotation', keyDeg() + '° (fixed)')
       + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (sr ? ', ' + sr + '°' : '')) : 'none') + '</div>'
       + '<div class="sd-learn-tune"><label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
       + '<button class="btn-secondary" id="sd-relearn">Apply columns</button></div>'
@@ -1231,7 +1222,6 @@
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
     var th = document.getElementById('sd-theme'); if (th) th.onchange = function () { setTheme(th.value); };
     bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
-    r.querySelectorAll('.sd-rot-btn').forEach(function (b) { b.onclick = function () { setRotation(+b.getAttribute('data-rot')); }; });
     var relearn = document.getElementById('sd-relearn');
     if (relearn) relearn.onclick = function () { var cols = +document.getElementById('sd-cols').value; if (cols >= 3 && cols <= 12) overrides.cols = cols; persist(); profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides }); device.profile = profile; registerLabelModel(profile); ensureProfilesShape(); paintAll(); render(); };
     r.querySelectorAll('.sd-srot-btn').forEach(function (b) { b.onclick = function () { applyStrip({ stripRotation: +b.getAttribute('data-srot') }); }; });
@@ -1249,7 +1239,7 @@
     var z = profile.keyPx;
     for (var i = 0; i < profile.keys; i++) { var cv = offCanvas(z); drawKeyInto(cv, { color: '#243a66', label: String(i + 1), active: (i % 2 === 0) }, z); try { var bytes = await keyJpegFromCanvas(cv, z); var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {} }
     lastPainted = new Array(profile.keys).fill('test');
-    toast('Test pattern sent. Keys should read upright at 0° — adjust Key rotation in Connect & Learn if not.');
+    toast('Test pattern sent. Keys are numbered 1-' + profile.keys + ' left to right, top to bottom.');
   }
   // Live strip re-calibration. The + XL is unpublished hardware, so W/H/zones/rot
   // are owner-adjustable; a stored override rebuilds the frozen profile in place.
@@ -1274,11 +1264,17 @@
   // pixel dimensions in the middle. From the deck (or a recording) you can read
   // exactly how much of the strip the current W/H fills, then dial it in.
   async function testStrip() {
-    if (!device || !profile || !profile.strip) { toast('Connect a deck that has a touch strip first.'); return; }
+    if (!device || !profile) { toast('Connect a deck first.'); return; }
+    if (!profile.strip) { toast('This deck is profiled with no touch strip. Use "Enable touch strip" just above.'); return; }
     var zones = profile.strip.zones;
     lastStripSig = '';
+    // Dump the device's own truth first — product id, resolved profile, and the
+    // HID report sizes the hardware actually advertises. If the strip stays dark,
+    // this report says whether we are drawing wrong or framing the packets wrong.
+    try { console.log('[KeyWi] strip test — device report:', JSON.stringify(deviceDiag(), null, 2)); } catch (e) {}
+    var bytes = null;
     try {
-      var bytes = await stripBytesFromContent(function (ctx, cw, ch) {
+      bytes = await stripBytesFromContent(function (ctx, cw, ch) {
         ctx.fillStyle = '#0b0f16'; ctx.fillRect(0, 0, cw, ch);
         ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, cw - 2, ch - 2);
         ctx.textAlign = 'center';
@@ -1294,11 +1290,68 @@
         ctx.fillStyle = '#f5b731'; ctx.fillRect(0, 0, 12, 12); ctx.fillRect(cw - 12, 0, 12, 12); ctx.fillRect(0, ch - 12, 12, 12); ctx.fillRect(cw - 12, ch - 12, 12, 12);
         ctx.fillStyle = '#ffffff'; ctx.font = '700 22px ui-monospace, monospace'; ctx.fillText(cw + ' × ' + ch, cw / 2, ch / 2 + 8);
       });
-      if (!bytes) { toast('Could not build the strip test image.'); return; }
-      var packets = Device.stripImagePackets(profile, bytes);
-      for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
-      toast('Strip test sent at ' + profile.strip.w + '×' + profile.strip.h + '. On the deck: 4 yellow corners + a full red border = correct size. If only part fills, shrink W/H to match and Apply strip.');
-    } catch (e) { toast('Could not draw the strip test.'); }
+    } catch (e) {
+      console.error('[KeyWi] strip test: drawing the image failed', e);
+      toast('Strip test could not draw the image: ' + ((e && e.message) || e)); return;
+    }
+    if (!bytes || !bytes.length) { toast('Strip test: the image encoded to zero bytes.'); return; }
+    var packets;
+    try { packets = Device.stripImagePackets(profile, bytes); }
+    catch (e) {
+      console.error('[KeyWi] strip test: packetizing failed', e);
+      toast('Strip test could not packetize: ' + ((e && e.message) || e)); return;
+    }
+    var sent = 0, failure = null;
+    for (var pk = 0; pk < packets.length; pk++) {
+      if (!device) return;
+      try { await device.hid.sendReport(packets[pk].reportId, packets[pk].data); sent++; }
+      catch (e) { failure = e; break; }
+    }
+    if (failure) {
+      console.error('[KeyWi] strip test: sendReport rejected at packet ' + (sent + 1) + '/' + packets.length,
+        { reportId: packets[0].reportId, bytesPerPacket: packets[0].data.length, totalBytes: bytes.length, error: failure });
+      toast('Strip test FAILED at packet ' + (sent + 1) + '/' + packets.length + ': ' + ((failure && failure.message) || failure) + ' — see console.');
+      return;
+    }
+    toast('Strip test sent OK: ' + packets.length + ' packets, ' + bytes.length + ' bytes, ' + profile.strip.w + '×' + profile.strip.h
+      + '. Still dark? The deck accepted the data, so the LCD framing is wrong — copy the console report.');
+  }
+  // Everything the driver knows about the connected deck, including the report
+  // sizes the hardware itself advertises over WebHID. This is ground truth: the
+  // + XL geometry in the profile table is an assumption, these numbers are not.
+  function deviceDiag() {
+    if (!device) return { connected: false };
+    var d = device.hid;
+    var summarize = function (r) {
+      var bits = 0;
+      (r.items || []).forEach(function (it) { bits += (it.reportCount || 0) * (it.reportSize || 0); });
+      return { reportId: r.reportId, payloadBytes: Math.ceil(bits / 8) };
+    };
+    var out = {
+      connected: true,
+      vendorId: '0x' + d.vendorId.toString(16), productId: '0x' + d.productId.toString(16),
+      productName: d.productName || '(none)', opened: !!d.opened,
+      profile: {
+        name: profile.name, adaptive: !!profile.adaptive, keys: profile.keys, cols: profile.cols, rows: profile.rows,
+        keyPx: profile.keyPx, dials: profile.dials, stateOffset: profile.stateOffset,
+        keyRotationDeg: keyDeg(),
+        strip: profile.strip ? { w: profile.strip.w, h: profile.strip.h, zones: profile.strip.zones, rot: profile.strip.rot, command: profile.strip.command, headerSize: profile.strip.headerSize, packetSize: profile.strip.packetSize } : null
+      },
+      unitInfoFromDevice: device.unitInfo || {},
+      savedOverrides: overrides,
+      hidCollections: []
+    };
+    try {
+      (d.collections || []).forEach(function (c) {
+        out.hidCollections.push({
+          usagePage: '0x' + (c.usagePage || 0).toString(16), usage: '0x' + (c.usage || 0).toString(16),
+          outputReports: (c.outputReports || []).map(summarize),
+          inputReports: (c.inputReports || []).map(summarize),
+          featureReports: (c.featureReports || []).map(summarize)
+        });
+      });
+    } catch (e) { out.hidCollectionsError = String(e); }
+    return out;
   }
 
   // ── Entry / gating ──────────────────────────────────────────────────────────
@@ -1330,6 +1383,7 @@
     _catalog: function () { buildCatalog(); return catalog; },
     _fire: fireSlot,
     _profileFor: function (pid, opts) { return Device.makeProfile(pid, opts || {}); },
+    diagnose: deviceDiag,
     _profiles: function () { return { profiles: profiles, active: activeProfileId, def: defaultProfileId }; }
   };
 })();
