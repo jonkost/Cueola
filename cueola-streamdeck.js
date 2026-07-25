@@ -342,10 +342,11 @@
     sendFeature(Device.resetReport(profile));
     setBrightness(brightness);
     previewMode = false;
+    stripErrToasted = false;
     render();
     startPaintLoop();
     startAnim();
-    connectLightShow().then(function () { return paintAll(); });
+    connectLightShow().then(function () { return paintAll(); }).then(function () { return stripProbe(); });
     toast('Connected: ' + profile.name + ' (' + profile.keys + ' keys, ' + profile.dials + ' dials).');
     return true;
   }
@@ -781,8 +782,67 @@
       });
     }
     ensureObsFrameLoop();
+    if (stripProbeActive) return;   // don't fight the format probe mid-cycle
     var sig = JSON.stringify(cells); if (!force && sig === lastStripSig) return; lastStripSig = sig;
-    try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+    try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } }
+    catch (e) {
+      console.error('[KeyWi] strip paint failed:', e);
+      if (!stripErrToasted) { stripErrToasted = true; toast('Touch strip error: ' + ((e && e.message) || e)); }
+    }
+  }
+  // ── Strip format probe ──────────────────────────────────────────────────────
+  // The + XL's window protocol has open questions this firmware can answer for
+  // us: partial (0x0c) vs full-window (0x0b) command × rotated (100×1200) vs
+  // flat (1200×100) JPEG. On connect, paint a giant numbered card in each of
+  // the four formats for a few seconds; whichever number the owner SEES on the
+  // physical strip is the format this firmware speaks. One glance, no knobs.
+  var stripProbeActive = false, stripErrToasted = false;
+  var STRIP_PROBE_VARIANTS = [
+    { n: 1, rotate: true,  cmd: 0x0c, color: '#0f4c81' },   // node-lib style
+    { n: 2, rotate: false, cmd: 0x0c, color: '#17653a' },
+    { n: 3, rotate: true,  cmd: 0x0b, color: '#a4741e' },
+    { n: 4, rotate: false, cmd: 0x0b, color: '#5a2a8a' }
+  ];
+  async function sendStripVariant(v) {
+    var w = profile.strip.w, h = profile.strip.h;
+    var content = document.createElement('canvas'); content.width = w; content.height = h;
+    var ctx = content.getContext('2d'); if (!ctx) return;
+    ctx.fillStyle = v.color; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, w - 4, h - 4);
+    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+    ctx.font = '700 78px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText(String(v.n), w / 2, h / 2 + 28);
+    ctx.font = '600 20px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('STRIP TEST', w / 2 - 220, h / 2 + 8);
+    ctx.fillText('STRIP TEST', w / 2 + 220, h / 2 + 8);
+    var out = content;
+    if (v.rotate) {
+      var dev2 = document.createElement('canvas'); dev2.width = h; dev2.height = w;
+      var d2 = dev2.getContext('2d'); if (!d2) return;
+      d2.translate(h / 2, w / 2); d2.rotate(-Math.PI / 2); d2.drawImage(content, -w / 2, -h / 2);
+      out = dev2;
+    }
+    var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.85); });
+    if (!blob) return;
+    var bytes = new Uint8Array(await blob.arrayBuffer());
+    var packets = (v.cmd === 0x0b) ? Device.stripWindowPackets(profile, bytes) : Device.stripImagePackets(profile, bytes);
+    console.log('[KeyWi] strip probe ' + v.n + ': cmd 0x' + v.cmd.toString(16) + ', jpeg ' + (v.rotate ? h + '×' + w : w + '×' + h) + ', ' + bytes.length + ' bytes, ' + packets.length + ' packets');
+    for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
+  }
+  async function stripProbe() {
+    if (!device || !profile || !profile.strip || stripProbeActive) return;
+    stripProbeActive = true;
+    toast('Strip check: watch the touch strip — remember which big NUMBER (1-4) shows up.');
+    for (var i = 0; i < STRIP_PROBE_VARIANTS.length; i++) {
+      var v = STRIP_PROBE_VARIANTS[i];
+      try { await sendStripVariant(v); }
+      catch (e) { console.warn('[KeyWi] strip probe ' + v.n + ' send failed:', (e && e.message) || e); }
+      await new Promise(function (r) { setTimeout(r, 2600); });
+      if (!device) break;
+    }
+    stripProbeActive = false;
+    lastStripSig = '';
+    try { await paintStrip(true); } catch (e) {}
   }
   // ── OBS-on-the-strip: a low-fps program monitor in any strip zone ────────────
   var obsFrameImg = null, obsFrameBusy = false, obsFrameLoop = null;
@@ -1338,6 +1398,7 @@
   document.addEventListener('visibilitychange', function () { if (document.hidden) releaseTalkback(false); });
   window.addEventListener('beforeunload', function () { releaseTalkback(true); });
 
+  try { console.log('[KeyWi] driver r4 — strip format probe build'); } catch (e) {}
   window.CueolaStreamDeck = {
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },
@@ -1347,6 +1408,7 @@
     _profileFor: function (pid, opts) { return Device.makeProfile(pid, opts || {}); },
     diagnose: deviceDiag,
     _testStrip: testStrip,
+    _stripProbe: stripProbe,
     _profiles: function () { return { profiles: profiles, active: activeProfileId, def: defaultProfileId }; }
   };
 })();

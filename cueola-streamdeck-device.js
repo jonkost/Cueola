@@ -266,6 +266,36 @@
     return packets;
   }
 
+  // Draw the whole touch window in one go (report 0x02 / cmd 0x0B, the
+  // "Update Window Image" command from Elgato's HID docs). 8-byte header like
+  // key images: [0x02, 0x0b, 0x00, done, len16, part16], payload at offset 8.
+  var IMG_LCD_FULL = 0x0b;
+  function stripWindowPackets(profile, imageBytes) {
+    if (!profile.strip) throw new Error('This device has no touch strip.');
+    var bytes = toBytes(imageBytes);
+    if (!bytes.length) throw new Error('Cannot send an empty strip image.');
+    var payloadMax = PACKET_SIZE - 8;
+    var packets = [];
+    var sent = 0, page = 0;
+    while (sent < bytes.length) {
+      var len = Math.min(payloadMax, bytes.length - sent);
+      var last = sent + len >= bytes.length;
+      var packet = new Uint8Array(PACKET_SIZE);
+      packet[0] = IMG_REPORT;
+      packet[1] = IMG_LCD_FULL;
+      packet[2] = 0x00;
+      packet[3] = last ? 1 : 0;
+      packet[4] = len & 0xff;
+      packet[5] = (len >> 8) & 0xff;
+      packet[6] = page & 0xff;
+      packet[7] = (page >> 8) & 0xff;
+      packet.set(bytes.subarray(sent, sent + len), 8);
+      packets.push({ reportId: IMG_REPORT, data: packet.subarray(1), page: page, last: last, length: len });
+      sent += len; page += 1;
+    }
+    return packets;
+  }
+
   // Draw one rectangular region of the touch LCD. The whole strip is one region
   // (x=0,y=0,w,h); a single zone is a narrower slice. Header layout follows the
   // shipping Stream Deck + protocol (report 0x02 / cmd 0x0C).
@@ -323,6 +353,7 @@
     keyEdges: keyEdges,
     keyImagePackets: keyImagePackets,
     stripImagePackets: stripImagePackets,
+    stripWindowPackets: stripWindowPackets,
     brightnessReport: brightnessReport,
     resetReport: resetReport
   });
