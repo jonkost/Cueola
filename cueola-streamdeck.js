@@ -1122,7 +1122,8 @@
       + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Key rotation', keyDeg() + '° (fixed)')
       + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (sr ? ', ' + sr + '°' : '')) : 'none') + '</div>'
       + '<div class="sd-learn-tune"><label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
-      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button></div>'
+      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button>'
+      + '<button class="btn-secondary" id="sd-diag">Copy device report</button></div>'
       + stripCal + '</div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
@@ -1227,12 +1228,30 @@
     r.querySelectorAll('.sd-srot-btn').forEach(function (b) { b.onclick = function () { applyStrip({ stripRotation: +b.getAttribute('data-srot') }); }; });
     bind('sd-strip-apply', function () { var v = function (id) { var el = document.getElementById(id); return el ? +el.value : 0; }; applyStrip({ stripW: v('sd-strip-w'), stripH: v('sd-strip-h'), stripZones: v('sd-strip-z') }); });
     bind('sd-strip-test', testStrip);
+    bind('sd-diag', function () {
+      var text = JSON.stringify(deviceDiag(), null, 2);
+      try { console.log('[KeyWi] device report:\n' + text); } catch (e) {}
+      var done = function () { toast('Device report copied. Paste it wherever you need it (also printed in the console).'); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); }); }
+        else fallbackCopy(text, done);
+      } catch (e) { fallbackCopy(text, done); }
+    });
     bind('sd-strip-on', function () { applyStrip({ enable: true }); });
     bind('sd-strip-off', function () { applyStrip({ enable: false }); });
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
   function bind(id, fn) { var el = document.getElementById(id); if (el) el.onclick = fn; }
+  // Clipboard without the async API (file://, http:, or a denied permission).
+  function fallbackCopy(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      done();
+    } catch (e) { toast('Could not copy — the report is in the browser console instead.'); }
+  }
 
   async function testPattern() {
     if (!device) return;
