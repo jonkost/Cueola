@@ -78,23 +78,27 @@
     0x006d: { name: 'Stream Deck (v2)',   keys: 15, cols: 5, keyPx: 72, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
     0x0080: { name: 'Stream Deck MK.2',   keys: 15, cols: 5, keyPx: 72, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
     0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, keyPx: 96, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
-    0x0084: { name: 'Stream Deck +',      keys: 8,  cols: 4, keyPx: 120, stateOffset: 3, rotation: 0,  reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 4, strip: { w: 800, h: 100, zones: 4 } }
+    0x0084: { name: 'Stream Deck +',      keys: 8,  cols: 4, keyPx: 120, stateOffset: 3, rotation: 0,  reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 4, strip: { w: 800, h: 100, zones: 4 } },
+    // Stream Deck + XL (Elgato model 20GBD9901). Numbers verified against
+    // Elgato's HID docs (docs.elgato.com/streamdeck/hid/stream-deck-plus-xl)
+    // and the node-elgato-stream-deck driver: 9×4 keys of 112 px JPEG rotated
+    // 90° counterclockwise before upload (= canvas 270° clockwise, hence
+    // mountRotation 270), six dials, and a 1200×100 touch window whose JPEG
+    // must ALSO be rotated 90° CCW — encoded 100 wide × 1200 tall — while the
+    // 0x0c draw header keeps logical 1200×100 coordinates (`encodeRotate`).
+    // The original Stream Deck + does NOT rotate its strip; that difference is
+    // exactly why this deck's strip stayed dark before this entry existed.
+    0x00c6: { name: 'Stream Deck + XL',   keys: 36, cols: 9, keyPx: 112, stateOffset: 3, rotation: 0, mountRotation: 270, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 6, strip: { w: 1200, h: 100, zones: 6, encodeRotate: true } }
   };
 
-  // The Stream Deck + XL the owner is building against: 36 keys, 6 dials, a
-  // 6-zone touch strip. Used when the connected Elgato device reports a product
-  // id we do not recognise (the likely case until the id is published), refined
-  // by the Unit Information descriptor and by Connect & Learn.
-  //
-  // `rotation` is the USER-facing key rotation (0 = upright, what the owner picks
-  // in Connect & Learn). `mountRotation` is a FIXED per-device offset that models
-  // how this hardware's key images are physically oriented, so that user 0 = truly
-  // upright. The + XL panel reads upright only when its key art is pre-rotated 270°
-  // ("270 is actually 0"), so its mount offset is 270 and its user default is 0.
+  // Fallback for a FUTURE unknown Elgato device (every current dial+strip model
+  // is pinned above): assume + XL-style hardware, refined by the Unit
+  // Information descriptor. Known models ignore unit info — their table entry
+  // is authoritative and firmware descriptor scans must not override it.
   var PLUS_XL_DEFAULT = {
-    name: 'Stream Deck + XL', keys: 36, cols: 9, keyPx: 96, stateOffset: 3, rotation: 0, mountRotation: 270,
+    name: 'Stream Deck + XL', keys: 36, cols: 9, keyPx: 112, stateOffset: 3, rotation: 0, mountRotation: 270,
     reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 6,
-    strip: { w: 1200, h: 100, zones: 6 }
+    strip: { w: 1200, h: 100, zones: 6, encodeRotate: true }
   };
 
   // ── Unit Information descriptor (getter feature report 0x08) ───────────────
@@ -136,7 +140,10 @@
     var base = KNOWN_MODELS[productId];
     var adaptive = !base;
     if (!base) base = PLUS_XL_DEFAULT;
-    var info = opts.unitInfo || {};
+    // Unit-info geometry only refines UNKNOWN hardware. For a pinned model the
+    // table is authoritative — a misparsed descriptor field (e.g. a bogus strip
+    // width) must never override verified numbers.
+    var info = adaptive ? (opts.unitInfo || {}) : {};
     var ov = opts.overrides || {};
     var pick = function (key, lo, hi) {
       if (ov[key] != null && Number.isFinite(Number(ov[key]))) return Number(ov[key]);
@@ -157,10 +164,9 @@
         w: (ov.stripW || info.stripW || stripBase.w),
         h: (ov.stripH || stripBase.h),
         zones: (ov.stripZones || stripBase.zones || Math.max(dials, 1)),
-        // Independent strip orientation. Key art and the LCD strip can need
-        // different rotations, so the strip carries its own (calibrated in
-        // Connect & Learn), rather than blindly inheriting the key rotation.
-        rot: (((Number(ov.stripRotation != null ? ov.stripRotation : (stripBase.rot || 0)) % 360) + 360) % 360),
+        // + XL quirk (per Elgato HID docs): the strip JPEG is rotated 90° CCW
+        // and encoded height×width, while the draw header keeps logical coords.
+        encodeRotate: !!stripBase.encodeRotate,
         reportId: IMG_REPORT, command: IMG_LCD_REGION, packetSize: PACKET_SIZE, headerSize: LCD_HEADER
       };
     }

@@ -814,10 +814,8 @@
   // The strip is a glanceable dashboard: one zone per dial. Accent line in the
   // dial's hue, the big value in tabular digits, a progress bar for continuous
   // things, a breathing dot when its thing is running, and the press action in
-  // small type so nobody has to remember what a tap does.
-  // Draw the strip's glanceable dashboard into a context sized cw×ch (the
-  // "upright" content frame). Kept separate from device orientation so the same
-  // layout can be composed at any strip rotation.
+  // small type so nobody has to remember what a tap does. Drawn in the strip's
+  // logical space; stripBytesFromContent handles the device's encode rotation.
   function drawStripContent(ctx, cells, cw, ch) {
     ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, cw, ch);
     var zw = cw / cells.length;
@@ -856,22 +854,25 @@
       if (cell.tap) { ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('tap: ' + cell.tap, x, ch - 8); }
     });
   }
-  // Compose an upright content canvas into the device's fixed w×h LCD buffer,
-  // applying the strip's calibrated rotation. 90/270 swap the content's axes so
-  // zones still run along the strip's long edge.
+  // Encode the strip's content for the wire. Content is always drawn in the
+  // strip's logical space (w×h, zones left to right). On the + XL the panel
+  // wants that image rotated 90° counterclockwise and encoded height×width
+  // (per Elgato's HID docs), while the 0x0c draw header keeps logical coords —
+  // `encodeRotate` on the profile carries that fact. Other strip decks (the
+  // original +) encode the logical image as-is.
   async function stripBytesFromContent(drawFn) {
     var w = profile.strip.w, h = profile.strip.h;
-    var rot = (((profile.strip.rot || 0) % 360) + 360) % 360;
-    var swap = (rot === 90 || rot === 270);
-    var cw = swap ? h : w, ch = swap ? w : h;
-    var content = document.createElement('canvas'); content.width = cw; content.height = ch;
+    var content = document.createElement('canvas'); content.width = w; content.height = h;
     var cctx = content.getContext('2d'); if (!cctx) return null;
-    drawFn(cctx, cw, ch);
-    var dev = document.createElement('canvas'); dev.width = w; dev.height = h;
-    var dctx = dev.getContext('2d'); if (!dctx) return null;
-    dctx.fillStyle = '#07090d'; dctx.fillRect(0, 0, w, h);
-    dctx.save(); dctx.translate(w / 2, h / 2); dctx.rotate(rot * Math.PI / 180); dctx.drawImage(content, -cw / 2, -ch / 2); dctx.restore();
-    var blob = await new Promise(function (res) { dev.toBlob(res, 'image/jpeg', 0.85); });
+    drawFn(cctx, w, h);
+    var out = content;
+    if (profile.strip.encodeRotate) {
+      var dev = document.createElement('canvas'); dev.width = h; dev.height = w;
+      var dctx = dev.getContext('2d'); if (!dctx) return null;
+      dctx.translate(h / 2, w / 2); dctx.rotate(-Math.PI / 2); dctx.drawImage(content, -w / 2, -h / 2);
+      out = dev;
+    }
+    var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.85); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
   }
   async function renderStripJpeg(cells) {
@@ -908,9 +909,14 @@
       defaultProfileId = raw.defaultProfile && profiles[raw.defaultProfile] ? raw.defaultProfile : activeProfileId;
       activeProfileId = defaultProfileId || activeProfileId;
     }
-    // Key rotation is a fixed property of the hardware (model orientation + mount
-    // offset), not a preference. Drop any rotation an older build stored, so it can
-    // never stack on top of the mount offset and paint the keys wrong.
+    // Geometry model v3: the + XL (0x00c6) is pinned from Elgato's own HID docs,
+    // so geometry is a fact of the hardware, not a preference. Wipe anything the
+    // old calibration UI stored (manual strip sizes, rotations, column counts) —
+    // stale experiments must never shadow verified numbers. Layouts are kept.
+    if (overrides._calModel !== 3) {
+      ['rotation', 'stripW', 'stripH', 'stripZones', 'stripRotation', 'stripForce', 'strip', 'cols', 'keys', 'keyPx'].forEach(function (k) { delete overrides[k]; });
+      overrides._calModel = 3;
+    }
     if (overrides.rotation != null) delete overrides.rotation;
     return { overrides: overrides };
   }
@@ -1079,11 +1085,7 @@
           + '</div>';
       }
       html += '</div>';
-      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors your ' + profile.strip.zones + ' dials: accent bar, live value, and a progress bar. Tap a zone = press its dial. Flick left or right = a big turn. '
-        + (device
-          ? 'Blank or misaligned on the deck? Open <b>Connect &amp; Learn</b> at the bottom of this page and use <b>Test strip</b>.'
-          : 'The strip only draws on real hardware — connect your deck to calibrate it in Connect &amp; Learn.')
-        + '</div>';
+      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors these dials live. Tap a zone = press its dial. Flick left or right = a big turn.</div>';
     }
     html += legendCard();
     return html;
@@ -1098,33 +1100,18 @@
       + '<div class="sd-legend-row"><span class="sf-symbol" data-symbol="action.repeat" aria-hidden="true"></span><div><b>Layouts</b> are whole pages of key assignments. Save one per situation (rehearsal, live, OBS-heavy) and jump between them with a PAGE key, right from the deck.</div></div>'
       + '</div></details>';
   }
+  // Read-only facts about the connected deck. Geometry comes from the model
+  // table (verified against Elgato's HID docs) — nothing here needs tuning.
   function learnPanel() {
-    var u = device.unitInfo || {};
-    var sr = (profile.strip && profile.strip.rot) || 0;
-    var stripCal = !profile.strip ? (''
-      + '<div class="sd-learn-tune sd-strip-cal"><span class="sd-tune-lbl">Touch strip</span>'
-      + '<span class="sd-note">No touch strip detected on this deck. If yours has an LCD strip above the dials, turn it on and calibrate it here.</span>'
-      + '<button class="btn-secondary" id="sd-strip-on">Enable touch strip</button></div>')
-    : (''
-      + '<div class="sd-learn-tune sd-strip-cal"><span class="sd-tune-lbl">Touch strip</span>'
-      + '<label>W <input type="number" id="sd-strip-w" min="100" max="2000" value="' + profile.strip.w + '"></label>'
-      + '<label>H <input type="number" id="sd-strip-h" min="40" max="480" value="' + profile.strip.h + '"></label>'
-      + '<label>Zones <input type="number" id="sd-strip-z" min="1" max="8" value="' + profile.strip.zones + '"></label>'
-      + '<span class="sd-tune-lbl">turn</span><div class="sd-rot-btns">'
-      + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-srot-btn' + (sr === d ? ' cur' : '') + '" data-srot="' + d + '">' + d + '&deg;</button>'; }).join('')
-      + '</div><button class="btn-secondary" id="sd-strip-apply">Apply strip</button>'
-      + '<button class="btn-secondary" id="sd-strip-test">Test strip</button>'
-      + '<button class="sd-mini" id="sd-strip-off" title="This deck has no touch strip">Turn off</button></div>'
-      + '<span class="sd-note">Strip blank or showing just a small block? Tap <b>Test strip</b> — it paints a numbered ruler at the current size. Set <b>W</b>/<b>H</b> to match the area that actually fills your strip, then <b>Apply strip</b>. Use the °&nbsp;buttons if it reads sideways or upside-down.</span>');
-    return '<details class="sd-learn" open><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
+    return '<details class="sd-learn"><summary>Deck details</summary><div class="sd-learn-body">'
       + '<div class="sd-learn-grid">'
-      + learnField('Product id', '0x' + profile.productId.toString(16)) + learnField('Keys', profile.keys + (u.keys ? ' (device says ' + u.keys + ')' : '')) + learnField('Columns', profile.cols)
-      + learnField('Key pixels', profile.keyPx) + learnField('Dials', profile.dials) + learnField('Key rotation', keyDeg() + '° (fixed)')
-      + learnField('Strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (sr ? ', ' + sr + '°' : '')) : 'none') + '</div>'
-      + '<div class="sd-learn-tune"><label>Columns <input type="number" id="sd-cols" min="3" max="12" value="' + profile.cols + '"></label>'
-      + '<button class="btn-secondary" id="sd-relearn">Apply columns</button>'
-      + '<button class="btn-secondary" id="sd-diag">Copy device report</button></div>'
-      + stripCal + '</div></details>';
+      + learnField('Model', profile.name)
+      + learnField('Product id', '0x' + profile.productId.toString(16))
+      + learnField('Keys', profile.keys + ' (' + profile.cols + ' × ' + profile.rows + ')')
+      + learnField('Dials', profile.dials)
+      + learnField('Key art', profile.keyPx + ' px')
+      + learnField('Touch strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones') : 'none')
+      + '</div></div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
   function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Daemon connected' : 'Not running'; } }
@@ -1223,35 +1210,10 @@
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
     var th = document.getElementById('sd-theme'); if (th) th.onchange = function () { setTheme(th.value); };
     bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
-    var relearn = document.getElementById('sd-relearn');
-    if (relearn) relearn.onclick = function () { var cols = +document.getElementById('sd-cols').value; if (cols >= 3 && cols <= 12) overrides.cols = cols; persist(); profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides }); device.profile = profile; registerLabelModel(profile); ensureProfilesShape(); paintAll(); render(); };
-    r.querySelectorAll('.sd-srot-btn').forEach(function (b) { b.onclick = function () { applyStrip({ stripRotation: +b.getAttribute('data-srot') }); }; });
-    bind('sd-strip-apply', function () { var v = function (id) { var el = document.getElementById(id); return el ? +el.value : 0; }; applyStrip({ stripW: v('sd-strip-w'), stripH: v('sd-strip-h'), stripZones: v('sd-strip-z') }); });
-    bind('sd-strip-test', testStrip);
-    bind('sd-diag', function () {
-      var text = JSON.stringify(deviceDiag(), null, 2);
-      try { console.log('[KeyWi] device report:\n' + text); } catch (e) {}
-      var done = function () { toast('Device report copied. Paste it wherever you need it (also printed in the console).'); };
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); }); }
-        else fallbackCopy(text, done);
-      } catch (e) { fallbackCopy(text, done); }
-    });
-    bind('sd-strip-on', function () { applyStrip({ enable: true }); });
-    bind('sd-strip-off', function () { applyStrip({ enable: false }); });
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
   function bind(id, fn) { var el = document.getElementById(id); if (el) el.onclick = fn; }
-  // Clipboard without the async API (file://, http:, or a denied permission).
-  function fallbackCopy(text, done) {
-    try {
-      var ta = document.createElement('textarea');
-      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px';
-      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-      done();
-    } catch (e) { toast('Could not copy — the report is in the browser console instead.'); }
-  }
 
   async function testPattern() {
     if (!device) return;
@@ -1260,31 +1222,12 @@
     lastPainted = new Array(profile.keys).fill('test');
     toast('Test pattern sent. Keys are numbered 1-' + profile.keys + ' left to right, top to bottom.');
   }
-  // Live strip re-calibration. The + XL is unpublished hardware, so W/H/zones/rot
-  // are owner-adjustable; a stored override rebuilds the frozen profile in place.
-  function applyStrip(patch) {
-    if (!device || !profile) return;
-    if (patch.enable === true) { overrides.stripForce = true; delete overrides.strip; }
-    if (patch.enable === false) { overrides.strip = null; delete overrides.stripForce; }
-    if (!profile.strip && patch.enable !== true) return;
-    if (patch.stripW && patch.stripW >= 100 && patch.stripW <= 2000) overrides.stripW = Math.round(patch.stripW);
-    if (patch.stripH && patch.stripH >= 40 && patch.stripH <= 480) overrides.stripH = Math.round(patch.stripH);
-    if (patch.stripZones && patch.stripZones >= 1 && patch.stripZones <= 8) overrides.stripZones = Math.round(patch.stripZones);
-    if (patch.stripRotation != null) overrides.stripRotation = (((patch.stripRotation % 360) + 360) % 360);
-    persist();
-    profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides });
-    device.profile = profile; ensureProfilesShape(); registerLabelModel(profile); lastStripSig = ''; paintAll(); render();
-    toast(profile.strip
-      ? 'Strip set to ' + profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (profile.strip.rot ? ', ' + profile.strip.rot + '°' : '') + '.'
-      : 'Touch strip turned off for this deck.');
-  }
-  // A calibration ruler for the touch LCD: red border on the outermost pixels,
-  // yellow squares in all four corners, 100px ticks, green zone dividers, and the
-  // pixel dimensions in the middle. From the deck (or a recording) you can read
-  // exactly how much of the strip the current W/H fills, then dial it in.
+  // A diagnostic ruler for the touch LCD (console-only tool, no UI): red border
+  // on the outermost pixels, yellow corner squares, 100px ticks, green zone
+  // dividers, and the pixel dimensions in the middle.
   async function testStrip() {
     if (!device || !profile) { toast('Connect a deck first.'); return; }
-    if (!profile.strip) { toast('This deck is profiled with no touch strip. Use "Enable touch strip" just above.'); return; }
+    if (!profile.strip) { toast('This deck has no touch strip.'); return; }
     var zones = profile.strip.zones;
     lastStripSig = '';
     // Dump the device's own truth first — product id, resolved profile, and the
@@ -1332,12 +1275,12 @@
       toast('Strip test FAILED at packet ' + (sent + 1) + '/' + packets.length + ': ' + ((failure && failure.message) || failure) + ' — see console.');
       return;
     }
-    toast('Strip test sent OK: ' + packets.length + ' packets, ' + bytes.length + ' bytes, ' + profile.strip.w + '×' + profile.strip.h
-      + '. Still dark? The deck accepted the data, so the LCD framing is wrong — copy the console report.');
+    toast('Strip test sent OK: ' + packets.length + ' packets, ' + bytes.length + ' bytes, ' + profile.strip.w + '×' + profile.strip.h + '.');
   }
   // Everything the driver knows about the connected deck, including the report
-  // sizes the hardware itself advertises over WebHID. This is ground truth: the
-  // + XL geometry in the profile table is an assumption, these numbers are not.
+  // sizes the hardware itself advertises over WebHID. Console-only diagnostics
+  // (CueolaStreamDeck.diagnose()) — geometry itself comes from the model table,
+  // verified against Elgato's published HID docs.
   function deviceDiag() {
     if (!device) return { connected: false };
     var d = device.hid;
@@ -1354,7 +1297,7 @@
         name: profile.name, adaptive: !!profile.adaptive, keys: profile.keys, cols: profile.cols, rows: profile.rows,
         keyPx: profile.keyPx, dials: profile.dials, stateOffset: profile.stateOffset,
         keyRotationDeg: keyDeg(),
-        strip: profile.strip ? { w: profile.strip.w, h: profile.strip.h, zones: profile.strip.zones, rot: profile.strip.rot, command: profile.strip.command, headerSize: profile.strip.headerSize, packetSize: profile.strip.packetSize } : null
+        strip: profile.strip ? { w: profile.strip.w, h: profile.strip.h, zones: profile.strip.zones, encodeRotate: !!profile.strip.encodeRotate, command: profile.strip.command, headerSize: profile.strip.headerSize, packetSize: profile.strip.packetSize } : null
       },
       unitInfoFromDevice: device.unitInfo || {},
       savedOverrides: overrides,
@@ -1403,6 +1346,7 @@
     _fire: fireSlot,
     _profileFor: function (pid, opts) { return Device.makeProfile(pid, opts || {}); },
     diagnose: deviceDiag,
+    _testStrip: testStrip,
     _profiles: function () { return { profiles: profiles, active: activeProfileId, def: defaultProfileId }; }
   };
 })();
