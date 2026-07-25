@@ -147,7 +147,10 @@
     var cols = pick('cols', 3, 12);
     var rows = Math.max(1, Math.ceil(keys / cols));
     var dials = ov.dials != null ? Number(ov.dials) : base.dials;
-    var stripBase = base.strip || (adaptive ? PLUS_XL_DEFAULT.strip : null);
+    // A strip exists when the model ships one, when the device is unknown (the
+    // adaptive + XL assumption), or when the owner force-enables one in Connect &
+    // Learn (`stripForce`) because their hardware has an LCD we did not detect.
+    var stripBase = base.strip || ((adaptive || ov.stripForce) ? PLUS_XL_DEFAULT.strip : null);
     var strip = null;
     if (stripBase && (ov.strip !== null)) {
       strip = {

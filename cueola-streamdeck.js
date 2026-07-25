@@ -1085,7 +1085,11 @@
           + '</div>';
       }
       html += '</div>';
-      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors your ' + profile.strip.zones + ' dials: accent bar, live value, and a progress bar. Tap a zone = press its dial. Flick left or right = a big turn. If it looks blank or misaligned, calibrate it in <b>Connect &amp; Learn</b> below.</div>';
+      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors your ' + profile.strip.zones + ' dials: accent bar, live value, and a progress bar. Tap a zone = press its dial. Flick left or right = a big turn. '
+        + (device
+          ? 'Blank or misaligned on the deck? Open <b>Connect &amp; Learn</b> at the bottom of this page and use <b>Test strip</b>.'
+          : 'The strip only draws on real hardware — connect your deck to calibrate it in Connect &amp; Learn.')
+        + '</div>';
     }
     html += legendCard();
     return html;
@@ -1103,7 +1107,11 @@
   function learnPanel() {
     var u = device.unitInfo || {};
     var sr = (profile.strip && profile.strip.rot) || 0;
-    var stripCal = profile.strip ? (''
+    var stripCal = !profile.strip ? (''
+      + '<div class="sd-learn-tune sd-strip-cal"><span class="sd-tune-lbl">Touch strip</span>'
+      + '<span class="sd-note">No touch strip detected on this deck. If yours has an LCD strip above the dials, turn it on and calibrate it here.</span>'
+      + '<button class="btn-secondary" id="sd-strip-on">Enable touch strip</button></div>')
+    : (''
       + '<div class="sd-learn-tune sd-strip-cal"><span class="sd-tune-lbl">Touch strip</span>'
       + '<label>W <input type="number" id="sd-strip-w" min="100" max="2000" value="' + profile.strip.w + '"></label>'
       + '<label>H <input type="number" id="sd-strip-h" min="40" max="480" value="' + profile.strip.h + '"></label>'
@@ -1111,8 +1119,9 @@
       + '<span class="sd-tune-lbl">turn</span><div class="sd-rot-btns">'
       + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-srot-btn' + (sr === d ? ' cur' : '') + '" data-srot="' + d + '">' + d + '&deg;</button>'; }).join('')
       + '</div><button class="btn-secondary" id="sd-strip-apply">Apply strip</button>'
-      + '<button class="btn-secondary" id="sd-strip-test">Test strip</button></div>'
-      + '<span class="sd-note">Strip blank or showing just a small block? Tap <b>Test strip</b> — it paints a numbered ruler at the current size. Set <b>W</b>/<b>H</b> to match the area that actually fills your strip, then <b>Apply strip</b>. Use the °&nbsp;buttons if it reads sideways or upside-down.</span>') : '';
+      + '<button class="btn-secondary" id="sd-strip-test">Test strip</button>'
+      + '<button class="sd-mini" id="sd-strip-off" title="This deck has no touch strip">Turn off</button></div>'
+      + '<span class="sd-note">Strip blank or showing just a small block? Tap <b>Test strip</b> — it paints a numbered ruler at the current size. Set <b>W</b>/<b>H</b> to match the area that actually fills your strip, then <b>Apply strip</b>. Use the °&nbsp;buttons if it reads sideways or upside-down.</span>');
     return '<details class="sd-learn" open><summary>Connect &amp; Learn (device details)</summary><div class="sd-learn-body">'
       + '<div class="sd-rotate-row"><span class="sd-tune-lbl">Key rotation</span><div class="sd-rot-btns">'
       + [0, 90, 180, 270].map(function (d) { return '<button class="sd-mini sd-rot-btn' + ((profile.rotation || 0) === d ? ' cur' : '') + '" data-rot="' + d + '">' + d + '&deg;</button>'; }).join('')
@@ -1228,6 +1237,8 @@
     r.querySelectorAll('.sd-srot-btn').forEach(function (b) { b.onclick = function () { applyStrip({ stripRotation: +b.getAttribute('data-srot') }); }; });
     bind('sd-strip-apply', function () { var v = function (id) { var el = document.getElementById(id); return el ? +el.value : 0; }; applyStrip({ stripW: v('sd-strip-w'), stripH: v('sd-strip-h'), stripZones: v('sd-strip-z') }); });
     bind('sd-strip-test', testStrip);
+    bind('sd-strip-on', function () { applyStrip({ enable: true }); });
+    bind('sd-strip-off', function () { applyStrip({ enable: false }); });
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
@@ -1243,7 +1254,10 @@
   // Live strip re-calibration. The + XL is unpublished hardware, so W/H/zones/rot
   // are owner-adjustable; a stored override rebuilds the frozen profile in place.
   function applyStrip(patch) {
-    if (!device || !profile || !profile.strip) return;
+    if (!device || !profile) return;
+    if (patch.enable === true) { overrides.stripForce = true; delete overrides.strip; }
+    if (patch.enable === false) { overrides.strip = null; delete overrides.stripForce; }
+    if (!profile.strip && patch.enable !== true) return;
     if (patch.stripW && patch.stripW >= 100 && patch.stripW <= 2000) overrides.stripW = Math.round(patch.stripW);
     if (patch.stripH && patch.stripH >= 40 && patch.stripH <= 480) overrides.stripH = Math.round(patch.stripH);
     if (patch.stripZones && patch.stripZones >= 1 && patch.stripZones <= 8) overrides.stripZones = Math.round(patch.stripZones);
@@ -1251,7 +1265,9 @@
     persist();
     profile = Device.makeProfile(profile.productId, { unitInfo: device.unitInfo, overrides: overrides });
     device.profile = profile; ensureProfilesShape(); registerLabelModel(profile); lastStripSig = ''; paintAll(); render();
-    toast('Strip set to ' + profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (profile.strip.rot ? ', ' + profile.strip.rot + '°' : '') + '.');
+    toast(profile.strip
+      ? 'Strip set to ' + profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones' + (profile.strip.rot ? ', ' + profile.strip.rot + '°' : '') + '.'
+      : 'Touch strip turned off for this deck.');
   }
   // A calibration ruler for the touch LCD: red border on the outermost pixels,
   // yellow squares in all four corners, 100px ticks, green zone dividers, and the
