@@ -233,6 +233,7 @@
   var brightness = 80, paintTimer = null, jogAccum = 0, muteMemory = null;
   var learnArmed = false, editingKey = -1;
   var previewMode = false;            // on-screen deck with no hardware, for playing with layouts + themes
+  var diagInfo = null;                // last hardware diagnostics capture (read-only report)
   var animTimer = null, animPhase = 0, hypeRunning = false;
   var PREVIEW_PID = 0xf1f1;
   var mode = 'local';
@@ -371,6 +372,120 @@
       } catch (e) { return; }
     }
     lastPainted = new Array(profile.keys).fill('wave');    // force the real layout to repaint over it
+  }
+
+  // ── Deck diagnostics (read-only) ────────────────────────────────────────────
+  // Shows what the hardware itself reports, on screen: vendor/product ids, the
+  // product name string, the HID report descriptor as the browser parsed it
+  // (WebHID never exposes the raw descriptor bytes — the parsed collections are
+  // the closest available), and a hex dump of every feature report the
+  // descriptor declares, including 0x08 Unit Information (the report the driver
+  // reads geometry from). GET-only inspection: nothing is written to the device
+  // and no model definition is touched.
+  function hexDump(bytes, max) {
+    if (!bytes || !bytes.length) return '(empty)';
+    var n = Math.min(bytes.length, max || 96);
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(('0' + bytes[i].toString(16)).slice(-2));
+    return out.join(' ') + (bytes.length > n ? ' … (' + bytes.length + ' bytes total)' : '');
+  }
+  function describeReports(list, kind) {
+    return (list || []).map(function (rep) {
+      var items = (rep.items || []).map(function (it) {
+        var usages = (it.usages || []).map(function (u) { return '0x' + u.toString(16); }).join(',');
+        return it.reportCount + '×' + it.reportSize + 'bit' + (usages ? ' usages[' + usages + ']' : '');
+      }).join('; ');
+      return kind + ' report 0x' + (rep.reportId || 0).toString(16) + (items ? ' — ' + items : '');
+    });
+  }
+  function describeCollections(cols, indent) {
+    var rows = [];
+    (cols || []).forEach(function (c) {
+      rows.push(indent + 'collection usagePage=0x' + (c.usagePage || 0).toString(16) + ' usage=0x' + (c.usage || 0).toString(16));
+      describeReports(c.inputReports, 'input').forEach(function (r) { rows.push(indent + '  ' + r); });
+      describeReports(c.outputReports, 'output').forEach(function (r) { rows.push(indent + '  ' + r); });
+      describeReports(c.featureReports, 'feature').forEach(function (r) { rows.push(indent + '  ' + r); });
+      rows = rows.concat(describeCollections(c.children, indent + '  '));
+    });
+    return rows;
+  }
+  async function runDiagnostics() {
+    if (!navigator.hid) { toast('WebHID needs Chrome or Edge.'); return; }
+    var dev = device && device.hid, openedHere = false;
+    try {
+      if (!dev) {
+        var have = (await navigator.hid.getDevices()).filter(supportedFilter);
+        dev = have[0];
+        if (!dev) { var picked = await navigator.hid.requestDevice({ filters: [{ vendorId: Device.ELGATO_VID }] }); dev = picked && picked[0]; }
+      }
+    } catch (e) { toast('Stream Deck selection cancelled.'); return; }
+    if (!dev) { toast('No Stream Deck selected. Quit the Elgato app first, then try again.'); return; }
+    var known = Device.KNOWN_MODELS[dev.productId];
+    var report = {
+      vendorId: '0x' + dev.vendorId.toString(16),
+      productId: '0x' + dev.productId.toString(16),
+      productName: dev.productName || '(no product name string)',
+      knownModel: known ? known.name : 'NOT in the model table — the adaptive + XL fallback would apply',
+      descriptor: [],
+      features: []
+    };
+    try { if (!dev.opened) { await dev.open(); openedHere = true; } }
+    catch (e) {
+      report.error = 'Could not open the device (quit the Elgato Stream Deck app — it claims the USB device): ' + (e && e.message ? e.message : e);
+      diagInfo = report; render(); return;
+    }
+    report.descriptor = describeCollections(dev.collections, '');
+    // Read every feature report the descriptor declares, plus 0x08 Unit Info
+    // even when undeclared — reads only, a GET can't change device state.
+    var ids = {};
+    (function walk(cols) { (cols || []).forEach(function (c) { (c.featureReports || []).forEach(function (r) { ids[r.reportId] = true; }); walk(c.children); }); })(dev.collections);
+    ids[0x08] = true;
+    var idList = Object.keys(ids).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < idList.length; i++) {
+      var id = idList[i], row = { id: '0x' + id.toString(16) };
+      try {
+        var dv = await dev.receiveFeatureReport(id);
+        var bytes = dv && dv.buffer ? new Uint8Array(dv.buffer, dv.byteOffset || 0, dv.byteLength) : null;
+        row.hex = hexDump(bytes, 96);
+        if (id === 0x08) row.parsed = JSON.stringify(Device.parseUnitInfo(bytes));
+      } catch (e) { row.error = String(e && e.message ? e.message : e); }
+      report.features.push(row);
+    }
+    if (openedHere && !device) { try { await dev.close(); } catch (e) {} }
+    diagInfo = report;
+    render();
+    toast('Deck diagnostics captured. Nothing was changed on the device.');
+  }
+  function diagText() {
+    if (!diagInfo) return '';
+    var d = diagInfo, lines = [];
+    lines.push('Vendor id:    ' + d.vendorId);
+    lines.push('Product id:   ' + d.productId);
+    lines.push('Product name: ' + d.productName);
+    lines.push('Model table:  ' + d.knownModel);
+    if (d.error) lines.push('ERROR:        ' + d.error);
+    if (d.descriptor.length) {
+      lines.push('');
+      lines.push('Report descriptor (parsed by the browser; WebHID does not expose the raw bytes):');
+      lines = lines.concat(d.descriptor);
+    }
+    if (d.features.length) {
+      lines.push('');
+      lines.push('Feature report dumps (GET only):');
+      d.features.forEach(function (f) {
+        lines.push('  feature ' + f.id + (f.error ? ' — read failed: ' + f.error : ' — ' + f.hex));
+        if (f.parsed) lines.push('    parsed as Unit Information: ' + f.parsed);
+      });
+    }
+    return lines.join('\n');
+  }
+  function diagPanel() {
+    if (!diagInfo) return '';
+    return '<div class="sd-diag"><div class="sd-diag-head"><b>Deck diagnostics</b>'
+      + '<span class="sd-pf-sp"></span>'
+      + '<button class="sd-mini" id="sd-diag-copy">Copy report</button>'
+      + '<button class="sd-mini" id="sd-diag-close">Close</button></div>'
+      + '<pre class="sd-diag-pre">' + esc(diagText()) + '</pre></div>';
   }
 
   function onDisconnect(e) { if (!device) return; if (e && e.device && e.device !== device.hid) return; teardownDevice(); toast('Stream Deck disconnected.'); render(); }
@@ -989,7 +1104,7 @@
     var r = root(); if (!r) return;
     if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi Bird needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
     var showGrid = device || previewMode;
-    r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) : connectHelp());
+    r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) + diagPanel() : connectHelp());
     wire(); renderStatus(); updateLiveBadge();
     if (showGrid) paintMirror();
   }
@@ -1017,11 +1132,11 @@
     var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
     return '<div class="sd-setup">'
       + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi Bird reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
-      + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button>')
+      + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show. <b>Diagnostics</b> just reads and prints what the hardware reports (ids, name, descriptor) without connecting it as a control surface.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button> <button class="btn-secondary" id="sd-diag">Diagnostics</button>')
       + stepRow(2, tbOn, 'Micochondria — talkback (optional)', tbOn ? 'Daemon connected. TKB and VofU are live, hold to talk.' : 'For the TKB (Talkback) and VofU (Voice of the Universe) mic keys, start the talkbackd daemon on this machine. KeyWi Bird finds it by itself and this dot turns green.', '')
       + stepRow(3, obsOn, 'OBS (optional)', obsOn ? 'OBS connected. Stream, record, and scene keys are live.' : 'For stream, record, and scene keys: in OBS enable Tools &rsaquo; WebSocket Server Settings, then connect below once the deck is on.', '')
       + '<div class="sd-setup-foot">Everything runs from this tab. Keep Cueola open here while you run the show.</div>'
-      + '</div>';
+      + '</div>' + diagPanel();
   }
   function stepRow(n, done, title, body, action) {
     return '<div class="sd-step' + (done ? ' done' : '') + '"><div class="sd-step-dot">' + (done ? '✓' : n) + '</div>'
@@ -1111,7 +1226,8 @@
       + learnField('Dials', profile.dials)
       + learnField('Key art', profile.keyPx + ' px')
       + learnField('Touch strip', profile.strip ? (profile.strip.w + '×' + profile.strip.h + ', ' + profile.strip.zones + ' zones') : 'none')
-      + '</div></div></details>';
+      + '</div><div class="sd-learn-tune"><button class="btn-secondary" id="sd-diag">Diagnostics</button><span class="sd-note">Print what the hardware itself reports (ids, name string, descriptor, feature dumps).</span></div>'
+      + '</div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
   function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Daemon connected' : 'Not running'; } }
@@ -1196,6 +1312,13 @@
   function wire() {
     var r = root(); if (!r) return;
     bind('sd-connect', connect); bind('sd-connect2', connect); bind('sd-disconnect', disconnect);
+    bind('sd-diag', runDiagnostics);
+    bind('sd-diag-close', function () { diagInfo = null; render(); });
+    bind('sd-diag-copy', function () {
+      var text = diagText(); if (!text) return;
+      try { navigator.clipboard.writeText(text).then(function () { toast('Diagnostics copied.'); }, function () { toast('Copy failed — select the text and copy by hand.'); }); }
+      catch (e) { toast('Copy failed — select the text and copy by hand.'); }
+    });
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
     bind('sd-learn', function () { learnArmed = !learnArmed; render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });

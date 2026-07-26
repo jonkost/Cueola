@@ -5843,6 +5843,9 @@ input.pt-range::-moz-range-thumb,
 .sd-lf b { font-size:14px; }
 .sd-learn-tune { display:flex; flex-wrap:wrap; gap:var(--sp-3,12px); align-items:center; padding:8px 0 14px; }
 .sd-learn-tune input[type=number] { width:60px; }
+.sd-diag { margin-top:var(--sp-4,16px); background:var(--s1); border:1px solid var(--border); border-radius:var(--ui-radius-group,16px); padding:12px var(--sp-4,16px) var(--sp-4,16px); max-width:920px; }
+.sd-diag-head { display:flex; align-items:center; gap:var(--sp-2,8px); margin-bottom:10px; }
+.sd-diag-pre { margin:0; max-height:340px; overflow:auto; background:var(--s2); border-radius:10px; padding:12px; font-family:var(--mono-num); font-size:12px; line-height:1.55; color:var(--text2); white-space:pre; }
 .sd-picker { display:none; position:fixed; inset:0; background:color-mix(in srgb,var(--bg) 72%,transparent); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:50; align-items:center; justify-content:center; }
 .sd-picker.on { display:flex; }
 .sd-picker-card { background:var(--s1); border:1px solid var(--bord2); border-radius:var(--ui-radius-panel,22px); width:min(440px,92vw); max-height:80vh; overflow:auto; padding:var(--sp-4,16px); box-shadow:var(--liquid-shadow-raised,0 28px 74px rgba(0,0,0,.30)); }
@@ -5929,7 +5932,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/outrangutan.js?v=984299cd5d"></script>
 <script src="cueola-streamdeck-device.js?v=5c056b7c38"></script>
 <script src="cueola-obs.js?v=b17032dbf7"></script>
-<script src="cueola-streamdeck.js?v=d0976e930a"></script>
+<script src="cueola-streamdeck.js?v=ef7cf16534"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
