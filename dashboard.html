@@ -1866,6 +1866,17 @@ function dashboardProfileAliases(profile) {
   return [...new Set(ids.filter(id => id && id !== current))].slice(0, 40);
 }
 
+// Resolves true once the Firebase module bootstrap has published its handles
+// (the firebaseReady event at the bottom of this page), or false after the
+// timeout so callers can show a "check your internet" path instead of hanging.
+async function waitForFirebase(ms=8000) {
+  if (window._firebaseReady) return true;
+  return new Promise(res=>{
+    const t=setTimeout(()=>res(false),ms);
+    window.addEventListener('firebaseReady',()=>{clearTimeout(t);res(true)},{once:true});
+  });
+}
+
 async function loadIdentityAdminData() {
   if (!window._firebaseReady) { await waitForFirebase(); }
   try {

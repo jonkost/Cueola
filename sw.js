@@ -134,7 +134,10 @@ const versionSignature = SHELL_ASSETS
 // JS; roll the shell so a plain reload picks it all up.
 // 12->13: renamed to "KeyWi Bird" + new brand icon assets/Brand/KeyWi_icon.svg
 // (precached unversioned) on the front-page card and the screen header.
-const WORKER_SCHEMA = '13';
+// 13->14: dashboard.html-only fix — restored the deleted waitForFirebase()
+// helper (New Session wizard + early Accounts load); the shell caches
+// dashboard.html, so only a schema roll delivers the fix to installed clients.
+const WORKER_SCHEMA = '14';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
