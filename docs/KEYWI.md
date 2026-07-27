@@ -106,6 +106,17 @@ the show) and the bus output while keyed. Meters and faders appear only when
 the running talkbackd speaks the levels protocol (`talkback/README.md`); an
 older daemon still gets the honest connected/off panel.
 
+**Pop out** (in the panel header) opens Micochondria in its own little window:
+the connected dot, both mics with lamp and meter, hold-to-talk, and the all-off
+panic, sized to sit in a corner of a second display. It closes with the tab,
+and a hold started there releases the moment the window loses focus, same as
+everywhere else.
+
+There is also a **Micochondria strip option** for the dials: assign a dial to
+Micochondria and its touch-strip zone becomes one block split in half, TKB on
+the left, VofU on the right, each half lit green while that mic is live (with
+small meters when the daemon speaks levels). Tapping the zone cuts both mics.
+
 ## Setup wizard
 
 First open runs a five-step wizard: welcome, deck (connect or preview),

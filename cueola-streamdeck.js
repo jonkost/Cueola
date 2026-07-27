@@ -201,7 +201,14 @@
       desc: 'A live OBS program monitor. Turn: the OBS stream audio volume (choose which input in the OBS row). Press: start or stop the OBS stream.',
       readout: function () { var st = obsState(); return st.connected ? pct(obsVolume()) : 'off'; },
       bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { return !!obsState().streaming; },
-      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS row above the deck).'); } }
+      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS row above the deck).'); } },
+    // Micochondria on the strip: one zone, split in half. TKB on the left,
+    // VofU on the right, each half lit while that mic is live. Tap = off-air panic.
+    micoStatus: { label: 'Micochondria', hue: '#22d3a0', turnLabel: 'Nothing (status)', pressLabel: 'All talk off', micoSplit: true,
+      desc: 'A Micochondria status zone, split in half: TKB left, VofU right, each lit while that mic is live. Turning does nothing. Press (or tap the zone): cut both mics instantly.',
+      readout: function () { return talkbackState.connected ? ((talkbackState.A || talkbackState.B) ? 'LIVE' : 'ready') : 'off'; },
+      bar: function () { return null; }, live: function () { return !!(talkbackState.A || talkbackState.B); },
+      tick: function () {}, press: function () { releaseTalkback(true); toast('All talk off.'); } }
   };
   var DEFAULT_DIALS = ['master', 'prompterSpeed', 'prompterSize', 'prompterScrub', 'rundownSelect', 'showClock'];
   function fmtClock(secs) { secs = Math.max(0, Math.round(secs || 0)); var m = Math.floor(secs / 60), s = secs % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
@@ -350,7 +357,7 @@
     var url = TALKBACK_URLS[tbUrlIndex % TALKBACK_URLS.length], ws;
     try { ws = new WebSocket(url); } catch (e) { scheduleTalkbackReconnect(); return; }
     tbSocket = ws;
-    ws.onopen = function () { talkbackState.connected = true; try { ws.send('state?'); } catch (e) {} renderStatus(); renderMico(); if (wizardStep >= 0) wizardRender(); };
+    ws.onopen = function () { talkbackState.connected = true; try { ws.send('state?'); } catch (e) {} renderStatus(); renderMico(); micoPopoutSync(); if (wizardStep >= 0) wizardRender(); };
     ws.onmessage = function (evt) {
       var m; try { m = JSON.parse(evt.data); } catch (e) { return; }
       if (m && m.type === 'state') {
@@ -360,13 +367,14 @@
         if (m.gainB != null) talkbackState.gainB = m.gainB;
         schedulePaint(); renderStatus();
         if (structural) renderMico(); else micoSync();
+        micoPopoutSync();
       } else if (m && m.type === 'levels') {
         if (!talkbackState.hasLevels) { talkbackState.hasLevels = true; renderMico(); }
         talkbackState.levels = { mic: +m.mic || 0, a: +m.a || 0, b: +m.b || 0 };
-        updateMicoMeters();
+        updateMicoMeters(); micoPopoutMeters();
       }
     };
-    ws.onclose = function () { talkbackState.connected = false; talkbackState.A = false; talkbackState.B = false; talkbackState.hasGains = false; talkbackState.hasLevels = false; talkbackState.levels = { mic: 0, a: 0, b: 0 }; talkbackHeld.A = false; talkbackHeld.B = false; tbUrlIndex++; scheduleTalkbackReconnect(); schedulePaint(); renderStatus(); renderMico(); if (wizardStep >= 0) wizardRender(); };
+    ws.onclose = function () { talkbackState.connected = false; talkbackState.A = false; talkbackState.B = false; talkbackState.hasGains = false; talkbackState.hasLevels = false; talkbackState.levels = { mic: 0, a: 0, b: 0 }; talkbackHeld.A = false; talkbackHeld.B = false; tbUrlIndex++; scheduleTalkbackReconnect(); schedulePaint(); renderStatus(); renderMico(); micoPopoutSync(); if (wizardStep >= 0) wizardRender(); };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
   }
   function scheduleTalkbackReconnect() { clearTimeout(tbReconnect); tbReconnect = setTimeout(talkbackConnect, 2000); }
@@ -844,13 +852,24 @@
     for (var z = 0; z < profile.strip.zones; z++) {
       var dialId = mapping().dials[(mapping().touch[z] || { dial: z }).dial];
       var c = DIAL_CONTROLLERS[dialId];
-      cells.push({
+      var cell = {
         title: c ? c.label : '', value: c ? String(c.readout(s)) : '', tap: c ? c.pressLabel : '',
         hue: (c && c.hue) || '#5b8df8',
         bar: c && c.bar ? (c.bar(s) == null ? null : Math.max(0, Math.min(1, c.bar(s) || 0))) : null,
         live: !!(c && c.live && c.live(s)),
         obsFrame: !!(c && c.obsFrame)
-      });
+      };
+      if (c && c.micoSplit) {
+        // Quantized levels keep the paint signature calm: at most ~5 strip
+        // repaints a second while audio is actually moving.
+        cell.micoSplit = true; cell.tkb = !!talkbackState.A; cell.vofu = !!talkbackState.B; cell.tbOn = !!talkbackState.connected;
+        if (talkbackState.hasLevels) {
+          var lv = talkbackState.levels;
+          cell.la = Math.round(Math.min(1, talkbackState.A ? lv.a : lv.mic) * 8);
+          cell.lb = Math.round(Math.min(1, talkbackState.B ? lv.b : lv.mic) * 8);
+        }
+      }
+      cells.push(cell);
     }
     ensureObsFrameLoop();
     var sig = JSON.stringify(cells);
@@ -981,6 +1000,35 @@
           ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(vbx, vby, vbw, 4);
           ctx.fillStyle = cell.hue; ctx.fillRect(vbx, vby, Math.round(vbw * cell.bar), 4);
         }
+        return;
+      }
+      if (cell.micoSplit) {
+        // One block, split in half: TKB left, VofU right. A half lights green
+        // while its mic is live; small meter under each when the daemon speaks
+        // levels. Tap anywhere on the zone = all talk off.
+        var hw = (zw - 10) / 2;
+        [['TKB', cell.tkb, cell.la], ['VofU', cell.vofu, cell.lb]].forEach(function (side, k) {
+          var sx0 = x0 + 3 + k * (hw + 4);
+          var on = !!side[1];
+          ctx.fillStyle = on ? 'rgba(34,211,160,0.26)' : 'rgba(255,255,255,0.05)';
+          ctx.fillRect(sx0, 3, hw, ch - 6);
+          ctx.strokeStyle = on ? '#22d3a0' : 'rgba(255,255,255,0.14)';
+          ctx.lineWidth = on ? 3 : 1;
+          ctx.strokeRect(sx0 + 1.5, 4.5, hw - 3, ch - 9);
+          ctx.textAlign = 'center';
+          ctx.fillStyle = on ? '#ffffff' : '#98a2b8';
+          ctx.font = '800 26px -apple-system, "Segoe UI", sans-serif';
+          ctx.fillText(side[0], sx0 + hw / 2, ch / 2 - 4);
+          ctx.font = '700 13px -apple-system, "Segoe UI", sans-serif';
+          ctx.fillStyle = on ? '#22d3a0' : '#6b7690';
+          ctx.fillText(cell.tbOn ? (on ? '● LIVE' : 'off') : 'daemon off', sx0 + hw / 2, ch / 2 + 18);
+          if (side[2] != null) {
+            var mbw = hw - 24, mbx = sx0 + 12, mby = ch - 13;
+            ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(mbx, mby, mbw, 4);
+            ctx.fillStyle = on ? '#22d3a0' : 'rgba(152,162,184,0.7)';
+            ctx.fillRect(mbx, mby, Math.round(mbw * Math.min(1, side[2] / 8)), 4);
+          }
+        });
         return;
       }
       // zone plate with a faint hue wash so zones read as separate touch targets
@@ -1284,7 +1332,9 @@
       + '<span class="sd-obs-dot' + (on ? ' on' : '') + '"></span>'
       + '<span class="sd-mico-name">Mic<span>ochondria</span></span>'
       + '<span class="sd-mico-status">' + (on ? 'Connected' : 'Not running') + '</span>'
-      + (on ? '<span class="sd-pf-sp"></span><button class="sd-mini danger" id="sd-mico-off" title="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + '<span class="sd-pf-sp"></span>'
+      + '<button class="sd-mini" id="sd-mico-pop" title="Pop Micochondria out into its own little window">Pop out</button>'
+      + (on ? '<button class="sd-mini danger" id="sd-mico-off" title="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
       + '</div>';
     if (on) {
       html += micoStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
@@ -1351,6 +1401,84 @@
     });
     box.querySelectorAll('.sd-mico-vol').forEach(function (sl) {
       sl.oninput = function () { talkbackGain(sl.getAttribute('data-vol'), sl.value / 100); };
+    });
+    bind('sd-mico-pop', openMicoPopout);
+  }
+
+  // ── Micochondria pop-out: a little status window you can keep on screen ────
+  // Same-origin blank window, written and driven directly by this tab: the dot,
+  // both mics with lamp + meter, hold-to-talk, and the off-air panic. Closes
+  // with the tab; goes quiet (not wrong) if the opener navigates away.
+  var micoWin = null;
+  var MICO_POP_CSS = 'body{margin:0;font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;background:#0c0e12;color:#e8ecf4;padding:14px 16px;user-select:none;-webkit-user-select:none}'
+    + '#mw-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}'
+    + '#mw-dot{width:9px;height:9px;border-radius:50%;background:#6b7690}#mw-dot.on{background:#22d3a0;box-shadow:0 0 8px #22d3a0}'
+    + '#mw-name{font-weight:800;font-size:15px}#mw-name span{color:#7ea6ff}'
+    + '#mw-status{color:#98a2b8;font-size:12.5px}'
+    + '.mw-strip{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}'
+    + '.mw-talk{min-width:64px;padding:9px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:#171b22;color:#e8ecf4;font-weight:800;font-size:13px;cursor:pointer;touch-action:none}'
+    + '.mw-strip.onair .mw-talk{background:rgba(34,211,160,.22);border-color:#22d3a0;box-shadow:0 0 12px rgba(34,211,160,.45)}'
+    + '.mw-mid{flex:1;min-width:80px}.mw-sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#6b7690;margin-bottom:4px}'
+    + '.mw-meter{height:7px;border-radius:999px;background:#171b22;border:1px solid rgba(255,255,255,.1);overflow:hidden}'
+    + '.mw-fill{height:100%;width:0;border-radius:999px;background:#22d3a0;transition:width 90ms linear}.mw-fill.idle{opacity:.45}.mw-fill.hot{background:#ff3b3b}'
+    + '.mw-lamp{min-width:52px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:4px 7px;background:#171b22;color:#6b7690}'
+    + '.mw-strip.onair .mw-lamp{background:#ff3b3b;color:#fff}'
+    + '#mw-off{margin-top:10px;width:100%;padding:9px;border-radius:999px;border:1px solid rgba(255,59,59,.5);background:#171b22;color:#ff8f8f;font-weight:700;font-size:13px;cursor:pointer}';
+  function micoPopoutAlive() { try { return !!(micoWin && !micoWin.closed); } catch (e) { return false; } }
+  function micoPopStrip(bus, name, sub) {
+    return '<div class="mw-strip" data-bus="' + bus + '"><button class="mw-talk" data-talk="' + bus + '" title="Hold to talk on ' + name + '">' + name + '</button>'
+      + '<div class="mw-mid"><div class="mw-sub">' + sub + '</div><div class="mw-meter"><div class="mw-fill" data-meter="' + bus + '"></div></div></div>'
+      + '<span class="mw-lamp">off</span></div>';
+  }
+  function openMicoPopout() {
+    if (micoPopoutAlive()) { try { micoWin.focus(); } catch (e) {} micoPopoutSync(); return; }
+    var w = null;
+    try { w = window.open('', 'cueola-mico', 'width=380,height=252,resizable=yes'); } catch (e) {}
+    if (!w) { toast('Pop-up blocked. Allow pop-ups for this site to pop Micochondria out.'); return; }
+    micoWin = w;
+    var d = w.document;
+    d.title = 'Micochondria';
+    var style = d.createElement('style'); style.textContent = MICO_POP_CSS; d.head.appendChild(style);
+    d.body.innerHTML = '<div id="mw-head"><span id="mw-dot"></span><span id="mw-name">Mic<span>ochondria</span></span><span id="mw-status"></span></div>'
+      + micoPopStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
+      + micoPopStrip('B', 'VofU', 'Voice of the Universe · outs 3-4')
+      + '<button id="mw-off" title="Cut both mics instantly">All talk off</button>';
+    d.querySelectorAll('.mw-talk').forEach(function (btn) {
+      var bus = btn.getAttribute('data-talk');
+      var down = function (e) { e.preventDefault(); talkbackSet(bus, true); };
+      var up = function () { talkbackSet(bus, false); };
+      btn.onpointerdown = down; btn.onpointerup = up; btn.onpointercancel = up; btn.onpointerleave = up;
+      btn.oncontextmenu = function (e) { e.preventDefault(); };
+    });
+    var off = d.getElementById('mw-off'); if (off) off.onclick = function () { releaseTalkback(true); };
+    // Safety mirrors the main tab: losing the pop-out mid-hold releases the mic.
+    w.onblur = function () { releaseTalkback(false); };
+    w.onpagehide = function () { releaseTalkback(false); };
+    var poll = setInterval(function () { if (!micoPopoutAlive()) { clearInterval(poll); micoWin = null; } }, 1500);
+    micoPopoutSync(); micoPopoutMeters();
+  }
+  function micoPopoutSync() {
+    if (!micoPopoutAlive()) return;
+    var d; try { d = micoWin.document; } catch (e) { return; }
+    var dot = d.getElementById('mw-dot'); if (dot) dot.className = talkbackState.connected ? 'on' : '';
+    var st = d.getElementById('mw-status'); if (st) st.textContent = talkbackState.connected ? 'Connected' : 'Not running';
+    ['A', 'B'].forEach(function (bus) {
+      var strip = d.querySelector('.mw-strip[data-bus="' + bus + '"]'); if (!strip) return;
+      strip.classList.toggle('onair', !!talkbackState[bus]);
+      var lamp = strip.querySelector('.mw-lamp'); if (lamp) lamp.textContent = talkbackState[bus] ? 'ON AIR' : 'off';
+    });
+  }
+  function micoPopoutMeters() {
+    if (!micoPopoutAlive() || !talkbackState.hasLevels) return;
+    var d; try { d = micoWin.document; } catch (e) { return; }
+    var lv = talkbackState.levels;
+    ['A', 'B'].forEach(function (bus) {
+      var fill = d.querySelector('.mw-fill[data-meter="' + bus + '"]'); if (!fill) return;
+      var on = talkbackState[bus];
+      var v = Math.max(0, Math.min(1, on ? (bus === 'A' ? lv.a : lv.b) : lv.mic));
+      fill.style.width = Math.round(Math.sqrt(v) * 100) + '%';
+      fill.classList.toggle('idle', !on);
+      fill.classList.toggle('hot', v > 0.85);
     });
   }
 
@@ -1668,9 +1796,17 @@
   function showScreen() { var scr = document.getElementById('streamdeck'); if (!scr) return; document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); }); scr.classList.add('on'); try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {} }
   function hideScreen() { var scr = document.getElementById('streamdeck'); if (scr) scr.classList.remove('on'); var entry = document.getElementById('entry'); if (entry) entry.classList.add('on'); }
 
-  window.addEventListener('blur', function () { releaseTalkback(false); });
+  window.addEventListener('blur', function () {
+    // Focus moving to the Micochondria pop-out is not walking away: a hold
+    // started there must survive the opener losing focus. Everything else
+    // keeps the original safety: blur releases any held mic.
+    setTimeout(function () {
+      try { if (micoPopoutAlive() && micoWin.document.hasFocus()) return; } catch (e) {}
+      releaseTalkback(false);
+    }, 60);
+  });
   document.addEventListener('visibilitychange', function () { if (document.hidden) releaseTalkback(false); });
-  window.addEventListener('beforeunload', function () { releaseTalkback(true); });
+  window.addEventListener('beforeunload', function () { releaseTalkback(true); try { if (micoPopoutAlive()) micoWin.close(); } catch (e) {} });
   // Esc parity with the rest of Cueola: closes the topmost layer first (key
   // editor, then wizard), then backs out of KeyWi Bird to the front page.
   document.addEventListener('keydown', function (e) {
@@ -1686,6 +1822,7 @@
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },
     talkbackConnected: function () { return talkbackState.connected; },
+    openMicoPopout: openMicoPopout,
     _catalog: function () { buildCatalog(); return catalog; },
     _fire: fireSlot,
     _profileFor: function (pid, opts) { return Device.makeProfile(pid, opts || {}); },

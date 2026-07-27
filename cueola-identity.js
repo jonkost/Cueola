@@ -177,6 +177,7 @@
     try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
     cachedProfile = null;
     say('Signed out on this device.');
+    renderFrontDoor();
     renderHub();
   }
 
@@ -268,6 +269,7 @@
     cachedProfile = p;
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
+    renderFrontDoor();
     return { ok: true, profile: p };
   }
 
@@ -349,6 +351,7 @@
     rememberIdentity(username, doc);
     cachedProfile = doc;
     adoptProfileLocally(doc);
+    renderFrontDoor();
     return { ok: true, profile: doc };
   }
 
@@ -367,6 +370,7 @@
     try {
       await w._updateDoc(w._doc(w._db, 'profiles', id.username), { sessions: merged, lastSeen: Date.now() });
       p.sessions = merged; cachedProfile = p;
+      renderFrontDoor();
       return { ok: true, added: added };
     } catch (e) { return { ok: false, msg: 'Could not save the session to your profile.' }; }
   }
@@ -1082,6 +1086,124 @@
     } catch (e) {}
   }
 
+  /* ══════════════════════ the front door (entry-page card) ═════════════════
+   * The entry page's primary card, replacing type-a-code as the way in.
+   * Signed out: username sign-in right on the page, plus create-profile.
+   * Signed in: your assigned sessions (the profile's sessions array, the same
+   * membership the portal uses), one tap to enter via enterSession so every
+   * join guard still applies. The typed session code survives as a quiet
+   * fallback link: guests and remote operators still arrive with only a code. */
+  var frontDoorGen = 0;
+  var FRONT_DOOR_MAX = 6;
+  function frontDoorEl() { return document.getElementById('entryFrontDoor'); }
+  function frontDoorLinks(signedIn) {
+    return '<div class="fd-links">'
+      + (signedIn
+        ? '<button type="button" class="fd-link" onclick="CueolaIdentity.openHub()">All sessions &amp; notes</button><span>&middot;</span>'
+        : '<button type="button" class="fd-link" onclick="CueolaIdentity.startCreate()">New here? Create your profile</button><span>&middot;</span>')
+      + '<button type="button" class="fd-link" onclick="openJoinSession()">Have a session code?</button>'
+      + (signedIn ? '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.signOut()">Sign out</button>' : '')
+      + '</div>';
+  }
+  function frontDoorInitials(name) {
+    return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (s) { return s.charAt(0).toUpperCase(); }).join('') || '?';
+  }
+  function frontDoorSignedOut(el, note) {
+    el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+      + '<div class="ec-title">Your sessions</div>'
+      + '<div class="ec-desc">Sign in with your username and the sessions assigned to you are one tap away. No password.</div>'
+      + '<div class="fd-row"><input class="field-in" id="fd-username" type="text" maxlength="40" placeholder="username" autocapitalize="none" autocomplete="username">'
+      + '<button type="button" class="btn-primary fd-go" onclick="CueolaIdentity.frontDoorSignIn()">Sign in</button></div>'
+      + '<div class="modal-err' + (note ? ' on' : '') + '" id="fd-err">' + esc(note || '') + '</div>'
+      + frontDoorLinks(false);
+    var input = document.getElementById('fd-username');
+    if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSignIn(); });
+  }
+  function frontDoorHead(p) {
+    return '<div class="fd-head"><span class="fd-ava">' + esc(frontDoorInitials(p.fullName)) + '</span>'
+      + '<div><div class="fd-hi">Hi, ' + esc(String(p.fullName || '').split(' ')[0]) + '</div>'
+      + '<div class="fd-user">@' + esc(p.username) + (p.role === 'admin' ? ' &middot; admin' : '') + '</div></div></div>';
+  }
+  async function frontDoorSessionMeta(w, code) {
+    try {
+      var ref = w._doc(w._db, 'sessions', code);
+      var snap = await readWithCache(
+        function () { return w._getDoc(ref); },
+        w._getDocFromCache ? function () { return w._getDocFromCache(ref); } : null
+      );
+      if (!snap || !snap.exists()) return null;
+      var d = snap.data() || {};
+      if (d.deletedAt) return null;
+      return { code: code, showName: String(d.showName || '') };
+    } catch (e) { return { code: code, showName: '' }; }
+  }
+  async function renderFrontDoor() {
+    var el = frontDoorEl(); if (!el) return;
+    var gen = ++frontDoorGen;
+    var id = identity();
+    if (!id) { frontDoorSignedOut(el, ''); return; }
+    var p = cachedProfile;
+    if (!p || p.username !== id.username) {
+      el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+        + '<div class="ec-title">Your sessions</div><div class="fd-loading">Loading your sessions&hellip;</div>';
+      if (!fb() && typeof window.waitForFirebaseReady === 'function') { try { await window.waitForFirebaseReady(); } catch (e) {} }
+      if (gen !== frontDoorGen) return;
+      var wOff = fb();
+      if (!wOff) {
+        el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+          + '<div class="ec-title">Your sessions</div>'
+          + '<div class="ec-desc">Signed in as @' + esc(id.username) + ', but the cloud is not reachable. Your sessions will appear when it is.</div>'
+          + frontDoorLinks(true);
+        return;
+      }
+      try { p = await fetchProfile(id.username); } catch (e) { p = null; }
+      if (gen !== frontDoorGen) return;
+      if (!p || p.renamedTo || p.mergedInto || p.active === false) {
+        frontDoorSignedOut(el, p ? 'That profile changed. Sign in again' + (p.renamedTo || p.mergedInto ? ' as @' + (p.renamedTo || p.mergedInto) : '') + '.' : '');
+        return;
+      }
+      cachedProfile = p;
+    }
+    var codes = (p.sessions || []).slice(-FRONT_DOOR_MAX).reverse();
+    el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+      + frontDoorHead(p)
+      + '<div class="fd-sessions" id="fd-sessions">'
+      + (codes.length ? '<div class="fd-loading">Checking your sessions&hellip;</div>'
+                      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>')
+      + '</div>'
+      + frontDoorLinks(true);
+    if (!codes.length) return;
+    var w = fb(); if (!w) return;
+    var metas = await Promise.all(codes.map(function (code) { return frontDoorSessionMeta(w, code); }));
+    if (gen !== frontDoorGen) return;
+    var wrap = document.getElementById('fd-sessions'); if (!wrap) return;
+    var rows = metas.filter(Boolean).map(function (m) {
+      var codeArg = JSON.stringify(m.code).replace(/"/g, '&quot;');
+      return '<button type="button" class="fd-session" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')" title="Open this session">'
+        + '<span class="fd-code">' + esc(m.code) + '</span>'
+        + '<span class="fd-show">' + esc(m.showName || 'Untitled show') + '</span>'
+        + '<span class="fd-open">Open</span></button>';
+    });
+    wrap.innerHTML = rows.length ? rows.join('')
+      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>';
+  }
+  async function frontDoorSignIn() {
+    var el = document.getElementById('fd-username');
+    var err = document.getElementById('fd-err');
+    if (err) err.classList.remove('on');
+    var res = await signIn(el && el.value);
+    if (!res.ok) { if (err) { err.innerHTML = res.msg; err.classList.add('on'); } return; }
+    say('Signed in as ' + res.profile.fullName + '.');
+    renderFrontDoor();
+  }
+  // The card follows identity wherever it changes; a zero-delay timer lets
+  // cueola-app.js (which loads after us) finish defining the firebase bridge.
+  setTimeout(function () { try { renderFrontDoor(); } catch (e) {} }, 0);
+  // Firebase flips ready asynchronously, sometimes after waitForFirebaseReady's
+  // own timeout has given up — re-render on its event so a slow cloud start can
+  // never strand a signed-in card on the offline message.
+  window.addEventListener('firebaseReady', function () { try { renderFrontDoor(); } catch (e) {} }, { once: true });
+
   window.CueolaIdentity = {
     identity: identity, profile: function () { return cachedProfile; },
     profileIdentity: function () { return canonicalProfileIdentity(cachedProfile); },
@@ -1095,6 +1217,7 @@
     submitSignIn: submitSignIn, startCreate: startCreate,
     wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardFinish: wizardFinish,
     renderPortal: renderPortal, portalAddCode: portalAddCode, enterSession: enterSession,
+    renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,
     deviceOnlyLook: deviceOnlyLook,
     _normalizeUsername: normalizeUsername, _normalizeCode: normalizeCode,
   };

@@ -4294,7 +4294,7 @@ input.pt-range::-moz-range-thumb,
 	      <div class="e-logo"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>
 	      <div class="e-title">Cue<span class="brand-hi">ola</span></div>
 	    </div>
-	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, sync <em>Flowmingo</em>, and cue playback with <em>Outrangutan.</em></div>
+	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, sync <em>Flowmingo</em>, cue playback with <em>Outrangutan</em>, and drive it all from a Stream Deck with <em>KeyWi Bird.</em></div>
 	    <!-- P7: crash recovery — one click rejoins the last session after an unclean exit (Decisions #14) -->
 	    <div class="resume-banner" id="resumeBanner" hidden>
 	      <span class="sf-symbol rb-ico" data-symbol="action.repeat" aria-hidden="true"></span>
@@ -4353,12 +4353,16 @@ input.pt-range::-moz-range-thumb,
       </div>
 	    </div>
 	    <div class="e-cards">
-      <button type="button" class="e-card stud e-card-full" onclick="openJoinSession()">
+      <!-- The front door: sign-in first, assigned sessions one tap away.
+           CueolaIdentity.renderFrontDoor() owns this card; the static content
+           below is only the pre-script skeleton. Typed codes live behind the
+           "Have a session code?" link inside the rendered card. -->
+      <div class="e-card stud e-card-full" id="entryFrontDoor">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>
-        <div class="ec-title">Join Session</div>
-        <div class="ec-desc">Enter the session code your director gave you.</div>
-        <span class="ec-pill">Enter session code</span>
-      </button>
+        <div class="ec-title">Your sessions</div>
+        <div class="ec-desc">Sign in with your username and the sessions assigned to you are one tap away. No password.</div>
+        <span class="ec-pill">Sign in</span>
+      </div>
       <button type="button" class="e-card e-card-full" onclick="openPlandaBearJoin()" style="--oc:var(--yellow);--ob:color-mix(in srgb,var(--yellow) 8%,transparent)">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-plandabear"/></svg></div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
@@ -5972,6 +5976,28 @@ input.pt-range::-moz-range-thumb,
 .sd-wz-foot .btn-primary, .sd-wz-foot .btn-secondary { width:auto; flex:0 0 auto; }
 
 @media (pointer:coarse) { .sd-theme-chip, .app-back, .sd-mico-talk, .sd-mico-lamp { min-height:44px; } .sd-mico-vol { min-height:44px; } }
+
+/* ── Front door: sign-in-first entry card ── */
+#entryFrontDoor { cursor:default; }
+.fd-row { display:flex; gap:8px; margin:10px 0 2px; width:100%; }
+.fd-row .field-in { flex:1; min-width:0; }
+.fd-row .btn-primary { width:auto; flex:0 0 auto; }
+.fd-links { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; font-size:12.5px; color:var(--text3); }
+.fd-link { background:none; border:none; color:var(--text2); font-size:12.5px; cursor:pointer; padding:2px 4px; border-radius:6px; }
+.fd-link:hover { color:var(--accent); }
+.fd-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; width:100%; }
+.fd-ava { width:34px; height:34px; border-radius:50%; background:color-mix(in srgb,var(--accent) 22%,var(--s2)); color:var(--text); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex:0 0 auto; }
+.fd-hi { font-weight:800; font-size:16px; line-height:1.2; }
+.fd-user { color:var(--text3); font-size:12.5px; }
+.fd-sessions { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.fd-session { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--s2); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:9px 12px; color:var(--text); cursor:pointer; transition:border-color var(--dur-fast,.12s) var(--ease,ease), transform var(--dur-fast,.12s) var(--ease,ease); }
+.fd-session:hover { border-color:color-mix(in srgb,var(--accent) 55%,var(--border)); transform:translateY(-1px); }
+.fd-code { font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:.08em; color:var(--accent); flex:0 0 auto; }
+.fd-show { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; }
+.fd-open { font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
+.fd-session:hover .fd-open { color:var(--accent); }
+.fd-loading { color:var(--text3); font-size:12.5px; padding:6px 0; }
+@media (pointer:coarse) { .fd-link, .fd-session { min-height:44px; } }
 </style>
 <div class="screen" id="streamdeck">
   <div class="sd-head">
@@ -5993,7 +6019,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-session-clone.js?v=fe05f41dfc"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=81570be11a"></script>
+<script src="cueola-identity.js?v=1d92cd2c1f"></script>
 <script src="cueola-admin-auth.js?v=2d94c57e93"></script>
 <script src="cueola-live-session.js?v=2352bc00d1"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -6006,7 +6032,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/outrangutan.js?v=984299cd5d"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=d6aad44701"></script>
-<script src="cueola-streamdeck.js?v=64be0ef0df"></script>
+<script src="cueola-streamdeck.js?v=88a13d2ee8"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
