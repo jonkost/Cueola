@@ -22,24 +22,35 @@ WebSockets directly (talkbackd on `17844`, obs-websocket on `4455`).
 Requirements: **Chrome or Edge** (WebHID is Chromium only), and the **Elgato
 Stream Deck app must be quit** because it claims the USB device exclusively.
 
-## Any Stream Deck, sensible out of the box
+## Any Stream Deck, organized by app
 
 KeyWi Bird works with any Stream Deck: Mini (6), Stream Deck + (8), classic/MK.2 (15),
 XL (32), and the + XL (36 keys, 6 dials, touch strip). Each size gets its own
-curated default layout: the Mini gets the survival kit (GO, STOP, PANIC, NEXT,
-TALK A, CLOCK), the + XL gets the full spread. On connect the deck plays a quick
-rainbow light show as a full pixel test, then settles into the layout.
+curated default layout, **organized by app like channel strips on a console**:
+each app owns a contiguous band of columns. On the + XL: columns 1-3 are
+Outrangutan (GO, PAUSE, STOP, FADE, PANIC, PAD 1-4, CUE 1-3), columns 4-5 are
+Cueola (NEXT, PREV, GO LIVE, the CLOCK widget, HYPE), columns 6-7 are Flowmingo
+(SCROLL, CUE ROW, TOP, MIRROR, BRAKE, BOOST, EDIT, SCRUB), column 8 is
+Micochondria (TKB, VofU, ALL TALK OFF), column 9 is OBS (STREAM, REC, SCN 1)
+plus PAGE →. The action catalog in the key editor groups the same way, so
+finding an action means thinking of the app, not a category.
 
-Default + XL bands: transport and Live (GO, PAUSE, STOP, FADE, PANIC, NEXT,
-PREV, GO LIVE, CUE ROW); prompter (SCROLL, TOP, sizes, speeds, FWD, REV,
-MIRROR); SFX and OBS scenes (PAD 1-4 with 🔊 art, BRAKE, BOOST, SCN 1-3); comms
-and clock (TALK A, TALK B, ALL TALK OFF, CLOCK GO, CLOCK ❚❚, CLOCK ▶, STREAM,
-REC, PAGE →).
+Redundancy rule: a deck with dials gets **no keys for what its dials already
+do**: text size, prompter speed, and the separate clock verbs are dial work on
+the + XL, so those keys are gone from its default (the dial-less XL keeps its
+SPD keys). The freed keys went to the app bands; a few deliberate blanks keep
+the bands readable. Everything trimmed is still in the catalog to bind by hand.
 
-Default dials, each card stating what turning and pressing does: Program vol
+On connect the deck plays a quick rainbow light show as a full pixel test, then
+settles into the layout.
+
+Default dials, each card stating what turning and pressing does: PLBK vol
 (press: mute), Prompter speed (press: play/pause), Text size (press: reset),
 Prompter scrub (press: cue to live row), Rundown row (press: take that row),
-Show clock (a live clock face; press: start/pause).
+Show clock (a live clock face; press: start/pause). The optional **OBS
+program** dial is a live program monitor on the strip whose turn rides the OBS
+stream-audio volume (pick which input in the OBS row) and whose press starts or
+stops the stream.
 
 The touch strip is a glanceable dashboard: one zone per dial with an accent bar,
 the live value in tabular digits, a progress bar, and a running dot. Tap a zone
@@ -72,13 +83,35 @@ Broadcast (clean, category colours), Neon (glowing edges on black), Synthwave
 applies to the physical keys and the on-screen preview alike.
 
 The **on-screen grid is exactly what the hardware shows**: the same canvas art
-drives both, so you can lay out and theme the deck and see the real result. And
+drives both, so you can lay out and theme the deck and see the real result. The
+on-screen deck sits in a hardware-style dark shell, and on strip decks the
+**touch strip renders live on screen too**, showing the same pixels the panel shows.
 **Preview mode** (See it on screen) gives you a full virtual + XL with no
 hardware plugged in, so you can build layouts and try themes any time, then hit
-Connect to drive the real deck.
+Connect to drive the real deck. Themes are one-click chips in the toolbar.
 
-There is a **HYPE** key too (under Fun): a rainbow ripple parties across the
-whole deck and settles back. Because a big panel of buttons should be fun.
+There is a **HYPE** key too (under Fun, and on the + XL default layout): a
+rainbow ripple parties across the whole deck and settles back. Because a big
+panel of buttons should be fun.
+
+## Micochondria (the mic panel)
+
+Micochondria is the talkback pair: hold **TKB** to talk to the crew (outs 1-2),
+hold **VofU** (the Voice of the Universe) to speak to the room (outs 3-4).
+Beyond the deck keys, KeyWi Bird now has a small **Micochondria panel**: a
+green/off dot that plainly says **Connected** or **Not running**, and one strip
+per mic with a hold-to-talk button, an ON AIR lamp, a live meter, and a volume
+fader. The meter shows the mic input while idle (proof the mic is alive before
+the show) and the bus output while keyed. Meters and faders appear only when
+the running talkbackd speaks the levels protocol (`talkback/README.md`); an
+older daemon still gets the honest connected/off panel.
+
+## Setup wizard
+
+First open runs a five-step wizard: welcome, deck (connect or preview),
+Micochondria, OBS, and make-it-yours (themes). The optional steps skip cleanly,
+status dots update live as things connect, and the wizard never volunteers
+itself twice; it lives behind **Setup wizard** in the toolbar after that.
 
 ## Deck Studio (the setup screen)
 

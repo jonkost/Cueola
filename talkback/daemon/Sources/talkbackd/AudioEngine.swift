@@ -271,9 +271,15 @@ final class AudioEngine {
 
         let targetA: Float = state.talkA ? 1 : 0
         let targetB: Float = state.talkB ? 1 : 0
+        // User volume per bus, applied on top of the click-free gate ramp.
+        let userA = state.gainA
+        let userB = state.gainB
         var gA = gainA
         var gB = gainB
         let step = rampStep
+        var peakMic: Float = 0
+        var peakA: Float = 0
+        var peakB: Float = 0
 
         // Non-interleaved: buffer 0/1 = pair A (outs 1-2), buffer 2/3 = pair B (outs 3-4).
         let a0 = out.count > 0 ? out[0].mData?.assumingMemoryBound(to: Float.self) : nil
@@ -285,19 +291,28 @@ final class AudioEngine {
             if gA < targetA { gA = min(gA + step, 1) } else if gA > targetA { gA = max(gA - step, 0) }
             if gB < targetB { gB = min(gB + step, 1) } else if gB > targetB { gB = max(gB - step, 0) }
             let sample = mic[frame]
+            let micAbs = abs(sample)
+            if micAbs > peakMic { peakMic = micAbs }
             if gA > 0 {
-                let s = sample * gA
+                let s = sample * gA * userA
                 a0?[frame] = s
                 a1?[frame] = s
+                let sAbs = abs(s)
+                if sAbs > peakA { peakA = sAbs }
             }
             if gB > 0 {
-                let s = sample * gB
+                let s = sample * gB * userB
                 b0?[frame] = s
                 b1?[frame] = s
+                let sAbs = abs(s)
+                if sAbs > peakB { peakB = sAbs }
             }
         }
         gainA = gA
         gainB = gB
+        // Meters: mic is pre-gate (proves the mic is alive before going on air),
+        // buses are post-gate (what actually reaches the outputs).
+        state.storeLevels(mic: peakMic, a: peakA, b: peakB)
         return noErr
     }
 

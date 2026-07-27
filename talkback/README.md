@@ -44,8 +44,12 @@ Startup logs the matched device, channel counts, and sample rate, then `WebSocke
 `ws://127.0.0.1:17844` (loopback only). Text frames.
 
 - Commands: `A on`, `A off`, `B on`, `B off`, `state?`
-- Pushes: `{"type":"state","talkA":bool,"talkB":bool}` sent to every client on connect and on any change (this is what lights the Stream Deck buttons)
+- Volume: `A gain 0.8`, `B gain 0.8`: per-bus output volume, clamped 0-1, applied on top of the gate ramp
+- Pushes: `{"type":"state","talkA":bool,"talkB":bool,"gainA":0.80,"gainB":1.00}` sent to every client on connect and on any change (this is what lights the Stream Deck buttons and syncs the Micochondria panel's faders)
+- Levels: `{"type":"levels","mic":0.42,"a":0.00,"b":0.00}` streamed at 10 Hz while any client is connected (peak per buffer, 0-1); `mic` is pre-gate (proves the mic is alive), `a`/`b` are post-gate (what reaches the outputs). This drives the meters in KeyWi Bird's Micochondria panel.
 - Unknown input: `{"type":"error","message":"unknown command"}`
+
+Clients that only speak the old protocol keep working unchanged; gains and levels are additive.
 
 The production suite should speak this same protocol; keep the daemon as a standalone service.
 

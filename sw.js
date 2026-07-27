@@ -106,8 +106,8 @@ const SHELL_ASSETS = [
   'outrangutan/outrangutan.css?v=718e619254',
   'outrangutan/outrangutan.js?v=984299cd5d',
   'cueola-streamdeck-device.js?v=48990ed663',
-  'cueola-obs.js?v=b17032dbf7',
-  'cueola-streamdeck.js?v=dd666f4a97',
+  'cueola-obs.js?v=d6aad44701',
+  'cueola-streamdeck.js?v=64be0ef0df',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -134,7 +134,11 @@ const versionSignature = SHELL_ASSETS
 // JS; roll the shell so a plain reload picks it all up.
 // 12->13: renamed to "KeyWi Bird" + new brand icon assets/Brand/KeyWi_icon.svg
 // (precached unversioned) on the front-page card and the screen header.
-const WORKER_SCHEMA = '13';
+// 13->14: KeyWi face-lift round — app-banded default layouts, Micochondria
+// panel, setup wizard, deck shell + on-screen strip, PLBK vol, OBS stream
+// volume. index.html markup/CSS changed (screen header, wizard mount, entry
+// card, shared .app-back), so the shell must roll along with the JS bumps.
+const WORKER_SCHEMA = '14';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

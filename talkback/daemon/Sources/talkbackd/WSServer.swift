@@ -2,9 +2,10 @@ import Foundation
 import Network
 
 /// Local WebSocket control surface. Accepts plain-text commands
-/// ("A on" / "A off" / "B on" / "B off" / "state?") and pushes the current
-/// state as JSON to every connected client on any change, so buttons can
-/// light up. Bound to loopback only.
+/// ("A on" / "A off" / "B on" / "B off" / "A gain 0.8" / "B gain 0.8" /
+/// "state?") and pushes the current state as JSON to every connected client on
+/// any change, so buttons can light up. Live peak levels stream at 10 Hz for
+/// meters. Bound to loopback only.
 final class WSServer {
 
     private let state: ControlState
@@ -12,6 +13,7 @@ final class WSServer {
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private let queue = DispatchQueue(label: "talkbackd.ws")
+    private var levelTimer: DispatchSourceTimer?
 
     init(state: ControlState, port: UInt16) {
         self.state = state
@@ -49,9 +51,19 @@ final class WSServer {
         state.onChange = { [weak self] _, _ in
             self?.queue.async { self?.broadcastState() }
         }
+
+        // Meters: peak levels to every client at 10 Hz. Quiet by design — no
+        // log lines, nothing sent while nobody is connected.
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 0.1, repeating: 0.1)
+        timer.setEventHandler { [weak self] in self?.broadcastLevels() }
+        timer.resume()
+        levelTimer = timer
     }
 
     func stop() {
+        levelTimer?.cancel()
+        levelTimer = nil
         listener?.cancel()
         for (_, connection) in connections { connection.cancel() }
         connections.removeAll()
@@ -96,19 +108,37 @@ final class WSServer {
     // MARK: - Protocol
 
     private func handle(command: String, from connection: NWConnection) {
-        switch command.lowercased() {
+        let lower = command.lowercased()
+        switch lower {
         case "a on":   state.set(bus: .a, on: true)
         case "a off":  state.set(bus: .a, on: false)
         case "b on":   state.set(bus: .b, on: true)
         case "b off":  state.set(bus: .b, on: false)
         case "state?": send(stateJSON(), to: connection)
         default:
-            send(#"{"type":"error","message":"unknown command"}"#, to: connection)
+            // "A gain 0.8" / "B gain 0.8": per-bus volume, clamped 0-1.
+            let parts = lower.split(separator: " ")
+            if parts.count == 3, parts[1] == "gain", let value = Float(parts[2]),
+               parts[0] == "a" || parts[0] == "b" {
+                state.set(bus: parts[0] == "a" ? .a : .b, gain: value)
+            } else {
+                send(#"{"type":"error","message":"unknown command"}"#, to: connection)
+            }
         }
     }
 
     private func stateJSON() -> String {
-        #"{"type":"state","talkA":\#(state.talkA),"talkB":\#(state.talkB)}"#
+        let gainA = String(format: "%.2f", state.gainA)
+        let gainB = String(format: "%.2f", state.gainB)
+        return #"{"type":"state","talkA":\#(state.talkA),"talkB":\#(state.talkB),"gainA":\#(gainA),"gainB":\#(gainB)}"#
+    }
+
+    private func broadcastLevels() {
+        guard !connections.isEmpty else { return }
+        let levels = state.levels
+        let json = String(format: #"{"type":"levels","mic":%.3f,"a":%.3f,"b":%.3f}"#,
+                          min(levels.mic, 1), min(levels.a, 1), min(levels.b, 1))
+        for (_, connection) in connections { send(json, to: connection) }
     }
 
     private func broadcastState() {

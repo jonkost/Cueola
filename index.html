@@ -4385,9 +4385,9 @@ input.pt-range::-moz-range-thumb,
       </div>
       <button type="button" class="e-card e-card-full" onclick="openControlSurface()" style="--oc:#6ff0a5;--ob:color-mix(in srgb,#6ff0a5 8%,transparent)">
         <div class="ec-icon"><img class="brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true"></div>
-        <div class="ec-title">KeyWi Bird</div>
-        <div class="ec-desc">Run playback, rundown, prompter, and talkback from one Stream Deck + XL. Sign in, then connect. Best in Chrome or Edge.</div>
-        <span class="ec-pill">Stream Deck + XL</span>
+        <div class="ec-title">Key<span class="brand-hi">Wi Bird</span></div>
+        <div class="ec-desc">Run playback, rundown, prompter, and mics from any Stream Deck. Sign in, then connect. Best in Chrome or Edge.</div>
+        <span class="ec-pill">Any Stream Deck</span>
       </button>
       <button type="button" class="e-card demo" onclick="loadDemo()">
         <div class="ec-icon"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></div>
@@ -5067,7 +5067,7 @@ input.pt-range::-moz-range-thumb,
         </div>
       </div>
       <div class="plandabear-tools">
-      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown"><span>Cue<span class="brand-hi">ola</span></span></button>
+      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" title="Back to Cueola rundown" aria-label="Back to Cueola rundown"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
       <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" title="Planda Bear theme settings" aria-label="Planda Bear theme settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       </div>
     </div>
@@ -5793,6 +5793,7 @@ input.pt-range::-moz-range-thumb,
 .sd-obs-in { background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 9px; font-size:13px; width:180px; }
 .sd-obs-err { color:var(--yellow); font-size:12px; }
 .sd-bright-row { display:flex; align-items:center; gap:var(--sp-3,12px); margin-bottom:var(--sp-4,16px); flex-wrap:wrap; }
+.sd-bright-row .btn-secondary { width:auto; flex:0 0 auto; }
 .sd-bright-row label { color:var(--text2); font-size:13px; }
 .sd-bright-row input[type=range] { width:200px; }
 .sd-sect-t { font-weight:700; font-size:14px; margin:var(--sp-4,16px) 0 var(--sp-2,8px); padding-top:var(--sp-3,12px); border-top:1px solid color-mix(in srgb,var(--text) 9%,transparent); }
@@ -5816,23 +5817,22 @@ input.pt-range::-moz-range-thumb,
 .sd-dial-lbl { font-size:13px; font-weight:700; margin-bottom:4px; }
 .sd-dial-row { font-size:11.5px; color:var(--text2); display:flex; gap:6px; justify-content:center; align-items:baseline; }
 .sd-dial-verb { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--dc,var(--accent)); }
-.sd-strip-note { display:flex; gap:8px; align-items:flex-start; margin-top:var(--sp-3,12px); color:var(--text2); font-size:12.5px; line-height:1.45; }
 .sd-legend { margin-top:var(--sp-4,16px); }
 .sd-legend summary { cursor:pointer; font-weight:700; padding:var(--sp-2,8px) 0; border-top:1px solid color-mix(in srgb,var(--text) 9%,transparent); }
 .sd-legend-body { padding:var(--sp-2,8px) 0 var(--sp-3,12px); }
 .sd-legend-row { display:flex; gap:var(--sp-3,12px); align-items:flex-start; padding:var(--sp-2,8px) 0; border-bottom:1px solid color-mix(in srgb,var(--text) 7%,transparent); font-size:13px; color:var(--text2); line-height:1.5; }
 .sd-legend-row:last-child { border-bottom:0; }
 .sd-legend-row b { color:var(--text); }
-.sd-setup { max-width:640px; }
-.sd-setup-head h3 { font-family:var(--syne); font-size:22px; margin:0 0 6px; }
-.sd-setup-head p { color:var(--text2); font-size:14px; line-height:1.55; margin:0 0 var(--sp-4,16px); }
-.sd-step { display:flex; gap:var(--sp-3,12px); padding:var(--sp-3,12px) 0; border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent); }
-.sd-step-dot { flex:0 0 30px; height:30px; border-radius:50%; background:var(--s2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; color:var(--text2); }
-.sd-step.done .sd-step-dot { background:var(--green); border-color:var(--green); color:#062315; }
-.sd-step-t { font-weight:700; margin-bottom:2px; }
-.sd-step-d { color:var(--text2); font-size:13.5px; line-height:1.5; margin-bottom:var(--sp-2,8px); }
-.sd-step .btn-primary { width:auto; }
-.sd-setup-foot { color:var(--text3); font-size:12.5px; margin-top:var(--sp-3,12px); }
+.sd-hero { max-width:640px; padding:var(--sp-4,16px) 0; }
+.sd-hero h3 { font-family:var(--syne); font-size:26px; letter-spacing:-.01em; margin:0 0 8px; }
+.sd-hero p { color:var(--text2); font-size:14px; line-height:1.6; margin:0 0 var(--sp-4,16px); }
+.sd-hero-actions { display:flex; gap:var(--sp-2,8px); flex-wrap:wrap; margin-bottom:var(--sp-4,16px); }
+.sd-hero-actions .btn-primary, .sd-hero-actions .btn-secondary { width:auto; flex:0 0 auto; }
+.sd-hero-checks { display:flex; gap:var(--sp-2,8px); flex-wrap:wrap; }
+.sd-ready { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:4px 12px; }
+.sd-ready::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--text3); }
+.sd-ready.on { color:var(--green); border-color:color-mix(in srgb,var(--green) 45%,transparent); }
+.sd-ready.on::before { background:var(--green); box-shadow:0 0 6px var(--green); }
 .sd-empty { background:var(--s1); border:1px solid var(--border); border-radius:var(--ui-radius-group,16px); padding:var(--sp-4,16px) var(--sp-5,24px); max-width:640px; }
 .sd-note { color:var(--text2); font-size:13px; }
 .sd-learn { margin-top:var(--sp-4,16px); background:var(--s1); border:1px solid var(--border); border-radius:var(--ui-radius-group,16px); padding:6px var(--sp-4,16px); }
@@ -5896,17 +5896,94 @@ input.pt-range::-moz-range-thumb,
 .sd-rot-btn.cur { border-color:var(--accent) !important; background:color-mix(in srgb,var(--accent) 18%,var(--s1)) !important; color:var(--text) !important; }
 .sd-brand-ico { width:34px; height:34px; border-radius:22.5%; flex:0 0 auto; display:block; }
 .ec-icon img.brand-ico { width:1em; height:1em; object-fit:contain; }
+
+/* ── Shared back-to-Cueola button: the one navigation idiom every app uses ── */
+.app-back { display:flex; align-items:center; gap:5px; background:none; border:1px solid var(--border); color:var(--text2); border-radius:var(--ui-radius-control,12px); padding:6px 12px 6px 8px; cursor:pointer; font-size:13px; font-weight:600; white-space:nowrap; flex:0 0 auto; transition:border-color var(--dur-fast,.12s) var(--ease,ease), color var(--dur-fast,.12s) var(--ease,ease); }
+.app-back:hover { border-color:color-mix(in srgb,var(--accent) 50%,transparent); color:var(--text); }
+
+/* ── KeyWi deck shell: the on-screen deck sits in a hardware-style housing.
+   Deliberately theme-independent darks, same exemption as the key faces. ── */
+.sd-shell { background:linear-gradient(180deg,#191c22,#0c0e12); border:1px solid #262b33; border-radius:24px; padding:var(--sp-4,16px); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 40px rgba(0,0,0,.35); }
+.sd-shell .sd-keys { margin-bottom:0; }
+.sd-strip-mirror { display:block; width:100%; height:auto; margin-top:var(--sp-3,12px); border-radius:10px; background:#000; border:1px solid #20242c; }
+.sd-keys .sd-key { animation:sdKeyIn var(--dur-slow,.3s) var(--ease,ease) backwards; animation-delay:calc(var(--i,0) * 12ms); }
+@keyframes sdKeyIn { from { opacity:0; transform:translateY(8px) scale(.9); } }
+
+/* ── Theme chips ── */
+.sd-theme-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.sd-theme-chip { border:1px solid var(--border); background:var(--s1); color:var(--text2); border-radius:999px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer; transition:transform var(--dur-fast,.12s) var(--ease,ease), border-color var(--dur-fast,.12s) var(--ease,ease), box-shadow var(--dur-fast,.12s) var(--ease,ease); }
+.sd-theme-chip:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--accent) 50%,transparent); color:var(--text); }
+.sd-theme-chip.cur { border-color:var(--accent); color:var(--text); box-shadow:0 0 0 1px var(--accent); }
+.sd-th-neon.cur { border-color:#00e5ff; box-shadow:0 0 0 1px #00e5ff, 0 0 12px rgba(0,229,255,.3); }
+.sd-th-synthwave.cur { border-color:#ff5ff0; box-shadow:0 0 0 1px #ff5ff0, 0 0 12px rgba(255,95,240,.28); }
+.sd-th-terminal.cur { border-color:#43ff9a; box-shadow:0 0 0 1px #43ff9a, 0 0 12px rgba(67,255,154,.28); }
+.sd-th-aurora.cur { border-color:#7cf7d4; box-shadow:0 0 0 1px #7cf7d4, 0 0 12px rgba(124,247,212,.28); }
+
+/* ── OBS stream-audio picker ── */
+.sd-obs-vol-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text3); margin-left:6px; }
+#sd-obs-vol { background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:5px 8px; font-size:12.5px; max-width:190px; }
+
+/* ── Micochondria: the mic panel. Connected or not, then one strip per mic. ── */
+.sd-mico { background:var(--s1); border:1px solid var(--border); border-radius:var(--ui-radius-group,16px); padding:var(--sp-3,12px) var(--sp-4,16px); margin:0 0 var(--sp-3,12px); max-width:640px; }
+#sd-surface-root > .sd-mico:last-child { margin-top:var(--sp-3,12px); }
+.sd-mico-head { display:flex; align-items:center; gap:var(--sp-2,8px); }
+.sd-mico-name { font-family:var(--syne); font-weight:800; font-size:15px; letter-spacing:-.01em; }
+.sd-mico-name span { color:var(--accent); }
+.sd-mico-status { color:var(--text2); font-size:13px; }
+.sd-mico-hint { color:var(--text2); font-size:12.5px; line-height:1.6; margin-top:6px; }
+.sd-mico-hint code { font-family:var(--mono); font-size:11.5px; background:var(--s2); border:1px solid var(--border); border-radius:6px; padding:2px 7px; user-select:all; -webkit-user-select:all; }
+.sd-mico-strip { display:flex; align-items:center; gap:var(--sp-3,12px); padding-top:var(--sp-2,8px); margin-top:var(--sp-2,8px); border-top:1px solid color-mix(in srgb,var(--text) 7%,transparent); }
+.sd-mico-talk { display:flex; align-items:center; gap:6px; min-width:86px; justify-content:center; background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:9px 14px; font-weight:800; font-size:13px; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:none; transition:transform var(--dur-fast,.12s) var(--ease,ease), border-color var(--dur-fast,.12s) var(--ease,ease), box-shadow var(--dur-fast,.12s) var(--ease,ease); }
+.sd-mico-talk:active { transform:scale(.96); }
+.sd-mico-strip.onair .sd-mico-talk { background:color-mix(in srgb,var(--green) 22%,var(--s2)); border-color:var(--green); box-shadow:0 0 12px color-mix(in srgb,var(--green) 45%,transparent); }
+.sd-mico-mid { flex:1; min-width:120px; }
+.sd-mico-sub { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text3); margin-bottom:5px; }
+.sd-mico-sub2 { font-size:12px; color:var(--text3); }
+.sd-mico-meter { height:8px; border-radius:999px; background:var(--s2); border:1px solid var(--border); overflow:hidden; }
+.sd-mico-meter-fill { height:100%; width:0; border-radius:999px; background:var(--green); transition:width 90ms linear; }
+.sd-mico-meter-fill.idle { opacity:.45; }
+.sd-mico-meter-fill.hot { background:var(--red); }
+.sd-mico-vol { width:130px; accent-color:var(--accent); }
+.sd-mico-lamp { min-width:56px; text-align:center; font-size:10.5px; font-weight:800; letter-spacing:.06em; border-radius:999px; padding:4px 8px; background:var(--s2); color:var(--text3); }
+.sd-mico-strip.onair .sd-mico-lamp { background:var(--red); color:#fff; animation:sdlive 1.4s infinite; }
+
+/* ── Setup wizard ── */
+.sd-wz-card { width:min(560px,94vw) !important; }
+.sd-wz-dots { display:flex; gap:7px; justify-content:center; margin-bottom:var(--sp-4,16px); }
+.sd-wz-dot { width:8px; height:8px; border-radius:50%; background:var(--s3); transition:background var(--dur-fast,.12s) var(--ease,ease), transform var(--dur-fast,.12s) var(--ease,ease); }
+.sd-wz-dot.cur { background:var(--accent); transform:scale(1.25); }
+.sd-wz-dot.done { background:color-mix(in srgb,var(--accent) 55%,var(--s3)); }
+.sd-wz-hero { text-align:center; margin:var(--sp-3,12px) 0 var(--sp-2,8px); }
+.sd-wz-mark { font-size:34px; }
+.sd-wz-tag { color:var(--text2); font-size:14px; margin-top:4px; margin-bottom:var(--sp-3,12px); }
+.sd-wz-t { font-family:var(--syne); font-weight:800; font-size:20px; margin:4px 0 10px; }
+.sd-wz-hi { color:var(--accent); }
+.sd-wz-opt { font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:2px 8px; vertical-align:4px; margin-left:6px; }
+.sd-wz-p { color:var(--text2); font-size:13.5px; line-height:1.6; margin:0 0 10px; }
+.sd-wz-code { display:block; font-family:var(--mono); font-size:12px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:0 0 10px; user-select:all; -webkit-user-select:all; }
+.sd-wz-actions { display:flex; gap:var(--sp-2,8px); flex-wrap:wrap; margin-bottom:10px; }
+.sd-wz-actions .btn-primary, .sd-wz-actions .btn-secondary { width:auto; flex:0 0 auto; }
+.sd-wz-status { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text2); background:var(--s2); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:8px 12px; margin-top:4px; }
+.sd-wz-status.on { color:var(--green); border-color:color-mix(in srgb,var(--green) 40%,transparent); }
+.sd-wz-obs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.sd-wz-obs .btn-secondary { width:auto; flex:0 0 auto; }
+.sd-wz-themes { margin-bottom:10px; }
+.sd-wz-foot { display:flex; align-items:center; gap:var(--sp-2,8px); margin-top:var(--sp-4,16px); padding-top:var(--sp-3,12px); border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent); }
+.sd-wz-foot .btn-primary, .sd-wz-foot .btn-secondary { width:auto; flex:0 0 auto; }
+
+@media (pointer:coarse) { .sd-theme-chip, .app-back, .sd-mico-talk, .sd-mico-lamp { min-height:44px; } .sd-mico-vol { min-height:44px; } }
 </style>
 <div class="screen" id="streamdeck">
   <div class="sd-head">
+    <button class="app-back" onclick="CueolaStreamDeck && CueolaStreamDeck.close()" title="Back to the front page" aria-label="Back to the front page"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
     <img class="sd-brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true">
-    <div><h2 class="sd-wordmark">Key<span>Wi</span> Bird</h2><div class="sd-sub">Playback &middot; rundown &middot; prompter &middot; talkback &middot; OBS &middot; one deck</div></div>
-    <span class="sd-livebadge" id="sd-livebadge"></span>
+    <div><h2 class="sd-wordmark">Key<span>Wi Bird</span></h2><div class="sd-sub">Playback &middot; rundown &middot; prompter &middot; mics &middot; OBS &middot; one deck</div></div>
     <div class="sd-spacer"></div>
-    <button class="btn-secondary" onclick="CueolaStreamDeck && CueolaStreamDeck.close()">Close</button>
+    <span class="sd-livebadge" id="sd-livebadge"></span>
   </div>
   <div class="sd-wrap"><div id="sd-surface-root"></div></div>
   <div class="sd-picker" id="sd-picker"></div>
+  <div class="sd-picker sd-wizard" id="sd-wizard"></div>
   <div id="sd-toast"></div>
 </div>
 
@@ -5928,8 +6005,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-app.js?v=05299da090"></script>
 <script src="outrangutan/outrangutan.js?v=984299cd5d"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
-<script src="cueola-obs.js?v=b17032dbf7"></script>
-<script src="cueola-streamdeck.js?v=dd666f4a97"></script>
+<script src="cueola-obs.js?v=d6aad44701"></script>
+<script src="cueola-streamdeck.js?v=64be0ef0df"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

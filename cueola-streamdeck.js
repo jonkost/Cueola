@@ -41,22 +41,33 @@
   var EMOJI_ART = ['🔊', '💥', '👏', '🎉', '😂', '🥁', '🎺', '🔔', '⚡', '🌩️', '🎵', '📣', '🚨', '🎬', '🎸', '🦆', '💨', '🏆', '❤️', '🤫'];
 
   // ── Action catalog ─────────────────────────────────────────────────────────
+  // Ordered app by app (Outrangutan → Cueola → Flowmingo) so the key editor's
+  // groups read like the apps themselves. Colors follow the app family — playback
+  // keeps its semantic transport colors, Cueola rides blues, Flowmingo purples —
+  // except safety colors (PANIC red, hold-key amber), which always win.
   var KEYMAP_ACTIONS = [
+    // Outrangutan (playback)
     ['playout.go', '#1c7a3e', 'GO'], ['playout.pause', '#5a4a12', 'PAUSE'],
     ['playout.stop', '#2e3640', 'STOP'], ['playout.fade', '#243a66', 'FADE'],
     ['playout.panic', '#8a1f1f', 'PANIC'],
-    ['rundown.next', '#234a8a', 'NEXT'], ['rundown.back', '#2e3640', 'PREV'],
-    ['prompter.cue.current', '#234a8a', 'CUE ROW'],
-    ['prompter.playpause', '#6a3b8a', 'SCROLL'], ['prompter.top', '#2e3640', 'TOP'],
-    ['prompter.size.up', '#2e3640', 'A+'], ['prompter.size.down', '#2e3640', 'A-'],
-    ['prompter.speed.up', '#2e3640', 'SPD+'], ['prompter.speed.down', '#2e3640', 'SPD-'],
-    ['prompter.dir.fwd', '#2e3640', 'FWD'], ['prompter.dir.rev', '#2e3640', 'REV'],
-    ['prompter.fullscreen', '#2e3640', 'FULL'], ['prompter.hideui', '#2e3640', 'HIDE UI'],
-    ['prompter.mirror', '#2e3640', 'MIRROR'], ['prompter.brake', '#5a4a12', 'BRAKE'],
-    ['prompter.boost', '#5a4a12', 'BOOST'], ['prompter.nudge.back', '#2e3640', 'NUDGE-'],
-    ['prompter.nudge.fwd', '#2e3640', 'NUDGE+'], ['prompter.editscript', '#2e3640', 'EDIT'],
-    ['ref.open', '#2e3640', 'HELP'], ['scrub.open', '#2e3640', 'SCRUB']
+    // Cueola (rundown + live)
+    ['rundown.next', '#234a8a', 'NEXT'], ['rundown.back', '#22365c', 'PREV'],
+    ['ref.open', '#2e3640', 'HELP'],
+    // Flowmingo (prompter)
+    ['prompter.cue.current', '#4a2f73', 'CUE ROW'],
+    ['prompter.playpause', '#6a3b8a', 'SCROLL'], ['prompter.top', '#3d2b52', 'TOP'],
+    ['prompter.size.up', '#3d2b52', 'A+'], ['prompter.size.down', '#3d2b52', 'A-'],
+    ['prompter.speed.up', '#3d2b52', 'SPD+'], ['prompter.speed.down', '#3d2b52', 'SPD-'],
+    ['prompter.dir.fwd', '#3d2b52', 'FWD'], ['prompter.dir.rev', '#3d2b52', 'REV'],
+    ['prompter.fullscreen', '#3d2b52', 'FULL'], ['prompter.hideui', '#3d2b52', 'HIDE UI'],
+    ['prompter.mirror', '#3d2b52', 'MIRROR'], ['prompter.brake', '#5a4a12', 'BRAKE'],
+    ['prompter.boost', '#5a4a12', 'BOOST'], ['prompter.nudge.back', '#3d2b52', 'NUDGE-'],
+    ['prompter.nudge.fwd', '#3d2b52', 'NUDGE+'], ['prompter.editscript', '#3d2b52', 'EDIT'],
+    ['scrub.open', '#3d2b52', 'SCRUB']
   ];
+  // Which app owns each keymap action — the key editor groups by app, so the
+  // catalog reads like the rig: Outrangutan, Cueola, Flowmingo, Micochondria, OBS.
+  var APP_GROUP = { playout: 'Outrangutan', rundown: 'Cueola', ref: 'Cueola', prompter: 'Flowmingo', scrub: 'Flowmingo' };
 
   var catalog = {};
   function registerAction(desc) { catalog[desc.id] = desc; }
@@ -100,27 +111,27 @@
     KEYMAP_ACTIONS.forEach(function (row) {
       var id = row[0], color = row[1], short = row[2];
       var entry = km.find(function (a) { return a.id === id; });
-      registerAction({ id: 'km:' + id, kind: 'keymap', keymapId: id, hold: !!(entry && entry.hold), group: (entry && entry.group) || 'Show', color: color, label: short, full: (entry && entry.label) || id, desc: KEYMAP_DESCS[id] || '', toggle: !!KEYMAP_TOGGLES[id], lamp: lampFor(id) });
+      registerAction({ id: 'km:' + id, kind: 'keymap', keymapId: id, hold: !!(entry && entry.hold), group: APP_GROUP[id.split('.')[0]] || (entry && entry.group) || 'Cueola', color: color, label: short, full: (entry && entry.label) || id, desc: KEYMAP_DESCS[id] || '', toggle: !!KEYMAP_TOGGLES[id], lamp: lampFor(id) });
     });
-    for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'SFX pads (by slot)', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
-    for (var c = 1; c <= 8; c++) registerAction({ id: 'cue:' + c, kind: 'cue', slot: c, group: 'Cues (by slot)', color: '#234a8a', label: 'CUE ' + c, full: 'Playout cue slot ' + c, desc: 'Fires cue number ' + c + ' of the loaded show.' });
+    for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'Outrangutan · SFX pads', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
+    for (var c = 1; c <= 8; c++) registerAction({ id: 'cue:' + c, kind: 'cue', slot: c, group: 'Outrangutan · cues', color: '#234a8a', label: 'CUE ' + c, full: 'Playout cue slot ' + c, desc: 'Fires cue number ' + c + ' of the loaded show.' });
     // Named cue/pad refs are bound from the live show list in the key editor.
     registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', desc: 'Fires one specific SFX pad, picked by name.' });
     registerAction({ id: 'cueRef', kind: 'cueRef', group: 'This show', color: '#234a8a', label: 'CUE', full: 'Cue (by name)', desc: 'Fires one specific cue, picked by name.' });
-    registerAction({ id: 'golive', kind: 'golive', group: 'Show', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
+    registerAction({ id: 'golive', kind: 'golive', group: 'Cueola', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
     // The clock suite: one toggle plus explicit Start / Pause / Resume verbs.
     // Lamps: Start+Resume glow while running; Pause glows while paused mid-show.
-    registerAction({ id: 'clock', kind: 'clock', verb: 'toggle', group: 'Show clock', color: '#243a66', label: 'CLOCK', full: 'Show clock: start / pause', desc: 'One-key clock: starts it, or pauses it if running. Toggle.', toggle: true, lamp: function (s) { return !!(s.clock && s.clock.running); } });
-    registerAction({ id: 'clock.start', kind: 'clock', verb: 'start', group: 'Show clock', color: '#1c7a3e', label: 'CLOCK GO', full: 'Show clock: start', desc: 'Starts the shared show clock. Quiet no-op if already running.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
-    registerAction({ id: 'clock.pause', kind: 'clock', verb: 'pause', group: 'Show clock', color: '#5a4a12', label: 'CLOCK ❚❚', full: 'Show clock: pause', desc: 'Pauses the shared show clock. Quiet no-op if already paused.', lamp: function (s) { return !!(s.clock && !s.clock.running && s.clock.elapsed > 0); } });
-    registerAction({ id: 'clock.resume', kind: 'clock', verb: 'resume', group: 'Show clock', color: '#0f4c81', label: 'CLOCK ▶', full: 'Show clock: resume', desc: 'Resumes a paused show clock from where it stopped.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
+    registerAction({ id: 'clock', kind: 'clock', verb: 'toggle', group: 'Cueola · show clock', color: '#243a66', label: 'CLOCK', full: 'Show clock: start / pause', desc: 'One-key clock: starts it, or pauses it if running. Toggle.', toggle: true, lamp: function (s) { return !!(s.clock && s.clock.running); } });
+    registerAction({ id: 'clock.start', kind: 'clock', verb: 'start', group: 'Cueola · show clock', color: '#1c7a3e', label: 'CLOCK GO', full: 'Show clock: start', desc: 'Starts the shared show clock. Quiet no-op if already running.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
+    registerAction({ id: 'clock.pause', kind: 'clock', verb: 'pause', group: 'Cueola · show clock', color: '#5a4a12', label: 'CLOCK ❚❚', full: 'Show clock: pause', desc: 'Pauses the shared show clock. Quiet no-op if already paused.', lamp: function (s) { return !!(s.clock && !s.clock.running && s.clock.elapsed > 0); } });
+    registerAction({ id: 'clock.resume', kind: 'clock', verb: 'resume', group: 'Cueola · show clock', color: '#0f4c81', label: 'CLOCK ▶', full: 'Show clock: resume', desc: 'Resumes a paused show clock from where it stopped.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
     // Micochondria — the powerhouse for the talkbacks. Two hold-to-talk mics:
     // TKB (Talkback, crew comms on outs 1-2) and VofU (Voice of the Universe, the
     // god-mic to the room on outs 3-4), plus one off-air panic. Action ids, kind,
     // and bus letters are the wire contract with the plugin + daemon — never rename.
     registerAction({ id: 'talk.a', kind: 'talkback', bus: 'A', momentary: true, group: 'Micochondria', color: '#17653a', label: 'TKB', full: 'Talkback (outs 1-2), hold', desc: 'HOLD to talk to the crew on the Talkback bus (outs 1-2). Mic cuts the moment you release.', lamp: function () { return talkbackState.A; } });
-    registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe — the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
-    registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics — TKB and VofU — instantly. The off-air safety.' });
+    registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe, the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
+    registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics (TKB and VofU) instantly. The off-air safety.' });
     // Layouts as pages: a key can jump straight to a saved layout, or cycle them.
     registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next saved layout', desc: 'Cycles to the next saved layout. Turns the deck into pages.' });
     registerAction({ id: 'layoutRef', kind: 'layoutRef', group: 'Layouts', color: '#2e3640', label: 'PAGE', full: 'Jump to a layout (by name)', desc: 'Switches the whole deck to one specific saved layout.', lamp: function (s, slot) { return !!(slot && slot.ref && mapping().name === slot.ref); } });
@@ -153,8 +164,8 @@
   // shown on the dial card, in the dial editor, and on the touch strip itself.
   // `bar(s)` returns 0..1 for the strip's progress bar; `hue` tints its zone.
   var DIAL_CONTROLLERS = {
-    master: { label: 'Program vol', hue: '#22d3a0', turnLabel: 'Volume up / down', pressLabel: 'Mute / unmute',
-      desc: 'Turn: program master volume. Press: instant mute, press again to restore.',
+    master: { label: 'PLBK vol', hue: '#22d3a0', turnLabel: 'Volume up / down', pressLabel: 'Mute / unmute',
+      desc: 'Turn: Outrangutan playback master volume. Press: instant mute, press again to restore.',
       readout: function () { return pct(masterGain()); }, bar: function () { return Math.min(1, masterGain() / 1.2); },
       tick: function (d) { setMaster(masterGain() + d * 0.03); }, press: function () { toggleMasterMute(); } },
     prompterSpeed: { label: 'Prompter speed', hue: '#b06ef8', turnLabel: 'Faster / slower', pressLabel: 'Play / pause',
@@ -183,34 +194,46 @@
       tick: function (d) { setBrightness(brightness + d * 5); }, press: function () { setBrightness(80); } },
     // Silly-but-why-not: the live OBS program, right on the touch strip. It is a
     // low-fps monitor glance (a screenshot every ~¼s over the websocket), not
-    // smooth video, but it turns a strip zone into a program preview. Press to
-    // start / stop the OBS stream.
-    obsProgram: { label: 'OBS program', hue: '#e2477b', turnLabel: 'Nothing (monitor)', pressLabel: 'Start / stop stream', obsFrame: true,
-      desc: 'Turn: nothing — this zone is a live OBS program monitor. Press: start or stop the OBS stream.',
-      readout: function () { var st = obsState(); return st.streaming ? 'LIVE' : (st.currentScene ? 'ON' : 'off'); },
-      bar: function () { return null; }, live: function () { return !!obsState().streaming; },
-      tick: function () {}, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (bottom of the setup panel).'); } }
+    // smooth video, but it turns a strip zone into a program preview. Turning
+    // rides the OBS stream-audio input volume (pick which input in the OBS row);
+    // press to start / stop the OBS stream.
+    obsProgram: { label: 'OBS program', hue: '#e2477b', turnLabel: 'Stream volume', pressLabel: 'Start / stop stream', obsFrame: true,
+      desc: 'A live OBS program monitor. Turn: the OBS stream audio volume (choose which input in the OBS row). Press: start or stop the OBS stream.',
+      readout: function () { var st = obsState(); return st.connected ? pct(obsVolume()) : 'off'; },
+      bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { return !!obsState().streaming; },
+      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS row above the deck).'); } }
   };
   var DEFAULT_DIALS = ['master', 'prompterSpeed', 'prompterSize', 'prompterScrub', 'rundownSelect', 'showClock'];
   function fmtClock(secs) { secs = Math.max(0, Math.round(secs || 0)); var m = Math.floor(secs / 60), s = secs % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
 
-  // Curated default layouts per deck size, so ANY Stream Deck gets a sensible
-  // out-of-the-box surface: a Mini gets the survival kit, a classic 15 gets a
-  // show-runner page, the XL family gets the full spread.
+  // Curated default layouts per deck size, organized BY APP: each app owns a
+  // contiguous band of columns (Outrangutan, then Cueola, then Flowmingo, then
+  // Micochondria, then OBS), like channel strips on a console. Redundancy rule:
+  // a deck with dials does NOT get keys for things its dials already do (text
+  // size, prompter speed, the three separate clock verbs) — one control, one
+  // job. The dial-less XL keeps its speed keys. Blanks are deliberate air
+  // between bands, not wasted keys.
   var DEFAULT_LAYOUTS = {
     6:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next', 'talk.a', 'clock'],
-    8:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next', 'km:rundown.back', 'talk.a', 'talk.b', 'clock'],
-    15: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next',
-         'km:prompter.playpause', 'km:prompter.top', 'km:prompter.cue.current', 'km:rundown.back', 'golive',
-         'pad:1', 'pad:2', 'talk.a', 'talk.b', 'clock'],
-    32: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:playout.fade', 'km:playout.panic', 'km:rundown.next', 'km:rundown.back', 'golive',
-         'km:prompter.playpause', 'km:prompter.top', 'km:prompter.size.up', 'km:prompter.size.down', 'km:prompter.speed.up', 'km:prompter.speed.down', 'km:prompter.cue.current', 'km:prompter.mirror',
-         'pad:1', 'pad:2', 'pad:3', 'pad:4', 'km:prompter.brake', 'km:prompter.boost', 'obs.scene:1', 'obs.scene:2',
-         'talk.a', 'talk.b', 'talk.off', 'clock.start', 'clock.pause', 'obs.stream', 'obs.record', 'layout.next'],
-    36: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:playout.fade', 'km:playout.panic', 'km:rundown.next', 'km:rundown.back', 'golive', 'km:prompter.cue.current',
-         'km:prompter.playpause', 'km:prompter.top', 'km:prompter.size.up', 'km:prompter.size.down', 'km:prompter.speed.up', 'km:prompter.speed.down', 'km:prompter.dir.fwd', 'km:prompter.dir.rev', 'km:prompter.mirror',
-         'pad:1', 'pad:2', 'pad:3', 'pad:4', 'km:prompter.brake', 'km:prompter.boost', 'obs.scene:1', 'obs.scene:2', 'obs.scene:3',
-         'talk.a', 'talk.b', 'talk.off', 'clock.start', 'clock.pause', 'clock.resume', 'obs.stream', 'obs.record', 'layout.next']
+    8:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next',
+         'km:rundown.back', 'clock', 'talk.a', 'talk.b'],
+    // 5 × 3: row 1 Outrangutan, row 2 Cueola, row 3 Flowmingo + Micochondria.
+    15: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:playout.panic', 'pad:1',
+         'km:rundown.next', 'km:rundown.back', 'golive', 'clock', 'km:prompter.playpause',
+         'km:prompter.cue.current', 'km:prompter.top', 'talk.a', 'talk.b', 'talk.off'],
+    // 8 × 4 (XL, no dials): cols 1-3 Outrangutan, 4-5 Cueola + OBS, 6-7 Flowmingo
+    // (keeps SPD keys — nothing else covers speed here), col 8 Micochondria.
+    32: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'talk.a',
+         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'talk.b',
+         'pad:2', 'pad:3', 'pad:4', 'obs.stream', 'obs.record', 'km:prompter.brake', 'km:prompter.boost', 'talk.off',
+         'cue:1', 'cue:2', 'cue:3', 'obs.scene:1', 'obs.scene:2', 'km:prompter.speed.down', 'km:prompter.speed.up', 'layout.next'],
+    // 9 × 4 (+ XL): cols 1-3 Outrangutan, 4-5 Cueola, 6-7 Flowmingo,
+    // col 8 Micochondria, col 9 OBS + pages. Dials cover volume, speed, size,
+    // scrub, row, clock — so those keys are gone on purpose.
+    36: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'talk.a', 'obs.stream',
+         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'talk.b', 'obs.record',
+         'pad:2', 'pad:3', 'pad:4', 'none', 'none', 'km:prompter.brake', 'km:prompter.boost', 'talk.off', 'obs.scene:1',
+         'cue:1', 'cue:2', 'cue:3', 'none', 'fx.hype', 'km:prompter.editscript', 'km:scrub.open', 'none', 'layout.next']
   };
   function defaultKeySlots(keys) {
     var sizes = Object.keys(DEFAULT_LAYOUTS).map(Number).sort(function (a, b) { return a - b; });
@@ -238,7 +261,9 @@
   var mode = 'local';
 
   var tbSocket = null, tbUrlIndex = 0, tbReconnect = null;
-  var talkbackState = { A: false, B: false, connected: false };
+  // gains/levels arrive only from an updated talkbackd; hasGains/hasLevels flag
+  // what this daemon speaks so the Micochondria panel never shows dead controls.
+  var talkbackState = { A: false, B: false, connected: false, gainA: 1, gainB: 1, hasGains: false, hasLevels: false, levels: { mic: 0, a: 0, b: 0 } };
   var talkbackHeld = { A: false, B: false };
 
   // ── Bridge accessors (defensive) ────────────────────────────────────────────
@@ -289,10 +314,31 @@
   function obsDo(op) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (bottom of the setup panel).'); return; } try { o[op] && o[op](); } catch (e) {} }
   function obsDo2(op, arg) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first.'); return; } try { o[op] && o[op](arg); } catch (e) {} }
   function obsSceneSlot(slot) { var st = obsState(), name = (st.scenes || [])[slot - 1]; if (name) obsDo2('setScene', name); else toast('No OBS scene in slot ' + slot + '.'); }
+  // Stream-output volume: obs-websocket has no master fader, so KeyWi rides ONE
+  // chosen audio input (the "stream audio" — usually Desktop Audio). The pick is
+  // remembered per browser; auto-guess prefers a desktop/stream-sounding name.
+  var OBS_VOL_KEY = 'cueola_obs_streamvol_input';
+  function obsVolInputName() {
+    var inputs = obsState().inputs || [];
+    var saved = ''; try { saved = localStorage.getItem(OBS_VOL_KEY) || ''; } catch (e) {}
+    if (saved && inputs.indexOf(saved) >= 0) return saved;
+    for (var i = 0; i < inputs.length; i++) if (/desktop|stream|program|master|output/i.test(inputs[i])) return inputs[i];
+    return inputs[0] || '';
+  }
+  function setObsVolInput(name) { try { localStorage.setItem(OBS_VOL_KEY, name || ''); } catch (e) {} schedulePaint(); }
+  function obsVolume() { var st = obsState(), n = obsVolInputName(); var v = st.volumes ? st.volumes[n] : null; return v == null ? 1 : Math.max(0, Math.min(1, v)); }
+  function obsVolTick(d) {
+    var o = OBSc();
+    if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (the OBS row above the deck).'); return; }
+    var n = obsVolInputName();
+    if (!n) { toast('OBS has no audio inputs to ride.'); return; }
+    try { o.setVolume(n, obsVolume() + d * 0.04); } catch (e) {}
+    schedulePaint();
+  }
   var obsWasReady = false;
   function onObsChange() {
     var now = !!(OBSc() && OBSc().isReady());
-    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); }
+    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); }
     else if (now) { updateObsScene(); updateLiveBadge(); schedulePaint(); }
   }
   function updateObsScene() { var el = document.querySelector('.sd-obs-scene'); if (el) el.textContent = obsState().currentScene || '(no scene)'; }
@@ -304,15 +350,38 @@
     var url = TALKBACK_URLS[tbUrlIndex % TALKBACK_URLS.length], ws;
     try { ws = new WebSocket(url); } catch (e) { scheduleTalkbackReconnect(); return; }
     tbSocket = ws;
-    ws.onopen = function () { talkbackState.connected = true; try { ws.send('state?'); } catch (e) {} renderStatus(); };
-    ws.onmessage = function (evt) { var m; try { m = JSON.parse(evt.data); } catch (e) { return; } if (m && m.type === 'state') { talkbackState.A = !!m.talkA; talkbackState.B = !!m.talkB; schedulePaint(); renderStatus(); } };
-    ws.onclose = function () { talkbackState.connected = false; talkbackState.A = false; talkbackState.B = false; talkbackHeld.A = false; talkbackHeld.B = false; tbUrlIndex++; scheduleTalkbackReconnect(); schedulePaint(); renderStatus(); };
+    ws.onopen = function () { talkbackState.connected = true; try { ws.send('state?'); } catch (e) {} renderStatus(); renderMico(); if (wizardStep >= 0) wizardRender(); };
+    ws.onmessage = function (evt) {
+      var m; try { m = JSON.parse(evt.data); } catch (e) { return; }
+      if (m && m.type === 'state') {
+        var structural = (talkbackState.A !== !!m.talkA) || (talkbackState.B !== !!m.talkB) || (!talkbackState.hasGains && m.gainA != null);
+        talkbackState.A = !!m.talkA; talkbackState.B = !!m.talkB;
+        if (m.gainA != null) { talkbackState.hasGains = true; talkbackState.gainA = m.gainA; }
+        if (m.gainB != null) talkbackState.gainB = m.gainB;
+        schedulePaint(); renderStatus();
+        if (structural) renderMico(); else micoSync();
+      } else if (m && m.type === 'levels') {
+        if (!talkbackState.hasLevels) { talkbackState.hasLevels = true; renderMico(); }
+        talkbackState.levels = { mic: +m.mic || 0, a: +m.a || 0, b: +m.b || 0 };
+        updateMicoMeters();
+      }
+    };
+    ws.onclose = function () { talkbackState.connected = false; talkbackState.A = false; talkbackState.B = false; talkbackState.hasGains = false; talkbackState.hasLevels = false; talkbackState.levels = { mic: 0, a: 0, b: 0 }; talkbackHeld.A = false; talkbackHeld.B = false; tbUrlIndex++; scheduleTalkbackReconnect(); schedulePaint(); renderStatus(); renderMico(); if (wizardStep >= 0) wizardRender(); };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
   }
   function scheduleTalkbackReconnect() { clearTimeout(tbReconnect); tbReconnect = setTimeout(talkbackConnect, 2000); }
   function talkbackSend(cmd) { if (tbSocket && tbSocket.readyState === 1) { try { tbSocket.send(cmd); return true; } catch (e) {} } return false; }
   function talkbackSet(bus, on) { talkbackHeld[bus] = on; if (!talkbackSend(bus + (on ? ' on' : ' off')) && on) toast('Talkback daemon not running (start talkbackd).'); }
   function releaseTalkback(force) { ['A', 'B'].forEach(function (bus) { if (talkbackHeld[bus] || (force && talkbackState[bus])) { talkbackHeld[bus] = false; talkbackSend(bus + ' off'); } }); }
+  // Volume rides the daemon ("A gain 0.8"). Sends are debounced so a slider
+  // drag is one command stream, not hundreds; local state updates instantly.
+  var tbGainTimers = {};
+  function talkbackGain(bus, v) {
+    v = Math.max(0, Math.min(1, +v || 0));
+    if (bus === 'A') talkbackState.gainA = v; else talkbackState.gainB = v;
+    clearTimeout(tbGainTimers[bus]);
+    tbGainTimers[bus] = setTimeout(function () { talkbackSend(bus + ' gain ' + v.toFixed(2)); }, 60);
+  }
 
   // ── Device lifecycle ─────────────────────────────────────────────────────────
   function supportedFilter(d) { return d && d.vendorId === Device.ELGATO_VID; }
@@ -344,6 +413,7 @@
     previewMode = false;
     stripErrToasted = false;
     render();
+    if (wizardStep >= 0) wizardRender();
     startPaintLoop();
     startAnim();
     connectLightShow().then(function () { return paintAll(); }).then(function () { return stripProbe(); });
@@ -387,10 +457,10 @@
     profile = Device.makeProfile(PREVIEW_PID, { overrides: overrides });
     keyState = new Array(profile.keys).fill(false);
     ensureProfilesShape();
-    render(); paintMirror(); startAnim();
+    render(); paintMirror(); startAnim(); startPaintLoop();
     toast('Preview mode: this is your deck on screen. Connect real hardware any time.');
   }
-  function stopPreview() { previewMode = false; profile = null; stopAnim(); render(); }
+  function stopPreview() { previewMode = false; profile = null; stopAnim(); stopPaintLoop(); render(); }
 
   function onInputReport(e) {
     if (!device) return;
@@ -692,6 +762,7 @@
   function schedulePaint() { paintScheduled = true; }
   function paintTick() {
     if (paintScheduled) { paintScheduled = false; paintChanged(); }
+    else paintStrip(false);  // strip readouts (the clock) drift without events; sig-deduped, so cheap
     refreshDialReadouts();   // keep the on-screen dial values live, not render-stale
   }
   function refreshDialReadouts() {
@@ -727,7 +798,7 @@
   function mirrorCanvasFor(i) { var r = root(); if (!r) return null; var btn = r.querySelector('.sd-key[data-key="' + i + '"]'); return btn ? btn.querySelector('canvas') : null; }
   // The on-screen grid shows the SAME art the hardware shows: true WYSIWYG.
   function paintMirror() { var cur = profile; if (!cur) return; var s = surfaceState(); for (var i = 0; i < cur.keys; i++) { var cv = mirrorCanvasFor(i); if (cv) { var spec = keyArtSpec(i, s); spec.editing = (i === editingKey); drawKeyInto(cv, spec, cv.width); } } }
-  async function paintAll() { var cur = profile; ensureSymbols(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); paintMirror(); await paintChanged(); if (device) await paintStrip(true); }
+  async function paintAll() { var cur = profile; ensureSymbols(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); paintMirror(); await paintChanged(); if (device || previewMode) await paintStrip(true); }
   async function paintChanged() {
     var cur = profile; if (!cur) return;
     var s = surfaceState();
@@ -737,7 +808,7 @@
       var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width);
       if (device) await paintKeyDevice(i, spec);
     }
-    if (device) await paintStrip(false);
+    if (device || previewMode) await paintStrip(false);
   }
   // Animation loop: clock ticks and REC/LIVE/scene keys breathe. Only animated
   // keys repaint, on-screen every ~7fps and to the device throttled to ~4fps.
@@ -768,7 +839,7 @@
     toast('🎉 HYPE!');
   }
   async function paintStrip(force) {
-    if (!device || !profile || !profile.strip) return;
+    if (!profile || !profile.strip || (!device && !previewMode)) return;
     var s = surfaceState(), cells = [];
     for (var z = 0; z < profile.strip.zones; z++) {
       var dialId = mapping().dials[(mapping().touch[z] || { dial: z }).dial];
@@ -776,19 +847,29 @@
       cells.push({
         title: c ? c.label : '', value: c ? String(c.readout(s)) : '', tap: c ? c.pressLabel : '',
         hue: (c && c.hue) || '#5b8df8',
-        bar: c && c.bar ? Math.max(0, Math.min(1, c.bar(s) || 0)) : null,
+        bar: c && c.bar ? (c.bar(s) == null ? null : Math.max(0, Math.min(1, c.bar(s) || 0))) : null,
         live: !!(c && c.live && c.live(s)),
         obsFrame: !!(c && c.obsFrame)
       });
     }
     ensureObsFrameLoop();
-    if (stripProbeActive) return;   // don't fight the format probe mid-cycle
-    var sig = JSON.stringify(cells); if (!force && sig === lastStripSig) return; lastStripSig = sig;
+    var sig = JSON.stringify(cells);
+    var changed = force || sig !== lastStripSig;
+    if (changed) drawStripMirrorCanvas(cells);   // the on-screen strip: always live, hardware or not
+    if (stripProbeActive) return;                // don't fight the format probe mid-cycle
+    if (!changed) return;
+    lastStripSig = sig;
+    if (!device) return;                         // preview mode: mirror only
     try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } }
     catch (e) {
       console.error('[KeyWi] strip paint failed:', e);
       if (!stripErrToasted) { stripErrToasted = true; toast('Touch strip error: ' + ((e && e.message) || e)); }
     }
+  }
+  function drawStripMirrorCanvas(cells) {
+    var cv = document.getElementById('sd-strip-mirror'); if (!cv) return;
+    var ctx = cv.getContext('2d'); if (!ctx) return;
+    try { drawStripContent(ctx, cells, cv.width, cv.height); } catch (e) {}
   }
   // ── Strip format probe ──────────────────────────────────────────────────────
   // The + XL's window protocol has open questions this firmware can answer for
@@ -832,7 +913,7 @@
   async function stripProbe() {
     if (!device || !profile || !profile.strip || stripProbeActive) return;
     stripProbeActive = true;
-    toast('Strip check: watch the touch strip — remember which big NUMBER (1-4) shows up.');
+    toast('Strip check: watch the touch strip and remember which big NUMBER (1-4) shows up.');
     for (var i = 0; i < STRIP_PROBE_VARIANTS.length; i++) {
       var v = STRIP_PROBE_VARIANTS[i];
       try { await sendStripVariant(v); }
@@ -853,12 +934,12 @@
     return false;
   }
   function ensureObsFrameLoop() {
-    var want = !!(device && isSurfaceVisible() && stripHasObsFrame());
+    var want = !!((device || previewMode) && isSurfaceVisible() && stripHasObsFrame());
     if (want && !obsFrameLoop) obsFrameLoop = setInterval(pollObsFrame, 250);
     else if (!want && obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } }
   }
   async function pollObsFrame() {
-    if (!device || !isSurfaceVisible() || !stripHasObsFrame()) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
+    if ((!device && !previewMode) || !isSurfaceVisible() || !stripHasObsFrame()) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
     if (obsFrameBusy || !profile || !profile.strip) return;
     var o = OBSc();
     if (!o || !o.isReady || !o.isReady()) { if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } return; }
@@ -893,6 +974,13 @@
           ctx.fillText(cell.value === 'off' ? 'OBS off' : 'OBS…', x, ch / 2 + 4);
         }
         if (cell.live) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2; ctx.strokeRect(x0 + 3, 3, zw - 6, ch - 6); ctx.textAlign = 'left'; ctx.fillStyle = '#ff3b3b'; ctx.font = '700 12px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('● LIVE', x0 + 8, 17); }
+        // Stream-audio volume rides this zone's dial: a slim fader over the frame.
+        if (cell.bar != null) {
+          var vbw = zw - 24, vbx = x0 + 12, vby = ch - 12;
+          ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(vbx - 3, vby - 3, vbw + 6, 10);
+          ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(vbx, vby, vbw, 4);
+          ctx.fillStyle = cell.hue; ctx.fillRect(vbx, vby, Math.round(vbw * cell.bar), 4);
+        }
         return;
       }
       // zone plate with a faint hue wash so zones read as separate touch targets
@@ -1049,9 +1137,9 @@
     var r = root(); if (!r) return;
     if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi Bird needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
     var showGrid = device || previewMode;
-    r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) : connectHelp());
+    r.innerHTML = statusBar() + (showGrid ? profileBar() + obsBar() + micoBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) : connectHelp() + micoBar());
     wire(); renderStatus(); updateLiveBadge();
-    if (showGrid) paintMirror();
+    if (showGrid) { paintMirror(); paintStrip(true); }
   }
   function previewBanner() {
     return '<div class="sd-preview-banner"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><div>Preview mode: a virtual Stream Deck + XL so you can lay it out, pick a theme, and press keys on screen. Plug in real hardware and hit <b>Connect real deck</b> to drive the show.</div><button class="btn-secondary" id="sd-preview-connect">Connect real deck</button></div>';
@@ -1071,21 +1159,19 @@
       + '</div></div>';
   }
   function statusChip(label, value, cls) { return '<div class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
-  // First-run setup: a guided stepper. Step 1 is required; talkback and OBS are
-  // optional companions with live status dots so it is obvious what is ready.
+  // Cold-start hero. The guided path is the setup wizard; this page just offers
+  // the three doors (connect, preview, wizard) plus honest readiness dots.
   function connectHelp() {
     var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
-    return '<div class="sd-setup">'
-      + '<div class="sd-setup-head"><h3>Set up your deck</h3><p>Any Stream Deck works: Mini, MK.2, XL, +, or the + XL. KeyWi Bird reads the model and lays out a sensible starting page for its size, then everything is yours to remap.</p></div>'
-      + stepRow(1, false, 'Connect the deck', 'Plug it in over USB and <b>quit the Elgato Stream Deck app</b> (it holds the hardware and blocks the browser). Then hit Connect and pick it from the list. Expect a little light show.', '<button class="btn-primary" id="sd-connect2">Connect deck</button> <button class="btn-secondary" id="sd-preview">See it on screen</button>')
-      + stepRow(2, tbOn, 'Micochondria — talkback (optional)', tbOn ? 'Daemon connected. TKB and VofU are live, hold to talk.' : 'For the TKB (Talkback) and VofU (Voice of the Universe) mic keys, start the talkbackd daemon on this machine. KeyWi Bird finds it by itself and this dot turns green.', '')
-      + stepRow(3, obsOn, 'OBS (optional)', obsOn ? 'OBS connected. Stream, record, and scene keys are live.' : 'For stream, record, and scene keys: in OBS enable Tools &rsaquo; WebSocket Server Settings, then connect below once the deck is on.', '')
-      + '<div class="sd-setup-foot">Everything runs from this tab. Keep Cueola open here while you run the show.</div>'
-      + '</div>';
-  }
-  function stepRow(n, done, title, body, action) {
-    return '<div class="sd-step' + (done ? ' done' : '') + '"><div class="sd-step-dot">' + (done ? '✓' : n) + '</div>'
-      + '<div class="sd-step-body"><div class="sd-step-t">' + title + '</div><div class="sd-step-d">' + body + '</div>' + action + '</div></div>';
+    return '<div class="sd-hero">'
+      + '<h3>Any Stream Deck. The whole rig.</h3>'
+      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: playback, rundown, prompter, mics, OBS. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it hogs the USB device.</p>'
+      + '<div class="sd-hero-actions"><button class="btn-primary" id="sd-connect2">Connect deck</button><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button></div>'
+      + '<div class="sd-hero-checks">'
+      + '<span class="sd-ready">Deck</span>'
+      + '<span class="sd-ready' + (tbOn ? ' on' : '') + '">Micochondria</span>'
+      + '<span class="sd-ready' + (obsOn ? ' on' : '') + '">OBS</span>'
+      + '</div></div>';
   }
   function profileBar() {
     var opts = Object.keys(profiles).map(function (id) { return '<option value="' + id + '"' + (id === activeProfileId ? ' selected' : '') + '>' + esc(profiles[id].name) + (id === defaultProfileId ? ' (default)' : '') + '</option>'; }).join('');
@@ -1102,13 +1188,14 @@
       + '<input type="file" id="sd-pf-file" accept="application/json,.json" hidden></div>';
   }
   function toolsRow() {
-    var themeOpts = Object.keys(DECK_THEMES).map(function (id) { return '<option value="' + id + '"' + (id === deckTheme ? ' selected' : '') + '>' + esc(DECK_THEMES[id].name) + '</option>'; }).join('');
+    var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-theme="' + id + '" title="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
     return '<div class="sd-bright-row">'
-      + '<label>Theme</label><select id="sd-theme" title="Reskin the whole deck">' + themeOpts + '</select>'
+      + '<label>Theme</label><div class="sd-theme-chips">' + chips + '</div>'
       + '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>'
       + (device ? '<label>Brightness</label><input type="range" id="sd-bright" min="0" max="100" value="' + brightness + '"><span id="sd-bright-val">' + brightness + '%</span>' : '')
       + (device ? '<button class="btn-secondary" id="sd-test">Test pattern</button>' : '')
-      + '<button class="btn-secondary" id="sd-reset">Reset this layout</button></div>';
+      + '<button class="btn-secondary" id="sd-reset">Reset this layout</button>'
+      + '<button class="btn-secondary" id="sd-wizard-btn">Setup wizard</button></div>';
   }
   function obsBar() {
     var o = OBSc(), ready = !!(o && o.isReady && o.isReady()), cfg = (o && o.config && o.config()) || { url: 'ws://localhost:4455', password: '' }, st = obsState(), err = (o && o.lastError && o.lastError()) || '';
@@ -1117,6 +1204,10 @@
       + (ready
         ? '<span class="sd-obs-scene" title="Current program scene">' + esc(st.currentScene || '(no scene)') + '</span>'
           + (st.streaming ? '<span class="sd-obs-tag live">LIVE</span>' : '') + (st.recording ? '<span class="sd-obs-tag rec">REC</span>' : '')
+          + ((st.inputs || []).length
+            ? '<label class="sd-obs-vol-lbl" for="sd-obs-vol" title="The OBS audio input the stream-volume dial rides">Stream audio</label><select id="sd-obs-vol">'
+              + st.inputs.map(function (n) { return '<option value="' + esc(n) + '"' + (n === obsVolInputName() ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'
+            : '')
           + '<span class="sd-pf-sp"></span><button class="sd-mini" id="sd-obs-dis">Disconnect OBS</button>'
         : '<input id="sd-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(cfg.url) + '"><input id="sd-obs-pw" class="sd-obs-in" type="password" placeholder="password (if set)" value="' + esc(cfg.password || '') + '"><button class="sd-mini" id="sd-obs-con">Connect OBS</button>'
           + (err ? '<span class="sd-obs-err">' + esc(err) + '</span>' : ''))
@@ -1124,13 +1215,18 @@
   }
   function surfaceGrid() {
     var s = surfaceState();
-    var html = '<div class="sd-sect-t">Keys <span class="sd-sect-hint">click a key to change what it does and how it looks</span></div>';
+    // The deck sits in a hardware-style shell: keys, then the live touch strip
+    // (the SAME pixels the hardware shows), inside one dark housing. WYSIWYG.
+    var html = '<div class="sd-sect-t">Deck <span class="sd-sect-hint">click a key to change what it does and how it looks</span></div>';
+    html += '<div class="sd-shell">';
     html += '<div class="sd-keys" style="grid-template-columns:repeat(' + profile.cols + ',1fr)">';
     for (var i = 0; i < profile.keys; i++) {
       var slot = slotAt(i), a = slotAction(slot);
       var tip = (a.full || a.label || 'blank') + (a.toggle ? ' · toggle' : '') + (a.hold ? ' · hold' : '') + (a.desc ? '. ' + a.desc : '');
-      html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" title="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="132" height="132"></canvas></button>';
+      html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" style="--i:' + i + '" title="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="132" height="132"></canvas></button>';
     }
+    html += '</div>';
+    if (profile.strip) html += '<canvas class="sd-strip-mirror" id="sd-strip-mirror" width="' + profile.strip.w + '" height="' + profile.strip.h + '" title="The touch strip, live. Tap a zone on the hardware = press its dial; flick = a big turn."></canvas>';
     html += '</div>';
     if (profile.dials) {
       html += '<div class="sd-sect-t">Dials <span class="sd-sect-hint">each shows what turning and pressing does · click to reassign</span></div>';
@@ -1145,7 +1241,6 @@
           + '</div>';
       }
       html += '</div>';
-      if (profile.strip) html += '<div class="sd-strip-note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The touch strip above the dials mirrors these dials live. Tap a zone = press its dial. Flick left or right = a big turn.</div>';
     }
     html += legendCard();
     return html;
@@ -1174,7 +1269,90 @@
       + '</div></div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
-  function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Daemon connected' : 'Not running'; } }
+  function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Connected' : 'Not running'; } }
+
+  // ── Micochondria: the mic panel ─────────────────────────────────────────────
+  // A small honest tool: says whether the daemon is connected, and when it is,
+  // gives one strip per mic (TKB, VofU) — hold-to-talk, a live meter (mic input
+  // while idle, bus output while keyed), and a volume fader. Meter and fader
+  // only appear when the running daemon actually speaks levels/gains, so an
+  // older talkbackd still gets a clean connected/off panel, never dead knobs.
+  function micoBar() {
+    var on = talkbackState.connected;
+    var html = '<div class="sd-mico" id="sd-mico">'
+      + '<div class="sd-mico-head">'
+      + '<span class="sd-obs-dot' + (on ? ' on' : '') + '"></span>'
+      + '<span class="sd-mico-name">Mic<span>ochondria</span></span>'
+      + '<span class="sd-mico-status">' + (on ? 'Connected' : 'Not running') + '</span>'
+      + (on ? '<span class="sd-pf-sp"></span><button class="sd-mini danger" id="sd-mico-off" title="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + '</div>';
+    if (on) {
+      html += micoStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
+            + micoStrip('B', 'VofU', 'Voice of the Universe · room · outs 3-4');
+    } else {
+      html += '<div class="sd-mico-hint">The talkback daemon runs the mics. Start it on this machine and this dot turns green by itself: <code>cd talkback/daemon && swift run -c release</code></div>';
+    }
+    return html + '</div>';
+  }
+  function micoStrip(bus, name, subtitle) {
+    var onAir = talkbackState[bus];
+    var gain = bus === 'A' ? talkbackState.gainA : talkbackState.gainB;
+    return '<div class="sd-mico-strip' + (onAir ? ' onair' : '') + '" data-bus="' + bus + '">'
+      + '<button class="sd-mico-talk" data-talk="' + bus + '" title="Hold to talk on ' + name + '. Releases the moment you let go."><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span>' + name + '</button>'
+      + '<div class="sd-mico-mid"><div class="sd-mico-sub">' + subtitle + '</div>'
+      + (talkbackState.hasLevels
+        ? '<div class="sd-mico-meter"><div class="sd-mico-meter-fill" data-meter="' + bus + '"></div></div>'
+        : '<div class="sd-mico-sub2">Hold to talk. The lamp is the truth.</div>')
+      + '</div>'
+      + (talkbackState.hasGains ? '<input type="range" class="sd-mico-vol" data-vol="' + bus + '" min="0" max="100" value="' + Math.round((gain == null ? 1 : gain) * 100) + '" aria-label="' + name + ' volume">' : '')
+      + '<span class="sd-mico-lamp">' + (onAir ? 'ON AIR' : 'off') + '</span>'
+      + '</div>';
+  }
+  function renderMico() {
+    var el = document.getElementById('sd-mico'); if (!el) return;
+    var tmp = document.createElement('div'); tmp.innerHTML = micoBar();
+    el.replaceWith(tmp.firstChild);
+    wireMico();
+  }
+  // Lightweight refresh: lamps and faders only, so a slider mid-drag is never
+  // rebuilt out from under the operator's pointer.
+  function micoSync() {
+    var box = document.getElementById('sd-mico'); if (!box) return;
+    ['A', 'B'].forEach(function (bus) {
+      var strip = box.querySelector('.sd-mico-strip[data-bus="' + bus + '"]'); if (!strip) return;
+      strip.classList.toggle('onair', !!talkbackState[bus]);
+      var lamp = strip.querySelector('.sd-mico-lamp'); if (lamp) lamp.textContent = talkbackState[bus] ? 'ON AIR' : 'off';
+      var sl = strip.querySelector('.sd-mico-vol');
+      var g = bus === 'A' ? talkbackState.gainA : talkbackState.gainB;
+      if (sl && document.activeElement !== sl && g != null) sl.value = Math.round(g * 100);
+    });
+  }
+  function updateMicoMeters() {
+    var box = document.getElementById('sd-mico'); if (!box) return;
+    var lv = talkbackState.levels;
+    ['A', 'B'].forEach(function (bus) {
+      var fill = box.querySelector('.sd-mico-meter-fill[data-meter="' + bus + '"]'); if (!fill) return;
+      var on = talkbackState[bus];
+      var v = Math.max(0, Math.min(1, on ? (bus === 'A' ? lv.a : lv.b) : lv.mic));
+      fill.style.width = Math.round(Math.sqrt(v) * 100) + '%';   // sqrt: quiet speech still visibly moves
+      fill.classList.toggle('idle', !on);
+      fill.classList.toggle('hot', v > 0.85);
+    });
+  }
+  function wireMico() {
+    var box = document.getElementById('sd-mico'); if (!box) return;
+    var off = document.getElementById('sd-mico-off'); if (off) off.onclick = function () { releaseTalkback(true); };
+    box.querySelectorAll('.sd-mico-talk').forEach(function (btn) {
+      var bus = btn.getAttribute('data-talk');
+      var down = function (e) { e.preventDefault(); btn.setPointerCapture && e.pointerId != null && btn.setPointerCapture(e.pointerId); talkbackSet(bus, true); };
+      var up = function () { talkbackSet(bus, false); };
+      btn.onpointerdown = down; btn.onpointerup = up; btn.onpointercancel = up; btn.onpointerleave = up;
+      btn.oncontextmenu = function (e) { e.preventDefault(); };
+    });
+    box.querySelectorAll('.sd-mico-vol').forEach(function (sl) {
+      sl.oninput = function () { talkbackGain(sl.getAttribute('data-vol'), sl.value / 100); };
+    });
+  }
 
   // ── Key editor (action + cues-by-name + label + colour + icon) ─────────────
   function overlay() { return document.getElementById('sd-picker'); }
@@ -1183,13 +1361,19 @@
     learnArmed = false; editingKey = index; schedulePaint();
     var slot = slotAt(index), s = surfaceState();
     var groups = {};
-    Object.keys(catalog).forEach(function (id) { var a = catalog[id]; if (a.kind === 'padRef' || a.kind === 'cueRef') return; (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.full || a.label || id }); });
+    // Ref kinds are bound from the live "This show" / "This OBS" sections below,
+    // so their generic entries would be dead weight here.
+    Object.keys(catalog).forEach(function (id) { var a = catalog[id]; if (a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef') return; (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.full || a.label || id }); });
+    // App-by-app order, sub-groups right under their app.
+    var GROUP_ORDER = ['Outrangutan', 'Outrangutan · SFX pads', 'Outrangutan · cues', 'Cueola', 'Cueola · show clock', 'Flowmingo', 'Micochondria', 'OBS', 'OBS scenes (by slot)', 'Layouts', 'Fun', 'Blank'];
+    var orderedGroups = GROUP_ORDER.filter(function (g) { return groups[g]; })
+      .concat(Object.keys(groups).filter(function (g) { return GROUP_ORDER.indexOf(g) < 0; }));
     var curAction = slotAction(slot);
     var body = '<div class="sd-ed-head">Edit key ' + (index + 1) + (fromLearn ? ' <span class="sd-ed-learned">learned</span>' : '')
       + (curAction.toggle ? ' <span class="sd-ed-chip">TOGGLE</span>' : '') + (curAction.hold ? ' <span class="sd-ed-chip">HOLD</span>' : '') + '</div>';
     if (curAction.desc) body += '<div class="sd-ed-desc">' + esc(curAction.desc) + '</div>';
     body += '<div class="sd-ed-cols"><div class="sd-ed-actions"><div class="sd-ed-sub">Action</div>';
-    Object.keys(groups).forEach(function (g) { body += '<div class="sd-picker-g">' + esc(g) + '</div>'; groups[g].forEach(function (o) { body += '<button class="sd-picker-opt' + (o.id === slot.a && !slot.ref ? ' cur' : '') + '" data-pick="' + esc(o.id) + '">' + esc(o.label || '(blank)') + '</button>'; }); });
+    orderedGroups.forEach(function (g) { body += '<div class="sd-picker-g">' + esc(g) + '</div>'; groups[g].forEach(function (o) { body += '<button class="sd-picker-opt' + (o.id === slot.a && !slot.ref ? ' cur' : '') + '" data-pick="' + esc(o.id) + '">' + esc(o.label || '(blank)') + '</button>'; }); });
     // This show: live cues + pads bound by name.
     var pads = (s.playout && s.playout.pads) || {}, cues = (s.playout && s.playout.cues) || {};
     if (Object.keys(pads).length || Object.keys(cues).length) {
@@ -1267,9 +1451,13 @@
     var sel = document.getElementById('sd-profile'); if (sel) sel.onchange = function () { switchProfile(sel.value); };
     bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
     bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
+    var ov = document.getElementById('sd-obs-vol'); if (ov) ov.onchange = function () { setObsVolInput(ov.value); toast('Stream-volume dial now rides "' + ov.value + '".'); };
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
-    var th = document.getElementById('sd-theme'); if (th) th.onchange = function () { setTheme(th.value); };
+    r.querySelectorAll('.sd-theme-chip').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-theme')); }; });
+    bind('sd-wizard-btn', function () { openWizard(0); });
+    bind('sd-wizard-open', function () { openWizard(0); });
     bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
+    wireMico();
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
@@ -1332,7 +1520,7 @@
     if (failure) {
       console.error('[KeyWi] strip test: sendReport rejected at packet ' + (sent + 1) + '/' + packets.length,
         { reportId: packets[0].reportId, bytesPerPacket: packets[0].data.length, totalBytes: bytes.length, error: failure });
-      toast('Strip test FAILED at packet ' + (sent + 1) + '/' + packets.length + ': ' + ((failure && failure.message) || failure) + ' — see console.');
+      toast('Strip test FAILED at packet ' + (sent + 1) + '/' + packets.length + ': ' + ((failure && failure.message) || failure) + ' (see console).');
       return;
     }
     toast('Strip test sent OK: ' + packets.length + ' packets, ' + bytes.length + ' bytes, ' + profile.strip.w + '×' + profile.strip.h + '.');
@@ -1376,6 +1564,89 @@
     return out;
   }
 
+  // ── Setup wizard ────────────────────────────────────────────────────────────
+  // Five friendly steps: welcome, deck, Micochondria, OBS, make-it-yours. Live
+  // status refreshes in place (connect callbacks re-render the open step), the
+  // optional steps skip cleanly, and finishing marks first-run done so the
+  // wizard only volunteers itself once. Reopen any time from the toolbar.
+  var WIZARD_KEY = 'cueola_streamdeck_wizard_done';
+  var wizardStep = -1;   // -1 = closed
+  var WIZARD_TOTAL = 5;
+  function wizardSeen() { try { return localStorage.getItem(WIZARD_KEY) === '1'; } catch (e) { return true; } }
+  function openWizard(step) { wizardStep = step == null ? 0 : step; wizardRender(); }
+  function closeWizard(markDone) {
+    wizardStep = -1;
+    if (markDone) { try { localStorage.setItem(WIZARD_KEY, '1'); } catch (e) {} }
+    var o = document.getElementById('sd-wizard'); if (o) { o.className = 'sd-picker sd-wizard'; o.innerHTML = ''; }
+    render();
+  }
+  function wizardRender() {
+    var o = document.getElementById('sd-wizard'); if (!o || wizardStep < 0) return;
+    var n = wizardStep;
+    var deckOn = !!(device || previewMode), tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
+    var dots = '';
+    for (var i = 0; i < WIZARD_TOTAL; i++) dots += '<span class="sd-wz-dot' + (i === n ? ' cur' : (i < n ? ' done' : '')) + '"></span>';
+    var body = '';
+    if (n === 0) {
+      body = '<div class="sd-wz-hero"><h3 class="sd-wordmark sd-wz-mark">Key<span>Wi Bird</span></h3><div class="sd-wz-tag">One deck. The whole rig.</div></div>'
+        + '<p class="sd-wz-p">A Stream Deck becomes the control surface for the show: Outrangutan playback and SFX, the Cueola rundown, the Flowmingo prompter, the Micochondria mics, and OBS. Organized by app, like the rig itself.</p>'
+        + '<p class="sd-wz-p">Four quick steps. Only the deck matters; the rest is optional and can wait.</p>';
+    } else if (n === 1) {
+      body = '<div class="sd-wz-t">Connect your deck</div>'
+        + (navigator.hid
+          ? '<p class="sd-wz-p"><b>Quit the Elgato Stream Deck app first</b>: it holds the USB device and blocks the browser. Then connect and pick your deck from the list. Expect a little light show.</p>'
+            + '<div class="sd-wz-actions"><button class="btn-primary" id="sd-wz-connect">Connect deck</button><button class="btn-secondary" id="sd-wz-preview">No deck? Preview on screen</button></div>'
+          : '<p class="sd-wz-p">This browser has no WebHID, so real hardware needs <b>Chrome or Edge</b>. Preview mode still works everywhere.</p>'
+            + '<div class="sd-wz-actions"><button class="btn-secondary" id="sd-wz-preview">Preview on screen</button></div>')
+        + wzStatus(deckOn, deckOn ? (device ? 'Connected: ' + profile.name : 'Preview mode is on: the full deck, on screen.') : 'Waiting for a deck (or preview).');
+    } else if (n === 2) {
+      body = '<div class="sd-wz-t">Mic<span class="sd-wz-hi">ochondria</span> <span class="sd-wz-opt">optional</span></div>'
+        + '<p class="sd-wz-p">The powerhouse for the mics: hold <b>TKB</b> to talk to the crew, hold <b>VofU</b> to speak to the room. It needs the little talkbackd program running on this machine:</p>'
+        + '<code class="sd-wz-code">cd talkback/daemon && swift run -c release</code>'
+        + '<p class="sd-wz-p">KeyWi Bird finds it by itself. No address, no pairing. The dot below goes green the moment it is up.</p>'
+        + wzStatus(tbOn, tbOn ? 'Connected. The mic keys are live: hold to talk.' : 'Not running. Fine to skip; the mic keys wait patiently.');
+    } else if (n === 3) {
+      body = '<div class="sd-wz-t">OBS Studio <span class="sd-wz-opt">optional</span></div>'
+        + '<p class="sd-wz-p">For stream, record, and scene keys, plus the program monitor and stream volume on a dial. In OBS: <b>Tools › WebSocket Server Settings</b>, enable the server, copy the password if one is set.</p>'
+        + (obsOn ? '' : '<div class="sd-wz-obs"><input id="sd-wz-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(((OBSc() && OBSc().config()) || {}).url || 'ws://localhost:4455') + '"><input id="sd-wz-obs-pw" class="sd-obs-in" type="password" placeholder="password (if set)"><button class="btn-secondary" id="sd-wz-obs-con">Connect OBS</button></div>')
+        + wzStatus(obsOn, obsOn ? 'Connected. Scene and stream keys glow live.' : ((OBSc() && OBSc().lastError && OBSc().lastError()) || 'Not connected. Fine to skip.'));
+    } else {
+      var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-wz-theme="' + id + '">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
+      body = '<div class="sd-wz-t">Make it yours</div>'
+        + '<p class="sd-wz-p">Pick a look. It reskins the physical keys and the on-screen deck alike:</p>'
+        + '<div class="sd-theme-chips sd-wz-themes">' + chips + '</div>'
+        + '<p class="sd-wz-p">From here: click any key to remap it, use <b>Live learn</b> to map by touch, and save whole layouts as pages. And yes, there is a HYPE key.</p>';
+    }
+    var foot = '<div class="sd-wz-foot">'
+      + (n > 0 ? '<button class="btn-secondary" id="sd-wz-back">Back</button>' : '<button class="btn-secondary" id="sd-wz-skipall">Skip the tour</button>')
+      + '<span class="sd-pf-sp"></span>'
+      + ((n === 2 || n === 3) ? '<button class="sd-mini" id="sd-wz-skip">Skip</button>' : '')
+      + (n < WIZARD_TOTAL - 1 ? '<button class="btn-primary" id="sd-wz-next">' + (n === 0 ? 'Set it up' : 'Next') + '</button>' : '<button class="btn-primary" id="sd-wz-finish">Start driving</button>')
+      + '</div>';
+    o.innerHTML = '<div class="sd-picker-card sd-wz-card"><div class="sd-wz-dots">' + dots + '</div>' + body + foot + '</div>';
+    o.className = 'sd-picker sd-wizard on';
+    wireWizard();
+  }
+  function wzStatus(on, text) { return '<div class="sd-wz-status' + (on ? ' on' : '') + '"><span class="sd-obs-dot' + (on ? ' on' : '') + '"></span>' + esc(text) + '</div>'; }
+  function wireWizard() {
+    var o = document.getElementById('sd-wizard'); if (!o) return;
+    o.onclick = function (e) { if (e.target === o) closeWizard(false); };
+    var go = function (id, fn) { var el = document.getElementById(id); if (el) el.onclick = fn; };
+    go('sd-wz-back', function () { wizardStep = Math.max(0, wizardStep - 1); wizardRender(); });
+    go('sd-wz-next', function () { wizardStep++; wizardRender(); });
+    go('sd-wz-skip', function () { wizardStep++; wizardRender(); });
+    go('sd-wz-skipall', function () { closeWizard(true); });
+    go('sd-wz-finish', function () { closeWizard(true); toast('KeyWi Bird is ready. Enjoy the deck.'); });
+    go('sd-wz-connect', function () { connect(); });
+    go('sd-wz-preview', function () { startPreview(); wizardRender(); });
+    go('sd-wz-obs-con', function () {
+      var url = (document.getElementById('sd-wz-obs-url') || {}).value || 'ws://localhost:4455';
+      var pw = (document.getElementById('sd-wz-obs-pw') || {}).value || '';
+      if (OBSc()) { OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); }
+    });
+    o.querySelectorAll('[data-wz-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-wz-theme')); wizardRender(); }; });
+  }
+
   // ── Entry / gating ──────────────────────────────────────────────────────────
   function open() {
     var id = window.CueolaIdentity;
@@ -1388,6 +1659,9 @@
     if (OBSc()) { OBSc().onChange(onObsChange); var oc = OBSc().config(); var savedObs = false; try { savedObs = !!localStorage.getItem('cueola_obs_config'); } catch (e) {} if (savedObs && oc && oc.url) OBSc().connect(); }
     render();
     if (navigator.hid) navigator.hid.getDevices().then(function (list) { var d = (list || []).filter(supportedFilter)[0]; if (d && !device) openDevice(d); }).catch(function () {});
+    // First visit: the wizard volunteers itself once. After that it lives in
+    // the toolbar. If a remembered deck reconnects above, it re-renders in place.
+    if (navigator.hid && !wizardSeen() && !device && !previewMode) openWizard(0);
     return true;
   }
   function close() { hideScreen(); }
@@ -1397,8 +1671,17 @@
   window.addEventListener('blur', function () { releaseTalkback(false); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) releaseTalkback(false); });
   window.addEventListener('beforeunload', function () { releaseTalkback(true); });
+  // Esc parity with the rest of Cueola: closes the topmost layer first (key
+  // editor, then wizard), then backs out of KeyWi Bird to the front page.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !isSurfaceVisible()) return;
+    var o = overlay();
+    if (o && o.classList.contains('on')) { closeOverlay(); return; }
+    if (wizardStep >= 0) { closeWizard(false); return; }
+    close();
+  });
 
-  try { console.log('[KeyWi] driver r4 — strip format probe build'); } catch (e) {}
+  try { console.log('[KeyWi] driver r5 — app bands, Micochondria panel, setup wizard'); } catch (e) {}
   window.CueolaStreamDeck = {
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },

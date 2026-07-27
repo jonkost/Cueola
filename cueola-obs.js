@@ -39,7 +39,8 @@
     virtualCam: false,
     studioMode: false,
     inputs: [],                      // array of input name strings
-    mutes: {}                        // inputName -> bool
+    mutes: {},                       // inputName -> bool
+    volumes: {}                      // inputName -> volume multiplier (1.0 = 0 dB)
   };
 
   function emitChange() { state.connected = ready; try { changeCb && changeCb(state); } catch (e) {} }
@@ -115,7 +116,10 @@
     try {
       var il = await request('GetInputList');
       state.inputs = (il.inputs || []).map(function (i) { return i.inputName; });
-      for (var k = 0; k < state.inputs.length; k++) { try { state.mutes[state.inputs[k]] = !!(await request('GetInputMute', { inputName: state.inputs[k] })).inputMuted; } catch (e) {} }
+      for (var k = 0; k < state.inputs.length; k++) {
+        try { state.mutes[state.inputs[k]] = !!(await request('GetInputMute', { inputName: state.inputs[k] })).inputMuted; } catch (e) {}
+        try { state.volumes[state.inputs[k]] = (await request('GetInputVolume', { inputName: state.inputs[k] })).inputVolumeMul; } catch (e) {}
+      }
     } catch (e) {}
     emitChange();
   }
@@ -129,9 +133,10 @@
     else if (t === 'VirtualcamStateChanged') state.virtualCam = !!e.outputActive;
     else if (t === 'StudioModeStateChanged') state.studioMode = !!e.studioModeEnabled;
     else if (t === 'InputMuteStateChanged') state.mutes[e.inputName] = !!e.inputMuted;
+    else if (t === 'InputVolumeChanged') state.volumes[e.inputName] = e.inputVolumeMul;
     else if (t === 'SceneListChanged') state.scenes = (e.scenes || []).map(function (s) { return s.sceneName; }).reverse();
     else if (t === 'InputCreated' && e.inputName) { if (state.inputs.indexOf(e.inputName) < 0) state.inputs.push(e.inputName); }
-    else if (t === 'InputRemoved' && e.inputName) { state.inputs = state.inputs.filter(function (n) { return n !== e.inputName; }); delete state.mutes[e.inputName]; }
+    else if (t === 'InputRemoved' && e.inputName) { state.inputs = state.inputs.filter(function (n) { return n !== e.inputName; }); delete state.mutes[e.inputName]; delete state.volumes[e.inputName]; }
     else return;
     emitChange();
   }
@@ -145,7 +150,7 @@
   function saveReplay() { return request('SaveReplayBuffer').catch(noop); }
   function studioTransition() { return request('TriggerStudioModeTransition').catch(noop); }
   function toggleMute(input) { return request('ToggleInputMute', { inputName: input }).catch(noop); }
-  function setVolume(input, mul) { return request('SetInputVolume', { inputName: input, inputVolumeMul: Math.max(0, Math.min(1, mul)) }).catch(noop); }
+  function setVolume(input, mul) { mul = Math.max(0, Math.min(1, mul)); state.volumes[input] = mul; return request('SetInputVolume', { inputName: input, inputVolumeMul: mul }).catch(noop); }
   function noop() {}
 
   window.CueolaOBS = {

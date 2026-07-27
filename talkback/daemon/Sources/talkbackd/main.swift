@@ -45,8 +45,10 @@ func parseOptions() -> Options {
           --ramp-ms <ms>        Gate ramp length, 5-10 ms recommended (default: 8)
           --list-devices        Print all CoreAudio devices and exit
 
-        WebSocket protocol (text frames): "A on" "A off" "B on" "B off" "state?"
-        State pushes: {"type":"state","talkA":bool,"talkB":bool}
+        WebSocket protocol (text frames): "A on" "A off" "B on" "B off"
+                                          "A gain 0.8" "B gain 0.8" "state?"
+        State pushes:  {"type":"state","talkA":bool,"talkB":bool,"gainA":n,"gainB":n}
+        Level pushes:  {"type":"levels","mic":n,"a":n,"b":n}  (peak 0-1, 10 Hz)
         """)
         exit(0)
     }
