@@ -120,8 +120,9 @@
     };
   }
 
-  // D5: one shared code alphabet — YY + MM + two letters from the 24-letter
-  // no-I/O alphabet = 576 codes/month. Collisions are handled ONLY by the
+  // D5: one shared code alphabet: YY + MM + four letters from the 24-letter
+  // no-I/O alphabet, about 331k codes/month (SEC-2). Older 6-char codes stay
+  // valid; parsing never assumes length. Collisions are handled ONLY by the
   // caller's create-if-missing transaction retry.
   const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   function generateEpisodeCode(date, randomFn) {
@@ -130,7 +131,7 @@
     const yy = String(when.getFullYear() % 100).padStart(2, '0');
     const mm = String(when.getMonth() + 1).padStart(2, '0');
     const pick = () => CODE_ALPHABET[Math.floor(rand() * CODE_ALPHABET.length) % CODE_ALPHABET.length];
-    return `${yy}${mm}${pick()}${pick()}`;
+    return `${yy}${mm}${pick()}${pick()}${pick()}${pick()}`;
   }
 
   return {

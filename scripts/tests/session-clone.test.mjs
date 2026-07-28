@@ -87,9 +87,9 @@ test('episode names increment', () => {
   assert.equal(Clone.nextEpisodeName(''), 'Next Episode');
 });
 
-test('episode codes are YYMM + two no-I/O letters', () => {
+test('episode codes are YYMM + four no-I/O letters', () => {
   const code = Clone.generateEpisodeCode(new Date(2026, 7, 3), () => 0.5);
-  assert.match(code, /^2608[A-HJ-NP-Z]{2}$/);
+  assert.match(code, /^2608[A-HJ-NP-Z]{4}$/);
   assert.equal(Clone.CODE_ALPHABET.length, 24);
   assert.ok(!Clone.CODE_ALPHABET.includes('I') && !Clone.CODE_ALPHABET.includes('O'));
 });

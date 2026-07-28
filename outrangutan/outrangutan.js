@@ -82,6 +82,7 @@
   let mode = 'standalone';
   let sessionCode = null;
   let sessionUserName = '';       // name entered on the join splash (parity with other modules)
+  let sessionIdentity = null;     // INC-3: identity stamp for the current join: { userName, profileId, username, profileAliases, identity:'profile'|'guest' }
   let cues = [];
   let pads = [];                 // SFX pads: [{ id, slot, bank, name, emoji, mediaId, color, key, gain, ... }]
   let banks = [];                // SFX banks (pages): [{ id, name }]
@@ -693,6 +694,11 @@
     if (pad.loop) { src.loopStart = off; src.loopEnd = pad.trimOut || rt.buffer.duration; }
     src.connect(rt.ch.input);
     const dur = (!pad.loop && pad.trimOut != null) ? Math.max(0, pad.trimOut - off) : undefined;
+    // Reactive-key timing: each voice remembers when it started and how long it
+    // will run, so padProgress() can answer from LOCAL state (never Firestore).
+    src._ogStartedAt = ac.currentTime;
+    src._ogLoop = !!pad.loop;
+    src._ogDur = pad.loop ? Infinity : (dur != null ? dur : Math.max(0, rt.buffer.duration - off));
     try { src.start(0, off, dur); } catch (e) { try { src.start(0, off); } catch (e2) {} }
     if (pad.fadeIn > 0) runFade('padin-' + pad.id, v => { rt.ch.gain.gain.value = v * (pad.gain == null ? 1 : pad.gain); }, 0, 1, pad.fadeIn * 1000, settings.fadeCurve);
     src.onended = () => { rt.voices = rt.voices.filter(v => v !== src); renderPadLive(pad.id); };
@@ -703,6 +709,18 @@
   function stopVoices(rt) { if (!rt) return; rt.voices.slice().forEach(v => { try { v.onended = null; v.stop(); } catch (e) {} }); rt.voices = []; }
   function stopPad(pad) { const rt = padRT.get(pad.id); if (!rt) return; cancelFade('padin-' + pad.id); stopVoices(rt); renderPadLive(pad.id); }
   function stopAllPads() { padRT.forEach((rt, id) => { cancelFade('padin-' + id); stopVoices(rt); }); renderPads(); scheduleStreamDeckRefresh(); }
+  // Cheap local progress accessor for reactive control-surface keys. Reads the
+  // newest voice only; loops report frac:null (no end to count down to).
+  function padProgress(padId) {
+    const rt = padRT.get(padId);
+    const voice = rt && rt.voices.length ? rt.voices[rt.voices.length - 1] : null;
+    if (!voice) return { playing: false, frac: 0, remainMs: 0, loop: false };
+    if (voice._ogLoop || !isFinite(voice._ogDur)) return { playing: true, frac: null, remainMs: null, loop: true };
+    const dur = Math.max(0.001, Number(voice._ogDur) || 0);
+    const elapsed = ac ? Math.max(0, ac.currentTime - (Number(voice._ogStartedAt) || 0)) : 0;
+    const frac = Math.min(1, elapsed / dur);
+    return { playing: true, frac, remainMs: Math.max(0, (dur - elapsed) * 1000), loop: false };
+  }
 
   // ── Clip→SFX tie ──────────────────────────────────────────────────────────
   // A cue can carry a tied SFX pad (cue.sfxPadId + cue.sfxDelay): firing the
@@ -1501,6 +1519,17 @@
   // is guarded — Chromium-only, and only fully verifiable with the hardware.
   const sdState = [];
   const sdIconCache = new Map();
+  // Reactive key repaint state. Progress is quantized to SD_PROGRESS_STEPS so
+  // the tick only repaints a key whose visible state actually moved, and
+  // hardware writes stay throttled to at most ~5 repaints/sec/key.
+  const SD_PROGRESS_STEPS = 20;
+  const SD_KEY_REPAINT_MS = 200;
+  const SD_PRESS_FLASH_MS = 150;
+  const sdSimSig = [];      // last-painted signature per simulator key
+  const sdHwSig = [];       // last-painted signature per hardware key
+  const sdKeyPaintAt = [];  // last hardware repaint time per key (perf.now ms)
+  const sdKeyBusy = [];     // per-key in-flight guard: never interleave one key's packets
+  const sdPressUntil = [];  // pressed = brief input flash, separate from latched active
   const sdLabelRenderer = SD_LABELS ? SD_LABELS.createRenderer({
     createCanvas(width, height) {
       const canvas = document.createElement('canvas');
@@ -1565,6 +1594,33 @@
       } else if (action === 'pad') {
         ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(57, 25); ctx.lineTo(57, 61); ctx.lineTo(72, 55); ctx.stroke();
         ctx.beginPath(); ctx.arc(45, 67, 11, 0, Math.PI * 2); ctx.fill();
+      } else if (action === 'rundown_go' || action === 'rundown_back') {
+        // rundown rows + a direction triangle
+        ctx.fillRect(20, 24, 34, 8); ctx.fillRect(20, 44, 34, 8); ctx.fillRect(20, 64, 34, 8);
+        ctx.beginPath();
+        if (action === 'rundown_go') { ctx.moveTo(62, 36); ctx.lineTo(80, 48); ctx.lineTo(62, 60); }
+        else { ctx.moveTo(80, 36); ctx.lineTo(62, 48); ctx.lineTo(80, 60); }
+        ctx.closePath(); ctx.fill();
+      } else if (action === 'rtrt_take') {
+        // two sources swapping: preview box up to program box
+        ctx.strokeRect(20, 22, 26, 20); ctx.fillRect(50, 54, 26, 20);
+        ctx.beginPath(); ctx.moveTo(30, 52); ctx.lineTo(30, 66); ctx.lineTo(40, 66); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(66, 44); ctx.lineTo(66, 30); ctx.lineTo(56, 30); ctx.stroke();
+      } else if (action === 'rtrt_abort') {
+        ctx.beginPath(); ctx.arc(48, 48, 32, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(34, 34); ctx.lineTo(62, 62); ctx.moveTo(62, 34); ctx.lineTo(34, 62); ctx.stroke();
+      } else if (action === 'prompter_toggle') {
+        // prompter play/pause: triangle beside pause bars
+        ctx.beginPath(); ctx.moveTo(20, 28); ctx.lineTo(48, 48); ctx.lineTo(20, 68); ctx.closePath(); ctx.fill();
+        ctx.fillRect(58, 28, 9, 40); ctx.fillRect(72, 28, 9, 40);
+      } else if (action === 'prompter_top') {
+        ctx.fillRect(24, 18, 48, 8);
+        ctx.beginPath(); ctx.moveTo(48, 74); ctx.lineTo(48, 40); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(34, 52); ctx.lineTo(48, 36); ctx.lineTo(62, 52); ctx.stroke();
+      } else if (action === 'prompter_cue') {
+        // script lines with the cue-row marker
+        ctx.fillRect(36, 26, 38, 7); ctx.fillRect(36, 45, 38, 7); ctx.fillRect(36, 64, 38, 7);
+        ctx.beginPath(); ctx.moveTo(20, 39); ctx.lineTo(32, 48); ctx.lineTo(20, 58); ctx.closePath(); ctx.fill();
       }
     } finally {
       ctx.restore();
@@ -1573,13 +1629,48 @@
     return canvas;
   }
   function sdKeyIsActive(index, mapping) {
+    // Latched state only. A held key is NOT active: pressed feedback is the
+    // separate 150 ms input flash (sdKeyPressed), so the two never fight.
     if (!mapping?.action) return false;
-    if (sdState[index] === true) return true;
     if (mapping.action === 'go') return !!active && !isActivePaused();
     if (mapping.action === 'pause') return isActivePaused();
     if (mapping.action === 'cue') return !!active && active.cue?.id === mapping.ref;
     if (mapping.action === 'pad') return !!padRT.get(mapping.ref)?.voices?.length;
+    if (CONTROL_BUS_ACTIONS[mapping.action]) {
+      // Cross-surface keys light up only where state is known locally: a
+      // same-tab surface may expose a read-only probe. No Firestore reads.
+      try {
+        const probe = window.cueolaControlSurfaceState;
+        if (typeof probe === 'function') {
+          const cmd = CONTROL_BUS_ACTIONS[mapping.action];
+          return probe(cmd.target, cmd.action) === true;
+        }
+      } catch (e) {}
+      return false;
+    }
     return false;
+  }
+  function sdKeyPressed(index) { return (sdPressUntil[index] || 0) > performance.now(); }
+  // What (if anything) a key's mapping should show as progress right now.
+  // All reads are LOCAL accessors (padProgress/cueProgress): when the deck
+  // shares the controller tab, progress never comes from Firestore echoes.
+  function sdKeyProgress(index, mapping) {
+    const action = mapping?.action;
+    if (!action) return null;
+    if (action === 'pad') {
+      const p = padProgress(mapping.ref);
+      if (!p.playing) return null;
+      if (p.loop) return { looping: true };
+      return { progress: p.frac, phase: 'playing' };
+    }
+    if (action === 'go' || action === 'cue') {
+      const cp = cueProgress();
+      if (action === 'cue' && cp.cueId !== mapping.ref) return null;
+      if (cp.phase === 'prewait') return { progress: cp.frac, phase: 'prewait' };
+      if ((cp.phase === 'playing' || cp.phase === 'paused') && cp.frac != null) return { progress: cp.frac, phase: 'playing' };
+      return null;
+    }
+    return null;
   }
   function sdKeyDescriptor(index, mapping, productId=sdCurrentProductId(), overrides={}) {
     const profile = sdSupportedProfile(productId);
@@ -1588,13 +1679,21 @@
     const iconMode = overrides.iconMode || 'combined';
     const showIcon = action && iconMode !== 'text';
     const showText = iconMode !== 'icon';
+    const has = key => Object.prototype.hasOwnProperty.call(overrides, key);
+    const prog = (has('progress') || has('phase') || has('looping')) ? null : sdKeyProgress(index, mapping);
+    const progress = has('progress') ? overrides.progress : (prog && prog.progress != null ? prog.progress : undefined);
     return {
       text:showText ? label : '',
       icon:showIcon && profile ? { image:sdIconCanvas(action, profile.imageWidth) } : '',
-      active:Object.prototype.hasOwnProperty.call(overrides, 'active') ? !!overrides.active : sdKeyIsActive(index, mapping),
+      active:has('active') ? !!overrides.active : sdKeyIsActive(index, mapping),
       backgroundColor:overrides.backgroundColor || (mapping?.action ? sdKeyColor(mapping) : '#101418'),
       accentColor:'#8ff7bc',
       maxLines:overrides.maxLines || 2,
+      progress,
+      progressStyle:has('progressStyle') ? overrides.progressStyle : (progress != null ? 'wipe' : undefined),
+      phase:has('phase') ? overrides.phase : (prog ? prog.phase : undefined),
+      looping:has('looping') ? !!overrides.looping : !!(prog && prog.looping),
+      pressed:has('pressed') ? !!overrides.pressed : sdKeyPressed(index),
     };
   }
   function sdActionLabel(m) {
@@ -1726,7 +1825,7 @@
       if (m.action === 'cue') refSel = '<select class="og-sd-ref og-midi-ref" data-mk="' + esc(key) + '"><option value="">Pick cue…</option>' + cues.map(c => '<option value="' + c.id + '"' + (m.ref === c.id ? ' selected' : '') + '>#' + c.num + ' ' + esc(c.name) + '</option>').join('') + '</select>';
       if (m.action === 'pad') refSel = '<select class="og-sd-ref og-midi-ref" data-mk="' + esc(key) + '"><option value="">Pick pad…</option>' + pads.map(p => '<option value="' + p.id + '"' + (m.ref === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
       return '<div class="og-midi-row"><span class="og-midi-key">' + esc(midiKeyLabel(key)) + '</span>' + actSel + refSel
-        + '<button class="og-sheet-x og-midi-del" data-mk="' + esc(key) + '" title="Remove mapping">✕</button></div>';
+        + '<button class="og-sheet-x og-midi-del" data-mk="' + esc(key) + '" data-tip="Remove mapping" aria-label="Remove mapping">' + sym('action.close') + '</button></div>';
     }).join('');
     body.innerHTML =
       (hasApi ? '' : '<div class="og-edit-empty">Web MIDI needs Chrome or Edge.</div>')
@@ -1761,6 +1860,7 @@
     }
     sd = { device: dev, model };
     sdState.length = 0;
+    sdHwSig.length = 0; sdKeyPaintAt.length = 0; sdKeyBusy.length = 0; sdPressUntil.length = 0;
     dev.oninputreport = onSdInput;
     try { navigator.hid.addEventListener('disconnect', onSdDisconnect); } catch (e) {}
     sdReset(); sdBrightness(80);
@@ -1779,7 +1879,12 @@
       const pressed = data[off + i] === 1, was = sdState[i];
       sdState[i] = pressed;
       if (pressed !== was) changed = true;
-      if (pressed && !was) sdFireKey(i);
+      if (pressed && !was) {
+        // Pressed = brief input flash, separate from latched active state.
+        sdPressUntil[i] = performance.now() + SD_PRESS_FLASH_MS;
+        sdArmPressFlashClear(i);   // clears the flash even when no tick loop is running
+        sdFireKey(i);
+      }
     }
     if (changed) scheduleStreamDeckRefresh();
   }
@@ -1802,6 +1907,10 @@
   async function sdPaintKey(i, target = sd) {
     if (!target || target !== sd) return false;
     if (!sdLabelRenderer || !sdSupportedProfile(target.device.productId)) return false;
+    // Stamp the painted signature + time so the reactive tick neither repeats
+    // this paint nor exceeds the per-key hardware repaint budget.
+    sdHwSig[i] = sdKeySignature(i, sdMap[i]);
+    sdKeyPaintAt[i] = performance.now();
     try {
       const rendered = await sdLabelRenderer.renderAndPacketize(target.device.productId, i, sdKeyDescriptor(i, sdMap[i], target.device.productId));
       if (target !== sd) return false;
@@ -1817,7 +1926,16 @@
       return false;
     }
   }
-  function sdKeyColor(m) { return ({ go: '#1c7a3e', stop: '#2e3640', pause: '#5a4a12', fadeStop: '#243a66', panic: '#8a1f1f', cue: '#234a8a', pad: '#5a2a8a' })[m.action] || '#234a8a'; }
+  function sdKeyColor(m) {
+    return ({
+      go: '#1c7a3e', stop: '#2e3640', pause: '#5a4a12', fadeStop: '#243a66', panic: '#8a1f1f', cue: '#234a8a', pad: '#5a2a8a',
+      // Cross-surface keys follow department colors: rundown/prompter live in
+      // the script cyan family, TAKE is video blue, ABORT is playback red.
+      rundown_go: '#0e6a72', rundown_back: '#0b525a',
+      rtrt_take: '#1d4f8a', rtrt_abort: '#8a2430',
+      prompter_toggle: '#0f5f66', prompter_top: '#0f5f66', prompter_cue: '#0f5f66',
+    })[m.action] || '#234a8a';
+  }
 
   // ── Outputs panel ─────────────────────────────────────────────────────────
   async function openOutputsPanel() { $('og-outputs').classList.add('on'); renderOutputs(); audioDevs = await listAudioOutputs(); renderOutputs(); }
@@ -1844,7 +1962,7 @@
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
           : '<span class="og-out-note">Detect displays to place this on a screen</span>';
         return '<div class="og-out-row">'
-          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' title="Not responding: the window may be frozen"' : '') + '></span>'
+          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' data-tip="Not responding: the window may be frozen"' : '') + '></span>'
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
             + '<button class="og-bar-btn og-out-open" data-o="' + o.id + '">' + (open ? 'Focus' : 'Open') + '</button>'
             + '<button class="og-bar-btn og-out-id" data-o="' + o.id + '">Identify</button>'
@@ -1997,6 +2115,63 @@
       }
     });
     return sdRefreshPromise;
+  }
+
+  // ── Reactive keys: playback progress tick ─────────────────────────────────
+  // The always-on meter rAF is the tick. Each frame, keys whose QUANTIZED
+  // visible state changed repaint individually (sdPaintKey / one simulator
+  // canvas), never a full sdPaintAll. Hardware writes stay on the existing
+  // per-key path, throttled to at most ~5 repaints/sec/key.
+  function sdKeySignature(index, mapping) {
+    const pressed = sdKeyPressed(index) ? 1 : 0;
+    const latched = sdKeyIsActive(index, mapping) ? 1 : 0;
+    const prog = sdKeyProgress(index, mapping);
+    if (!prog) return 'p' + pressed + 'a' + latched;
+    if (prog.looping) return 'p' + pressed + 'a' + latched + ':loop';
+    const step = Math.floor(Math.min(1, Math.max(0, prog.progress || 0)) * SD_PROGRESS_STEPS);
+    return 'p' + pressed + 'a' + latched + ':' + (prog.phase || '') + ':' + step;
+  }
+  function sdPaintSimKey(index) {
+    const body = $('og-sd-body'); if (!body) return;
+    const canvas = body.querySelector('.og-sdk-preview[data-k="' + index + '"]'); if (!canvas) return;
+    const productId = sdCurrentProductId();
+    if (!sdSupportedProfile(productId)) return;
+    const frames = sdPhysicalFrames(productId, sdKeyDescriptor(index, sdMap[index], productId));
+    sdCopyCanvas(canvas, frames.simulated);
+    canvas.dataset.active = sdKeyIsActive(index, sdMap[index]) ? 'true' : 'false';
+  }
+  function sdReactiveTick() {
+    const panel = $('og-sd');
+    const panelOpen = !!(panel && panel.classList.contains('on'));
+    const hw = !!sd;
+    if (!hw && !panelOpen) return;
+    const keys = hw ? sd.model.keys : (sdSupportedProfile(sdCurrentProductId())?.keys || 0);
+    const now = performance.now();
+    for (let i = 0; i < keys; i++) {
+      const sig = sdKeySignature(i, sdMap[i]);
+      if (panelOpen && sdSimSig[i] !== sig) { sdSimSig[i] = sig; sdPaintSimKey(i); }
+      if (hw && !sdRefreshPromise && !sdKeyBusy[i] && sdHwSig[i] !== sig
+          && (now - (sdKeyPaintAt[i] || 0)) >= SD_KEY_REPAINT_MS) {
+        sdKeyBusy[i] = true;
+        // Per-key painter ONLY from the tick; sdPaintKey stamps sig + time.
+        Promise.resolve(sdPaintKey(i)).catch(() => {}).then(() => { sdKeyBusy[i] = false; });
+      }
+    }
+  }
+  // Backstop that guarantees the press flash clears even when no rAF tick
+  // loop is running (audio never initialized, no program cue active). One
+  // setTimeout is not enough: the release-triggered full refresh can stamp
+  // the key's paint time while the flash is still lit, so the lone tick gets
+  // swallowed by the per-key repaint budget (or an in-flight refresh) and the
+  // white overlay latches on the hardware key. Flash clearing outranks the
+  // repaint budget for this one key, and retries are bounded.
+  function sdArmPressFlashClear(index, tries = 5) {
+    setTimeout(() => {
+      if (sdKeyPressed(index)) { sdArmPressFlashClear(index, tries); return; }
+      sdKeyPaintAt[index] = 0;
+      sdReactiveTick();
+      if (tries > 0 && sd && sdHwSig[index] !== sdKeySignature(index, sdMap[index])) sdArmPressFlashClear(index, tries - 1);
+    }, SD_PRESS_FLASH_MS + 30);
   }
 
   function buildStreamDeckProofCanvas(productId) {
@@ -2598,8 +2773,10 @@
     b._goState = state;
     // The button is icon-only; state rides the caption label + a paused tint.
     b.classList.toggle('paused', paused);
-    b.title = paused ? 'Resume' : 'Play / Pause';
-    b.setAttribute('aria-label', b.title);
+    const goTip = paused ? 'Resume' : 'Play / Pause';
+    b.setAttribute('data-tip', goTip);
+    b.removeAttribute('title');
+    b.setAttribute('aria-label', goTip);
     const lbl = $('og-go-lbl');
     if (lbl) lbl.textContent = paused ? 'Resume' : 'Play / Pause';
   }
@@ -2933,7 +3110,7 @@
   }
 
   // ── count-out clock + ticker ─────────────────────────────────────────────
-  function startTicker() { if (rafId) return; const loop = () => { renderClock(); renderEditPlayhead(); publishLive(); maybePersistTransport(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }
+  function startTicker() { if (rafId) return; const loop = () => { renderClock(); renderEditPlayhead(); publishLive(); maybePersistTransport(); sdReactiveTick(); rafId = requestAnimationFrame(loop); }; rafId = requestAnimationFrame(loop); }   // program cues can run before audio ever starts, so this loop ticks the deck too; the signature check makes a double tick per frame a no-op
   // Persist the playhead every ~10 s while the program runs, so a UI reload
   // mid-show recovers to (at worst) a few seconds behind the real position.
   function maybePersistTransport() {
@@ -2949,6 +3126,31 @@
     const base = c.type === 'image' ? (c.duration || 0) : ((el && isFinite(el.duration)) ? el.duration : (c.duration || 0));
     const out = c.trimOut != null ? c.trimOut : base;
     return Math.max(0, (out || 0) - (c.trimIn || 0));
+  }
+  // Cheap local progress accessor for the program cue. Pre-wait is a distinct
+  // phase so a key can show an armed/pre-roll state before playout begins.
+  // Same-tab authority: this reads the live playout only, never Firestore.
+  function cueProgress() {
+    if (preInfo) {
+      const total = Math.max(1, (Number(preInfo.cue.preWait) || 0) * 1000);
+      const remainMs = Math.max(0, preInfo.until - performance.now());
+      return { phase: 'prewait', playing: true, frac: Math.min(1, 1 - (remainMs / total)), remainMs, cueId: preInfo.cue.id };
+    }
+    if (!active) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId: null };
+    const cueId = active.cue.id;
+    if (active.kind === 'image') {
+      const durMs = cuePlayoutDuration(active.cue) * 1000;
+      const paused = !!active.paused;
+      if (!(durMs > 0)) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId };
+      const remainMs = paused ? Math.max(0, active.remainMs) : Math.max(0, active.remainMs - (performance.now() - active.timerStart));
+      return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, 1 - (remainMs / durMs)), remainMs, cueId };
+    }
+    if (!active.el) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId };
+    const paused = !!active.el.paused;
+    const dur = cuePlayoutDuration(active.cue, active.el);
+    if (!(dur > 0)) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId };
+    const elapsed = Math.max(0, active.el.currentTime - (active.cue.trimIn || 0));
+    return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, elapsed / dur), remainMs: Math.max(0, (dur - elapsed) * 1000), cueId };
   }
   function renderClock() {
     const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), durEl = $('og-clock-duration'), wrap = $('og-clock');
@@ -3017,7 +3219,8 @@
     if (!t || !wrap || !isOpen()) return;
     t.textContent = formatWallClock(new Date());
     wrap.setAttribute('aria-label', 'Time of day, ' + (settings.wallClockMode === '12' ? '12-hour' : '24-hour') + '. Click to toggle.');
-    wrap.title = settings.wallClockMode === '12' ? 'Switch to 24-hour clock' : 'Switch to 12-hour clock';
+    wrap.setAttribute('data-tip', settings.wallClockMode === '12' ? 'Switch to 24-hour clock' : 'Switch to 12-hour clock');
+    wrap.removeAttribute('title');
   }
 
   function toggleWallClockMode() {
@@ -3027,7 +3230,7 @@
   }
 
   // ── meters ───────────────────────────────────────────────────────────────
-  function startMeterLoop() { if (meterRAF) return; const loop = () => { paintMeters(); meterRAF = requestAnimationFrame(loop); }; meterRAF = requestAnimationFrame(loop); }
+  function startMeterLoop() { if (meterRAF) return; const loop = () => { paintMeters(); sdReactiveTick(); meterRAF = requestAnimationFrame(loop); }; meterRAF = requestAnimationFrame(loop); }
   function level(an, buf) { an.getByteTimeDomainData(buf); let peak = 0, sum = 0; for (let i = 0; i < buf.length; i++) { const x = (buf[i] - 128) / 128, a = x < 0 ? -x : x; if (a > peak) peak = a; sum += x * x; } return { rms: Math.sqrt(sum / buf.length), peak }; }
   function paintMeter(fillEl, peakEl, an, buf) {
     const l = level(an, buf), v = Math.min(1, l.rms * 1.9);
@@ -3072,7 +3275,7 @@
         + '<span class="og-cue-num">' + c.num + '</span>'
         + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : c.type === 'image' ? 'content.image' : 'department.video') + '</span>'
         + '<span class="og-cue-name">' + esc(c.name) + '</span>'
-        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" title="Failed to play last time. Replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" title="Tied SFX pad: fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
+        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" data-tip="Failed to play last time. Replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" data-tip="Tied SFX pad: fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
@@ -3228,7 +3431,7 @@
     ins.innerHTML =
       '<div class="insp-head og-insp-head">' +
         '<div class="insp-tabs" role="tablist" aria-label="Cue inspector groups">' +
-          tabs.map(t => '<button type="button" class="insp-tab' + (t.key === activeTab ? ' on' : '') + '" role="tab" aria-selected="' + (t.key === activeTab ? 'true' : 'false') + '" data-insp="' + t.key + '" title="' + t.label + '">' + sym(t.icon) + '</button>').join('') +
+          tabs.map(t => '<button type="button" class="insp-tab' + (t.key === activeTab ? ' on' : '') + '" role="tab" aria-selected="' + (t.key === activeTab ? 'true' : 'false') + '" data-insp="' + t.key + '" data-tip="' + t.label + '" aria-label="' + t.label + '">' + sym(t.icon) + '</button>').join('') +
         '</div>' +
         '<div class="insp-caption" id="og-insp-caption">' + (tabs.find(t => t.key === activeTab) || tabs[0]).label + '</div>' +
       '</div>' +
@@ -3379,9 +3582,9 @@
     const tout = (c.trimOut == null ? dur : clamp(c.trimOut, 0, dur || 1e9)) || dur;
     const isLive = active && active.cue.id === c.id;
     if (acts) acts.innerHTML =
-      '<button class="og-bar-btn" id="og-edit-setin" title="Set IN at the playhead">Set In</button>'
-      + '<button class="og-bar-btn" id="og-edit-setout" title="Set OUT at the playhead">Set Out</button>'
-      + '<button class="og-bar-btn" id="og-edit-reset" title="Clear trim">Reset</button>';
+      '<button class="og-bar-btn" id="og-edit-setin" data-tip="Set IN at the playhead">Set In</button>'
+      + '<button class="og-bar-btn" id="og-edit-setout" data-tip="Set OUT at the playhead">Set Out</button>'
+      + '<button class="og-bar-btn" id="og-edit-reset" data-tip="Clear trim">Reset</button>';
     const pct = (t) => dur > 0 ? (clamp(t, 0, dur) / dur * 100) : 0;
     body.innerHTML =
       '<div class="og-trk-meta"><span class="og-trk-name og-type-' + c.type + '-fg">' + esc(c.name) + '</span>'
@@ -3391,8 +3594,8 @@
             ? '<div class="og-track-strip loading" id="og-trk-strip">' + (c.thumb ? '<div class="frame" style="background-image:url(' + c.thumb + ')"></div>' : '') + '</div>'
             : '<div class="og-track-thumb og-track-' + c.type + '"></div>')
         + '<div class="og-track-region" id="og-trk-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
-        + '<div class="og-track-h og-track-in" id="og-trk-in" style="left:' + pct(tin) + '%" title="Trim in"></div>'
-        + '<div class="og-track-h og-track-out" id="og-trk-out" style="left:' + pct(tout) + '%" title="Trim out"></div>'
+        + '<div class="og-track-h og-track-in" id="og-trk-in" style="left:' + pct(tin) + '%" data-tip="Trim in"></div>'
+        + '<div class="og-track-h og-track-out" id="og-trk-out" style="left:' + pct(tout) + '%" data-tip="Trim out"></div>'
         + '<div class="og-track-play" id="og-trk-play" style="left:' + pct(isLive ? active.el.currentTime : tin) + '%"></div>'
       + '</div>'
       + '<div class="og-trk-fields">'
@@ -3494,8 +3697,8 @@
       + '<div class="og-track" id="og-sfx-track">'
         + '<div class="og-track-thumb og-track-audio"></div>'
         + '<div class="og-track-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
-        + '<div class="og-track-h og-track-in" id="og-sfx-in" style="left:' + pct(tin) + '%" title="Trim in"></div>'
-        + '<div class="og-track-h og-track-out" id="og-sfx-out" style="left:' + pct(tout) + '%" title="Trim out"></div>'
+        + '<div class="og-track-h og-track-in" id="og-sfx-in" style="left:' + pct(tin) + '%" data-tip="Trim in"></div>'
+        + '<div class="og-track-h og-track-out" id="og-sfx-out" style="left:' + pct(tout) + '%" data-tip="Trim out"></div>'
       + '</div>'
       + '<div class="og-trk-fields">'
         + field('Trim in (s)', '<input id="og-sfx-in-n" type="number" min="0" step="0.1" value="' + (Math.round(tin * 10) / 10) + '">')
@@ -3653,13 +3856,13 @@
       const live = padRT.get(p.id); const playing = live && live.voices.length;
       html += '<button class="og-pad' + (playing ? ' live' : '') + (p.id === selectedPadId ? ' sel' : '') + '" data-pad="' + p.id + '" style="--pad:' + p.color + '">'
         + '<span class="og-pad-key">' + (p.key ? keyLabel(p.key) : '') + '</span>'
-        + '<span class="og-pad-edit" data-edit="' + p.id + '" title="Edit pad">' + sym('action.more') + '</span>'
+        + '<span class="og-pad-edit" data-edit="' + p.id + '" data-tip="Edit pad">' + sym('action.more') + '</span>'
         + (p.emoji ? '<span class="og-pad-emoji">' + esc(p.emoji) + '</span>' : '')
         + '<span class="og-pad-name">' + esc(p.name) + '</span>'
         + '<span class="og-pad-meter"><span class="og-pad-meter-fill" id="og-padmeter-' + p.id + '"></span></span>'
         + '</button>';
     }
-    if (padCount < PAD_COUNT_MAX) html += '<button class="og-pad og-pad-add-slot" id="og-pad-add-slot" title="Grow this bank by one pad slot">+ Add pad · ' + padCount + '/' + PAD_COUNT_MAX + '</button>';
+    if (padCount < PAD_COUNT_MAX) html += '<button class="og-pad og-pad-add-slot" id="og-pad-add-slot" data-tip="Grow this bank by one pad slot">+ Add pad · ' + padCount + '/' + PAD_COUNT_MAX + '</button>';
     grid.innerHTML = html;
     const addSlot = $('og-pad-add-slot');
     if (addSlot) addSlot.onclick = () => {
@@ -3696,12 +3899,12 @@
       const label = editing
         ? '<input class="og-bank-rename" type="text" value="' + esc(b.name) + '" maxlength="40" spellcheck="false" aria-label="Bank name">'
         : '<span class="og-bank-name">' + esc(b.name) + '</span>';
-      return '<button class="og-bank-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-bank="' + b.id + '" title="Double-click or ✎ to rename">'
+      return '<button class="og-bank-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-bank="' + b.id + '" data-tip="Double-click to rename">'
         + label + (n && !editing ? '<span class="og-bank-count">' + n + '</span>' : '')
-        + (on && !editing ? '<span class="og-bank-edit" data-edit="' + b.id + '" title="Rename bank" role="button" aria-label="Rename bank">' + sym('action.edit') + '</span>' : '')
-        + (on && banks.length > 1 && !editing ? '<span class="og-bank-x" data-del="' + b.id + '" title="Delete bank">×</span>' : '')
+        + (on && !editing ? '<span class="og-bank-edit" data-edit="' + b.id + '" data-tip="Rename bank" role="button" aria-label="Rename bank">' + sym('action.edit') + '</span>' : '')
+        + (on && banks.length > 1 && !editing ? '<span class="og-bank-x" data-del="' + b.id + '" data-tip="Delete bank" role="button" aria-label="Delete bank">' + sym('action.close') + '</span>' : '')
         + '</button>';
-    }).join('') + '<button class="og-bank-add" id="og-bank-add" title="Add a bank">' + sym('action.add') + '</button>';
+    }).join('') + '<button class="og-bank-add" id="og-bank-add" data-tip="Add a bank" aria-label="Add a bank">' + sym('action.add') + '</button>';
     Array.prototype.forEach.call(bar.querySelectorAll('.og-bank-tab'), t => {
       const id = t.getAttribute('data-bank');
       const input = t.querySelector('.og-bank-rename');
@@ -3734,7 +3937,7 @@
         + '<span class="og-search-emoji">' + (p.emoji ? esc(p.emoji) : '<span class="og-search-dot" style="background:' + p.color + '"></span>') + '</span>'
         + '<span class="og-search-name">' + esc(p.name) + '</span>'
         + '<span class="og-search-bank">' + esc(bank ? bank.name : '') + (p.key ? ' · ' + keyLabel(p.key) : '') + '</span>'
-        + '<button class="og-search-fire" data-fire="' + p.id + '" title="Fire">' + sym('media.play') + '</button>'
+        + '<button class="og-search-fire" data-fire="' + p.id + '" data-tip="Fire this pad" aria-label="Fire this pad">' + sym('media.play') + '</button>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(box.querySelectorAll('.og-search-row'), row => {
@@ -4289,25 +4492,25 @@
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
-        + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" title="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
-        + '<button class="og-bar-btn og-program-popout" id="og-program-popout" title="Pop the program output into a movable window for another display" aria-label="Pop out program window" aria-pressed="false">' + sym('action.fullscreen') + '<span>Pop out program</span></button>'
-        + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary title="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
+        + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" data-tip="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
+        + '<button class="og-bar-btn og-program-popout" id="og-program-popout" data-tip="Pop the program output into a movable window for another display" aria-label="Pop out program window" aria-pressed="false">' + sym('action.fullscreen') + '<span>Pop out program</span></button>'
+        + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary data-tip="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
           + '<details class="og-themes-submenu"><summary class="og-themes-row"><span class="og-tr-ico" aria-hidden="true"></span><span class="og-tr-lbl">Themes</span><span class="og-tr-val">Choose<span class="og-tr-chev" aria-hidden="true">›</span></span></summary>'
             + '<div class="og-theme-grid" id="og-theme-options"></div>'
           + '</details>'
           + '<div class="og-tools-sep"></div>'
           + '<div class="og-settings-label">Tools</div>'
           + '<div class="og-tools-pop-inline">'
-            + '<button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" title="Waveform + vectorscope">' + assetIcon('scope') + '<span>Scopes</span></button>'
-            + '<button class="og-bar-btn" id="og-output-btn" title="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
-            + '<button class="og-bar-btn" id="og-sd-btn" title="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
-            + '<button class="og-bar-btn" id="og-midi-btn" title="MIDI control surfaces (Web MIDI)">' + sym('action.grid') + 'MIDI</button>'
-            + '<button class="og-bar-btn" id="og-print-btn" title="Print the show-day pack: cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
-            + '<button class="og-bar-btn" id="og-pro-btn" title="' + (OBS_UI ? 'OBS · ' : '') + 'Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
-            + '<button class="og-bar-btn" id="og-lock-btn" title="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
-            + '<button class="og-bar-btn" id="og-help-btn" title="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
-            + '<button class="og-bar-btn" id="og-save-file-btn" title="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
-            + '<button class="og-bar-btn" id="og-open-file-btn" title="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
+            + '<button class="og-bar-btn og-scopes-btn" id="og-scopes-btn" data-tip="Waveform + vectorscope">' + assetIcon('scope') + '<span>Scopes</span></button>'
+            + '<button class="og-bar-btn" id="og-output-btn" data-tip="Manage output windows &amp; displays">' + sym('content.display') + 'Outputs</button>'
+            + '<button class="og-bar-btn" id="og-sd-btn" data-tip="Stream Deck control (WebHID)">' + sym('action.grid') + 'Stream Deck</button>'
+            + '<button class="og-bar-btn" id="og-midi-btn" data-tip="MIDI control surfaces (Web MIDI)">' + sym('action.grid') + 'MIDI</button>'
+            + '<button class="og-bar-btn" id="og-print-btn" data-tip="Print the show-day pack: cue sheet + SFX pad map">' + sym('action.export') + 'Print</button>'
+            + '<button class="og-bar-btn" id="og-pro-btn" data-tip="' + (OBS_UI ? 'OBS · ' : '') + 'Dropbox · Transcode">' + sym('action.more') + 'Integrations</button>'
+            + '<button class="og-bar-btn" id="og-lock-btn" data-tip="Lock edits during the show">' + sym('action.lock') + 'Show Lock</button>'
+            + '<button class="og-bar-btn" id="og-help-btn" data-tip="Keyboard shortcuts">' + sym('action.guide') + 'Shortcuts</button>'
+            + '<button class="og-bar-btn" id="og-save-file-btn" data-tip="Save this show (with its media) to a file on your computer">' + sym('action.download') + 'Save Show</button>'
+            + '<button class="og-bar-btn" id="og-open-file-btn" data-tip="Open a saved show file from your computer">' + sym('action.upload') + 'Open Show</button>'
             // Phase 9 (D10.4): ⓘ — what an .ogshow contains (shared popover in cueola-app.js)
             + '<button type="button" class="info-btn" id="og-file-info" aria-label="About the .ogshow show file">' + sym('state.info') + '</button>'
           + '</div>'
@@ -4325,7 +4528,7 @@
             + '<div class="og-cuelist" id="og-cuelist"></div>'
             + '<div class="og-cue-add-row">'
               + '<button class="og-cue-add" id="og-cue-add">' + assetIcon('document-plus') + '<span>Drop video / audio / stills here, or click to add</span></button>'
-              + '<button class="og-bar-btn og-matte-inline" id="og-matte-add" title="Add a solid-color matte cue">' + sym('content.image') + ' Matte</button>'
+              + '<button class="og-bar-btn og-matte-inline" id="og-matte-add" data-tip="Add a solid-color matte cue">' + sym('content.image') + ' Matte</button>'
             + '</div>'
             + '<input type="file" id="og-file-input" accept="video/*,audio/*,image/*" multiple hidden>'
           + '</div>'
@@ -4342,19 +4545,19 @@
               + '</div>'
             + '</div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
-            + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><button type="button" class="og-clock-dir" id="og-clock-dir" title="Toggle count direction (elapsed / remaining)" aria-label="Toggle count direction">' + sym('media.forward') + '</button><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div></div>'
+            + '<div class="og-clock" id="og-clock"><div class="og-clock-meta"><span class="og-clock-label" id="og-clock-label">STANDBY</span><button type="button" class="og-clock-dir" id="og-clock-dir" data-tip="Toggle count direction (elapsed / remaining)" aria-label="Toggle count direction">' + sym('media.forward') + '</button><span class="og-clock-duration" id="og-clock-duration">DUR 0:00</span></div><div class="og-clock-time" id="og-clock-time">0:00</div></div>'
             // Media transport: one centred cluster of round icon buttons with quiet
             // captions underneath — Play/Pause is the big green primary, Panic sits
             // apart behind a hairline. Captions carry the labels + key hints so the
             // buttons themselves stay clean.
             + '<div class="og-transport">'
               + '<div class="og-transport-group">'
-                + '<div class="og-tctl"><button class="og-tbtn" id="og-prev" title="Previous cue" aria-label="Previous cue">' + sym('chevron.left') + '</button><span class="og-tcap">Prev <span class="og-tbtn-key">↑</span></span></div>'
-                + '<div class="og-tctl og-tctl-go"><button class="og-tbtn og-tbtn-go" id="og-go" title="Play / Pause" aria-label="Play or pause">' + sym('media.playpause') + '</button><span class="og-tcap"><span id="og-go-lbl">Play / Pause</span> <span class="og-tbtn-key" id="og-k-go"></span></span></div>'
-                + '<div class="og-tctl"><button class="og-tbtn" id="og-fade" title="Fade out" aria-label="Fade out">' + sym('media.waveform.low') + '</button><span class="og-tcap">Fade <span class="og-tbtn-key" id="og-k-fade"></span></span></div>'
-                + '<div class="og-tctl"><button class="og-tbtn" id="og-next" title="Next cue" aria-label="Next cue">' + sym('chevron.right') + '</button><span class="og-tcap">Next <span class="og-tbtn-key">↓</span></span></div>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-prev" data-tip="Previous cue" aria-label="Previous cue">' + sym('chevron.left') + '</button><span class="og-tcap">Prev <span class="og-tbtn-key">↑</span></span></div>'
+                + '<div class="og-tctl og-tctl-go"><button class="og-tbtn og-tbtn-go" id="og-go" data-tip="Play / Pause" aria-label="Play or pause">' + sym('media.playpause') + '</button><span class="og-tcap"><span id="og-go-lbl">Play / Pause</span> <span class="og-tbtn-key" id="og-k-go"></span></span></div>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-fade" data-tip="Fade out" aria-label="Fade out">' + sym('media.waveform.low') + '</button><span class="og-tcap">Fade <span class="og-tbtn-key" id="og-k-fade"></span></span></div>'
+                + '<div class="og-tctl"><button class="og-tbtn" id="og-next" data-tip="Next cue" aria-label="Next cue">' + sym('chevron.right') + '</button><span class="og-tcap">Next <span class="og-tbtn-key">↓</span></span></div>'
               + '</div>'
-              + '<div class="og-tctl og-tctl-panic"><button class="og-tbtn og-tbtn-panic" id="og-panic" title="Panic: stop everything" aria-label="Panic: stop everything">' + sym('action.power') + '</button><span class="og-tcap">Panic <span class="og-tbtn-key" id="og-k-panic"></span></span></div>'
+              + '<div class="og-tctl og-tctl-panic"><button class="og-tbtn og-tbtn-panic" id="og-panic" data-tip="Panic: stop everything" aria-label="Panic: stop everything">' + sym('action.power') + '</button><span class="og-tcap">Panic <span class="og-tbtn-key" id="og-k-panic"></span></span></div>'
             + '</div>'
           + '</div>'
           + '<div class="og-pane og-inspector-pane" id="og-inspector-pane">'
@@ -4414,8 +4617,8 @@
       + '</div></div>'
       + '<div class="og-sheet" id="og-matte"><div class="og-sheet-card og-matte-card"><div class="og-sheet-head"><h3>' + sym('content.image') + ' New Matte</h3><button class="og-sheet-x" id="og-matte-x">Done</button></div>'
         + '<div class="og-matte-swatches" id="og-matte-swatches">'
-          + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" title="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
-          + '<label class="og-matte-swatch og-matte-custom" title="Custom color"><input type="color" id="og-matte-color" value="#1e3a8a"><span>Custom…</span></label>'
+          + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" data-tip="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
+          + '<label class="og-matte-swatch og-matte-custom" data-tip="Custom color"><input type="color" id="og-matte-color" value="#1e3a8a"><span>Custom…</span></label>'
         + '</div>'
         + '<p class="og-sheet-note">A matte is a full-screen solid color that holds until you advance. Use it for blackouts, backgrounds, and key fills. It becomes a normal still cue: set duration, fades, or an output in the Inspector.</p>'
       + '</div></div>'
@@ -4424,6 +4627,7 @@
         + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
         + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>'
         + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
+        + '<div class="join-identity-strip" id="og-join-identity" hidden></div>'
         + '<div class="modal-err" id="og-join-err">Please fill in both fields.</div>'
         + '<button class="btn-primary" id="og-join-go">Open Outrangutan</button>'
         + '<button class="btn-secondary" id="og-join-skip">Cancel</button>'
@@ -4655,6 +4859,70 @@
     else { closeSessionJoin(); await applyShow(); maybeShowChromePrompt(); }
   }
 
+  // ── INC-3: the og join card rides the shared profile identity ──────────────
+  // A signed-in CueolaIdentity profile locks the name field to its display
+  // name and stamps the join with profileId + username (the same identity
+  // stamp cueola-app.js joinSession carries). Signed-out operators keep the
+  // typed-name path (guest operation is by design here) and their join is
+  // stamped identity:'guest'.
+  function ogJoinProfile() {
+    try {
+      const id = window.CueolaIdentity;
+      if (!id || typeof id.identity !== 'function' || !id.identity()) return null;
+      const p = typeof id.profile === 'function' ? id.profile() : null;
+      return (p && p.fullName) ? p : null;
+    } catch (e) { return null; }
+  }
+  function ogJoinIdentityKey() {
+    const p = ogJoinProfile();
+    return p ? (p.username || '') + '|' + (p.fullName || '') : '';
+  }
+  function decorateOgJoinIdentity() {
+    const strip = $('og-join-identity'), nameEl = $('og-join-name');
+    if (!nameEl) return;
+    const profile = ogJoinProfile();
+    if (!profile) {
+      nameEl.readOnly = false; nameEl.removeAttribute('aria-readonly');
+      if (strip) { strip.hidden = true; strip.innerHTML = ''; }
+      return;
+    }
+    // Locked, not just prefilled: the join is stamped with the signed-in
+    // identity, so a free-typed alias would contradict the stamp.
+    nameEl.value = profile.fullName;
+    nameEl.readOnly = true; nameEl.setAttribute('aria-readonly', 'true');
+    if (!strip) return;
+    strip.hidden = false;
+    strip.innerHTML = '<span class="jis-who">Joining as <b>' + esc(profile.fullName) + '</b>'
+      + (profile.username ? ' <span class="jis-user">@' + esc(profile.username) + '</span>' : '') + '</span>'
+      + '<button type="button" class="jis-btn" id="og-join-switch">Not you? Switch</button>';
+    const sw = $('og-join-switch');
+    if (sw) sw.onclick = () => {
+      try { window.CueolaIdentity.openHub(); } catch (e) {}
+      watchOgJoinIdentity();
+    };
+  }
+  let ogJoinIdentityWatch = 0;
+  function watchOgJoinIdentity() {
+    // "Not you? Switch" opens the identity portal; the identity module has no
+    // change event, so while the join sheet stays open we poll for the account
+    // flip and re-decorate. Self-clears when the sheet closes (or after 2 min).
+    if (ogJoinIdentityWatch) return;
+    let ticks = 0, last = ogJoinIdentityKey();
+    ogJoinIdentityWatch = setInterval(() => {
+      const sheet = $('og-join');
+      if (!sheet || !sheet.classList.contains('on') || ++ticks > 240) {
+        clearInterval(ogJoinIdentityWatch); ogJoinIdentityWatch = 0; return;
+      }
+      const now = ogJoinIdentityKey();
+      if (now !== last) {
+        last = now;
+        const nameEl = $('og-join-name');
+        if (nameEl && !ogJoinProfile()) nameEl.value = '';   // signed out: back to the typed-name path
+        decorateOgJoinIdentity();
+      }
+    }, 500);
+  }
+
   function openSessionJoin() {
     mode = 'session';
     const sheet = $('og-join'); if (!sheet) { applyShow(); return; }
@@ -4668,10 +4936,15 @@
     } catch (e) {}
     if (codeEl && !codeEl.value) codeEl.value = preCode;
     if (nameEl && !nameEl.value) nameEl.value = preName;
+    decorateOgJoinIdentity();
     if (err) err.classList.remove('on');
     renderTransportKeys(); renderAll();
     sheet.classList.add('on');
-    setTimeout(() => { const f = (codeEl && codeEl.value) ? nameEl : codeEl; if (f) { f.focus(); if (f.select) f.select(); } }, 40);
+    setTimeout(() => {
+      let f = (codeEl && codeEl.value) ? nameEl : codeEl;
+      if (f === nameEl && nameEl && nameEl.readOnly) f = $('og-join-go');   // locked profile name: land on the join button
+      if (f) { f.focus(); if (f.select && !f.readOnly) f.select(); }
+    }, 40);
   }
   function closeSessionJoin() { const s = $('og-join'); if (s) s.classList.remove('on'); }
   async function joinSession() {
@@ -4686,11 +4959,24 @@
       closeSessionJoin();
       return;
     }
-    sessionCode = code; sessionUserName = name; mode = 'session';
+    // INC-3: stamp the join with the shared profile identity, the same shape
+    // cueola-app.js joinSession stamps (userName/profileId/username/aliases).
+    // noteJoin also auto-attaches this session code to the signed-in profile.
+    let joined = null;
+    if (ogJoinProfile()) {
+      try { joined = window.CueolaIdentity.noteJoin(code, name) || null; } catch (e) { joined = null; }
+      if (!joined) { try { joined = window.CueolaIdentity.profileIdentityForJoin(name) || null; } catch (e) { joined = null; } }
+    }
+    sessionIdentity = joined
+      ? { userName: joined.displayName || joined.fullName || name, profileId: joined.profileId || '', username: joined.username || '', profileAliases: Array.isArray(joined.profileAliases) ? joined.profileAliases.slice() : [], identity: 'profile' }
+      : { userName: name, profileId: '', username: '', profileAliases: [], identity: 'guest' };
+    sessionCode = code; sessionUserName = sessionIdentity.userName; mode = 'session';
     reattachLiveControl(); // identity change immediately closes any standalone/stale-session outputs
     try { localStorage.setItem('cueola_outrangutan_code', code); localStorage.setItem('cueola_last_code', code); localStorage.setItem('cueola_last_name', name); } catch (e) {}
     closeSessionJoin(); await applyShow();
-    slog('session', 'Joined session ' + code);
+    slog('session', 'Joined session ' + code + (sessionIdentity.identity === 'profile'
+      ? ' as ' + sessionIdentity.userName + (sessionIdentity.username ? ' (@' + sessionIdentity.username + ')' : '')
+      : ' as ' + sessionIdentity.userName + ' (guest)'));
     toast('Joined session ' + code + '.');
     maybeShowChromePrompt();
   }
@@ -4798,7 +5084,11 @@
     // and drives program master gain (0..1.2) when Outrangutan shares this tab.
     masterGain: () => settings.masterGain,
     setMasterGain: (v) => setMasterGain(v, 'streamdeck'),
-    _state: () => ({ cues, pads, banks, currentBankId, outputs, outputStatus: outputStatus(), sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode }),
+    // Reactive-key accessors: LOCAL playback truth for same-tab surfaces.
+    // Remote followers keep the existing playingStart one-shot; nothing here
+    // ever reads or writes Firestore.
+    padProgress, cueProgress,
+    _state: () => ({ cues, pads, banks, currentBankId, outputs, outputStatus: outputStatus(), sdMap, selectedId, selectedPadId, settings, active: active && active.cue.id, mode, sessionCode, sessionIdentity: sessionIdentity && { ...sessionIdentity } }),
     _outputUrl: id => outputUrl(id || 1),             // live-preview rehearsal hook; carries exact protocol identity
     _onSessionDoc: onSessionDoc, _sender: () => OG_SENDER,
     // P4: same-page fast path — when Cueola and Outrangutan share this tab (the

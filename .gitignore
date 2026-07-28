@@ -8,10 +8,16 @@ firestore-debug.log
 firepit-log.txt
 ds-bundle/
 .design-sync/.cache/
-# P2607 recovery artifacts — contain real student data, never publish
-P2607-prepro-backup-*.json
-p2607-snapshot-restore.json
-restore-p2607.html
+
+# Build output: never track compiled artifacts
+.build/
+
+# Claude Code local state (worktrees are scratch clones; settings.local.json holds machine-local permission strings)
+.claude/worktrees/
+.claude/settings.local.json
+
+# macOS Finder duplicate copies ("name 2.ext")
+* [0-9].*
 
 # P2607 recovery artifacts — contain real student data, never publish
 P2607-prepro-backup-*.json

@@ -270,9 +270,11 @@ test('Ready·Track·Roll·Take: armed call with an abort window, published for a
   assert.match(app, /const RTRT_STAGE_MS = 1000/);
   const select = app.slice(app.indexOf('function selectLiveRundownRow('), app.indexOf('function lsNext('));
   assert.doesNotMatch(select, /beginPlayoutCall|fireOutrangutanAutoForBeat/);
-  // G is TAKE-now, S aborts, click buttons exist, leaving live aborts.
+  // G is TAKE-now. S aborts the armed call AND falls through to the normal
+  // transport stop, so panic always silences playing media (INC-19 decision).
   assert.match(app, /if \(action === 'go'\) return takePlayoutCall\('take-now'\)/);
-  assert.match(app, /return abortPlayoutCall\(action\)/);
+  assert.match(app, /if \(action === 'stop' \|\| action === 'fadeStop' \|\| action === 'panic'\) abortPlayoutCall\(action\)/);
+  assert.doesNotMatch(app, /return abortPlayoutCall\(action\)/);
   assert.match(html, /onclick="takePlayoutCall\('button'\)"/);
   assert.match(html, /onclick="abortPlayoutCall\('button'\)"/);
   assert.match(app, /abortPlayoutCall\('left-live'\)/);
@@ -479,6 +481,38 @@ test('drawer and drag handles are safe for pointer and keyboard operation', () =
 test('follow targets use native buttons with pressed state', () => {
   assert.match(app, /<button type="button" class="follow-chip follow-self/);
   assert.match(app, /aria-pressed="\$\{isActive\?'true':'false'\}"/);
+});
+
+test('same-tab control-surface probe, repaint push, and liveRowInfo honor the bridge contract', () => {
+  // Probe: strict booleans from LOCAL state only (no Firestore reads), and the
+  // exact verb map the deck expects: prompter toggle, RTRT take/abort, clock.
+  const probeAt = app.indexOf('window.cueolaControlSurfaceState');
+  const probe = app.slice(probeAt, app.indexOf('function notifyControlSurfaceState', probeAt));
+  assert.ok(probeAt >= 0);
+  assert.match(probe, /action === 'toggle' \? !!ptPlaying : false/);
+  assert.match(probe, /\(action === 'take' \|\| action === 'abort'\) \? !!_rtrtCall : false/);
+  assert.match(probe, /if \(target === 'clock'\) return !!liveClockRunning;/);
+  assert.match(probe, /catch \(e\) \{ return false; \}/);
+  assert.doesNotMatch(probe, /_getDoc|_updateDoc|_onSnapshot|_db\b/);
+  // Outrangutan's key lamp consumes exactly this probe, with === true strictness.
+  assert.match(playbackJs, /window\.cueolaControlSurfaceState/);
+  assert.match(playbackJs, /probe\(cmd\.target, cmd\.action\) === true/);
+  // Push: every deck-visible state mutator dispatches the cheap repaint event.
+  assert.match(app, /new Event\('cueola-surface-state'\)/);
+  const fnBody = (name) => {
+    const at = app.indexOf(`function ${name}(`);
+    assert.ok(at >= 0, `${name} exists`);
+    const end = app.indexOf('\nfunction ', at + 1);
+    return app.slice(at, end < 0 ? app.length : end);
+  };
+  for (const name of ['ptStartPlay', 'ptStopPlay', 'startTimer', 'stopTimer', 'beginPlayoutCall', 'takePlayoutCall', 'abortPlayoutCall', 'setLiveSelectedCue', 'adoptLiveActiveCue']) {
+    assert.match(fnBody(name), /notifyControlSurfaceState\(\)/, `${name} pushes 'cueola-surface-state'`);
+  }
+  // Bridge payload: additive liveRowInfo carries current and next row {index, title}.
+  assert.match(app, /liveRowInfo: \{/);
+  assert.match(app, /current: _sdSafe\(\(\) => _sdRowInfo\(ai\), null\)/);
+  assert.match(app, /next: _sdSafe\(\(\) => _sdRowInfo\(liveNextPlayableCueIndex\(ai\)\), null\)/);
+  assert.match(app, /return \{ index, title: _sdBeatName\(b\) \|\| b\.info \|\| '' \};/);
 });
 
 test('Outrangutan has reachable narrow, medium, and wide modes', () => {

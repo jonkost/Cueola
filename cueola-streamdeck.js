@@ -34,8 +34,13 @@
   var Device = window.CueolaDeckDevice;
   var TALKBACK_URLS = ['ws://127.0.0.1:17844', 'ws://localhost:17844'];
   var STORE_KEY = 'cueola_streamdeck_profile';   // per-productId config (profiles + geometry overrides)
+  var SEED_KEY = 'cueola_streamdeck_seed_layouts';   // staged named layouts (e.g. The Break Room demo), added once per deck
   var BRIGHTNESS_KEY = 'cueola_streamdeck_bright';
   var PAINT_HZ = 5;
+  // Press feedback duration, mirroring the Outrangutan renderer convention:
+  // a key input flashes white for 150ms, as an overlay that composes with the
+  // active ring and the progress wipe.
+  var SD_PRESS_FLASH_MS = 150;
   var SWATCHES = ['#1c7a3e', '#8a1f1f', '#243a66', '#5a2a8a', '#5a4a12', '#2e3640', '#17653a', '#1c4a86', '#6a3b8a', '#7a5a1c', '#0f4c81', '#a4741e'];
   // Key-art quick picks: show-runner sounds and moments. Owner-requested fun.
   var EMOJI_ART = ['🔊', '💥', '👏', '🎉', '😂', '🥁', '🎺', '🔔', '⚡', '🌩️', '🎵', '📣', '🚨', '🎬', '🎸', '🦆', '💨', '🏆', '❤️', '🤫'];
@@ -255,11 +260,13 @@
   var device = null, profile = null;
   var overrides = {};                 // device geometry (Connect & Learn), per productId
   var profiles = {};                  // id -> { name, keys:[slot], dials:[id], touch:[{dial}] }
+  var seededNames = [];               // layout names already offered from SEED_KEY for this deck (delete stays deleted)
   var activeProfileId = '';           // selected profile
   var defaultProfileId = '';          // auto-selected on connect
   function mapping() { return profiles[activeProfileId] || { keys: [], dials: [], touch: [] }; }
 
   var keyState = [], dialPress = [], lastPainted = [], lastStripSig = '';
+  var pressFlashUntil = [];           // per-key deadline for the 150ms input flash
   var brightness = 80, paintTimer = null, jogAccum = 0, muteMemory = null;
   var learnArmed = false, editingKey = -1;
   var previewMode = false;            // on-screen deck with no hardware, for playing with layouts + themes
@@ -438,23 +445,39 @@
     var order = [];
     for (var i = 0; i < profile.keys; i++) order.push(i);
     order.sort(function (a, b) { return ((a % profile.cols) + Math.floor(a / profile.cols)) - ((b % profile.cols) + Math.floor(b / profile.cols)); });
-    for (var k = 0; k < order.length; k++) {
-      if (device !== target) return;                       // unplugged mid-show
-      var idx = order[k];
-      var hue = Math.round(((idx % profile.cols) + Math.floor(idx / profile.cols)) / (profile.cols + profile.rows) * 300);
-      var cv = offCanvas(z), cx = cv.getContext('2d'); cx.clearRect(0, 0, z, z); cx.fillStyle = 'hsl(' + hue + ', 85%, 45%)'; rr(cx, 0, 0, z, z, z * 0.15); cx.fill();
-      try {
+    // Each frame is one serialized queue job (draw + encode + send together:
+    // the offscreen canvas is shared with the regular painters).
+    var lightShowFrame = function (idx) {
+      return async function () {
+        if (device !== target) return;
+        var hue = Math.round(((idx % profile.cols) + Math.floor(idx / profile.cols)) / (profile.cols + profile.rows) * 300);
+        var cv = offCanvas(z), cx = cv.getContext('2d'); cx.clearRect(0, 0, z, z); cx.fillStyle = 'hsl(' + hue + ', 85%, 45%)'; rr(cx, 0, 0, z, z, z * 0.15); cx.fill();
         var bytes = await keyJpegFromCanvas(cv, z);
         var packets = Device.keyImagePackets(profile, idx, bytes);
         for (var pk = 0; pk < packets.length; pk++) { if (device !== target) return; await target.hid.sendReport(packets[pk].reportId, packets[pk].data); }
-      } catch (e) { return; }
+      };
+    };
+    for (var k = 0; k < order.length; k++) {
+      if (device !== target) return;                       // unplugged mid-show
+      try { await queueDeviceWrite('key:' + order[k], lightShowFrame(order[k])); } catch (e) { return; }
     }
     lastPainted = new Array(profile.keys).fill('wave');    // force the real layout to repaint over it
   }
 
   function onDisconnect(e) { if (!device) return; if (e && e.device && e.device !== device.hid) return; teardownDevice(); toast('Stream Deck disconnected.'); render(); }
-  function disconnect() { if (device && device.hid) { try { sendFeature(Device.resetReport(profile)); } catch (e) {} try { device.hid.close(); } catch (e) {} } teardownDevice(); render(); }
-  function teardownDevice() { stopPaintLoop(); stopAnim(); device = null; if (!previewMode) profile = null; keyState = []; dialPress = []; }
+  function disconnect() {
+    var hid = device && device.hid, prof = profile;
+    teardownDevice();   // flushes the queue first, so the goodbye below is the only writer left
+    if (hid) {
+      var rep = null; try { rep = Device.resetReport(prof); } catch (e) {}
+      queueDeviceWrite(null, async function () {
+        if (rep) { try { await hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} }
+        try { hid.close(); } catch (e) {}
+      }).catch(function () {});
+    }
+    render();
+  }
+  function teardownDevice() { stopPaintLoop(); stopAnim(); stopAutoDim(); flushDeviceWrites(); device = null; if (!previewMode) profile = null; keyState = []; dialPress = []; }
 
   // Preview mode: a virtual + XL on screen so the deck can be explored, themed,
   // and laid out with no hardware plugged in. Real Connect takes over instantly.
@@ -472,12 +495,13 @@
 
   function onInputReport(e) {
     if (!device) return;
+    noteDeckInput();   // any key, dial, or touch input restores + re-arms auto-dim
     var data = new Uint8Array(e.data.buffer);
     var evt = Device.parseInputReport(e.reportId, data, profile);
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(keyState, evt.states);
       keyState = evt.states;
-      edges.downs.forEach(function (i) { if (learnArmed) { openKeyEditor(i, true); } else { fireSlot(mapping().keys[i], 'down'); } });
+      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else { fireSlot(mapping().keys[i], 'down'); } });
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
       if (edges.downs.length || edges.ups.length) schedulePaint();
     } else if (evt.type === 'dials') {
@@ -614,6 +638,27 @@
         c.fillStyle = g2; rr(c, 0, 0, z, z, z * 0.15); c.fill();
         if (sp.active) { c.strokeStyle = '#7cf7d4'; c.lineWidth = z * 0.045; rr(c, z * 0.05, z * 0.05, z * 0.9, z * 0.9, z * 0.12); c.stroke(); }
       }
+    },
+    liquidglass: {
+      name: 'Liquid Glass', ink: '#f2f5fa', sub: '#c3ccdd', ring: '#9fd8ff', labelWeight: 800,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px -apple-system,'SF Pro Display','Segoe UI',sans-serif"; },
+      bg: function (c, z, sp) {
+        // Smoked-glass keycap, per the app's liquid-glass doctrine: a near-black
+        // base, a translucent accent tint, a top glass fill, and a hairline rim.
+        // Depth from layered translucency only: no glow, no shadow.
+        c.fillStyle = '#0d1016'; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        c.save(); rr(c, 0, 0, z, z, z * 0.15); c.clip();
+        var tint = c.createLinearGradient(0, 0, 0, z);
+        tint.addColorStop(0, rgba(sp.color, sp.active ? 0.5 : 0.28)); tint.addColorStop(1, rgba(sp.color, sp.active ? 0.16 : 0.07));
+        c.fillStyle = tint; c.fillRect(0, 0, z, z);
+        var glass = c.createLinearGradient(0, 0, 0, z * 0.55);
+        glass.addColorStop(0, 'rgba(255,255,255,0.11)'); glass.addColorStop(1, 'rgba(255,255,255,0.02)');
+        c.fillStyle = glass; c.fillRect(0, 0, z, z * 0.55);
+        c.restore();
+        c.strokeStyle = sp.active ? rgba('#9fd8ff', 0.9) : 'rgba(255,255,255,0.2)';
+        c.lineWidth = Math.max(1, z * (sp.active ? 0.03 : 0.016));
+        rr(c, 0.5, 0.5, z - 1, z - 1, z * 0.15); c.stroke();
+      }
     }
   };
 
@@ -655,6 +700,45 @@
     'prompter.editscript': 'editing/pencil.svg', 'prompter.cue.current': 'textformatting/text.line.first.and.arrowtriangle.forward.svg',
     'ref.open': 'communication/questionmark.circle.fill.svg', 'scrub.open': 'media/waveform.path.svg'
   };
+  // Curated, searchable subset of the repo's SF Symbol catalog for the key
+  // editor's icon picker. Names are the plain words an operator would search.
+  // Every path exists under SYMBOL_BASE and draws through the same Path2D
+  // pipeline as the built-in key symbols.
+  var SYMBOL_PICK = [
+    ['Play', 'media/play.fill.svg'], ['Pause', 'media/pause.svg'], ['Stop', 'media/stop.fill.svg'],
+    ['Play pause', 'media/playpause.circle.fill.svg'], ['Stop circle', 'media/stop.circle.svg'],
+    ['Record', 'objectsandtools/circle.fill.svg'], ['Clapper', 'media/movieclapper.svg'],
+    ['Film stack', 'media/film.stack.svg'], ['Popcorn', 'media/popcorn.svg'], ['TV', 'media/tv.svg'],
+    ['Display', 'media/display.svg'], ['Two displays', 'media/display.2.svg'], ['Play display', 'media/play.display.svg'],
+    ['Speaker', 'media/hifispeaker.svg'], ['Guitar', 'media/guitars.svg'],
+    ['Mute', 'media/speaker.slash.svg'], ['Volume up', 'media/speaker.plus.svg'], ['Volume down', 'media/speaker.minus.svg'],
+    ['Waveform', 'media/waveform.path.svg'], ['Waveform circle', 'media/waveform.circle.svg'], ['Waveform low', 'media/waveform.low.svg'],
+    ['Microphone', 'editing/microphone.svg'], ['Stand mic', 'editing/microphone.dynamic.on.stand.svg'],
+    ['Faders', 'editing/slider.vertical.3.svg'], ['Scissors', 'editing/scissors.svg'], ['Sparkles', 'editing/sparkles.svg'],
+    ['Pencil', 'editing/pencil.svg'], ['Palette', 'editing/paintpalette.svg'], ['Draw', 'editing/hand.draw.svg'],
+    ['Bell', 'objectsandtools/bell.svg'], ['Check', 'objectsandtools/checkmark.svg'], ['Clock', 'objectsandtools/clock.svg'],
+    ['Gear', 'objectsandtools/gearshape.svg'], ['Hammer', 'objectsandtools/hammer.svg'], ['Wrench', 'objectsandtools/wrench.adjustable.svg'],
+    ['Bulb', 'objectsandtools/lightbulb.svg'], ['Power', 'objectsandtools/power.svg'], ['Lock', 'objectsandtools/lock.fill.svg'],
+    ['Repeat', 'objectsandtools/repeat.svg'], ['Grid', 'objectsandtools/square.grid.3x3.svg'], ['Stack', 'objectsandtools/square.stack.3d.up.svg'],
+    ['Trash', 'objectsandtools/trash.svg'], ['X mark', 'objectsandtools/xmark.svg'], ['Balloon', 'objectsandtools/balloon.svg'],
+    ['Pin', 'objectsandtools/pin.fill.svg'], ['Info', 'objectsandtools/info.circle.svg'], ['Bookmark', 'objectsandtools/bookmark.svg'],
+    ['Timer', 'time/timer.svg'], ['Calendar', 'time/calendar.svg'],
+    ['Arrow up', 'arrows/arrowshape.up.svg'], ['Arrow down', 'arrows/arrowshape.down.svg'],
+    ['Arrow left', 'arrows/arrowshape.left.svg'], ['Arrow right', 'arrows/arrowshape.right.svg'],
+    ['Undo', 'arrows/arrow.uturn.left.svg'], ['Redo', 'arrows/arrow.uturn.right.svg'],
+    ['Refresh', 'arrows/arrow.counterclockwise.svg'], ['Share', 'arrows/square.and.arrow.up.svg'],
+    ['Fullscreen', 'arrows/square.arrowtriangle.4.outward.svg'],
+    ['Hare', 'nature/hare.svg'], ['Tortoise', 'nature/tortoise.svg'], ['Tree', 'nature/tree.svg'], ['Ladybug', 'nature/ladybug.fill.svg'],
+    ['Sun', 'weather/sun.max.fill.svg'], ['Moon', 'weather/moon.svg'], ['Bolt', 'weather/cloud.bolt.svg'],
+    ['Wind', 'weather/wind.svg'], ['Storm', 'weather/hurricane.svg'],
+    ['Heart', 'health/heart.svg'], ['Cross', 'health/cross.svg'], ['Bandage', 'health/bandage.svg'],
+    ['Person', 'human/person.crop.circle.fill.svg'], ['House', 'home/house.svg'], ['Location', 'maps/location.svg'],
+    ['Question', 'communication/questionmark.circle.fill.svg'], ['Bubble', 'communication/plus.bubble.svg'],
+    ['Scroll', 'textformatting/scroll.svg'], ['Checklist', 'textformatting/checklist.svg'], ['List', 'textformatting/list.bullet.svg'],
+    ['Magazine', 'textformatting/magazine.svg'], ['Quote', 'textformatting/quote.bubble.svg'], ['Page', 'textformatting/text.page.svg'],
+    ['Warning', 'privacyandsecurity/exclamationmark.triangle.svg'], ['Extinguisher', 'privacyandsecurity/fire.extinguisher.svg'],
+    ['Frame', 'cameraandphotos/photo.artframe.svg'], ['Viewfinder', 'cameraandphotos/plus.viewfinder.svg']
+  ];
   function symbolFor(a) {
     var id = a.keymapId || '';
     if (SYMBOL_KM[id]) return SYMBOL_KM[id];
@@ -702,18 +786,82 @@
   }
   function ensureSymbols() { var m = mapping(); if (!m || !m.keys) return; m.keys.forEach(function (slot) { var a = catalog[(typeof slot === 'string' ? slot : slot.a)]; if (a) { var p = symbolFor(a); if (p) loadSymbol(p); } }); }
 
+  // ── Playout progress for key art ────────────────────────────────────────────
+  // Same-tab Outrangutan is the preferred truth: padProgress/cueProgress read
+  // LOCAL playback state (never Firestore echoes). When the deck rides a tab
+  // without Outrangutan, the bridge playout snapshot is the fallback. Playing
+  // keys get the duration wipe, pre-wait gets the thin bottom pre-roll bar,
+  // loop pads get a static corner marker (a loop has no end to count down to).
+  function ogAccessors() { var o = window.Outrangutan; return (o && typeof o.padProgress === 'function' && typeof o.cueProgress === 'function') ? o : null; }
+  function slotPadId(a, slot, s) {
+    if (a.kind === 'padRef') return slot.ref || null;
+    if (a.kind === 'pad') { var map = (s.playout && s.playout.pads) || {}; return Object.keys(map)[a.slot - 1] || null; }
+    return null;
+  }
+  function slotCueId(a, slot, s) {
+    if (a.kind === 'cueRef') return slot.ref || null;
+    if (a.kind === 'cue') { var map = (s.playout && s.playout.cues) || {}; return Object.keys(map)[a.slot - 1] || null; }
+    return null;
+  }
+  function applyPlayoutProgress(spec, a, slot, s) {
+    var og = ogAccessors();
+    var padId = slotPadId(a, slot, s);
+    if (padId) {
+      if (!og) return;   // pads have no bridge progress; stay quiet cross-tab
+      try {
+        var pp = og.padProgress(padId);
+        if (!pp || !pp.playing) return;
+        if (pp.loop || pp.frac == null) { spec.looping = true; return; }
+        spec.progress = Math.max(0, Math.min(1, pp.frac)); spec.phase = 'playing'; spec.progressStyle = 'wipe';
+      } catch (e) {}
+      return;
+    }
+    var isGo = a.keymapId === 'playout.go';
+    var cueId = slotCueId(a, slot, s);
+    if (!isGo && !cueId) return;
+    if (og) {
+      try {
+        var cp = og.cueProgress();
+        if (!cp || (cueId && cp.cueId !== cueId)) return;
+        if (cp.phase === 'prewait') { spec.preroll = Math.max(0, Math.min(1, cp.frac || 0)); return; }
+        if ((cp.phase === 'playing' || cp.phase === 'paused') && cp.frac != null) { spec.progress = Math.max(0, Math.min(1, cp.frac)); spec.phase = 'playing'; spec.progressStyle = 'wipe'; }
+      } catch (e) {}
+      return;
+    }
+    var po = s.playout || {};
+    if (po.status !== 'play' || !po.dur) return;
+    if (cueId && po.cueId !== cueId) return;
+    spec.progress = Math.max(0, Math.min(1, 1 - (po.remaining || 0) / po.dur));
+    spec.phase = 'playing'; spec.progressStyle = 'wipe';
+  }
+
+  // Per-key appearance overrides live as additive fields on the slot (label,
+  // hideLabel, color, icon, symbol, style, flash, reactive). Absent = the
+  // defaults every existing profile already had: auto look, wipe progress,
+  // press flash on, reactive on. Old saved profiles need no migration.
   function keyArtSpec(i, s) {
     var slot = slotAt(i), a = slotAction(slot);
     var active = slotActive(slot, s) || keyState[i];
-    var spec = { color: slotColor(slot), label: slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
+    var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
+    spec.flash = (pressFlashUntil[i] || 0) > performance.now();
+    if (slot.flash === false) { spec.flash = false; spec.pressed = false; }   // press flash opted out
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
-    if (!spec.emoji) { spec.symbol = symbolFor(a); spec.glyph = glyphFor(a); }
+    if (slot.symbol) { spec.symbol = slot.symbol; spec.emoji = ''; }          // picked symbol wins
+    else if (!spec.emoji) { spec.symbol = symbolFor(a); spec.glyph = glyphFor(a); }
     if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
-    if (a.keymapId === 'playout.go' && s.playout && s.playout.status === 'play' && s.playout.dur) spec.progress = Math.max(0, Math.min(1, 1 - (s.playout.remaining || 0) / s.playout.dur));
-    if (active && ((a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord')) || a.kind === 'golive' || a.kind === 'talkback')) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#f5b731' : (a.kind === 'talkback' ? '#22d3a0' : '#ff3b3b'); }
+    if (slot.reactive !== false) {   // a key can opt out of animation entirely
+      applyPlayoutProgress(spec, a, slot, s);
+      if (slot.style && spec.progress != null) spec.progressStyle = slot.style;   // wipe | ring | bar
+      if (active && ((a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord')) || a.kind === 'golive' || a.kind === 'talkback')) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#f5b731' : (a.kind === 'talkback' ? '#22d3a0' : '#ff3b3b'); }
+    }
     return spec;
   }
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), deckTheme].join('|'); }
+  // The full dynamic state rides the signature, so the unconditional paint tick
+  // repaints exactly the keys whose art actually changed: playout progress and
+  // phase (quantized to 20 steps), pre-roll, loop marker, pulse lamps (talkback,
+  // OBS stream/record, GO LIVE), the press flash, prompter/lamp active state,
+  // and the show clock readout.
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', deckTheme].join('|'); }
 
   function drawKeyInto(canvas, spec, z) {
     var ctx = canvas.getContext('2d'); if (!ctx) return;
@@ -727,6 +875,17 @@
       ctx.fillStyle = ink; ctx.font = t.font(Math.round(z * 0.24), 800); ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.52);
       if (spec.clockRunning) { var ph = (spec.pulsePhase || 0); var al = 0.45 + 0.45 * Math.sin(ph * 0.5); ctx.fillStyle = rgba('#ff3b3b', al); ctx.beginPath(); ctx.arc(z / 2, z * 0.76, z * 0.06, 0, 7); ctx.fill(); }
     } else {
+      // Duration wipe: the default for playing SFX/playback keys. A translucent
+      // accent fill sweeps left to right BEHIND the icon and label, with a
+      // sharp leading edge. No glow, no shadow (UI doctrine, and the same
+      // convention as the Outrangutan key renderer).
+      if (spec.progress != null && spec.progressStyle === 'wipe') {
+        ctx.save(); rr(ctx, 0, 0, z, z, z * 0.15); ctx.clip();
+        ctx.fillStyle = rgba(t.ring, 0.34); ctx.fillRect(0, 0, Math.round(z * spec.progress), z);
+        ctx.restore();
+      }
+      // Loop pads carry a static corner marker instead of a wipe.
+      if (spec.looping) { var mk = Math.max(3, Math.round(z * 0.1)); ctx.fillStyle = t.ring; ctx.fillRect(z - z * 0.08 - mk, z * 0.08, mk, mk); }
       var hasLabel = spec.label && spec.label.length;
       var gy = hasLabel ? z * 0.37 : z * 0.5, gr = z * (hasLabel ? 0.2 : 0.26);
       var drew = false;
@@ -741,36 +900,74 @@
         var baseY = z * ((spec.glyph || spec.emoji || spec.symbol) ? 0.8 : 0.5) - (lines.length - 1) * fs * 0.6;
         lines.forEach(function (ln, k) { ctx.fillText(ln, z / 2, baseY + k * fs * 1.15); });
       }
-      if (spec.progress != null) { var bw = z * 0.76, bx = z * 0.12, by = z * 0.9; ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, bx, by, bw, z * 0.05, z * 0.025); ctx.fill(); ctx.fillStyle = t.ring; rr(ctx, bx, by, bw * spec.progress, z * 0.05, z * 0.025); ctx.fill(); }
+      // Ring style: a hairline track circle plus a sharp accent arc from 12
+      // o'clock. Same doctrine as the wipe: crisp edges, no glow, no shadow.
+      if (spec.progress != null && spec.progressStyle === 'ring') {
+        var rrad = z * 0.42, rlw = Math.max(2, z * 0.055);
+        ctx.lineWidth = rlw; ctx.lineCap = 'butt';
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.beginPath(); ctx.arc(z / 2, z / 2, rrad, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = t.ring; ctx.beginPath(); ctx.arc(z / 2, z / 2, rrad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * spec.progress); ctx.stroke();
+      } else if (spec.progress != null && spec.progressStyle !== 'wipe') { var bw = z * 0.76, bx = z * 0.12, by = z * 0.9; ctx.fillStyle = 'rgba(255,255,255,0.18)'; rr(ctx, bx, by, bw, z * 0.05, z * 0.025); ctx.fill(); ctx.fillStyle = t.ring; rr(ctx, bx, by, bw * spec.progress, z * 0.05, z * 0.025); ctx.fill(); }
+      // Pre-roll: a thin bottom bar counts the pre-wait up, distinct from the
+      // playing wipe so an armed cue reads differently from a rolling one.
+      if (spec.preroll != null) {
+        var pbh = Math.max(2, Math.round(z * 0.05)), pby = z - pbh - Math.round(z * 0.04), pbx = Math.round(z * 0.05), pbw = Math.round(z * 0.9);
+        ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(pbx, pby, pbw, pbh);
+        ctx.fillStyle = t.ring; ctx.fillRect(pbx, pby, Math.round(pbw * spec.preroll), pbh);
+      }
     }
     if (spec.toggle) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
     if (spec.pulse) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03, z * 0.03, z * 0.94, z * 0.94, z * 0.14); ctx.stroke(); }
-    if (spec.pressed) { ctx.fillStyle = 'rgba(255,255,255,0.22)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
+    // Press flash: a brief white overlay on key input (SD_PRESS_FLASH_MS), and
+    // the same overlay while the key is physically held. It composes with the
+    // active ring and the progress wipe; it never replaces them.
+    if (spec.pressed || spec.flash) { ctx.fillStyle = 'rgba(255,255,255,0.3)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
   }
 
-  // ── Painting ──────────────────────────────────────────────────────────────
-  // The label module is a factory: it needs a canvas source and a JPEG encoder
-  // injected (same pattern Outrangutan uses). Built once, lazily.
-  var labelRenderer = null;
-  function getRenderer() {
-    if (labelRenderer) return labelRenderer;
-    var L = window.CueolaStreamDeckLabel;
-    if (!L || typeof L.createRenderer !== 'function') return null;
-    try {
-      labelRenderer = L.createRenderer({
-        createCanvas: function (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; },
-        encode: function (canvas, opts) { return new Promise(function (res, rej) { canvas.toBlob(function (b) { b ? res(b) : rej(new Error('JPEG encode failed')); }, opts.type, opts.quality); }); }
-      });
-    } catch (e) { return null; }
-    return labelRenderer;
+  // ── Serialized HID write queue ─────────────────────────────────────────────
+  // WebHID gives no framing guarantee across callers: a key image is a
+  // multi-packet message, and two writers interleaving on the same pipe garble
+  // frames on the hardware. EVERY device write (key images, the strip,
+  // brightness and reset features, light shows, test patterns) goes through
+  // this one FIFO queue. Image jobs coalesce by slot key: if a newer image for
+  // the same key (or the strip) is queued before the older one started, the
+  // older is dropped, so a burst of state changes paints the newest art, never
+  // the backlog.
+  var hidWriteQueue = [], hidWriteBusy = false;
+  function queueDeviceWrite(slotKey, job) {
+    return new Promise(function (resolve, reject) {
+      if (slotKey != null) {
+        for (var i = 0; i < hidWriteQueue.length; i++) {
+          if (hidWriteQueue[i].slotKey === slotKey) { hidWriteQueue.splice(i, 1)[0].resolve(false); break; }
+        }
+      }
+      hidWriteQueue.push({ slotKey: slotKey, job: job, resolve: resolve, reject: reject });
+      drainDeviceWrites();
+    });
   }
+  async function drainDeviceWrites() {
+    if (hidWriteBusy) return;
+    hidWriteBusy = true;
+    while (hidWriteQueue.length) {
+      var next = hidWriteQueue.shift();
+      try { await next.job(); next.resolve(true); }
+      catch (e) { next.reject(e); }
+    }
+    hidWriteBusy = false;
+  }
+  function flushDeviceWrites() { while (hidWriteQueue.length) hidWriteQueue.shift().resolve(false); }
+
+  // ── Painting ──────────────────────────────────────────────────────────────
   function startPaintLoop() { stopPaintLoop(); paintTimer = setInterval(paintTick, Math.round(1000 / PAINT_HZ)); }
   function stopPaintLoop() { if (paintTimer) clearInterval(paintTimer); paintTimer = null; }
   var paintScheduled = false;
   function schedulePaint() { paintScheduled = true; }
   function paintTick() {
-    if (paintScheduled) { paintScheduled = false; paintChanged(); }
-    else paintStrip(false);  // strip readouts (the clock) drift without events; sig-deduped, so cheap
+    // Push reactivity: EVERY tick diffs and repaints, no event has to remember
+    // to call schedulePaint. specSig carries the full dynamic state and the
+    // strip is sig-deduped, so idle ticks are nearly free.
+    paintScheduled = false;
+    paintChanged();
     refreshDialReadouts();   // keep the on-screen dial values live, not render-stale
   }
   function refreshDialReadouts() {
@@ -797,11 +994,16 @@
     var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
   }
-  async function paintKeyDevice(i, spec) {
-    if (!device || !profile) return;
-    var z = profile.keyPx, cv = offCanvas(z);
-    drawKeyInto(cv, spec, z);
-    try { var bytes = await keyJpegFromCanvas(cv, z); if (!bytes) return; var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+  // The draw + encode happens INSIDE the queued job (the offscreen canvas is
+  // shared, so it must be serialized along with the packet writes).
+  function paintKeyDevice(i, spec) {
+    if (!device || !profile) return Promise.resolve(false);
+    return queueDeviceWrite('key:' + i, async function () {
+      if (!device || !profile) return;
+      var z = profile.keyPx, cv = offCanvas(z);
+      drawKeyInto(cv, spec, z);
+      try { var bytes = await keyJpegFromCanvas(cv, z); if (!bytes) return; var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+    });
   }
   function mirrorCanvasFor(i) { var r = root(); if (!r) return null; var btn = r.querySelector('.sd-key[data-key="' + i + '"]'); return btn ? btn.querySelector('canvas') : null; }
   // The on-screen grid shows the SAME art the hardware shows: true WYSIWYG.
@@ -818,21 +1020,25 @@
     }
     if (device || previewMode) await paintStrip(false);
   }
-  // Animation loop: clock ticks and REC/LIVE/scene keys breathe. Only animated
-  // keys repaint, on-screen every ~7fps and to the device throttled to ~4fps.
+  // Animation loop: clock ticks, pulse lamps, playout wipes and pre-rolls, and
+  // press flashes all animate. Only animated keys repaint, on-screen every
+  // ~7.7fps; device writes ride the serialized queue, throttled to ~4fps.
   function startAnim() { stopAnim(); animTimer = setInterval(animateKeys, 130); }
   function stopAnim() { if (animTimer) clearInterval(animTimer); animTimer = null; }
   function isSurfaceVisible() { var scr = document.getElementById('streamdeck'); return !!(scr && scr.classList.contains('on')); }
+  function specAnimated(spec) { return (spec.widget === 'clock' && spec.clockRunning) || !!spec.pulse || spec.progress != null || spec.preroll != null || !!spec.phase || !!spec.looping || !!spec.flash; }
   function animateKeys() {
     if (!profile || hypeRunning || !isSurfaceVisible()) return;
     animPhase++;
     var s = surfaceState(), cur = profile, r = root();
     for (var i = 0; i < cur.keys; i++) {
       var spec = keyArtSpec(i, s);
-      if (!(spec.widget === 'clock' && spec.clockRunning) && !spec.pulse) continue;
+      if (!specAnimated(spec)) continue;
       spec.pulsePhase = animPhase;
       if (r) { var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width); }
-      if (device && animPhase % 2 === 0) paintKeyDevice(i, spec);
+      // Stamp the signature so the paint tick does not double-write the same
+      // frame; the queue coalesces any stale image still waiting for this key.
+      if (device && animPhase % 2 === 0) { lastPainted[i] = specSig(spec, i); paintKeyDevice(i, spec); }
     }
   }
   // The HYPE key: a rainbow ripple parties across the whole deck, then restores.
@@ -879,11 +1085,14 @@
     if (!changed) return;
     lastStripSig = sig;
     if (!device) return;                         // preview mode: mirror only
-    try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } }
-    catch (e) {
-      console.error('[KeyWi] strip paint failed:', e);
-      if (!stripErrToasted) { stripErrToasted = true; toast('Touch strip error: ' + ((e && e.message) || e)); }
-    }
+    await queueDeviceWrite('strip', async function () {
+      if (!device) return;
+      try { var bytes = await renderStripJpeg(cells); if (!bytes) return; var packets = Device.stripImagePackets(profile, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } }
+      catch (e) {
+        console.error('[KeyWi] strip paint failed:', e);
+        if (!stripErrToasted) { stripErrToasted = true; toast('Touch strip error: ' + ((e && e.message) || e)); }
+      }
+    });
   }
   function drawStripMirrorCanvas(cells) {
     var cv = document.getElementById('sd-strip-mirror'); if (!cv) return;
@@ -927,7 +1136,11 @@
     var bytes = new Uint8Array(await blob.arrayBuffer());
     var packets = (v.cmd === 0x0b) ? Device.stripWindowPackets(profile, bytes) : Device.stripImagePackets(profile, bytes);
     console.log('[KeyWi] strip probe ' + v.n + ': cmd 0x' + v.cmd.toString(16) + ', jpeg ' + (v.rotate ? h + '×' + w : w + '×' + h) + ', ' + bytes.length + ' bytes, ' + packets.length + ' packets');
-    for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
+    // Probe frames must all reach the panel, so no coalescing key here; the
+    // queue still serializes them against every other write.
+    await queueDeviceWrite(null, async function () {
+      for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); }
+    });
   }
   async function stripProbe() {
     if (!device || !profile || !profile.strip || stripProbeActive) return;
@@ -1074,14 +1287,43 @@
   async function renderStripJpeg(cells) {
     return stripBytesFromContent(function (ctx, cw, ch) { drawStripContent(ctx, cells, cw, ch); });
   }
-  function sendFeature(rep) { if (device) { try { device.hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} } }
+  function sendFeature(rep) {
+    if (!device) return;
+    queueDeviceWrite(null, async function () { if (device) { try { await device.hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} } }).catch(function () {});
+  }
   function setBrightness(pctVal) {
     brightness = Math.max(0, Math.min(100, Math.round(pctVal)));
     try { localStorage.setItem(BRIGHTNESS_KEY, String(brightness)); } catch (e) {}
-    if (device && profile) sendFeature(Device.brightnessReport(profile, brightness));
+    autoDimmed = false;   // touching the slider is input: dim over, timer restarts
+    if (device && profile) { sendFeature(Device.brightnessReport(profile, brightness)); armAutoDim(); }
     var el = document.getElementById('sd-bright'); if (el && el.value != brightness) el.value = brightness;
     var lbl = document.getElementById('sd-bright-val'); if (lbl) lbl.textContent = brightness + '%';
   }
+  // ── Auto-dim ────────────────────────────────────────────────────────────────
+  // Five minutes with no input from the deck drops the backlight to 20% (never
+  // above the operator's own setting). Any key, dial, touch, or slider input
+  // restores it instantly. The stored brightness preference is untouched, and
+  // the writes ride the same serialized HID queue as every other device write.
+  var AUTO_DIM_AFTER_MS = 5 * 60 * 1000, AUTO_DIM_PCT = 20;
+  var autoDimmed = false, autoDimTimer = null, lastDeckInputAt = 0;
+  function armAutoDim() {
+    clearTimeout(autoDimTimer); autoDimTimer = null;
+    if (!device) return;
+    lastDeckInputAt = Date.now();
+    autoDimTimer = setTimeout(autoDimCheck, AUTO_DIM_AFTER_MS + 250);
+  }
+  function autoDimCheck() {
+    autoDimTimer = null;
+    if (!device || !profile || autoDimmed) return;
+    var idle = Date.now() - lastDeckInputAt;
+    if (idle >= AUTO_DIM_AFTER_MS) { autoDimmed = true; sendFeature(Device.brightnessReport(profile, Math.min(brightness, AUTO_DIM_PCT))); }
+    else autoDimTimer = setTimeout(autoDimCheck, AUTO_DIM_AFTER_MS - idle + 250);
+  }
+  function noteDeckInput() {
+    if (autoDimmed) { autoDimmed = false; if (device && profile) sendFeature(Device.brightnessReport(profile, brightness)); }
+    armAutoDim();
+  }
+  function stopAutoDim() { clearTimeout(autoDimTimer); autoDimTimer = null; autoDimmed = false; }
   function registerLabelModel(prof) {
     var r = window.CueolaStreamDeckLabel; if (!r || typeof r.registerModel !== 'function') return;
     try { r.registerModel({ productId: prof.productId, name: prof.name, keys: prof.keys, columns: prof.cols, imageWidth: prof.keyPx, imageHeight: prof.keyPx, imageType: 'image/jpeg', imageQuality: 0.9, deviceRotationDegrees: ((((prof.rotation || 0) + (prof.mountRotation || 0)) % 360) + 360) % 360, inputStateOffset: prof.stateOffset, packet: { reportId: prof.keyImage.reportId, command: prof.keyImage.command, packetSize: prof.keyImage.packetSize, headerSize: prof.keyImage.headerSize, payloadSize: prof.keyImage.packetSize - prof.keyImage.headerSize } }); } catch (e) {}
@@ -1114,10 +1356,36 @@
       overrides._calModel = 3;
     }
     if (overrides.rotation != null) delete overrides.rotation;
+    // Staged layout seeds (e.g. "The Break Room" demo show): another module may
+    // stage named layouts under SEED_KEY. Add each once per deck, by name, and
+    // never touch the active or default selection. seededNames remembers what
+    // was already offered so a deliberate delete stays deleted.
+    seededNames = (raw.seededNames || []).slice();
+    try {
+      var seeds = JSON.parse(localStorage.getItem(SEED_KEY) || '[]') || [];
+      if (seeds.length) {
+        var have = Object.keys(profiles).map(function (id) { return profiles[id].name; });
+        var added = false;
+        seeds.forEach(function (seed) {
+          if (!seed || !seed.name || seededNames.indexOf(seed.name) >= 0 || have.indexOf(seed.name) >= 0) return;
+          var id = newId();
+          profiles[id] = { name: seed.name, keys: (seed.keys || []).map(toSlot) };
+          have.push(seed.name); seededNames.push(seed.name); added = true;
+        });
+        if (added) {
+          if (!activeProfileId) { activeProfileId = Object.keys(profiles)[0]; defaultProfileId = defaultProfileId || activeProfileId; }
+          var s = readStore(); s[pid] = s[pid] || {};
+          s[pid].profiles = profiles; s[pid].seededNames = seededNames;
+          if (s[pid].activeProfile == null) s[pid].activeProfile = activeProfileId;
+          if (s[pid].defaultProfile == null) s[pid].defaultProfile = defaultProfileId;
+          writeStore(s);
+        }
+      }
+    } catch (e) {}
     return { overrides: overrides };
   }
   function toSlot(s) { return (typeof s === 'string') ? { a: s } : (s && typeof s === 'object' ? s : { a: 'none' }); }
-  function persist() { if (!profile) return; var s = readStore(); s[profile.productId] = { overrides: overrides, profiles: profiles, activeProfile: activeProfileId, defaultProfile: defaultProfileId }; writeStore(s); }
+  function persist() { if (!profile) return; var s = readStore(); s[profile.productId] = { overrides: overrides, profiles: profiles, activeProfile: activeProfileId, defaultProfile: defaultProfileId, seededNames: seededNames }; writeStore(s); }
   function newId() { var n = 1; while (profiles['p' + n]) n++; return 'p' + n; }
   function uniqueName(base) { var name = base || 'Profile', names = Object.keys(profiles).map(function (id) { return profiles[id].name; }), n = name, i = 2; while (names.indexOf(n) >= 0) n = name + ' ' + (i++); return n; }
   // Make every profile fit the connected device (pad/truncate keys, dials, touch).
@@ -1196,17 +1464,17 @@
     var s = surfaceState();
     return '<div class="sd-status">'
       + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : 'Not connected'), device ? 'ok' : 'off')
-      + statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off')
+      + statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off', 'sd-chip-mico')
       + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
       + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : '<button class="btn-primary" id="sd-connect">Connect deck</button>')
       + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
       // The off-air panic (kills both mics) only makes sense once a deck/preview
       // is up or the talkback daemon is live — hide it on the cold setup page.
-      + ((talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" title="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + ((talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" data-tip="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
       + '</div></div>';
   }
-  function statusChip(label, value, cls) { return '<div class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
+  function statusChip(label, value, cls, id) { return '<div' + (id ? ' id="' + id + '"' : '') + ' class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
   // Cold-start hero. The guided path is the setup wizard; this page just offers
   // the three doors (connect, preview, wizard) plus honest readiness dots.
   function connectHelp() {
@@ -1225,18 +1493,18 @@
     var opts = Object.keys(profiles).map(function (id) { return '<option value="' + id + '"' + (id === activeProfileId ? ' selected' : '') + '>' + esc(profiles[id].name) + (id === defaultProfileId ? ' (default)' : '') + '</option>'; }).join('');
     return '<div class="sd-profiles">'
       + '<label class="sd-pf-lbl">Layout</label><select id="sd-profile">' + opts + '</select>'
-      + '<button class="sd-mini" id="sd-pf-new" title="New layout">New</button>'
-      + '<button class="sd-mini" id="sd-pf-dup" title="Duplicate">Duplicate</button>'
-      + '<button class="sd-mini" id="sd-pf-ren" title="Rename">Rename</button>'
-      + '<button class="sd-mini" id="sd-pf-def" title="Use as default on connect">Set default</button>'
-      + '<button class="sd-mini danger" id="sd-pf-del" title="Delete layout">Delete</button>'
+      + '<button class="sd-mini" id="sd-pf-new" data-tip="New layout">New</button>'
+      + '<button class="sd-mini" id="sd-pf-dup" data-tip="Duplicate">Duplicate</button>'
+      + '<button class="sd-mini" id="sd-pf-ren" data-tip="Rename">Rename</button>'
+      + '<button class="sd-mini" id="sd-pf-def" data-tip="Use as default on connect">Set default</button>'
+      + '<button class="sd-mini danger" id="sd-pf-del" data-tip="Delete layout">Delete</button>'
       + '<span class="sd-pf-sp"></span>'
-      + '<button class="sd-mini" id="sd-pf-exp" title="Export to a file">Export</button>'
-      + '<button class="sd-mini" id="sd-pf-imp" title="Import from a file">Import</button>'
+      + '<button class="sd-mini" id="sd-pf-exp" data-tip="Export to a file">Export</button>'
+      + '<button class="sd-mini" id="sd-pf-imp" data-tip="Import from a file">Import</button>'
       + '<input type="file" id="sd-pf-file" accept="application/json,.json" hidden></div>';
   }
   function toolsRow() {
-    var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-theme="' + id + '" title="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
+    var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
     return '<div class="sd-bright-row">'
       + '<label>Theme</label><div class="sd-theme-chips">' + chips + '</div>'
       + '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>'
@@ -1250,14 +1518,14 @@
     return '<div class="sd-obs">'
       + '<span class="sd-obs-dot' + (ready ? ' on' : '') + '"></span><span class="sd-obs-lbl">OBS</span>'
       + (ready
-        ? '<span class="sd-obs-scene" title="Current program scene">' + esc(st.currentScene || '(no scene)') + '</span>'
+        ? '<span class="sd-obs-scene" data-tip="Current program scene">' + esc(st.currentScene || '(no scene)') + '</span>'
           + (st.streaming ? '<span class="sd-obs-tag live">LIVE</span>' : '') + (st.recording ? '<span class="sd-obs-tag rec">REC</span>' : '')
           + ((st.inputs || []).length
-            ? '<label class="sd-obs-vol-lbl" for="sd-obs-vol" title="The OBS audio input the stream-volume dial rides">Stream audio</label><select id="sd-obs-vol">'
+            ? '<label class="sd-obs-vol-lbl" for="sd-obs-vol" data-tip="The OBS audio input the stream-volume dial rides">Stream audio</label><select id="sd-obs-vol">'
               + st.inputs.map(function (n) { return '<option value="' + esc(n) + '"' + (n === obsVolInputName() ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'
             : '')
           + '<span class="sd-pf-sp"></span><button class="sd-mini" id="sd-obs-dis">Disconnect OBS</button>'
-        : '<input id="sd-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(cfg.url) + '"><input id="sd-obs-pw" class="sd-obs-in" type="password" placeholder="password (if set)" value="' + esc(cfg.password || '') + '"><button class="sd-mini" id="sd-obs-con">Connect OBS</button>'
+        : '<input id="sd-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(cfg.url) + '"><input id="sd-obs-pw" class="sd-obs-in" type="password" placeholder="' + (cfg.password ? '••••••••' : 'password (if set)') + '" value=""><button class="sd-mini" id="sd-obs-con">Connect OBS</button>'
           + (err ? '<span class="sd-obs-err">' + esc(err) + '</span>' : ''))
       + '</div>';
   }
@@ -1271,17 +1539,17 @@
     for (var i = 0; i < profile.keys; i++) {
       var slot = slotAt(i), a = slotAction(slot);
       var tip = (a.full || a.label || 'blank') + (a.toggle ? ' · toggle' : '') + (a.hold ? ' · hold' : '') + (a.desc ? '. ' + a.desc : '');
-      html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" style="--i:' + i + '" title="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="132" height="132"></canvas></button>';
+      html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" style="--i:' + i + '" data-tip="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="132" height="132"></canvas></button>';
     }
     html += '</div>';
-    if (profile.strip) html += '<canvas class="sd-strip-mirror" id="sd-strip-mirror" width="' + profile.strip.w + '" height="' + profile.strip.h + '" title="The touch strip, live. Tap a zone on the hardware = press its dial; flick = a big turn."></canvas>';
+    if (profile.strip) html += '<canvas class="sd-strip-mirror" id="sd-strip-mirror" width="' + profile.strip.w + '" height="' + profile.strip.h + '" data-tip="The touch strip, live. Tap a zone on the hardware = press its dial; flick = a big turn."></canvas>';
     html += '</div>';
     if (profile.dials) {
       html += '<div class="sd-sect-t">Dials <span class="sd-sect-hint">each shows what turning and pressing does · click to reassign</span></div>';
       html += '<div class="sd-dials">';
       for (var d = 0; d < profile.dials; d++) {
         var c = DIAL_CONTROLLERS[mapping().dials[d]] || {};
-        html += '<div class="sd-dial" data-dial="' + d + '" title="' + esc(c.desc || '') + '" style="--dc:' + (c.hue || 'var(--accent)') + '">'
+        html += '<div class="sd-dial" data-dial="' + d + '" data-tip="' + esc(c.desc || '') + '" style="--dc:' + (c.hue || 'var(--accent)') + '">'
           + '<div class="sd-dial-knob">' + esc(c.readout ? String(c.readout(s)) : '') + '</div>'
           + '<div class="sd-dial-lbl">' + esc(c.label || 'unset') + '</div>'
           + '<div class="sd-dial-row"><span class="sd-dial-verb">turn</span>' + esc(c.turnLabel || '') + '</div>'
@@ -1317,7 +1585,7 @@
       + '</div></div></details>';
   }
   function learnField(k, v) { return '<div class="sd-lf"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>'; }
-  function renderStatus() { var bar = document.querySelector('.sd-status'); if (!bar) return; var chips = bar.querySelectorAll('.sd-chip'); if (chips[1]) { chips[1].className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); chips[1].querySelector('.sd-chip-v').textContent = talkbackState.connected ? 'Connected' : 'Not running'; } }
+  function renderStatus() { var chip = document.getElementById('sd-chip-mico'); if (!chip) return; chip.className = 'sd-chip sd-chip-' + (talkbackState.connected ? 'ok' : 'off'); var v = chip.querySelector('.sd-chip-v'); if (v) v.textContent = talkbackState.connected ? 'Connected' : 'Not running'; }
 
   // ── Micochondria: the mic panel ─────────────────────────────────────────────
   // A small honest tool: says whether the daemon is connected, and when it is,
@@ -1333,8 +1601,8 @@
       + '<span class="sd-mico-name">Mic<span>ochondria</span></span>'
       + '<span class="sd-mico-status">' + (on ? 'Connected' : 'Not running') + '</span>'
       + '<span class="sd-pf-sp"></span>'
-      + '<button class="sd-mini" id="sd-mico-pop" title="Pop Micochondria out into its own little window">Pop out</button>'
-      + (on ? '<button class="sd-mini danger" id="sd-mico-off" title="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + '<button class="sd-mini" id="sd-mico-pop" data-tip="Pop Micochondria out into its own little window">Pop out</button>'
+      + (on ? '<button class="sd-mini danger" id="sd-mico-off" data-tip="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
       + '</div>';
     if (on) {
       html += micoStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
@@ -1348,7 +1616,7 @@
     var onAir = talkbackState[bus];
     var gain = bus === 'A' ? talkbackState.gainA : talkbackState.gainB;
     return '<div class="sd-mico-strip' + (onAir ? ' onair' : '') + '" data-bus="' + bus + '">'
-      + '<button class="sd-mico-talk" data-talk="' + bus + '" title="Hold to talk on ' + name + '. Releases the moment you let go."><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span>' + name + '</button>'
+      + '<button class="sd-mico-talk" data-talk="' + bus + '" data-tip="Hold to talk on ' + name + '. Releases the moment you let go."><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span>' + name + '</button>'
       + '<div class="sd-mico-mid"><div class="sd-mico-sub">' + subtitle + '</div>'
       + (talkbackState.hasLevels
         ? '<div class="sd-mico-meter"><div class="sd-mico-meter-fill" data-meter="' + bus + '"></div></div>'
@@ -1410,20 +1678,38 @@
   // both mics with lamp + meter, hold-to-talk, and the off-air panic. Closes
   // with the tab; goes quiet (not wrong) if the opener navigates away.
   var micoWin = null;
-  var MICO_POP_CSS = 'body{margin:0;font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;background:#0c0e12;color:#e8ecf4;padding:14px 16px;user-select:none;-webkit-user-select:none}'
-    + '#mw-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}'
-    + '#mw-dot{width:9px;height:9px;border-radius:50%;background:#6b7690}#mw-dot.on{background:#22d3a0;box-shadow:0 0 8px #22d3a0}'
-    + '#mw-name{font-weight:800;font-size:15px}#mw-name span{color:#7ea6ff}'
-    + '#mw-status{color:#98a2b8;font-size:12.5px}'
-    + '.mw-strip{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}'
-    + '.mw-talk{min-width:64px;padding:9px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:#171b22;color:#e8ecf4;font-weight:800;font-size:13px;cursor:pointer;touch-action:none}'
-    + '.mw-strip.onair .mw-talk{background:rgba(34,211,160,.22);border-color:#22d3a0;box-shadow:0 0 12px rgba(34,211,160,.45)}'
-    + '.mw-mid{flex:1;min-width:80px}.mw-sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#6b7690;margin-bottom:4px}'
-    + '.mw-meter{height:7px;border-radius:999px;background:#171b22;border:1px solid rgba(255,255,255,.1);overflow:hidden}'
-    + '.mw-fill{height:100%;width:0;border-radius:999px;background:#22d3a0;transition:width 90ms linear}.mw-fill.idle{opacity:.45}.mw-fill.hot{background:#ff3b3b}'
-    + '.mw-lamp{min-width:52px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:4px 7px;background:#171b22;color:#6b7690}'
-    + '.mw-strip.onair .mw-lamp{background:#ff3b3b;color:#fff}'
-    + '#mw-off{margin-top:10px;width:100%;padding:9px;border-radius:999px;border:1px solid rgba(255,59,59,.5);background:#171b22;color:#ff8f8f;font-weight:700;font-size:13px;cursor:pointer}';
+  // Liquid glass, pop-out edition. This window has no page behind it, so depth
+  // comes from layered translucent fills over a near-black base instead of
+  // backdrop-filter. It also cannot read the main page's custom properties, so
+  // the --mw-* vars below are local copies mirroring the index.html token sheet
+  // (--liquid-fill/-strong, --liquid-edge/-strong, --ui-radius-*) at dark-base
+  // values. No box-shadows, no glows: rims and fills only, LEDs are solid.
+  var MICO_POP_CSS = ':root{'
+    + '--mw-base:#0b0d12;'
+    + '--mw-fill:linear-gradient(145deg,rgba(255,255,255,.06),rgba(255,255,255,.02));' // mirrors --liquid-fill
+    + '--mw-fill-strong:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.04));' // mirrors --liquid-fill-strong
+    + '--mw-edge:rgba(255,255,255,.14);' // mirrors --liquid-edge
+    + '--mw-edge-strong:rgba(255,255,255,.26);' // mirrors --liquid-edge-strong
+    + '--mw-radius-control:12px;--mw-radius-group:16px;--mw-radius-panel:22px;' // mirrors --ui-radius-*
+    + '--mw-text:#e8ecf4;--mw-text-dim:#98a2b8;--mw-text-faint:#8a94aa;'
+    + '--mw-ok:#22d3a0;--mw-hot:#ff3b3b;--mw-accent:#7ea6ff}'
+    + 'body{margin:0;font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;background:var(--mw-base);color:var(--mw-text);padding:14px 16px;user-select:none;-webkit-user-select:none}'
+    + '#mw-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px}'
+    + '#mw-dot{width:9px;height:9px;box-sizing:border-box;border-radius:50%;background:rgba(255,255,255,.10);border:1px solid var(--mw-edge-strong)}'
+    + '#mw-dot.on{background:var(--mw-ok);border-color:rgba(255,255,255,.38)}' // sharp LED: solid fill + rim, zero blur
+    + '#mw-name{font-weight:800;font-size:15px}#mw-name span{color:var(--mw-accent)}'
+    + '#mw-status{color:var(--mw-text-dim);font-size:12.5px}'
+    + '#mw-card{background:var(--mw-fill);border:1px solid var(--mw-edge);border-radius:var(--mw-radius-group);overflow:hidden}'
+    + '.mw-strip{display:flex;align-items:center;gap:10px;padding:9px 11px}'
+    + '.mw-strip+.mw-strip{border-top:1px solid var(--mw-edge)}'
+    + '.mw-talk{min-width:64px;padding:8px 12px;border-radius:var(--mw-radius-control);border:1px solid var(--mw-edge);background:var(--mw-fill-strong);color:var(--mw-text);font-weight:800;font-size:13px;cursor:pointer;touch-action:none}'
+    + '.mw-strip.onair .mw-talk{background:rgba(34,211,160,.22);border-color:var(--mw-ok);color:#dffff5}'
+    + '.mw-mid{flex:1;min-width:80px}.mw-sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mw-text-faint);margin-bottom:4px}'
+    + '.mw-meter{height:8px;border-radius:4px;background:rgba(0,0,0,.38);border:1px solid var(--mw-edge);overflow:hidden}' // solid-fill bar, 1px rim
+    + '.mw-fill{height:100%;width:0;background:var(--mw-ok);transition:width 90ms linear}.mw-fill.idle{opacity:.45}.mw-fill.hot{background:var(--mw-hot)}'
+    + '.mw-lamp{min-width:52px;box-sizing:border-box;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:var(--mw-radius-control);padding:4px 7px;background:var(--mw-fill-strong);border:1px solid var(--mw-edge);color:var(--mw-text-faint)}'
+    + '.mw-strip.onair .mw-lamp{background:var(--mw-hot);border-color:rgba(255,255,255,.38);color:#fff}'
+    + '#mw-off{margin-top:10px;width:100%;padding:9px;border-radius:var(--mw-radius-control);border:1px solid rgba(255,59,59,.5);background:var(--mw-fill-strong);color:#ff8f8f;font-weight:700;font-size:13px;cursor:pointer}';
   function micoPopoutAlive() { try { return !!(micoWin && !micoWin.closed); } catch (e) { return false; } }
   function micoPopStrip(bus, name, sub) {
     return '<div class="mw-strip" data-bus="' + bus + '"><button class="mw-talk" data-talk="' + bus + '" title="Hold to talk on ' + name + '">' + name + '</button>'
@@ -1440,8 +1726,10 @@
     d.title = 'Micochondria';
     var style = d.createElement('style'); style.textContent = MICO_POP_CSS; d.head.appendChild(style);
     d.body.innerHTML = '<div id="mw-head"><span id="mw-dot"></span><span id="mw-name">Mic<span>ochondria</span></span><span id="mw-status"></span></div>'
+      + '<div id="mw-card">'
       + micoPopStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
       + micoPopStrip('B', 'VofU', 'Voice of the Universe · outs 3-4')
+      + '</div>'
       + '<button id="mw-off" title="Cut both mics instantly">All talk off</button>';
     d.querySelectorAll('.mw-talk').forEach(function (btn) {
       var bus = btn.getAttribute('data-talk');
@@ -1516,13 +1804,23 @@
       (obs.scenes || []).forEach(function (name) { body += '<button class="sd-picker-opt' + (slot.a === 'obs.sceneRef' && slot.ref === name ? ' cur' : '') + '" data-ref="obs.sceneRef" data-refid="' + esc(name) + '" data-refname="' + esc(name) + '">SCENE ' + esc(name) + '</button>'; });
       (obs.inputs || []).forEach(function (name) { body += '<button class="sd-picker-opt' + (slot.a === 'obs.muteRef' && slot.ref === name ? ' cur' : '') + '" data-ref="obs.muteRef" data-refid="' + esc(name) + '" data-refname="' + esc(name) + '">MUTE ' + esc(name) + '</button>'; });
     } else if (OBSc() && OBSc().isReady && !OBSc().isReady()) { body += '<div class="sd-picker-g">This OBS</div><div class="sd-note" style="padding:4px 2px">Connect OBS to bind scenes and audio by name.</div>'; }
-    body += '</div><div class="sd-ed-style"><div class="sd-ed-sub">Custom look</div>'
+    var styleCur = slot.style || 'wipe';
+    var customHex = (slot.color && SWATCHES.indexOf(slot.color) < 0) ? slot.color : '';
+    body += '</div><div class="sd-ed-style"><div class="sd-ed-sub">Appearance</div>'
       + '<label class="sd-ed-f">Label<input id="sd-ed-label" placeholder="' + esc(slotAction(slot).label || 'default') + '" value="' + esc(slot.label || '') + '"></label>'
-      + '<label class="sd-ed-f">Icon<input id="sd-ed-icon" placeholder="emoji or blank" maxlength="2" value="' + esc(slot.icon || '') + '"></label>'
-      + '<div class="sd-ed-f">Key art<div class="sd-emoji">' + EMOJI_ART.map(function (em) { return '<button class="sd-em' + (slot.icon === em ? ' cur' : '') + '" data-emoji="' + em + '" title="Use ' + em + ' on this key">' + em + '</button>'; }).join('') + '</div></div>'
-      + '<div class="sd-ed-f">Colour<div class="sd-swatches"><button class="sd-sw sd-sw-auto' + (slot.color ? '' : ' cur') + '" data-color="" title="Auto">Auto</button>'
+      + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-hidelabel"' + (slot.hideLabel ? ' checked' : '') + '><span>Hide label</span></label>'
+      + '<div class="sd-ed-f">Accent color<div class="sd-swatches"><button class="sd-sw sd-sw-auto' + (slot.color ? '' : ' cur') + '" data-color="" data-tip="Auto">Auto</button>'
       + SWATCHES.map(function (col) { return '<button class="sd-sw' + (slot.color === col ? ' cur' : '') + '" data-color="' + col + '" style="background:' + col + '"></button>'; }).join('') + '</div></div>'
-      + '<div class="sd-ed-actions-row"><button class="sd-mini" id="sd-ed-clear">Clear custom look</button><button class="btn-primary" id="sd-ed-done">Done</button></div></div></div>';
+      + '<label class="sd-ed-f">Custom color (hex)<input id="sd-ed-hex" placeholder="#1c7a3e" maxlength="7" autocomplete="off" spellcheck="false" value="' + esc(customHex) + '"></label>'
+      + '<label class="sd-ed-f">Symbol<input id="sd-ed-symsearch" placeholder="Search symbols" autocomplete="off"></label>'
+      + '<div class="sd-symgrid" id="sd-symgrid">' + SYMBOL_PICK.map(function (row) { return '<button class="sd-symopt' + (slot.symbol === row[1] ? ' cur' : '') + '" data-sympick="' + esc(row[1]) + '" data-symname="' + esc(row[0]) + '" data-tip="' + esc(row[0]) + '" aria-label="' + esc(row[0]) + '"><canvas width="52" height="52"></canvas></button>'; }).join('') + '</div>'
+      + '<label class="sd-ed-f">Icon<input id="sd-ed-icon" placeholder="emoji or blank" maxlength="2" value="' + esc(slot.icon || '') + '"></label>'
+      + '<div class="sd-ed-f">Key art<div class="sd-emoji">' + EMOJI_ART.map(function (em) { return '<button class="sd-em' + (slot.icon === em ? ' cur' : '') + '" data-emoji="' + em + '" data-tip="Use this art on the key">' + em + '</button>'; }).join('') + '</div></div>'
+      + '<div class="sd-ed-f">Progress style<div class="sd-seg" id="sd-ed-style-seg">'
+      + [['wipe', 'Wipe'], ['ring', 'Ring'], ['bar', 'Bottom bar']].map(function (opt) { return '<button data-style="' + opt[0] + '"' + (styleCur === opt[0] ? ' class="cur"' : '') + '>' + opt[1] + '</button>'; }).join('') + '</div></div>'
+      + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-flash"' + (slot.flash === false ? '' : ' checked') + '><span>Press flash</span></label>'
+      + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-reactive"' + (slot.reactive === false ? '' : ' checked') + '><span>Reactive animation</span></label>'
+      + '<div class="sd-ed-actions-row"><button class="sd-mini" id="sd-ed-clear">Reset appearance</button><button class="btn-primary" id="sd-ed-done">Done</button></div></div></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-ed-card">' + body + '</div>'; o.className = 'sd-picker on';
     wireKeyEditor(index); render();
   }
@@ -1537,12 +1835,69 @@
         mapping().keys[index] = slot; persist(); openKeyEditor(index);
       };
     });
-    var lab = document.getElementById('sd-ed-label'); if (lab) lab.oninput = function () { var slot = slotAt(index); slot.label = lab.value; mapping().keys[index] = slot; persist(); refreshKey(index); };
-    var ic = document.getElementById('sd-ed-icon'); if (ic) ic.oninput = function () { var slot = slotAt(index); slot.icon = ic.value; mapping().keys[index] = slot; persist(); refreshKey(index); };
+    var lab = document.getElementById('sd-ed-label'); if (lab) lab.oninput = function () { var slot = slotAt(index); slot.label = lab.value; if (!slot.label) delete slot.label; mapping().keys[index] = slot; persist(); refreshKey(index); };
+    var hl = document.getElementById('sd-ed-hidelabel'); if (hl) hl.onchange = function () { var slot = slotAt(index); if (hl.checked) slot.hideLabel = true; else delete slot.hideLabel; mapping().keys[index] = slot; persist(); refreshKey(index); };
+    var ic = document.getElementById('sd-ed-icon'); if (ic) ic.oninput = function () { var slot = slotAt(index); slot.icon = ic.value; if (!slot.icon) delete slot.icon; else delete slot.symbol; mapping().keys[index] = slot; persist(); refreshKey(index); };
+    var hexIn = document.getElementById('sd-ed-hex'); if (hexIn) hexIn.oninput = function () {
+      var v = hexIn.value.trim();
+      if (!/^#?[0-9a-fA-F]{6}$/.test(v)) return;   // partial typing: wait for a full hex
+      var slot = slotAt(index); slot.color = '#' + v.replace('#', '').toLowerCase();
+      mapping().keys[index] = slot; persist();
+      o.querySelectorAll('.sd-sw').forEach(function (b) { b.classList.remove('cur'); });
+      refreshKey(index);
+    };
+    var ss = document.getElementById('sd-ed-symsearch'); if (ss) ss.oninput = function () {
+      var q = ss.value.trim().toLowerCase();
+      o.querySelectorAll('.sd-symopt').forEach(function (btn) {
+        var name = (btn.getAttribute('data-symname') || '').toLowerCase();
+        btn.style.display = (!q || name.indexOf(q) >= 0) ? '' : 'none';
+      });
+    };
+    o.querySelectorAll('.sd-symopt').forEach(function (btn) {
+      btn.onclick = function () {
+        var slot = slotAt(index), pick = btn.getAttribute('data-sympick');
+        var on = slot.symbol !== pick;
+        if (on) { slot.symbol = pick; delete slot.icon; } else delete slot.symbol;
+        mapping().keys[index] = slot; persist();
+        o.querySelectorAll('.sd-symopt').forEach(function (b) { b.classList.toggle('cur', on && b === btn); });
+        o.querySelectorAll('.sd-em').forEach(function (b) { b.classList.remove('cur'); });
+        var icf = document.getElementById('sd-ed-icon'); if (icf && on) icf.value = '';
+        refreshKey(index);
+      };
+    });
+    o.querySelectorAll('#sd-ed-style-seg button').forEach(function (btn) {
+      btn.onclick = function () {
+        var slot = slotAt(index), v = btn.getAttribute('data-style');
+        if (v === 'wipe') delete slot.style; else slot.style = v;
+        mapping().keys[index] = slot; persist();
+        o.querySelectorAll('#sd-ed-style-seg button').forEach(function (b) { b.classList.toggle('cur', b === btn); });
+        refreshKey(index);
+      };
+    });
+    var fl = document.getElementById('sd-ed-flash'); if (fl) fl.onchange = function () { var slot = slotAt(index); if (fl.checked) delete slot.flash; else slot.flash = false; mapping().keys[index] = slot; persist(); refreshKey(index); };
+    var rx = document.getElementById('sd-ed-reactive'); if (rx) rx.onchange = function () { var slot = slotAt(index); if (rx.checked) delete slot.reactive; else slot.reactive = false; mapping().keys[index] = slot; persist(); refreshKey(index); };
     o.querySelectorAll('.sd-sw').forEach(function (sw) { sw.onclick = function () { var slot = slotAt(index), col = sw.getAttribute('data-color'); if (col) slot.color = col; else delete slot.color; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
-    o.querySelectorAll('.sd-em').forEach(function (em) { em.onclick = function () { var slot = slotAt(index), pick = em.getAttribute('data-emoji'); slot.icon = (slot.icon === pick) ? '' : pick; if (!slot.icon) delete slot.icon; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
-    var clr = document.getElementById('sd-ed-clear'); if (clr) clr.onclick = function () { var slot = slotAt(index); delete slot.label; delete slot.color; delete slot.icon; mapping().keys[index] = slot; persist(); openKeyEditor(index); };
+    o.querySelectorAll('.sd-em').forEach(function (em) { em.onclick = function () { var slot = slotAt(index), pick = em.getAttribute('data-emoji'); slot.icon = (slot.icon === pick) ? '' : pick; if (!slot.icon) delete slot.icon; else delete slot.symbol; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
+    var clr = document.getElementById('sd-ed-clear'); if (clr) clr.onclick = function () { var slot = slotAt(index); delete slot.label; delete slot.hideLabel; delete slot.color; delete slot.icon; delete slot.symbol; delete slot.style; delete slot.flash; delete slot.reactive; mapping().keys[index] = slot; persist(); openKeyEditor(index); };
     var done = document.getElementById('sd-ed-done'); if (done) done.onclick = closeOverlay;
+    paintSymbolPicker();
+  }
+  // Draw the symbol picker's little canvases. Symbols still fetching retry on a
+  // short timer until the grid is fully painted (or the editor closes).
+  function paintSymbolPicker() {
+    var o = overlay(); if (!o || !o.classList.contains('on')) return;
+    var pending = false;
+    o.querySelectorAll('.sd-symopt').forEach(function (btn) {
+      var path = btn.getAttribute('data-sympick'), cv = btn.querySelector('canvas');
+      if (!path || !cv || btn._symPainted) return;
+      if (_sym[path] === undefined) loadSymbol(path);
+      if (!symbolReady(path)) { if (_sym[path] !== 'error') pending = true; return; }
+      var cx2 = cv.getContext('2d'); if (!cx2) return;
+      cx2.clearRect(0, 0, cv.width, cv.height);
+      drawSymbolPath(cx2, path, cv.width / 2, cv.height / 2, cv.width * 0.72, '#cfd6e4');
+      btn._symPainted = true;
+    });
+    if (pending) { clearTimeout(paintSymbolPicker._t); paintSymbolPicker._t = setTimeout(paintSymbolPicker, 180); }
   }
   function refreshKey(index) {
     var cv = mirrorCanvasFor(index);
@@ -1577,7 +1932,7 @@
     bind('sd-pf-imp', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
     var file = document.getElementById('sd-pf-file'); if (file) file.onchange = function () { if (file.files && file.files[0]) importFile(file.files[0]); file.value = ''; };
     var sel = document.getElementById('sd-profile'); if (sel) sel.onchange = function () { switchProfile(sel.value); };
-    bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
+    bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
     bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
     var ov = document.getElementById('sd-obs-vol'); if (ov) ov.onchange = function () { setObsVolInput(ov.value); toast('Stream-volume dial now rides "' + ov.value + '".'); };
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
@@ -1594,7 +1949,14 @@
   async function testPattern() {
     if (!device) return;
     var z = profile.keyPx;
-    for (var i = 0; i < profile.keys; i++) { var cv = offCanvas(z); drawKeyInto(cv, { color: '#243a66', label: String(i + 1), active: (i % 2 === 0) }, z); try { var bytes = await keyJpegFromCanvas(cv, z); var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {} }
+    var testKeyJob = function (i) {
+      return async function () {
+        if (!device) return;
+        var cv = offCanvas(z); drawKeyInto(cv, { color: '#243a66', label: String(i + 1), active: (i % 2 === 0) }, z);
+        try { var bytes = await keyJpegFromCanvas(cv, z); var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } catch (e) {}
+      };
+    };
+    for (var i = 0; i < profile.keys; i++) { try { await queueDeviceWrite('key:' + i, testKeyJob(i)); } catch (e) {} }
     lastPainted = new Array(profile.keys).fill('test');
     toast('Test pattern sent. Keys are numbered 1-' + profile.keys + ' left to right, top to bottom.');
   }
@@ -1609,7 +1971,7 @@
     // Dump the device's own truth first — product id, resolved profile, and the
     // HID report sizes the hardware actually advertises. If the strip stays dark,
     // this report says whether we are drawing wrong or framing the packets wrong.
-    try { console.log('[KeyWi] strip test — device report:', JSON.stringify(deviceDiag(), null, 2)); } catch (e) {}
+    try { console.log('[KeyWi] strip test: device report:', JSON.stringify(deviceDiag(), null, 2)); } catch (e) {}
     var bytes = null;
     try {
       bytes = await stripBytesFromContent(function (ctx, cw, ch) {
@@ -1640,11 +2002,14 @@
       toast('Strip test could not packetize: ' + ((e && e.message) || e)); return;
     }
     var sent = 0, failure = null;
-    for (var pk = 0; pk < packets.length; pk++) {
-      if (!device) return;
-      try { await device.hid.sendReport(packets[pk].reportId, packets[pk].data); sent++; }
-      catch (e) { failure = e; break; }
-    }
+    await queueDeviceWrite(null, async function () {
+      for (var pk = 0; pk < packets.length; pk++) {
+        if (!device) return;
+        try { await device.hid.sendReport(packets[pk].reportId, packets[pk].data); sent++; }
+        catch (e) { failure = e; break; }
+      }
+    });
+    if (!device) return;
     if (failure) {
       console.error('[KeyWi] strip test: sendReport rejected at packet ' + (sent + 1) + '/' + packets.length,
         { reportId: packets[0].reportId, bytesPerPacket: packets[0].data.length, totalBytes: bytes.length, error: failure });
@@ -1718,7 +2083,7 @@
     if (n === 0) {
       body = '<div class="sd-wz-hero"><h3 class="sd-wordmark sd-wz-mark">Key<span>Wi Bird</span></h3><div class="sd-wz-tag">One deck. The whole rig.</div></div>'
         + '<p class="sd-wz-p">A Stream Deck becomes the control surface for the show: Outrangutan playback and SFX, the Cueola rundown, the Flowmingo prompter, the Micochondria mics, and OBS. Organized by app, like the rig itself.</p>'
-        + '<p class="sd-wz-p">Four quick steps. Only the deck matters; the rest is optional and can wait.</p>';
+        + '<p class="sd-wz-p">A few quick steps. Only the deck matters; the rest is optional and can wait.</p>';
     } else if (n === 1) {
       body = '<div class="sd-wz-t">Connect your deck</div>'
         + (navigator.hid
@@ -1736,7 +2101,7 @@
     } else if (n === 3) {
       body = '<div class="sd-wz-t">OBS Studio <span class="sd-wz-opt">optional</span></div>'
         + '<p class="sd-wz-p">For stream, record, and scene keys, plus the program monitor and stream volume on a dial. In OBS: <b>Tools › WebSocket Server Settings</b>, enable the server, copy the password if one is set.</p>'
-        + (obsOn ? '' : '<div class="sd-wz-obs"><input id="sd-wz-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(((OBSc() && OBSc().config()) || {}).url || 'ws://localhost:4455') + '"><input id="sd-wz-obs-pw" class="sd-obs-in" type="password" placeholder="password (if set)"><button class="btn-secondary" id="sd-wz-obs-con">Connect OBS</button></div>')
+        + (obsOn ? '' : '<div class="sd-wz-obs"><input id="sd-wz-obs-url" class="sd-obs-in" placeholder="ws://localhost:4455" value="' + esc(((OBSc() && OBSc().config()) || {}).url || 'ws://localhost:4455') + '"><input id="sd-wz-obs-pw" class="sd-obs-in" type="password" placeholder="' + ((((OBSc() && OBSc().config()) || {}).password) ? '••••••••' : 'password (if set)') + '"><button class="btn-secondary" id="sd-wz-obs-con">Connect OBS</button></div>')
         + wzStatus(obsOn, obsOn ? 'Connected. Scene and stream keys glow live.' : ((OBSc() && OBSc().lastError && OBSc().lastError()) || 'Not connected. Fine to skip.'));
     } else {
       var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-wz-theme="' + id + '">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
@@ -1770,15 +2135,34 @@
     go('sd-wz-obs-con', function () {
       var url = (document.getElementById('sd-wz-obs-url') || {}).value || 'ws://localhost:4455';
       var pw = (document.getElementById('sd-wz-obs-pw') || {}).value || '';
-      if (OBSc()) { OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); }
+      if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); }
     });
     o.querySelectorAll('[data-wz-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-wz-theme')); wizardRender(); }; });
   }
 
   // ── Entry / gating ──────────────────────────────────────────────────────────
-  function open() {
+  // INC-4: the gate is fail-closed once Firebase is ready. With Firebase up and
+  // no signed-in identity, KeyWi Bird does NOT open, even if the identity
+  // module itself failed to load. Only a machine with no Firebase at all (pure
+  // local dev) may pass without the module.
+  function keyWiSignInGate() {
     var id = window.CueolaIdentity;
-    if (id && typeof id.identity === 'function' && !id.identity()) { try { id.openSignIn && id.openSignIn(); } catch (e) {} toast('Sign in to open KeyWi Bird.'); return false; }
+    var signedIn = false;
+    try { signedIn = !!(id && typeof id.identity === 'function' && id.identity()); } catch (e) {}
+    if (signedIn) return true;
+    var fbReady = false;
+    try { fbReady = !!window._firebaseReady; } catch (e) {}
+    if (!fbReady && !(id && typeof id.identity === 'function')) return true;   // no Firebase, no identity module: local-only dev
+    if (id && typeof id.openSignIn === 'function') {
+      // returnTo is new API; call it defensively and fall back to the plain form.
+      try { id.openSignIn({ returnTo: 'keywi' }); }
+      catch (e) { try { id.openSignIn(); } catch (e2) {} }
+    }
+    toast('Sign in to open KeyWi Bird.');
+    return false;
+  }
+  function open() {
+    if (!keyWiSignInGate()) return false;
     showScreen(); buildCatalog(); loadTheme();
     try { brightness = Math.max(0, Math.min(100, parseInt(localStorage.getItem(BRIGHTNESS_KEY), 10) || 80)); } catch (e) {}
     talkbackConnect();
@@ -1817,7 +2201,7 @@
     close();
   });
 
-  try { console.log('[KeyWi] driver r5 — app bands, Micochondria panel, setup wizard'); } catch (e) {}
+  try { console.log('[KeyWi] driver r6: per-key appearance, Liquid Glass theme, auto-dim'); } catch (e) {}
   window.CueolaStreamDeck = {
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },

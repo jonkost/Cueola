@@ -172,10 +172,17 @@
     if (profile) value.profileId = canonicalProfileId(profile);
     try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(value)); } catch (e) {}
   }
+  // One dispatch point for every signed-in identity transition (sign-in,
+  // sign-out, restore on boot). Listeners (cueola-app's instructor-only UI)
+  // re-read CueolaIdentity.profile() when this fires.
+  function announceIdentityChange() {
+    try { document.dispatchEvent(new CustomEvent('cueola-identity-change')); } catch (e) {}
+  }
   function signOut() {
     portalRequestGeneration++;
     try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
     cachedProfile = null;
+    announceIdentityChange();
     say('Signed out on this device.');
     renderFrontDoor();
     renderHub();
@@ -267,6 +274,7 @@
     if (p.active === false) return { ok: false, msg: 'This profile was deactivated by an instructor.' };
     rememberIdentity(username, p);
     cachedProfile = p;
+    announceIdentityChange();
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
     renderFrontDoor();
@@ -350,6 +358,7 @@
     }
     rememberIdentity(username, doc);
     cachedProfile = doc;
+    announceIdentityChange();
     adoptProfileLocally(doc);
     renderFrontDoor();
     return { ok: true, profile: doc };
@@ -501,7 +510,10 @@
 
 
   /* ══════════════════════ UI: hub / sign-in / wizard / portal ══════════════ */
-  var afterSignIn = null;   // 'stud' | 'pp' | null — return to a join modal after sign-in
+  // Where to land after a successful sign-in: 'stud' | 'pp' reopen their join
+  // modals; any other value is a return target ('keywi' or a screen id) that
+  // routes through returnToScreen. Null lands in the portal, as always.
+  var afterSignIn = null;
   var wizard = null;        // create-profile state
 
   function body() { return document.getElementById('identityBody'); }
@@ -515,10 +527,34 @@
     if (identity()) renderPortal(); else renderHub();
   }
   function openSignIn(returnTo) {
-    afterSignIn = returnTo || null;
-    if (returnTo) close(returnTo === 'stud' ? 'modal-stud' : 'modal-prepro-join');
+    // Accepts the legacy string kind ('stud' | 'pp') or an options object
+    // { returnTo: 'keywi' | <screen id> }. No-arg behaves exactly as before.
+    var target = (returnTo && typeof returnTo === 'object') ? returnTo.returnTo : returnTo;
+    afterSignIn = target || null;
+    if (target === 'stud' || target === 'pp') close(target === 'stud' ? 'modal-stud' : 'modal-prepro-join');
     open('identityModal');
     renderSignIn();
+  }
+  // Route a non-join returnTo target after sign-in. 'keywi' opens the KeyWi
+  // Bird control surface through its own (login-gated) front door; any other
+  // value is honored when it names a .screen element, switched the same way
+  // the app routes screens (single .screen.on). Returns true when it navigated.
+  function returnToScreen(target) {
+    if (!target || typeof target !== 'string') return false;
+    if (target === 'keywi') {
+      try {
+        if (typeof window.openControlSurface === 'function') { window.openControlSurface(); return true; }
+      } catch (e) {}
+      return false;
+    }
+    var el = document.getElementById(target);
+    if (!el || !el.classList || !el.classList.contains('screen')) return false;
+    try {
+      var on = document.querySelectorAll('.screen.on');
+      for (var i = 0; i < on.length; i++) on[i].classList.remove('on');
+      el.classList.add('on');
+      return true;
+    } catch (e) { return false; }
   }
 
   function renderHub() {
@@ -560,10 +596,12 @@
     say('Signed in as ' + res.profile.fullName + '.');
     if (afterSignIn) {
       var kind = afterSignIn; afterSignIn = null;
-      close('identityModal');
-      if (kind === 'stud') { try { window.openJoinSession(); } catch (e) {} }
-      else { try { window.openPreProJoinModal('hub'); } catch (e) {} }
-      return;
+      if (kind === 'stud') { close('identityModal'); try { window.openJoinSession(); } catch (e) {} return; }
+      if (kind === 'pp') { close('identityModal'); try { window.openPreProJoinModal('hub'); } catch (e) {} return; }
+      // Screen-return targets ('keywi', or a screen id): go back where the
+      // user was headed instead of stranding them in the portal. An unknown
+      // target falls through to the portal, the safe default.
+      if (returnToScreen(kind)) { close('identityModal'); return; }
     }
     renderPortal();
   }
@@ -1163,6 +1201,7 @@
         return;
       }
       cachedProfile = p;
+      announceIdentityChange();  // restore-on-boot: profile is now known
     }
     var codes = (p.sessions || []).slice(-FRONT_DOOR_MAX).reverse();
     el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'

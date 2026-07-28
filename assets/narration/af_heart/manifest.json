@@ -6,6 +6,7 @@
     "LH-cueola-live.lesson",
     "LH-flowmingo-remote.lesson",
     "LH-flowmingo-talent.lesson",
+    "LH-keywi.lesson",
     "LH-outrangutan.lesson",
     "LH-plandabear.lesson",
     "LH-profile.lesson",
@@ -13,14 +14,15 @@
     "LH-support.lesson"
   ],
   "texts": {
-    "LH-cueola-build.lesson": "02dd2cd2b01e",
+    "LH-cueola-build.lesson": "7f63bc272ede",
     "LH-cueola-live.lesson": "1a8efd5c43f0",
     "LH-flowmingo-remote.lesson": "7a9a6352ed09",
     "LH-flowmingo-talent.lesson": "84741d742a7c",
+    "LH-keywi.lesson": "fea83137c5b7",
     "LH-outrangutan.lesson": "e77ead25e750",
     "LH-plandabear.lesson": "58deb97cd8f9",
-    "LH-profile.lesson": "fe8850d0c652",
-    "LH-start.lesson": "e34718684ade",
+    "LH-profile.lesson": "84e7f4e2c3e2",
+    "LH-start.lesson": "2f99fbfe514c",
     "LH-support.lesson": "14b2ae25390f"
   }
 }

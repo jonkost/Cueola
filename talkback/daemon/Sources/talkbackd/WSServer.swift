@@ -5,7 +5,8 @@ import Network
 /// ("A on" / "A off" / "B on" / "B off" / "A gain 0.8" / "B gain 0.8" /
 /// "state?") and pushes the current state as JSON to every connected client on
 /// any change, so buttons can light up. Live peak levels stream at 10 Hz for
-/// meters. Bound to loopback only.
+/// meters. Bound to loopback only; browser clients must also present an
+/// allowed Origin header or the upgrade is rejected.
 final class WSServer {
 
     private let state: ControlState
@@ -27,6 +28,16 @@ final class WSServer {
         params.allowLocalEndpointReuse = true
         let wsOptions = NWProtocolWebSocket.Options()
         wsOptions.autoReplyPing = true
+        // Any webpage in a local browser can open a loopback socket, so gate
+        // the upgrade on the Origin header before the handshake completes.
+        wsOptions.setClientRequestHandler(queue) { _, additionalHeaders in
+            let origin = additionalHeaders.first { $0.name.lowercased() == "origin" }?.value
+            guard WSServer.isAllowed(origin: origin) else {
+                log("rejected WebSocket upgrade from origin: \(origin ?? "(none)")")
+                return NWProtocolWebSocket.Response(status: .reject, subprotocol: nil)
+            }
+            return NWProtocolWebSocket.Response(status: .accept, subprotocol: nil)
+        }
         params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 
         let listener = try NWListener(using: params)
@@ -52,7 +63,7 @@ final class WSServer {
             self?.queue.async { self?.broadcastState() }
         }
 
-        // Meters: peak levels to every client at 10 Hz. Quiet by design — no
+        // Meters: peak levels to every client at 10 Hz. Quiet by design: no
         // log lines, nothing sent while nobody is connected.
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 0.1, repeating: 0.1)
@@ -67,6 +78,21 @@ final class WSServer {
         listener?.cancel()
         for (_, connection) in connections { connection.cancel() }
         connections.removeAll()
+    }
+
+    // MARK: - Origin allowlist
+
+    /// Native clients (the Stream Deck plugin, CLI tools) send no Origin
+    /// header; browser pages always do. Accept only the production site and
+    /// local development hosts on any port.
+    private static func isAllowed(origin: String?) -> Bool {
+        guard let origin else { return true }
+        let lower = origin.lowercased()
+        if lower == "https://cueola.live" { return true }
+        for host in ["http://localhost", "http://127.0.0.1"] {
+            if lower == host || lower.hasPrefix(host + ":") { return true }
+        }
+        return false
     }
 
     // MARK: - Connections

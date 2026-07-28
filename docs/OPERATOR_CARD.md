@@ -1,7 +1,7 @@
-# Cueola — Operator Card
+# Cueola Operator Card
 
 One page. Print it, tape it to the desk. Extracted from the app's keymap registry
-(V2.1, 2026-07) — press **?** in the app any time for the live version (it is generated
+(V2.2, 2026-07). Press **?** in the app any time for the live version (it is generated
 from the same registry and includes any of your own rebinds; override keys via
 `localStorage.cueola_keymap`). Typing in any text field suppresses all shortcuts.
 
@@ -17,7 +17,7 @@ from the same registry and includes any of your own rebinds; override keys via
 **Rundown**
 | Key | Action |
 |---|---|
-| → / ↓ | Next row *(always — even with Script Op open)* |
+| → / ↓ | Next row *(always, even with Script Op open)* |
 | ← / ↑ | Previous row |
 
 **Prompter (Flowmingo)**
@@ -36,20 +36,20 @@ from the same registry and includes any of your own rebinds; override keys via
 | E | Edit current row script |
 | Alt+↑ / Alt+↓ | Direction forward / reverse |
 
-**Playout (Outrangutan — from the Cueola live screen)**
+**Playout (Outrangutan, from the Cueola live screen)**
 | Key | Action |
 |---|---|
-| G | GO — fires the readied cue **immediately** (no call, no abort window) |
-| G *(during an armed call)* | TAKE — fire the readied clip now |
-| S *(during a call)* | ABORT — stop the call, nothing fires |
+| G | GO: fires the readied cue **immediately** (no call, no abort window) |
+| G *(during an armed call)* | TAKE: fire the readied clip now |
+| S *(during a call)* | ABORT: stop the call, nothing fires |
 
 *The automatic call (READY · TRACK · ROLL · TAKE) runs when you **advance onto
-a row with linked media** — arrow keys or the on-screen GO button — never from
+a row with linked media** (arrow keys or the on-screen GO button), never from
 the G key.*
 | P | Pause / resume |
 | S | Stop |
 | Shift+S | Fade-stop |
-| **Shift+Esc** | **PANIC — all stop** |
+| **Shift+Esc** | **PANIC: all stop** |
 
 *Prefer to pull the trigger yourself? Toggle **Manual TAKE (armed call)** in the
 live prompter controls: GO readies the clip, TAKE fires it.*
@@ -63,7 +63,7 @@ live prompter controls: GO readies the clip, TAKE fires it.*
 **Scrub & reference**
 | Key | Action |
 |---|---|
-| / | Jog-wheel scrub — local until **Enter** cues the talent there; **Esc** abandons |
+| / | Jog-wheel scrub: local until **Enter** cues the talent there; **Esc** abandons |
 | ? | Shortcut reference (live + build screens) |
 
 ## Outrangutan screen (module focused)
@@ -78,7 +78,7 @@ live prompter controls: GO readies the clip, TAKE fires it.*
 | *Pad hotkeys* | Fire SFX pads (set per pad) |
 
 **Control surfaces:** Stream Deck (WebHID) and any MIDI box (toolbar ▸ MIDI ▸
-Connect, then **+ Learn a control** — touch it, pick its action; a CC fader can
+Connect, then **+ Learn a control**: touch it, pick its action; a CC fader can
 ride Master level). Rehearse mappings without hardware:
 `Outrangutan.midiInject(0x90, 60, 127)` in the console.
 
@@ -88,41 +88,57 @@ ride Master level). Rehearse mappings without hardware:
 |---|---|
 | Cmd/Ctrl+S | Save the open surface's show file in place (`.cueola` / `.ogshow`) |
 
-**Identity:** enter with your **username** via the front-page profile button —
-no passwords; profiles come from the class **login code**. Your portal shows
-your position, open to-dos, and unseen notes per session.
+**Sign in:** the front page opens on the **Your sessions** card. Type your
+**username**, press **Sign in** (no password), and every session assigned to
+you is one tap away. Only have a code? Use the **Have a session code?** link
+under the card. New crew: **New here? Create your profile**, with the class
+login code. New session codes look like `2607KWXR` (year, month, four
+letters); older short codes still work. Your portal shows your position, open
+to-dos, and unseen notes per session.
 
-**Recovery — read this row before panicking:**
+**If you use a Stream Deck:** sign in first, then open the front-page
+**KeyWi Bird** card (it stays locked until you do). Any Stream Deck works,
+6-key Mini through the 36-key + XL, in Chrome or Edge. First time on a deck, run the
+**Setup wizard**. Keys are live: playing keys wipe with the clip, pre-roll
+shows a thin bottom bar, presses flash.
+
+**Practice:** the front-page **Demo** card loads Campus News (10 rows) with
+no login. Drill this whole card there before a real show. Instructors who
+sign in also see **The Break Room (instructor drill)** on the same card: a
+full late-night show with scripts, paperwork, a KeyWi profile, and a pad
+board.
+
+**Recovery. Read this row before panicking:**
 
 - **Link strip** (above the live bar): CLOUD · TALENT · PLAYOUT · SCRIPT show
   every connection at a glance; PLAYOUT adds **· NOT ARMED** until the first GO
   is proven ready. The **CALLER / FOLLOWING / VIEWER** badge says who has the
   wheel; if another operator window takes the prompter, this one says so and
   follows.
-- **System status** rail (live screen): one **Recover** button per subsystem —
+- **System status** rail (live screen): one **Recover** button per subsystem:
   Recover Flowmingo · Recover Playback · Recover Script Operator · Retry cloud
   sync. Use it the moment a link word goes dark.
 - **Session History** (Settings ▸ File ▸ **History**): timestamped snapshots
-  from **this device — plus the cloud trail on an admin-signed-in machine**
+  from **this device, plus the cloud trail on an admin-signed-in machine**
   (students see the local rows only; badged "Cloud" / "This device";
   saved on join, every two minutes while things change, on go-live, and on
-  leave). **Restore replaces the rundown for everyone** — it re-stamps as the
+  leave). **Restore replaces the rundown for everyone**: it re-stamps as the
   newest change so an offline machine can't undo it, and a recovery copy of
   the current state is saved first. Export any snapshot for a file copy.
-- Notes, likes, and checklist ticks sync per-note — a reload on dead Wi-Fi
+- Notes, likes, and checklist ticks sync per-note; a reload on dead Wi-Fi
   still boots the show from the local cache.
 
 ---
 
-## Going live — the 10-line checklist
+## Going live: the 10-line checklist
 
 1. Open the session on the operator machine; **Outrangutan same tab, Session mode, same code**.
 2. Output window to the program display, fullscreen; **Identify** to confirm which screen. The watchdog flags a frozen output and re-syncs it when it returns.
-3. Talent opens Flowmingo with the code — wait for **Connected**.
-4. **Settings ▸ Production ▸ Preflight** — fix anything red via its "Row →" jump; rerun until green.
-5. Save the show: **Cmd+S** (`.cueola`), Outrangutan **Save Show** (`.ogshow`) — your walk-away backups. Print the **show pack** (cue sheet + pad map) and the rundown (its Outrangutan column shows every linked cue).
-6. **Go Live** (the button runs preflight again — it should already be green).
+3. Talent opens Flowmingo with the code; wait for **Connected**.
+4. **Settings ▸ Production ▸ Preflight**: fix anything red via its "Row →" jump; rerun until green.
+5. Save the show: **Cmd+S** (`.cueola`), Outrangutan **Save Show** (`.ogshow`). These are your walk-away backups. Print the **show pack** (cue sheet + pad map) and the rundown (its Outrangutan column shows every linked cue).
+6. **Go Live** (the button runs preflight again; it should already be green).
 7. `C` to cue the prompter to row 1; confirm the follower mirrors you.
-8. Drive with **arrows**; `G/P/S` for playout; pads or your MIDI box for SFX. Keyboard first, mouse never required.
-9. If anything breaks mid-show: it cuts to **black + a toast, the show keeps running** — advance and keep going. **Shift+Esc** is the big red button.
-10. After: **Settings ▸ Production ▸ Show Log ▸ Export** — attach it to any issue report. Pinned wrap-notes show who still hasn't read them.
+8. Drive with **arrows**; `G/P/S` for playout; pads, your deck, or your MIDI box for SFX. Keyboard first, mouse never required.
+9. If anything breaks mid-show: it cuts to **black + a toast, the show keeps running**. Advance and keep going. **Shift+Esc** is the big red button.
+10. After: **Settings ▸ Production ▸ Show Log ▸ Export**, attached to any issue report. Pinned wrap-notes show who still hasn't read them.

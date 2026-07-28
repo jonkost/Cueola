@@ -194,6 +194,74 @@ test('renders and accepts every supported key index while rejecting out-of-range
   assert.equal(encodes[0].options.quality, 0.9);
 });
 
+test('progress renders as a clamped translucent accent wipe behind icon and label', () => {
+  const { renderer } = harness();
+  const wiped = renderer.renderCanonical(0x006d, { icon: '▶', text: 'STING', progress: 0.5, phase: 'playing', accentColor: '#8ff7bc' });
+  const rects = calls(wiped.canvas, 'fillRect');
+  assert.equal(rects.length, 2);
+  assert.deepEqual(rects[0], ['fillRect', 0, 0, 72, 72, '#101418']);
+  assert.deepEqual(rects[1], ['fillRect', 0, 0, 36, 72, 'rgba(143, 247, 188, 0.34)']);
+  const wipeAt = wiped.canvas.operations.indexOf(rects[1]);
+  const firstTextAt = wiped.canvas.operations.findIndex(op => op[0] === 'fillText');
+  assert.ok(wipeAt < firstTextAt, 'the wipe must sit behind the icon and label');
+  assert.equal(wiped.progress, 0.5);
+  assert.equal(wiped.phase, 'playing');
+  assert.equal(wiped.looping, false);
+  assert.equal(wiped.pressed, false);
+
+  assert.equal(renderer.renderCanonical(0x006d, { text: 'GO', progress: 1.4, phase: 'playing' }).progress, 1);
+  assert.equal(renderer.renderCanonical(0x006d, { text: 'GO', progress: -3, phase: 'playing' }).progress, 0);
+  const defaultAccent = renderer.renderCanonical(0x006d, { text: 'GO', progress: 0.5, phase: 'playing' });
+  assert.equal(calls(defaultAccent.canvas, 'fillRect')[1][5], 'rgba(111, 240, 165, 0.34)');
+
+  const none = renderer.renderCanonical(0x006d, { text: 'GO' });
+  assert.equal(calls(none.canvas, 'fillRect').length, 1);
+  assert.equal(none.progress, null);
+  const invalid = renderer.renderCanonical(0x006d, { text: 'GO', progress: 'soon' });
+  assert.equal(calls(invalid.canvas, 'fillRect').length, 1);
+  const unknownStyle = renderer.renderCanonical(0x006d, { text: 'GO', progress: 0.5, progressStyle: 'radial' });
+  assert.equal(calls(unknownStyle.canvas, 'fillRect').length, 1);
+  assert.equal(unknownStyle.progress, null);
+});
+
+test('prewait draws a distinct thin bottom bar instead of a full-height wipe', () => {
+  const { renderer } = harness();
+  const pre = renderer.renderCanonical(0x006d, { text: 'CUE 4', progress: 0.25, phase: 'prewait', accentColor: '#8ff7bc' });
+  const rects = calls(pre.canvas, 'fillRect');
+  assert.equal(rects.length, 2);
+  assert.deepEqual(rects[1], ['fillRect', 0, 67, 18, 5, '#8ff7bc']);
+  assert.equal(pre.phase, 'prewait');
+  assert.equal(pre.progress, 0.25);
+});
+
+test('looping keys carry a static corner marker and never a wipe', () => {
+  const { renderer } = harness();
+  const loop = renderer.renderCanonical(0x006d, { icon: '▶', looping: true, accentColor: '#8ff7bc' });
+  const rects = calls(loop.canvas, 'fillRect');
+  assert.equal(rects.length, 2);
+  assert.deepEqual(rects[1], ['fillRect', 57, 6, 9, 9, '#8ff7bc']);
+  assert.equal(loop.looping, true);
+  assert.equal(loop.progress, null);
+});
+
+test('pressed is a composable last-drawn flash overlay, separate from active', () => {
+  const { renderer } = harness();
+  const key = renderer.renderCanonical(0x006d, { text: 'GO', active: true, pressed: true, progress: 0.5, phase: 'playing' });
+  const rects = calls(key.canvas, 'fillRect');
+  assert.equal(rects.length, 3);   // background + wipe + flash, all three composing
+  assert.deepEqual(rects[2], ['fillRect', 0, 0, 72, 72, 'rgba(255, 255, 255, 0.3)']);
+  assert.equal(calls(key.canvas, 'strokeRect').length, 1);   // the latched active border survives
+  const flashAt = key.canvas.operations.indexOf(rects[2]);
+  const lastTextAt = key.canvas.operations.map(op => op[0]).lastIndexOf('fillText');
+  assert.ok(flashAt > lastTextAt, 'the flash overlays the finished key');
+  assert.equal(key.pressed, true);
+
+  const pressedOnly = renderer.renderCanonical(0x006d, { text: 'GO', pressed: true });
+  assert.equal(pressedOnly.active, false);
+  assert.equal(calls(pressedOnly.canvas, 'strokeRect').length, 0);
+  assert.equal(calls(pressedOnly.canvas, 'fillRect').length, 2);
+});
+
 test('packetizes all bytes with the correct pages and an explicit final short chunk', async () => {
   const encodedSize = (1016 * 2) + 17;
   const { renderer } = harness(encodedSize);

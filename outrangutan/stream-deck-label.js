@@ -119,6 +119,20 @@
     return Number.isFinite(number) ? number : fallback;
   }
 
+  // Hex color to a translucent rgba() string. Non-hex inputs pass through
+  // unchanged so callers can hand in any canvas-legal color they like.
+  function withAlpha(color, alpha) {
+    var value = String(color == null ? '' : color).trim();
+    var match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+    if (!match) return value || 'rgba(255, 255, 255, ' + alpha + ')';
+    var hex = match[1];
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    var r = parseInt(hex.slice(0, 2), 16);
+    var g = parseInt(hex.slice(2, 4), 16);
+    var b = parseInt(hex.slice(4, 6), 16);
+    return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+  }
+
   function resetContext(ctx, width, height) {
     if (!ctx || typeof ctx.setTransform !== 'function' || typeof ctx.clearRect !== 'function') {
       throw new Error('Stream Deck label rendering requires a 2D canvas context.');
@@ -232,6 +246,14 @@
       resetContext(ctx, width, height);
 
       var active = data.active === true;
+      var pressed = data.pressed === true;
+      var looping = data.looping === true;
+      var phase = data.phase === 'prewait' ? 'prewait' : (data.phase === 'playing' ? 'playing' : '');
+      var progressStyle = data.progressStyle == null ? 'wipe' : data.progressStyle;
+      var progressValue = finite(data.progress, NaN);
+      var hasProgress = Number.isFinite(progressValue) && progressStyle === 'wipe';
+      if (hasProgress) progressValue = Math.min(1, Math.max(0, progressValue));
+      var accent = data.accentColor || '#6ff0a5';
       var text = String(data.text == null ? '' : data.text).trim();
       var hasIcon = data.icon != null && data.icon !== '';
       var background = data.backgroundColor || (active ? '#17653a' : '#101418');
@@ -248,10 +270,25 @@
         ctx.fillStyle = background;
         ctx.fillRect(0, 0, width, height);
         if (active && typeof ctx.strokeRect === 'function') {
-          ctx.strokeStyle = data.accentColor || '#6ff0a5';
+          ctx.strokeStyle = accent;
           ctx.lineWidth = Math.max(2, Math.round(width * 0.04));
           var inset = ctx.lineWidth / 2;
           ctx.strokeRect(inset, inset, width - ctx.lineWidth, height - ctx.lineWidth);
+        }
+
+        // Playback reactivity. A horizontal left-to-right wipe of translucent
+        // accent shows playing progress BEHIND the icon and label; pre-wait
+        // uses a distinct thin bottom bar instead; loop pads carry a static
+        // corner marker (no wipe: a loop has no end to count down to). Sharp
+        // edges only, no glow, no shadow.
+        if (hasProgress && phase !== 'prewait') {
+          ctx.fillStyle = withAlpha(accent, 0.34);
+          ctx.fillRect(0, 0, Math.round(width * progressValue), height);
+        }
+        if (looping) {
+          var marker = Math.max(4, Math.round(width * 0.12));
+          ctx.fillStyle = accent;
+          ctx.fillRect(width - padding - marker, padding, marker, marker);
         }
 
         ctx.fillStyle = foreground;
@@ -271,11 +308,27 @@
             ctx.fillText(line, width / 2, firstY + (index * lineHeight), maxTextWidth);
           });
         }
+
+        if (hasProgress && phase === 'prewait') {
+          var barHeight = Math.max(2, Math.round(height * 0.07));
+          ctx.fillStyle = accent;
+          ctx.fillRect(0, height - barHeight, Math.round(width * progressValue), barHeight);
+        }
+        // Pressed = brief input flash. It is an overlay, so it composes with
+        // (and never replaces) the latched active border and the progress wipe.
+        if (pressed) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.fillRect(0, 0, width, height);
+        }
       } finally {
         ctx.restore();
       }
 
-      return { canvas: canvas, layout: wrapped, active: active, model: model };
+      return {
+        canvas: canvas, layout: wrapped, active: active, model: model,
+        progress: hasProgress ? progressValue : null,
+        phase: phase || null, looping: looping, pressed: pressed
+      };
     }
 
     function createDeviceFrame(modelValue, canonicalCanvas) {

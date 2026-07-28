@@ -1,9 +1,32 @@
-# KeyWi Bird (Cueola control surface for the Stream Deck + XL)
+# KeyWi Bird (Cueola control surface for any Stream Deck)
 
-One Stream Deck + XL (36 keys, 6 dials, 6 touch zones) drives the whole rig:
-playback and SFX (Outrangutan), the rundown, the Flowmingo prompter, Talkback
-A/B, and OBS Studio. It is reached from the front page under **KeyWi Bird**, gated
-behind a normal user sign in.
+Any Stream Deck, from the 6 key Mini up to the 36 key + XL, drives the whole
+rig: playback and SFX (Outrangutan), the rundown, the Flowmingo prompter, the
+Micochondria mics, and OBS Studio. It is reached from the front page under
+**KeyWi Bird** and requires a normal user sign in.
+
+## Quick start (your first show)
+
+1. Open Cueola in **Chrome or Edge** and sign in. The KeyWi Bird card only
+   opens for a signed in user; without one it asks you to sign in first.
+2. If the Elgato Stream Deck app is installed, **quit it**. It holds the USB
+   device and blocks the browser.
+3. Click the **KeyWi Bird** card. The first open runs a five step setup
+   wizard: a welcome, **Connect your deck**, **Micochondria** (optional),
+   **OBS Studio** (optional), and **Make it yours** (pick a theme). The
+   optional steps skip cleanly; only the deck step matters.
+4. On the deck step click **Connect deck**, pick your deck from the browser's
+   device list, and allow it once. The deck plays a quick rainbow light show
+   as a pixel test, then settles into a layout built for its size.
+5. No deck yet? Click **See it on screen** (in the wizard, **No deck? Preview
+   on screen**). Preview mode gives you the full virtual deck with nothing
+   plugged in, so you can learn it, lay it out, and pick a theme any time.
+6. Press keys and turn dials. Every key does what its label says, and the on
+   screen deck mirrors the hardware exactly. Click any key on screen to read
+   a plain description of what it does, or to change it.
+
+The wizard never volunteers itself twice. Reopen it any time from **Setup
+wizard** in the toolbar.
 
 ## How it works
 
@@ -16,11 +39,20 @@ Everything runs in the operator's own Cueola tab (Phase 1, same machine). A key
 press runs the same code the keyboard shortcut runs, so it inherits every guard
 the app already has: Live single authority, session checks, the cross device
 writes that reach the projector and the talent prompter. Dials send relative
-ticks into continuous controls. Talkback A/B and OBS both speak local loopback
+ticks into continuous controls. Micochondria and OBS both speak local loopback
 WebSockets directly (talkbackd on `17844`, obs-websocket on `4455`).
 
 Requirements: **Chrome or Edge** (WebHID is Chromium only), and the **Elgato
 Stream Deck app must be quit** because it claims the USB device exclusively.
+
+## Sign in first (the gate)
+
+The front page card says it plainly: sign in, then connect. The gate is fail
+closed: once Firebase is up, KeyWi Bird does not open without a signed in
+identity, even if the identity module is slow to load. An unsigned click gets
+the sign in screen and the toast "Sign in to open KeyWi Bird." Local only
+development with no Firebase at all still opens, so the module can be worked
+on offline.
 
 ## Any Stream Deck, organized by app
 
@@ -32,7 +64,7 @@ Outrangutan (GO, PAUSE, STOP, FADE, PANIC, PAD 1-4, CUE 1-3), columns 4-5 are
 Cueola (NEXT, PREV, GO LIVE, the CLOCK widget, HYPE), columns 6-7 are Flowmingo
 (SCROLL, CUE ROW, TOP, MIRROR, BRAKE, BOOST, EDIT, SCRUB), column 8 is
 Micochondria (TKB, VofU, ALL TALK OFF), column 9 is OBS (STREAM, REC, SCN 1)
-plus PAGE →. The action catalog in the key editor groups the same way, so
+plus PAGE. The action catalog in the key editor groups the same way, so
 finding an action means thinking of the app, not a category.
 
 Redundancy rule: a deck with dials gets **no keys for what its dials already
@@ -41,32 +73,31 @@ the + XL, so those keys are gone from its default (the dial-less XL keeps its
 SPD keys). The freed keys went to the app bands; a few deliberate blanks keep
 the bands readable. Everything trimmed is still in the catalog to bind by hand.
 
-On connect the deck plays a quick rainbow light show as a full pixel test, then
-settles into the layout.
-
 Default dials, each card stating what turning and pressing does: PLBK vol
 (press: mute), Prompter speed (press: play/pause), Text size (press: reset),
 Prompter scrub (press: cue to live row), Rundown row (press: take that row),
-Show clock (a live clock face; press: start/pause). The optional **OBS
-program** dial is a live program monitor on the strip whose turn rides the OBS
-stream-audio volume (pick which input in the OBS row) and whose press starts or
-stops the stream.
+Show clock (a live clock face; press: start/pause). Three more live in the
+catalog to assign by hand: the **OBS program** dial (a live program monitor on
+the strip; turn rides the OBS stream audio volume, pick which input in the OBS
+row, press starts or stops the stream), the **Micochondria** split strip (see
+below), and **Deck light** (turn: the physical backlight, press: back to 80%).
 
 The touch strip is a glanceable dashboard: one zone per dial with an accent bar,
 the live value in tabular digits, a progress bar, and a running dot. Tap a zone
 to fire that dial's press action; flick along it for a big turn.
 
 Toggles (pause, scroll, mirror, stream, rec, mutes) wear an ON/OFF badge on
-screen and glow on the deck while active. The show clock has explicit Start,
-Pause, and Resume keys plus a one-key toggle; a verb that matches the current
-state is a quiet no-op, so a nervous double-press never double-fires.
+screen and light their ring on the deck while active. The show clock has
+explicit Start, Pause, and Resume keys plus a one-key toggle; a verb that
+matches the current state is a quiet no-op, so a nervous double-press never
+double-fires.
 
 ## Look and feel (streamer deck)
 
 Every key is an illustrated keycap, not flat text: a gradient face, a crisp
-icon, a soft glow, a toggle pip when it is on, and live mini-graphics. GO shows
-a progress bar as a clip plays; the clock keys show a running ON AIR time;
-STREAM, REC, GO LIVE and the TALK keys breathe while active.
+icon, a toggle pip when it is on, and live mini-graphics. Per the app's liquid
+glass doctrine the art is crisp edges and layered translucency, no glows and
+no shadows (the Neon theme's glowing edges are the one deliberate exception).
 
 Key icons come from the repo's **SF Symbol library**
 (`design-system/apple/symbols/runtime/`): play/pause/stop, a fader for FADE, an
@@ -77,10 +108,12 @@ any size, tinted to the key ink), with a built-in vector fallback so a key is
 never blank while a symbol loads. To use a symbol KeyWi Bird does not map yet, add
 the SVG under the runtime folder and point the action at it in `symbolFor()`.
 
-Pick a **theme** from the top of the setup panel to reskin the whole deck:
-Broadcast (clean, category colours), Neon (glowing edges on black), Synthwave
-(sunset grids), Terminal (green-on-black with scanlines), or Aurora. The theme
-applies to the physical keys and the on-screen preview alike.
+Pick a **theme** to reskin the whole deck. Six ship: Broadcast (clean,
+category colors), Neon (glowing edges on black), Synthwave (sunset grids),
+Terminal (green-on-black with scanlines), Aurora, and **Liquid Glass** (smoked
+glass keycaps that match the app chrome). Themes are one-click chips in the
+toolbar and in the wizard's last step, and apply to the physical keys and the
+on-screen preview alike.
 
 The **on-screen grid is exactly what the hardware shows**: the same canvas art
 drives both, so you can lay out and theme the deck and see the real result. The
@@ -88,23 +121,78 @@ on-screen deck sits in a hardware-style dark shell, and on strip decks the
 **touch strip renders live on screen too**, showing the same pixels the panel shows.
 **Preview mode** (See it on screen) gives you a full virtual + XL with no
 hardware plugged in, so you can build layouts and try themes any time, then hit
-Connect to drive the real deck. Themes are one-click chips in the toolbar.
+**Connect real deck** to drive the real one.
 
 There is a **HYPE** key too (under Fun, and on the + XL default layout): a
 rainbow ripple parties across the whole deck and settles back. Because a big
 panel of buttons should be fun.
 
+## Reactive keys
+
+Keys animate with the show, on the hardware and on screen alike:
+
+- **Duration wipe.** A playing SFX pad or playout key fills with a translucent
+  wipe that tracks the clip, with a sharp leading edge, so time remaining is
+  readable at a glance.
+- **Pre-roll bar.** A cue in pre-wait shows a thin bar along the bottom edge,
+  deliberately different from the playing wipe, so an armed cue reads
+  differently from a rolling one.
+- **Loop marker.** A looping pad carries a small static corner square instead
+  of a wipe: a loop has no end to count down to.
+- **Press flash.** Every key press flashes a brief white overlay (150 ms), so
+  the deck confirms the touch.
+- **Pulse lamps.** STREAM, REC, GO LIVE and the TALK keys breathe while
+  active; the clock keys show a running ON AIR time.
+
+All of it can be tuned or turned off per key in the key editor (below).
+
+## Make any key yours (per-key appearance)
+
+Click any key on screen (or use Live learn and press it on the deck) to open
+the key editor. Beyond picking the action, every key takes appearance
+overrides, stored with the layout:
+
+- **Label**: replace the printed label, or check **Hide label** for an
+  icon-only key.
+- **Accent color**: an Auto chip, twelve swatches, or any **Custom color
+  (hex)**.
+- **Key art**: an emoji palette, a typed emoji, or the **symbol picker**: 85
+  SF Symbols drawn live on little canvases, filtered as you type in **Search
+  symbols**. A picked symbol wins over emoji; clearing both restores the
+  action's own icon.
+- **Progress style**: how a playing key shows time. **Wipe** (the default),
+  **Ring** (a hairline track circle with a sharp accent arc from 12 o'clock),
+  or **Bottom bar**.
+- **Press flash** and **Reactive animation** checkboxes, per key.
+- **Reset appearance** clears every override and returns the key to the
+  theme's default look.
+
+Old saved profiles need no migration: absent overrides mean the defaults every
+existing layout already had.
+
+## Brightness and auto-dim
+
+With hardware connected the toolbar grows a **Brightness** slider with a live
+percentage. The optional **Deck light** dial does the same from the deck
+itself (press resets to 80%).
+
+After **5 idle minutes** the physical deck dims itself to **20%**. Any key,
+dial, or touch input restores full brightness instantly and re-arms the
+timer. The stored brightness preference is untouched; the dim is a screensaver,
+not a setting.
+
 ## Micochondria (the mic panel)
 
 Micochondria is the talkback pair: hold **TKB** to talk to the crew (outs 1-2),
 hold **VofU** (the Voice of the Universe) to speak to the room (outs 3-4).
-Beyond the deck keys, KeyWi Bird now has a small **Micochondria panel**: a
+Beyond the deck keys, KeyWi Bird has a small **Micochondria panel**: a
 green/off dot that plainly says **Connected** or **Not running**, and one strip
 per mic with a hold-to-talk button, an ON AIR lamp, a live meter, and a volume
 fader. The meter shows the mic input while idle (proof the mic is alive before
 the show) and the bus output while keyed. Meters and faders appear only when
 the running talkbackd speaks the levels protocol (`talkback/README.md`); an
-older daemon still gets the honest connected/off panel.
+older daemon still gets the honest connected/off panel. An **All talk off**
+button in the toolbar and the panel cuts both mics instantly.
 
 **Pop out** (in the panel header) opens Micochondria in its own little window:
 the connected dot, both mics with lamp and meter, hold-to-talk, and the all-off
@@ -117,24 +205,21 @@ Micochondria and its touch-strip zone becomes one block split in half, TKB on
 the left, VofU on the right, each half lit green while that mic is live (with
 small meters when the daemon speaks levels). Tapping the zone cuts both mics.
 
-## Setup wizard
-
-First open runs a five-step wizard: welcome, deck (connect or preview),
-Micochondria, OBS, and make-it-yours (themes). The optional steps skip cleanly,
-status dots update live as things connect, and the wizard never volunteers
-itself twice; it lives behind **Setup wizard** in the toolbar after that.
+The talkbackd daemon only accepts browser connections from cueola.live or
+localhost origins, so a random webpage cannot key the mic; details in
+`talkback/README.md`.
 
 ## Deck Studio (the setup screen)
 
-Everything is customisable, live:
+Everything is customizable, live:
 
 - **Saved profiles.** Keep several named layouts (Rehearsal, Live, OBS heavy).
   New / Duplicate / Rename / Delete / Set default, and switch instantly. Mappings
   are stored per device in the browser.
-- **Per-key custom look.** Click a key to set its action, a custom label, one of
-  twelve colours (or Auto), and key art from the emoji palette (or type your
-  own). SFX pads get a waveform icon automatically; every binding shows a plain-language
-  description of what it does, and TOGGLE/HOLD chips where they apply.
+- **Per-key look and feel.** The full appearance kit above, per key: label,
+  color, art, progress style, flash, reactive. Every binding shows a
+  plain-language description of what it does, and TOGGLE/HOLD chips where they
+  apply. SFX pads get a waveform icon automatically.
 - **Bind by name.** The key editor's "This show" and "This OBS" sections list the
   loaded show's cues and pads and OBS's scenes and audio inputs, so a key can fire
   a specific cue or switch to a specific scene by name.
@@ -144,44 +229,57 @@ Everything is customisable, live:
   to another operator machine, and import it back.
 - **Layouts as pages.** Bind PAGE keys (next layout, or jump to one by name) so
   the deck itself flips between rehearsal, live, and OBS-heavy pages.
-- **Guided setup.** First run shows a three-step setup card (deck, talkback,
-  OBS) with live status dots. The screen follows the active Cueola theme.
+- **Setup wizard.** The five step first-run tour lives behind **Setup wizard**
+  in the toolbar, with live status dots for the deck, Micochondria, and OBS.
+  The screen follows the active Cueola theme.
 
 ## OBS control
 
 OBS Studio 28+ ships obs-websocket. In OBS: Tools, WebSocket Server Settings,
 enable the server (default port `4455`), and copy the password if one is set.
-In KeyWi Bird, open the **OBS** row at the top of the setup panel, enter
-`ws://localhost:4455` and the password, and click **Connect OBS**. KeyWi Bird
-reconnects automatically next time.
+In KeyWi Bird, enter `ws://localhost:4455` and the password in the OBS row (or
+the wizard's OBS step) and click **Connect OBS**. KeyWi Bird reconnects
+automatically next time.
 
 Available OBS actions (all remappable): STREAM (start/stop), REC (start/stop),
 REC pause, V-CAM (virtual camera), CLIP (save replay buffer), OBS TAKE (studio
 transition), scene by slot (SCN 1-6, the first scenes in the list), scene by name,
-and mute by name. Keys light up live: the STREAM and REC keys glow while active,
-the current scene's key glows, and a **LIVE** / **REC** badge shows in the header.
+and mute by name. Keys light up live: the STREAM and REC keys pulse while
+active, the current scene's key lights its ring, and a **LIVE** / **REC**
+badge shows in the header. The **OBS program** dial adds a live program
+monitor on the touch strip, stream audio volume on the turn, and stream
+start/stop on the press.
 
-## Connect and Learn (owner bring-up, one time, with the deck plugged in)
+## Hardware bring-up (owner errand, with a real deck plugged in)
 
-The Stream Deck + XL is new enough that its exact USB profile (product id, key
-pixel size, touch strip dimensions, image rotation) is confirmed from your real
-unit rather than assumed. Do this once:
+Geometry is pinned per model from Elgato's published HID documentation, so
+there is no calibration UI: connect and it should simply be right. What still
+needs a pass on real hardware:
 
-1. Quit the Elgato Stream Deck app. Plug the deck in. Open Cueola in Chrome or
-   Edge, sign in, open **KeyWi Bird**, click **Connect deck**, pick the device.
-2. KeyWi Bird reads the device's own descriptor (HID Get Unit Information, feature
-   report `0x08`) for geometry, and remembers the product id.
-3. Click **Test pattern**. Each key should show its number, right way up. If it
-   reads sideways or upside down, open **Connect & Learn** and tap the Key
-   rotation buttons (0/90/180/270) until it is upright. If the grid shape is
-   wrong, set the correct Columns there.
-4. Turn each dial and press the touch zones, confirm the paired action fires.
-5. Confirm the touch strip shows the six readouts. The strip image path follows
-   the shipping Stream Deck + protocol (report `0x02` / command `0x0C`); if the
-   strip stays black on this hardware it is the one part most likely to need a
-   firmware specific tweak. Keys and dials keep working regardless.
+1. **Connect and learn.** Quit the Elgato app, plug in, sign in, open KeyWi
+   Bird, **Connect deck**, pick the device. Confirm the light show, the
+   default layout, and that **Live learn** opens the right editor for every
+   key, dial, and touch zone.
+2. **Test pattern.** Click **Test pattern**: each key shows its number, right
+   way up, 1 to N left to right, top to bottom. If anything reads wrong,
+   `CueolaStreamDeck.diagnose()` in the console dumps everything the driver
+   knows (model profile, rotation, the report sizes the hardware advertises)
+   for a fix in the model table.
+3. **Wipe legibility.** Play a clip and confirm the duration wipe, pre-roll
+   bar, and ring style all read at arm's length on 72 px keys (classic and
+   MK.2, the smallest key pixels).
+4. **Brightness.** Confirm the slider and the Deck light dial move the
+   physical backlight, and that auto-dim drops to 20% after 5 idle minutes
+   and snaps back on the first touch.
+5. **Strip.** Confirm the touch strip shows the dial readouts. The strip
+   image path follows the shipping Stream Deck + protocol; if the strip stays
+   black on a + XL it is the one part most likely to need a firmware specific
+   tweak. Keys and dials keep working regardless.
+6. **UR44 meters.** With the interface attached, start talkbackd and confirm
+   the Micochondria meters move with the real mic and buses
+   (`talkback/README.md`, Milestone 0).
 
-For Talkback A/B, start the daemon first (see `talkback/README.md`):
+For Micochondria, start the daemon first (see `talkback/README.md`):
 
 ```sh
 cd talkback/daemon && swift build -c release && .build/release/talkbackd
@@ -194,12 +292,14 @@ cd talkback/daemon && swift build -c release && .build/release/talkbackd
   per model profiles, Get Unit Information parser. Node testable:
   `node scripts/streamdeck-device.test.cjs` (46 assertions).
 - `cueola-streamdeck.js`: the browser controller and Deck Studio UI. Device
-  lifecycle, action catalog, profiles/mapping, the `fireSlot()` dispatch seam,
-  the talkback client, the paint loop, and OBS integration.
+  lifecycle, action catalog, profiles/mapping, per-key appearance overrides on
+  the slot, the `fireSlot()` dispatch seam, the setup wizard, the Micochondria
+  panel and pop-out, the paint loop (reactive specs, themes, auto-dim), and
+  OBS integration.
 - `cueola-obs.js`: an obs-websocket v5 client (Hello/Identify with SHA-256 auth
   via crypto.subtle, request/response, event mirroring). Attaches window.CueolaOBS.
 - `outrangutan/stream-deck-label.js`: key image renderer, extended with
-  `registerModel()` so a probed + XL profile can be injected at runtime.
+  `registerModel()` so a probed deck profile can be injected at runtime.
 - `window.cueolaSurfaceBridge` (in `cueola-app.js`): the single seam into the
   running show (KEYMAP action table, prompter/playout/clock dispatchers, and a
   flat paint snapshot).

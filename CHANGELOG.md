@@ -1,9 +1,92 @@
 # Changelog
 
+## v2.2.0 DRAFT: Overhaul round (built 2026-07-27; not yet released)
+
+One round between terms: the whole app on one visual language, a control
+surface that answers back, a security pass, and a show built for drilling.
+The owner console errands carried from v2.1 §1 stay open and gate release QA.
+
+### Liquid glass restyle
+- The whole app moved to the liquid glass look: no glows or drop shadows
+  anywhere in chrome; depth comes from layered translucency, not lighting
+  effects.
+- Tooltips are instant glass chips on hover (the shared data-tip engine);
+  status lamps are sharp solid dots.
+- KeyWi Bird gained a sixth deck theme, "Liquid Glass", matching the app.
+
+### Reactive Stream Deck keys & customization (KeyWi Bird)
+- Keys are reactive: playing SFX/playback keys sweep a duration wipe behind
+  the icon, pre-roll shows a thin bottom bar, loop pads carry a corner marker
+  (a loop has no end to count down to), and every press flashes for 150 ms.
+- Per-key appearance overrides in the key editor: accent color swatches plus
+  custom hex, searchable SF Symbol picker (85 symbols), label override and
+  Hide label, progress style (Wipe / Ring / Bottom bar), Press flash and
+  Reactive animation toggles, one-click Reset appearance.
+- Five-step setup wizard (intro, connect deck, Micochondria, OBS, theme);
+  brightness slider with auto-dim to 20% after 5 idle minutes, any input
+  restores it instantly.
+- Micochondria: pop-out window (glass look), split TKB/VofU strip zone,
+  PLBK vol dial, All talk off; meters and faders appear when talkbackd
+  reports levels.
+- Profiles and pages persist every override.
+
+### Security round
+- XSS escaping fixes across render paths.
+- talkbackd WebSocket origin gate: browser origins outside cueola.live /
+  localhost / 127.0.0.1 are rejected; native clients (no Origin header)
+  still connect.
+- Session-code keyspace widened: new codes are YYMM + 4 letters (e.g.
+  2607KWXR); old YYMM + 2 letter codes remain valid.
+- Staged Firestore rules updated for the round (deploy is an owner errand,
+  see deferrals below).
+
+### Sign-in consistency (the front door)
+- Identity-first entry card replaces type-a-code as the way in: sign in with
+  a username right on the card, and your assigned sessions are one tap away
+  through the same join guards. The typed session code survives as a quiet
+  "Have a session code?" fallback link for guests and remote operators.
+- Admin sign-in rides real Firebase Auth (synthetic
+  `<username>@admins.cueola.app` accounts minted from the dashboard);
+  @jonkost is the owner admin profile.
+- firebaseReady re-render fixes a boot race that could strand a signed-in
+  card on the offline message.
+- Front page redesigned around the new door: the identity card is the hero,
+  the app cards line up beneath it, and Demo and Blank Slate become compact
+  cards with inline actions, all in the liquid glass treatment (no glows, no
+  drop shadows).
+
+### The Break Room test show
+- Load Demo now offers Campus News (10 rows) to everyone, plus The Break Room
+  (advanced, 29 rows) as an instructor drill: a full late-night talk show
+  with segments, scripts, the question lane, complete paperwork (call sheet,
+  production schedule with tech checklist, safety plan, 12-row video patch,
+  16+1 audio/comms patch), a KeyWi profile named "The Break Room", and an
+  Outrangutan pad board. Its front-door button appears once you sign in as
+  an instructor.
+- Admins additionally get a dashboard "Create Test Show" button that seeds a
+  real cloud session with the same show.
+
+### Junk sweep & guides
+- 132 MB of untracked artifacts swept out of the working tree.
+- Guides refreshed for the round; three new video click-path scripts (sign in
+  and join, KeyWi Bird setup and custom keys, The Break Room drill night) in
+  docs/video-scripts.md.
+
+### Known deferrals (owner errands)
+- Staged Firestore rules from the security round are in-repo but **not
+  deployed** (owner deploys).
+- App Check rollout still owed (owner).
+- Hardware pass still owed: real-deck Connect-and-Learn and the UR44 meter
+  verify (owner).
+
+*(Release-day: flip CUEOLA_VERSION to 2.2.0, run `node scripts/bump-cache.mjs`,
+WORKER_SCHEMA 14 → 15 in sw.js, staged deploys per D8 rule 3; this entry loses
+its DRAFT mark then.)*
+
 ## v2.1.0: Term-boundary build (live on cueola.live 2026-07-21; owner QA in progress)
 
 The `V2_1_PLAN` window between terms: accounts and identity hardening, live
-reliability, cloud recovery, and platform polish. Phases 1–7, 9–11, 13 + 1.5
+reliability, cloud recovery, and platform polish. Phases 1-7, 9-11, 13 + 1.5
 code-complete; Phase 8 (Stage Plot) extends past the window by decision 17.
 Version flip to 2.1.0 done 2026-07-21. Owner QA (docs/V2_1_CHECKOUT.md) and
 the Firebase console errands in its §1 are still open.
@@ -20,7 +103,7 @@ the Firebase console errands in its §1 are still open.
 - Session-doc hygiene: preProActivity cap, purge cascade over all five
   subcollections.
 
-### Identity, dashboard, groups (Phases 3–6)
+### Identity, dashboard, groups (Phases 3-6)
 - Profiles + portal (class login codes, no passwords), avatars, entry gate.
 - Instructor dashboard: session browser, Class Keys, paperwork presets
   (Intro course / Full production), Entry Requirement, soft-delete/restore.
@@ -72,8 +155,8 @@ per D8 rule 3; see docs/V2_1_CHECKOUT.md.)*
 
 ## v2.0.0: Identity & collaboration build (2026-07-14) *(entry written retroactively 2026-07-21)*
 
-The `V2_PLAN` run (phases 1–5) plus the pre-launch ship sweep. Shipped to
-cueola.live 2026-07-14; this entry was reconstructed afterward — v2.0.0
+The `V2_PLAN` run (phases 1-5) plus the pre-launch ship sweep. Shipped to
+cueola.live 2026-07-14; this entry was reconstructed afterward: v2.0.0
 originally went out without a changelog entry.
 
 - **Data safety & deploy gap:** staged shape-validating Firestore rules
@@ -97,19 +180,19 @@ originally went out without a changelog entry.
 
 ## v1.0.0: Production-readiness build (2026-07-05)
 
-The complete `CUEOLA MASTER PLAN` run (phases 0–8), hardening the app after the
+The complete `CUEOLA MASTER PLAN` run (phases 0-8), hardening the app after the
 AVT Lab live run. One operator, one machine, keyboard-first, nothing hangs the
 live view.
 
-### Phase 0 — Discovery & architecture audit
+### Phase 0: Discovery & architecture audit
 - `docs/ARCHITECTURE.md`: four surfaces (rundown, Script Op, Outrangutan, Flowmingo),
   show-state model, media pipeline, test inventory, top-5 live-failure risk list.
 
-### Phase 1 — Branding refresh
+### Phase 1: Branding refresh
 - New brand SVGs (`assets/Brand/`) everywhere: front page, dashboard sprite,
   favicons (incl. the Outrangutan output window), zero stale artwork.
 
-### Phase 2 — Outrangutan media engine core
+### Phase 2: Outrangutan media engine core
 - Import-time probe v2: undecodable/damaged files **rejected at import**; duration,
   dimensions, aspect stored; 8 s stall guard.
 - Stills first-class (hold-until-advanced or timed); pause → GO resumes from the
@@ -119,35 +202,35 @@ live view.
 - `scripts/make-test-media.sh` generates the 16:9/4:3/9:16 + stills + SFX +
   broken-file test set.
 
-### Phase 3 — Rundown stability & sync hardening
+### Phase 3: Rundown stability & sync hardening
 - The "Questions"-segment blanking fixed: fingerprint-gated snapshot renders
-  (key-sorted stableStringify), in-place badge patching, scroll preserved —
+  (key-sorted stableStringify), in-place badge patching, scroll preserved:
   a playout write storm now causes **zero** table rebuilds.
 - Versioned updates (ts + seq) drop stale packets; ~1 Hz continuous playout;
   explicit **SYNC RECONNECTING** chip for followers.
 
-### Phase 4 — SFX system
+### Phase 4: SFX system
 - Rundown playback/audio cells link Outrangutan SFX pads: manual green **SFX**
   button + per-cell auto-fire-on-advance. Same-tab local fast path ≈ 3 ms
   trigger-to-start. Stable pad/bank ids (renames never break links). Followers
   see a transient "SFX · name" chip.
 
-### Phase 5 — Single-operator control
+### Phase 5: Single-operator control
 - Central keymap registry drives dispatch **and** the `?` reference. Arrows always
-  drive the rundown — including with Script Op open. Space/J/K/L prompter
+  drive the rundown, including with Script Op open. Space/J/K/L prompter
   transport; G/P/S playout; Shift+S fade; Shift+Esc PANIC.
-- `/` jog-wheel scrub across the whole script — local until Enter commits.
+- `/` jog-wheel scrub across the whole script, local until Enter commits.
 
-### Phase 6 — Control & inspector redesign
+### Phase 6: Control & inspector redesign
 - Shared UI kit (cards, segmented controls, steppers, toggles, context pills);
   Outrangutan inspector rebuilt; 3×3 visual theme grids; one global Overlay-size
   stepper; duplicate buttons removed; shared click-outside/Esc dismissal;
   Message Center + Planda Bear polish; <920 px Outrangutan overlap fixed.
 
-### Phase 7 — Production hardening
+### Phase 7: Production hardening
 - **Show preflight**: validates script/talent/cloud, every rundown→playout link,
   the media library (present + decodable + known dimensions), SFX banks, a timed
-  cloud write→ack round-trip, and theme assets — with jump-to-row links. Runs on
+  cloud write→ack round-trip, and theme assets, with jump-to-row links. Runs on
   Go Live and from Settings ▸ Production.
 - **Error containment**: window-level handlers + guards around every live-critical
   render/dispatch path; an exception logs, toasts once, and the show keeps running.
@@ -161,16 +244,16 @@ live view.
 - Script Op drawer cleanup: theme controls restored to the 3×3 tile grid;
   full-width control sections.
 
-### Phase 8 — Dress rehearsal & release
+### Phase 8: Dress rehearsal & release
 - `docs/REHEARSAL_CHECKLIST.md` (scripted AVT-Lab-shaped rehearsal) and
   `docs/OPERATOR_CARD.md` (keymap-derived shortcut card + 10-line go-live list).
 - Rehearsal executed end-to-end; punch list closed at zero P0/P1. Fixes landed:
   - Legacy cue migration preserved Outrangutan link fields (`outCueId` etc.).
-  - `enterRundown` records its screen — the resume banner can no longer claim a
+  - `enterRundown` records its screen, so the resume banner can no longer claim a
     stale "live" state.
   - `Outrangutan.preflight()` reads the joined session's show record directly
     from IndexedDB (was: loaded the standalone show and mutated module state).
-  - The resume heartbeat is gated on a session screen being up — a deliberate
+  - The resume heartbeat is gated on a session screen being up, so a deliberate
     leave can no longer resurrect the resume banner.
 
 ### Post-rehearsal polish (same release, operator-requested)
@@ -185,14 +268,14 @@ live view.
   different names), stray emoji replaced with SF Symbols per the design
   guidelines, sessions empty-state copy rewritten.
 - Theme pickers unified on the **circle swatches** (the entry-page/Settings
-  look) across every surface — Script Op drawer and Flowmingo Op overlay
+  look) across every surface, Script Op drawer and Flowmingo Op overlay
   included; the rectangle tiles are gone.
-- The live **Cue scrubber mirrors its position into the Script Op editor** —
+- The live **Cue scrubber mirrors its position into the Script Op editor**:
   the operator sees the script fly by while dragging, not just a percentage.
 - Script Op panel gained its own **× close** (the topbar toggle can be covered
   when the panel overlaps it); hidden inside the dedicated pop-out window.
 - Build rundown: the sticky #/name columns no longer let the scrolled table
-  show through — hover/edit dimming moved off the sticky cells onto the drag
+  show through: hover/edit dimming moved off the sticky cells onto the drag
   icon itself, and both rundown tables switched from `border-collapse:collapse`
   to `separate` (collapsed borders paint on the table grid, not the cells, so
   scrolling strokes slid straight through the pinned columns).
@@ -200,7 +283,7 @@ live view.
 ### Inspector redesign (operator-requested, Keynote-style)
 - The Script Op drawer's stacked accordion of bordered boxes is gone: **icon
   tabs** at the top pick one control group (Prompter / Cue & On Air / Clocks &
-  Alerts / Formatting) shown as a single flat page — bold text headers,
+  Alerts / Formatting) shown as a single flat page: bold text headers,
   hairline separators, controls directly on the panel. Active tab remembered.
 - All dead accordion CSS removed; the pattern is codified in
   `DESIGN_GUIDELINES.md` ("The inspector standard") as the template for

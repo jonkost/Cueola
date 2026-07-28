@@ -1,5 +1,13 @@
 rules_version = '2';
 
+// STAGED REVISION, deploys manually with the rest of this file. It changes:
+//   1. SEC-5: files/notes/groups/assignments subcollection deletes now carry
+//      the same isAdmin() gate as the session-doc delete.
+//   2. SEC-11: the admins/global read branch is removed (no code reads it);
+//      delete the frozen doc in the console after this deploys.
+//   3. INC-13: session ids tightened from 1-160 chars to 3-24, with a scoped
+//      carve-out for legacy pbfile_* sibling attachment docs.
+//
 // v2.1 (D1): STUDENTS still have no username/password authentication — codes
 // and profiles are unchanged (university rule, enforced structurally). ADMINS
 // now sign in through Firebase Auth (Email/Password with synthetic
@@ -54,8 +62,13 @@ service cloud.firestore {
     }
 
     function validSessionId(code) {
-      // Includes ordinary session codes and the legacy pbfile_* sibling docs.
-      return code.matches('^[A-Za-z0-9_.-]{1,160}$');
+      // INC-13: ordinary session codes are 3-24 chars (covers legacy YYMM+2
+      // ids and current longer codes; every UI input caps at 20). Legacy
+      // pbfile_* sibling attachment docs keep their longer composite ids for
+      // the documented migration window (see the files subcollection note);
+      // clients still read, and stale shells still write, that layout.
+      return code.matches('^[A-Za-z0-9_.-]{3,24}$')
+        || code.matches('^pbfile_[A-Za-z0-9_.-]{1,153}$');
     }
 
     function validSessionDocument(code, data) {
@@ -213,7 +226,7 @@ service cloud.firestore {
     function validAssignment(assignmentId, code, data) {
       return validCanonicalId(assignmentId)
         // productionSession is a foreign key to the existing session path.
-        // Preserve Cueola's 1–160 character session-code contract; generated
+        // Session codes follow validSessionId's 3-24 char contract; generated
         // assignment/profile/position identifiers use validCanonicalId().
         && validSessionId(code)
         && data is map
@@ -312,14 +325,22 @@ service cloud.firestore {
       // Phase 1 item 3 target. Reads/writes are shape-limited now so the rules
       // can be deployed before the client migration without reopening rules.
       match /files/{fileId} {
-        allow get, delete: if validSessionId(code) && fileId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow get: if validSessionId(code) && fileId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        // SEC-5: delete matches the session-doc gate above. (TIGHTENING,
+        // release-day deploy. Student clients sweep attachment docs on note
+        // delete with a silent catch; orphans wait for the dashboard purge.)
+        allow delete: if validSessionId(code) && fileId.matches('^[A-Za-z0-9_.-]{1,160}$') && isAdmin();
         allow list: if validSessionId(code);
         allow create, update: if validSessionId(code) && validFileDocument(code, fileId, request.resource.data);
       }
 
       // Phase 4 per-note target.
       match /notes/{noteId} {
-        allow get, delete: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow get: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        // SEC-5: delete matches the session-doc gate above. (TIGHTENING,
+        // release-day deploy. A denied student note delete rides the existing
+        // permission-denied fallback in writePlandaBearNotes.)
+        allow delete: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$') && isAdmin();
         allow list: if validSessionId(code);
         allow create, update: if validSessionId(code) && validNote(noteId, request.resource.data);
       }
@@ -328,7 +349,11 @@ service cloud.firestore {
       // today's session-doc paperwork fields; group ids are identifier-safe
       // so masked prePro.<key> patches stay legal.
       match /groups/{groupId} {
-        allow get, delete: if validSessionId(code) && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$');
+        allow get: if validSessionId(code) && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$');
+        // SEC-5: delete matches the session-doc gate above. (TIGHTENING,
+        // release-day deploy. Only the signed-in dashboard purge deletes
+        // group docs.)
+        allow delete: if validSessionId(code) && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$') && isAdmin();
         allow list: if validSessionId(code);
         allow create, update: if validSessionId(code)
           && groupId.matches('^[A-Za-z_][A-Za-z0-9_]{0,63}$')
@@ -341,7 +366,11 @@ service cloud.firestore {
       // and bounds only: without Firebase Auth they cannot prove whether the
       // caller is an instructor, administrator, or student.
       match /assignments/{assignmentId} {
-        allow get, delete: if validSessionId(code) && validCanonicalId(assignmentId);
+        allow get: if validSessionId(code) && validCanonicalId(assignmentId);
+        // SEC-5: delete matches the session-doc gate above. (TIGHTENING,
+        // release-day deploy. Only the signed-in dashboard purge deletes
+        // assignment docs.)
+        allow delete: if validSessionId(code) && validCanonicalId(assignmentId) && isAdmin();
         allow list: if validSessionId(code);
         allow create: if validSessionId(code)
                       && validAssignment(assignmentId, code, request.resource.data);
@@ -372,9 +401,11 @@ service cloud.firestore {
       // v2.1 (D1): uid-keyed admin accounts. Reads need only a signed-in Auth
       // user (a fresh admin must read their own doc to resolve their session);
       // writes are super-only, and no one can delete their own doc (lockout
-      // guard). The legacy 'global' list-doc is FROZEN read-only for one
-      // release as rollback safety — its writes are gone.
-      allow read: if docId == 'global' || request.auth != null;
+      // guard). SEC-11: the legacy 'global' list-doc read branch is gone (no
+      // code reads it; only uid-keyed reads remain). Delete the frozen
+      // admins/global doc in the console after this deploys; the
+      // docId != 'global' write guards below keep it from coming back.
+      allow read: if request.auth != null;
       allow create, update: if docId != 'global'
         && isSuperAdmin()
         && validAdminAccountDocument(request.resource.data);

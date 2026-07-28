@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '2.1.0';
+const CUEOLA_VERSION = '2.2.0';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 
 // ── v2.1 D12.7: runtime budgets — measure, then defer, then gate ────────────
@@ -229,7 +229,7 @@ function renderLiveStatusItem(name, record) {
   button.className = 'ls-status-recovery';
   button.dataset.actionLabel = actionLabel;
   button.textContent = actionLabel;
-  button.title = actionLabel;
+  button.dataset.tip = actionLabel;
   button.setAttribute('aria-label', actionLabel);
   button.addEventListener('click', () => recoverLiveSubsystem(name));
   actions.replaceChildren(button);
@@ -312,6 +312,7 @@ function setLiveSelectedCue(index, options={}) {
   if (activate) liveSessionController.setActiveCue(index, { select:true, reason:options.reason || 'local-cue' });
   else liveSessionController.setSelectedCue(index, { reason:options.reason || 'selected-cue' });
   lsIdx = liveSessionState().selectedCueIndex;
+  notifyControlSurfaceState();
   return lsIdx;
 }
 
@@ -321,6 +322,7 @@ function adoptLiveActiveCue(index, options={}) {
     reason: options.reason || 'authoritative-cue',
   });
   if (options.select === true) lsIdx = liveSessionState().selectedCueIndex;
+  notifyControlSurfaceState();
   return liveSessionState().activeCueIndex;
 }
 
@@ -447,7 +449,7 @@ function renderLiveLinkChip(link) {
   // D12.4: the playout chip carries the ARMED verdict when the link is live.
   const armedSuffix = link.key === 'playout' && link.status !== 'off' && typeof link.meta?.armed === 'boolean'
     ? (link.meta.armed ? '' : ' · NOT ARMED') : '';
-  chip.title = `${link.label}: ${detail}${armedSuffix ? ' (first GO is not proven ready)' : ''}`;
+  chip.dataset.tip = `${link.label}: ${detail}${armedSuffix ? ' (first GO is not proven ready)' : ''}`;
   chip.setAttribute('aria-label', `${link.label} link ${link.status}: ${detail}${armedSuffix}`);
   const text = chip.querySelector('.ls-link-word');
   if (text) text.textContent = (LIVE_LINK_LABELS[link.key] || link.label.toUpperCase()) + armedSuffix;
@@ -650,6 +652,27 @@ function cueolaThemeToPlandaBearTheme(t) {
 function hasPlandaBearThemeOverride() {
   try { return localStorage.getItem('cueola_plandabear_theme') !== null; } catch { return false; }
 }
+// Boot-time paint of every static picker swatch from CUEOLA_THEME_SWATCHES,
+// so index.html markup carries no hex of its own (INC-6: single source).
+const PLANDABEAR_SWATCH_SOURCE = { glacier:'cool', honey:'warm', 'polar-bear':'white', eucalyptus:'green' };
+function paintThemeSwatches() {
+  document.querySelectorAll('.theme-swatch[data-theme] .ts-preview').forEach(el => {
+    const hex = CUEOLA_THEME_SWATCHES[el.closest('.theme-swatch').dataset.theme];
+    if (hex) el.style.background = hex;
+  });
+  document.querySelectorAll('.theme-swatch[data-plandabear-theme-choice] .ts-preview').forEach(el => {
+    const name = el.closest('.theme-swatch').dataset.plandabearThemeChoice;
+    const hex = CUEOLA_THEME_SWATCHES[PLANDABEAR_SWATCH_SOURCE[name] || name];
+    if (hex) el.style.background = hex;
+  });
+  CUEOLA_THEMES.forEach(name => {
+    const dot = document.getElementById(`pt-t-${name}`);
+    const hex = CUEOLA_THEME_SWATCHES[name];
+    if (dot && hex) dot.style.background = hex;
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', paintThemeSwatches, { once: true });
+else paintThemeSwatches();
 function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
 let plandaBearTheme = normalizePlandaBearTheme(hasPlandaBearThemeOverride() ? localStorage.getItem('cueola_plandabear_theme') : cueolaThemeToPlandaBearTheme(currentTheme));
@@ -1531,7 +1554,7 @@ function containError(label, err) {
     const now = Date.now();
     if (now - _errToastTs > 4000) {   // throttled: an error loop must not bury the operator in toasts
       _errToastTs = now;
-      toast('⚠ ' + label + ' hit an error (logged to the show log). The show keeps running.', 3500);
+      toast(label + ' hit an error (logged to the show log). The show keeps running.', 3500);
     }
   } catch {}
 }
@@ -1591,11 +1614,16 @@ function dismissResumeBanner() {
   clearResumeState();
   logShow('session', 'Resume banner dismissed');
 }
-function resumeLastSession() {
+async function resumeLastSession() {
   const r = readResumeState();
   if (!r) { clearResumeState(); return; }
   const banner = document.getElementById('resumeBanner');
   if (banner) banner.hidden = true;
+  const ready = await waitForFirebaseReady();
+  // Same entry gate as every other door (decision 12a): a resume must not
+  // slip past the class-key check. On deny the gate opens the front-door
+  // join modal itself, so we simply stop here.
+  if (!(await cueolaEntryGateAllows(r.code, 'Resuming'))) return;
   session = {
     code: r.code, role: r.role || 'instructor', userName: r.name || '',
     profileId: r.profileId || '', username: r.username || '',
@@ -1631,10 +1659,8 @@ function resumeLastSession() {
       if (r.scriptOp) setTimeout(() => { try { if (!livePrompterOpen) toggleLivePrompterPanel(); } catch {} }, 500);
     }
   };
-  waitForFirebaseReady().then(ready => {
-    if (ready) { enterRundown(); setTimeout(after, 400); }
-    else { try { openLocalSession(r.code, r.name || 'Operator', r.role || 'instructor'); } catch {} setTimeout(after, 400); }
-  });
+  if (ready) { enterRundown(); setTimeout(after, 400); }
+  else { try { openLocalSession(r.code, r.name || 'Operator', r.role || 'instructor'); } catch {} setTimeout(after, 400); }
   logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + ((r.lsIdx ?? 0) + 1) + ')' : ''));
 }
 // Refresh the record every 20 s while in a session — the ts doubles as the
@@ -1723,6 +1749,8 @@ function leaveSessionForFrontPage() {
   document.getElementById('flowOp')?.classList.remove('on');
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
+  sessionQuestionCards = [];   // prepared question cards belong to the session just left
+  _outNameLinksPresent = false;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2153,7 +2181,7 @@ function setCloudSyncState(state='synced', detail='') {
     else if (state === 'local') dot.classList.add('local');
     else if (state === 'off') dot.classList.add('off');
   }
-  if (badge) badge.title = detail;
+  if (badge) badge.dataset.tip = detail;
   if (document.getElementById('liveshow')?.classList.contains('on')) renderLiveStatusRail();
 }
 
@@ -2185,11 +2213,11 @@ const LEARNING_LESSONS = [
   {
     id:'start',
     area:'Start',
-    title:'What The Three Tools Do',
+    title:'What The Five Apps Do',
     time:'3 min',
-    intro:'Cueola is the show brain. Planda Bear is the prep package. Flowmingo is the script display and remote prompter.',
+    intro:'Cueola is the show brain. Planda Bear is the prep package. Flowmingo is the script display and remote prompter. Outrangutan is the playback deck. KeyWi Bird puts the whole rig on a Stream Deck.',
     navigation:[
-      'Start inside this guide. Use the lesson list to jump between Cueola, Planda Bear, and Flowmingo.',
+      'Start inside this guide. Use the lesson list to jump between Cueola, Planda Bear, Flowmingo, Outrangutan, and KeyWi Bird.',
       'Use Voice Over, Replay Lesson, and the speed control at the top of the guide while you learn.',
       'Use Previous, Mark Complete, and Next at the bottom of each lesson to move through the training.'
     ],
@@ -2197,13 +2225,14 @@ const LEARNING_LESSONS = [
       'Use Cueola to create or join a show, build rows, add cues, and run the live view.',
       'Use Planda Bear before show day for call sheets, schedules, safety plans, patch sheets, comments, and PDF exports.',
       'Use Flowmingo when talent needs a clean script screen that can be controlled from another window or device.',
-      'Keep one shared session code. That code is the bridge between the rundown, paperwork, and prompter.'
+      'Use Outrangutan to cue and play video and sound, and KeyWi Bird when one operator should drive it all from a Stream Deck.',
+      'Keep one shared session code. That code is the bridge between the rundown, paperwork, prompter, and playback.'
     ],
     callouts:[
-      ['Session code','The same code connects collaborators, Planda Bear, Flowmingo Talent Display, and Flowmingo Remote Op.'],
-      ['Best first move','Load Demo, open this guide beside it, and walk through the lessons once before using a real show.']
+      ['Session code','The same code connects collaborators, Planda Bear, Flowmingo Talent Display, Flowmingo Remote Op, and Outrangutan in Session mode.'],
+      ['Best first move','Load the Campus News demo (10 rows), open this guide beside it, and walk through the lessons once.']
     ],
-    checks:['I know what Cueola, Planda Bear, and Flowmingo each do.','I know the session code is the shared connection point.'],
+    checks:['I know what each of the five apps does.','I know the session code is the shared connection point.'],
     actions:[['Load Demo','demo'],['Open Blank Slate','blank']]
   },
   {
@@ -2213,9 +2242,9 @@ const LEARNING_LESSONS = [
     time:'4 min',
     intro:'One profile follows you through every session: no password, just the class login code your instructor gave the class. Your portal gathers your sessions, your position, and everything assigned to you.',
     navigation:[
-      'Tap the profile button in the centered row under the Cueola wordmark on the home screen to open Your Cueola profile.',
-      'First time? Choose Create profile. Coming back? Choose I have a username and type it. There is no password to remember.',
-      'From your portal, open any session card to jump straight in, or open Notes to see the crew board.'
+      'The first card on the home screen is the front door: type your username into Your sessions and press Sign in. There is no password to remember.',
+      'First time? Use the New here? Create your profile link under the card. Coming back? The same card signs you in on any device.',
+      'Once signed in, the card lists your assigned sessions, one tap to open. All sessions & notes opens your full portal, and the small profile button in the row under the wordmark does the same.'
     ],
     steps:[
       'Create your profile once: enter the class login code, pick your name and username, then choose your look and theme.',
@@ -2228,7 +2257,7 @@ const LEARNING_LESSONS = [
       ['No passwords','Usernames are managed by your instructors. If yours stops working, ask them. Codes rotate between terms.'],
       ['Everything that needs you','Mentions, assigned checklist items, and to-dos follow your profile, so checking your portal before call time clears surprises.']
     ],
-    checks:['I can open my profile from the home screen.','I know my username works without a password.','I know where my open to-dos and unseen notes appear.'],
+    checks:['I can sign in from the Your sessions card.','I know my username works without a password.','I know where my open to-dos and unseen notes appear.'],
     actions:[['Open Your Profile','profile']]
   },
   {
@@ -2238,12 +2267,12 @@ const LEARNING_LESSONS = [
     time:'5 min',
     intro:'A Cueola rundown is built from rows. Each row is one beat in the production, and each cue cell holds the instructions for one department.',
     navigation:[
-      'From the home screen, choose Join Session, Blank Slate, or Load Demo.',
+      'From the home screen, sign in and tap one of Your sessions, use the Have a session code? link to type one, or open Blank Slate or a Demo.',
       'Inside the rundown, use Add Row to create the next beat, then click cue cells across that row.',
       'Use Edit in the topbar when you need to reorder rows, rename labels, or remove old beats.'
     ],
     steps:[
-      'Join a session or create a Blank Slate code.',
+      'Open your assigned session from the Your sessions card, join with a typed code, or create a Blank Slate code.',
       'Add a row for each show beat: open, intro, segment, package, conversation, outro, or any custom label.',
       'Choose Timed when the row has a known duration. Choose Flex when it can breathe.',
       'Click any cue cell to add Video, Audio, Playback, GFX, Lighting, or Script instructions.',
@@ -2393,6 +2422,33 @@ const LEARNING_LESSONS = [
     actions:[['Open Outrangutan','outrangutan']]
   },
   {
+    id:'keywi',
+    area:'KeyWi Bird',
+    title:'KeyWi Bird And Micochondria',
+    time:'5 min',
+    intro:'KeyWi Bird turns any Stream Deck into the control surface for the whole rig: Outrangutan playback and SFX, the Cueola rundown, the Flowmingo prompter, the Micochondria mics, and OBS. No deck handy? Preview mode puts a virtual one on screen.',
+    navigation:[
+      'Open KeyWi Bird from its home screen card. It asks you to sign in first: the deck drives the live show, so it needs to know who is at the wheel.',
+      'On the first visit the setup wizard walks you through connecting a deck, Micochondria, OBS, and a theme. Reopen it any time from the toolbar.',
+      'Quit the Elgato Stream Deck app before you connect; it holds the USB device and blocks the browser. No hardware? Press See it on screen.'
+    ],
+    steps:[
+      'Press Connect deck in Chrome or Edge and pick your deck from the list, or start Preview mode. Keys arrive pre-laid in bands by app, like channel strips on a console.',
+      'Watch the keys react: a playing SFX or playback key fills with a duration wipe, an armed cue shows a thin pre-roll bar along the bottom, and every press flashes so you know the deck heard you.',
+      'Make any key yours: click it to remap the action, then set its label, accent color, symbol or key art, and progress style (Wipe, Ring, or Bottom bar). Reset appearance undoes it all.',
+      'Pick one of the six themes: Broadcast, Neon, Synthwave, Terminal, Aurora, or Liquid Glass. A theme reskins the physical keys and the on-screen deck alike.',
+      'Start the talkbackd program and the Micochondria panel comes alive with a strip per mic: hold TKB to talk to the crew, hold VofU to speak to the room. Each strip shows an ON AIR lamp, a live meter, and a volume fader.',
+      'Press Pop out to keep Micochondria in its own little window beside the show. All talk off cuts both mics instantly.'
+    ],
+    callouts:[
+      ['When to use it','A show with one busy operator: playback GO, SFX pads, rundown next, prompter play, mics, and OBS scenes all land on real keys, so eyes stay on the room instead of the mouse.'],
+      ['Live learn and pages','Press Live learn, touch a control on the hardware, and pick what it should do. Layouts save as pages, so a rehearsal deck and a show deck can live side by side.'],
+      ['HYPE','Yes, there is a HYPE key. A rainbow light show ripples across the whole deck. Pure fun, worth a press.']
+    ],
+    checks:['I can connect a deck or start Preview mode.','I know what the wipe, pre-roll bar, and press flash mean.','I can remap a key and hold TKB to talk.'],
+    actions:[['Open KeyWi Bird','keywi']]
+  },
+  {
     id:'support',
     area:'Support',
     title:'First Fixes When Something Feels Off',
@@ -2443,28 +2499,6 @@ const cueolaTTS = {
   localAssetRefs: new Set(),
   localMissingRefs: new Set(),
 };
-
-function ttsExpand(text) {
-  return String(text || '')
-    .replace(/\bCueola\b/g, 'Cue oh la')
-    .replace(/\bPlanda Bear\b/g, 'Planda Bear')
-    .replace(/\bFlowmingo\b/g, 'Flow mingo')
-    .replace(/\bGFX\b/g, 'graphics')
-    .replace(/\bPDF\b/g, 'P D F')
-    .replace(/\bVO\b/g, 'voice over')
-    .replace(/\bOp\b/g, 'operator')
-    .replace(/\bMP3\b/g, 'M P 3')
-    .replace(/\bUI\b/g, 'user interface')
-    .replace(/\b[A-Z]{2,}\b/g, word => word.toLowerCase());
-}
-
-function ttsClean(text) {
-  return ttsExpand(text)
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[✓✗↺•·→←↑↓]/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
 
 function ttsStop() {
   if (cueolaTTS._audio) {
@@ -2594,10 +2628,6 @@ async function ttsSpeak(text, priority=true, refId='') {
   if (refId && await playLocalNarration(refId)) return true;
   setTTSAssetStatus(refId ? `Kokoro file pending: ${refId}` : 'Kokoro narration file pending.');
   return false;
-}
-
-function ttsCancelAndSpeak(text, refId='') {
-  return ttsSpeak(text, true, refId);
 }
 
 function learningNarrationRefId(lesson) {
@@ -2749,7 +2779,7 @@ function renderLearningLesson() {
     </div>
     <div class="guide-lesson-copy">${esc(lesson.intro)}</div>
     ${lesson.video ? `
-    <div class="guide-video-slot"><a class="guide-mini-btn" href="${esc(lesson.video)}" target="_blank" rel="noopener">▶ Watch the video</a></div>
+    <div class="guide-video-slot"><a class="guide-mini-btn" href="${esc(lesson.video)}" target="_blank" rel="noopener">${sfIcon('media.play')} Watch the video</a></div>
     ` : ''}
     ${(lesson.navigation || []).length ? `
     <section class="guide-section guide-nav-section" id="guide-sec-where">
@@ -2795,7 +2825,7 @@ function renderLearningLesson() {
     <div class="guide-actions">
       <div class="guide-action-left">
         ${(lesson.actions || []).length ? `<span class="guide-try-label">Try it now →</span>` : ''}
-        ${(lesson.actions || []).map(([label, action]) => `<button type="button" class="guide-mini-btn guide-try-btn" onclick="openGuideAction('${action}')">▶ ${esc(label)}</button>`).join('')}
+        ${(lesson.actions || []).map(([label, action]) => `<button type="button" class="guide-mini-btn guide-try-btn" onclick="openGuideAction('${action}')">${sfIcon('media.play')} ${esc(label)}</button>`).join('')}
       </div>
       <div class="guide-action-right">
         <button type="button" class="guide-mini-btn" onclick="selectLearningLesson(${activeLearningLesson - 1})" ${activeLearningLesson <= 0 ? 'disabled' : ''}>Previous</button>
@@ -2847,6 +2877,7 @@ function openGuideAction(action) {
   else if (action === 'talent') openPrompterApp();
   else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
   else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
+  else if (action === 'keywi') openControlSurface();
 }
 
 function markPaperworkDirty() {
@@ -2928,6 +2959,7 @@ function logoutAdmin() {
 }
 
 function updateAdminUI() {
+  updateInstructorOnlyUI();
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
   if (adminSession) {
@@ -2938,6 +2970,29 @@ function updateAdminUI() {
     btn.className = 'tbtn tbtn-ghost';
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// INSTRUCTOR-ONLY FRONT-PAGE UI
+// ─────────────────────────────────────────────────────────────
+// True when the device carries an instructor identity: either the signed-in
+// CueolaIdentity profile has the admin role (the same accessor renderFrontDoor
+// uses to print "@name · admin") or an admin console session is active.
+function instructorIdentityActive() {
+  try {
+    const p = window.CueolaIdentity && CueolaIdentity.profile();
+    if (p && p.role === 'admin') return true;
+  } catch {}
+  return Boolean(adminSession);
+}
+
+// The Break Room demo is an instructor drill, not a public sample. Its button
+// ships hidden in the markup; this is the only thing that reveals it.
+function updateInstructorOnlyUI() {
+  const btn = document.getElementById('demoBreakRoomBtn');
+  if (btn) btn.hidden = !instructorIdentityActive();
+}
+document.addEventListener('cueola-identity-change', updateInstructorOnlyUI);
+window.addEventListener('firebaseReady', updateInstructorOnlyUI);
 
 // ─────────────────────────────────────────────────────────────
 // ADMIN LOGIN OVERLAY
@@ -3022,9 +3077,9 @@ function renderAdminBody() {
         <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
         <button class="admin-act-btn" onclick="openPaperworkHub()">Open Planda Bear</button>
       </div>` : ''}
-      <div style="font-size:12px;color:var(--text3);line-height:1.6;margin-top:8px">
+      <div class="u-note-lg u-mt8">
         Signed in as <b>${esc(adminSession.name)}</b> (${esc(adminSession.username || '')}).
-        Instructor accounts are managed on the <a href="dashboard.html#accounts" style="color:var(--accent)">Dashboard → Accounts</a> page.
+        Instructor accounts are managed on the <a href="dashboard.html#accounts" class="link-accent">Dashboard → Accounts</a> page.
       </div>
     </div>`;
   }
@@ -3032,7 +3087,7 @@ function renderAdminBody() {
   // ── Session sources ──
   if (session.code || session.isExpert) {
     html += `<div class="admin-section">
-      <div class="admin-section-label">Session Sources <span style="color:var(--text3);font-size:9px">(this session only)</span></div>
+      <div class="admin-section-label">Session Sources <span class="admin-section-tag">(this session only)</span></div>
       <div class="admin-sources-grid">
         ${renderSourcesRow('video','Video')}
         ${renderSourcesRow('audio','Audio')}
@@ -3045,33 +3100,33 @@ function renderAdminBody() {
   if (session.code) {
     const presenceNames = getActivePresencePeople().map(p=>p.name);
     const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    html += `<div class="admin-section" style="margin-top:16px">
+    html += `<div class="admin-section u-mt16">
       <div class="admin-section-label">Live Control</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="adminFollowSelect" class="field-in" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px">
+      <div class="u-row-wrap">
+        <select id="adminFollowSelect" class="field-in admin-follow-in">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'}${presenceNames.length?'':' style="opacity:.45;cursor:not-allowed"'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
+        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
       </div>
     </div>`;
   }
   if (session.code || session.isExpert) {
-    html += `<div class="admin-section" style="margin-top:16px">
+    html += `<div class="admin-section u-mt16">
       <div class="admin-section-label">Show Clock</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
-      <button class="admin-act-btn danger" onclick="restartShowClock()">↺ Restart Show Clock</button>
+      <div class="u-note u-mb8">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
+      <button class="admin-act-btn danger" onclick="restartShowClock()">${sfIcon('action.reset')} Restart Show Clock</button>
     </div>`;
   }
   if (session.code || session.isExpert) {
     const positionOptions = getRolePositionOptions();
     html += `<div class="admin-section">
       <div class="admin-section-label">Role and Planda Bear Assignments</div>
-      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-bottom:8px">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save Assignments</b>.</div>
+      <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save Assignments</b>.</div>
       <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
-      <div class="admin-src-row" style="margin-bottom:10px">
+      <div class="admin-src-row u-mb10">
         <span class="admin-src-label">Positions</span>
         <div class="admin-src-chips">
-          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${JSON.stringify(p).replace(/"/g,'&quot;')})" title="Remove ${esc(p)} from this production">x</button></span>`).join('')}
+          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
           <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
         </div>
       </div>
@@ -3086,27 +3141,27 @@ function renderAdminBody() {
   // ── People in session (remove a device from the code) ──
   if (session.code && !session.isDemo && !session.isExpert) {
     const people = getActivePresencePeople();
-    html += `<div class="admin-section" style="margin-top:16px">
+    html += `<div class="admin-section u-mt16">
       <div class="admin-section-label">People in Session</div>
       ${people.length ? `<div class="admin-list">` + people.map(p => {
         const isMe = sameParticipantName(p.name, session.userName);
         return `<div class="admin-item">
           <div class="admin-item-name">${esc(p.name)}
-            <span class="admin-level-chip ${p.role==='instructor'?'alc-full':'alc-standard'}" style="margin-left:7px">${p.role==='instructor'?'INST':'STU'}</span>
+            <span class="admin-level-chip u-ml7 ${p.role==='instructor'?'alc-full':'alc-standard'}">${p.role==='instructor'?'INST':'STU'}</span>
           </div>
-          <div style="flex:1"></div>
+          <div class="u-spacer"></div>
           ${isMe ? '<span class="admin-item-you">YOU</span>'
-                 : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${JSON.stringify(p.name).replace(/"/g,'&quot;')})">Remove</button></div>`}
+                 : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
         </div>`;
       }).join('') + `</div>`
-      : `<div style="font-size:11px;color:var(--text3)">No one is connected right now.</div>`}
-      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;margin-top:8px">Remove disconnects that person's device from this code. They can rejoin with the same code. Move the session to a new code to keep them out.</div>
+      : `<div class="u-note">No one is connected right now.</div>`}
+      <div class="u-note-sm u-mt8">Remove disconnects that person's device from this code. They can rejoin with the same code. Move the session to a new code to keep them out.</div>
     </div>`;
 
     // ── Session rescue: move the whole show to a fresh code ──
-    html += `<div class="admin-section" style="margin-top:16px">
+    html += `<div class="admin-section u-mt16">
       <div class="admin-section-label">Session Code</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:8px">Current code: <b style="color:var(--text);font-family:var(--mono)">${esc(session.code)}</b>. If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
+      <div class="u-note u-mb8">Current code: <b class="u-mono-strong">${esc(session.code)}</b>. If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
       <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move Session to a New Code</button>
     </div>`;
   }
@@ -3120,7 +3175,6 @@ const ROLE_POSITION_OPTIONS = [
   'Director',
   'Assistant Director',
   'Production Manager',
-  'PM',
   'Stage Manager',
   'Show Caller',
   'Technical Director',
@@ -3245,14 +3299,6 @@ function collectSessionParticipantNames(data={}) {
     Object.values(data.presence).forEach(p => names.push(p?.name));
   }
   return cleanUniqueStrings(names);
-}
-
-function getAssignmentPeople(savedRows=[]) {
-  return cleanUniqueStrings([
-    ...sessionParticipantNames,
-    ...getActivePresencePeople().map(p => p.name),
-    ...savedRows.map(row => row?.person || row?.name),
-  ]);
 }
 
 function paperworkIdForLabel(label='') {
@@ -3457,7 +3503,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
             <label class="admin-add-label">Position</label>
             <select class="admin-in" data-role-field="positionId">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
           </div>
-          <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" title="Remove assignment">x</button>
+          <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove assignment" aria-label="Remove assignment">${sfIcon('action.close')}</button>
         </div>
         <div class="field">
           <label class="admin-add-label">Planda Bear Paperwork</label>
@@ -3808,16 +3854,13 @@ function onAssignmentRevisionSnapshot(data={}) {
   hydrateRoleAssignments({ force:true });
 }
 
-// Compatibility alias for any cached inline handler from the pre-Phase-6 shell.
-function autoSaveRoleAssignments() { markRoleAssignmentsUnsaved(); }
-
 function renderSourcesRow(key, label) {
   const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
   const removed = sessionCustomSources.__removed?.[key] || [];
   const custom = (sessionCustomSources[key]||[]);
   const all = [...defaults.filter(s=>!removed.includes(s)), ...custom];
   const chips = all.map(s => {
-    return `<span class="admin-src-chip">${esc(s)}<button class="rm" onclick="removeSessionSource('${key}',${JSON.stringify(s).replace(/"/g,'&quot;')})" title="Remove ${esc(s)}">x</button></span>`;
+    return `<span class="admin-src-chip">${esc(s)}<button class="rm" onclick="removeSessionSource('${key}',${esc(JSON.stringify(s))})" data-tip="Remove ${esc(s)}" aria-label="Remove ${esc(s)}">${sfIcon('action.close')}</button></span>`;
   }).join('');
   return `<div class="admin-src-row">
     <span class="admin-src-label">${label}</span>
@@ -3972,13 +4015,6 @@ function addCustomSource(key) {
   renderAdminBody();
 }
 
-function removeCustomSource(key, idx) {
-  if (!sessionCustomSources[key]) return;
-  sessionCustomSources[key].splice(idx,1);
-  syncSessionSources();
-  renderAdminBody();
-}
-
 function removeSessionSource(key, value) {
   const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
   if (!sessionCustomSources.__removed) sessionCustomSources.__removed = {};
@@ -4033,7 +4069,7 @@ function migrateOldCue(type, d) {
   // P8 (dress-rehearsal find): the legacy rebuild above replaced the object and
   // silently dropped the Outrangutan link fields (P4) — a linked cue in the old
   // {state,clipName} shape lost its playout/SFX link on the next sync echo.
-  ['outCueId', 'outAuto', 'outPadId', 'outPadAuto'].forEach(k => { if (d[k] !== undefined) migrated[k] = d[k]; });
+  ['outCueId', 'outAuto', 'outPadId', 'outPadAuto', 'outCueName', 'outPadName'].forEach(k => { if (d[k] !== undefined) migrated[k] = d[k]; });
   return migrated;
 }
 
@@ -4087,13 +4123,14 @@ function restoreLocalDraftAsRundownBaseline() {
   return true;
 }
 
-// v2.1 D5: standardized on the shared two-letter format (YYMM + 2 letters
-// from the 24-letter no-I/O alphabet = 576 codes/month). Collisions are the
+// v2.1 D5 + SEC-2: standardized on the shared format (YYMM + 4 letters from
+// the 24-letter no-I/O alphabet, about 331k codes/month). Collisions are the
 // create-if-missing transaction's job, never this function's.
 function genCode() {
-  return window.CueolaSessionClone
-    ? CueolaSessionClone.generateEpisodeCode()
-    : `${String(new Date().getFullYear()).slice(-2)}${pad(new Date().getMonth() + 1)}AA`;
+  if (window.CueolaSessionClone) return CueolaSessionClone.generateEpisodeCode();
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const pick = () => abc[Math.floor(Math.random() * abc.length)];
+  return `${String(new Date().getFullYear()).slice(-2)}${pad(new Date().getMonth() + 1)}${pick()}${pick()}${pick()}${pick()}`;
 }
 
 function waitForFirebaseReady(timeoutMs=FIREBASE_WAIT_MS) {
@@ -4308,7 +4345,8 @@ async function joinSession() {
       const d = snap.data() || {};
       // Per-session admin toggle: entry may require an active class login code
       // (profiles whose own code is still active pass without extra friction).
-      const gate = window.CueolaIdentity ? await CueolaIdentity.entrySatisfied(d, 'stud-entry-code') : { pass: true };
+      // Signed-in admins pass, same exemption as the side-door gate.
+      const gate = (window.CueolaIdentity && !adminSession) ? await CueolaIdentity.entrySatisfied(d, 'stud-entry-code') : { pass: true };
       if (!gate.pass) {
         if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('stud-entrycode-row');
         errEl.textContent = gate.msg || 'This session requires a class login code.';
@@ -4385,7 +4423,8 @@ async function joinPreProSession() {
         return;
       }
       // Per-session admin toggle: entry may require an active class login code.
-      const gate = window.CueolaIdentity ? await CueolaIdentity.entrySatisfied(snap.data() || {}, 'pp-entry-code') : { pass: true };
+      // Signed-in admins pass, same exemption as the side-door gate.
+      const gate = (window.CueolaIdentity && !adminSession) ? await CueolaIdentity.entrySatisfied(snap.data() || {}, 'pp-entry-code') : { pass: true };
       if (!gate.pass) {
         if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('pp-entrycode-row');
         errEl.textContent = gate.msg || 'This session requires a class login code.';
@@ -4476,12 +4515,47 @@ async function startBlankSlate() {
   }
 }
 
-function loadDemo() {
+function loadDemo(which) {
+  if (which === 'breakroom') {
+    // Defense in depth: the button is instructor-gated, and so is the loader.
+    if (!instructorIdentityActive()) { toast('The Break Room is an instructor drill. Sign in as an instructor to load it.'); return; }
+    loadBreakRoomDemo(); return;
+  }
   session = { code:'DEMO1', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
   show = { name:'Campus News: Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
   freeTextMode = false;
   enterRundown();
+}
+
+// The Break Room: the advanced offline demo (break-room-show.js). 29 rows with
+// full scripts, the question lane cards, the whole paperwork package, and
+// playback cells linked BY NAME to the matching Outrangutan show. Fully local,
+// isDemo, nothing syncs and nothing is saved to the cloud.
+function loadBreakRoomDemo() {
+  const data = window.CueolaBreakRoom, Kit = window.CueolaBreakRoomKit;
+  if (!data || !Kit) { toast('The Break Room demo module did not load. Reload the page and try again.'); return; }
+  session = { code:'DEMO2', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
+  show = { name:data.meta.sessionNameSuggestion, start:data.meta.showStart };
+  beats = Kit.buildBeats().map(migrateBeat);
+  freeTextMode = false;
+  sessionQuestionCards = Kit.questionPasteLines();
+  _outNameLinksPresent = true;
+  // Paperwork rides the normal persist path (demo sessions never reach the
+  // cloud; the write lands in this browser's local copy for the DEMO2 code).
+  try { persistPreProData(Kit.buildPrePro(Date.now()), 'Demo seed'); } catch {}
+  seedBreakRoomDeckLayouts(Kit);
+  enterRundown();
+}
+
+// Stage the two authored KeyWi pages as named layouts. The deck module adds
+// each once per device the next time it loads a deck config (by name, never
+// touching the operator's current or default layout selection).
+function seedBreakRoomDeckLayouts(Kit) {
+  try {
+    const seeds = Kit.deckProfileSeeds();
+    if (seeds.length) localStorage.setItem('cueola_streamdeck_seed_layouts', JSON.stringify(seeds));
+  } catch {}
 }
 
 function goHome() {
@@ -5096,15 +5170,22 @@ function setupFirestore() {
           ptUpdateFromCueola(prompterText);
         }
       }
-      if (isFlowmingoTalentActive() && d.prompter?.control?.action && !isPrompterSelfSender(d.prompter.control.sender)) {
-        const control = d.prompter.control;
-        if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
-          flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
-        }
+      if (isFlowmingoTalentActive() && d.prompter) {
+        // controlQueue first (every unseen command, in order); legacy single
+        // slot when the writer is an old shell.
+        const queued = unseenPrompterQueueControls(d.prompter.controlQueue);
+        const controls = queued || (d.prompter.control?.action && !isPrompterSelfSender(d.prompter.control.sender) ? [d.prompter.control] : []);
+        controls.forEach(control => {
+          if (!control?.action) return;
+          if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
+            flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
+          }
+        });
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       if (d.showClock) applyRemoteShowClock(d.showClock);  // shared start/pause clock
       if (d.liveCall) applyRemoteLiveCall(d.liveCall);     // D11.3: READY·TRACK·ROLL·TAKE for every viewer
+      if (d.busExecutor) _busExecutorClaim = d.busExecutor;    // exclusivity claim, adopt before executing
       if (d.controlBus) applyControlBusCommand(d.controlBus);  // D11.7: cross-machine deck actions
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
@@ -5115,10 +5196,18 @@ function setupFirestore() {
       if (_hb?.ts && !isPrompterSelfSender(_hb.sender)
           && _hb.ts !== _lastSeenTalentHeartbeatTs && (Date.now() - _hb.ts) < 20000) {
         _lastSeenTalentHeartbeatTs = _hb.ts;
+        _recordTalentSighting(_hb.sender);   // counts for preflight even if the message is rejected below
         _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ..._hb });
       }
       // Outrangutan playback module — cue list + live status published back to us.
       if (d.outrangutan) applyOutrangutanState(d.outrangutan);
+      // Prepared question cards (seeded test shows): datalist suggestions for
+      // the question lane. Strings or { pasteLine } objects both accepted.
+      if (Array.isArray(d.questionLane)) {
+        sessionQuestionCards = d.questionLane
+          .map(card => typeof card === 'string' ? card : String(card?.pasteLine || ''))
+          .filter(Boolean);
+      }
       // Handle force commands
       if (d.forceCmd && d.forceCmd.ts) {
         const cmd = d.forceCmd;
@@ -5356,16 +5445,16 @@ function renderPresence(map) {
     shown.map(p=>{
       const pos = pbPositionFor(p.name);
       const tip = `${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}${pos?` · ${esc(pos)}`:''}${canInspect?' · click for info':''}`;
-      const click = canInspect ? ` onclick="openPersonInfo(${JSON.stringify(p.name).replace(/"/g,'&quot;')})"` : '';
+      const click = canInspect ? ` onclick="openPersonInfo(${esc(JSON.stringify(p.name))})"` : '';
       return `<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}${canInspect?' pi-click':''}" data-fullname="${tip}"${click}>${initials(p.name)}</div>`;
     }).join('')+
     (extra>0?`<div class="p-avatar extra" data-fullname="${extra} more in session">+${extra}</div>`:'');
   document.getElementById('presenceTooltip').innerHTML =
-    `<div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px">IN SESSION</div>`+
+    `<div class="p-tip-head">IN SESSION</div>`+
     active.map(p=>{
       const col=p.role==='instructor'?'var(--accent)':'var(--green)';
       const pos = pbPositionFor(p.name);
-      return `<div class="p-tip-row" title="${esc(p.name)}${pos?` · ${esc(pos)}`:''}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span>${pos?`<span class="p-tip-pos">${esc(pos)}</span>`:''}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
+      return `<div class="p-tip-row" data-tip="${esc(p.name)}${pos?` · ${esc(pos)}`:''}"><div class="p-tip-dot" style="background:${col};color:${col}"></div><span class="p-tip-name">${esc(p.name)}</span>${pos?`<span class="p-tip-pos">${esc(pos)}</span>`:''}<span class="p-tip-label">${p.role==='instructor'?'INST':'STU'}</span></div>`;
     }).join('');
   refreshAdminBodyForSessionPeople();
 }
@@ -5414,7 +5503,7 @@ async function openPersonInfo(name) {
 
   body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
   actions.innerHTML = `
-    <button class="btn-secondary" style="color:var(--red)" onclick="hideModal('personInfoModal');removePersonFromSession(${JSON.stringify(name).replace(/"/g,'&quot;')})">Remove from Session</button>
+    <button class="btn-secondary btn-danger-text" onclick="hideModal('personInfoModal');removePersonFromSession(${esc(JSON.stringify(name))})">Remove from Session</button>
     <button class="btn-primary" onclick="hideModal('personInfoModal')">Done</button>`;
   showModal('personInfoModal');
 
@@ -5458,9 +5547,9 @@ async function openPersonInfo(name) {
       <div class="pi-stat"><b>${stats.todosDone}</b><span>To-Dos done</span></div>
       <div class="pi-stat"><b>${paperworkSaves.length}</b><span>PB saves</span></div>
     </div>
-    ${stats.todosOpen ? `<div class="pi-card" style="margin-top:7px">Open to-dos assigned to them: <b>${stats.todosOpen}</b></div>` : ''}
+    ${stats.todosOpen ? `<div class="pi-card u-mt7">Open to-dos assigned to them: <b>${stats.todosOpen}</b></div>` : ''}
     ${sectionLine ? `<div class="pi-sec">Paperwork touched</div><div class="pi-card">${sectionLine}</div>` : ''}
-    ${lastTouch ? `<div class="pi-sec">Last contribution</div><div class="pi-card">${esc(pbAgo(lastTouch))}</div>` : (paperworkSaves.length || stats.posts ? '' : `<div class="pi-card" style="margin-top:7px">No paperwork saves or notes from ${esc(name)} in this session yet.</div>`)}`;
+    ${lastTouch ? `<div class="pi-sec">Last contribution</div><div class="pi-card">${esc(pbAgo(lastTouch))}</div>` : (paperworkSaves.length || stats.posts ? '' : `<div class="pi-card u-mt7">No paperwork saves or notes from ${esc(name)} in this session yet.</div>`)}`;
 }
 
 window.addEventListener('beforeunload', leavePresence);
@@ -5487,10 +5576,6 @@ function isInteractiveTarget(target) {
 
 function isInteractiveEventTarget(event) {
   return isInteractiveTarget(event?.target) || isInteractiveTarget(document.activeElement);
-}
-
-function isLiveScriptPanelTarget(target) {
-  return Boolean(target?.closest?.('#lsSidebar'));
 }
 
 function consumeRemoteKey(e) {
@@ -5666,10 +5751,40 @@ window.cueolaSurfaceBridge = {
       playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', remaining: (live.remaining != null ? live.remaining : null), dur: (live.dur != null ? live.dur : null), cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
       prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
-      live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') }
+      live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') },
+      // Additive: the deck's next-cue info key reads current and next row here.
+      liveRowInfo: {
+        current: _sdSafe(() => _sdRowInfo(ai), null),
+        next: _sdSafe(() => _sdRowInfo(liveNextPlayableCueIndex(ai)), null)
+      }
     };
   }
 };
+function _sdRowInfo(index) {
+  if (!Number.isFinite(index) || index < 0 || !beats[index]) return null;
+  const b = beats[index];
+  return { index, title: _sdBeatName(b) || b.info || '' };
+}
+
+// Same-tab latched-state probe for cross-surface deck keys. Outrangutan's key
+// renderer (and any control surface sharing this tab) asks whether a bus verb
+// is currently latched-active from THIS app's LOCAL state only: strict boolean,
+// no Firestore reads, unknown pairs answer false. Momentary verbs (rundown
+// go/back) always answer false: pressed feedback is the deck's own input flash.
+window.cueolaControlSurfaceState = function (target, action) {
+  try {
+    if (target === 'prompter') return action === 'toggle' ? !!ptPlaying : false;
+    if (target === 'rundown') return (action === 'take' || action === 'abort') ? !!_rtrtCall : false;
+    if (target === 'clock') return !!liveClockRunning;
+    return false;
+  } catch (e) { return false; }
+};
+// 'cueola-surface-state' window event: cheap push dispatched after the deck-visible
+// state mutators (prompter play/pause, show clock start/stop, RTRT arm/resolve,
+// live row change) so an attached deck repaints promptly; the deck listens if present.
+function notifyControlSurfaceState() {
+  try { window.dispatchEvent(new Event('cueola-surface-state')); } catch (e) {}
+}
 
 // Login-gated entry from the front-page Control Surface card. The gate + screen
 // switch live in the module; this just forwards (and warns if it failed to load).
@@ -5779,7 +5894,7 @@ function renderJogScrub() {
   ov.innerHTML = `<div class="km-card jog-card">
     <div class="km-head"><h3>Scrub script</h3><span class="jog-pct">${(pos / total * 100).toFixed(1)}%</span></div>
     <div class="jog-list">${rows}</div>
-    <div class="jog-bar" title="Drag to scrub"><div class="jog-fill" style="width:${(pos / total * 100).toFixed(2)}%"></div></div>
+    <div class="jog-bar" data-tip="Drag to scrub"><div class="jog-fill" style="width:${(pos / total * 100).toFixed(2)}%"></div></div>
     <div class="km-note">Wheel or drag to scrub · Shift = faster · ↑ ↓ jump rows · ← → fine · <b>Enter cues the prompter here</b> · Esc cancels</div>
     <div class="km-actions"><button type="button" class="btn-secondary jog-cancel">Cancel</button><button type="button" class="btn-primary jog-commit">Cue here (Enter)</button></div>
   </div>`;
@@ -5965,9 +6080,8 @@ function toggleEditMode() {
   const btn = document.getElementById('editModeBtn');
   if (btn) {
     setSymbolButtonLabel(btn, editMode ? 'action.confirm' : 'action.edit', editMode ? 'Done Editing' : 'Edit');
-    btn.style.background = editMode ? 'color-mix(in srgb,var(--accent) 16%,transparent)' : '';
-    btn.style.borderColor = editMode ? 'var(--accent)' : '';
-    btn.style.color = editMode ? 'var(--accent)' : '';
+    if (editMode) btn.dataset.state = 'editing';
+    else delete btn.dataset.state;
   }
   renderRundown();
 }
@@ -5979,25 +6093,25 @@ function renderTableHeaders() {
     const m = COL_META[type];
     if (editMode) {
       return `<th class="col-cue${type==='script'?' col-script-c':''}"
-                style="color:${m.color};cursor:grab;user-select:none"
+                style="color:${m.color}"
                 draggable="true"
                 ondragstart="colDragStart(event,'${type}')"
                 ondragover="colDragOver(event,this)"
                 ondrop="colDrop(event,'${type}')"
                 ondragend="colDragEnd(event)"
                 data-col="${type}"
-                title="Drag to reorder">${sfIcon(m.symbol)} ${m.label} ${sfIcon('action.drag','col-grip')}</th>`;
+                data-tip="Drag to reorder">${sfIcon(m.symbol)} ${m.label} ${sfIcon('action.drag','col-grip')}</th>`;
     }
     return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${sfIcon(m.symbol)} ${m.label}</th>`;
   }).join('');
-  const dragCol = editMode ? `<th class="col-drag" title="Drag rows to reorder">${sfIcon('action.drag')}</th>` : '<th class="col-drag"></th>';
+  const dragCol = editMode ? `<th class="col-drag" data-tip="Drag rows to reorder">${sfIcon('action.drag')}</th>` : '<th class="col-drag"></th>';
   thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
 }
 
 function colDragStart(e, type) {
   colDragSrc = type;
   e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '.5';
+  e.currentTarget.dataset.state = 'dragging';
 }
 function colDragOver(e, el) {
   e.preventDefault();
@@ -6020,7 +6134,7 @@ function colDrop(e, targetType) {
   reRenderActiveGrid();
 }
 function colDragEnd(e) {
-  e.currentTarget.style.opacity = '';
+  delete e.currentTarget.dataset.state;
   document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
   colDragSrc = null;
 }
@@ -6033,6 +6147,7 @@ function toggleSegmentCollapse(id) {
 }
 
 function renderRundown() {
+  resolveOutrangutanNameLinks();   // name-authored playback links pick up ids when a matching show is present
   renderTableHeaders();
   const name = show.name||'Untitled Show';
   document.getElementById('rd-name').textContent = name;
@@ -6080,9 +6195,9 @@ function renderRundown() {
       const cc = segChildCounts[b.id] || 0;
       const editActions = editMode ? `
         <div class="row-edit-actions">
-          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
-          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
-          <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
+          <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
         </div>` : '';
       html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
         <td class="seg-td" colspan="${colOrder.length + 4}">
@@ -6103,23 +6218,23 @@ function renderRundown() {
     cueNum++;
     const editActions = editMode ? `
       <div class="row-edit-actions">
-        <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move up">▲ Up</button>
-        <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled style="opacity:.3;cursor:not-allowed"':''} title="Move down">▼ Down</button>
-        <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" title="Add row before">+ Before</button>
-        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" title="Remove row">${sfIcon('action.delete')} Remove</button>
-        <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" title="Add row after">+ After</button>
+        <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
+        <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
+        <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" data-tip="Add row before">+ Before</button>
+        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
+        <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" data-tip="Add row after">+ After</button>
       </div>` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
-      <td class="cd cd-drag" style="cursor:${editMode?'grab':'default'}" title="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
+      <td class="cd cd-drag" data-tip="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
       <td class="cd cd-num">${cueNum}</td>
-      <td class="cd" style="padding:8px 6px">
+      <td class="cd cd-pad">
         <div class="cd-name">${esc(b.info||'—')}${rundownRowPresenceHTML(b.id)}</div>
         ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
-        <span class="style-pill style-${b.style||'flex'}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px">${sfIcon(b.style==='timed'?'state.timed':'state.flex')} ${(b.style||'flex').toUpperCase()}</span>
+        <span class="style-pill pill-inline style-${b.style||'flex'}">${sfIcon(b.style==='timed'?'state.timed':'state.flex')} ${(b.style||'flex').toUpperCase()}</span>
         ${editMode ? '' : '<div class="row-open-hint">Click row to edit</div>'}
         ${editActions}
       </td>
-      <td class="cd" style="padding:8px 6px">
+      <td class="cd cd-pad">
         ${startStr!=='—'?`<div class="cd-time-start">${startStr}</div>`:''}
         <div class="cd-time-dur">${dur}</div>
       </td>
@@ -6159,7 +6274,7 @@ function getCueCell(b, type) {
   const scriptText = type === 'script' ? scriptCueText(d) : '';
   const isEmpty = !on && !off && (type !== 'script' || !scriptText) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
   if (isEmpty) {
-    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" title="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
+    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" data-tip="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
   const lines = [
     on  ? `<div class="cue-on-line"><span class="cue-on-dot">${sfIcon('marker.go')}</span>${esc(on)}</div>`  : '',
@@ -6173,13 +6288,6 @@ function getCueCell(b, type) {
     <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
     <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
   </div>`;
-}
-
-function getCueSummary(b) {
-  const pType = COL_DEFAULTS.find(t => b.cues?.[t] && (getCueOn(b.cues[t]) || getCueOff(b.cues[t])));
-  if (!pType) return { stateStr:'', srcStr:'', detStr:'' };
-  const d = b.cues[pType];
-  return { stateStr: getCueOff(d)||'', srcStr: getCueOn(d)||'', detStr:'' };
 }
 
 function scriptLineCount(text) {
@@ -6324,7 +6432,7 @@ function arGoStep2() {
     return `<button type="button" class="opt-card" id="artype-${type}"
         style="--oc:${tc.color};--ob:${tc.bg}"
         onclick="arSelectCueType('${type}')">
-      <div class="opt-icon" style="font-size:24px">${sfIcon(tc.symbol)}</div>
+      <div class="opt-icon opt-icon-lg">${sfIcon(tc.symbol)}</div>
       <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
       <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
     </button>`;
@@ -6371,10 +6479,6 @@ function arCreateRowAndOpenCueBuilder() {
   setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
 }
 
-function arGoStep3() {
-  arCreateRowAndOpenCueBuilder();
-}
-
 function arGoStep1() {
   document.getElementById('ar-step-2').classList.remove('on');
   document.getElementById('ar-step-1').classList.add('on');
@@ -6392,10 +6496,10 @@ function buildArContext() {
   ctx.innerHTML = `<div class="ar-ctx-label">Last ${last4.length} row${last4.length>1?'s':''}</div>`+
     last4.map(b => {
       const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
-      const badges = types.map(t=>`<span class="type-badge tb-${t}" style="font-size:7px;color:${CT[t].color};background:${CT[t].bg}">${sfIcon(CT[t].symbol)}</span>`).join('');
+      const badges = types.map(t=>`<span class="type-badge tb-${t} tb-mini" style="color:${CT[t].color};background:${CT[t].bg}">${sfIcon(CT[t].symbol)}</span>`).join('');
       return `<div class="ar-ctx-row">
         <span class="ar-ctx-num">${beats.indexOf(b)+1}</span>
-        <span style="display:flex;gap:2px;align-items:center">${badges||'<span style="color:var(--text3);font-size:10px">—</span>'}</span>
+        <span class="ar-ctx-badges">${badges||'<span class="ar-ctx-none">—</span>'}</span>
         <span class="ar-ctx-name">${esc(b.info||'—')}</span>
         <span class="ar-ctx-dur">${fmtDur(b)}</span>
       </div>`;
@@ -6470,11 +6574,11 @@ function buildFreeTextCueFields(type, d) {
     </div>
     <div class="field">
       <label class="field-lbl">Script Copy</label>
-      <textarea class="field-in" id="cc-s-text" rows="8" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Type or paste the script for Flowmingo.">${esc(d.text||'')}</textarea>
+      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="8" placeholder="Type or paste the script for Flowmingo.">${esc(d.text||'')}</textarea>
     </div>` : ''}
     <div class="field">
       <label class="field-lbl">Notes</label>
-      <textarea class="field-in" id="cc-notes" rows="3" style="font-size:13px;line-height:1.6" placeholder="Anything the team needs to know.">${esc(d.notes||'')}</textarea>
+      <textarea class="field-in cc-note-ta" id="cc-notes" rows="3" placeholder="Anything the team needs to know.">${esc(d.notes||'')}</textarea>
     </div>`;
 }
 
@@ -6487,11 +6591,8 @@ function ccChips(chips, fn) {
     return `<button type="button" class="cc-chip" onclick="${fn}(${val})">${lbl}</button>`;
   }).join('');
 }
-function ccTabHint(icon, text) {
-  return `<div class="cc-hint"><span class="cc-hint-icon">${icon}</span><span>${text}</span></div>`;
-}
 function ccCustomSrcField(id, val) {
-  return `<input class="field-in cc-custom-in" id="${id}" value="${esc(val||'')}" placeholder="Type custom source name…" style="display:none;margin-top:8px" oninput="ccCustomSrcInput('${id}')">`;
+  return `<input class="field-in cc-custom-in" id="${id}" value="${esc(val||'')}" placeholder="Type custom source name…" style="display:none" oninput="ccCustomSrcInput('${id}')">`;
 }
 
 // ── Cue config tab switcher ─────────────────────────
@@ -6554,7 +6655,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 · Wide" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6566,7 +6667,7 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['Black', ...getSources('video')], 'ccVOffDest')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-dest-custom','_ccVOffBuild')">+ Custom</button>
         </div>
-        <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none;margin-top:8px" oninput="_ccVOffBuild()">
+        <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none" oninput="_ccVOffBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
@@ -6575,11 +6676,11 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['Take','Dissolve','Media Wipe','Fade to Black'], 'ccVOffTrans')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-trans-custom','_ccVOffBuild')">+ Custom</button>
         </div>
-        <input class="field-in cc-custom-in" id="cc-v-off-trans-custom" value="" placeholder="Type custom transition…" style="display:none;margin-top:8px" oninput="_ccVOffBuild()">
+        <input class="field-in cc-custom-in" id="cc-v-off-trans-custom" value="" placeholder="Type custom transition…" style="display:none" oninput="_ccVOffBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Dissolve to Black" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6602,11 +6703,11 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['Open Mic','Track PLBK','Fade In','Play'], 'ccAOnCueType')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-cue-custom','_ccAOnBuild')">+ Custom</button>
         </div>
-        <input class="field-in cc-custom-in" id="cc-a-cue-custom" value="" placeholder="Type custom cue type…" style="display:none;margin-top:8px" oninput="_ccAOnBuild()">
+        <input class="field-in cc-custom-in" id="cc-a-cue-custom" value="" placeholder="Type custom cue type…" style="display:none" oninput="_ccAOnBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic · Host" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6618,7 +6719,7 @@ function buildCueConfigFields(type, d) {
           ${ccChips([...getSources('audio'), 'All'], 'ccAOffSrc')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-off-custom','_ccAOffBuild')">+ Custom</button>
         </div>
-        <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none;margin-top:8px" oninput="_ccAOffBuild()">
+        <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none" oninput="_ccAOffBuild()">
       </div>
       ${step(2,'What will you do with it?')}
       <div class="cc-section">
@@ -6629,7 +6730,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic · Host" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6650,25 +6751,25 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-section" id="pOn-dur-row" style="display:none">
         <div class="cc-section-lbl">Duration (TRT)</div>
-        <div style="display:flex;gap:10px;align-items:flex-start">
-          <div class="field" style="flex:1;text-align:center">
+        <div class="cc-row-start">
+          <div class="field cc-time-col">
             <label class="field-lbl">Min</label>
-            <input class="field-in" id="cc-play-min" type="number" min="0" max="99" value="${d.trtMin||''}" placeholder="0" style="text-align:center;font-family:var(--mono);font-size:20px" oninput="ccPOnBuild()">
+            <input class="field-in cc-time-in" id="cc-play-min" type="number" min="0" max="99" value="${d.trtMin||''}" placeholder="0" oninput="ccPOnBuild()">
           </div>
-          <div style="padding-top:34px;color:var(--text3);font-size:22px;font-family:var(--mono)">:</div>
-          <div class="field" style="flex:1;text-align:center">
+          <div class="cc-time-sep">:</div>
+          <div class="field cc-time-col">
             <label class="field-lbl">Sec</label>
-            <input class="field-in" id="cc-play-sec" type="number" min="0" max="59" value="${d.trtSec||''}" placeholder="00" style="text-align:center;font-family:var(--mono);font-size:20px" oninput="ccPOnBuild()">
+            <input class="field-in cc-time-in" id="cc-play-sec" type="number" min="0" max="59" value="${d.trtSec||''}" placeholder="00" oninput="ccPOnBuild()">
           </div>
         </div>
-        <div class="field" style="margin-top:10px">
-          <label class="field-lbl">SMPTE Timecode <span style="color:var(--text3);font-weight:400">(HH:MM:SS:FF)</span></label>
-          <input class="field-in" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" style="font-family:var(--mono)" oninput="ccPOnBuild()">
+        <div class="field u-mt10">
+          <label class="field-lbl">SMPTE Timecode <span class="lbl-hint">(HH:MM:SS:FF)</span></label>
+          <input class="field-in u-mono" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" oninput="ccPOnBuild()">
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 · 0:45 TRT" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6689,7 +6790,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK · Take CAM 1" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6703,7 +6804,7 @@ function buildCueConfigFields(type, d) {
           ${ccChips(['Lower 3rd','Full Screen','Bug'], 'ccGOnType')}
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-g-custom','ccGOnBuild')">+ Custom</button>
         </div>
-        <input class="field-in cc-custom-in" id="cc-g-custom" value="${esc(d.customType||'')}" placeholder="Type custom graphic type…" style="display:none;margin-top:8px" oninput="ccGOnBuild()">
+        <input class="field-in cc-custom-in" id="cc-g-custom" value="${esc(d.customType||'')}" placeholder="Type custom graphic type…" style="display:none" oninput="ccGOnBuild()">
       </div>
       <div class="cc-section">
         <div class="cc-section-lbl">Source</div>
@@ -6726,12 +6827,12 @@ function buildCueConfigFields(type, d) {
         </div>
       </div>
       <div class="field">
-        <label class="field-lbl">Content <span style="color:var(--text3);font-weight:400">(what it reads / shows)</span></label>
+        <label class="field-lbl">Content <span class="lbl-hint">(what it reads / shows)</span></label>
         <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, sponsor bug, intro card" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On · Lower 3rd GFX" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6752,7 +6853,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It · Lower 3rd" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6785,8 +6886,8 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-section" id="lOn-intensity-row" style="display:none">
         <div class="cc-section-lbl">Intensity</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="field-in" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" style="max-width:120px" oninput="_ccLOnBuild()">
+        <div class="u-row">
+          <input class="field-in u-maxw120" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" oninput="_ccLOnBuild()">
           <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
         </div>
       </div>
@@ -6795,19 +6896,19 @@ function buildCueConfigFields(type, d) {
         <div class="cc-chip-grid" id="lOn-color">
           ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
         </div>
-        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" style="margin-top:6px" oninput="_ccLOnBuild()">
+        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" oninput="_ccLOnBuild()">
       </div>
       <div class="cc-section" id="lOn-gobo-row" style="display:none">
         <div class="cc-section-lbl">Gobo</div>
         <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 · Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
       </div>
       <div class="field">
-        <label class="field-lbl">Lighting notes <span style="color:var(--text3);font-weight:400">(cue numbers, focus, wash details)</span></label>
-        <textarea class="field-in" id="cc-l-notes-detail" rows="2" style="font-size:12px;line-height:1.5" placeholder="e.g. Cue 14.5: Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
+        <label class="field-lbl">Lighting notes <span class="lbl-hint">(cue numbers, focus, wash details)</span></label>
+        <textarea class="field-in cc-note-ta-sm" id="cc-l-notes-detail" rows="2" placeholder="e.g. Cue 14.5: Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">○ READY (standby)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (standby)</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key · Cue On" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6838,7 +6939,7 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ TAKE (go)</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (go)</label>
         <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key · Fade Out" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6867,13 +6968,13 @@ function buildCueConfigFields(type, d) {
           <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-custom','_ccSOnBuild')">+ Custom</button>
         </div>
         ${ccCustomSrcField('cc-s-custom', d.customSrc)}
-        <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="Speaker name for Flowmingo headers…" maxlength="80" autocomplete="off" style="margin-top:8px">
+        <input class="field-in u-mt8" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="Speaker name for Flowmingo headers…" maxlength="80" autocomplete="off">
       </div>
       ${step(2,'What will you do with it?')}
       <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
         <div class="field">
-          <label class="field-lbl">Script copy <span style="color:var(--text3);font-weight:400">(feeds Flowmingo)</span></label>
-          <textarea class="field-in" id="cc-s-text" rows="5" style="resize:vertical;line-height:1.7;font-size:14px" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
+          <label class="field-lbl">Script copy <span class="lbl-hint">(feeds Flowmingo)</span></label>
+          <textarea class="field-in cc-script-ta" id="cc-s-text" rows="5" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
           <div class="marker-chip-row">
             <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
             <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
@@ -6882,19 +6983,19 @@ function buildCueConfigFields(type, d) {
           </div>
         </div>
         <div class="field">
-          <label class="field-lbl">Upload script <span style="color:var(--text3);font-weight:400">(.txt or .pdf)</span></label>
-          <input type="file" id="cc-s-file" accept=".txt,.md,.pdf" style="color:var(--text2);font-size:12px" onchange="loadScriptFile(this,'cc-s-text')">
+          <label class="field-lbl">Upload script <span class="lbl-hint">(.txt or .pdf)</span></label>
+          <input type="file" class="cc-file-in" id="cc-s-file" accept=".txt,.md,.pdf" onchange="loadScriptFile(this,'cc-s-text')">
         </div>
       </div>
       <div id="sOn-dialogue-panel" style="${isDialogue?'':'display:none'}">
         <div class="field">
-          <label class="field-lbl">Dialogue note <span style="color:var(--text3);font-weight:400">(brief description only)</span></label>
+          <label class="field-lbl">Dialogue note <span class="lbl-hint">(brief description only)</span></label>
           <input class="field-in" id="cc-s-dialogue" value="${esc(d.dialogueNote||'')}" placeholder="e.g. Host and guest discuss the segment topic (unscripted)" maxlength="160" autocomplete="off">
         </div>
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">▶ SCRIPT CUE</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} SCRIPT CUE</label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host · Begin" maxlength="120" autocomplete="off">
       </div>`;
 
@@ -6905,8 +7006,8 @@ function buildCueConfigFields(type, d) {
   const isScript = type === 'script';
   const tabHtml = isScript ? '' : `
     <div class="cc-tabs">
-      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">○&nbsp; Ready</button>
-      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">▶&nbsp; Take</button>
+      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">${sfIcon('marker.ready')} Ready</button>
+      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">${sfIcon('marker.go')} Take</button>
     </div>`;
   return `
     ${tabHtml}
@@ -6914,8 +7015,8 @@ function buildCueConfigFields(type, d) {
     ${isScript ? '' : `<div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>`}
     <div class="cc-divider"></div>
     <div class="field">
-      <label class="field-lbl">Notes <span style="color:var(--text3);font-weight:400">(for your crew)</span></label>
-      <textarea class="field-in" id="cc-notes" rows="2" placeholder="Add context, reminders, or crew instructions…" style="font-size:13px;line-height:1.6">${esc(notes)}</textarea>
+      <label class="field-lbl">Notes <span class="lbl-hint">(for your crew)</span></label>
+      <textarea class="field-in" id="cc-notes" rows="2" class="cc-note-ta" placeholder="Add context, reminders, or crew instructions…">${esc(notes)}</textarea>
     </div>`;
 }
 
@@ -7228,14 +7329,16 @@ function saveCueConfig() {
   if (cueConfigType === 'playback') {
     const outCue = document.getElementById('cc-out-cue')?.value || '';
     const outAuto = document.getElementById('cc-out-auto')?.checked || false;
-    if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; }
-    else { delete d.outCueId; delete d.outAuto; }
+    if (outCue === '__name__') { d.outAuto = outAuto; }   // unresolved name link kept as authored
+    else if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; delete d.outCueName; }
+    else { delete d.outCueId; delete d.outAuto; delete d.outCueName; }
   }
   if (cueConfigType === 'playback' || cueConfigType === 'audio') {
     const outPad = document.getElementById('cc-out-pad')?.value || '';
     const outPadAuto = document.getElementById('cc-out-pad-auto')?.checked || false;
-    if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; }
-    else { delete d.outPadId; delete d.outPadAuto; }
+    if (outPad === '__name__') { d.outPadAuto = outPadAuto; }   // unresolved name link kept as authored
+    else if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; delete d.outPadName; }
+    else { delete d.outPadId; delete d.outPadAuto; delete d.outPadName; }
   }
   // QLab integration removed 2026-07-13 (owner decision) — stale qlabCue/
   // qlabAction/qlabAuto fields on old rows are dropped whenever a cue is re-saved.
@@ -7265,6 +7368,9 @@ function removeCueCfg() {
 // the cell. Transport: one command object, deduped by id on the receiver.
 // ─────────────────────────────────────────────────────────────
 let outrangutanState = { cues: {}, pads: {}, live: null };
+// The Break Room demo authors playback links by NAME (outCueName/outPadName);
+// this flag marks that some loaded rows still need a name-to-id resolve pass.
+let _outNameLinksPresent = false;
 let _outCmdSeq = 0;
 let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out-of-order packets (P3)
 
@@ -7342,6 +7448,9 @@ function applyOutrangutanState(og) {
   if (og.playingStart && (og.playingStart.ts || 0) >= (outrangutanState.playingStart?.ts || 0)) {
     outrangutanState.playingStart = og.playingStart;
   }
+  // Name-authored links resolve as soon as the cue/pad summaries carry the
+  // matching names; a resolve is a structural change (badges appear).
+  if (resolveOutrangutanNameLinks()) structural = true;
   if (structural) {
     if (document.getElementById('rundown')?.classList.contains('on')) renderRundown();
     if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
@@ -7415,17 +7524,20 @@ function outrangutanFmtDur(sec) {
 }
 
 // <select> options of the Outrangutan cues published into this session.
-function outrangutanCueOptions(cur) {
+function outrangutanCueOptions(cur, curName) {
   const map = outrangutanState.cues || {};
   const ids = Object.keys(map).sort((a, b) => (map[a].num || 0) - (map[b].num || 0));
   let html = `<option value="">None</option>`;
   for (const id of ids) html += `<option value="${esc(id)}" ${cur === id ? 'selected' : ''}>#${esc(String(map[id].num ?? ''))} ${esc(map[id].name || 'Cue')}</option>`;
   if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked cue (offline)</option>`;
+  // Name-authored link, not yet resolved to an id: keep it selected as-is so an
+  // unrelated save never silently strips the link.
+  if (!cur && curName) html += `<option value="__name__" selected>${esc(curName)} (by name)</option>`;
   return html;
 }
 
 // <select> options of the Outrangutan SFX pads published into this session (P4).
-function outrangutanPadOptions(cur) {
+function outrangutanPadOptions(cur, curName) {
   const map = outrangutanState.pads || {};
   const ids = Object.keys(map).sort((a, b) => (map[a].bank + map[a].name).localeCompare(map[b].bank + map[b].name));
   let html = `<option value="">None</option>`;
@@ -7434,6 +7546,7 @@ function outrangutanPadOptions(cur) {
     html += `<option value="${esc(id)}"${cur === id ? ' selected' : ''}>${esc((p.emoji ? p.emoji + ' ' : '') + p.name + (p.bank ? ' · ' + p.bank : ''))}</option>`;
   });
   if (cur && !map[cur]) html += `<option value="${esc(cur)}" selected>Linked pad (offline)</option>`;
+  if (!cur && curName) html += `<option value="__name__" selected>${esc(curName)} (by name)</option>`;
   return html;
 }
 
@@ -7446,18 +7559,18 @@ function outrangutanCueFields(type, d) {
   const emptyPads = !Object.keys(outrangutanState.pads || {}).length;
   const cuePart = type !== 'playback' ? '' : `
       <div class="cc-trigger-row">
-        <div class="cc-trigger-cue-field" style="flex:1">
+        <div class="cc-trigger-cue-field u-flex1">
           <label class="field-lbl">Link to an Outrangutan cue</label>
-          <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '')}</select>
+          <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '', d.outCueName || '')}</select>
           ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
       <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>`;
   const sfxPart = `
       <div class="cc-trigger-row">
-        <div class="cc-trigger-cue-field" style="flex:1">
+        <div class="cc-trigger-cue-field u-flex1">
           <label class="field-lbl">SFX pad</label>
-          <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '')}</select>
+          <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '', d.outPadName || '')}</select>
           ${emptyPads ? `<div class="cc-out-hint">Assign pads on Outrangutan's SFX board to list them here.</div>` : ''}
         </div>
       </div>
@@ -7534,7 +7647,8 @@ function fireOutrangutanTransport(action) {
   // countdown owns the transport keys until it resolves.
   if (_rtrtCall) {
     if (action === 'go') return takePlayoutCall('take-now');
-    if (action === 'stop' || action === 'fadeStop' || action === 'panic') return abortPlayoutCall(action);
+    // Deliberate panic behavior: abort the armed call AND fall through to the normal transport stop below, so S always silences playing media.
+    if (action === 'stop' || action === 'fadeStop' || action === 'panic') abortPlayoutCall(action);
   }
   const local = window.Outrangutan && window.Outrangutan._local;
   if (local && local.transport && session.code && local.session() === session.code && local.transport(action)) {
@@ -7547,40 +7661,98 @@ function fireOutrangutanTransport(action) {
 // Manual SFX trigger on a live row (P4, Decisions #6: manual + optional auto).
 function fireOutrangutanSfxCell(beatId, type) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  const b = beats.find(x => x.id === beatId);
+  const b = beats.find(x => String(x.id) === String(beatId));
   const d = b?.cues?.[type];
-  if (!d || !d.outPadId) { toast('No SFX pad linked.'); return; }
+  if (d && !d.outPadId && d.outPadName) resolveOutrangutanNameLinks();
+  if (!d || !d.outPadId) {
+    toast(d?.outPadName ? `SFX pad "${d.outPadName}" is not in the loaded Outrangutan show yet.` : 'No SFX pad linked.');
+    return;
+  }
   if (fireOutrangutanCommand('pad', d.outPadId)) outrangutanSendToast('SFX');
 }
 
-function outrangutanCellLinked(d) { return !!(d && d.outCueId); }
+function outrangutanCellLinked(d) { return !!(d && (d.outCueId || d.outCueName)); }
+
+// ── Name-authored links (The Break Room demo) ───────────────────────────────
+// Authored show data cannot know the ids Outrangutan assigns at import time,
+// so its rundown cells carry outCueName/outPadName. Resolve names to ids from
+// whichever truth exists: the session-published cue/pad summaries, or the
+// same-tab Outrangutan show (the offline demo path). Runs on playout state
+// updates and again on first use of any still-unresolved cell.
+function outrangutanNameIndex() {
+  const cues = {}, pads = {};
+  const put = (map, id, name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (key && !map[key]) map[key] = String(id);
+  };
+  Object.entries(outrangutanState.cues || {}).forEach(([id, c]) => put(cues, id, c && c.name));
+  Object.entries(outrangutanState.pads || {}).forEach(([id, p]) => put(pads, id, p && p.name));
+  try {
+    const local = window.Outrangutan?._state?.();
+    (local?.cues || []).forEach(c => put(cues, c.id, c.name));
+    (local?.pads || []).forEach(p => put(pads, p.id, p.name));
+  } catch {}
+  return { cues, pads };
+}
+
+function resolveOutrangutanNameLinks() {
+  // Cheap pre-scan: most rundowns carry no name links at all.
+  let any = false;
+  for (const b of beats || []) {
+    for (const d of Object.values(b?.cues || {})) {
+      if (d && ((d.outCueName && !d.outCueId) || (d.outPadName && !d.outPadId))) { any = true; break; }
+    }
+    if (any) break;
+  }
+  if (!any) { _outNameLinksPresent = false; return false; }
+  const idx = outrangutanNameIndex();
+  if (!Object.keys(idx.cues).length && !Object.keys(idx.pads).length) return false;
+  let changed = false, remaining = false;
+  (beats || []).forEach(b => Object.values(b?.cues || {}).forEach(d => {
+    if (!d) return;
+    if (!d.outCueId && d.outCueName) {
+      const id = idx.cues[String(d.outCueName).trim().toLowerCase()];
+      if (id) { d.outCueId = id; changed = true; } else remaining = true;
+    }
+    if (!d.outPadId && d.outPadName) {
+      const id = idx.pads[String(d.outPadName).trim().toLowerCase()];
+      if (id) { d.outPadId = id; changed = true; } else remaining = true;
+    }
+  }));
+  _outNameLinksPresent = remaining;
+  return changed;
+}
 
 // Small SFX chip on rundown cells that link a pad (P4) — name only, no live state.
 function outrangutanSfxBadge(d) {
-  if (!d || !d.outPadId) return '';
+  if (!d || (!d.outPadId && !d.outPadName)) return '';
   const p = (outrangutanState.pads || {})[d.outPadId];
-  const label = p ? `${p.emoji ? p.emoji + ' ' : ''}${p.name}` : 'Linked SFX';
+  const label = p ? `${p.emoji ? p.emoji + ' ' : ''}${p.name}` : (d.outPadName || 'Linked SFX');
   return `<div class="cue-out-badge cue-sfx-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">SFX · ${esc(label)}</span>${d.outPadAuto ? '<span class="cue-out-live cue-out-auto">AUTO</span>' : ''}</div>`;
 }
 
 // Manual SFX trigger button for the live focus view (P4).
 function outrangutanSfxGoBtnHTML(beatId, type, d) {
-  if (!d || !d.outPadId) return '';
-  return `<button type="button" class="lf-trigger-go lf-out-go lf-sfx-go" title="Fire the linked SFX pad" onclick="event.stopPropagation();fireOutrangutanSfxCell('${beatId}','${type}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> SFX</button>`;
+  if (!d || (!d.outPadId && !d.outPadName)) return '';
+  return `<button type="button" class="lf-trigger-go lf-out-go lf-sfx-go" data-tip="Fire the linked SFX pad" onclick="event.stopPropagation();fireOutrangutanSfxCell('${beatId}','${type}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> SFX</button>`;
 }
 
 // Manual GO from a live cue card.
 function fireOutrangutanCueCell(beatId) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  const d = beats.find(x => x.id === beatId)?.cues?.playback;
-  if (!outrangutanCellLinked(d)) { toast('No Outrangutan cue linked.'); return; }
+  const d = beats.find(x => String(x.id) === String(beatId))?.cues?.playback;
+  if (d && !d.outCueId && d.outCueName) resolveOutrangutanNameLinks();
+  if (!d || !d.outCueId) {
+    toast(d?.outCueName ? `Cue "${d.outCueName}" is not in the loaded Outrangutan show yet.` : 'No Outrangutan cue linked.');
+    return;
+  }
   if (fireOutrangutanCommand('cue', d.outCueId)) toast('Outrangutan: GO sent.');
 }
 
 // GO button for a live cue card (playback cells linked to an Outrangutan cue).
 function outrangutanGoBtnHTML(beatId, d) {
   if (!outrangutanCellLinked(d)) return '';
-  return `<button type="button" class="lf-trigger-go lf-out-go" title="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
+  return `<button type="button" class="lf-trigger-go lf-out-go" data-tip="Fire the linked Outrangutan cue" onclick="event.stopPropagation();fireOutrangutanCueCell('${beatId}')"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> GO</button>`;
 }
 
 // ── D11.3: Ready · Track · Roll · Take — the playback call, as a control ────
@@ -7644,6 +7816,7 @@ function beginPlayoutCall(beat, rowIdx) {
   logShow('media', `Playback call READY · row ${rowIdx + 1}${manual ? ' (manual TAKE)' : ''}`);
   publishLiveCall('ready');
   renderLiveCallBanner('ready');
+  notifyControlSurfaceState();
   if (!manual) _rtrtCall.timer = setTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
   return true;
 }
@@ -7675,6 +7848,7 @@ function takePlayoutCall(source='take') {
   logShow('media', `TAKE · row ${call.rowIdx + 1} (${source})`);
   publishLiveCall('take', call);
   renderLiveCallBanner('take', call);
+  notifyControlSurfaceState();
   return true;
 }
 
@@ -7687,6 +7861,7 @@ function abortPlayoutCall(source='abort') {
   toast('Playback call aborted. Nothing fired.');
   publishLiveCall('abort', call);
   renderLiveCallBanner('abort', call);
+  notifyControlSurfaceState();
   return true;
 }
 
@@ -7718,6 +7893,10 @@ function runControlBusAction(target, action, source='bus') {
     return false;
   }
   if (target === 'prompter') {
+    // Same caller gate as the rundown branch: without it every live-open
+    // client dispatched duplicate prompter commands, and 'toggle' flipped on
+    // each client's own (possibly stale) ptPlaying.
+    if (!isShowCaller()) return false;
     if (action === 'toggle') { sendPrompterControl(ptPlaying ? 'pause' : 'resume'); return true; }
     if (action === 'pause' || action === 'resume') { sendPrompterControl(action); return true; }
     if (action === 'top') { sendPrompterControl('reset'); return true; }
@@ -7730,6 +7909,45 @@ window.cueolaControlBus = (target, action, source) => {
   try { return runControlBusAction(target, action, source || 'local-deck'); } catch { return false; }
 };
 
+// Bus-executor claim: cross-machine bus execution is exclusive. The current
+// show caller heartbeats a busExecutor {clientId, ts} field on the session doc
+// (~5s); a client only executes doc-delivered bus commands while it holds the
+// claim, or when the claim is stale (>15s) and it re-stamps it with its own
+// clientId first. Followers never execute. Solo surfaces (no code, demo,
+// expert) have no doc to claim and behave exactly as before. Additive field:
+// old clients never write it, so an absent claim reads as stale and the single
+// classroom instructor executes identically to today.
+const BUS_EXECUTOR_HEARTBEAT_MS = 5000;
+const BUS_EXECUTOR_STALE_MS = 15000;
+let _busExecutorClaim = null;   // last busExecutor claim seen on the session doc
+let _busExecutorTimer = null;
+function _busClaimExempt() { return !session.code || session.isDemo || session.isExpert || !window._firebaseReady; }
+function _busClaimIsMine() { return _busExecutorClaim?.clientId === CLIENT_ID; }
+function _busClaimIsStale() {
+  return !_busExecutorClaim || !Number.isFinite(_busExecutorClaim.ts)
+    || (Date.now() - _busExecutorClaim.ts) > BUS_EXECUTOR_STALE_MS;
+}
+function holdsBusExecutorClaim() {
+  return _busClaimExempt() || _busClaimIsMine() || _busClaimIsStale();
+}
+function _stampBusExecutorClaim() {
+  if (_busClaimExempt()) return;
+  const claim = { clientId: CLIENT_ID, ts: Date.now() };
+  _busExecutorClaim = claim;   // optimistic; the doc echo confirms or corrects it
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).catch(() => {});
+}
+function _busExecutorHeartbeatTick() {
+  if (_busClaimExempt()) return;
+  if (!document.getElementById('liveshow')?.classList.contains('on')) return;
+  if (!isShowCaller()) return;
+  if (_busClaimIsMine() || _busClaimIsStale()) _stampBusExecutorClaim();
+}
+function _ensureBusExecutorHeartbeat() {
+  _busExecutorHeartbeatTick();
+  if (_busExecutorTimer) return;
+  _busExecutorTimer = setInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS);
+}
+
 // Cross-machine consumer: dedupe by command id, discard stale commands (a
 // reconnect must never replay an old GO — D11.7's staleness window).
 let _lastControlBusId = '';
@@ -7737,14 +7955,29 @@ function applyControlBusCommand(cmd) {
   if (!cmd?.id || cmd.id === _lastControlBusId) return;
   _lastControlBusId = cmd.id;
   if (!Number.isFinite(cmd.ts) || Date.now() - cmd.ts > 5000) return;
-  if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {
-    logShow('link', `Control bus: ${cmd.target} ${cmd.action} (deck on another machine)`);
+  if (!holdsBusExecutorClaim()) return;   // a follower never executes bus commands
+  if (_busClaimExempt() || _busClaimIsMine()) {
+    if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {
+      logShow('link', `Control bus: ${cmd.target} ${cmd.action} (deck on another machine)`);
+    }
+    return;
   }
+  // Stale claim: take it, and execute only after the stamp lands so two
+  // surfaces racing on the same stale claim cannot both advance.
+  const claim = { clientId: CLIENT_ID, ts: Date.now() };
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).then(() => {
+    if (_busExecutorClaim && _busExecutorClaim.clientId !== CLIENT_ID) return;  // someone else re-stamped first
+    _busExecutorClaim = claim;
+    if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {
+      logShow('link', `Control bus: ${cmd.target} ${cmd.action} (deck on another machine)`);
+    }
+  }).catch(() => {});
 }
 
 // Auto-fire linked Outrangutan cues/SFX when a row advances live (lsNext only).
 function fireOutrangutanAutoForBeat(beat) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  resolveOutrangutanNameLinks();   // name-authored links resolve on first use
   const d = beat?.cues?.playback;
   const rowIdx = beats.indexOf(beat);
   if (d && d.outAuto && d.outCueId) {
@@ -7765,7 +7998,7 @@ function fireOutrangutanAutoForBeat(beat) {
 function outrangutanCellBadge(d, beatId) {
   if (!outrangutanCellLinked(d)) return '';
   const id = d.outCueId, c = (outrangutanState.cues || {})[id], live = outrangutanState.live;
-  const name = c ? c.name : 'Linked cue';
+  const name = c ? c.name : (d.outCueName || 'Linked cue');
   const dur = c && c.dur ? ` · ${outrangutanFmtDur(c.dur)}` : '';
   const isLive = live && live.cueId === id && live.status && live.status !== 'idle';
   const label = isLive ? (live.status === 'play' ? 'ON AIR' : live.status === 'pre' ? 'PRE' : live.status === 'pause' ? 'PAUSE' : '') : '';
@@ -7895,9 +8128,12 @@ function preLiveCheck() {
       ? `${totalRows} row${totalRows===1?'':'s'} but no script cues yet`
       : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script`;
 
-  const talentSeenMs = lastTalentPingTs ? Date.now() - lastTalentPingTs : Infinity;
+  // Local ping OR any remote sighting counts: heartbeats over the session doc
+  // land before the operator runtime starts on first Go Live.
+  const talentTs = Math.max(lastTalentPingTs || 0, _latestTalentSightingTs());
+  const talentSeenMs = talentTs ? Date.now() - talentTs : Infinity;
   const talentOk = talentSeenMs < 14000;
-  const talentLabel = !lastTalentPingTs
+  const talentLabel = !talentTs
     ? 'Talent prompter hasn’t opened yet'
     : talentOk
       ? `Connected · last seen ${Math.max(0, Math.floor(talentSeenMs/1000))}s ago`
@@ -7995,11 +8231,14 @@ function runPreflight(reviewOnly) {
   // D11.2 cue-to-top affordance: a show must never start mid-scroll. The
   // prompter no longer moves on its own, so a parked position is the op's to
   // clear — deliberately — before doors.
-  if (_prompterHasRecentTalent()) {
+  {
+    // Always reported: a parked position with no talent connected yet was
+    // silently skipped before, and doors opened on a mid-scroll script.
     const parkedPct = ptProgressPct();
+    const talentNote = _prompterHasRecentTalent() ? '' : ' (no talent screen connected yet)';
     _preflightRows.push(parkedPct > 2
-      ? { key: 'Prompter position', state: 'warn', detail: `Talent script is parked mid-scroll (${parkedPct}%). Press T (top) or C (cue current row) before doors` }
-      : { key: 'Prompter position', state: 'ok', detail: 'Talent script is at the top' });
+      ? { key: 'Prompter position', state: 'warn', detail: `Talent script is parked mid-scroll (${parkedPct}%)${talentNote}. Press T (top) or C (cue current row) before doors` }
+      : { key: 'Prompter position', state: 'ok', detail: `Talent script is at the top${talentNote}` });
   }
   const links = collectPlayoutLinks();
   if (links.cues.length || links.pads.length) addPreflightRow({ key: 'Playout links', state: 'pend', detail: 'Checking ' + (links.cues.length + links.pads.length) + ' linked cue/pad reference' + (links.cues.length + links.pads.length === 1 ? '' : 's') + '…' });
@@ -8136,12 +8375,18 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
 function preflightCloudRoundTrip() {
   return new Promise(resolve => {
     if (!(window._firebaseReady && session.code && !session.isDemo && !session.isExpert)) return resolve(-1);
-    let done = false, unsub = null;
+    let done = false, unsub = null, ref = null;
     const t0 = Date.now();
     const token = 'pf_' + CLIENT_ID + '_' + t0.toString(36);
-    const finish = v => { if (done) return; done = true; try { unsub && unsub(); } catch {} resolve(v); };
+    const finish = v => {
+      if (done) return; done = true;
+      try { unsub && unsub(); } catch {}
+      // Scrub the ping off the session doc so no residue field lingers.
+      if (v >= 0 && ref) { try { window._updateDoc(ref, { preflightPing: window._deleteField() }).catch(() => {}); } catch {} }
+      resolve(v);
+    };
     try {
-      const ref = window._doc(window._db, 'sessions', session.code);
+      ref = window._doc(window._db, 'sessions', session.code);
       // includeMetadataChanges: the server ack arrives as a metadata-only
       // transition (hasPendingWrites → false) that default snapshots skip.
       unsub = window._onSnapshot(ref, { includeMetadataChanges: true }, snap => {
@@ -8219,6 +8464,7 @@ function enterLiveSessionScreen(liveState) {
   // D12.4: entering live is an operator gesture — resume the audio engine and
   // stage the first armed cue NOW, so the first GO behaves like the tenth.
   try { window.Outrangutan?.armPlayback?.()?.then?.(() => syncOutrangutanControllerStatus()); } catch (error) { containError('Playback arming', error); }
+  _ensureBusExecutorHeartbeat();
   liveSessionController.registerCleanup('live-clock', () => stopTimer(false));
   liveSessionController.registerCleanup('playout-call', () => { if (_rtrtCall) abortPlayoutCall('left-live'); });
   liveSessionController.registerCleanup('prompter-operator', stopPrompterOperatorRuntime);
@@ -8543,8 +8789,10 @@ function updateLiveClockButton() {
 
 // Only the show caller (whoever is driving their own live position) controls the
 // shared clock; followers mirror it. Keeps two people from fighting over start/pause.
+// Tightened to the bus-executor claim holder: with two instructor surfaces open,
+// only the one heartbeating the busExecutor claim may start/pause for everyone.
 function canDriveShowClock() {
-  return isFollowingSelf();
+  return isFollowingSelf() && holdsBusExecutorClaim();
 }
 
 function toggleShowClock() {
@@ -8996,7 +9244,7 @@ function renderLiveCurrent(b, i) {
     </div>`;
   }).join('');
   return `<div class="lv-cur-card">
-    <div class="lv-cur-badge">● NOW · Row ${i+1}</div>
+    <div class="lv-cur-badge">${sfIcon('marker.active')} NOW · Row ${i+1}</div>
     <div class="lv-cur-name">${esc(b.info||'—')}</div>
     ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
     ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
@@ -9097,7 +9345,7 @@ function liveCellForBeat(b, type, beatIdx) {
   const tc = CT[type];
   const d = b.cues?.[type];
   if (!d && type === 'script') {
-    return `<div class="live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Add script">+</div>`;
+    return `<div class="live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})" data-tip="Add script">+</div>`;
   }
   if (!d) return `<div class="live-cue-empty">·</div>`;
   const on = getCueOn(d);
@@ -9111,7 +9359,7 @@ function liveCellForBeat(b, type, beatIdx) {
   // D11.4: linked playout rows carry the badge (cue name · ON AIR · live
   // countdown) in the grid view too.
   const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
-  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" title="Open full script"`:''}>
+  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" data-tip="Open full script"`:''}>
     ${liveCueOperationLine('ready', on, 'live-cue-rdy')}
     ${liveCueOperationLine('take', off, 'live-cue-go', `color:${tc.color}`)}
     ${outBadge}
@@ -9129,7 +9377,7 @@ function liveCueOperationLine(operation, text, className='', style='') {
   const meta = LIVE_CUE_OPERATION[operation] || LIVE_CUE_OPERATION.ready;
   // Quiet marker icons (the original cue-line look) carry the READY/TAKE
   // vocabulary in the title/aria label instead of a boxed verb chip.
-  return `<div class="${className}"${style ? ` style="${style}"` : ''} title="${meta.title}" aria-label="${meta.label}: ${esc(text)}">${sfIcon(operation === 'take' ? 'marker.go' : 'marker.ready')} <span>${esc(text)}</span></div>`;
+  return `<div class="${className}"${style ? ` style="${style}"` : ''} data-tip="${meta.title}" aria-label="${meta.label}: ${esc(text)}">${sfIcon(operation === 'take' ? 'marker.go' : 'marker.ready')} <span>${esc(text)}</span></div>`;
 }
 
 // Clean cue chips for the Focus view — only the row's programmed departments.
@@ -9180,7 +9428,7 @@ function liveRowStateChips(index, options={}) {
   const execution = liveCueExecution(index);
   const chips = [];
   const isActive = index === state.activeCueIndex;
-  const failureTitle = execution.failure ? ` title="${esc(execution.failure)}"` : '';
+  const failureTitle = execution.failure ? ` data-tip="${esc(execution.failure)}"` : '';
   if (isActive) {
     chips.push('<span class="live-status now">On Air</span>');
   } else if (LIVE_ROW_STATE_LABEL[execution.status]) {
@@ -9192,7 +9440,7 @@ function liveRowStateChips(index, options={}) {
     chips.push('<span class="live-status later">Later</span>');
   }
   if (execution.status === 'failed' && options.recovery !== false) {
-    chips.push(`<button type="button" class="live-row-recover" onclick="recoverLiveCueFailure(event,${index})" title="Recover row ${index + 1}" aria-label="Recover failed row ${index + 1}">Recover</button>`);
+    chips.push(`<button type="button" class="live-row-recover" onclick="recoverLiveCueFailure(event,${index})" data-tip="Recover row ${index + 1}" aria-label="Recover failed row ${index + 1}">Recover</button>`);
   }
   return chips.join('');
 }
@@ -9212,11 +9460,12 @@ function updateLiveGoControl(projectedState=null) {
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
   const studentLocked = !isShowCaller() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
-  button.title = dispatchable ? `GO to ${text}`
+  button.setAttribute('data-tip', dispatchable ? `GO to ${text}`
     : failed ? `Recover failed row ${nextIndex + 1} before GO`
     : studentLocked ? 'Joined as a student: only the show caller (instructor or admin) advances the rundown'
     : nextBeat ? 'Follow the active show caller to use GO'
-    : 'No upcoming cue';
+    : 'No upcoming cue');
+  button.removeAttribute('title');
   button.setAttribute('aria-label', button.title);
 }
 
@@ -9359,7 +9608,7 @@ function renderLive() {
       i === selectedIdx ? 'live-row-selected' : '',
     ].filter(Boolean).join(' ');
     const goButton = canJump && !isCur && !isDisabled && execution.status !== 'failed'
-      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" title="Activate row ${i + 1}" aria-label="GO row ${i + 1}">GO</button>`
+      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Activate row ${i + 1}" aria-label="GO row ${i + 1}">GO</button>`
       : '';
     html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${i + 1}, ${esc(b.info || 'untitled')}, ${execution.status}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
       <td><div class="live-num">${i + 1}</div></td>
@@ -9720,7 +9969,8 @@ function renderShowCallerBadge() {
   }
   badge.dataset.state = state;
   badge.textContent = text;
-  badge.title = title;
+  badge.setAttribute('data-tip', title);
+  badge.removeAttribute('title');
 }
 
 function renderFollowChips() {
@@ -10006,8 +10256,21 @@ function _prompterHasRecentTalent() {
   return !!lastTalentPingTs && (Date.now() - lastTalentPingTs) < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000);
 }
 
+// Talent sightings, recorded even while the local operator runtime is idle.
+// Remote heartbeats arrive over the session doc before Go Live; without this
+// map preLiveCheck false-warned "hasn't opened yet" on the first Go Live.
+const _talentSeenAt = {};   // sender id -> last sighting ts
+function _recordTalentSighting(sender) {
+  _talentSeenAt[String(sender || 'talent')] = Date.now();
+}
+function _latestTalentSightingTs() {
+  const vals = Object.values(_talentSeenAt);
+  return vals.length ? Math.max(...vals) : 0;
+}
+
 function _notePrompterTalentSeen(msg={}) {
   if (isPrompterSelfSender(msg.sender)) return false;
+  _recordTalentSighting(msg.sender);
   if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
@@ -10049,6 +10312,7 @@ function adoptPrompterTalentState(state={}) {
     ptPlaying = observedPlaying;
     flowOpPlaying = observedPlaying;
     ptSyncPlayIcons(ptPlaying);
+    notifyControlSurfaceState();
     if (_prompterHasRecentTalent()) {
       setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', ptPlaying ? 'Talent scrolling' : 'Talent paused');
     }
@@ -10627,8 +10891,6 @@ function scriptOperatorSnapshot() {
   // An idle Script Operator watchdog must not create new prompter state.
   const prompterState = prompterSessionController.getState();
   const liveState = liveSessionState();
-  let inspectorTab = 'prompter';
-  try { inspectorTab = localStorage.getItem('cueola_script_operator_tab') || 'prompter'; } catch {}
   return {
     productionCode:session.code,
     showName:show.name || 'Untitled Show',
@@ -10661,7 +10923,6 @@ function scriptOperatorSnapshot() {
     wrapMinutes:flowWrapCustomMin,
     prompterTheme:ptThemeName,
     uiTheme:currentTheme,
-    inspectorTab,
     prompter:{
       sessionId:prompterState.sessionId,
       productionCode:prompterState.productionCode,
@@ -10690,7 +10951,8 @@ function scriptOperatorSetButton(active, label='Pop out Script Operator') {
   const button = document.getElementById('lsPopoutBtn');
   if (!button) return;
   button.classList.toggle('active', Boolean(active));
-  button.title = label;
+  button.setAttribute('data-tip', label);
+  button.removeAttribute('title');
   button.setAttribute('aria-label', label);
   const icon = button.querySelector('.sf-symbol');
   if (icon) icon.setAttribute('data-symbol', active ? 'content.display' : 'action.fullscreen');
@@ -11125,14 +11387,26 @@ function buildPrompterControl(action, source='script-op', payload=null) {
   };
 }
 
+// Rapid commands (a punch-in sends seek then resume back-to-back) coalesce in
+// the single prompter.control slot and a remote talent can lose the seek. Each
+// write also publishes prompter.controlQueue, the last 8 commands with a seq
+// that stays monotonic for this writer across reloads; receivers replay every
+// unseen seq in order. The legacy slot keeps stale shells working.
+let _prompterControlSeq = 0;
+let _prompterControlQueue = [];
+
 function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverride='') {
   if (!control?.action) return false;
   _postPrompterMessage(control);
   trackPrompterControl(control, origin, quiet);
   const code = String(codeOverride || control.productionCode || session.code || flowOpCode || '').trim().toUpperCase();
   if (window._firebaseReady && code) {
+    _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
+    const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
+    _prompterControlQueue = [..._prompterControlQueue, stamped].slice(-8);
     window._updateDoc(window._doc(window._db, 'sessions', code), {
-      'prompter.control': { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID },
+      'prompter.control': stamped,
+      'prompter.controlQueue': _prompterControlQueue,
       'prompter.updatedAt':control.ts,
     }).catch(err => {
       if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
@@ -11345,6 +11619,10 @@ let flowOpColorBarsOn = false;
 let ptQuestionOn = false;
 let flowOpQuestionOn = false;
 let ptQuestionText = '';       // D12.6: current QUESTION card copy ('' = generic)
+// Prepared question cards for the lane (The Break Room demo or a seeded
+// session's questionLane field). Surfaced as datalist suggestions under the
+// lane input; the lane itself stays one-card-at-a-time, last write wins.
+let sessionQuestionCards = [];
 let flowOpQuestionText = '';
 let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
 let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
@@ -11733,7 +12011,7 @@ function promptOpControlsHTML(includeLiveActions = true) {
   const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
   const screen = `<div class="flow-control-section flow-control-screen">
@@ -11768,7 +12046,7 @@ function opInspHeadHTML(scope) {
   return `<div class="insp-head op-insp-head">
     <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
       ${Object.keys(OP_INSP_LABELS).map(key =>
-        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')" title="${OP_INSP_LABELS[key]}"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span></button>`).join('')}
+        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')" data-tip="${OP_INSP_LABELS[key]}"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span></button>`).join('')}
     </div>
     <div class="insp-caption" data-insp-caption>${OP_INSP_LABELS.transport}</div>
   </div>`;
@@ -11800,6 +12078,7 @@ function ptStartPlay() {
   prompterSessionController.setTransport({ running:true, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
   ptSyncPlayIcons(true);
   ptAnimFrame = requestAnimationFrame(ptScrollLoop);
+  notifyControlSurfaceState();
 }
 
 function ptStopPlay() {
@@ -11808,6 +12087,7 @@ function ptStopPlay() {
   ptAnimFrame = null;
   prompterSessionController.setTransport({ running:false, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
   ptSyncPlayIcons(false);
+  notifyControlSurfaceState();
 }
 
 function ptTogglePlay() {
@@ -12063,8 +12343,8 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   const rowCue = isFlow ? '' : `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
       <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
-        <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${Math.max(liveActiveCueIndex(), 0) + 1}')" title="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
-        <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" title="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+        <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${Math.max(liveActiveCueIndex(), 0) + 1}')" data-tip="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
+        <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" data-tip="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
       </div>
     </div>`;
   // Returns bare control groups so they nest inside the existing panel containers
@@ -12072,20 +12352,20 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   return `${rowCue}
     <div class="flow-control-section flow-control-onair">
       <div class="flow-control-title">On Air</div>
-      ${isFlow ? '' : `<label class="ls-rtrt-mode" title="Manual TAKE: GO readies the linked clip; only an explicit TAKE fires it (decision 18)"><input type="checkbox" ${liveCallManualArm() ? 'checked' : ''} onchange="setLiveCallManualArm(this.checked)"> Manual TAKE (armed call)</label>`}
+      ${isFlow ? '' : `<label class="ls-rtrt-mode" data-tip="GO readies the linked clip. Only an explicit TAKE fires it."><input type="checkbox" ${liveCallManualArm() ? 'checked' : ''} onchange="setLiveCallManualArm(this.checked)"> Manual TAKE (armed call)</label>`}
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
-        <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" title="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
-        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" title="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
+        <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
+        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
       </div>
     </div>
 	    <div class="flow-control-section flow-control-cue">
 	      <div class="flow-control-title">Scrub</div>
 	      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
 	        <span class="pt-ctrl-label">Cue</span>
-	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" title="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
+	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
 	        <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${seekDrag}${dis}>
-	        <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" title="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
-	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" title="Punch in from this script position" aria-label="Punch in from this script position"${dis}>${sfIcon('media.play')}</button>
+	        <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
+	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" data-tip="Punch in from this script position" aria-label="Punch in from this script position"${dis}>${sfIcon('media.play')}</button>
 	      </div>
 	    </div>`;
 }
@@ -12185,13 +12465,26 @@ function scriptToFormattedHTML(text) {
 function ptPlainTextToHTML(text) {
   return scriptToFormattedHTML(text);
 }
+const PT_SANITIZE_ALLOWED_TAGS = new Set(['P','BR','B','STRONG','I','EM','U','SPAN','DIV','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','HR']);
+const PT_SANITIZE_CLASS_TAGS = new Set(['SPAN','DIV','P']);
 function ptSanitizeHTML(html) {
+  // Allowlist sanitizer: only the tags above survive, and the only attribute
+  // that survives is class (span/div/p, word-character class names only).
+  // Prompter scripts are plain formatted text, they never need links or media.
   const doc = new DOMParser().parseFromString(html || '', 'text/html');
-  doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(el => el.remove());
-  doc.body.querySelectorAll('*').forEach(el => {
-    [...el.attributes].forEach(attr => {
-      if (/^on/i.test(attr.name) || attr.name === 'style') el.removeAttribute(attr.name);
-    });
+  doc.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form,template,noscript,svg,math').forEach(el => el.remove());
+  [...doc.body.querySelectorAll('*')].forEach(el => {
+    if (!PT_SANITIZE_ALLOWED_TAGS.has(el.tagName)) {
+      // Unknown tag: keep its text content, drop the tag itself
+      while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+      el.remove();
+      return;
+    }
+    const keepClass = PT_SANITIZE_CLASS_TAGS.has(el.tagName)
+      ? (el.getAttribute('class') || '').split(/\s+/).filter(c => /^[\w-]+$/.test(c)).join(' ')
+      : '';
+    [...el.attributes].forEach(attr => el.removeAttribute(attr.name));
+    if (keepClass) el.setAttribute('class', keepClass);
   });
   return doc.body.innerHTML;
 }
@@ -12738,6 +13031,33 @@ function applyQuestionAction(action, target='talent', text='') {
 // Apply a remote control exactly once, no matter how many transports deliver it
 // or how often a Firestore snapshot re-fires. Dedup by a signature instead of a
 // monotonic timestamp so clock skew between devices can't permanently wedge it.
+// Companion to the prompter.controlQueue writer: return the queue entries this
+// client has not yet processed, oldest first, tracking the highest seq applied
+// per writer. On the very first snapshot only the newest entry is returned so
+// boot matches the legacy single-slot behavior instead of replaying history.
+// Returns null when the doc carries no usable queue (legacy writer): callers
+// fall back to the single prompter.control slot.
+const _ptControlQueueSeen = {};   // writer clientId -> highest seq handed out
+let _ptControlQueuePrimed = false;
+function unseenPrompterQueueControls(queue) {
+  if (!Array.isArray(queue) || !queue.length) return null;
+  const entries = queue.filter(c => c && c.action && Number.isFinite(Number(c.seq)));
+  if (!entries.length) return null;
+  const prime = !_ptControlQueuePrimed;
+  _ptControlQueuePrimed = true;
+  const fresh = [];
+  entries.forEach(c => {
+    const writer = String(c.senderClient || c.sender || '');
+    const seq = Number(c.seq);
+    if (seq > (_ptControlQueueSeen[writer] || 0)) {
+      _ptControlQueueSeen[writer] = seq;
+      if (!prime) fresh.push(c);
+    }
+  });
+  if (prime) fresh.push(entries[entries.length - 1]);
+  return fresh;
+}
+
 function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) {
   if (!action) return false;
   if (isPrompterSelfSender(sender)) return false;
@@ -13041,8 +13361,9 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
       <div class="pt-question-lane" data-question-lane>
         <input id="${scope}-question-input" class="pt-question-lane-input" type="text" maxlength="280"
           placeholder="Paste a chat question · Enter pushes · Esc clears"
-          aria-label="Question for the talent" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
-        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" title="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push</span></button>
+          aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
+        <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
+        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push</span></button>
       </div>
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
@@ -13097,7 +13418,7 @@ function flowOpControlsHTML(disabled=false) {
   const theme = `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" title="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
   const screen = `<div class="flow-control-section flow-control-screen">
@@ -13223,7 +13544,7 @@ function flowOpRenderSession(data=null) {
   return true;
 }
 
-function flowOpLoadSession(codeOverride='') {
+async function flowOpLoadSession(codeOverride='') {
   const input = flowOpEl('flowOpCodeInput');
   const code = (codeOverride || input?.value || '').trim().toUpperCase();
   const btn = flowOpEl('flowOpLoadBtn');
@@ -13234,6 +13555,12 @@ function flowOpLoadSession(codeOverride='') {
   }
   if (input) input.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  // Phase 5: the in-panel loader honors the class-key gate like the side doors.
+  if (!(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) {
+    flowOpSetStatus('Class key needed', true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+    return;
+  }
   flowOpCode = '';
   flowOpSessionRenderFingerprint = '';
   flowOpControlsRenderFingerprint = '';
@@ -13506,13 +13833,19 @@ function ptAssembleCueolaScript(data) {
   return assemblePrompterScriptFromBeats((data?.beats || []).map(migrateBeat));
 }
 
-function ptLoadFromCueolaCode(codeOverride='') {
+async function ptLoadFromCueolaCode(codeOverride='') {
   const codeIn = ptEl('pt-cueola-code-input');
   const code = (codeOverride || codeIn?.value || '').trim().toUpperCase();
   const btn = ptEl('pt-cueola-load-btn');
   if (!code) return;
   if (codeIn) codeIn.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  // Phase 5: the in-panel loader honors the class-key gate like the side doors.
+  if (!(await cueolaEntryGateAllows(code, 'Flowmingo'))) {
+    ptSetCueolaStatus('Class key needed', true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+    return;
+  }
   ptLastCueolaScript = null; // fresh load → allow the first snapshot to render from the top
   ptSetCueolaStatus('Loading...');
   ptConnState = 'connecting';
@@ -13594,11 +13927,14 @@ function ptLoadFromCueolaCode(codeOverride='') {
           }
         }
         ptUpdateReady();
-        const control = data.prompter?.control;
-        if (control?.action && !isPrompterSelfSender(control.sender)
-            && prompterSessionController.accepts(control, { allowLegacy:true })) {
-          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
-        }
+        const queued = unseenPrompterQueueControls(data.prompter?.controlQueue);
+        const controls = queued || (data.prompter?.control ? [data.prompter.control] : []);
+        controls.forEach(control => {
+          if (control?.action && !isPrompterSelfSender(control.sender)
+              && prompterSessionController.accepts(control, { allowLegacy:true })) {
+            applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
+          }
+        });
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
       }, err => {
         const label = firebaseConnectionLabel(err, 'Error');
@@ -13768,9 +14104,8 @@ function exitPrompter() {
   const prevScreen = sessionStorage.getItem('cueola_screen');
   if (prevScreen === 'live') {
     document.getElementById('liveshow').classList.add('on');
-  } else if (prevScreen === 'entry' || ptLinkedCueolaCode) {
-    document.getElementById('entry').classList.add('on');
-  } else if (session && session.code) {
+  } else if (ptLinkedCueolaCode || (session && session.code)) {
+    // A linked Cueola code returns to its rundown, not the front page.
     document.getElementById('rundown').classList.add('on');
   } else {
     document.getElementById('entry').classList.add('on');
@@ -13822,30 +14157,48 @@ function renderLivePromptOp() {
 // (and anyone re-entering the live view) pick up a running clock from anchorMs.
 let _remoteClockState = null;   // last clock object seen from the session
 let _lastAppliedClockTs = 0;    // newest clock ts we've broadcast or applied
+let _lastAppliedClockSig = ''; // writer+seq signature of the last applied clock write
+let _showClockSeq = 0;         // highest clock seq seen or written by this client
 let _applyingRemoteClock = false;
 
 function broadcastShowClock() {
   if (_applyingRemoteClock) return;
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  // seq rides Date.now() so it stays monotonic for this writer across reloads.
+  _showClockSeq = Math.max(_showClockSeq + 1, Date.now());
   const payload = {
     running: !!liveClockRunning,
     anchorMs: liveClockRunning ? (liveTimerStartMs || (Date.now() - elapsedSecs * 1000)) : 0,
     elapsedSecs: Math.max(0, Math.floor(elapsedSecs)),
     by: session.userName || '',
     senderId: presenceId,
+    senderClient: CLIENT_ID,
+    seq: _showClockSeq,
     ts: Date.now(),
   };
   _remoteClockState = payload;
   _lastAppliedClockTs = payload.ts;  // ignore my own echo when it bounces back
+  _lastAppliedClockSig = CLIENT_ID + ':' + payload.seq;
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { showClock: payload }).catch(() => {});
 }
 
 function applyRemoteShowClock(clock) {
   if (!clock || typeof clock !== 'object') return;
   _remoteClockState = clock;
-  if (clock.senderId === presenceId) return;        // my own write coming back
-  if (!(Number(clock.ts) > _lastAppliedClockTs)) return; // not newer than what we have
-  _lastAppliedClockTs = Number(clock.ts);
+  if (Number.isFinite(Number(clock.seq))) _showClockSeq = Math.max(_showClockSeq, Number(clock.seq));
+  if (clock.senderId === presenceId || (clock.senderClient && clock.senderClient === CLIENT_ID)) return;  // my own write coming back
+  if (Number.isFinite(Number(clock.seq)) && (clock.senderClient || clock.senderId)) {
+    // Signature dedupe, same pattern as prompter controls: cross-machine wall
+    // clocks cannot order writes, so any NEW writer+seq signature applies.
+    const sig = (clock.senderClient || clock.senderId) + ':' + Number(clock.seq);
+    if (sig === _lastAppliedClockSig) return;
+    _lastAppliedClockSig = sig;
+    _lastAppliedClockTs = Math.max(_lastAppliedClockTs, Number(clock.ts) || 0);
+  } else {
+    // Legacy writer without seq: keep the old wall-clock newer test.
+    if (!(Number(clock.ts) > _lastAppliedClockTs)) return;
+    _lastAppliedClockTs = Number(clock.ts);
+  }
   _applyingRemoteClock = true;
   try {
     if (clock.running) {
@@ -13909,6 +14262,7 @@ function startTimer(anchorMs) {
     updateWallClock();
   },1000 / Math.min(frameRate, 30));
   updateLiveClockButton();
+  notifyControlSurfaceState();
 }
 
 function updateWallClock() {
@@ -13939,6 +14293,7 @@ function stopTimer(stopPrompter=true) {
   liveTimerStartMs = null;
   liveClockRunning = false;
   updateLiveClockButton();
+  notifyControlSurfaceState();
   if (!stopPrompter) return;
   stopPrompterOperatorRuntime();
 }
@@ -13995,7 +14350,17 @@ function toggleEntryThemes() {
   const open = panel.hasAttribute('hidden');
   panel.toggleAttribute('hidden', !open);
   gear?.classList.toggle('active', open);
-  if (open) syncEntryThemeSwatches();   // dismissal handled by uiDismissRegister (P6)
+  if (open) {
+    syncEntryThemeSwatches();   // dismissal handled by uiDismissRegister (P6)
+    // Keep the panel on screen: centered under the gear it can spill past the
+    // viewport edge at narrow widths, so nudge the translate back inside.
+    panel.style.translate = '';
+    const r = panel.getBoundingClientRect();
+    let dx = 0;
+    if (r.right > innerWidth - 8) dx = (innerWidth - 8) - r.right;
+    if (r.left + dx < 8) dx = 8 - r.left;
+    if (dx) panel.style.translate = 'calc(50% + ' + dx + 'px) 0';
+  }
 }
 function closeEntryThemes() {
   document.getElementById('entryThemePanel')?.setAttribute('hidden', '');
@@ -14290,7 +14655,7 @@ function renderPbGroupBar() {
   if (isCrew) {
     bar.innerHTML = `
       <span class="pb-group-bar-label">Reviewing</span>
-      <select class="field-in pb-group-select" onchange="selectGroup(this.value) && renderPbGroupBar()">
+      <select class="field-in pb-group-select" onchange="selectGroup(this.value);renderPbGroupBar()">
         ${groups.map(g => `<option value="${esc(g.id)}" ${g.id === activeGroupId ? 'selected' : ''}>${esc(g.name || g.id)}</option>`).join('')}
       </select>
       <span class="pb-group-bar-note">Each group has its own paperwork · exports follow this picker${groupsLocked() ? ' · groups are locked' : ''}</span>`;
@@ -14830,7 +15195,7 @@ function rundownRowPresenceHTML(beatId) {
     .filter(([id, p]) => id !== presenceId && p && Number(p.rdBeat) === Number(beatId) && (now - (p.lastSeen || 0) < 25000))
     .map(([, p]) => p);
   if (!people.length) return '';
-  return `<span class="rd-row-presence" title="Editing now">` + people.slice(0, 3).map(p =>
+  return `<span class="rd-row-presence" data-tip="Editing now">` + people.slice(0, 3).map(p =>
     `<span class="rd-pres-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" data-fullname="${esc(p.name)} · editing">${esc(pbInitials(p.name))}</span>`
   ).join('') + `</span>`;
 }
@@ -15159,10 +15524,6 @@ function pbInitCollabListeners() {
   });
 }
 
-function paperworkItemIndex(id) {
-  return PAPERWORK_ITEMS.findIndex(item => item.id === id);
-}
-
 function currentPaperworkItemId() {
   if (document.getElementById('preProModal')?.classList.contains('on')) return 'call-sheet';
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
@@ -15353,7 +15714,7 @@ function pbSectionLabel(idOrSection='Overall') {
 
 function normalizePlandaBearComment(c) {
   return {
-    id: c?.id || `pbc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    id: String(c?.id || '').replace(/[^\w.-]/g, '') || `pbc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
     section: pbSectionLabel(c?.section || 'Overall'),
     text: String(c?.text || '').trim(),
     by: c?.by || 'Instructor',
@@ -16254,12 +16615,12 @@ function pbRenderUserPortal() {
   const me = { by: session.userName || 'You', clientId: CLIENT_ID, avatar: _pbPortalDraft };
   const sel = t => (_pbPortalDraft && _pbPortalDraft.type === t);
   const animalBtns = Object.entries(PB_AVATAR_ANIMALS).map(([k, v]) =>
-    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'animal' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('animal','${k}')" title="${esc(v.label)}">
+    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'animal' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('animal','${k}')" data-tip="${esc(v.label)}">
       <span class="pb-av-chip" style="background:${v.bg}"><img class="pb-av-img" src="${v.src}" alt=""></span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
     </button>`).join('');
   // D7: icon avatars — theme-tinted masks on the user's stable hashed color.
   const iconBtns = Object.entries(PB_AVATAR_ICONS).map(([k, v]) =>
-    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'icon' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('icon','${k}')" title="${esc(v.label)}">
+    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'icon' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('icon','${k}')" data-tip="${esc(v.label)}">
       <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${pbIconEntryInner(v)}</span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
     </button>`).join('');
   slot.innerHTML = `
@@ -16657,9 +17018,9 @@ function pbComposerDrop(e) {
 function pbAttachChipsHTML(list, scope) {
   return list.map(a => `
     <div class="pb-attach-chip">
-      ${a.isImage ? `<img src="${a.dataUrl}" alt="">` : `<span class="pb-file-ico">${sfIcon(a.isAudio ? 'department.audio' : pbFileSymbol(a))}</span>`}
+      ${a.isImage ? `<img src="${esc(a.dataUrl)}" alt="">` : `<span class="pb-file-ico">${sfIcon(a.isAudio ? 'department.audio' : pbFileSymbol(a))}</span>`}
       <span class="pb-attach-meta"><span class="pb-attach-name">${esc(a.name)}</span><span class="pb-attach-size">${esc(pbFileSize(a.size))}</span></span>
-      <button type="button" class="pb-attach-x" onclick="pbRemovePendingAttachment('${a.fileId}','${scope}')" title="Remove attachment">×</button>
+      <button type="button" class="pb-attach-x" onclick="pbRemovePendingAttachment('${a.fileId}','${scope}')" data-tip="Remove attachment" aria-label="Remove attachment">${sfIcon('action.close')}</button>
     </div>`).join('');
 }
 
@@ -16718,7 +17079,7 @@ async function pbLoadNoteFile(fileId) {
     const local = localStorage.getItem(pbLocalFileKey(fileId));
     if (local) { pbNoteFileCache.set(fileId, local); return local; }
   } catch {}
-  if (!window._firebaseReady || !session.code || session.isDemo) return '';
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return '';
   let readThrew = false;
   const readChunks = async refForChunk => {
     const snap = await window._getDoc(refForChunk(0));
@@ -16992,7 +17353,7 @@ function pbPositionFor(name) {
 
 function pbPositionChipHTML(name) {
   const pos = pbPositionFor(name);
-  return pos ? `<span class="pb-note-pos" title="Crew position">${esc(pos)}</span>` : '';
+  return pos ? `<span class="pb-note-pos" data-tip="Crew position">${esc(pos)}</span>` : '';
 }
 
 /* ── @mentions ──────────────────────────────────────────────────────────────
@@ -17119,9 +17480,9 @@ function pbRenderComposerTags() {
   const slot = document.getElementById('pbTagPicker');
   if (!slot) return;
   const chips = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
-    `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" title="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
+    `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" data-tip="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
   const assign = pbComposerTag === 'todo'
-    ? `<label class="pb-assign-pick" title="Assign this to-do to someone in the session">Assign:
+    ? `<label class="pb-assign-pick" data-tip="Assign this to-do to someone in the session">Assign:
         <select onchange="pbSetComposerAssignee(this.value)">
           <option value="">Anyone</option>
           ${pbAssigneeOptions().map(n => `<option value="${esc(n)}"${pbComposerAssignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
@@ -17162,11 +17523,11 @@ function pbRenderComposerChecklist() {
     <div class="pb-cl-row">
       <span class="pb-cl-box" aria-hidden="true"></span>
       <input class="pb-cl-input" type="text" value="${esc(it.text)}" placeholder="To-do item ${i + 1}" oninput="pbChecklistEdit(${i}, this.value)" onkeydown="pbChecklistKeydown(event, ${i})" aria-label="Checklist item ${i + 1}">
-      <select class="pb-cl-assign" onchange="pbChecklistAssign(${i}, this.value)" title="Who owes this item" aria-label="Assign checklist item ${i + 1}">
+      <select class="pb-cl-assign" onchange="pbChecklistAssign(${i}, this.value)" data-tip="Who owes this item" aria-label="Assign checklist item ${i + 1}">
         <option value="">Anyone</option>
         ${opts.map(n => `<option value="${esc(n)}"${it.assignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
       </select>
-      <button type="button" class="pb-cl-del" onclick="pbChecklistRemove(${i})" title="Remove item" aria-label="Remove item">${sfIcon('action.close')}</button>
+      <button type="button" class="pb-cl-del" onclick="pbChecklistRemove(${i})" data-tip="Remove item" aria-label="Remove item">${sfIcon('action.close')}</button>
     </div>`;
   }).join('');
   slot.innerHTML = `
@@ -17352,7 +17713,7 @@ async function publishPlandaBearNote() {
   } catch (err) {
     // Upload or write failed — keep the composer contents so nothing is lost, but say so.
     console.warn('[plandabear] note publish failed', err);
-    toast('⚠ Could not post the note. Check your connection and try again.');
+    toast('Could not post the note. Check your connection and try again.');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -17395,18 +17756,18 @@ async function deletePlandaBearNote(id) {
 /* ── Rendering the board ── */
 function pbAttachmentHTML(att) {
   if (att.isImage) {
-    return `<div class="pb-msg-img" data-pb-img="${att.fileId}" onclick="pbOpenLightbox('${att.fileId}')" title="Click to enlarge"><div class="pb-img-loading">Loading image…</div></div>`;
+    return `<div class="pb-msg-img" data-pb-img="${att.fileId}" onclick="pbOpenLightbox('${att.fileId}')" data-tip="Click to enlarge"><div class="pb-img-loading">Loading image…</div></div>`;
   }
   if (att.isAudio) {
-    const argName = JSON.stringify(att.name || 'audio').replace(/"/g, '&quot;');
+    const argName = esc(JSON.stringify(att.name || 'audio'));
     return `<div class="pb-msg-audio" data-pb-audio="${att.fileId}">
       <div class="pb-audio-head"><span class="pb-file-ico">${sfIcon('department.audio')}</span><span class="pb-file-name">${esc(att.name)}</span>
-        <button type="button" class="pb-audio-og" onclick="pbSendAudioToOutrangutan('${att.fileId}',${argName})" title="Download & send to the Outrangutan SFX board">${sfIcon('action.forward')} SFX</button>
-        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" title="Download">${sfIcon('action.download')}</button></div>
+        <button type="button" class="pb-audio-og" onclick="pbSendAudioToOutrangutan('${att.fileId}',${argName})" data-tip="Download & send to the Outrangutan SFX board">${sfIcon('action.forward')} SFX</button>
+        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download">${sfIcon('action.download')}</button></div>
       <div class="pb-audio-slot"><div class="pb-audio-loading">Loading audio…</div></div>
     </div>`;
   }
-  return `<button type="button" class="pb-file-chip" onclick="pbDownloadNoteFile('${att.fileId}')" title="Download this file">
+  return `<button type="button" class="pb-file-chip" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download this file">
     <span class="pb-file-ico">${sfIcon(pbFileSymbol(att))}</span>
     <span class="pb-file-meta"><span class="pb-file-name">${esc(att.name)}</span><span class="pb-file-size">${esc(pbFileSize(att.size))}</span></span>
     <span class="pb-file-dl">${sfIcon('action.download')}</span>
@@ -17475,7 +17836,7 @@ function pbHydrateNoteAudio(scope) {
 
 function pbTodoCheckHTML(note) {
   if (pbCanManageNote(note)) {
-    return `<button type="button" class="pb-todo-check${note.done ? ' done' : ''}" onclick="toggleProductionNotesTodo('${note.id}')" title="${note.done ? 'Reopen this to-do' : 'Mark this to-do done'}">${note.done ? '✓' : ''}</button>`;
+    return `<button type="button" class="pb-todo-check${note.done ? ' done' : ''}" onclick="toggleProductionNotesTodo('${note.id}')" data-tip="${note.done ? 'Reopen this to-do' : 'Mark this to-do done'}">${note.done ? '✓' : ''}</button>`;
   }
   return `<span class="pb-todo-check static${note.done ? ' done' : ''}">${note.done ? '✓' : ''}</span>`;
 }
@@ -17499,8 +17860,8 @@ function pbNoteHeadHTML(note) {
   // To-Do ownership chip: who it's assigned to, or who completed it.
   const assignChip = note.tag === 'todo'
     ? (note.done
-        ? `<span class="pb-note-assign done" title="Completed">✓ ${esc(note.doneBy || 'Done')}${note.doneAt ? ` · ${esc(pbAgo(note.doneAt))}` : ''}</span>`
-        : (note.assignee ? `<span class="pb-note-assign" title="Assigned to">→ ${esc(note.assignee)}</span>` : ''))
+        ? `<span class="pb-note-assign done" data-tip="Completed">✓ ${esc(note.doneBy || 'Done')}${note.doneAt ? ` · ${esc(pbAgo(note.doneAt))}` : ''}</span>`
+        : (note.assignee ? `<span class="pb-note-assign" data-tip="Assigned to">→ ${esc(note.assignee)}</span>` : ''))
     : '';
   return `<header class="pb-note-head">
     <span class="pb-note-avatar" style="background:${pbAvatarBg(note)}">${pbAvatarInner(note)}</span>
@@ -17528,11 +17889,11 @@ function pbChecklistHTML(note) {
   const me = (session.userName || '').trim();
   const rows = items.map(it => {
     const box = canManage
-      ? `<button type="button" class="pb-clitem-check${it.done ? ' done' : ''}" onclick="pbToggleChecklistItem('${note.id}','${it.id}')" title="${it.done ? 'Reopen' : 'Mark done'}" aria-pressed="${it.done}">${it.done ? '✓' : ''}</button>`
+      ? `<button type="button" class="pb-clitem-check${it.done ? ' done' : ''}" onclick="pbToggleChecklistItem('${note.id}','${it.id}')" data-tip="${it.done ? 'Reopen' : 'Mark done'}" aria-pressed="${it.done}">${it.done ? '✓' : ''}</button>`
       : `<span class="pb-clitem-check static${it.done ? ' done' : ''}">${it.done ? '✓' : ''}</span>`;
     const mine = !it.done && it.assignee && me && sameParticipantName(it.assignee, me);
     const owner = !it.done && it.assignee
-      ? `<span class="pb-clitem-assign${mine ? ' mine' : ''}" title="Assigned to">→ ${esc(it.assignee)}</span>` : '';
+      ? `<span class="pb-clitem-assign${mine ? ' mine' : ''}" data-tip="Assigned to">→ ${esc(it.assignee)}</span>` : '';
     const meta = it.done && it.doneBy ? `<span class="pb-clitem-by">${esc(it.doneBy)}</span>` : '';
     return `<li class="pb-clitem${it.done ? ' done' : ''}${mine ? ' mine' : ''}">${box}<span class="pb-clitem-text">${esc(it.text)}</span>${owner}${meta}</li>`;
   }).join('');
@@ -17671,7 +18032,7 @@ function pbRenderOwes() {
         <span class="pb-owes-count">${r.items.length} open</span>
       </div>
       <ul class="pb-owes-items">${r.items.map(it => `
-        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" title="Jump to this note">${esc(it.text.slice(0, 120))}</button><button type="button" class="pb-owes-push" onclick="pbPushOwesItem('${it.noteId}','${it.itemId}')" title="Add to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button></li>`).join('')}</ul>
+        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" data-tip="Jump to this note">${esc(it.text.slice(0, 120))}</button><button type="button" class="pb-owes-push" onclick="pbPushOwesItem('${it.noteId}','${it.itemId}')" data-tip="Add to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button></li>`).join('')}</ul>
     </div>`).join('');
 }
 
@@ -17685,7 +18046,7 @@ function pbOwesJump(noteId) {
 function pbLikeButtonHTML(note) {
   const liked = pbHasLiked(note);
   const n = (note.likes || []).length;
-  return `<button type="button" class="pb-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${note.id}')" title="${liked ? 'Remove your like' : 'Like this note'}" aria-pressed="${liked}">
+  return `<button type="button" class="pb-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${note.id}')" data-tip="${liked ? 'Remove your like' : 'Like this note'}" aria-pressed="${liked}">
     <span class="pb-like-ico">${sfIcon('state.favorite')}</span>${n ? `<span class="pb-like-count">${n}</span>` : ''}
   </button>`;
 }
@@ -17695,7 +18056,7 @@ function pbLikeButtonHTML(note) {
 function pbSeenByHTML(note) {
   const names = Object.values(note.seenBy || {}).map(e => e && e.name).filter(Boolean);
   if (!names.length) return '';
-  return `<span class="pb-note-seen" title="${esc('Seen by ' + names.join(', '))}">Seen by ${names.length}</span>`;
+  return `<span class="pb-note-seen" data-tip="${esc('Seen by ' + names.join(', '))}">Seen by ${names.length}</span>`;
 }
 
 // On a pinned note, instructors see who on the crew roster HASN'T read it yet
@@ -17719,7 +18080,7 @@ function pbNoteFootHTML(note, replyCount) {
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${sfIcon('action.pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
-    ${pbIsInstructor() && ((note.tag === 'todo' && !note.done) || (note.checklist || []).some(it => !it.done)) ? `<button type="button" class="pb-note-act" onclick="pbPushNoteToSchedule('${note.id}')" title="Add the open to-dos to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button>` : ''}
+    ${pbIsInstructor() && ((note.tag === 'todo' && !note.done) || (note.checklist || []).some(it => !it.done)) ? `<button type="button" class="pb-note-act" onclick="pbPushNoteToSchedule('${note.id}')" data-tip="Add the open to-dos to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button>` : ''}
     <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
     ${pbSeenByHTML(note)}
@@ -17751,9 +18112,9 @@ function pbReplyHTML(reply) {
       <div class="pb-reply-body">${check}<div class="pb-note-main">${text}${atts}</div></div>
     </div>
     <div class="pb-reply-acts">
-      <button type="button" class="pb-reply-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${reply.id}')" title="${liked ? 'Remove your like' : 'Like'}" aria-pressed="${liked}">${sfIcon('state.favorite')}${likeN ? ` ${likeN}` : ''}</button>
-      ${mine ? `<button type="button" onclick="pbStartEditNote('${reply.id}')" title="Edit your reply" aria-label="Edit your reply">${sfIcon('action.edit')}</button>` : ''}
-      ${pbCanManageNote(reply) ? `<button type="button" class="danger" onclick="deletePlandaBearNote('${reply.id}')" title="Delete reply" aria-label="Delete reply">${sfIcon('action.delete')}</button>` : ''}
+      <button type="button" class="pb-reply-like${liked ? ' liked' : ''}" onclick="pbToggleLike('${reply.id}')" data-tip="${liked ? 'Remove your like' : 'Like'}" aria-pressed="${liked}">${sfIcon('state.favorite')}${likeN ? ` ${likeN}` : ''}</button>
+      ${mine ? `<button type="button" onclick="pbStartEditNote('${reply.id}')" data-tip="Edit your reply" aria-label="Edit your reply">${sfIcon('action.edit')}</button>` : ''}
+      ${pbCanManageNote(reply) ? `<button type="button" class="danger" onclick="deletePlandaBearNote('${reply.id}')" data-tip="Delete reply" aria-label="Delete reply">${sfIcon('action.delete')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -17764,7 +18125,7 @@ function pbReplyComposerHTML(root) {
     <div class="pb-attach-tray" id="pbReplyAttachTray" hidden></div>
     <div class="pb-reply-compose-row">
       <textarea id="pbReplyInput" rows="1" placeholder="Reply to ${esc(root.by)}… Type @ to mention someone." oninput="pbAutosizeNoteInput(this);pbMentionOnInput(this,'reply')" onkeydown="pbReplyKeydown(event,'${root.id}')" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'reply')"></textarea>
-      <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" title="Attach to reply" aria-label="Attach to reply">${sfIcon('action.attach')}</button>
+      <button type="button" class="pb-reply-attach" onclick="document.getElementById('pbReplyFileInput').click()" data-tip="Attach to reply" aria-label="Attach to reply">${sfIcon('action.attach')}</button>
       <input type="file" id="pbReplyFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'reply')">
       <button type="button" class="pb-post-btn small" onclick="pbPostReply('${root.id}')"><span>Reply</span>${sfIcon('action.forward')}</button>
       <button type="button" class="pb-note-act" onclick="pbCancelReply()">Cancel</button>
@@ -17793,7 +18154,7 @@ function pbThreadHTML(t) {
   if (root.tag === 'todo' && root.done) classes.push('done');
   if (collapsed) classes.push('collapsed');
   const replyCount = t.replies.length;
-  const collapseBtn = `<button type="button" class="pb-collapse-btn" onclick="pbToggleCollapse('${root.id}')" title="Collapse note" aria-expanded="true" aria-label="Collapse note">${sfIcon('action.expand')}</button>`;
+  const collapseBtn = `<button type="button" class="pb-collapse-btn" onclick="pbToggleCollapse('${root.id}')" data-tip="Collapse note" aria-expanded="true" aria-label="Collapse note">${sfIcon('action.expand')}</button>`;
   if (collapsed) {
     return `<article class="${classes.join(' ')}" data-note-id="${root.id}">
       ${root.pinned ? `<div class="pb-pin-flag">${sfIcon('action.pin')} Pinned</div>` : ''}
@@ -18124,9 +18485,10 @@ function pbUpdateBellBtn() {
   btn.classList.toggle('on', on);
   btn.setAttribute('aria-pressed', String(on));
   setSymbolButtonLabel(btn, pbNotificationSymbol(unread, !on), on ? 'Alerts on' : 'Alerts off');
-  btn.title = on
+  btn.setAttribute('data-tip', on
     ? 'Browser notifications are on. Click to turn off'
-    : 'Get a browser notification when teammates post (works while this tab is open in the background)';
+    : 'Get a browser notification when teammates post (works while this tab is open in the background)');
+  btn.removeAttribute('title');
 }
 
 function pbToggleBrowserNotify() {
@@ -18441,7 +18803,7 @@ function renderPnPanel() {
       <div class="pn-head-row">
         <span class="pn-head-title">${sfIcon('content.note')} Notes</span>
         ${total ? `<span class="pn-count">${total}</span>` : ''}
-        <button type="button" class="pn-close" onclick="togglePnPanel()" aria-label="Close notes panel" title="Close">${sfIcon('action.close')}</button>
+        <button type="button" class="pn-close" onclick="togglePnPanel()" aria-label="Close notes panel" data-tip="Close">${sfIcon('action.close')}</button>
       </div>
       <div class="pn-target-row">
         <span class="pn-target-label">Row</span>
@@ -18470,14 +18832,14 @@ function pnNoteCardHTML(note) {
     ${atts ? `<div class="pn-card-atts">${sfIcon('action.attach')} ${atts} file${atts > 1 ? 's' : ''}</div>` : ''}
     <div class="pn-card-acts">
       ${canTarget && hasText ? `
-        <button type="button" class="pn-act-btn pn-act-notes" onclick="pnAddToRowNotes('${note.id}')" title="Copy note text to the target row's notes field">
+        <button type="button" class="pn-act-btn pn-act-notes" onclick="pnAddToRowNotes('${note.id}')" data-tip="Copy note text to the target row's notes field">
           ${sfIcon('content.note')} Row Notes
         </button>
-        <button type="button" class="pn-act-btn pn-act-script" onclick="pnAddAsScript('${note.id}')" title="Set as script cue text on the target row">
+        <button type="button" class="pn-act-btn pn-act-script" onclick="pnAddAsScript('${note.id}')" data-tip="Set as script cue text on the target row">
           ${sfIcon('content.script')} Script
         </button>
       ` : ''}
-      <button type="button" class="pn-act-btn pn-act-new" onclick="pnAddAsNewRow('${note.id}')" title="Create a new rundown row from this note">
+      <button type="button" class="pn-act-btn pn-act-new" onclick="pnAddAsNewRow('${note.id}')" data-tip="Create a new rundown row from this note">
         ${sfIcon('action.add')} New Row
       </button>
     </div>
@@ -18588,14 +18950,14 @@ async function renderPlandaBearHubActivity() {
   const contributors = new Set(log.map(e => e && e.by).filter(Boolean)).size;
   panel.innerHTML = `<div class="pb-hub-activity">
     <div class="pb-hub-activity-head" onclick="togglePbHub(this)">
-      <span>👥 Who worked on what</span>
-      <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">${log.length} change${log.length===1?'':'s'} · ${contributors} ${contributors===1?'person':'people'}</span>
-      <span class="pb-hub-caret">▶</span>
+      <span>${sfIcon('action.profile')} Who worked on what</span>
+      <span class="pb-hub-sub">${log.length} change${log.length===1?'':'s'} · ${contributors} ${contributors===1?'person':'people'}</span>
+      <span class="pb-hub-caret">${sfIcon('chevron.right')}</span>
     </div>
     <div class="pb-hub-activity-body">
       ${recent.map(e=>`<div class="pb-hub-row">
         <span class="s">${esc(e.section||'Planda Bear')}</span>
-        <span class="b" title="${esc(e.by||'Unknown')}">by ${esc(e.by||'Unknown')}</span>
+        <span class="b" data-tip="${esc(e.by||'Unknown')}">by ${esc(e.by||'Unknown')}</span>
         <span class="w">${pbAgo(e.at)}</span>
       </div>`).join('')}
     </div>
@@ -19570,21 +19932,6 @@ function weatherSummaryLine(w) {
   return parts.join(' · ');
 }
 
-// Cute one-liner with emoji icons — used only where plain text rendering is
-// acceptable. Form fields use sf-symbol icons beside plain editable text.
-function weatherCuteSummary(w, withSun=false) {
-  w = normalizeCallSheetWeather(w);
-  if (!w) return '';
-  const parts = [];
-  if (w.conditions) parts.push(`${w.emoji || '🌤️'} ${w.conditions}`);
-  else if (w.emoji) parts.push(w.emoji);
-  if (w.high || w.low) parts.push(`🌡️ ${w.high || '—'} / ${w.low || '—'}`);
-  if (w.precip) parts.push(`💧 ${w.precip}`);
-  if (w.wind) parts.push(`💨 ${w.wind}`);
-  if (withSun && (w.sunrise || w.sunset)) parts.push(`🌅 ${w.sunrise || '—'}  🌇 ${w.sunset || '—'}`);
-  return parts.join('  ·  ');
-}
-
 function weatherCompactSummary(w, withSun=false) {
   w = normalizeCallSheetWeather(w);
   if (!w) return '';
@@ -19648,6 +19995,7 @@ function renderSafetyPlanWeatherSymbols(data=loadPreProData()) {
 
 function safetySecurityValue(value) {
   const v = String(value || '').trim();
+  // '8822' is the legacy demo-session marker; strip it so it never renders as a real security value.
   return v === '8822' ? '' : v;
 }
 
@@ -19947,16 +20295,6 @@ function callSheetTitle(data={}) {
   return production ? `${production} - ${suffix}` : suffix;
 }
 
-function getCallSheetExportData() {
-  if (document.getElementById('preProModal')?.classList.contains('on')) {
-    return saveCallSheet(false);
-  }
-  const data = loadPreProData();
-  const sheets = getCallSheets(data);
-  const idx = resolveActiveCallSheetIndex(sheets);
-  return normalizeCallSheet(sheets[idx], idx);
-}
-
 function showPatchSheetPreview(kind) {
   openPatchSheetEditor(kind);
 }
@@ -20034,21 +20372,6 @@ function callSheetPreviewHTML(data, prePro=loadPreProData()) {
     <table><thead><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th>Call</th></tr></thead><tbody>${peopleRows || '<tr><td colspan="5">No crew or talent entered yet.</td></tr>'}</tbody></table>
     ${notes ? `<h2>General Notes</h2>
     <table><tbody><tr><td>${esc(notes)}</td></tr></tbody></table>` : ''}`;
-}
-
-function showCuePartPreview(type) {
-  const titleMap = { video:'Camera Cue Part', audio:'Rundown Audio Cues Part', lighting:'Rundown Lighting Cues Part' };
-  const rows = beats.map((b,i) => {
-    const d = b.cues?.[type];
-    if (!d) return '';
-    const on = getCueOn(d), off = getCueOff(d);
-    return `<tr><td>${i+1}</td><td>${esc(b.info||'-')}</td><td>${esc(on||'-')}</td><td>${esc(off||'-')}</td><td>${esc(d.notes||'')}</td></tr>`;
-  }).filter(Boolean).join('');
-  showPaperPreview(titleMap[type], `
-    <h1>${titleMap[type]}</h1>
-    <div>Rendered from the rundown editor.</div>
-    <table><thead><tr><th>#</th><th>Row</th><th>Ready</th><th>Take</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No cues for this part yet.</td></tr>'}</tbody></table>
-  `, 'Done', 'dismissPaperPreview()', null);
 }
 
 function openSafetyPlan() {
@@ -20196,17 +20519,6 @@ function guideForProductionArea(area) {
   return PRODUCTION_CHECKLIST_GUIDES.find(row => row.area.toLowerCase() === needle);
 }
 
-function syncProductionChecklistGuide(input) {
-  const idx = Number(input?.dataset?.psRow);
-  if (!Number.isFinite(idx)) return;
-  const guide = guideForProductionArea(input.value);
-  const hint = guide?.hint || 'Add a ready-before-show item.';
-  const hidden = document.querySelector(`[data-ps-row="${idx}"][data-ps-field="hint"]`);
-  const check = document.querySelector(`[data-ps-row="${idx}"][data-ps-field="item"]`);
-  if (hidden) hidden.value = hint;
-  if (check && !check.value.trim()) check.setAttribute('placeholder', hint);
-}
-
 function openProductionSchedule() {
   activePaperworkItemId = 'production-scheduler';
   hideModal('paperworkHubModal');
@@ -20255,7 +20567,7 @@ function renderProductionChecklist(items) {
           <input class="field-in" data-ps-row="${i}" data-ps-field="item" value="${esc(row.item||'')}" placeholder="Add a ready-before-show item">
           ${row.done && row.doneBy ? `<div class="readiness-signoff">✓ Signed off by ${esc(row.doneBy)}${row.doneAt ? ` · ${esc(pbAgo(row.doneAt))}` : ''}</div>` : ''}
         </div>
-        <button class="readiness-remove" onclick="removeProductionChecklistRow(${i})" title="Remove row" aria-label="Remove readiness row">×</button>
+        <button class="readiness-remove" onclick="removeProductionChecklistRow(${i})" data-tip="Remove row" aria-label="Remove readiness row">${sfIcon('action.close')}</button>
         <input type="hidden" data-ps-row="${i}" data-ps-field="id" value="${esc(row.id||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="area" value="${esc(row.area||'')}">
         <input type="hidden" data-ps-row="${i}" data-ps-field="hint" value="${esc(row.hint||'')}">
@@ -20403,8 +20715,8 @@ function renderPatchTable(kind, title) {
   const isComms = kind === 'comms';
   const heads = isComms ? ['Position','Out','Gear','Notes'] : ['Label','Destination','Source','Cabling','Notes'];
   const moveCell = (i) => `<div class="patch-move">
-          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},-1)" title="Move row up" aria-label="Move ${kind} row ${i + 1} up" ${i === 0 ? 'disabled' : ''}>${sfIcon('chevron.up')}</button>
-          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},1)" title="Move row down" aria-label="Move ${kind} row ${i + 1} down" ${i === rows.length - 1 ? 'disabled' : ''}>${sfIcon('chevron.down')}</button>
+          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},-1)" data-tip="Move row up" aria-label="Move ${kind} row ${i + 1} up" ${i === 0 ? 'disabled' : ''}>${sfIcon('chevron.up')}</button>
+          <button class="patch-move-btn" onclick="movePatchRow('${kind}',${i},1)" data-tip="Move row down" aria-label="Move ${kind} row ${i + 1} down" ${i === rows.length - 1 ? 'disabled' : ''}>${sfIcon('chevron.down')}</button>
         </div>`;
   return `
     <div class="field">
@@ -20418,7 +20730,7 @@ function renderPatchTable(kind, title) {
           ${patchInput(row.gear, kind, i, 'gear')}
           ${patchInput(row.notes, kind, i, 'notes')}
           ${moveCell(i)}
-          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" title="Remove row" aria-label="Remove ${kind} row ${i + 1}">x</button>
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" data-tip="Remove row" aria-label="Remove ${kind} row ${i + 1}">${sfIcon('action.close')}</button>
         ` : `
           ${patchInput(row.label, kind, i, 'label')}
           ${patchInput(row.destination, kind, i, 'destination')}
@@ -20426,7 +20738,7 @@ function renderPatchTable(kind, title) {
           ${patchInput(row.cabling, kind, i, 'cabling')}
           ${patchInput(row.notes, kind, i, 'notes')}
           ${moveCell(i)}
-          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" title="Remove row" aria-label="Remove ${kind} row ${i + 1}">x</button>
+          <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" data-tip="Remove row" aria-label="Remove ${kind} row ${i + 1}">${sfIcon('action.close')}</button>
         `)).join('')}
       </div>
       <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
@@ -20827,11 +21139,6 @@ function paperExportMeta(opts={}) {
     revisionLabel:String(supplied.revisionLabel || '').slice(0,240),
     draftLabel:String(hasDraftLabel ? supplied.draftLabel : 'PREVIEW ONLY').slice(0,80),
   };
-}
-
-function paperExportDateLabel(value) {
-  const parsed = new Date(value || Date.now());
-  return Number.isNaN(parsed.getTime()) ? String(value || '') : parsed.toLocaleString();
 }
 
 // D9.3: printed pages carry a date, never an export timestamp.
@@ -21511,10 +21818,6 @@ function applyPlandaShowStartToRundown() {
   syncToFirestore();
 }
 
-function savePrePro() {
-  saveCallSheet();
-}
-
 function syncCallSheetPeopleFromDOM() {
   callSheetPeople = Array.from(document.querySelectorAll('.call-person-row')).map(row => ({
     // Stable row identity for the leaf-granular sync (PB_COLLAB_PLAN.md):
@@ -21615,13 +21918,13 @@ function renderCallSheetPeople() {
     <div class="call-grid-head"></div>
     ${rows.map((p,i)=>`
       <div class="call-person-row" data-idx="${i}"${p.id ? ` data-row-id="${esc(p.id)}"` : ''} style="display:contents">
-        <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" title="Drag to reorder" aria-label="Drag to reorder">⠿</div>
+        <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" data-tip="Drag to reorder" aria-label="Drag to reorder">${sfIcon('action.drag')}</div>
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="position" list="ppPositionOptions" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="email" value="${esc(p.email||'')}" placeholder="Email" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="phone" value="${esc(p.phone||'')}" placeholder="Phone" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="call" type="time" value="${esc(normalizeTimeValue(p.call)||'')}" oninput="syncCallSheetPeopleFromDOM()">
-        <button class="call-row-remove" onclick="removeCallSheetPerson(${i})" title="Remove person">x</button>
+        <button class="call-row-remove" onclick="removeCallSheetPerson(${i})" data-tip="Remove person" aria-label="Remove person">${sfIcon('action.close')}</button>
       </div>`).join('')}`;
 }
 
@@ -21714,7 +22017,6 @@ async function downloadCallSheetPDF() {
       toast(`Could not render the saved call sheet: ${paperworkExportFailureMessage(printError)}`);
     }
   }
-  return;
 }
 
 async function exportPreProPackagePDF() {
@@ -21756,7 +22058,6 @@ async function exportPreProPackagePDF() {
       toast(`Could not render the saved package: ${paperworkExportFailureMessage(printError)}`);
     }
   }
-  return;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -21796,7 +22097,6 @@ async function exportPDF() {
       toast(`Could not render the saved rundown: ${paperworkExportFailureMessage(printError)}`);
     }
   }
-  return;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -22122,35 +22422,53 @@ window.addEventListener('keydown', e => {
   if (build || live) { e.preventDefault(); exportRundownFile(); }
 }, true);
 
-// Name-badge hover tooltips (presence avatars, Planda Bear collab badges,
-// rundown presence dots). The old pure-CSS ::after tooltips were clipped by
-// scrollable ancestors (.tb-right gains overflow-x:auto under 900px, which
-// forces vertical clipping too), so the tooltip is a body-level fixed element
-// positioned from the badge's viewport rect instead.
+// Global hover-label engine. One reusable glass chip (.ui-float-tip) serves
+// every element tagged data-tip (plain-language hover help on controls) plus
+// the legacy data-fullname badges (presence avatars, Planda Bear collab
+// badges, rundown presence dots). The old pure-CSS ::after tooltips were
+// clipped by scrollable ancestors (.tb-right gains overflow-x:auto under
+// 900px, which forces vertical clipping too), so the chip is a body-level
+// fixed element positioned from the anchor's viewport rect. Shows after a
+// 150ms hover/focus dwell; hides on leave, blur, Esc, scroll, or click.
 (function uiFloatTip() {
-  let tip = null, anchor = null;
-  const hide = () => { tip?.remove(); tip = null; anchor = null; };
-  document.addEventListener('mouseover', e => {
-    const t = e.target.closest?.('[data-fullname]');
-    if (!t) { if (anchor) hide(); return; }
-    if (t === anchor) return;
-    hide();
-    anchor = t;
+  let tip = null, anchor = null, timer = 0;
+  const textFor = el => el.getAttribute('data-tip') || el.getAttribute('data-fullname') || '';
+  const hide = () => { clearTimeout(timer); timer = 0; tip?.remove(); tip = null; anchor = null; };
+  const show = el => {
+    const text = textFor(el);
+    if (!text) return;
     tip = document.createElement('div');
     tip.className = 'ui-float-tip';
-    tip.textContent = t.getAttribute('data-fullname') || '';
+    tip.setAttribute('role', 'tooltip');
+    tip.textContent = text;
     document.body.appendChild(tip);
-    const r = t.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    const r = el.getBoundingClientRect(), tr = tip.getBoundingClientRect();
     const x = Math.max(8, Math.min(r.left + r.width / 2 - tr.width / 2, innerWidth - tr.width - 8));
     let y = r.bottom + 8;
     if (y + tr.height > innerHeight - 8) y = r.top - tr.height - 8;
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
     requestAnimationFrame(() => tip?.classList.add('on'));
-  });
-  document.addEventListener('mouseout', e => {
+  };
+  const arm = el => {
+    if (el === anchor) return;
+    hide();
+    anchor = el;
+    timer = setTimeout(() => { if (anchor === el && document.contains(el)) show(el); }, 150);
+  };
+  const enter = e => {
+    const t = e.target.closest?.('[data-tip],[data-fullname]');
+    if (!t) { if (anchor && e.type === 'mouseover') hide(); return; }
+    arm(t);
+  };
+  const leave = e => {
     if (anchor && !(e.relatedTarget && anchor.contains(e.relatedTarget))) hide();
-  });
+  };
+  document.addEventListener('mouseover', enter);
+  document.addEventListener('mouseout', leave);
+  document.addEventListener('focusin', enter);
+  document.addEventListener('focusout', leave);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); }, true);
   document.addEventListener('scroll', hide, true);
   document.addEventListener('click', hide, true);
 })();

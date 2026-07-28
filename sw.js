@@ -87,27 +87,28 @@ const SHELL_ASSETS = [
   'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=e56e5e6cd7',
   'cueola-assignment-model.js?v=d81e0cf353',
-  'cueola-session-clone.js?v=fe05f41dfc',
+  'cueola-session-clone.js?v=2b4cf2ea17',
+  'break-room-show.js?v=a878b2a3c7',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=1d92cd2c1f',
+  'cueola-identity.js?v=dfd7726c59',
   'cueola-admin-auth.js?v=2d94c57e93',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
-  'script-operator.js?v=f3efd29fc5',
-  'script-operator.css?v=cad0bcf104',
+  'script-operator.js?v=20cc4ca0c1',
+  'script-operator.css?v=7abb39cd6e',
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
-  'outrangutan/stream-deck-label.js?v=8912d8ca65',
-  'cueola-app.js?v=05299da090',
-  'outrangutan/outrangutan.css?v=718e619254',
-  'outrangutan/outrangutan.js?v=984299cd5d',
+  'outrangutan/stream-deck-label.js?v=bef2fc8307',
+  'cueola-app.js?v=c9f2b12372',
+  'outrangutan/outrangutan.css?v=1640115e75',
+  'outrangutan/outrangutan.js?v=f55ff37cff',
   'cueola-streamdeck-device.js?v=48990ed663',
-  'cueola-obs.js?v=d6aad44701',
-  'cueola-streamdeck.js?v=88a13d2ee8',
+  'cueola-obs.js?v=53b3859b7c',
+  'cueola-streamdeck.js?v=e2405aa42f',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -138,7 +139,13 @@ const versionSignature = SHELL_ASSETS
 // panel, setup wizard, deck shell + on-screen strip, PLBK vol, OBS stream
 // volume. index.html markup/CSS changed (screen header, wizard mount, entry
 // card, shared .app-back), so the shell must roll along with the JS bumps.
-const WORKER_SCHEMA = '14';
+// 14->15: The Break Room test show: new precached break-room-show.js module
+// plus index.html (front-door demo card) and dashboard.html (Create Test Show)
+// markup changes the shell caches; roll so installed clients get all three.
+// 15->16: v2.2 front page: instructor-gated Break Room button, 2-up app card
+// grid + glass restyle, version flip to 2.2.0. index.html markup/CSS changed
+// alongside the cueola-app/cueola-identity bumps, so the shell must roll.
+const WORKER_SCHEMA = '16';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
@@ -164,8 +171,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   // Firebase SDKs, Firestore, App Check, and the local emulator are different
   // origins and intentionally remain under their own networking/persistence.
-  // restore-p2607.html is a recovery utility that must never be shell-cached.
-  if (url.origin !== self.location.origin || url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/restore-p2607.html')) return;
+  if (url.origin !== self.location.origin || url.pathname.endsWith('/sw.js')) return;
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);

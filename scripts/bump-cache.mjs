@@ -22,6 +22,7 @@ export const ASSETS = [
   'cueola-avatar-profile.js',
   'cueola-assignment-model.js',
   'cueola-session-clone.js',
+  'break-room-show.js',
   'cueola-export-model.js',
   'cueola-prepro-sync.js',
   'cueola-identity.js',

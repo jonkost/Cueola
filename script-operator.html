@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
   <meta name="theme-color" content="#080b12">
   <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-  <link rel="stylesheet" href="script-operator.css?v=cad0bcf104">
+  <link rel="stylesheet" href="script-operator.css?v=7abb39cd6e">
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=209555b4d7" defer></script>
-  <script src="script-operator.js?v=f3efd29fc5" defer></script>
+  <script src="script-operator.js?v=20cc4ca0c1" defer></script>
 </head>
 <body>
-  <main class="script-operator" id="scriptOperatorRoot" data-render-count="1">
+  <main class="script-operator" id="scriptOperatorRoot">
     <header class="operator-bar">
       <div class="operator-identity">
         <div class="operator-brand" aria-label="Cueola Script Operator">Cu<span>e</span>ola</div>
@@ -27,7 +27,7 @@
           <span class="connection-dot" aria-hidden="true"></span>
           <span id="connectionStatusText">Connecting…</span>
         </div>
-        <button class="icon-button" id="closeWindowButton" type="button" title="Close Script Operator" aria-label="Close Script Operator">
+        <button class="icon-button" id="closeWindowButton" type="button" data-tip="Close Script Operator" aria-label="Close Script Operator">
           <span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span>
         </button>
       </div>
@@ -45,7 +45,7 @@
       </button>
     </section>
 
-    <div class="operator-scroll" id="scriptOperatorControls" data-render-count="1">
+    <div class="operator-scroll" id="scriptOperatorControls">
       <section class="script-workspace" aria-labelledby="scriptHeading">
         <div class="section-heading-row">
           <div>
@@ -56,10 +56,10 @@
         </div>
         <textarea class="script-editor" id="scriptEditor" spellcheck="true" aria-label="Live Flowmingo script" placeholder="The live Flowmingo script appears here." data-requires-state></textarea>
         <div class="script-actions" aria-label="Script actions">
-          <button class="quiet-button icon-only" type="button" data-command-kind="edit-script" title="Edit cue script" aria-label="Edit cue script" data-requires-state>
+          <button class="quiet-button icon-only" type="button" data-command-kind="edit-script" data-tip="Edit cue script" aria-label="Edit cue script" data-requires-state>
             <span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span>
           </button>
-          <button class="quiet-button icon-only danger-button" type="button" data-command-kind="clear" title="Clear script" aria-label="Clear script" data-requires-state>
+          <button class="quiet-button icon-only danger-button" type="button" data-command-kind="clear" data-tip="Clear script" aria-label="Clear script" data-requires-state>
             <span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span>
           </button>
           <button class="primary-button" type="button" data-command-kind="push" data-include-draft data-requires-state>
@@ -72,19 +72,19 @@
       <section class="inspector" aria-label="Script Operator controls">
         <div class="inspector-head">
           <div class="inspector-tabs" role="tablist" aria-label="Script Operator control groups">
-            <button class="inspector-tab is-active" id="tab-prompter" type="button" role="tab" aria-selected="true" aria-controls="pane-prompter" data-tab="prompter" title="Prompter">
+            <button class="inspector-tab is-active" id="tab-prompter" type="button" role="tab" aria-selected="true" aria-controls="pane-prompter" data-tab="prompter" data-tip="Prompter">
               <span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
               <span class="visually-hidden">Prompter</span>
             </button>
-            <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" title="Cue &amp; On Air">
+            <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" data-tip="Cue and On Air">
               <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
               <span class="visually-hidden">Cue &amp; On Air</span>
             </button>
-            <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" title="Clocks &amp; Alerts">
+            <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" data-tip="Clocks and alerts">
               <span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span>
               <span class="visually-hidden">Clocks &amp; Alerts</span>
             </button>
-            <button class="inspector-tab" id="tab-formatting" type="button" role="tab" aria-selected="false" aria-controls="pane-formatting" data-tab="formatting" title="Formatting &amp; Markers">
+            <button class="inspector-tab" id="tab-formatting" type="button" role="tab" aria-selected="false" aria-controls="pane-formatting" data-tab="formatting" data-tip="Formatting and markers">
               <span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span>
               <span class="visually-hidden">Formatting &amp; Markers</span>
             </button>
@@ -247,12 +247,12 @@
             <h2>Formatting &amp; Markers</h2>
             <p class="section-help">Formatting is inserted into the script at the current selection.</p>
             <div class="format-actions">
-              <button class="format-button text-format" type="button" data-wrap-before="**" data-wrap-after="**" aria-label="Bold" title="Bold (⌘B)" data-requires-state><strong>B</strong></button>
-              <button class="format-button text-format" type="button" data-wrap-before="*" data-wrap-after="*" aria-label="Italic" title="Italic (⌘I)" data-requires-state><em>I</em></button>
+              <button class="format-button text-format" type="button" data-wrap-before="**" data-wrap-after="**" aria-label="Bold" data-tip="Bold (Cmd B)" data-requires-state><strong>B</strong></button>
+              <button class="format-button text-format" type="button" data-wrap-before="*" data-wrap-after="*" aria-label="Italic" data-tip="Italic (Cmd I)" data-requires-state><em>I</em></button>
               <button class="format-button" type="button" data-insert="[UPDATE] " data-requires-state><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
               <button class="format-button" type="button" data-insert="[BREAK - AUTO PAUSE] " data-requires-state><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
               <button class="format-button" type="button" data-insert="[STOP HERE] " data-requires-state><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-              <button class="format-button" type="button" data-insert="&#10;&#10;" title="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
+              <button class="format-button" type="button" data-insert="&#10;&#10;" data-tip="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
               <button class="format-button" type="button" data-paste data-requires-state><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Paste</span></button>
               <button class="format-button" type="button" data-paste-push data-requires-state><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Paste Push</span></button>
             </div>

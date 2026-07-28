@@ -48,6 +48,27 @@
   const activeHolds = new Map();
   const pendingControlValues = new Map();
   const pendingIntents = new Map();
+  const previewThrottles = new Map();
+
+  // D11.1: window-level keycommands via the shared cueola-keymap.js engine,
+  // including the owner's direct ask, J/L hold-to-Brake/Boost, so bindings,
+  // overrides, and the "?" reference match the Live surface exactly.
+  // Declared with the boot state so hold release paths can run during init.
+  const keymapApi = window.CueolaKeymap || null;
+  const OPERATOR_KEYMAP = [
+    { id: 'scriptop.playpause',  scope: 'scriptop', group: 'Prompter', keys: ['Space', 'K'], label: 'Play / pause',
+      run: () => sendIntent('control', { action: document.getElementById('playButton')?.dataset.action || 'resume' }) },
+    { id: 'scriptop.brake',      scope: 'scriptop', group: 'Prompter', keys: ['J'], label: 'Brake (hold)', hold: ['brake_start', 'brake_stop'] },
+    { id: 'scriptop.boost',      scope: 'scriptop', group: 'Prompter', keys: ['L'], label: 'Boost (hold)', hold: ['boost_start', 'boost_stop'] },
+    { id: 'scriptop.size.down',  scope: 'scriptop', group: 'Prompter', keys: ['-'], label: 'Text smaller', run: () => sendIntent('control', { action: 'size_down' }) },
+    { id: 'scriptop.size.up',    scope: 'scriptop', group: 'Prompter', keys: ['='], label: 'Text bigger',  run: () => sendIntent('control', { action: 'size_up' }) },
+    { id: 'scriptop.speed.down', scope: 'scriptop', group: 'Prompter', keys: ['['], label: 'Speed down',   run: () => sendIntent('control', { action: 'speed_down' }) },
+    { id: 'scriptop.speed.up',   scope: 'scriptop', group: 'Prompter', keys: [']'], label: 'Speed up',     run: () => sendIntent('control', { action: 'speed_up' }) },
+    { id: 'scriptop.ref',        scope: 'scriptop', group: 'Reference', keys: ['?'], label: 'This shortcut reference', run: () => toggleOperatorKeymapRef() },
+  ];
+  const operatorHolds = keymapApi
+    ? keymapApi.createHoldTracker(sendHoldControl)
+    : null;
 
   document.documentElement.dataset.theme = activeTheme;
   init();
@@ -64,6 +85,10 @@
     }
 
     protocol = createProtocolAdapter();
+    if (!protocol) {
+      setDisconnected('The Script Operator protocol failed to load. Close this panel and reopen it from Cueola Live.');
+      return;
+    }
     try {
       channel = new BroadcastChannel(protocol.channelName);
       channel.addEventListener('message', onChannelMessage);
@@ -87,14 +112,10 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') releaseAllHolds();
     });
-    // D11.1: window-level keycommands (J/L brake/boost, Space/K, ?, sizes)
-    // with the same blur hold-safety as the pointer holds above.
+    // D11.1: window-level keycommands (J/L brake/boost, Space/K, ?, sizes).
+    // releaseAllHolds above covers keyboard holds on blur and hide too.
     document.addEventListener('keydown', e => operatorKeymapDispatch(e, 'down'));
     document.addEventListener('keyup', e => operatorKeymapDispatch(e, 'up'));
-    window.addEventListener('blur', () => operatorHolds?.releaseAll());
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') operatorHolds?.releaseAll();
-    });
 
     controlsRoot.addEventListener('click', onDelegatedClick);
     controlsRoot.addEventListener('input', onDelegatedInput);
@@ -110,127 +131,46 @@
     editor.addEventListener('blur', onEditorBlur);
   }
 
+  // cueola-script-operator-protocol.js is a hard dependency loaded by
+  // script-operator.html before this file; the adapter is a thin wrapper over
+  // its operator instance with no hand-rolled fallback envelopes.
   function createProtocolAdapter() {
-    const factoryOptions = { ...identity };
+    if (!protocolApi || typeof protocolApi.createOperator !== 'function') {
+      console.error('[Script Operator] Protocol library missing');
+      return null;
+    }
     let instance = null;
     try {
-      if (protocolApi && typeof protocolApi.createOperator === 'function') {
-        instance = protocolApi.createOperator(factoryOptions);
-      }
+      instance = protocolApi.createOperator({ ...identity });
     } catch (error) {
       console.error('[Script Operator] Protocol initialization failed', error);
+      return null;
     }
-
-    let name = '';
-    if (instance && typeof instance.channelName === 'string') name = instance.channelName;
-    if (!name && protocolApi && typeof protocolApi.channelName === 'function') {
-      try { name = protocolApi.channelName(factoryOptions); } catch {}
-      if (!name) {
-        try { name = protocolApi.channelName(productionCode, controllerInstanceId); } catch {}
-      }
-    }
-    if (!name) name = `cueola-script-operator:${productionCode}:${sessionId}:${controllerInstanceId}`;
-
-    const heartbeatInterval = Number(protocolApi?.HEARTBEAT_INTERVAL_MS) || 2000;
-    const misses = Number(protocolApi?.HEARTBEAT_MISSES_ALLOWED) || 3;
-    const heartbeatTimeout = Number(protocolApi?.HEARTBEAT_TIMEOUT_MS) || heartbeatInterval * misses;
+    const heartbeatInterval = Number(protocolApi.HEARTBEAT_INTERVAL_MS) || 2000;
+    const heartbeatTimeout = Number(protocolApi.HEARTBEAT_TIMEOUT_MS) || heartbeatInterval * 3;
 
     return {
-      instance,
-      channelName: name,
+      channelName: instance.channelName,
       heartbeatInterval,
       heartbeatTimeout,
       accepts(message) {
         if (!message || typeof message !== 'object') return false;
-        if (instance && typeof instance.accepts === 'function') {
-          try { return instance.accepts(message); } catch { return false; }
-        }
-        if (protocolApi && typeof protocolApi.accepts === 'function') {
-          try { return protocolApi.accepts(message, factoryOptions); } catch {}
-        }
-        return manualIdentityAccepts(message);
+        return instance.accepts(message);
       },
-      ready() {
-        if (instance && typeof instance.buildReady === 'function') return instance.buildReady();
-        return envelope('READY', { reason: 'operator-ready' });
-      },
-      heartbeat() {
-        if (instance && typeof instance.buildHeartbeat === 'function') return instance.buildHeartbeat();
-        return envelope('HEARTBEAT', {});
-      },
+      ready() { return instance.buildReady(); },
+      heartbeat() { return instance.buildHeartbeat(); },
       applyState(message) {
-        let result = null;
-        if (instance && typeof instance.applyState === 'function') result = instance.applyState(message);
-        if (result === false || result?.accepted === false) return null;
-        let state = null;
-        if (instance && typeof instance.getState === 'function') {
-          try { state = instance.getState(); } catch {}
-        }
-        return state || result || message;
+        const state = instance.applyState(message);
+        return state && typeof state === 'object' ? state : null;
       },
-      stateApplied() {
-        if (instance && typeof instance.buildStateApplied === 'function') return instance.buildStateApplied();
-        return envelope('STATE_APPLIED', {});
-      },
-      noteHeartbeat(message) {
-        if (instance && typeof instance.noteHeartbeat === 'function') {
-          try { instance.noteHeartbeat(message); } catch {}
-        }
-      },
-      checkHeartbeat() {
-        if (instance && typeof instance.checkHeartbeat === 'function') {
-          try { return instance.checkHeartbeat(); } catch {}
-        }
-        return false;
-      },
-      noteCommandAck(message) {
-        if (instance && typeof instance.noteCommandAck === 'function') {
-          try { return instance.noteCommandAck(message); } catch {}
-        }
-        return null;
-      },
-      noteControllerClosing(message) {
-        if (instance && typeof instance.noteControllerClosing === 'function') {
-          try { instance.noteControllerClosing(message); } catch {}
-        }
-      },
-      command(kind, data) {
-        if (instance && typeof instance.buildCommand === 'function') return instance.buildCommand(kind, data);
-        return envelope('COMMAND', { commandType: kind, data });
-      },
-      closing(reason) {
-        if (instance && typeof instance.close === 'function') return instance.close(reason);
-        return envelope('CLOSING', { reason });
-      }
+      stateApplied() { return instance.buildStateApplied(); },
+      noteHeartbeat(message) { instance.noteHeartbeat(message); },
+      checkHeartbeat() { return instance.checkHeartbeat(); },
+      noteCommandAck(message) { return instance.noteCommandAck(message); },
+      noteControllerClosing(message) { instance.noteControllerClosing(message); },
+      command(kind, data) { return instance.buildCommand(kind, data); },
+      closing(reason) { return instance.close(reason); }
     };
-
-    function envelope(type, payload) {
-      if (instance && typeof instance.envelope === 'function') {
-        try { return instance.envelope(type, payload); } catch {}
-      }
-      if (protocolApi && typeof protocolApi.envelope === 'function') {
-        try { return protocolApi.envelope(type, payload, factoryOptions); } catch {}
-      }
-      return {
-        protocolVersion: Number(protocolApi?.PROTOCOL_VERSION) || 1,
-        type,
-        messageId: makeId(type.toLowerCase()),
-        timestamp: Date.now(),
-        ...identity,
-        payload
-      };
-    }
-  }
-
-  function manualIdentityAccepts(message) {
-    const value = (key) => message[key] ?? message.identity?.[key] ?? message.payload?.[key];
-    const code = value('productionCode');
-    const session = value('sessionId');
-    const controller = value('controllerInstanceId');
-    if (code && String(code).toUpperCase() !== productionCode) return false;
-    if (sessionId && session && String(session) !== sessionId) return false;
-    if (controller && String(controller) !== controllerInstanceId) return false;
-    return true;
   }
 
   function sendReady(reason) {
@@ -270,23 +210,25 @@
 
   function receiveMessage(message) {
     if (closed || !protocol?.accepts(message)) return;
-    const messageId = message.messageId || message.mid || message.id;
+    const messageId = message.messageId;
     if (messageId && isDuplicate(messageId)) return;
-    const type = normalizeMessageType(message.type || message.messageType || message.kind);
+    const type = normalizeMessageType(message.type);
     if (!type) return;
 
     lastControllerSeenAt = Date.now();
-    if (type === 'STATE' || type === 'SYNC_STATE') {
+    if (type === 'STATE') {
       const initialState = !stateApplied;
       const state = protocol.applyState(message);
       if (!state) return;
-      const snapshot = state.data || state.payload?.data || state.payload?.state || message.data || message.state || message.snapshot || message.payload?.data || message.payload?.state || message.payload || {};
-      currentSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      patchSnapshot(currentSnapshot);
+      currentSnapshot = state.data && typeof state.data === 'object' ? state.data : {};
+      // Acknowledge before patching: the forced hold release inside
+      // patchSnapshot may need to send stop controls, and the protocol only
+      // builds commands once the snapshot is acknowledged.
       const applied = protocol.stateApplied();
       postMessageToController(applied);
       stateApplied = true;
       disconnected = false;
+      patchSnapshot(currentSnapshot);
       const readyLabel = productionCode ? `Ready · ${productionCode}` : 'Ready';
       setConnection('ready', readyLabel, sessionControlsEnabled ? 'State applied' : 'Live controls paused');
       setCommandAvailability(sessionControlsEnabled);
@@ -304,24 +246,27 @@
       return;
     }
 
-    if (type === 'COMMAND_ACK' || type === 'ACK') {
+    if (type === 'COMMAND_ACK') {
       const ackState = protocol.noteCommandAck(message);
       if (ackState === false) return;
-      const payload = message.payload || message.data || {};
+      const payload = message.payload || {};
       const pending = clearPendingIntent(payload.commandId);
       const result = ackState && typeof ackState === 'object' ? ackState : (payload.result || payload);
       const ok = result.ok !== false && result.accepted !== false;
       const detail = result.error || result.reason || result.detail || (ok ? 'Command acknowledged' : 'Command failed');
-      if (!ok || pending?.kind !== 'preview') setDraftStatus(detail, ok ? 'ok' : 'error');
+      // Preview intents are never tracked, so read the ack's own commandType
+      // to keep slider preview acks from spamming the status line.
+      const ackKind = pending ? pending.kind : String(payload.commandType || '');
+      if (!ok || ackKind !== 'preview') setDraftStatus(detail, ok ? 'ok' : 'error');
       if (pending && (pending.kind === 'push' || pending.kind === 'clear')) toast(ok ? (pending.kind === 'push' ? 'Pushed to Flowmingo' : detail) : detail);
       return;
     }
 
-    if (type === 'CONTROLLER_CLOSING' || type === 'CLOSED' || type === 'DISCONNECTED') {
+    if (type === 'CONTROLLER_CLOSING') {
       protocol.noteControllerClosing(message);
-      const reason = message.payload?.reason || message.reason || 'Cueola Live closed the Script Operator connection.';
+      const reason = message.payload?.reason || 'Cueola Live closed the Script Operator connection.';
       setDisconnected(reason);
-      if (type === 'CONTROLLER_CLOSING') queueMicrotask(() => window.close());
+      queueMicrotask(() => window.close());
     }
   }
 
@@ -476,7 +421,7 @@
     }
     if (target.matches('input[type="range"][data-preview-prefix]')) {
       updateRangeReadout(target);
-      sendIntent('preview', { action: target.dataset.previewPrefix + formatNumber(target.value) });
+      queuePreviewIntent(target);
     }
   }
 
@@ -484,8 +429,28 @@
     const target = event.target;
     if (target.matches('input[type="range"][data-preview-prefix]')) {
       target.dataset.dragging = '';
+      cancelPreviewIntent(target);
       sendIntent('control', { action: target.dataset.previewPrefix + formatNumber(target.value) });
     }
+  }
+
+  // INC-20: previews send at most every 100ms, trailing, so a slider drag
+  // does not spam per-input preview commands at the controller.
+  function queuePreviewIntent(input) {
+    const key = input.id || input.dataset.previewPrefix;
+    if (previewThrottles.has(key)) return;
+    previewThrottles.set(key, window.setTimeout(() => {
+      previewThrottles.delete(key);
+      sendIntent('preview', { action: input.dataset.previewPrefix + formatNumber(input.value) });
+    }, 100));
+  }
+
+  function cancelPreviewIntent(input) {
+    const key = input.id || input.dataset.previewPrefix;
+    const timer = previewThrottles.get(key);
+    if (timer == null) return;
+    window.clearTimeout(timer);
+    previewThrottles.delete(key);
   }
 
   function onDelegatedPointerDown(event) {
@@ -525,18 +490,48 @@
     window.setTimeout(() => applyPendingControlValue(id), 0);
   }
 
-  function releaseHold(button, pointerId) {
+  function releaseHold(button, pointerId, force) {
     const hold = activeHolds.get(button);
-    if (!hold || (pointerId != null && hold.pointerId !== pointerId)) return;
+    if (!hold) return;
+    if (!force && pointerId != null && hold.pointerId !== pointerId) return;
     activeHolds.delete(button);
     button.classList.remove('is-active');
     button.setAttribute('aria-pressed', 'false');
     try { if (button.hasPointerCapture(hold.pointerId)) button.releasePointerCapture(hold.pointerId); } catch {}
-    if (hold.stopAction && stateApplied && !disconnected) sendIntent('control', { action: hold.stopAction });
+    if (!hold.stopAction) return;
+    if (force) { sendControlDirect(hold.stopAction); return; }
+    if (stateApplied && !disconnected) sendIntent('control', { action: hold.stopAction });
   }
 
   function releaseAllHolds() {
     [...activeHolds.entries()].forEach(([button, hold]) => releaseHold(button, hold.pointerId));
+    operatorHolds?.releaseAll();
+  }
+
+  // Any transition to paused, disconnected, or closing must release every
+  // active hold, keyboard and pointer, even though sendIntent refuses while
+  // controls are disabled; stops go out through the direct path instead.
+  function forceReleaseAllHolds() {
+    [...activeHolds.keys()].forEach((button) => releaseHold(button, null, true));
+    operatorHolds?.releaseAll();
+  }
+
+  // Fire-and-forget control send that bypasses the disabled guard. Only hold
+  // stop releases route through here; the protocol layer still drops it when
+  // the controller is truly gone.
+  function sendControlDirect(action) {
+    if (!action || closed || !protocol) return false;
+    return postMessageToController(protocol.command('control', { kind: 'control', action }));
+  }
+
+  // Send function for the keyboard hold tracker: normal tracked sends while
+  // live, direct stop delivery once controls are paused or disconnected.
+  function sendHoldControl(action) {
+    if (stateApplied && !disconnected && !closed && sessionControlsEnabled) {
+      sendIntent('control', { action });
+      return;
+    }
+    sendControlDirect(action);
   }
 
   function preserveEditorSelection(event) {
@@ -579,26 +574,7 @@
     releaseHold(holdButton, null);
   }
 
-  // ── D11.1: window-level keycommands via the shared engine ─────────────────
-  // The desk finally gets registered keys — including the owner's direct ask,
-  // J/L hold-to-Brake/Boost — dispatched through cueola-keymap.js so bindings,
-  // overrides, and the "?" reference match the Live surface exactly.
-  const keymapApi = window.CueolaKeymap || null;
-  const OPERATOR_KEYMAP = [
-    { id: 'scriptop.playpause',  scope: 'scriptop', group: 'Prompter', keys: ['Space', 'K'], label: 'Play / pause',
-      run: () => sendIntent('control', { action: document.getElementById('playButton')?.dataset.action || 'resume' }) },
-    { id: 'scriptop.brake',      scope: 'scriptop', group: 'Prompter', keys: ['J'], label: 'Brake (hold)', hold: ['brake_start', 'brake_stop'] },
-    { id: 'scriptop.boost',      scope: 'scriptop', group: 'Prompter', keys: ['L'], label: 'Boost (hold)', hold: ['boost_start', 'boost_stop'] },
-    { id: 'scriptop.size.down',  scope: 'scriptop', group: 'Prompter', keys: ['-'], label: 'Text smaller', run: () => sendIntent('control', { action: 'size_down' }) },
-    { id: 'scriptop.size.up',    scope: 'scriptop', group: 'Prompter', keys: ['='], label: 'Text bigger',  run: () => sendIntent('control', { action: 'size_up' }) },
-    { id: 'scriptop.speed.down', scope: 'scriptop', group: 'Prompter', keys: ['['], label: 'Speed down',   run: () => sendIntent('control', { action: 'speed_down' }) },
-    { id: 'scriptop.speed.up',   scope: 'scriptop', group: 'Prompter', keys: [']'], label: 'Speed up',     run: () => sendIntent('control', { action: 'speed_up' }) },
-    { id: 'scriptop.ref',        scope: 'scriptop', group: 'Reference', keys: ['?'], label: 'This shortcut reference', run: () => toggleOperatorKeymapRef() },
-  ];
-  const operatorHolds = keymapApi
-    ? keymapApi.createHoldTracker(action => sendIntent('control', { action }))
-    : null;
-
+  // ── D11.1: window-level keycommand dispatch ───────────────────────────────
   // Buttons, tabs, and fields own their native keys (Space clicks a focused
   // button; the hold buttons have their own Space/Enter handling above).
   function isOperatorInteractiveTarget(target) {
@@ -609,7 +585,7 @@
     if (!keymapApi || event.metaKey || event.ctrlKey || event.defaultPrevented) return false;
     if (isOperatorInteractiveTarget(event.target)) {
       // Releasing a held key while focus sits in a field must still send the
-      // stop control — same blur-safety contract as the Live surface.
+      // stop control, same blur-safety contract as the Live surface.
       if (phase === 'up' && operatorHolds.size()) operatorHolds.upByEvent(OPERATOR_KEYMAP, event);
       return false;
     }
@@ -617,8 +593,14 @@
       if (!keymapApi.actionMatches(action, event)) continue;
       if (action.hold) {
         event.preventDefault();
-        if (phase === 'down') operatorHolds.down(action, event);
-        else operatorHolds.up(action);
+        if (phase === 'down') {
+          // Never start a hold while controls are disabled; the pointer path
+          // has the same guard in onDelegatedPointerDown.
+          if (!stateApplied || disconnected || !sessionControlsEnabled) return true;
+          operatorHolds.down(action, event);
+        } else {
+          operatorHolds.up(action);
+        }
         return true;
       }
       if (phase !== 'down' || event.repeat) { if (phase === 'down') event.preventDefault(); return true; }
@@ -639,7 +621,7 @@
       document.body.appendChild(ov);
     }
     ov.innerHTML = keymapApi.referenceHTML({
-      title: 'Keyboard shortcuts — Script Operator',
+      title: 'Keyboard shortcuts: Script Operator',
       sections: keymapApi.sectionsForScope(OPERATOR_KEYMAP, 'scriptop'),
       foot: 'Arrows drive the rundown on the main Cueola window; Space/J/K/L drive the prompter from this desk. Typing in any field suppresses shortcuts.',
     });
@@ -693,8 +675,9 @@
   function patchSnapshot(snapshot) {
     const lifecycle = String(first(snapshot, ['liveLifecycle', 'lifecycle']) || 'live');
     const nextControlsEnabled = first(snapshot, ['controlsEnabled']) !== false && lifecycle === 'live';
-    if (sessionControlsEnabled && !nextControlsEnabled) releaseAllHolds();
+    const controlsWereEnabled = sessionControlsEnabled;
     sessionControlsEnabled = nextControlsEnabled;
+    if (controlsWereEnabled && !nextControlsEnabled) forceReleaseAllHolds();
     root.dataset.controlsEnabled = sessionControlsEnabled ? 'true' : 'false';
     const text = first(snapshot, ['prompterText', 'text', 'draft.text', 'prompter.text', 'prompter.scriptText', 'prompter.script']);
     if (typeof text === 'string') patchEditor(text);
@@ -901,7 +884,7 @@
     if (disconnected && connectionDetail.textContent === detail) return;
     disconnected = true;
     stateApplied = false;
-    releaseAllHolds();
+    forceReleaseAllHolds();
     setConnection('disconnected', 'Disconnected', detail);
     setCommandAvailability(false);
     setDraftStatus('Disconnected', 'error');
@@ -969,11 +952,13 @@
 
   function cleanup() {
     if (closed) return;
-    releaseAllHolds();
+    forceReleaseAllHolds();
     closed = true;
     window.clearInterval(heartbeatTimer);
     window.clearInterval(clockTimer);
     window.clearTimeout(draftTimer);
+    previewThrottles.forEach((timer) => window.clearTimeout(timer));
+    previewThrottles.clear();
     const toastElement = document.getElementById('toast');
     if (toastElement) window.clearTimeout(toastElement._t);
     pendingIntents.forEach(entry => window.clearTimeout(entry.timer));

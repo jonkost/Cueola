@@ -17,7 +17,7 @@ One mic, two push-to-talk destinations. Hold the Talk A button on the Stream Dec
 | 3. Gating + ramps | Code complete (8 ms linear ramp, sample accurate, in the render callback) |
 | 4. Local WebSocket API | **Done and tested live** (protocol round-trip verified against a stand-in 8ch device) |
 | 5. Stream Deck plugin | Code complete, needs Stream Deck app to verify |
-| 6. Suite integration | API is ready; suite-side client not started |
+| 6. Suite integration | **Done on the suite side**: KeyWi Bird's Micochondria panel speaks this API (hold-to-talk keys, ON AIR lamps, meters, faders, pop-out window, All talk off). Meter accuracy still needs the UR44 to verify |
 
 ## Milestone 0 checklist (do this first, with the UR44 plugged in)
 
@@ -42,6 +42,8 @@ Startup logs the matched device, channel counts, and sample rate, then `WebSocke
 ## WebSocket API
 
 `ws://127.0.0.1:17844` (loopback only). Text frames.
+
+Browser connections must present an allowed `Origin` header: `https://cueola.live`, or `http://localhost` / `http://127.0.0.1` on any port. Anything else is rejected during the upgrade handshake, so a random webpage in a local browser cannot key the mic. Native clients like the Stream Deck plugin send no Origin header and connect as before.
 
 - Commands: `A on`, `A off`, `B on`, `B off`, `state?`
 - Volume: `A gain 0.8`, `B gain 0.8`: per-bus output volume, clamped 0-1, applied on top of the gate ramp
