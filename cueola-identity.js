@@ -1243,6 +1243,51 @@
   // never strand a signed-in card on the offline message.
   window.addEventListener('firebaseReady', function () { try { renderFrontDoor(); } catch (e) {} }, { once: true });
 
+  /* ══════════════════ assigned-session picker (shared) ══════════════════
+   * The owner directive behind the front-door hero applies app wide: a
+   * signed-in user should never have to type a session code the app already
+   * knows. Any join surface (Planda Bear, Flowmingo Remote Op, Outrangutan,
+   * the typed-code modal) awaits sessionChoices() for the profile's assigned
+   * sessions and leads with one-tap rows; the typed code stays as a fallback.
+   *
+   * Markup contract (mirrors the hero rows): a .fd-sessions column of
+   * .fd-session buttons, each holding .fd-code (the code chip), .fd-show
+   * (the show name), and .fd-open ("Open"). renderSessionChoiceRows builds
+   * that markup; surfaces that render their own rows use the same classes.
+   * Surfaces refresh on the existing 'cueola-identity-change' event when
+   * they are open; nothing new is dispatched here.
+   */
+  async function sessionChoices() {
+    var id = identity();
+    if (!id) return [];
+    var p = cachedProfile;
+    if (!p || p.username !== id.username) {
+      if (!fb() && typeof window.waitForFirebaseReady === 'function') { try { await window.waitForFirebaseReady(); } catch (e) {} }
+      if (!fb()) return [];
+      try { p = await fetchProfile(id.username); } catch (e) { p = null; }
+      if (!p || p.renamedTo || p.mergedInto || p.active === false) return [];
+      cachedProfile = p;
+      announceIdentityChange();  // same restore-on-boot announce the hero makes
+    }
+    var codes = (p.sessions || []).slice().reverse();  // newest membership first, hero order
+    if (!codes.length) return [];
+    var w = fb();
+    if (!w) return codes.map(function (code) { return { code: code, name: '' }; });
+    var metas = await Promise.all(codes.map(function (code) { return frontDoorSessionMeta(w, code); }));
+    return metas.filter(Boolean).map(function (m) { return { code: m.code, name: m.showName || '' }; });
+  }
+  function renderSessionChoiceRows(choices, onPickName) {
+    if (!Array.isArray(choices) || !choices.length) return '';
+    var pick = String(onPickName || 'CueolaIdentity.enterSession');
+    return '<div class="fd-sessions">' + choices.map(function (c) {
+      var codeArg = JSON.stringify(String(c.code || '')).replace(/"/g, '&quot;');
+      return '<button type="button" class="fd-session" onclick="' + pick + '(' + codeArg + ')" title="Open this session">'
+        + '<span class="fd-code">' + esc(c.code) + '</span>'
+        + '<span class="fd-show">' + esc(c.name || 'Untitled show') + '</span>'
+        + '<span class="fd-open">Open</span></button>';
+    }).join('') + '</div>';
+  }
+
   window.CueolaIdentity = {
     identity: identity, profile: function () { return cachedProfile; },
     profileIdentity: function () { return canonicalProfileIdentity(cachedProfile); },
@@ -1256,6 +1301,7 @@
     submitSignIn: submitSignIn, startCreate: startCreate,
     wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardFinish: wizardFinish,
     renderPortal: renderPortal, portalAddCode: portalAddCode, enterSession: enterSession,
+    sessionChoices: sessionChoices, renderSessionChoiceRows: renderSessionChoiceRows,
     renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,
     deviceOnlyLook: deviceOnlyLook,
     _normalizeUsername: normalizeUsername, _normalizeCode: normalizeCode,

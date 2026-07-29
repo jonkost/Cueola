@@ -88,10 +88,10 @@ const SHELL_ASSETS = [
   'cueola-avatar-profile.js?v=e56e5e6cd7',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=2b4cf2ea17',
-  'break-room-show.js?v=a878b2a3c7',
+  'break-room-show.js?v=c3ba5e11a0',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=dfd7726c59',
+  'cueola-identity.js?v=62435a0278',
   'cueola-admin-auth.js?v=2d94c57e93',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
@@ -103,9 +103,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=c9f2b12372',
+  'cueola-app.js?v=0f4ffc856b',
   'outrangutan/outrangutan.css?v=1640115e75',
-  'outrangutan/outrangutan.js?v=f55ff37cff',
+  'outrangutan/outrangutan.js?v=59908d42fb',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
   'cueola-streamdeck.js?v=e2405aa42f',
@@ -145,7 +145,11 @@ const versionSignature = SHELL_ASSETS
 // 15->16: v2.2 front page: instructor-gated Break Room button, 2-up app card
 // grid + glass restyle, version flip to 2.2.0. index.html markup/CSS changed
 // alongside the cueola-app/cueola-identity bumps, so the shell must roll.
-const WORKER_SCHEMA = '16';
+// 17->18: assigned-session pickers on every join surface (Planda Bear,
+// typed-code, Flowmingo Remote Op, Outrangutan). index.html grew the
+// your-sessions containers + row CSS the shell caches, so the shell rolls
+// with the identity/app/outrangutan JS bumps.
+const WORKER_SCHEMA = '18';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

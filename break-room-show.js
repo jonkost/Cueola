@@ -819,6 +819,9 @@ function buildSessionDocSeed(opts) {
     createdAt: now,
     activeIdx: 0,
     status: 'idle',
+    // Marker the app reads on join: a session minted from this seed also
+    // stages the authored KeyWi deck layouts on the joiner's device.
+    testShow: 'break-room',
     freeMode: false,
     participants: [],
     beats: buildBeats(),

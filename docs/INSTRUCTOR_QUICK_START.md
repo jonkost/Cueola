@@ -22,11 +22,12 @@ recorded (decision 14).*
    sign in right on that card by username, and every session assigned to
    them is one tap away. **There are no passwords.**
 4. Want a sandbox first? The front-page **Demo** card loads Campus News (the
-   short tour) with no login. Once you are signed in as an instructor, the
-   same card also shows **The Break Room (instructor drill)**: a full
-   late-night show (segments, scripts, complete paperwork, a KeyWi Stream
-   Deck profile, an Outrangutan pad board). Admins can also seed a real
-   cloud practice session with the dashboard's Create Test Show button.
+   short tour) with no login. For the full drill, The Break Room, use the
+   dashboard's **Create Test Show** button: it mints a real session
+   pre-loaded with a complete late-night show (segments, scripts, complete
+   paperwork, a KeyWi Stream Deck profile, an Outrangutan pad board), and
+   the session code it mints is what you hand to the crew. Everyone who
+   joins that code gets the whole drill, seeded KeyWi layouts included.
 
 ## 2 · Start a production
 
@@ -35,7 +36,9 @@ recorded (decision 14).*
    (year + month + four letters), and older short codes still work.
    Students assigned to the session see it on their sign-in card and enter
    with one tap; anyone with just the code uses the **Have a session code?**
-   link under that card.
+   link under that card. The join doors in Planda Bear, Flowmingo Remote Op,
+   Outrangutan, and the typed-code window lead with the same assigned-session
+   list for signed-in students; typed codes are the fallback everywhere.
 2. **Entry Requirement**: choose whether the door needs just the show code
    (**Show code only: anyone with the code joins**) or **Show code + class
    key: students must sign in with a profile**.

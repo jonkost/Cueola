@@ -158,12 +158,14 @@ sections aloud.
     every per-key override. Set it once, it is yours.
 
 ## V13 · Drill Night: The Break Room (`v22-breakroom`, ~5 min)
-1. [0:00] Front page: sign in as an instructor first. The Break Room is an
-   instructor drill, and its button stays hidden until you do.
-2. [0:10] Open the **Demo** card. Two buttons now: **Campus News (10 rows)**
-   is the gentle one; pick **The Break Room (instructor drill)** (advanced,
-   29 rows). Say: a full late-night talk show, built to rehearse every part
-   of the rig in one sitting.
+1. [0:00] Instructor dashboard: press **Create Test Show**, keep the
+   suggested name, confirm. The modal shows the freshly minted session code
+   and share link. Say: this code is the drill; hand it to your crew like
+   any show code.
+2. [0:10] Front page: join the minted session. Assigned crew see it as one
+   tap on the **Your sessions** card; anyone else types the code behind the
+   **Have a session code?** link. Say: a full late-night talk show (29
+   rows), built to rehearse every part of the rig in one sitting.
 3. [0:20] Walk the rundown top to bottom, slowly: cold open, monologue, desk
    segments, guest, closer. Click into two script cues so the script pages
    show; point at rows carrying video and audio cues.

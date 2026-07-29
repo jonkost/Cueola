@@ -4427,7 +4427,7 @@
     if ($('og-sd').classList.contains('on')) { if (e.key === 'Escape') closeSdPanel(); return; }
     if ($('og-integrations').classList.contains('on')) { if (e.key === 'Escape') closeIntegrations(); return; }
     if ($('og-chrome') && $('og-chrome').classList.contains('on')) { if (e.key === 'Escape') closeChromePrompt(); return; }
-    if ($('og-join') && $('og-join').classList.contains('on')) return;
+    if ($('og-join') && $('og-join').classList.contains('on')) { if (e.key === 'Escape' && !typingTarget(e)) exitOutrangutan(); return; }
     if (typingTarget(e)) return;
     const sc = settings.shortcuts, k = e.key;
     const match = (bound) => bound && (bound.length === 1 ? k.toLowerCase() === bound.toLowerCase() : k === bound);
@@ -4625,6 +4625,8 @@
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
         + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
+        + '<div class="join-your-sessions" id="og-join-sessions" hidden></div>'
+        + '<div class="join-altcode-label" id="og-join-altcode" hidden>Have a different code?</div>'
         + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>'
         + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
         + '<div class="join-identity-strip" id="og-join-identity" hidden></div>'
@@ -4687,6 +4689,14 @@
     const ogJoinKey = e => { if (e.key === 'Enter') { e.preventDefault(); joinSession(); } else if (e.key === 'Escape') { e.preventDefault(); exitOutrangutan(); } };
     $('og-join-code').addEventListener('keydown', ogJoinKey);
     $('og-join-name').addEventListener('keydown', ogJoinKey);
+    // The join card follows identity while it is open: re-decorate the name
+    // lock and refresh the assigned-session rows on the shared change event.
+    document.addEventListener('cueola-identity-change', () => {
+      const sheet = $('og-join');
+      if (!sheet || !sheet.classList.contains('on')) return;
+      decorateOgJoinIdentity();
+      renderOgJoinChoices();
+    });
     $('og-go').onclick = goPauseButton;
     $('og-prev').onclick = () => moveSelection(-1);
     $('og-next').onclick = () => moveSelection(1);
@@ -4923,6 +4933,38 @@
     }, 500);
   }
 
+  // Owner directive, app wide: signed-in operators pick from their assigned
+  // sessions (CueolaIdentity.sessionChoices, same rows as the front-door
+  // hero); the typed code demotes to a "Have a different code?" fallback.
+  // Guests keep the typed path untouched, and the join is still stamped
+  // through the existing identity path in joinSession.
+  let ogJoinChoiceGen = 0;
+  async function renderOgJoinChoices() {
+    const wrap = $('og-join-sessions'), alt = $('og-join-altcode');
+    if (!wrap) return;
+    const idApi = window.CueolaIdentity;
+    const gen = ++ogJoinChoiceGen;
+    const clear = () => { wrap.hidden = true; wrap.innerHTML = ''; if (alt) alt.hidden = true; };
+    if (!idApi || typeof idApi.sessionChoices !== 'function'
+        || typeof idApi.identity !== 'function' || !idApi.identity()) { clear(); return; }
+    wrap.hidden = false;
+    wrap.innerHTML = '<div class="join-yours-label">Your sessions</div><div class="fd-loading">Checking your sessions…</div>';
+    let choices = [];
+    try { choices = await idApi.sessionChoices(); } catch (e) { choices = []; }
+    if (gen !== ogJoinChoiceGen) return;                // a newer render superseded this one
+    const sheet = $('og-join');
+    if (!sheet || !sheet.classList.contains('on')) return;
+    if (!choices.length) { clear(); return; }
+    wrap.innerHTML = '<div class="join-yours-label">Your sessions</div>'
+      + idApi.renderSessionChoiceRows(choices, 'Outrangutan.pickAssignedSession');
+    if (alt) alt.hidden = false;
+  }
+  function pickAssignedSession(code) {
+    const codeEl = $('og-join-code');
+    if (codeEl) codeEl.value = String(code || '').toUpperCase();
+    joinSession();
+  }
+
   function openSessionJoin() {
     mode = 'session';
     const sheet = $('og-join'); if (!sheet) { applyShow(); return; }
@@ -4940,6 +4982,7 @@
     if (err) err.classList.remove('on');
     renderTransportKeys(); renderAll();
     sheet.classList.add('on');
+    renderOgJoinChoices();
     setTimeout(() => {
       let f = (codeEl && codeEl.value) ? nameEl : codeEl;
       if (f === nameEl && nameEl && nameEl.readOnly) f = $('og-join-go');   // locked profile name: land on the join button
@@ -5051,6 +5094,7 @@
   window.enterOutrangutan = enterOutrangutan;
   window.exitOutrangutan = exitOutrangutan;
   window.Outrangutan = { enter: enterOutrangutan, exit: exitOutrangutan,
+    pickAssignedSession,                            // assigned-session row tap on the og join card
     preflight: preflightReport,                     // P7: deep media/SFX check for the Cueola preflight panel
     outputHealth,                                   // watchdog status for the preflight "Playout outputs" row
     outputStatus,                                   // full protocol state for Cueola Live + operator diagnostics

@@ -94,7 +94,10 @@ you is one tap away. Only have a code? Use the **Have a session code?** link
 under the card. New crew: **New here? Create your profile**, with the class
 login code. New session codes look like `2607KWXR` (year, month, four
 letters); older short codes still work. Your portal shows your position, open
-to-dos, and unseen notes per session.
+to-dos, and unseen notes per session. The join doors in Planda Bear,
+Flowmingo Remote Op, and Outrangutan lead with the same one-tap list of your
+assigned sessions once you are signed in; typing a code is the fallback
+everywhere.
 
 **If you use a Stream Deck:** sign in first, then open the front-page
 **KeyWi Bird** card (it stays locked until you do). Any Stream Deck works,
@@ -103,10 +106,7 @@ to-dos, and unseen notes per session.
 shows a thin bottom bar, presses flash.
 
 **Practice:** the front-page **Demo** card loads Campus News (10 rows) with
-no login. Drill this whole card there before a real show. Instructors who
-sign in also see **The Break Room (instructor drill)** on the same card: a
-full late-night show with scripts, paperwork, a KeyWi profile, and a pad
-board.
+no login. Drill this whole card there before a real show.
 
 **Recovery. Read this row before panicking:**
 

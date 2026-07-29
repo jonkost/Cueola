@@ -2959,7 +2959,6 @@ function logoutAdmin() {
 }
 
 function updateAdminUI() {
-  updateInstructorOnlyUI();
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
   if (adminSession) {
@@ -2970,29 +2969,6 @@ function updateAdminUI() {
     btn.className = 'tbtn tbtn-ghost';
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// INSTRUCTOR-ONLY FRONT-PAGE UI
-// ─────────────────────────────────────────────────────────────
-// True when the device carries an instructor identity: either the signed-in
-// CueolaIdentity profile has the admin role (the same accessor renderFrontDoor
-// uses to print "@name · admin") or an admin console session is active.
-function instructorIdentityActive() {
-  try {
-    const p = window.CueolaIdentity && CueolaIdentity.profile();
-    if (p && p.role === 'admin') return true;
-  } catch {}
-  return Boolean(adminSession);
-}
-
-// The Break Room demo is an instructor drill, not a public sample. Its button
-// ships hidden in the markup; this is the only thing that reveals it.
-function updateInstructorOnlyUI() {
-  const btn = document.getElementById('demoBreakRoomBtn');
-  if (btn) btn.hidden = !instructorIdentityActive();
-}
-document.addEventListener('cueola-identity-change', updateInstructorOnlyUI);
-window.addEventListener('firebaseReady', updateInstructorOnlyUI);
 
 // ─────────────────────────────────────────────────────────────
 // ADMIN LOGIN OVERLAY
@@ -4275,9 +4251,56 @@ function prefillJoinFields(codeId, nameId) {
   if (nameEl && !nameEl.value) nameEl.value = name;
 }
 
+// Owner directive, app wide: a signed-in user should never have to type a
+// session code the app already knows. Join modals lead with the profile's
+// assigned sessions (the same rows as the front-door hero, via
+// CueolaIdentity.sessionChoices) and the typed-code fields demote to a
+// "Have a different code?" fallback below. Signed out: unchanged.
+let joinChoiceGen = 0;
+async function populateJoinSessionChoices(prefix, pickFnName) {
+  const wrap = document.getElementById(prefix + '-your-sessions');
+  const alt = document.getElementById(prefix + '-altcode-label');
+  if (!wrap) return;
+  const idApi = window.CueolaIdentity;
+  const gen = ++joinChoiceGen;
+  const clear = () => { wrap.hidden = true; wrap.innerHTML = ''; if (alt) alt.hidden = true; };
+  if (!idApi || typeof idApi.sessionChoices !== 'function' || !idApi.identity?.()) { clear(); return; }
+  wrap.hidden = false;
+  wrap.innerHTML = '<div class="join-yours-label">Your sessions</div><div class="fd-loading">Checking your sessions…</div>';
+  let choices = [];
+  try { choices = await idApi.sessionChoices(); } catch { choices = []; }
+  if (gen !== joinChoiceGen) return;                    // a newer populate superseded this one
+  if (!choices.length) { clear(); return; }
+  wrap.innerHTML = '<div class="join-yours-label">Your sessions</div>' + idApi.renderSessionChoiceRows(choices, pickFnName);
+  if (alt) alt.hidden = false;
+}
+function pickAssignedStudSession(code) {
+  const el = document.getElementById('stud-code');
+  if (el) el.value = String(code || '').toUpperCase();
+  joinSession();
+}
+function pickAssignedPreProSession(code) {
+  const el = document.getElementById('pp-join-code');
+  if (el) el.value = String(code || '').toUpperCase();
+  joinPreProSession();
+}
+// Open pickers follow identity wherever it changes (sign-in, sign-out,
+// restore-on-boot): re-render whichever join surface is on screen.
+document.addEventListener('cueola-identity-change', () => {
+  try {
+    if (document.getElementById('modal-stud')?.classList.contains('on')) populateJoinSessionChoices('stud', 'pickAssignedStudSession');
+    if (document.getElementById('modal-prepro-join')?.classList.contains('on')) populateJoinSessionChoices('pp', 'pickAssignedPreProSession');
+    if (document.getElementById('flowOp')?.classList.contains('on') && !flowOpCode && !flowOpData) {
+      flowOpSessionRenderFingerprint = '';
+      flowOpRenderSession(null);
+    }
+  } catch {}
+});
+
 function openJoinSession() {
   prefillJoinFields('stud-code', 'stud-name');
   window.CueolaIdentity?.decorateJoin('stud');
+  populateJoinSessionChoices('stud', 'pickAssignedStudSession');
   showModal('modal-stud');
   setTimeout(() => {
     const codeEl = document.getElementById('stud-code');
@@ -4306,6 +4329,7 @@ function openPreProJoinModal(target) {
   }
   prefillJoinFields('pp-join-code', 'pp-join-name');
   window.CueolaIdentity?.decorateJoin('pp');
+  populateJoinSessionChoices('pp', 'pickAssignedPreProSession');
   showModal('modal-prepro-join');
   setTimeout(() => {
     const codeEl = document.getElementById('pp-join-code');
@@ -4365,6 +4389,7 @@ async function joinSession() {
       rundownShadowBeats = cloneRundownValue(beats);
       rundownShadowShow = { name:show.name, start:show.start, freeMode:freeTextMode };
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
+      maybeStageTestShowDeckLayouts(d);
       rememberLastSession(code, name);
       hideModal('modal-stud');
       enterRundown();
@@ -4398,6 +4423,7 @@ async function joinPreProSession() {
     // Merge shared work and recover any newer draft still on this device without
     // replacing unrelated cloud sections.
     mergePreProFromCloud(d.prePro && typeof d.prePro === 'object' ? d.prePro : {}, true);
+    maybeStageTestShowDeckLayouts(d);
     rememberLastSession(code, name);
     hideModal('modal-prepro-join');
     // joinPresence first: it SETS the whole presence entry, so the landing
@@ -4515,12 +4541,7 @@ async function startBlankSlate() {
   }
 }
 
-function loadDemo(which) {
-  if (which === 'breakroom') {
-    // Defense in depth: the button is instructor-gated, and so is the loader.
-    if (!instructorIdentityActive()) { toast('The Break Room is an instructor drill. Sign in as an instructor to load it.'); return; }
-    loadBreakRoomDemo(); return;
-  }
+function loadDemo() {
   session = { code:'DEMO1', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
   show = { name:'Campus News: Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
@@ -4528,31 +4549,18 @@ function loadDemo(which) {
   enterRundown();
 }
 
-// The Break Room: the advanced offline demo (break-room-show.js). 29 rows with
-// full scripts, the question lane cards, the whole paperwork package, and
-// playback cells linked BY NAME to the matching Outrangutan show. Fully local,
-// isDemo, nothing syncs and nothing is saved to the cloud.
-function loadBreakRoomDemo() {
-  const data = window.CueolaBreakRoom, Kit = window.CueolaBreakRoomKit;
-  if (!data || !Kit) { toast('The Break Room demo module did not load. Reload the page and try again.'); return; }
-  session = { code:'DEMO2', role:'student', userName:'Demo', profileId:'', username:'', profileAliases:[], isDemo:true, isExpert:false };
-  show = { name:data.meta.sessionNameSuggestion, start:data.meta.showStart };
-  beats = Kit.buildBeats().map(migrateBeat);
-  freeTextMode = false;
-  sessionQuestionCards = Kit.questionPasteLines();
-  _outNameLinksPresent = true;
-  // Paperwork rides the normal persist path (demo sessions never reach the
-  // cloud; the write lands in this browser's local copy for the DEMO2 code).
-  try { persistPreProData(Kit.buildPrePro(Date.now()), 'Demo seed'); } catch {}
-  seedBreakRoomDeckLayouts(Kit);
-  enterRundown();
-}
-
-// Stage the two authored KeyWi pages as named layouts. The deck module adds
-// each once per device the next time it loads a deck config (by name, never
-// touching the operator's current or default layout selection).
-function seedBreakRoomDeckLayouts(Kit) {
+// The Break Room test show is minted from the dashboard (Create Test Show) and
+// handed out as a normal session code. Everything content-wise rides the
+// session document; the one device-local piece is the pair of authored KeyWi
+// deck pages. When a joined session's doc carries the test-show marker, stage
+// them as named layouts: the deck module adds each once per device the next
+// time it loads a deck config (by name, never touching the operator's current
+// or default layout selection). Additive and inert for normal sessions.
+function maybeStageTestShowDeckLayouts(docData) {
   try {
+    if (!docData || docData.testShow !== 'break-room') return;
+    const Kit = window.CueolaBreakRoomKit;
+    if (!Kit) return;
     const seeds = Kit.deckProfileSeeds();
     if (seeds.length) localStorage.setItem('cueola_streamdeck_seed_layouts', JSON.stringify(seeds));
   } catch {}
@@ -13517,6 +13525,7 @@ function flowOpRenderSession(data=null) {
     if (titleEl) titleEl.textContent = 'Flowmingo Op';
     if (meta) meta.innerHTML = `<div class="flowop-session-title">No session loaded</div><div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>`;
     if (preview) preview.innerHTML = `<div class="flowop-empty">Load a session code to control Flowmingo remotely.</div>`;
+    flowOpOfferAssignedSessions();
     return true;
   }
   const showName = data.show?.name || data.showName || data.name || 'Untitled Show';
@@ -13543,6 +13552,29 @@ function flowOpRenderSession(data=null) {
   }
   return true;
 }
+
+// Same directive as the join modals: a signed-in operator picks an assigned
+// session from the empty preview instead of typing the code. The top-bar code
+// input stays as the typed fallback. Renders only while no session is loaded;
+// flowOpRenderSession(null) calls this after painting the plain empty state.
+let flowOpChoiceGen = 0;
+async function flowOpOfferAssignedSessions() {
+  const idApi = window.CueolaIdentity;
+  if (!idApi || typeof idApi.sessionChoices !== 'function' || !idApi.identity?.()) return;
+  const gen = ++flowOpChoiceGen;
+  let choices = [];
+  try { choices = await idApi.sessionChoices(); } catch { choices = []; }
+  if (gen !== flowOpChoiceGen || !choices.length) return;
+  if (flowOpCode || flowOpData) return;                 // a session loaded while we were checking
+  const preview = flowOpEl('flowOpScriptPreview');
+  if (!preview || !preview.querySelector('.flowop-empty')) return;
+  preview.innerHTML = '<div class="flowop-empty flowop-choices">'
+    + '<div class="join-yours-label">Your sessions</div>'
+    + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
+    + '<div class="flowop-note" style="margin-top:12px">Or type a session code above.</div>'
+    + '</div>';
+}
+function flowOpPickAssignedSession(code) { flowOpLoadSession(String(code || '').toUpperCase()); }
 
 async function flowOpLoadSession(codeOverride='') {
   const input = flowOpEl('flowOpCodeInput');

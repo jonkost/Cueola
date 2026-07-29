@@ -50,21 +50,29 @@ The owner console errands carried from v2.1 §1 stay open and gate release QA.
   @jonkost is the owner admin profile.
 - firebaseReady re-render fixes a boot race that could strand a signed-in
   card on the offline message.
+- Signed-in users get the same one-tap assigned-session pickers inside the
+  join doors of Planda Bear, Flowmingo Remote Op, Outrangutan, and the
+  typed-code modal; the typed code demotes to a "Have a different code?"
+  fallback beneath the list.
 - Front page redesigned around the new door: the identity card is the hero,
   the app cards line up beneath it, and Demo and Blank Slate become compact
   cards with inline actions, all in the liquid glass treatment (no glows, no
   drop shadows).
+- The app cards share a hero-aligned anatomy: icon plus title header, a
+  one-line description, and actions pinned to the card bottom, with Demo and
+  Blank Slate as a quieter half-width pair.
 
 ### The Break Room test show
-- Load Demo now offers Campus News (10 rows) to everyone, plus The Break Room
-  (advanced, 29 rows) as an instructor drill: a full late-night talk show
-  with segments, scripts, the question lane, complete paperwork (call sheet,
-  production schedule with tech checklist, safety plan, 12-row video patch,
-  16+1 audio/comms patch), a KeyWi profile named "The Break Room", and an
-  Outrangutan pad board. Its front-door button appears once you sign in as
-  an instructor.
-- Admins additionally get a dashboard "Create Test Show" button that seeds a
-  real cloud session with the same show.
+- The Break Room (advanced, 29 rows) is the full-system drill: a complete
+  late-night talk show with segments, scripts, the question lane, complete
+  paperwork (call sheet, production schedule with tech checklist, safety
+  plan, 12-row video patch, 16+1 audio/comms patch), a KeyWi profile named
+  "The Break Room", and an Outrangutan pad board.
+- Its only path is the dashboard "Create Test Show" button, which mints a
+  real session code the admin hands out; everyone who joins that code gets
+  the whole drill, seeded KeyWi layouts included. It does not appear on the
+  front page. The front-page Demo card stays Campus News (10 rows), no
+  login.
 
 ### Junk sweep & guides
 - 132 MB of untracked artifacts swept out of the working tree.

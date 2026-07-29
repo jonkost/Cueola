@@ -4366,7 +4366,7 @@ input.pt-range::-moz-range-thumb,
       <button type="button" class="e-card e-card-app oc-yellow" onclick="openPlandaBearJoin()">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-plandabear"/></svg></div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
-        <div class="ec-desc">Build the pre-production package with your session code.</div>
+        <div class="ec-desc">View and build the paperwork package for your session.</div>
         <span class="ec-pill ec-pill-yellow">Session code required</span>
       </button>
       <div class="e-card e-card-app flowmingo-card oc-cyan">
@@ -4399,7 +4399,6 @@ input.pt-range::-moz-range-thumb,
         <div class="ec-desc">Load a pre-built example rundown. No login needed.</div>
         <div class="ec-actions">
           <button class="ec-mini-btn" onclick="event.stopPropagation();loadDemo()">Campus News (10 rows)</button>
-          <button class="ec-mini-btn" id="demoBreakRoomBtn" hidden onclick="event.stopPropagation();loadDemo('breakroom')">The Break Room (instructor drill)</button>
         </div>
       </div>
       <button type="button" class="e-card e-card-mini exp" onclick="openBlankSlateSetup()">
@@ -5451,6 +5450,8 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-title">Open Planda Bear<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub">Enter the session code to work on the Planda Bear package.</div>
     <div class="join-identity-strip" id="pp-identity-strip" hidden></div>
+    <div class="join-your-sessions" id="pp-your-sessions" hidden></div>
+    <div class="join-altcode-label" id="pp-altcode-label" hidden>Have a different code?</div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in u-code-input" id="pp-join-code" type="text" placeholder="Session code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
@@ -5616,6 +5617,8 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-title">Join a Session<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub">Enter the session code your director gave you.</div>
     <div class="join-identity-strip" id="stud-identity-strip" hidden></div>
+    <div class="join-your-sessions" id="stud-your-sessions" hidden></div>
+    <div class="join-altcode-label" id="stud-altcode-label" hidden>Have a different code?</div>
     <div class="field"><label class="field-lbl">Session Code</label><input class="field-in u-code-input" id="stud-code" type="text" placeholder="Session code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="field join-entrycode" id="stud-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="stud-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
@@ -6011,6 +6014,26 @@ input.pt-range::-moz-range-thumb,
 .fd-open { font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
 .fd-session:hover .fd-open { color:var(--accent); }
 .fd-loading { color:var(--text3); font-size:12.5px; padding:6px 0; }
+/* Assigned-session rows inside join modals (Planda Bear, typed-code, Outrangutan).
+   Same row anatomy as the front-door hero; the typed code demotes to a fallback below. */
+.join-your-sessions { margin:2px 0 4px; }
+.join-your-sessions .fd-sessions { margin-top:0; max-height:220px; overflow-y:auto; }
+.join-yours-label { font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); margin:0 0 6px; }
+.join-altcode-label { font-size:12.5px; color:var(--text3); margin:8px 0 2px; }
+/* Flowmingo Remote Op empty state offers the same rows on its dark chrome.
+   The script surface normally pads deep for prompter copy; when it holds the
+   choices it tightens up and scrolls so the rows survive short viewports. */
+#flowOp .flowop-script:has(> .flowop-choices) { padding:40px 28px 48px; }
+#flowOp .flowop-preview:has(.flowop-choices) { overflow-y:auto; }
+#flowOp .flowop-preview:has(.flowop-choices) .flowop-readline { display:none; }
+#flowOp .flowop-choices { padding:0; font-family:var(--sans); font-size:14px; }
+#flowOp .fd-sessions { max-width:420px; margin:10px auto 0; }
+#flowOp .fd-session { background:rgba(0,0,0,.3); border-color:var(--pt-ui-border); color:var(--pt-text); }
+#flowOp .fd-session:hover { border-color:var(--pt-accent); }
+#flowOp .fd-code { color:var(--pt-accent); }
+#flowOp .fd-show { color:var(--pt-text); }
+#flowOp .fd-open { color:var(--pt-accent); opacity:.7; }
+#flowOp .join-yours-label { color:var(--pt-accent); }
 @media (pointer:coarse) { .fd-link, .fd-session { min-height:44px; } }
 
 /* generated-markup utilities */
@@ -6154,19 +6177,22 @@ input.pt-range::-moz-range-thumb,
   background:var(--liquid-fill-strong);
   border-color:color-mix(in srgb,var(--text) 22%,var(--liquid-edge));
 }
-/* App cards: full-width on mobile, 2-up from 720px. Shared anatomy: icon and
-   title on the header row, desc in the middle, pills/actions pinned to the
-   bottom so cards in a row stay aligned. Rows stretch, so heights match. */
+/* App cards: full-width on mobile, 2-up from 720px. Shared anatomy matches
+   the hero: the brand icon sits alone in the left column at the hero icon's
+   size, and ALL text (title, desc, pills/actions) lives in the right column
+   so its left edge lines up with the hero's session rows. Desc row takes the
+   stretch, actions pin to the bottom so cards in a row stay aligned. */
 .e-card-app{grid-column:span 2;grid-template-rows:auto 1fr auto;row-gap:9px}
-.e-card-app .ec-icon{grid-row:1;font-size:42px;min-width:42px;min-height:42px;align-self:center}
-.e-card-app .ec-title{grid-row:1;align-self:center}
-.e-card-app .ec-desc{grid-column:1/-1;grid-row:2;align-self:start}
-.e-card-app .ec-pill,.e-card-app .ec-actions{grid-column:1/-1;grid-row:3;align-self:end;margin-top:2px}
+.e-card-app .ec-desc{align-self:start}
+.e-card-app .ec-pill,.e-card-app .ec-actions{align-self:end;margin-top:2px}
 @media(min-width:720px){.e-card-app{grid-column:span 1}}
-/* Demo + Blank Slate: the quiet half-width pair. */
-.e-card-mini{padding:15px 16px;column-gap:12px}
-.e-card-mini .ec-icon{font-size:38px;min-width:38px;min-height:38px}
-.e-card-mini .ec-icon .sf-symbol{font-size:17px}
+/* Demo + Blank Slate: the quiet half-width pair. Same anatomy and icon size
+   as every other card (owner's rule: all icons at the hero size, all text in
+   the aligned right column); only the type steps down. */
+.e-card-mini{grid-template-rows:auto 1fr auto;row-gap:9px}
+#entry .e-card-mini .ec-icon{grid-row:1/span 3}
+#entry .e-card-mini .ec-desc{grid-column:2;align-self:start}
+#entry .e-card-mini .ec-pill,#entry .e-card-mini .ec-actions{grid-column:2;align-self:end;margin-top:2px}
 .e-card-mini .ec-title{font-size:15.5px}
 .e-card-mini .ec-desc{font-size:12.5px}
 /* Pills stop shouting: sentence case, smaller, subtle glass chip. The oc-*
@@ -6184,9 +6210,11 @@ input.pt-range::-moz-range-thumb,
   border:1px solid color-mix(in srgb,var(--oc,var(--accent)) 24%,transparent);
 }
 /* Narrow phones: the hero drops its brand icon so session rows get the full
-   width, and the Demo + Blank Slate pair stacks instead of cramping. */
+   width. Every other card drops its icon with it, so the single text column
+   stays aligned with the hero's session rows all the way down, and the
+   Demo + Blank Slate pair stacks instead of cramping. */
 @media(max-width:559px){
-  #entry #entryFrontDoor .ec-icon{display:none}
+  #entry .e-card .ec-icon{display:none}
   #entry .e-card-mini{grid-column:span 2}
 }
 </style>
@@ -6208,10 +6236,10 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-avatar-profile.js?v=e56e5e6cd7"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
-<script src="break-room-show.js?v=a878b2a3c7"></script>
+<script src="break-room-show.js?v=c3ba5e11a0"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=dfd7726c59"></script>
+<script src="cueola-identity.js?v=62435a0278"></script>
 <script src="cueola-admin-auth.js?v=2d94c57e93"></script>
 <script src="cueola-live-session.js?v=2352bc00d1"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -6220,8 +6248,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=515bfb5721"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=c9f2b12372"></script>
-<script src="outrangutan/outrangutan.js?v=f55ff37cff"></script>
+<script src="cueola-app.js?v=0f4ffc856b"></script>
+<script src="outrangutan/outrangutan.js?v=59908d42fb"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="cueola-streamdeck.js?v=e2405aa42f"></script>

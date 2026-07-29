@@ -28,9 +28,10 @@ labels. Deeper procedures: [admin-accounts-runbook.md](admin-accounts-runbook.md
 - Session **delete** and class-key **minting** are admin-only at the rules
   layer; students never see those controls.
 - Need a sandbox? The front-page **Demo** card loads Campus News with no
-  login. The Break Room (the full advanced show) appears on that card only
-  once you sign in as an instructor. The dashboard's Create Test Show button
-  seeds a real cloud session to poke at.
+  login. The Break Room (the full advanced show) comes from the dashboard's
+  **Create Test Show** button only: it mints a real cloud session, and the
+  code it mints is what you hand to the crew. Everyone who joins that code
+  gets the whole drill, seeded KeyWi layouts included.
 
 ## The four errands only admins can run
 
