@@ -91,6 +91,16 @@ button,input,select,textarea{font:inherit}
 button{appearance:none;color:inherit}
 button:focus:not(:focus-visible){outline:none}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 78%,white);outline-offset:2px}
+/* One focus indicator per control. These text fields draw their own accent
+   ring on focus (border + soft glow below), so the generic outline above is
+   suppressed for them; text inputs match :focus-visible on any focus and
+   would otherwise show both, a double box. The outline stays for checkboxes
+   and buttons, and returns under forced colors where box-shadow is stripped. */
+:is(.field-in,.admin-mini-in,.participant-role-select,.participant-role-custom,.add-student-input,.merge-select,.assignment-position):focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+:is(.field-in,.admin-mini-in,.participant-role-select,.participant-role-custom,.add-student-input,.merge-select,.assignment-position):focus-visible{outline:none}
+@media (forced-colors: active){
+:is(.field-in,.admin-mini-in,.participant-role-select,.participant-role-custom,.add-student-input,.merge-select,.assignment-position):focus-visible{outline:2px solid Highlight;outline-offset:2px}
+}
 
 /* ── TOPBAR ── */
 .topbar{

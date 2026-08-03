@@ -4245,10 +4245,16 @@ function prefillJoinFields(codeId, nameId) {
     code = localStorage.getItem('cueola_last_code') || '';
     name = localStorage.getItem('cueola_last_name') || '';
   } catch {}
+  // A signed-in user never types their own name: the profile (or instructor
+  // account) name wins, even over a name remembered from a past guest join.
+  const authedName = window.CueolaIdentity?.profile?.()?.fullName || adminSession?.name || '';
   const codeEl = document.getElementById(codeId);
   const nameEl = document.getElementById(nameId);
   if (codeEl && !codeEl.value) codeEl.value = code;
-  if (nameEl && !nameEl.value) nameEl.value = name;
+  if (nameEl) {
+    if (authedName) nameEl.value = authedName;
+    else if (!nameEl.value) nameEl.value = name;
+  }
 }
 
 // Owner directive, app wide: a signed-in user should never have to type a
@@ -4481,7 +4487,11 @@ function openBlankSlateSetup() {
   const code = document.getElementById('blank-code');
   const showIn = document.getElementById('blank-show');
   const err = document.getElementById('blank-err');
-  if (name && !name.value) name.value = adminSession?.name || localStorage.getItem('cueola_last_name') || '';
+  const authedName = adminSession?.name || window.CueolaIdentity?.profile?.()?.fullName || '';
+  if (name) {
+    if (authedName) name.value = authedName;
+    else if (!name.value) name.value = localStorage.getItem('cueola_last_name') || '';
+  }
   if (code) code.value = '';
   if (showIn) showIn.value = '';
   err?.classList.remove('on');
@@ -7024,7 +7034,7 @@ function buildCueConfigFields(type, d) {
     <div class="cc-divider"></div>
     <div class="field">
       <label class="field-lbl">Notes <span class="lbl-hint">(for your crew)</span></label>
-      <textarea class="field-in" id="cc-notes" rows="2" class="cc-note-ta" placeholder="Add context, reminders, or crew instructions…">${esc(notes)}</textarea>
+      <textarea class="field-in cc-note-ta" id="cc-notes" rows="2" placeholder="Add context, reminders, or crew instructions…">${esc(notes)}</textarea>
     </div>`;
 }
 
@@ -22319,6 +22329,8 @@ async function cueolaEntryGateAllows(code, doorLabel = 'This session') {
   try {
     const inp = document.getElementById('stud-code');
     if (inp) inp.value = clean;
+    prefillJoinFields('stud-code', 'stud-name');
+    window.CueolaIdentity?.decorateJoin('stud');
     showModal('modal-stud');
     CueolaIdentity?.revealEntryCodeRow?.('stud-entrycode-row');
   } catch {}
@@ -22406,6 +22418,8 @@ window.cueolaEntryGateAllows = cueolaEntryGateAllows;   // Outrangutan's module 
       // No name stored — show the join modal pre-filled with the code
       const inp = document.getElementById('stud-code');
       if (inp) inp.value = code;
+      prefillJoinFields('stud-code', 'stud-name');
+      window.CueolaIdentity?.decorateJoin('stud');
       showModal('modal-stud');
     }
   };
@@ -22418,6 +22432,8 @@ window.cueolaEntryGateAllows = cueolaEntryGateAllows;   // Outrangutan's module 
     } else {
       const inp = document.getElementById('stud-code');
       if (inp) inp.value = code;
+      prefillJoinFields('stud-code', 'stud-name');
+      window.CueolaIdentity?.decorateJoin('stud');
       showModal('modal-stud');
       toast('Offline in this browser. You can open a local copy with this code.');
     }

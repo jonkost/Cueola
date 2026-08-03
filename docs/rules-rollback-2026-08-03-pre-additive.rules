@@ -1,0 +1,308 @@
+rules_version = '2';
+
+// Cueola deliberately has no username/password authentication. App Check is the
+// perimeter control; these rules validate paths and document shapes so an
+// accepted client cannot create arbitrary collections or unbounded structures.
+// They do not identify a person or prove an instructor role.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function shortString(value, limit) {
+      return value is string && value.size() > 0 && value.size() <= limit;
+    }
+
+    function optionalShortString(data, key, limit) {
+      return !data.keys().hasAny([key]) || shortString(data[key], limit);
+    }
+
+    function validSessionId(code) {
+      // Includes ordinary session codes and the legacy pbfile_* sibling docs.
+      return code.matches('^[A-Za-z0-9_.-]{1,160}$');
+    }
+
+    function validSessionDocument(code, data) {
+      // Session docs are intentionally extensible: Cueola, Flowmingo,
+      // Outrangutan, dashboard, and Prompt-Up share this document.
+      return data is map
+        && (!data.keys().hasAny(['code']) || data.code == code)
+        && optionalShortString(data, 'showName', 200)
+        && optionalShortString(data, 'createdBy', 120)
+        && (!data.keys().hasAny(['beats']) || data.beats is list)
+        && (!data.keys().hasAny(['cues']) || data.cues is list)
+        && (!data.keys().hasAny(['participants']) || data.participants is list)
+        && (!data.keys().hasAny(['presence']) || data.presence is map)
+        && (!data.keys().hasAny(['prompter']) || data.prompter is map)
+        && (!data.keys().hasAny(['outrangutan']) || data.outrangutan is map)
+        && (!data.keys().hasAny(['prePro']) || data.prePro is map)
+        && (!data.keys().hasAny(['assignments']) || data.assignments is map)
+        && (!data.keys().hasAny(['roleAssignments']) || data.roleAssignments is list)
+        && (!data.keys().hasAny(['assignmentRevision'])
+          || (data.assignmentRevision is int && data.assignmentRevision >= 0))
+        && (!data.keys().hasAny(['assignmentUpdatedAt'])
+          || (data.assignmentUpdatedAt is int && data.assignmentUpdatedAt >= 0))
+        && optionalShortString(data, 'assignmentUpdatedBy', 160)
+        // Dashboard soft-delete stamp (Phase 1 item 4): restore removes both keys.
+        && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is int)
+        && optionalShortString(data, 'deletedBy', 120)
+        // Phase 3 per-session admin toggle: entry also requires a class login code.
+        && (!data.keys().hasAny(['requireLoginCode']) || data.requireLoginCode is bool);
+    }
+
+    function validAdminsDocument(data) {
+      return data is map
+        && data.keys().hasOnly(['list'])
+        && data.list is list
+        && data.list.size() <= 200;
+    }
+
+    function validFileDocument(code, fileId, data) {
+      return fileId.matches('^[A-Za-z0-9_.-]{1,160}$')
+        && data is map
+        && data.keys().hasOnly([
+          'kind', 'fileId', 'parentFileId', 'session', 'name', 'type', 'size',
+          'chunkCount', 'data', 'at', 'chunkIndex'
+        ])
+        && shortString(data.kind, 40)
+        && data.kind in ['pbNoteFile', 'pbNoteFileChunk']
+        && (!data.keys().hasAny(['fileId']) || data.fileId == fileId)
+        && (!data.keys().hasAny(['parentFileId']) || data.parentFileId.matches('^[A-Za-z0-9_.-]{1,160}$'))
+        && (!data.keys().hasAny(['session']) || data.session == code)
+        && optionalShortString(data, 'name', 240)
+        && optionalShortString(data, 'type', 160)
+        && (!data.keys().hasAny(['size']) || (data.size is int && data.size >= 0 && data.size <= 10485760))
+        && (!data.keys().hasAny(['chunkCount']) || (data.chunkCount is int && data.chunkCount >= 1 && data.chunkCount <= 8))
+        && (!data.keys().hasAny(['chunkIndex']) || (data.chunkIndex is int && data.chunkIndex >= 1 && data.chunkIndex < 8))
+        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 800000));
+    }
+
+    function validAccessCode(data) {
+      return data is map
+        && data.keys().hasAll(['role', 'label', 'active', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['role', 'label', 'active', 'createdBy', 'createdAt', 'revokedAt', 'revokedBy'])
+        && data.role in ['student', 'admin']
+        && shortString(data.label, 160)
+        && data.active is bool
+        && shortString(data.createdBy, 120)
+        && (!data.keys().hasAny(['revokedAt']) || data.revokedAt is int)
+        && optionalShortString(data, 'revokedBy', 120);
+    }
+
+    function validUsername(username) {
+      return username.matches('^[a-z0-9][a-z0-9._-]{2,39}$');
+    }
+
+    function validCanonicalId(value) {
+      return value is string
+        && value.matches('^[A-Za-z0-9_.-]{3,160}$');
+    }
+
+    function validProfile(username, data) {
+      return validUsername(username)
+        && data is map
+        && data.keys().hasAll([
+          'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
+          'codeUsed', 'createdAt', 'lastSeen'
+        ])
+        && data.keys().hasOnly([
+          'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
+          'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto',
+          'profileId', 'profileAliases'
+        ])
+        && data.username.lower() == username
+        && shortString(data.username, 40)
+        && shortString(data.fullName, 120)
+        && data.role in ['student', 'admin']
+        && data.avatar is map
+        && shortString(data.theme, 40)
+        && data.sessions is list
+        && data.sessions.size() <= 100
+        && shortString(data.codeUsed, 80)
+        // Phase 6 migration fields are optional for legacy profiles. Once a
+        // profileId is added, immutableProfileId() prevents removing/changing it.
+        && (!data.keys().hasAny(['profileId']) || validCanonicalId(data.profileId))
+        && (!data.keys().hasAny(['profileAliases'])
+          || (data.profileAliases is list && data.profileAliases.size() <= 40))
+        && (!data.keys().hasAny(['active']) || data.active is bool)
+        && optionalShortString(data, 'renamedTo', 40)
+        && optionalShortString(data, 'mergedInto', 40);
+    }
+
+    function activeCodeForProfile(data) {
+      let path = /databases/$(database)/documents/accessCodes/$(data.codeUsed);
+      return exists(path)
+        && get(path).data.active == true
+        && get(path).data.role == data.role;
+    }
+
+    function immutableProfileIdentity() {
+      return request.resource.data.username == resource.data.username
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.codeUsed == resource.data.codeUsed
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function immutableProfileId() {
+      // Existing profiles may add an opaque id once. Profiles that already have
+      // one must preserve it on every subsequent update.
+      return (!resource.data.keys().hasAny(['profileId']))
+        || (request.resource.data.keys().hasAny(['profileId'])
+          && request.resource.data.profileId == resource.data.profileId);
+    }
+
+    function validAssignment(assignmentId, code, data) {
+      return validCanonicalId(assignmentId)
+        // productionSession is a foreign key to the existing session path.
+        // Preserve Cueola's 1–160 character session-code contract; generated
+        // assignment/profile/position identifiers use validCanonicalId().
+        && validSessionId(code)
+        && data is map
+        && data.keys().hasAll([
+          'assignmentId', 'productionSession', 'profileId', 'displayName',
+          'positionId', 'positionLabel', 'paperworkIds', 'paperworkLabels',
+          'status', 'assignedBy', 'assignedByLabel', 'createdAt', 'updatedAt',
+          'revision'
+        ])
+        && data.keys().hasOnly([
+          'assignmentId', 'productionSession', 'profileId', 'displayName',
+          'positionId', 'positionLabel', 'paperworkIds', 'paperworkLabels',
+          'status', 'assignedBy', 'assignedByLabel', 'createdAt', 'updatedAt',
+          'revision'
+        ])
+        && data.assignmentId == assignmentId
+        && data.productionSession == code
+        && validCanonicalId(data.profileId)
+        && shortString(data.displayName, 160)
+        && validCanonicalId(data.positionId)
+        && shortString(data.positionLabel, 160)
+        && data.paperworkIds is list
+        && data.paperworkIds.size() <= 40
+        && data.paperworkLabels is list
+        && data.paperworkLabels.size() == data.paperworkIds.size()
+        && data.status in ['assigned', 'completed']
+        && validCanonicalId(data.assignedBy)
+        && shortString(data.assignedByLabel, 160)
+        && data.createdAt is int
+        && data.createdAt >= 0
+        && data.updatedAt is int
+        && data.updatedAt >= data.createdAt
+        && data.revision is int
+        && data.revision >= 1
+        && data.revision <= 1000000;
+    }
+
+    function immutableAssignmentIdentity() {
+      return request.resource.data.assignmentId == resource.data.assignmentId
+        && request.resource.data.productionSession == resource.data.productionSession
+        && request.resource.data.profileId == resource.data.profileId
+        && request.resource.data.positionId == resource.data.positionId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt >= resource.data.updatedAt
+        && request.resource.data.revision > resource.data.revision;
+    }
+
+    function validNote(noteId, data) {
+      return noteId.matches('^[A-Za-z0-9_.-]{1,160}$')
+        && data is map
+        && data.keys().hasOnly([
+          'id', 'text', 'by', 'role', 'tag', 'assignee', 'done', 'doneBy',
+          'doneAt', 'at', 'clientId', 'replyTo', 'editedAt', 'pinned', 'avatar',
+          'likes', 'mentions', 'checklist', 'attachments', 'replies', 'seenBy'
+        ])
+        && (!data.keys().hasAny(['id']) || data.id == noteId)
+        && optionalShortString(data, 'text', 20000)
+        && optionalShortString(data, 'by', 120)
+        && (!data.keys().hasAny(['role']) || data.role in ['student', 'instructor', 'admin'])
+        && optionalShortString(data, 'tag', 40)
+        && optionalShortString(data, 'assignee', 120)
+        // Phase 4 per-note migration: the client writes these fields verbatim.
+        && (!data.keys().hasAny(['done']) || data.done is bool)
+        && (!data.keys().hasAny(['pinned']) || data.pinned is bool)
+        && (!data.keys().hasAny(['at']) || data.at is int)
+        && (!data.keys().hasAny(['doneAt']) || data.doneAt is int)
+        && (!data.keys().hasAny(['editedAt']) || data.editedAt is int)
+        && optionalShortString(data, 'doneBy', 120)
+        && optionalShortString(data, 'clientId', 120)
+        && (!data.keys().hasAny(['replyTo']) || data.replyTo is string && data.replyTo.size() <= 160)
+        && (!data.keys().hasAny(['avatar']) || data.avatar is map)
+        && (!data.keys().hasAny(['likes']) || (data.likes is list && data.likes.size() <= 500))
+        && (!data.keys().hasAny(['mentions']) || (data.mentions is list && data.mentions.size() <= 100))
+        && (!data.keys().hasAny(['checklist']) || (data.checklist is list && data.checklist.size() <= 100))
+        && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 40))
+        && (!data.keys().hasAny(['replies']) || (data.replies is list && data.replies.size() <= 500))
+        && (!data.keys().hasAny(['seenBy']) || (data.seenBy is map && data.seenBy.size() <= 200));
+    }
+
+    // Shared show state. App Check enforcement in Firebase Console is the only
+    // current way to distinguish Cueola clients from arbitrary callers.
+    match /sessions/{code} {
+      allow get: if validSessionId(code);
+      allow list: if true;
+      allow create, update: if validSessionId(code) && validSessionDocument(code, request.resource.data);
+      allow delete: if validSessionId(code);
+
+      // Phase 1 item 3 target. Reads/writes are shape-limited now so the rules
+      // can be deployed before the client migration without reopening rules.
+      match /files/{fileId} {
+        allow get, delete: if validSessionId(code) && fileId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow list: if validSessionId(code);
+        allow create, update: if validSessionId(code) && validFileDocument(code, fileId, request.resource.data);
+      }
+
+      // Phase 4 per-note target.
+      match /notes/{noteId} {
+        allow get, delete: if validSessionId(code) && noteId.matches('^[A-Za-z0-9_.-]{1,160}$');
+        allow list: if validSessionId(code);
+        allow create, update: if validSessionId(code) && validNote(noteId, request.resource.data);
+      }
+
+      // Canonical Phase 6 crew assignments. These rules validate consistency
+      // and bounds only: without Firebase Auth they cannot prove whether the
+      // caller is an instructor, administrator, or student.
+      match /assignments/{assignmentId} {
+        allow get, delete: if validSessionId(code) && validCanonicalId(assignmentId);
+        allow list: if validSessionId(code);
+        allow create: if validSessionId(code)
+                      && validAssignment(assignmentId, code, request.resource.data);
+        allow update: if validSessionId(code)
+                      && validAssignment(assignmentId, code, request.resource.data)
+                      && immutableAssignmentIdentity();
+      }
+    }
+
+    match /admins/{docId} {
+      allow read: if docId == 'global';
+      allow create, update: if docId == 'global' && validAdminsDocument(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Entitlements are server-authoritative. Admin SDK/server writes bypass rules.
+    match /accounts/{accountId} {
+      allow read: if accountId.matches('^[A-Za-z0-9_.-]{1,160}$');
+      allow write: if false;
+    }
+
+    // Phase 3 identity layer. This is consistency, not authentication: without
+    // Firebase Auth an accepted client can still mint an access-code document.
+    match /accessCodes/{code} {
+      allow get: if code.matches('^[A-Za-z0-9_-]{4,80}$');
+      allow list: if true;
+      allow create, update: if code.matches('^[A-Za-z0-9_-]{4,80}$') && validAccessCode(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /profiles/{username} {
+      allow get: if validUsername(username);
+      allow list: if true;
+      allow create: if validProfile(username, request.resource.data)
+                    && activeCodeForProfile(request.resource.data);
+      allow update: if validProfile(username, request.resource.data)
+                    && immutableProfileIdentity()
+                    && immutableProfileId();
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

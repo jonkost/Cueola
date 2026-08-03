@@ -103,8 +103,8 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=515bfb5721',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=0f4ffc856b',
-  'outrangutan/outrangutan.css?v=1640115e75',
+  'cueola-app.js?v=89c18ad1e6',
+  'outrangutan/outrangutan.css?v=1922dfba89',
   'outrangutan/outrangutan.js?v=59908d42fb',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
@@ -149,12 +149,18 @@ const versionSignature = SHELL_ASSETS
 // typed-code, Flowmingo Remote Op, Outrangutan). index.html grew the
 // your-sessions containers + row CSS the shell caches, so the shell rolls
 // with the identity/app/outrangutan JS bumps.
-const WORKER_SCHEMA = '18';
+const WORKER_SCHEMA = '19';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_ASSETS)));
+  // cache:'reload' bypasses the browser HTTP cache at install. Without it,
+  // unversioned entries (index.html, dashboard.html, brand SVGs, manifest)
+  // can be precached from a stale HTTP-cache copy, and a schema roll would
+  // ship the old shell anyway — the exact stale-shell trap this file's
+  // changelog keeps relearning. Versioned ?v= URLs never hit that path.
+  event.waitUntil(caches.open(CACHE_NAME).then(cache =>
+    cache.addAll(SHELL_ASSETS.map(url => new Request(url, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', event => {
