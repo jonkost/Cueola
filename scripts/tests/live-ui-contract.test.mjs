@@ -402,7 +402,10 @@ test('cloud snapshots: group-aware capture, hashed dedupe, merged history, one r
 });
 
 test('explicit create and ordinary join have separate Firestore authority', () => {
-  const create = app.slice(app.indexOf('async function createSession()'), app.indexOf('function enterAsInstructor'));
+  // The explicit create path on the entry page is Blank Slate (the legacy
+  // Create-a-Session modal was dead code, removed 2026-08-03; dashboard.html
+  // owns instructor session creation).
+  const create = app.slice(app.indexOf('async function startBlankSlate()'), app.indexOf('function loadDemo'));
   const createOnly = app.slice(app.indexOf('async function createSessionDocumentIfMissing'), app.indexOf('async function restoreMissingSessionDocument'));
   const setup = app.slice(app.indexOf('function setupFirestore()'), app.indexOf('// ── P3: snapshot render gating'));
   assert.match(create, /await createSessionDocumentIfMissing\(ref, payload\)/);

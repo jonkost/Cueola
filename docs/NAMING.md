@@ -42,16 +42,13 @@ mid-show (D8 rule 1: never change a wire shape deployed clients consume):
 
 ## 2. Window globals
 
-- **camelCase** for runtime state the app computes and owns:
-  `window.cueolaPlatform` (detected platform), `window.cueolaCapabilities`,
-  `window.cueolaEntitlements`.
+- **camelCase** for runtime state the app computes and owns
+  (e.g. `window.cueolaClientId`).
 - **UPPER_SNAKE** for external/build-time input flags set *before* the app
   runs and only read by it: `window.CUEOLA_PLATFORM` (native-wrapper build
   flag), `window.CUEOLA_PB_LEAF_SYNC` (dark-launch gate).
-  `CUEOLA_PLATFORM` vs `cueolaPlatform` is therefore **not** a duplicate —
-  one is the input override, the other the resolved output. Keep both.
 - **PascalCase namespaces** for shared modules exposed on window:
-  `CueolaEntitlements`, `CueolaIdentity`, `Outrangutan`.
+  `CueolaIdentity`, `CueolaAdminAuth`, `Outrangutan`.
 - One top-level declaration per name per page. dashboard.html carried two
   identical `initialsOf` function declarations (the later silently shadowed
   the earlier); deduped in v2.1. Don't reintroduce shadowing — grep before

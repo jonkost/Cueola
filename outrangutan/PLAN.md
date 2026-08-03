@@ -13,7 +13,7 @@
 **Stack (matched exactly — no new stack):**
 - Vanilla JS, **no framework, no bundler, no package manager** for the web app. `index.html`
   (~3.2k lines, all CSS + markup) loads `cueola-app.js` (~12k lines, one global script) and
-  the small `cueola-entitlements.js`. Firebase (`app` + `app-check` + `firestore`) is the
+  small companion global scripts like `cueola-identity.js`. Firebase (`app` + `app-check` + `firestore`) is the
   only "backend"; **no server**, **no Firebase Storage**, **no media-upload path** exists.
 - State is plain globals; persistence is `localStorage` + Firestore. Files today are read
   client-side via `FileReader` (scripts, PDFs) — never uploaded to a server.
@@ -45,7 +45,7 @@
 Outrangutan is large (engine + cue list + SFX + outputs + scopes + keying + OBS…). Inlining
 it into the 12k-line `cueola-app.js` would bloat it and raise merge risk (this repo has
 already lost markup in a merge once). So Outrangutan lives in its **own folder, same stack**
-— vanilla JS global scripts + theme tokens, exactly like `cueola-entitlements.js`. It still
+— vanilla JS global scripts + theme tokens, exactly like `cueola-identity.js`. It still
 *feels native*: a front-page `.e-card`, a `.screen` it owns, the same `enterX()`/back-nav
 pattern, the same tokens/symbols. **Not a new stack; not a framework — just file isolation.**
 

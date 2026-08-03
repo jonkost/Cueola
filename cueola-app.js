@@ -1688,6 +1688,10 @@ let cueConfigType   = null;
 // Presence cache for follow chips
 let currentPresence = {};
 let sessionParticipantNames = [];
+// Raw participants array from the latest session snapshot: the durable roster,
+// not just who is online. The Admin panel People pane lists these so an
+// offline participant can still be removed.
+let sessionParticipantRecords = [];
 
 // Live script edit
 let liveScriptEditIdx = null;
@@ -1750,6 +1754,10 @@ function leaveSessionForFrontPage() {
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
   sessionQuestionCards = [];   // prepared question cards belong to the session just left
+  // The roster belongs to the session just left too; a stale copy would let
+  // the Admin People pane list the wrong show's people until the next snapshot.
+  sessionParticipantRecords = [];
+  sessionParticipantNames = [];
   _outNameLinksPresent = false;
 }
 
@@ -2933,7 +2941,7 @@ function toggleCueolaFullscreen(screenId) {
 // CueolaAdminAuth owns sign-in and session resolution; this adapter mirrors
 // the published session into the legacy `adminSession` global so every
 // existing consumer (script lock, session info, presence inspect,
-// entitlements, assignment actor…) works unchanged. Auth's IndexedDB
+// assignment actor…) works unchanged. Auth's IndexedDB
 // persistence carries the session across all same-origin surfaces.
 function initAdminAuthAdapter() {
   if (!window.CueolaAdminAuth) return;
@@ -3031,6 +3039,45 @@ function closeAdminPanel(e) {
   hideOverlay('adminPanel');
 }
 
+// The panel follows the house inspector standard: icon tabs pick ONE group at
+// a time, an uppercase caption names the active group, each group is one flat
+// page, and the active tab is remembered so the panel reopens where the
+// operator works.
+const ADMIN_TABS = [
+  { id:'session', label:'Session', symbol:'action.attach',     when:() => true },
+  { id:'people',  label:'People',  symbol:'action.profile',    when:() => Boolean(session.code && !session.isDemo && !session.isExpert) },
+  { id:'crew',    label:'Crew',    symbol:'content.checklist', when:() => Boolean(session.code || session.isExpert) },
+  { id:'sources', label:'Sources', symbol:'content.display',   when:() => Boolean(session.code || session.isExpert) },
+];
+let adminActiveTab = '';
+// Unsaved Crew edits carried across a tab switch, so browsing People never
+// costs an in-progress assignment draft. Cleared whenever the server copy is
+// (re)confirmed: save, revert, reload, hydrate.
+let adminAssignmentTabDraft = null;
+
+function adminAvailableTabs() { return ADMIN_TABS.filter(t => t.when()); }
+
+function currentAdminTab() {
+  const tabs = adminAvailableTabs();
+  let stored = adminActiveTab;
+  if (!stored) { try { stored = localStorage.getItem('cueola_admin_tab') || ''; } catch {} }
+  return (tabs.find(t => t.id === stored) || tabs[0]).id;
+}
+
+function setAdminTab(id) {
+  // 'saving' is included: a save can fail after the switch, and its failure
+  // copy promises the draft is still here. The DOM rows at switch time ARE
+  // that draft; a later success clears this stash anyway.
+  if (currentAdminTab() === 'crew' && id !== 'crew'
+      && document.querySelector('#adminBody [data-role-assignment-row]')
+      && ['unsaved','saving','failed','conflict'].includes(assignmentSaveState)) {
+    adminAssignmentTabDraft = getRoleAssignmentsFromAdminDOM(true);
+  }
+  adminActiveTab = id;
+  try { localStorage.setItem('cueola_admin_tab', id); } catch {}
+  renderAdminBody();
+}
+
 function renderAdminBody() {
   const body = document.getElementById('adminBody');
   // Presence heartbeats rebuild this panel while it is open. Safari never gives
@@ -3039,111 +3086,271 @@ function renderAdminBody() {
   // silently resetting them to the last saved state.
   const pendingAssignments = body?.querySelector('[data-role-assignment-row]')
     ? getRoleAssignmentsFromAdminDOM(true) : null;
-  const isSuper = adminSession.level==='super';   // 'full' level retired (plan decision 4)
+  const tabs = adminAvailableTabs();
+  const active = currentAdminTab();
 
+  let html = tabs.length > 1
+    ? `<div class="admin-tabs" role="tablist" aria-label="Admin controls">
+        ${tabs.map(t => `<button class="admin-tab${t.id === active ? ' sel' : ''}" role="tab" aria-selected="${t.id === active}" onclick="setAdminTab('${t.id}')" data-tip="${t.label}" aria-label="${t.label}">${sfIcon(t.symbol)}</button>`).join('')}
+      </div>
+      <div class="admin-caption">${tabs.find(t => t.id === active).label}</div>`
+    : '';
+
+  if (active === 'people') html += renderAdminPanePeople();
+  else if (active === 'crew') html += renderAdminPaneCrew(pendingAssignments);
+  else if (active === 'sources') html += renderAdminPaneSources();
+  else html += renderAdminPaneSession();
+
+  html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Sign out of admin</button>`;
+  body.innerHTML = html;
+}
+
+function renderAdminPaneSession() {
+  const isSuper = adminSession?.level === 'super';   // 'full' level retired (plan decision 4)
   let html = '';
-
-  // ── Admin management (accounts live on the dashboard now — D1) ──
+  if (session.code) {
+    html += `<div class="admin-section">
+      <div class="admin-section-label">Invite</div>
+      <div class="admin-btn-row">
+        <button class="admin-act-btn" onclick="copySessionCode()" data-tip="Copy the session code">Copy code</button>
+        <button class="admin-act-btn" onclick="copySessionLink()" data-tip="Copy a join link">Copy link</button>
+        <button class="admin-act-btn" onclick="shareSessionInvite()" data-tip="Share a join invite">Share invite</button>
+        <button class="admin-act-btn" onclick="openPaperworkHub()" data-tip="Open the Planda Bear paperwork hub">Open Planda Bear</button>
+      </div>
+    </div>`;
+  }
   if (isSuper) {
     html += `<div class="admin-section">
-      <div class="admin-section-label">Admin Management</div>
-      ${session.code ? `<div class="admin-session-actions">
-        <button class="admin-act-btn" onclick="copySessionCode()">Copy Session Code</button>
-        <button class="admin-act-btn" onclick="copySessionLink()">Copy Session Link</button>
-        <button class="admin-act-btn" onclick="shareSessionInvite()">Share Session</button>
-        <button class="admin-act-btn" onclick="openPaperworkHub()">Open Planda Bear</button>
-      </div>` : ''}
-      <div class="u-note-lg u-mt8">
+      <div class="admin-section-label">Accounts</div>
+      <div class="u-note">
         Signed in as <b>${esc(adminSession.name)}</b> (${esc(adminSession.username || '')}).
-        Instructor accounts are managed on the <a href="dashboard.html#accounts" class="link-accent">Dashboard → Accounts</a> page.
+        Instructor accounts are managed on the <a href="dashboard.html#accounts" class="link-accent">Dashboard accounts page</a>.
       </div>
     </div>`;
   }
-
-  // ── Session sources ──
   if (session.code || session.isExpert) {
     html += `<div class="admin-section">
-      <div class="admin-section-label">Session Sources <span class="admin-section-tag">(this session only)</span></div>
-      <div class="admin-sources-grid">
-        ${renderSourcesRow('video','Video')}
-        ${renderSourcesRow('audio','Audio')}
-        ${renderSourcesRow('gfx','GFX')}
-        ${renderSourcesRow('scriptWho','Script / Who')}
-      </div>
+      <div class="admin-section-label">Show clock</div>
+      <div class="u-note u-mb8">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
+      <button class="admin-act-btn danger" onclick="restartShowClock()">${sfIcon('action.reset')} Restart show clock</button>
     </div>`;
   }
-
   if (session.code) {
     const presenceNames = getActivePresencePeople().map(p=>p.name);
     const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    html += `<div class="admin-section u-mt16">
-      <div class="admin-section-label">Live Control</div>
+    html += `<div class="admin-section">
+      <div class="admin-section-label">Live control</div>
+      <div class="u-note u-mb8">Send every connected device to the live screen, all following one operator.</div>
       <div class="u-row-wrap">
         <select id="adminFollowSelect" class="field-in admin-follow-in">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force Everyone Live + Follow</button>
+        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force everyone live</button>
       </div>
     </div>`;
   }
-  if (session.code || session.isExpert) {
-    html += `<div class="admin-section u-mt16">
-      <div class="admin-section-label">Show Clock</div>
-      <div class="u-note u-mb8">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
-      <button class="admin-act-btn danger" onclick="restartShowClock()">${sfIcon('action.reset')} Restart Show Clock</button>
-    </div>`;
-  }
-  if (session.code || session.isExpert) {
-    const positionOptions = getRolePositionOptions();
-    html += `<div class="admin-section">
-      <div class="admin-section-label">Role and Planda Bear Assignments</div>
-      <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save Assignments</b>.</div>
-      <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
-      <div class="admin-src-row u-mb10">
-        <span class="admin-src-label">Positions</span>
-        <div class="admin-src-chips">
-          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
-          <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
-        </div>
-      </div>
-      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(pendingAssignments?.length ? pendingAssignments : undefined)}</div>
-      <div class="admin-assignment-actions">
-        <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add Person</button>
-        <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save Assignments</button>
-      </div>
-    </div>`;
-  }
-
-  // ── People in session (remove a device from the code) ──
   if (session.code && !session.isDemo && !session.isExpert) {
-    const people = getActivePresencePeople();
-    html += `<div class="admin-section u-mt16">
-      <div class="admin-section-label">People in Session</div>
-      ${people.length ? `<div class="admin-list">` + people.map(p => {
-        const isMe = sameParticipantName(p.name, session.userName);
-        return `<div class="admin-item">
-          <div class="admin-item-name">${esc(p.name)}
-            <span class="admin-level-chip u-ml7 ${p.role==='instructor'?'alc-full':'alc-standard'}">${p.role==='instructor'?'INST':'STU'}</span>
-          </div>
-          <div class="u-spacer"></div>
-          ${isMe ? '<span class="admin-item-you">YOU</span>'
-                 : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
-        </div>`;
-      }).join('') + `</div>`
-      : `<div class="u-note">No one is connected right now.</div>`}
-      <div class="u-note-sm u-mt8">Remove disconnects that person's device from this code. They can rejoin with the same code. Move the session to a new code to keep them out.</div>
-    </div>`;
-
-    // ── Session rescue: move the whole show to a fresh code ──
-    html += `<div class="admin-section u-mt16">
-      <div class="admin-section-label">Session Code</div>
+    html += `<div class="admin-section">
+      <div class="admin-section-label">Session rescue</div>
       <div class="u-note u-mb8">Current code: <b class="u-mono-strong">${esc(session.code)}</b>. If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
-      <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move Session to a New Code</button>
+      <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move to a new code</button>
     </div>`;
   }
-  html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Logout Admin</button>`;
-  body.innerHTML = html;
-  window._newAdminLevel = 'standard';
+  if (!html) {
+    html = `<div class="admin-section">
+      <div class="admin-section-label">Session</div>
+      <div class="u-note">No session is open on this device. Join or start a session and its controls appear here.</div>
+    </div>`;
+  }
+  return html;
+}
+
+function renderAdminPanePeople() {
+  // Union of live presence and the durable roster (participants on the session
+  // doc), so someone who already left can still be removed.
+  const online = getActivePresencePeople();
+  const seen = new Set();
+  const people = [];
+  online.forEach(p => {
+    people.push({ name:p.name, role:p.role, online:true });
+    seen.add(participantNameKey(p.name));
+  });
+  (sessionParticipantRecords || []).forEach(p => {
+    const name = typeof p === 'string' ? p : p?.name;
+    if (!name) return;
+    const key = participantNameKey(name);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    people.push({ name, role:(typeof p === 'object' && p?.role) || 'student', online:false });
+  });
+  let html = `<div class="admin-section">
+    <div class="admin-section-label">In this session</div>
+    ${people.length ? `<div class="admin-list">` + people.map(p => {
+      const isMe = sameParticipantName(p.name, session.userName);
+      return `<div class="admin-item">
+        <span class="admin-item-dot${p.online?' on':''}" role="img" aria-label="${p.online?'Connected now':'Not connected'}" data-tip="${p.online?'Connected now':'Not connected'}"></span>
+        <div class="admin-item-name">${esc(p.name)}
+          <span class="admin-level-chip u-ml7 ${p.role==='instructor'?'alc-full':'alc-standard'}">${p.role==='instructor'?'INST':'STU'}</span>
+        </div>
+        <div class="u-spacer"></div>
+        ${isMe ? '<span class="admin-item-you">YOU</span>'
+               : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
+      </div>`;
+    }).join('') + `</div>`
+    : `<div class="u-note">No one has joined this session yet.</div>`}
+    <div class="u-note-sm u-mt8">Remove disconnects that person's device and takes them off the session roster. They can rejoin with the code. Move the session to a new code to keep them out.</div>
+  </div>`;
+  html += `<div class="admin-section">
+    <div class="admin-section-label">Assigned profiles</div>
+    <div class="u-note u-mb8">These profiles carry this session on their sign-in page, one tap to enter. Unassign removes that tile from the profile; it does not disconnect a device and it does not touch crew assignments.</div>
+    <div id="adminMembershipList">${adminMembershipListHTML()}</div>
+    <div class="admin-assign-row u-mt8">
+      <input class="field-in" id="adminAssignUser" list="adminAssignOptions" placeholder="@username" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')adminAssignProfileToSession()">
+      <datalist id="adminAssignOptions">${adminAssignOptionsHTML()}</datalist>
+      <button class="admin-act-btn" onclick="adminAssignProfileToSession()">Assign</button>
+    </div>
+  </div>`;
+  return html;
+}
+
+function renderAdminPaneCrew(pendingAssignments) {
+  const positionOptions = getRolePositionOptions();
+  const draft = pendingAssignments?.length ? pendingAssignments
+    : (adminAssignmentTabDraft?.length && ['unsaved','saving','failed','conflict'].includes(assignmentSaveState)
+      ? adminAssignmentTabDraft : undefined);
+  return `<div class="admin-section">
+    <div class="admin-section-label">Role and Planda Bear assignments</div>
+    <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save assignments</b>.</div>
+    <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
+    <div class="admin-src-row u-mb10">
+      <span class="admin-src-label">Positions</span>
+      <div class="admin-src-chips">
+        ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
+        <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
+      </div>
+    </div>
+    <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(draft)}</div>
+    <div class="admin-assignment-actions">
+      <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
+      <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save assignments</button>
+    </div>
+  </div>`;
+}
+
+function renderAdminPaneSources() {
+  return `<div class="admin-section">
+    <div class="admin-section-label">Session sources <span class="admin-section-tag">(this session only)</span></div>
+    <div class="admin-sources-grid">
+      ${renderSourcesRow('video','Video')}
+      ${renderSourcesRow('audio','Audio')}
+      ${renderSourcesRow('gfx','GFX')}
+      ${renderSourcesRow('scriptWho','Script / Who')}
+    </div>
+  </div>`;
+}
+
+// ── Assigned profiles: the session↔profile ties, with the missing remove ──
+function adminSessionMembers() {
+  return (assignmentAllProfiles || [])
+    .filter(p => Array.isArray(p.sessions) && p.sessions.includes(session.code))
+    .sort((a, b) => String(a.fullName || a.username || '').localeCompare(String(b.fullName || b.username || ''), undefined, { sensitivity:'base' }));
+}
+
+function adminMembershipListHTML() {
+  if (!(assignmentAllProfiles || []).length) {
+    if (assignmentSaveState === 'loading') return '<div class="u-note">Loading saved profiles…</div>';
+    if (assignmentSaveState === 'failed') {
+      return `<div class="u-note">Profiles could not be loaded. <button class="admin-act-btn" onclick="hydrateRoleAssignments({force:true})">Retry</button></div>`;
+    }
+  }
+  const members = adminSessionMembers();
+  if (!members.length) return '<div class="u-note">No profiles carry this session yet.</div>';
+  return '<div class="admin-list">' + members.map(p => `<div class="admin-item">
+      <div class="admin-item-name">${esc(p.fullName || p.username)}
+        <span class="admin-member-user">@${esc(p.username || '')}</span>
+        ${p.role === 'admin' ? '<span class="admin-level-chip u-ml7 alc-full">ADMIN</span>' : ''}
+      </div>
+      <div class="u-spacer"></div>
+      <div class="admin-item-acts"><button class="admin-act-btn danger" onclick="adminUnassignProfileFromSession(${esc(JSON.stringify(p.username || ''))})">Unassign</button></div>
+    </div>`).join('') + '</div>';
+}
+
+function adminAssignOptionsHTML() {
+  return (assignmentAllProfiles || [])
+    .map(p => `<option value="${esc(p.username || '')}">${esc(p.fullName || '')}</option>`).join('');
+}
+
+// Patch local caches after a membership write and repaint whatever admin
+// surfaces show them, without a full panel rebuild.
+function adminNoteMembershipChange(profileData, sessions) {
+  const username = profileData.username;
+  let known = false;
+  [assignmentAllProfiles, assignmentProfiles].forEach(list => {
+    const hit = (list || []).find(p => p.username === username);
+    if (hit) { hit.sessions = sessions; if (list === assignmentAllProfiles) known = true; }
+  });
+  // Only live profiles enter the cache: hydration applies the same filter, so
+  // a deactivated or tombstoned doc must not reappear here until then.
+  if (!known && profileData.active !== false && !profileData.renamedTo && !profileData.mergedInto) {
+    assignmentAllProfiles.push({ ...profileData, sessions });
+  }
+  const wrap = document.getElementById('adminMembershipList');
+  if (wrap) wrap.innerHTML = adminMembershipListHTML();
+  const options = document.getElementById('adminAssignOptions');
+  if (options) options.innerHTML = adminAssignOptionsHTML();
+}
+
+async function adminAssignProfileToSession(usernameRaw) {
+  const input = document.getElementById('adminAssignUser');
+  const username = String(usernameRaw ?? input?.value ?? '').trim().replace(/^@/, '').toLowerCase();
+  if (!username) return;
+  if (!session.code || !window._firebaseReady) { toast('A cloud session is required to assign profiles.'); return; }
+  try {
+    // The session doc must be live: attaching a dead or deleted code would put
+    // a one-tap tile on the profile that leads nowhere.
+    const sessionSnap = await window._getDoc(window._doc(window._db, 'sessions', session.code));
+    if (!sessionSnap.exists() || sessionSnap.data()?.deletedAt) { toast('This session is not in the cloud, so it cannot be assigned.'); return; }
+    const ref = window._doc(window._db, 'profiles', username);
+    const snap = await window._getDoc(ref);
+    if (!snap.exists()) { toast(`No profile named @${username}.`); return; }
+    const data = snap.data() || {};
+    if (data.renamedTo || data.mergedInto) { toast(`@${username} moved to @${data.renamedTo || data.mergedInto}. Assign that profile instead.`); return; }
+    if (data.active === false) { toast(`@${username} was deactivated by an instructor. Reactivate the profile on the dashboard first.`); return; }
+    const sessions = Array.isArray(data.sessions) ? data.sessions.slice() : [];
+    if (sessions.includes(session.code)) { toast(`@${username} already has this session.`); return; }
+    if (sessions.length >= 100) { toast(`@${username} is at the 100-session limit. Unassign an old session first.`); return; }
+    // arrayUnion keeps the write atomic against concurrent edits of the same
+    // profile; the rules' 100-item cap still holds server-side.
+    if (window._arrayUnion) await window._updateDoc(ref, { sessions: window._arrayUnion(session.code) });
+    else await window._updateDoc(ref, { sessions: [...sessions, session.code] });
+    if (input) input.value = '';
+    adminNoteMembershipChange({ ...data, username }, [...sessions, session.code]);
+    toast(`${data.fullName || '@' + username} assigned to ${session.code}.`);
+  } catch (err) {
+    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not assign. Check the connection and try again.');
+  }
+}
+
+async function adminUnassignProfileFromSession(username) {
+  const u = String(username || '').trim().toLowerCase();
+  if (!u || !session.code || !window._firebaseReady) return;
+  if (!dangerConfirm(`Remove ${session.code} from @${u}?`, 'The one-tap session tile disappears from their sign-in page. This does not disconnect a device and does not touch crew assignments. Assign the session again any time.')) return;
+  try {
+    const ref = window._doc(window._db, 'profiles', u);
+    // Fresh read so a stale cached array never clobbers a concurrent edit.
+    const snap = await window._getDoc(ref);
+    if (!snap.exists()) { toast(`No profile named @${u}.`); return; }
+    const data = snap.data() || {};
+    if (data.renamedTo || data.mergedInto) { toast(`@${u} moved to @${data.renamedTo || data.mergedInto}. Manage sessions on that profile instead.`); return; }
+    const sessions = (Array.isArray(data.sessions) ? data.sessions : []).filter(c => c !== session.code);
+    // arrayRemove keeps the write atomic against concurrent edits.
+    if (window._arrayRemove) await window._updateDoc(ref, { sessions: window._arrayRemove(session.code) });
+    else await window._updateDoc(ref, { sessions });
+    adminNoteMembershipChange({ ...data, username:u }, sessions);
+    toast(`${session.code} removed from @${u}.`);
+  } catch (err) {
+    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not unassign. Check the connection and try again.');
+  }
 }
 
 const ROLE_POSITION_OPTIONS = [
@@ -3175,6 +3382,9 @@ const ROLE_POSITION_OPTIONS = [
 ];
 
 let assignmentProfiles = [];
+// Every live profile from the last hydration (not just this session's): the
+// People pane's assign picker and membership list read from here.
+let assignmentAllProfiles = [];
 let canonicalRoleAssignments = [];
 let confirmedRoleAssignmentRows = [];
 let assignmentRevision = 0;
@@ -3618,6 +3828,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
       const profiles = [];
       profileSnap.forEach(docSnap => profiles.push({ id:docSnap.id, ...(docSnap.data() || {}) }));
       const legacyRows = legacyAssignmentRowsFromSession(sessionData);
+      assignmentAllProfiles = profiles.filter(p => p && p.username && !p.renamedTo && !p.mergedInto && p.active !== false);
       assignmentProfiles = assignmentProfilesForSession(profiles, records, legacyRows);
       canonicalRoleAssignments = records;
       assignmentRevision = Math.max(0, Number(sessionData.assignmentRevision) || 0);
@@ -3648,8 +3859,15 @@ async function hydrateRoleAssignments({ force=false }={}) {
           ? 'The cached assignment set is empty, but Firestore could not confirm that it is current.'
           : 'No assignments saved yet.');
       }
+      adminAssignmentTabDraft = null;   // the server copy is now the truth
       rerenderRoleAssignments(rows);
       renderPlandaBearAssignmentsCard();
+      // The People pane's membership list and assign picker ride the same
+      // hydration; repaint them if they are on screen.
+      const membershipWrap = document.getElementById('adminMembershipList');
+      if (membershipWrap) membershipWrap.innerHTML = adminMembershipListHTML();
+      const assignOptions = document.getElementById('adminAssignOptions');
+      if (assignOptions) assignOptions.innerHTML = adminAssignOptionsHTML();
       return rows;
     } catch (error) {
       assignmentFromCache = false;
@@ -3782,6 +4000,7 @@ async function saveRoleAssignmentsFromAdmin() {
     assignmentRevision = expectedRevision + 1;
     assignmentFromCache = false;
     canonicalRoleAssignments = records;
+    adminAssignmentTabDraft = null;
     confirmedRoleAssignmentRows = records.map(record => normalizeRoleAssignment(record));
     localizeConfirmedAssignmentProjection(compatibility, now);
     rerenderRoleAssignments(confirmedRoleAssignmentRows);
@@ -3790,6 +4009,9 @@ async function saveRoleAssignmentsFromAdmin() {
     toast('Assignments saved to Firestore.');
     return true;
   } catch (error) {
+    // If the operator switched tabs mid-save, the Crew rows are gone from the
+    // DOM; stash the draft we just tried so "the draft remains" stays true.
+    if (!document.getElementById('adminRoleAssignments')) adminAssignmentTabDraft = draft;
     if (error?.code === 'assignment-conflict') {
       setAssignmentSaveState('conflict', `${error.message} Your draft is still here; load the server copy before deciding what to reapply.`);
     } else if (error?.code === 'permission-denied') {
@@ -3803,6 +4025,7 @@ async function saveRoleAssignmentsFromAdmin() {
 }
 
 function revertRoleAssignments() {
+  adminAssignmentTabDraft = null;
   rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
   setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
     ? 'Reverted to the cached assignment copy. Reconnect before treating it as confirmed.'
@@ -3890,7 +4113,7 @@ function shareSessionInvite(name='') {
 // session to a fresh code is the hard lock-out.
 async function removePersonFromSession(name) {
   if (!session.code || !window._firebaseReady) { toast('A cloud session is required to remove people.'); return; }
-  if (!dangerConfirm(`Remove "${name}" from this session?`, 'Their device is disconnected from this session code. They can rejoin with the same code. Use "Move Session to a New Code" to keep them out for good.')) return;
+  if (!dangerConfirm(`Remove "${name}" from this session?`, 'Their device is disconnected and they come off the session roster. They can rejoin with the same code. Use "Move to a new code" in the Admin panel to keep them out for good.')) return;
   try {
     const ref = window._doc(window._db, 'sessions', session.code);
     const updates = {};
@@ -3959,6 +4182,10 @@ function followSessionMove(newCode, isMover = false) {
   const wasLive = document.getElementById('liveshow')?.classList.contains('on');
   if (firestoreUnsub) { try { firestoreUnsub(); } catch {} firestoreUnsub = null; }
   leavePresence();   // builds its doc ref from session.code synchronously — still the old code here
+  // The new code starts with an empty participants array; holding the old
+  // roster would show the pre-move people as removable members.
+  sessionParticipantRecords = [];
+  sessionParticipantNames = [];
   session.code = String(newCode || '').trim().toUpperCase();
   rememberLastSession(session.code, session.userName);
   enterRundown();    // re-subscribes Firestore, rejoins presence, refreshes the code badge
@@ -4164,69 +4391,6 @@ function openLocalPlandaBear(code='', name='You') {
     openPaperworkHub();
     toast('Opened local Planda Bear copy. Shared sync is unavailable while offline.');
   }
-}
-
-async function createSession() {
-  const name = document.getElementById('inst-name').value.trim();
-  const showName = document.getElementById('inst-show').value.trim();
-  const err = document.getElementById('inst-err');
-  const btn = document.getElementById('inst-create-btn');
-  if (!name) {
-    err.textContent = 'Please enter your name.';
-    err.classList.add('on');
-    return;
-  }
-  err.classList.remove('on');
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
-  const ready = await waitForFirebaseReady();
-  if (!ready) {
-    err.textContent = 'Cueola cloud did not finish loading. Check the connection and try again.';
-    err.classList.add('on');
-    if (btn) { btn.disabled = false; btn.textContent = 'Create Session'; }
-    return;
-  }
-  try {
-    let code = '';
-    let created = false;
-    for (let attempt = 0; attempt < 12 && !created; attempt++) {
-      code = genCode();
-      const ref = window._doc(window._db, 'sessions', code);
-      const payload = buildSessionBootstrapPayload({
-        code,
-        createdBy:name,
-        ownerUid:adminSession?.id || '',
-        showName:showName || 'Untitled Show',
-        startTime:'',
-        beats:[],
-        rundownAliases:{},
-        customSources:{},
-        cues:[],
-        freeMode:false,
-        createdAt:window._serverTimestamp(),
-      });
-      created = await createSessionDocumentIfMissing(ref, payload);
-    }
-    if (!created) throw new Error('No unused session code was available.');
-    session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
-    show = { name:showName || 'Untitled Show', start:'' };
-    beats = [];
-    rundownAliases = {};
-    sessionCustomSources = {};
-    freeTextMode = false;
-    document.getElementById('code-display-val').textContent = session.code;
-    hideModal('modal-inst');
-    showModal('modal-code');
-  } catch (createErr) {
-    err.textContent = firebaseConnectionHint(createErr);
-    err.classList.add('on');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Create Session'; }
-  }
-}
-
-function enterAsInstructor() {
-  hideModal('modal-code');
-  enterRundown();
 }
 
 // Remember the last session code + name so the user only enters them once,
@@ -4517,12 +4681,7 @@ async function startBlankSlate() {
   }
   try {
     const ref = window._doc(window._db,'sessions',code);
-    const snap = await window._getDoc(ref);
-    if (snap.exists()) {
-      if (err) { err.textContent='That workspace code already exists. Pick another code or join it from the front page.'; err.classList.add('on'); }
-      return;
-    }
-    await window._setDoc(ref, {
+    const payload = {
       code,
       createdBy:name,
       ...(adminSession ? { ownerUid: adminSession.id } : {}),
@@ -4535,7 +4694,12 @@ async function startBlankSlate() {
       status:'idle',
       createdAt:window._serverTimestamp(),
       participants:[],
-    });
+    };
+    const created = await createSessionDocumentIfMissing(ref, payload);
+    if (!created) {
+      if (err) { err.textContent='That workspace code already exists. Pick another code or join it from the front page.'; err.classList.add('on'); }
+      return;
+    }
     localStorage.setItem('cueola_last_name', name);
     session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
     show = { name:showName, start:'' };
@@ -5247,6 +5411,7 @@ function setupFirestore() {
         }
       }
       sessionParticipantNames = collectSessionParticipantNames(d);
+      sessionParticipantRecords = Array.isArray(d.participants) ? d.participants : [];
       renderPresence(d.presence||{});
       pbApplyRemoteCollab();   // Planda Bear live presence + field sync
       // P3: rebuild the rundown table only when its inputs actually changed.
@@ -22238,72 +22403,6 @@ window.addEventListener('popstate', () => {
 // Then load from Firestore (source of truth) — updates cache + restores session again
 // (v2.1) admins/global listener removed — CueolaAdminAuth binds itself on
 // firebaseReady and the adapter registered at boot mirrors the session.
-
-// ── Entitlement layer (Phase 1) ─────────────────────────────────────────────
-// Server-authoritative, offline-tolerant account entitlement. Reads accounts/{id}
-// as the source of truth and caches it so live use survives a bad network. This
-// EXTENDS the existing identity — account id = signed-in admin id when present,
-// else a persistent device account id — rather than adding a parallel auth.
-// Phase 1 is read-only: it never gates a feature (capability resolution = Phase 2).
-function cueolaInitEntitlements() {
-  const E = window.CueolaEntitlements;
-  if (!E) return null;
-  const accountId = (adminSession && adminSession.id) || E.getDeviceAccountId();
-  if (window.cueolaEntitlements && window.cueolaEntitlements.accountId === accountId) {
-    return window.cueolaEntitlements; // already keyed to this identity
-  }
-  if (window.cueolaEntitlements) window.cueolaEntitlements.stop();
-  const firestore = (window._firebaseReady && window._db && window._doc && window._onSnapshot)
-    ? { db: window._db, doc: window._doc, onSnapshot: window._onSnapshot }
-    : null;
-  window.cueolaEntitlements = E.createStore({
-    accountId,
-    firestore,
-    log: function () { try { console.debug.apply(console, ['[entitlement]'].concat([].slice.call(arguments))); } catch {} },
-  }).start();
-  // Compute capabilities now and whenever the entitlement changes (grant/refund/expiry).
-  cueolaComputeCapabilities();
-  try { window.cueolaEntitlements.subscribe(cueolaComputeCapabilities); } catch {}
-  return window.cueolaEntitlements;
-}
-
-// ── Capability resolution (Phase 2) ─────────────────────────────────────────
-// resolveCapabilities(entitlement, platform) is the single gate. Computed here and
-// exposed as window.cueolaCapabilities. Pricing is NOT live (GATING_ENABLED=false), so
-// the web app resolves to FULL function — this layer is additive and gates nothing
-// today; it's the declarative hook platform builds use later (data-cap-requires).
-function cueolaComputeCapabilities() {
-  const E = window.CueolaEntitlements;
-  if (!E || !window.cueolaEntitlements) return null;
-  const platform = E.detectPlatform(typeof navigator !== 'undefined' ? navigator : null);
-  const offline = (typeof navigator !== 'undefined') && navigator.onLine === false;
-  const caps = E.resolveCapabilities(window.cueolaEntitlements.get(), platform, { offline });
-  window.cueolaPlatform = platform;
-  window.cueolaCapabilities = caps;
-  applyCapabilityVisibility(caps);
-  return caps;
-}
-
-// Declarative, reversible UI gating. Mark an element data-cap-requires="<key>" (e.g.
-// "outrangutan", "flowmingo") and it's hidden when that capability resolves unavailable.
-// On the web app today everything resolves available, so this is a no-op — it only
-// lights up on restricted platform builds or once gating is switched on.
-function applyCapabilityVisibility(caps) {
-  if (!caps || typeof document === 'undefined') return;
-  document.querySelectorAll('[data-cap-requires]').forEach(function (el) {
-    const available = window.CueolaEntitlements.can(caps, el.getAttribute('data-cap-requires'));
-    el.hidden = !available;
-    el.setAttribute('aria-hidden', available ? 'false' : 'true');
-  });
-}
-
-// Simple feature check for app code: cueolaCan('outrangutan'), cueolaCan('flowmingo').
-function cueolaCan(key) {
-  return !!(window.CueolaEntitlements && window.CueolaEntitlements.can(window.cueolaCapabilities, key));
-}
-
-if (window._firebaseReady) cueolaInitEntitlements();
-else window.addEventListener('firebaseReady', cueolaInitEntitlements, { once: true });
 
 // ── v2.1 Phase 5 (decision 12a): ONE entry gate for every door ──────────────
 // The main join modals already call CueolaIdentity.entrySatisfied; the side

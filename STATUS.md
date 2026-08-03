@@ -186,12 +186,9 @@ Each item ends with the single most important thing that's missing.
   and wired in. *Missing: it ships switched off (deliberately, until every user's
   browser has the new code), so the same-section overwrite window still exists.*
 
-- **Accounts and paid plans.** A complete account/entitlement model runs on every
-  launch: tiers, offline grace, per-platform capability tables, and a mechanism to
-  hide features by plan. It is deliberately inert — everyone gets everything, which
-  matches the owner's "full-function web app now, no pricing" direction. *Missing:
-  beyond the switch being off, there is no server component anywhere that could ever
-  grant a paid plan, and no interface element actually uses the hiding mechanism.*
+- **Accounts and paid plans.** Removed 2026-08-03 by owner decision: the dormant
+  entitlement/capability layer and its plans were deleted outright. If the app is
+  ever monetized, that work starts fresh.
 
 - **OBS Studio control inside the playback tool.** A complete OBS integration exists
   inside Outrangutan (per-cue scene changes, connection settings, status), but a

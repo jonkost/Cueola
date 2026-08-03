@@ -124,9 +124,13 @@
 
   if (window._adminAuth) bind();
   window.addEventListener('firebaseReady', bind);
-  // If Firebase never comes up (offline shell), resolve ready() with null so
-  // callers don't hang.
-  setTimeout(function () { if (!auth()) settleReady(); }, 8000);
+  // Always settle ready() eventually. Two hang paths end here: Firebase never
+  // comes up (offline shell), or a restored session's admins/{uid} read never
+  // answers (offline cache stall, rules regression). The dashboard sign-in
+  // button waits on ready(), so an unsettled promise means a permanently
+  // disabled "Connecting…" button. settleReady is idempotent, and a session
+  // that resolves after this still lands through onChange.
+  setTimeout(function () { settleReady(); }, 8000);
 
   function friendlyAuthError(err) {
     var code = err && err.code || '';
@@ -140,12 +144,27 @@
     return (err && err.message) || 'Sign-in failed.';
   }
 
+  // Interactive sign-in must never strand the button: if the admins/{uid}
+  // authorization read hangs, fail with a truthful message after 10s. Should
+  // the read answer later anyway, resolveSession's publish() still lands the
+  // session through onChange, so the UI self-heals.
+  function resolveSessionWithTimeout(user, ms) {
+    return Promise.race([
+      resolveSession(user),
+      new Promise(function (ignore, reject) {
+        setTimeout(function () {
+          reject(new Error('The sign-in service is not responding. Check the connection and try again.'));
+        }, ms);
+      }),
+    ]);
+  }
+
   function signIn(username, password) {
     var clean = normalizeUsername(username);
     if (!validUsername(clean)) return Promise.reject(new Error('Usernames are 3 to 40 characters: letters, numbers, dots, dashes.'));
     if (!auth() || !fns()) return Promise.reject(new Error('Sign-in service is still loading. Try again in a moment.'));
     return fns().signInWithEmailAndPassword(auth(), usernameToEmail(clean), String(password || ''))
-      .then(function (cred) { return resolveSession(cred.user); })
+      .then(function (cred) { return resolveSessionWithTimeout(cred.user, 10000); })
       .then(function (session) {
         if (!session) throw new Error('Signed in, but this account is not an authorized admin.');
         return session;

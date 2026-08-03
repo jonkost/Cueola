@@ -315,4 +315,25 @@ test('out-of-order output heartbeats cannot regress observed renderer state', ()
   assert.equal(state.playhead, 9);
 });
 
-console.log('PASS 11 Outrangutan output protocol tests');
+test('a never-adopted renderer heartbeat or ack is ignored, not a crash', () => {
+  // A surviving output window can heartbeat into a REBUILT controller with the
+  // same session/controller ids (cleanupOutputRuntime wiped the records). With
+  // no READY yet there is no record; both handlers must return false, and
+  // adoption must still go through the normal handshake afterwards.
+  const time = clock();
+  const first = pair({ time });
+  handshake(first.controller, first.output);
+  const command = first.controller.buildCommand('load', { outputId: 'program' });
+  assert.ok(first.output.beginCommand(command).accepted);
+  const ack = first.output.completeCommand(command, true, { windowStatus: 'open' });
+  assert.ok(ack);
+  // The rebuilt controller: identical identity, empty records.
+  const rebuilt = pair({ time }).controller;
+  assert.equal(rebuilt.noteHeartbeat(first.output.buildHeartbeat({ windowStatus: 'open', playbackStatus: 'paused' })), false);
+  assert.equal(rebuilt.noteAck(ack), false);
+  // Normal adoption still works after the rejects.
+  handshake(rebuilt, first.output);
+  assert.equal(rebuilt.noteHeartbeat(first.output.buildHeartbeat({ windowStatus: 'open' })), true);
+});
+
+console.log('PASS 12 Outrangutan output protocol tests');

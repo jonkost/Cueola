@@ -417,6 +417,11 @@
       var incoming = normalizeEnvelope(message);
       if (incoming.commandType !== MESSAGE_TYPES.HEARTBEAT || !accepts(incoming)) return false;
       var record = recordFor(incoming.outputId);
+      // A renderer this controller never adopted (no READY yet — e.g. a
+      // surviving window heartbeating into a rebuilt controller after
+      // cleanupOutputRuntime) has no record. Ignore it: adoption goes through
+      // the READY handshake, never through a heartbeat.
+      if (!record) return false;
       var observed = normalizeState(incoming.payload.state, record.state);
       if (observed.stateVersion < (record.originStateVersion || 0)) return false;
       record.originStateVersion = observed.stateVersion;
@@ -437,6 +442,7 @@
       var incoming = normalizeEnvelope(message);
       if (incoming.commandType !== MESSAGE_TYPES.COMMAND_ACK || !accepts(incoming)) return false;
       var record = recordFor(incoming.outputId);
+      if (!record) return false;   // never-adopted renderer: same guard as noteHeartbeat
       var result = incoming.payload.result && typeof incoming.payload.result === 'object' ? incoming.payload.result : {};
       var observed = normalizeState(incoming.payload.state, record.state);
       var staleObservedState = observed.stateVersion < (record.originStateVersion || 0);

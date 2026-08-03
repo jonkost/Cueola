@@ -384,6 +384,41 @@
     } catch (e) { return { ok: false, msg: 'Could not save the session to your profile.' }; }
   }
 
+  // The remove half of attachSessions: drop codes from the profile's sessions
+  // array. Rules allow shrinking the array (validProfile just checks the list
+  // shape), so this works for self-service removal in the hub and for the
+  // instructor-side unassign in the Admin panel (which edits other profiles
+  // through its own writer, not this one).
+  async function detachSessions(codes) {
+    var id = identity(); var w = fb();
+    if (!id || !w || !w._updateDoc) return { ok: false };
+    // Fresh read, never cachedProfile: an instructor may have assigned a new
+    // session since this device rendered, and a stale full-array write would
+    // silently drop it. arrayRemove keeps the write itself atomic too.
+    var p;
+    try { p = await fetchProfile(id.username); } catch (e) { p = null; }
+    if (!p) return { ok: false, msg: 'Could not load your profile. Check the connection and try again.' };
+    var drop = (codes || []).map(function (raw) { return String(raw || '').trim().toUpperCase(); }).filter(Boolean);
+    var kept = (p.sessions || []).filter(function (s) { return drop.indexOf(String(s).toUpperCase()) < 0; });
+    // arrayRemove matches exact values, so drop the stored spellings, not the
+    // normalized input (legacy lowercase codes would otherwise survive).
+    var stored = (p.sessions || []).filter(function (s) { return drop.indexOf(String(s).toUpperCase()) >= 0; });
+    var removed = stored.length;
+    if (!removed) return { ok: true, removed: 0 };
+    try {
+      if (w._arrayRemove) {
+        await w._updateDoc(w._doc(w._db, 'profiles', id.username), {
+          sessions: w._arrayRemove.apply(null, stored), lastSeen: Date.now(),
+        });
+      } else {
+        await w._updateDoc(w._doc(w._db, 'profiles', id.username), { sessions: kept, lastSeen: Date.now() });
+      }
+      p.sessions = kept; cachedProfile = p;
+      renderFrontDoor();
+      return { ok: true, removed: removed };
+    } catch (e) { return { ok: false, msg: 'Could not remove the session from your profile.' }; }
+  }
+
   // Called by the app after any successful session join. If the operator joined
   // under their profile's name, quietly attach the session to the profile.
   function profileIdentityForJoin(nameUsed) {
@@ -1004,10 +1039,14 @@
         : entry.sessionStatus === 'denied' ? 'Session access denied'
           : entry.sessionStatus === 'offline' ? 'Session not checked · offline'
             : 'Couldn’t load session';
-    var retry = entry.sessionStatus !== 'deleted'
-      ? '<div class="id-card-actions"><button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>' : '';
+    var codeArg = JSON.stringify(String(entry.code)).replace(/"/g, '&quot;');
+    var actions = '<div class="id-card-actions">'
+      + (entry.sessionStatus !== 'deleted'
+        ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button>' : '')
+      + '<button type="button" class="jis-btn jis-remove" onclick="CueolaIdentity.portalRemoveCode(' + codeArg + ')" data-tip="Remove this session from your profile" aria-label="Remove ' + esc(entry.code) + ' from your profile">Remove</button>'
+      + '</div>';
     return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
-      '<span class="id-card-name">' + esc(name) + '</span></div>' + retry + '</div>';
+      '<span class="id-card-name">' + esc(name) + '</span></div>' + actions + '</div>';
   }
 
   async function renderPortal() {
@@ -1086,6 +1125,7 @@
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')">Open Cueola</button>' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'notes\')">Notes</button>' +
         (hasIssue ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry status</button>' : '') +
+        '<button type="button" class="jis-btn jis-remove" onclick="CueolaIdentity.portalRemoveCode(' + codeArg + ')" data-tip="Remove this session from your profile" aria-label="Remove ' + esc(entry.code) + ' from your profile">Remove</button>' +
         '</div></div>';
     }).join('');
   }
@@ -1096,6 +1136,16 @@
     if (!res.ok) { say(res.msg || 'Could not add that code.'); return; }
     if (!res.added || !res.added.length) { say('That code is already on your profile (or not a valid code).'); return; }
     say('Added ' + res.added.join(', ') + ' to your profile.');
+    renderPortal();
+  }
+
+  async function portalRemoveCode(code) {
+    var c = String(code || '').trim().toUpperCase();
+    if (!c) return;
+    if (!window.confirm('Remove ' + c + ' from your profile? The one-tap tile goes away on every device you sign in on. You can add it back any time with the code.')) return;
+    var res = await detachSessions([c]);
+    if (!res.ok) { say(res.msg || 'Could not remove that session.'); return; }
+    say('Removed ' + c + ' from your profile.');
     renderPortal();
   }
 
@@ -1293,14 +1343,14 @@
     profileIdentity: function () { return canonicalProfileIdentity(cachedProfile); },
     profileIdentityForJoin: profileIdentityForJoin,
     signIn: signIn, signOut: signOut, createProfile: createProfile,
-    attachSessions: attachSessions, noteJoin: noteJoin,
+    attachSessions: attachSessions, detachSessions: detachSessions, noteJoin: noteJoin,
     entrySatisfied: entrySatisfied, revealEntryCodeRow: revealEntryCodeRow,
     onDeviceAvatarSaved: onDeviceAvatarSaved,
     decorateJoin: decorateJoin, pickSession: pickSession,
     openHub: openHub, openSignIn: openSignIn, renderHub: renderHub, renderSignIn: renderSignIn,
     submitSignIn: submitSignIn, startCreate: startCreate,
     wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardFinish: wizardFinish,
-    renderPortal: renderPortal, portalAddCode: portalAddCode, enterSession: enterSession,
+    renderPortal: renderPortal, portalAddCode: portalAddCode, portalRemoveCode: portalRemoveCode, enterSession: enterSession,
     sessionChoices: sessionChoices, renderSessionChoiceRows: renderSessionChoiceRows,
     renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,
     deviceOnlyLook: deviceOnlyLook,

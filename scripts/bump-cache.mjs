@@ -18,7 +18,6 @@
  */
 
 export const ASSETS = [
-  'cueola-entitlements.js',
   'cueola-avatar-profile.js',
   'cueola-assignment-model.js',
   'cueola-session-clone.js',

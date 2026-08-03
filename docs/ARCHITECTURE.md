@@ -9,13 +9,13 @@ files as of this audit.
 |---|---|
 | Language / framework | Vanilla JavaScript + HTML/CSS. **No framework, no build step, no bundler, no transpile.** |
 | App shell | `index.html` (~4.2k lines: all app CSS inline + markup for every screen) |
-| App logic | `cueola-app.js` (~13.2k lines, global scope) + `cueola-entitlements.js` (capability layer, gating currently disabled) |
+| App logic | `cueola-app.js` (~13.2k lines, global scope) |
 | Playout module | `outrangutan/outrangutan.js` (~2.2k-line IIFE, injects its own DOM) + `outrangutan.css` + `outrangutan/output.html` (chrome-free output window) |
 | Instructor dashboard | `dashboard.html` (self-contained page, own CSS/JS/sprite copy) |
 | Backend | Firebase **Firestore only** (project `cueola`, shared with Prompt-Up-The-Jam). No auth; open rules in `firestore.rules`; App Check not configured. |
 | Hosting | Firebase Hosting site `cueola` → **cueola.live**. SPA rewrites (`/flowmingo`, `/outrangutan`, `/dashboard`, `**` → index.html), strict security headers + CSP, `max-age=31536000,immutable` on assets. |
 | Cache busting | Manual `?v=YYYYMMDDx` query strings on `<script>`/`<link>` tags in index.html. |
-| Run (dev) | Any static server. Repo convention: `python3 -m http.server 3001` (see `.claude/launch.json`). No console errors expected at boot beyond known entitlement/App Check notices. |
+| Run (dev) | Any static server. Repo convention: `python3 -m http.server 3001` (see `.claude/launch.json`). No console errors expected at boot beyond the known App Check notice. |
 | Deploy | `firebase deploy` (hosting + rules). No build artifacts — the repo root *is* the site. |
 | Target platform | Desktop browser (Chrome/Edge recommended for Outrangutan). No Electron/native shell. |
 
@@ -77,7 +77,7 @@ playhead broadcast at 4–10 Hz **cannot ride this document as-is**.
 
 ## 5. Test & CI inventory
 
-- **Tests:** one script — `scripts/test-entitlements.mjs` (node, entitlement resolver). No runner, no framework, no coverage anywhere else.
+- **Tests:** node scripts under `scripts/tests/` (17+ suites: contract, model, and protocol tests) plus `scripts/check-contracts.mjs`. No framework; run each with node.
 - **CI:** none (`.github/` absent). No lint config. Deploys are manual.
 - **Gap + proposal:** for pure logic (state resolution, keymap, sequence handling) a zero-dependency `node:test` suite under `scripts/tests/` is cheap since files are framework-free; UI verification stays manual via the preview-browser workflow. Every phase appends to the manual QA checklist in `PROGRESS.md` (plan rule 7 minimum).
 

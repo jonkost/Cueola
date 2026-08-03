@@ -1,5 +1,12 @@
 # Built-in Avatar Library Implementation Plan
 
+> **Historical planning snapshot.** The environment facts below describe the
+> repo as it stood at planning time and are no longer current: the avatar
+> system has since shipped (V2 identity, icon + Twemoji packs), admin login
+> now rides Firebase Auth, and the entitlement layer (with its `accounts/{id}`
+> reads and `test-entitlements.mjs`) was removed entirely on 2026-08-03.
+> Keep this file as a record of the plan, not as a description of the app.
+
 ## 1. Executive summary
 
 Cueola should add the curated avatar library to the existing **Your profile** modal and serve its images as immutable Firebase Hosting assets. The repository is a static, vanilla JavaScript application deployed directly from the repository root; it does not currently use a package manager, build step, Firebase Authentication, Cloud Storage SDK, or a durable user-profile collection. Although the Firebase configuration names a Storage bucket, no Storage client or `storage.rules` exists. Firebase Hosting is therefore the existing, deployed, read-only asset provider that best fits a curated library.

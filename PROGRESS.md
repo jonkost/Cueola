@@ -172,7 +172,7 @@ Framecheck design language, for future UI work (from the deleted `design/framech
 ## Deferred items
 
 - Hardened Firestore rules exist in-repo but are **not deployed**; App Check unconfigured; admin-code rotation owed (pre-plan security audit). Likely lands with Phase 7 hardening unless prioritized sooner.
-- Entitlement gating intentionally disabled (`GATING_ENABLED=false`) — full-function web, by prior owner decision.
+- Entitlement layer removed entirely (2026-08-03, owner decision: no pricing; a future monetization effort starts fresh).
 
 ## Known issues (from audit; to be reproduced per plan rule 3 in their phases)
 
@@ -180,7 +180,7 @@ Framecheck design language, for future UI work (from the deleted `design/framech
 - ~~"Questions"-segment blanking; no sequence numbers on sync~~ **reproduced, root-caused, and fixed in Phase 3** (2026-07-04). Continuous playhead stays ~1 Hz by design (Decisions #5).
 - ~~No central keymap; shortcuts fragmented per surface~~ **fixed in Phase 5** (2026-07-05). Note: the old Script-Op-open arrow behaviors (arrows = prompter size/boost) were deliberately replaced per the approved keymap — J/L now hold-brake/boost, −/= resize.
 - ~~No error boundaries, no show log, no preflight~~ **built in Phase 7** (2026-07-05).
-- Console noise at boot: entitlement `permission-denied` retries + App Check warning (known, by design pre-hardening).
+- Console noise at boot: App Check warning (known, by design pre-hardening; the entitlement retry noise went away with the layer's removal 2026-08-03).
 - ~~Outrangutan narrow layout (<920px) overlap~~ **fixed in Phase 6** (2026-07-05): stacked column now scrolls at natural pane heights.
 
 ## Manual QA checklist (grows every phase)

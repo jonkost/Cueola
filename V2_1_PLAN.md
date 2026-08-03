@@ -163,7 +163,7 @@ coherent rebuild, not nine patches.
 
 **Depends on:** Phase 0 closed. **Size:** 1 day.
 
-1. **PII/private artifacts out of the deployable web root (first job of the window):** move `P2607-prepro-backup-2026-07-15.json`, `p2607-snapshot-restore.json`, `restore-p2607.html` to the local-only recovery folder + belt-and-suspenders hosting.ignore globs (`*p2607*`, `P2607*`); review `test-media/`. (Verified 2026-07-16: all three 404 on cueola.live today — this closes the *future* Firebase-Hosting deploy risk.) Add internal docs to hosting.ignore: `CHANGELOG.md`, `CUEOLA MASTER PLAN.md`, `PB_COLLAB_PLAN.md`, `PROGRESS.md`, `V2_PLAN.md`.
+1. **PII/private artifacts out of the deployable web root (first job of the window):** *(complete — these files now live ONLY in the local-only recovery folder outside the repo; they were also purged from public git history during the P2607 incident cleanup)* move `P2607-prepro-backup-2026-07-15.json`, `p2607-snapshot-restore.json`, `restore-p2607.html` to the local-only recovery folder + belt-and-suspenders hosting.ignore globs (`*p2607*`, `P2607*`); review `test-media/`. (Verified 2026-07-16: all three 404 on cueola.live today — this closes the *future* Firebase-Hosting deploy risk.) Add internal docs to hosting.ignore: `CHANGELOG.md`, `CUEOLA MASTER PLAN.md`, `PB_COLLAB_PLAN.md`, `PROGRESS.md`, `V2_PLAN.md`.
 2. **Vendor the cdnjs libraries** (pdf.js — consolidate its two pinned versions — mammoth, jszip) same-origin; add to sw.js precache; drop cdnjs from CSP.
 3. **`docs/NAMING.md`** + the safe sweep (grep-verify every rule first — identifiers are `outrangutan`/`og`): localStorage `cueola_*` standard with read-old/write-new shims for `promptypus_*`/stray `og_*`; window-global conventions + dedupe (`cueolaPlatform` vs `CUEOLA_PLATFORM`, dashboard's double `initialsOf`); CSS prefix contract documented, renames opportunistic only.
 4. **Session-doc hygiene:** preProActivity cap (~200) in both writers; purge-cascade gaps (/notes, /assignments; /snapshots + /groups join later). Later phases only verify this.
@@ -457,7 +457,7 @@ Wed Jul 29 – onward       Phase 8    Stage Plot — LAST · owner design consu
 Leaf-granular sync re-light (resolved: deferred) · per-group rundowns/Live · group-scoped notes ·
 crew carry-over on clone · Stage Plot advanced tools (walls, image backgrounds, align, cable runs,
 live cursors) · native wrapper for system-wide .cueola/.ogshow Finder icons · student anonymous
-Firebase Auth · pricing/IAP · avatar photo-library raster track · **YouTube-chat auto-feed** (the
+Firebase Auth · avatar photo-library raster track · **YouTube-chat auto-feed** (the
 official Live Streaming API exists but needs a Google Cloud project, OAuth with the broadcasting
 account, and polling quota — real setup + failure surface on a show day; 2.1 ships the zero-config
 paste lane per decision 16b, and the auto-feed can layer on top of the same question card in 3.0).

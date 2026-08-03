@@ -170,7 +170,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .overview-row-main{min-width:0}
 .overview-row-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .overview-row-meta{font-size:11px;color:var(--text2);font-family:var(--mono);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.overview-chip{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:999px;background:var(--s3);border:1px solid var(--bord2);color:var(--text2);white-space:nowrap}
+.overview-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:999px;background:var(--s3);border:1px solid var(--bord2);color:var(--text2);white-space:nowrap}
+.overview-chip .chip-x{border:none;background:none;padding:0;margin:0;font-family:var(--mono);font-size:12px;line-height:1;color:var(--text3);cursor:pointer}
+.overview-chip .chip-x:hover{color:var(--red)}
 /* Phase 3: login codes + class roster rows */
 .roster-row{display:flex;align-items:center;gap:12px}
 .roster-row.inactive{opacity:.55}
@@ -603,6 +605,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(pointer:coarse){
   .btn-sm{min-height:44px}
   .btn-icon{width:44px;height:44px}
+  .overview-chip .chip-x{min-width:32px;min-height:32px;display:inline-flex;align-items:center;justify-content:center}
 }
 </style>
 </head>
@@ -1135,7 +1138,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
 <script src="break-room-show.js?v=c3ba5e11a0"></script>
-<script src="cueola-admin-auth.js?v=2d94c57e93"></script>
+<script src="cueola-admin-auth.js?v=84a9727118"></script>
 <script>
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
@@ -1253,6 +1256,8 @@ function initAdminAuth() {
   const btn = document.getElementById('login-btn');
   if (!window.CueolaAdminAuth) {
     showErr('login-err', 'Sign-in module failed to load. Refresh the page.');
+    btn.disabled = false;
+    btn.textContent = 'Sign In →';
     return;
   }
   CueolaAdminAuth.onChange(session => {
@@ -1943,10 +1948,13 @@ function renderSuperOverview() {
 }
 
 function setDashboardMainVisible(visible) {
-  ['hero','superOverview','sessionsHead','newSessionCard','sessionArea'].forEach(id => {
+  ['hero','superOverview','sessionsHead','newSessionCard','sessionArea','deletedHead','deletedArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = visible ? '' : 'none';
   });
+  // Recently Deleted manages its own visibility (hidden while the 30-day list
+  // is empty), so restoring the page re-renders it instead of blindly showing.
+  if (visible) { try { renderDeletedSessions(); } catch {} }
 }
 
 function openAccountsPage() {
@@ -2092,7 +2100,10 @@ function renderRoster() {
     const u = String(p.username || p.id);
     const uArg = JSON.stringify(u).replace(/"/g, '&quot;');
     const active = p.active !== false;
-    const sessions = (p.sessions || []).map(s => `<span class="overview-chip">${escapeHtml(s)}</span>`).join('') || '<span class="roster-sub">no sessions</span>';
+    const sessions = (p.sessions || []).map(s => {
+      const sArg = JSON.stringify(String(s)).replace(/"/g, '&quot;');
+      return `<span class="overview-chip">${escapeHtml(s)}<button class="chip-x" onclick="rosterDetachCode(${uArg},${sArg})" data-tip="Remove ${escapeHtml(s)} from this profile" aria-label="Remove ${escapeHtml(s)} from @${escapeHtml(u)}">×</button></span>`;
+    }).join('') || '<span class="roster-sub">no sessions</span>';
     return `<div class="overview-row roster-row${active ? '' : ' inactive'}">
       <input type="checkbox" class="roster-check" data-roster-user="${escapeHtml(u)}" aria-label="Select ${escapeHtml(u)}">
       <span class="roster-main"><b>${escapeHtml(p.fullName || u)}</b> <span class="roster-user">@${escapeHtml(u)}</span>
@@ -2169,6 +2180,23 @@ async function rosterMerge(username) {
     });
   } catch (e) { showToast('Merge failed: ' + e.message); return; }
   showToast(`@${username} merged into @${clean}.`);
+  await loadIdentityAdminData();
+}
+
+// The detach half of rosterBulkAttach: take one show code off one profile.
+// The tie between a session and a user is the profile's sessions array; this
+// is the dashboard's remove for it.
+async function rosterDetachCode(username, code) {
+  const p = rosterProfile(username); if (!p) return;
+  if (!await dashConfirm('Remove session from profile?',
+    `Remove ${code} from @${username}? The one-tap session tile disappears from their sign-in page. Their work in the session is untouched, and the code can be attached again any time.`,
+    { okLabel:'Remove', danger:true })) return;
+  try {
+    // arrayRemove is atomic: the dashboard's roster copy can be minutes old,
+    // and a full-array write from it would drop codes attached since.
+    await window._updateDoc(window._doc(db(), 'profiles', username), { sessions: window._arrayRemove(code) });
+  } catch (e) { showToast('Remove failed: ' + e.message); return; }
+  showToast(`${code} removed from @${username}.`);
   await loadIdentityAdminData();
 }
 
@@ -3831,7 +3859,7 @@ window.addEventListener('load', ()=>{
 <script type="module">
   import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, serverTimestamp }
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, arrayRemove, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -3909,6 +3937,7 @@ window.addEventListener('load', ()=>{
   window._deleteDoc = deleteDoc;
   window._runTransaction = runTransaction;
   window._arrayUnion = arrayUnion;
+  window._arrayRemove = arrayRemove;
   window._serverTimestamp = serverTimestamp;
   // v2.1 admin accounts (D1): Auth handles for cueola-admin-auth.js.
   const adminAuth = getAuth(app);

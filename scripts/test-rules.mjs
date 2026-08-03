@@ -185,9 +185,6 @@ setAuth('uid_std_1');
 denied(await write('admins/uid_nope_2', stdDoc), 'standard admin cannot mint admins');
 setAuth(null);
 
-allowedMissing(await request('accounts/acct_1'), 'entitlement reads remain available');
-denied(await write('accounts/acct_1', { tier: 'paid' }), 'client entitlement grants remain denied');
-
 const accessCode = { role: 'student', label: 'Fall TV', active: true, createdBy: 'Instructor', createdAt: 1 };
 // v2.1 (D1): minting is admin-gated — the public minting hole is closed.
 denied(await write('accessCodes/UNAUTH1', accessCode), 'unauthenticated code minting retired');

@@ -5,6 +5,21 @@ Newest phase on top.
 
 ---
 
+## Corrections (2026-08-03) — read before trusting older entries below
+
+- **Panel resizing is GONE.** Owner decision 2026-07-14: the draggable
+  splitters (`#og-split-si`, `#og-split-sh`, the vertical pair) were removed;
+  pane proportions are now fixed and width-derived (`applyLayout()` owns
+  them), and old persisted `settings.layout` values are deliberately ignored.
+  Every splitter/resize claim in the Polish entries below is historical.
+- **The OBS integration UI is DARK.** `OBS_UI = false` in outrangutan.js hides
+  the Integrations-sheet OBS block, the per-cue Inspector OBS section, and the
+  tooltip mention until it is ready; the backend client stays live for
+  existing shows. Phase 5 entries below describing that UI as surfaced
+  describe the build, not what ships.
+
+---
+
 ## Cueola master-plan P7 — hardening surface (show files, preflight, show log)
 
 - **`.ogshow` show files.** `exportShowFile` saves through the File System Access

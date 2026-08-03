@@ -131,7 +131,7 @@
   display: inline-flex; align-items: center; gap: 6px;
   font-family: var(--mono); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
   letter-spacing: .02em; color: var(--text2); cursor: pointer; user-select: none;
-  border-radius: 8px; padding: 6px 8px;
+  border-radius: var(--og-r-sm, 8px); padding: 6px 8px;
 }
 .og-wallclock:hover, .og-top-wallclock:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
 .og-wallclock:focus-visible, .og-top-wallclock:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 78%, white); outline-offset: 2px; }
@@ -459,7 +459,7 @@
 .og-clock-dir {
   flex: 0 0 auto; display: inline-grid; place-items: center;
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
-  border: 1px solid var(--og-edge-strong); border-radius: 8px;
+  border: 1px solid var(--og-edge-strong); border-radius: var(--og-r-sm, 8px);
   background: color-mix(in srgb, var(--s2) 80%, transparent); color: var(--text2); cursor: pointer;
 }
 .og-clock-dir:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 22%, transparent); }

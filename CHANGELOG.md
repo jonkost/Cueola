@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.2.0 DRAFT: Overhaul round (built 2026-07-27; not yet released)
+## v2.2.0: Overhaul round (built 2026-07-27; live on cueola.live since the 2026-08-03 push)
 
 One round between terms: the whole app on one visual language, a control
 surface that answers back, a security pass, and a show built for drilling.
@@ -81,15 +81,16 @@ The owner console errands carried from v2.1 §1 stay open and gate release QA.
   docs/video-scripts.md.
 
 ### Known deferrals (owner errands)
-- Staged Firestore rules from the security round are in-repo but **not
-  deployed** (owner deploys).
+- Firestore rules: the ADDITIVE block deployed 2026-08-03 (admin sign-in +
+  groups + snapshots live). The round-2 tightening from the security round is
+  in-repo and still **not deployed** (owner deploys after instructors are
+  minted, gated on the emulator suite).
 - App Check rollout still owed (owner).
 - Hardware pass still owed: real-deck Connect-and-Learn and the UR44 meter
   verify (owner).
 
-*(Release-day: flip CUEOLA_VERSION to 2.2.0, run `node scripts/bump-cache.mjs`,
-WORKER_SCHEMA 14 → 15 in sw.js, staged deploys per D8 rule 3; this entry loses
-its DRAFT mark then.)*
+*(The release-day levers all landed by 2026-08-03: CUEOLA_VERSION is 2.2.0,
+caches bumped, WORKER_SCHEMA well past 15.)*
 
 ## v2.1.0: Term-boundary build (live on cueola.live 2026-07-21; owner QA in progress)
 

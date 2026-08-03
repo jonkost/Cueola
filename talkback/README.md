@@ -1,11 +1,11 @@
 # Cueola Talkback A/B
 
-One mic, two push-to-talk destinations. Hold the Talk A button on the Stream Deck and the mic flows out the interface's physical outputs 1-2; hold Talk B and it flows out outputs 3-4. Release and it stops. Built per the Talkback A/B build spec (Option 1: custom Stream Deck plugin with true keyDown/keyUp momentary behavior).
+One mic, two push-to-talk destinations. Hold the TKB (Talkback) key on the Stream Deck and the mic flows out the interface's physical outputs 1-2; hold VofU (Voice of the Universe) and it flows out outputs 3-4. Release and it stops. Built per the Talkback A/B build spec (Option 1: custom Stream Deck plugin with true keyDown/keyUp momentary behavior).
 
 ## Layout
 
 - `daemon/` Swift package for `talkbackd`, the standalone audio daemon. CoreAudio AUHAL engine plus the local WebSocket API. This is the module's only public surface; the Stream Deck plugin and the production suite are both just clients.
-- `streamdeck/com.cueola.talkback.sdPlugin/` custom Stream Deck plugin. Two actions (Talk A, Talk B), keyDown sends `on`, keyUp sends `off`, and the buttons light up from the daemon's state pushes.
+- `streamdeck/com.cueola.talkback.sdPlugin/` custom Stream Deck plugin, shipped as "Cueola Micochondria". Two actions (TKB — Talkback, VofU — Voice of the Universe), keyDown sends `on`, keyUp sends `off`, and the buttons light up from the daemon's state pushes.
 
 ## Status vs. the spec milestones
 
@@ -62,7 +62,7 @@ ln -s "$(pwd)/talkback/streamdeck/com.cueola.talkback.sdPlugin" \
   "$HOME/Library/Application Support/com.elgato.StreamDeck/Plugins/com.cueola.talkback.sdPlugin"
 ```
 
-Then quit and relaunch the Stream Deck app. Drag "Talk A (outs 1-2)" and "Talk B (outs 3-4)" from the Cueola Talkback category onto keys. Green/blue means the route is live; if the daemon is not running, pressing a key shows the warning triangle. The plugin reconnects to the daemon every 2 seconds, so start order does not matter.
+Then quit and relaunch the Stream Deck app. Drag "TKB — Talkback (outs 1-2)" and "VofU — Voice of the Universe (outs 3-4)" from the Cueola Micochondria category onto keys. Green/blue means the route is live; if the daemon is not running, pressing a key shows the warning triangle. The plugin reconnects to the daemon every 2 seconds, so start order does not matter.
 
 ## Design notes
 

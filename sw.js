@@ -84,15 +84,14 @@ const SHELL_ASSETS = [
   'assets/avatars/trex.svg',
   'assets/avatars/turtle.svg',
   'assets/avatars/unicorn.svg',
-  'cueola-entitlements.js?v=746c10a762',
   'cueola-avatar-profile.js?v=e56e5e6cd7',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=2b4cf2ea17',
   'break-room-show.js?v=c3ba5e11a0',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=62435a0278',
-  'cueola-admin-auth.js?v=2d94c57e93',
+  'cueola-identity.js?v=c7dbc3f08d',
+  'cueola-admin-auth.js?v=84a9727118',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
@@ -100,15 +99,15 @@ const SHELL_ASSETS = [
   'cueola-script-operator-protocol.js?v=209555b4d7',
   'script-operator.js?v=20cc4ca0c1',
   'script-operator.css?v=7abb39cd6e',
-  'outrangutan/output-protocol.js?v=515bfb5721',
+  'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=89c18ad1e6',
-  'outrangutan/outrangutan.css?v=1922dfba89',
+  'cueola-app.js?v=8dd2dd1113',
+  'outrangutan/outrangutan.css?v=a6ad31bb8e',
   'outrangutan/outrangutan.js?v=59908d42fb',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=e2405aa42f',
+  'cueola-streamdeck.js?v=3a3f8e2da6',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -149,7 +148,13 @@ const versionSignature = SHELL_ASSETS
 // typed-code, Flowmingo Remote Op, Outrangutan). index.html grew the
 // your-sessions containers + row CSS the shell caches, so the shell rolls
 // with the identity/app/outrangutan JS bumps.
-const WORKER_SCHEMA = '19';
+// 19->20: loose-ends round. Roll for three reasons at once: (1) the
+// entitlement layer is gone (cueola-entitlements.js left the precache and
+// index.html), (2) the runtime cache stops storing HTML — rolling purges any
+// wrong-page entries the old poisoning bug already cached in installed
+// clients, (3) index.html/dashboard.html page-HTML changes (dead
+// Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
+const WORKER_SCHEMA = '20';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
@@ -186,11 +191,17 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     if (request.mode === 'navigate') {
-      const shellPage = url.pathname.endsWith('/dashboard.html')
+      // Hosting serves clean URLs (firebase.json cleanUrls + rewrites), so the
+      // address users actually hold is the SHORT one — match both spellings or
+      // the dashboard/operator/output pages are unreachable offline. Bare
+      // /outrangutan is deliberately NOT here: hosting rewrites it to the
+      // front page (it is a screen inside index.html, not output.html).
+      const p = url.pathname;
+      const shellPage = (p.endsWith('/dashboard.html') || p.endsWith('/dashboard'))
         ? './dashboard.html'
-        : url.pathname.endsWith('/script-operator.html')
+        : (p.endsWith('/script-operator.html') || p.endsWith('/script-operator'))
           ? './script-operator.html'
-        : url.pathname.endsWith('/outrangutan/output.html')
+        : (p.endsWith('/outrangutan/output.html') || p.endsWith('/outrangutan/output'))
           ? './outrangutan/output.html'
           : './index.html';
       return (await cache.match(shellPage)) || fetch(request);
@@ -199,7 +210,16 @@ self.addEventListener('fetch', event => {
     if (cached) return cached;
     try {
       const response = await fetch(request);
-      if (response.ok && response.type === 'basic') cache.put(request, response.clone());
+      // Hosting's catch-all rewrite answers ANY missing same-origin file with
+      // index.html + 200, and this cache is read cache-first — caching that
+      // answer would serve the wrong page for that URL forever. No legitimate
+      // runtime-cache target here is HTML (all HTML is precached and served
+      // via the navigate branch above), so an HTML response means "missing
+      // file": pass it through but never store it.
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && response.type === 'basic' && !response.redirected && !contentType.includes('text/html')) {
+        cache.put(request, response.clone());
+      }
       return response;
     } catch (err) {
       throw err;

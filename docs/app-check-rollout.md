@@ -26,16 +26,14 @@ The section below is retained for history.
 
 Production probes show the CURRENTLY DEPLOYED rules are an older hardened
 revision: `sessions/{code}` works, but `sessions/{code}/files`,
-`sessions/{code}/notes`, `accessCodes`, `profiles`, and even `accounts/{id}`
-READS are all denied. Two live consequences until the staged rules deploy:
+`sessions/{code}/notes`, `accessCodes`, and `profiles`
+READS are all denied. Live consequence until the staged rules deploy:
 
 - **Note attachments** could not post at all (the client writes the files
   subcollection). The client now falls back to the legacy `pbfile_*` sibling
   docs when it sees `permission-denied` — attachments work again, but land in
   the legacy location and keep bloating the sessions collection. The fallback
   self-retires once the staged rules are live.
-- **Entitlement reads** (`accounts/{id}`) fail quietly; the client uses its
-  local default (currently full-function, so no user-visible impact).
 
 Deploying the staged `firestore.rules` (section 2) resolves both.
 
@@ -70,7 +68,7 @@ pings, rundown transaction batches), dashboard list/delete and admin roster
 (incl. the Phase 10 list tightening: anonymous sessions/accessCodes lists
 denied, admin lists allowed, profiles list open),
 Flowmingo/Prompt-Up prompter updates, Outrangutan updates, legacy attachment
-documents, read-only entitlements, deny-by-default behavior, type/bound
+documents, deny-by-default behavior, type/bound
 denials (list/map types, showName bounds, attachment chunk caps, unknown
 keys), and the future files/notes/accessCodes/profiles shapes including code
 revocation and profile identity immutability. It refuses to run against a
@@ -106,10 +104,19 @@ local Java runtime; install/enable that outside this repository if necessary.
 
 ## 3. Register App Check
 
-1. In Firebase Console, open **Security → App Check** and register the existing
-   Cueola web app with reCAPTCHA v3.
+Registration alone is the free, harmless half: it only collects data. Do it
+well before enforcement so the metrics can soak.
+
+1. In Firebase Console, open **Security → App Check** (in some console
+   versions it sits under **Build**) and register the existing Cueola web app
+   with reCAPTCHA v3. The console may bounce you to Google's reCAPTCHA admin
+   page to create the site key, then back — the constants that matter are:
+   reCAPTCHA v3, monitor mode, no enforcement clicked anywhere.
 2. Allow `cueola.live`, `www.cueola.live` if used, and the Firebase Hosting
    preview domains used by the owner.
+   *Proof it worked:* App Check lists the web app as registered, and over the
+   following days its metrics page shows request counts (verified vs.
+   unverified). That soak data is what gates the enforcement flip.
 3. Copy the public reCAPTCHA v3 site key into
    `APP_CHECK_RECAPTCHA_V3_SITE_KEY` in both `index.html` and `dashboard.html`.
 4. Set `APP_CHECK_ENABLED = true` in both files.

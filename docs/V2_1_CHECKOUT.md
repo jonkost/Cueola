@@ -23,16 +23,23 @@ Companion docs: [term-boundary-runbook.md](term-boundary-runbook.md) ·
 
 ## 1 · Console errands (~30 min, blocks the most)
 
-- [ ] **Firebase Console: enable Email/Password** provider (blocks all admin
-      sign-in QA).
+- [x] **Firebase Console: enable Email/Password** provider (blocks all admin
+      sign-in QA). *(DONE, confirmed 2026-08-03: provider live with email
+      enumeration protection on — bad creds return wrong-password, not
+      operation-not-allowed.)*
 - [ ] **App Check: register + monitor** all five surfaces (index, dashboard,
       script-operator, Flowmingo talent, Outrangutan output). Enforcement
       waits for monitor data + term date.
-- [ ] **Mint your admin account** (bootstrap script — run together with me).
-- [ ] **Deploy the ADDITIVE Phase 7 rules block BEFORE your first admin
+- [x] **Mint your admin account** (bootstrap script — run together with me).
+      *(DONE 2026-08-03: @jonkost minted super via the double-clickable
+      wrapper in the local recovery folder; dashboard sign-in verified.)*
+- [x] **Deploy the ADDITIVE Phase 7 rules block BEFORE your first admin
       sign-in** (hosting already shipped 7/21 while no admin could exist, so
       this now gates the sign-in instead) — then watch a capture doc appear
-      in `sessions/{code}/snapshots` on join.
+      in `sessions/{code}/snapshots` on join. *(DEPLOYED 2026-08-03 before
+      first sign-in, as a strict-union variant of the additive block:
+      docs/rules-additive-2026-08-03.rules, rollback copy alongside it.
+      STILL OWED: watch one capture doc actually appear on an admin join.)*
 - [ ] **Decision 0:** term start date → sets App Check enforce timing + rules
       round-2 deploy day.
 - [ ] **Decision 14:** where training videos live (unlisted YouTube
