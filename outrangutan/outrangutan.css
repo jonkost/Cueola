@@ -40,7 +40,7 @@
   --og-card: linear-gradient(180deg, color-mix(in srgb, var(--s1) 94%, transparent), color-mix(in srgb, var(--s1) 84%, transparent));
   --og-r-lg: var(--ui-radius-group);
   --og-r: var(--ui-radius-control);
-  --og-r-sm: 8px;
+  --og-r-sm: var(--ui-radius-control);
 
   position: absolute; inset: 0; display: none;
   flex-direction: column; background: var(--bg); color: var(--text);
@@ -320,7 +320,7 @@
   position: relative;
   display: grid; grid-template-columns: 30px 22px 1fr auto; align-items: center; gap: 9px;
   min-height: 44px; padding: 7px 10px 7px 13px; margin: 2px 0;
-  border-radius: 10px; cursor: pointer;
+  border-radius: var(--og-r); cursor: pointer;
   transition: background .12s var(--ease, ease);
 }
 .og-cue:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
@@ -440,7 +440,7 @@
 /* scopes strip (hidden until toggled) */
 .og-scopes { display: none; gap: 10px; padding: 6px 16px 0; align-items: stretch; }
 .og-scopes.on { display: flex; }
-.og-scope { position: relative; min-width: 0; overflow: hidden; height: 118px; height: clamp(96px, 16cqh, 156px); border: 1px solid var(--og-edge-strong); border-radius: 10px; background: #04060a; }
+.og-scope { position: relative; min-width: 0; overflow: hidden; height: 118px; height: clamp(96px, 16cqh, 156px); border: 1px solid var(--og-edge-strong); border-radius: var(--og-r); background: #04060a; }
 .og-scope-wfm { flex: 1 1 auto; }
 .og-scope-vec { flex: 0 0 auto; aspect-ratio: 1; }
 .og-scope-lbl { position: absolute; top: 6px; left: 9px; z-index: 1; pointer-events: none; font-family: var(--mono); font-size: 8.5px; font-weight: 800; letter-spacing: .12em; color: rgba(214, 232, 240, .62); text-shadow: 0 1px 3px rgba(0, 0, 0, .85); }
@@ -630,7 +630,7 @@
 .og-trk-name { font-weight: 700; font-size: 13px; }
 .og-trk-times { font-family: var(--mono-num, monospace); color: var(--text2); font-variant-numeric: tabular-nums; }
 .og-trk-times b { color: var(--text); }
-.og-track { position: relative; height: 58px; background: #05070a; border: 1px solid var(--og-edge-strong); border-radius: 10px; overflow: hidden; cursor: pointer; user-select: none; }
+.og-track { position: relative; height: 58px; background: #05070a; border: 1px solid var(--og-edge-strong); border-radius: var(--og-r); overflow: hidden; cursor: pointer; user-select: none; }
 .og-track-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .32; }
 .og-track-strip { position: absolute; inset: 0; display: flex; opacity: .46; }
 .og-track-strip .frame { flex: 1 1 0; min-width: 0; background-position: center; background-size: cover; background-color: #05070a; box-shadow: inset -1px 0 0 var(--liquid-edge-recess); }
@@ -769,6 +769,7 @@
 .og-sheet.on, .og-help.on { display: flex; }
 .og-join { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 31; }
 .og-join.on { display: flex; }
+.og-join-code-in { font-size: 24px; font-family: var(--mono); letter-spacing: .2em; text-align: center; }
 .og-sheet-card, .og-help-card {
   width: min(680px, 94vw); max-height: 86vh; overflow: auto; padding: 0;
   border: 1px solid var(--liquid-edge, var(--og-edge));
@@ -782,6 +783,9 @@
 .og-help-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--og-edge); }
 .og-help-row input { width: 110px; text-align: center; font-family: var(--mono); min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); color: var(--text); border-radius: var(--ui-radius-control, 12px); padding: 6px; }
 .og-help-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+/* quiet fixed-shortcut rows (not rebindable) */
+.og-help-row.og-help-note { color: var(--text2); }
+.og-help-row.og-help-noline { border-bottom: none; }
 
 .og-sheet-head {
   position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
@@ -794,7 +798,7 @@
 .og-sheet-x, .og-help-close {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: var(--ui-control-height-compact, 34px); padding: 6px 16px;
-  border: none; border-radius: var(--ui-radius-control, 12px);
+  border: none; border-radius: 999px;   /* confirming sheet action = capsule (house rule 7) */
   background: color-mix(in srgb, var(--accent) 84%, var(--s2));
   color: color-mix(in srgb, var(--bg) 18%, #000);
   font-weight: 800; font-size: 14px; cursor: pointer;
@@ -805,6 +809,7 @@
 .og-help-close { margin-top: 14px; width: 100%; padding: 10px; }
 #og-outputs-body, #og-sd-body, #og-integrations-body, #og-midi-body { padding: 18px 20px; }
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.5; margin: 14px 0 0; max-width: 68ch; }
+.og-sheet-hint { color: var(--text2); font-size: 12px; margin: 12px 0 0; }
 .og-sheet-note code { font-family: var(--mono-num, monospace); background: var(--s3); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 
 /* Phase 9 (D10.1): one-time non-Chromium capability sheet */
@@ -816,7 +821,7 @@
 .og-matte-card { max-width: 420px; padding-bottom: 16px; }
 .og-matte-card .og-matte-swatches, .og-matte-card .og-sheet-note { margin-inline: 20px; }
 .og-matte-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 14px; }
-.og-matte-swatch { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--og-edge); border-radius: 10px; background: color-mix(in srgb, var(--s2) 80%, transparent); color: var(--text); font: 600 12px var(--sans, inherit); cursor: pointer; }
+.og-matte-swatch { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--og-edge); border-radius: var(--og-r); background: color-mix(in srgb, var(--s2) 80%, transparent); color: var(--text); font: 600 12px var(--sans, inherit); cursor: pointer; }
 .og-matte-swatch:hover { border-color: var(--accent); background: var(--s3); }
 .og-matte-chip { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
 .og-matte-custom { position: relative; }
@@ -885,6 +890,7 @@
 .og-intg-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13.5px; color: var(--text); margin-bottom: 12px; }
 .og-intg-head .sf-symbol { font-size: 15px; color: var(--text2); }
 .og-intg-head .og-out-note { font-weight: 500; }
+.og-push-right { margin-left: auto; }   /* pushes a row's trailing item (e.g. the OBS status dot) to the right edge */
 .og-intg-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 .og-intg-row:last-child { margin-bottom: 0; }
 .og-intg-in { flex: 1 1 120px; min-width: 80px; box-sizing: border-box; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 12px; }
@@ -1039,8 +1045,8 @@
 /* v2.1 D11.6: live drag-reorder — insertion edge on the drop target. */
 .og-cue { cursor: grab; }
 .og-cue:active { cursor: grabbing; }
-.og-cue.og-drop-before { box-shadow: 0 -2px 0 0 var(--og-accent, #f97316); }
-.og-cue.og-drop-after { box-shadow: 0 2px 0 0 var(--og-accent, #f97316); }
+.og-cue.og-drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+.og-cue.og-drop-after { box-shadow: 0 2px 0 0 var(--accent); }
 
 /* Phase 9 (D10.4): coarse-pointer touch targets — appended LAST on purpose so
    the hardcoded compact rows above (settings-pop 34px, pane-head 30px) can't
@@ -1049,4 +1055,15 @@
 @media (pointer: coarse) {
   .og-settings-pop .theme-swatch, .og-settings-pop .og-tools-pop-inline .og-bar-btn { min-height: 44px; }
   .og-pane-head .og-bar-btn { min-height: 44px; }
+  /* segmented pill grows with its tabs so each tab reaches the 44px floor */
+  .og-tabs { height: auto; }
+  .og-tab { min-height: 44px; }
+  .og-settings-menu > summary { width: 44px; height: 44px; min-width: 44px; }
+  /* color swatches lift like chips; the 8px gap keeps them separable */
+  .og-swatch { width: 36px; height: 36px; }
+  .og-bank-add { width: 44px; height: 44px; }
+  .og-search-fire { width: 44px; height: 44px; }
+  .og-matte-swatch { min-height: 44px; }
+  /* hover-only edit affordance: always visible on touch, comfortable hit size */
+  .og-pad-edit { opacity: .85; min-width: 32px; min-height: 32px; display: inline-grid; place-items: center; padding: 0; }
 }

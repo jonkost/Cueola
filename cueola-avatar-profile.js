@@ -18,6 +18,9 @@
   const PROFILE_KEY = 'cueola_profile';
   const MAX_IMAGE_DATA_URL_LENGTH = 60000;
   const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,/;
+  // User-chosen chip background: strict 6-digit hex only, so a stored value can
+  // never smuggle markup or a CSS expression into a style attribute.
+  const BG_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
   function normalizeAvatar(avatar, approvedAnimals, iconManifest) {
     if (!avatar || typeof avatar !== 'object' || Array.isArray(avatar)) return null;
@@ -33,7 +36,9 @@
         && typeof avatar.value === 'string'
         && iconManifest
         && Object.prototype.hasOwnProperty.call(iconManifest, avatar.value)) {
-      return { type: 'icon', value: avatar.value };
+      const out = { type: 'icon', value: avatar.value };
+      if (typeof avatar.bg === 'string' && BG_COLOR_RE.test(avatar.bg)) out.bg = avatar.bg;
+      return out;
     }
     if (avatar.type === 'image'
         && typeof avatar.value === 'string'
@@ -75,6 +80,7 @@
   return {
     PROFILE_KEY,
     MAX_IMAGE_DATA_URL_LENGTH,
+    BG_COLOR_RE,
     normalizeAvatar,
     createProfileModel,
   };

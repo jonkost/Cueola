@@ -160,12 +160,27 @@ overrides, stored with the layout:
   SF Symbols drawn live on little canvases, filtered as you type in **Search
   symbols**. A picked symbol wins over emoji; clearing both restores the
   action's own icon.
+- **Custom image**: upload any PNG, JPEG, or WebP and it fills the whole key
+  face, square-cropped and stored at 256 px (at least 2x the largest key's
+  hardware resolution, so it stays sharp on the deck). **Show trigger
+  overlays on the image** keeps the label, progress, pips, and pulse lamps
+  riding on top; uncheck it for pure art. The label sits on a soft bottom
+  scrim over an image so it stays readable.
+- **Silly art**: a bucket of the same vendored fun art the profile avatars
+  use (CC-BY Twemoji), one click to put a T-Rex or a taco on a key.
 - **Progress style**: how a playing key shows time. **Wipe** (the default),
   **Ring** (a hairline track circle with a sharp accent arc from 12 o'clock),
   or **Bottom bar**.
 - **Press flash** and **Reactive animation** checkboxes, per key.
-- **Reset appearance** clears every override and returns the key to the
-  theme's default look.
+- **Reset appearance** clears every override (image included) and returns the
+  key to the theme's default look.
+
+**Drag one key onto another to swap them**, straight on the on-screen grid.
+After any edit a floating **Done** capsule appears; it asks where the layout
+should live: **Keep on this device** (localStorage, as always), **Download
+.keywi** (a standalone file, see below), or **Save to my profile** (signed-in
+users; the layout follows the login to any machine once the keywiLayouts
+rules round is deployed).
 
 Old saved profiles need no migration: absent overrides mean the defaults every
 existing layout already had.
@@ -225,10 +240,17 @@ Everything is customizable, live:
   a specific cue or switch to a specific scene by name.
 - **Live learn.** Click **Live learn**, then press a key or turn a dial on the
   deck and its editor opens. Tactile mapping, no hunting on screen.
-- **Import / export.** Export a layout to a `.json` file to back it up or copy it
-  to another operator machine, and import it back.
+- **Import / export.** Export a layout as a **`.keywi` file** (JSON inside,
+  versioned, custom key images included) to back it up or hand it to another
+  operator machine, and import it back. Old `.json` exports import forever.
 - **Layouts as pages.** Bind PAGE keys (next layout, or jump to one by name) so
   the deck itself flips between rehearsal, live, and OBS-heavy pages.
+- **Multiple decks, one computer.** Connect a second Stream Deck with **Add
+  deck** and a deck-tab row appears; each deck runs its own layouts live, the
+  tabs pick which one the editor configures, and one brightness slider drives
+  them all. PAGE keys page the deck they sit on. On separate computers each
+  operator's browser keeps its own decks and layouts, and a signed-in profile
+  (or a `.keywi` file) carries a layout between machines.
 - **Setup wizard.** The five step first-run tour lives behind **Setup wizard**
   in the toolbar, with live status dots for the deck, Micochondria, and OBS.
   The screen follows the active Cueola theme.

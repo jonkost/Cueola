@@ -94,6 +94,22 @@ test('unknown icon ids and markup-shaped values fall back to initials', () => {
   }
 });
 
+test('icon avatars keep a valid chosen background color and drop invalid ones', () => {
+  const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals, iconManifest });
+  assert.deepEqual(model.setAvatar({ type: 'icon', value: 'play', bg: '#F5B731' }),
+    { type: 'icon', value: 'play', bg: '#F5B731' });
+  assert.deepEqual(model.getProfile(), { avatar: { type: 'icon', value: 'play', bg: '#F5B731' } });
+  for (const bg of ['red', '#123', '#12345', '#1234567', 'url(x)', '#12g45z', 42, null, '']) {
+    assert.deepEqual(model.setAvatar({ type: 'icon', value: 'play', bg }), { type: 'icon', value: 'play' });
+  }
+});
+
+test('background colors never attach to non-icon shapes', () => {
+  const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals, iconManifest });
+  assert.deepEqual(model.setAvatar({ type: 'animal', value: 'cueola', bg: '#112233' }), { type: 'animal', value: 'cueola' });
+  assert.deepEqual(model.setAvatar({ type: 'initials', bg: '#112233' }), { type: 'initials' });
+});
+
 test('icon avatars without a manifest fall back to initials (old-client shape safety)', () => {
   const model = AvatarProfile.createProfileModel({ storage: memoryStorage(), approvedAnimals });
   assert.deepEqual(model.setAvatar({ type: 'icon', value: 'play' }), { type: 'initials' });

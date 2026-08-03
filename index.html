@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=a6ad31bb8e">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=003c1cf78e">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -226,6 +226,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .p-avatar.inst{background:var(--accent);color:var(--bg);text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 80%,#000) inset}
 .p-avatar.stud{background:var(--green);color:var(--bg);text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 80%,#000) inset}
 .p-avatar.extra{background:var(--s4);color:var(--text);font-size:11px;font-weight:700}
+/* Presence bubbles carrying the person's chosen avatar art keep the role rim */
+.p-avatar.has-art,.pi-ava.has-art,.rd-pres-avatar.has-art,.pb-collab-avatar.has-art{overflow:hidden;text-shadow:none}
+.has-art .pb-av-img{width:100%;height:100%;object-fit:cover}
+.has-art .pb-av-img.pb-av-art{width:72%;height:72%;object-fit:contain}
 .presence-wrap:hover .p-avatar{transform:translateY(-1px)}
 .p-avatar.pi-click{cursor:pointer}
 .p-avatar.pi-click:hover{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)}
@@ -1710,6 +1714,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-av-chip .sf-symbol{color:var(--text2);font-size:18px}
 .pb-av-choice-lbl{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .pb-av-upload{position:relative}
+/* Background color swatches for the fun avatars (portal + create wizard) */
+.pb-av-bg-row,.id-av-bg-row{display:flex;gap:8px;flex-wrap:wrap}
+.pb-av-bg{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;flex:none}
+.pb-av-bg:hover{border-color:var(--bord2)}
+.pb-av-bg.sel{border-color:var(--accent)}
+.id-av-bg-row{margin-top:4px}
 .pb-note-who{display:flex;flex-direction:column;gap:1px;min-width:0}
 .pb-note-byline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .pb-note-author{font-size:13.5px;font-weight:800;color:var(--text)}
@@ -4080,6 +4090,7 @@ input.pt-range::-moz-range-thumb,
   .fmt-btn{width:44px;height:44px}
   .ls-pact-circle{width:44px;height:44px}
   #liveshow .ls-exit-btn.icon-only{width:44px;height:44px}
+  .pb-av-bg{width:36px;height:36px}
 }
 </style>
 </head>
@@ -5492,7 +5503,7 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="userPortalModal">
   <div class="modal">
     <div class="modal-title"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span> Your profile</div>
-    <div class="modal-sub">Pick how you show up on the Production Notes board. Just for this device.</div>
+    <div class="modal-sub">Pick how you show up across Cueola. Signed-in profiles carry it to every device.</div>
     <div class="pb-portal-body" id="userPortalBody"></div>
     <button class="btn-primary" onclick="pbSaveUserPortal()">Save</button>
     <button class="btn-secondary" onclick="hideModal('userPortalModal')">Cancel</button>
@@ -5802,10 +5813,10 @@ input.pt-range::-moz-range-thumb,
 .sd-obs-dot { width:9px; height:9px; border-radius:50%; background:var(--text3); }
 .sd-obs-dot.on { background:var(--green); box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 55%,transparent); }
 .sd-obs-lbl { font-weight:700; font-size:13px; letter-spacing:.03em; }
-.sd-obs-scene { font-size:14px; color:var(--text2); background:var(--s2); padding:4px 10px; border-radius:8px; }
+.sd-obs-scene { font-size:14px; color:var(--text2); background:var(--s2); padding:4px 10px; border-radius:var(--ui-radius-control,12px); }
 .sd-obs-tag { font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px; color:#fff; }
 .sd-obs-tag.live { background:var(--red); } .sd-obs-tag.rec { background:var(--yellow); color:#201703; }
-.sd-obs-in { background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 9px; font-size:13px; width:180px; }
+.sd-obs-in { background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:6px 9px; font-size:13px; width:180px; }
 .sd-obs-err { color:var(--yellow); font-size:12px; }
 .sd-bright-row { display:flex; align-items:center; gap:var(--sp-3,12px); margin-bottom:var(--sp-4,16px); flex-wrap:wrap; }
 .sd-bright-row .btn-secondary { width:auto; flex:0 0 auto; }
@@ -5853,7 +5864,7 @@ input.pt-range::-moz-range-thumb,
 .sd-learn { margin-top:var(--sp-4,16px); background:var(--s1); border:1px solid var(--border); border-radius:var(--ui-radius-group,16px); padding:6px var(--sp-4,16px); }
 .sd-learn summary { cursor:pointer; padding:10px 0; font-weight:600; }
 .sd-learn-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--sp-2,8px); margin:10px 0; }
-.sd-lf { background:var(--s2); border-radius:10px; padding:8px 12px; display:flex; flex-direction:column; }
+.sd-lf { background:var(--s2); border-radius:var(--ui-radius-control,12px); padding:8px 12px; display:flex; flex-direction:column; }
 .sd-lf span { font-size:11px; color:var(--text3); text-transform:uppercase; }
 .sd-lf b { font-size:14px; }
 .sd-learn-tune { display:flex; flex-wrap:wrap; gap:var(--sp-3,12px); align-items:center; padding:8px 0 14px; }
@@ -5866,7 +5877,7 @@ input.pt-range::-moz-range-thumb,
 .sd-picker-card { background:var(--s1); border:1px solid var(--liquid-edge,var(--bord2)); border-radius:var(--ui-radius-panel,22px); width:min(440px,92vw); max-height:80vh; overflow:auto; padding:var(--sp-4,16px); }
 .sd-picker-head { font-weight:700; font-size:16px; margin-bottom:10px; }
 .sd-picker-g { font-size:11px; text-transform:uppercase; color:var(--text3); margin:12px 0 4px; }
-.sd-picker-opt { display:block; width:100%; text-align:left; padding:9px 12px; border-radius:9px; border:1px solid transparent; background:var(--s2); color:var(--text); margin-bottom:4px; cursor:pointer; }
+.sd-picker-opt { display:block; width:100%; text-align:left; padding:9px 12px; border-radius:var(--ui-radius-control,12px); border:1px solid transparent; background:var(--s2); color:var(--text); margin-bottom:4px; cursor:pointer; }
 .sd-picker-opt:hover { border-color:color-mix(in srgb,var(--accent) 50%,transparent); }
 .sd-picker-opt.cur { background:color-mix(in srgb,var(--green) 18%,var(--s2)); border-color:var(--green); }
 .sd-dial-opt-t { display:block; font-weight:700; border-left:3px solid var(--dc,var(--accent)); padding-left:8px; }
@@ -5882,7 +5893,7 @@ input.pt-range::-moz-range-thumb,
 .sd-ed-sub { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text3); margin-bottom:6px; }
 .sd-ed-style { border-left:1px solid color-mix(in srgb,var(--text) 9%,transparent); padding-left:var(--sp-4,16px); }
 .sd-ed-f { display:block; font-size:12px; color:var(--text2); margin-bottom:var(--sp-3,12px); }
-.sd-ed-f input { display:block; width:100%; margin-top:4px; background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:14px; }
+.sd-ed-f input { display:block; width:100%; margin-top:4px; background:var(--s2); color:var(--text); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:8px 10px; font-size:14px; }
 .sd-swatches { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
 .sd-sw { width:30px; height:30px; border-radius:8px; border:2px solid transparent; cursor:pointer; padding:0; }
 .sd-sw.cur { border-color:var(--text); }
@@ -5906,16 +5917,37 @@ input.pt-range::-moz-range-thumb,
 @media (pointer:coarse) { .sd-symopt { min-height:44px; min-width:44px; } .sd-seg button { min-height:44px; } }
 #sd-toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:var(--s3); color:var(--text); border:1px solid var(--bord2); padding:11px 18px; border-radius:var(--ui-radius-control,12px); opacity:0; pointer-events:none; transition:opacity var(--dur-normal,.2s) var(--ease,ease), transform var(--dur-normal,.2s) var(--ease,ease); z-index:60; max-width:80vw; text-align:center; }
 #sd-toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
-@media (pointer:coarse) { .sd-mini, .sd-em { min-height:44px; min-width:44px; } .sd-picker-opt { min-height:44px; } }
+@media (pointer:coarse) { .sd-mini, .sd-em { min-height:44px; min-width:44px; } .sd-picker-opt { min-height:44px; } .sd-obs-in, .sd-ed-f input { min-height:44px; } .sd-key { min-width:44px; min-height:44px; } .sd-funopt { min-height:44px; min-width:44px; } .sd-deck-tab { min-height:44px; } }
+/* ── Deck tabs (multi-deck), Done bar, save sheet, key-image editor rows ── */
+.sd-deck-tabs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:var(--sp-3,12px); }
+.sd-deck-tab { border:1px solid var(--border); background:var(--s1); color:var(--text2); border-radius:999px; padding:6px 14px; font-size:12.5px; font-weight:700; cursor:pointer; transition:border-color var(--dur-fast,.12s) var(--ease,ease), color var(--dur-fast,.12s) var(--ease,ease); }
+.sd-deck-tab:hover { border-color:color-mix(in srgb,var(--accent) 50%,transparent); color:var(--text); }
+.sd-deck-tab.cur { border-color:var(--accent); color:var(--text); background:color-mix(in srgb,var(--accent) 10%,var(--s1)); }
+.sd-done-bar { position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(80px); display:flex; align-items:center; gap:12px; background:var(--liquid-fill-strong); backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation)); -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation)); border:1px solid var(--liquid-edge); border-radius:999px; padding:8px 10px 8px 18px; font-size:13px; font-weight:600; color:var(--text2); z-index:55; transition:transform var(--dur-normal,.2s) var(--ease,ease); }
+.sd-done-bar.on { transform:translateX(-50%) translateY(0); }
+.sd-done-bar .btn-primary { width:auto; padding:8px 22px; }
+.sd-save-card { max-width:520px; }
+.sd-save-actions { display:flex; gap:var(--sp-2,8px); flex-wrap:wrap; align-items:center; justify-content:flex-end; margin-top:var(--sp-4,16px); }
+.sd-save-actions .btn-primary, .sd-save-actions .btn-secondary { width:auto; }
+.sd-img-row { display:flex; align-items:center; gap:8px; margin-top:5px; }
+.sd-img-cur { width:44px; height:44px; border-radius:var(--ui-radius-control,12px); object-fit:cover; border:1px solid var(--border); background:var(--s2); }
+.sd-funart { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; max-height:120px; overflow:auto; }
+.sd-funopt { width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--s2); cursor:pointer; padding:4px; line-height:0; }
+.sd-funopt img { width:100%; height:100%; object-fit:contain; display:block; }
+.sd-funopt.cur { border-color:var(--green); box-shadow:0 0 0 1px var(--green); }
 
-/* ── Streamer-deck key art: the canvas draws each keycap (gradient, glyph, glow),
-   so the tile is just a transparent frame around it. True WYSIWYG with hardware. */
+/* ── Streamer-deck key art: the canvas draws each keycap (gradient, glyph),
+   so the tile is just a transparent frame around it. True WYSIWYG with hardware.
+   No CSS glow or drop shadow (design guidelines): keycap separation comes from
+   a hairline rim, hover lift stays as pure transform. */
 .sd-key { position:relative; aspect-ratio:1/1; background:transparent !important; border:0 !important; padding:0 !important; border-radius:14px; overflow:visible; cursor:pointer; transition:transform var(--dur-fast,.1s) var(--ease,ease); }
-.sd-key canvas { width:100%; height:100%; display:block; border-radius:14px; box-shadow:0 2px 7px rgba(0,0,0,.4); }
+.sd-key canvas { width:100%; height:100%; display:block; border-radius:14px; box-shadow:0 0 0 1px rgba(255,255,255,.05); }
 .sd-key:hover { transform:translateY(-2px) scale(1.03); z-index:1; }
-.sd-key:hover canvas { box-shadow:0 8px 20px rgba(0,0,0,.55); }
+.sd-key:hover canvas { box-shadow:0 0 0 1px rgba(255,255,255,.14); }
 .sd-key.on { box-shadow:none; animation:none; }
 .sd-key.editing { outline:2px dashed var(--accent); outline-offset:3px; }
+.sd-key.dragging { opacity:.45; }
+.sd-key.drop-target canvas { box-shadow:0 0 0 2px var(--accent); }
 .sd-keys { gap:10px; }
 #sd-theme { background:var(--s1); color:var(--text); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:7px 10px; font-size:14px; font-weight:600; }
 .sd-preview-banner { display:flex; gap:12px; align-items:center; margin-top:16px; padding:12px 16px; background:color-mix(in srgb,var(--accent) 9%,var(--s1)); border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border)); border-radius:var(--ui-radius-group,16px); font-size:13px; color:var(--text2); line-height:1.5; }
@@ -5930,8 +5962,9 @@ input.pt-range::-moz-range-thumb,
 .app-back:hover { border-color:color-mix(in srgb,var(--accent) 50%,transparent); color:var(--text); }
 
 /* ── KeyWi deck shell: the on-screen deck sits in a hardware-style housing.
-   Deliberately theme-independent darks, same exemption as the key faces. ── */
-.sd-shell { background:linear-gradient(180deg,#191c22,#0c0e12); border:1px solid #262b33; border-radius:24px; padding:var(--sp-4,16px); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 40px rgba(0,0,0,.35); }
+   Deliberately theme-independent darks, same exemption as the key faces. The
+   inset hairline is the sanctioned rim highlight; no outer elevation shadow. ── */
+.sd-shell { background:linear-gradient(180deg,#191c22,#0c0e12); border:1px solid #262b33; border-radius:var(--ui-radius-panel,22px); padding:var(--sp-4,16px); box-shadow:inset 0 1px 0 rgba(255,255,255,.06); }
 .sd-shell .sd-keys { margin-bottom:0; }
 .sd-strip-mirror { display:block; width:100%; height:auto; margin-top:var(--sp-3,12px); border-radius:10px; background:#000; border:1px solid #20242c; }
 .sd-keys .sd-key { animation:sdKeyIn var(--dur-slow,.3s) var(--ease,ease) backwards; animation-delay:calc(var(--i,0) * 12ms); }
@@ -5989,7 +6022,7 @@ input.pt-range::-moz-range-thumb,
 .sd-wz-hi { color:var(--accent); }
 .sd-wz-opt { font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); border:1px solid var(--border); border-radius:999px; padding:2px 8px; vertical-align:4px; margin-left:6px; }
 .sd-wz-p { color:var(--text2); font-size:13.5px; line-height:1.6; margin:0 0 10px; }
-.sd-wz-code { display:block; font-family:var(--mono); font-size:12px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:0 0 10px; user-select:all; -webkit-user-select:all; }
+.sd-wz-code { display:block; font-family:var(--mono); font-size:12px; background:var(--s2); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:8px 12px; margin:0 0 10px; user-select:all; -webkit-user-select:all; }
 .sd-wz-actions { display:flex; gap:var(--sp-2,8px); flex-wrap:wrap; margin-bottom:10px; }
 .sd-wz-actions .btn-primary, .sd-wz-actions .btn-secondary { width:auto; flex:0 0 auto; }
 .sd-wz-status { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text2); background:var(--s2); border:1px solid var(--border); border-radius:var(--ui-radius-control,12px); padding:8px 12px; margin-top:4px; }
@@ -6011,7 +6044,7 @@ input.pt-range::-moz-range-thumb,
 .fd-link { background:none; border:none; color:var(--text2); font-size:12.5px; cursor:pointer; padding:2px 4px; border-radius:6px; }
 .fd-link:hover { color:var(--accent); }
 .fd-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; width:100%; }
-.fd-ava { width:34px; height:34px; border-radius:50%; background:color-mix(in srgb,var(--accent) 22%,var(--s2)); color:var(--text); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex:0 0 auto; }
+.fd-ava { width:34px; height:34px; border-radius:50%; background:color-mix(in srgb,var(--accent) 22%,var(--s2)); color:var(--text); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex:0 0 auto; overflow:hidden; }
 .fd-hi { font-weight:800; font-size:16px; line-height:1.2; }
 .fd-user { color:var(--text3); font-size:12.5px; }
 .fd-sessions { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:8px; }
@@ -6137,7 +6170,7 @@ input.pt-range::-moz-range-thumb,
 .oc-cyan{--oc:var(--cyan);--ob:color-mix(in srgb,var(--cyan) 7%,transparent)}
 .oc-accent{--oc:var(--accent);--ob:color-mix(in srgb,var(--accent) 8%,transparent)}
 .oc-neutral{--oc:var(--text2);--ob:color-mix(in srgb,var(--text2) 7%,transparent)}
-.oc-keywi{--oc:#6ff0a5;--ob:color-mix(in srgb,#6ff0a5 8%,transparent)}
+.oc-keywi{--oc:var(--green);--ob:color-mix(in srgb,var(--green) 8%,transparent)}
 .ec-pill-yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
 
 /* ══════════════ v2.2 FRONT-PAGE PASS ══════════════
@@ -6240,13 +6273,13 @@ input.pt-range::-moz-range-thumb,
   <div id="sd-toast"></div>
 </div>
 
-<script src="cueola-avatar-profile.js?v=e56e5e6cd7"></script>
+<script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
 <script src="break-room-show.js?v=c3ba5e11a0"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=c7dbc3f08d"></script>
+<script src="cueola-identity.js?v=64ff506bad"></script>
 <script src="cueola-admin-auth.js?v=84a9727118"></script>
 <script src="cueola-live-session.js?v=2352bc00d1"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -6255,11 +6288,11 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=8dd2dd1113"></script>
-<script src="outrangutan/outrangutan.js?v=59908d42fb"></script>
+<script src="cueola-app.js?v=7cf2607b4f"></script>
+<script src="outrangutan/outrangutan.js?v=d34236e878"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
-<script src="cueola-streamdeck.js?v=3a3f8e2da6"></script>
+<script src="cueola-streamdeck.js?v=7a1d65c157"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

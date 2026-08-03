@@ -84,13 +84,13 @@ const SHELL_ASSETS = [
   'assets/avatars/trex.svg',
   'assets/avatars/turtle.svg',
   'assets/avatars/unicorn.svg',
-  'cueola-avatar-profile.js?v=e56e5e6cd7',
+  'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=2b4cf2ea17',
   'break-room-show.js?v=c3ba5e11a0',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=c7dbc3f08d',
+  'cueola-identity.js?v=64ff506bad',
   'cueola-admin-auth.js?v=84a9727118',
   'cueola-live-session.js?v=2352bc00d1',
   'cueola-link-state.js?v=effa089bdc',
@@ -102,12 +102,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=8dd2dd1113',
-  'outrangutan/outrangutan.css?v=a6ad31bb8e',
-  'outrangutan/outrangutan.js?v=59908d42fb',
+  'cueola-app.js?v=7cf2607b4f',
+  'outrangutan/outrangutan.css?v=003c1cf78e',
+  'outrangutan/outrangutan.js?v=d34236e878',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=3a3f8e2da6',
+  'cueola-streamdeck.js?v=7a1d65c157',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -154,7 +154,7 @@ const versionSignature = SHELL_ASSETS
 // wrong-page entries the old poisoning bug already cached in installed
 // clients, (3) index.html/dashboard.html page-HTML changes (dead
 // Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
-const WORKER_SCHEMA = '20';
+const WORKER_SCHEMA = '21';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

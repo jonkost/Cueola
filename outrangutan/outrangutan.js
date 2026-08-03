@@ -2005,7 +2005,7 @@
     const obsConn = obs.connected;
     const sceneBtns = obs.scenes.map(s => '<button class="og-bar-btn og-obs-scene' + (s === obs.current ? ' on' : '') + '" data-scene="' + esc(s) + '">' + esc(s) + '</button>').join('') || '<span class="og-out-note">No scenes. Connect to load.</span>';
     const obsHTML =
-      '<div class="og-intg-sect"><div class="og-intg-head">' + sym('content.display') + ' OBS Studio <span class="og-out-note">obs-websocket v5</span><span class="og-out-dot' + (obsConn ? ' live' : '') + '" style="margin-left:auto"></span></div>'
+      '<div class="og-intg-sect"><div class="og-intg-head">' + sym('content.display') + ' OBS Studio <span class="og-out-note">obs-websocket v5</span><span class="og-out-dot og-push-right' + (obsConn ? ' live' : '') + '"></span></div>'
       + (obsConn
         ? '<div class="og-obs-scenes">' + sceneBtns + '</div>'
           + '<div class="og-intg-row">'
@@ -4457,9 +4457,9 @@
     body.innerHTML = rows.map(([key, label]) =>
       '<div class="og-help-row"><span>' + label + '</span><input data-sc="' + key + '" value="' + esc(keyLabel(settings.shortcuts[key])) + '" readonly></div>'
     ).join('')
-      + '<div class="og-help-row" style="color:var(--text2)"><span>Select prev / next</span><span>↑ / ↓ (fixed)</span></div>'
-      + '<div class="og-help-row" style="border:none;color:var(--text2)"><span>Switch Playback / SFX</span><span>Tab (fixed)</span></div>'
-      + '<div class="og-help-row" style="border:none;color:var(--text2)"><span>SFX pads</span><span>per-pad hotkeys (set on the board)</span></div>';
+      + '<div class="og-help-row og-help-note"><span>Select prev / next</span><span>↑ / ↓ (fixed)</span></div>'
+      + '<div class="og-help-row og-help-note og-help-noline"><span>Switch Playback / SFX</span><span>Tab (fixed)</span></div>'
+      + '<div class="og-help-row og-help-note og-help-noline"><span>SFX pads</span><span>per-pad hotkeys (set on the board)</span></div>';
     Array.prototype.forEach.call(body.querySelectorAll('input[data-sc]'), inp => {
       inp.onkeydown = (ev) => { ev.preventDefault(); const key = inp.getAttribute('data-sc'); const v = ev.key === ' ' ? ' ' : ev.key; settings.shortcuts[key] = v; inp.value = keyLabel(v); renderFoot(); renderTransportKeys(); scheduleSave(); };
       inp.onfocus = () => { inp.value = 'press a key…'; };
@@ -4603,7 +4603,7 @@
       + '<div class="og-foot"><span id="og-foot-keys"></span><div class="og-foot-spacer"></div><span id="og-foot-mode">Local-first · IndexedDB · Web Audio</span></div>'
       + '<audio id="og-audio-deck"></audio>'
       + '<div class="og-help" id="og-help"><div class="og-help-card"><h3>Keyboard shortcuts</h3><div id="og-help-rows"></div>'
-        + '<p style="color:var(--text2);font-size:12px;margin:12px 0 0">Click a field and press a key to rebind. GO and PANIC are always reachable by keyboard.</p>'
+        + '<p class="og-sheet-hint">Click a field and press a key to rebind. GO and PANIC are always reachable by keyboard.</p>'
         + '<button class="og-help-close" id="og-help-close">Done</button></div></div>'
       + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
       + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
@@ -4627,7 +4627,7 @@
         + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
         + '<div class="join-your-sessions" id="og-join-sessions" hidden></div>'
         + '<div class="join-altcode-label" id="og-join-altcode" hidden>Have a different code?</div>'
-        + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;font-family:var(--mono);letter-spacing:.2em;text-align:center"></div>'
+        + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in og-join-code-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
         + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
         + '<div class="join-identity-strip" id="og-join-identity" hidden></div>'
         + '<div class="modal-err" id="og-join-err">Please fill in both fields.</div>'

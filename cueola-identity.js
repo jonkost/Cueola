@@ -155,6 +155,10 @@
     try { if (PB_AVATAR_ICONS && typeof PB_AVATAR_ICONS === 'object') return PB_AVATAR_ICONS; } catch (e) {}
     return {};
   }
+  function avatarBgChoices() {
+    try { if (Array.isArray(PB_AVATAR_BG_CHOICES)) return PB_AVATAR_BG_CHOICES; } catch (e) {}
+    return [];
+  }
   function normalizeAvatar(a) {
     var m = window.CueolaAvatarProfile;
     return (m && m.normalizeAvatar(a, animals(), avatarIcons())) || { type: 'initials' };
@@ -297,10 +301,14 @@
   // signed-in user's look follows them to every device via the cloud profile.
   function onDeviceAvatarSaved(avatar) {
     var id = identity(); var w = fb();
-    if (!id || !w || !w._updateDoc) return;
+    if (!id) return;
     var normalized = normalizeAvatar(avatar);
+    // Reflect the new look immediately (front door head + toolbar button);
+    // the cloud write follows so it travels to other devices.
+    if (cachedProfile && cachedProfile.username === id.username) cachedProfile.avatar = normalized;
+    try { renderFrontDoor(); } catch (e) {}
+    if (!w || !w._updateDoc) return;
     w._updateDoc(w._doc(w._db, 'profiles', id.username), { avatar: normalized, lastSeen: Date.now() })
-      .then(function () { if (cachedProfile) cachedProfile.avatar = normalized; })
       .catch(function () {});
   }
 
@@ -676,30 +684,33 @@
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     } else if (w.step === 2) {
       setTitle('Create your profile', 'Step 3: pick your look and theme (changeable later).');
-      var av = animals();
       var initialSel = w.avatar.type === 'initials';
       var grid = '<button type="button" class="id-av' + (initialSel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'initials\')">' +
         '<span class="id-av-chip">' + esc((w.fullName || 'You').split(/\s+/).map(function (p) { return p[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?') + '</span><span>Initials</span></button>';
-      Object.keys(av).forEach(function (k) {
-        var sel = w.avatar.type === 'animal' && w.avatar.value === k;
-        grid += '<button type="button" class="id-av' + (sel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'animal\',' + JSON.stringify(k).replace(/"/g, '&quot;') + ')">' +
-          '<span class="id-av-chip" style="background:' + esc(av[k].bg) + '"><img src="' + esc(av[k].src) + '" alt=""></span><span>' + esc(av[k].label) + '</span></button>';
-      });
-      // v2.1 D7: icon avatars — same manifest as the Planda Bear portal.
+      // Owner decision 2026-08-03: the picker offers the fun art only; symbols
+      // and brand marks are gone. The chip shows the chosen background color.
       var icons = avatarIcons();
       Object.keys(icons).forEach(function (k) {
         var sel = w.avatar.type === 'icon' && w.avatar.value === k;
         var inner = icons[k].src
           ? '<img src="' + esc(icons[k].src) + '" alt="">'
           : '<span class="sf-symbol" data-symbol="' + esc(icons[k].symbol) + '" aria-hidden="true"></span>';
+        var bg = sel && w.avatar.bg ? ' style="background:' + esc(w.avatar.bg) + '"' : '';
         grid += '<button type="button" class="id-av' + (sel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'icon\',' + JSON.stringify(k).replace(/"/g, '&quot;') + ')">' +
-          '<span class="id-av-chip">' + inner + '</span><span>' + esc(icons[k].label) + '</span></button>';
+          '<span class="id-av-chip"' + bg + '>' + inner + '</span><span>' + esc(icons[k].label) + '</span></button>';
       });
+      var bgRow = '';
+      if (w.avatar.type === 'icon') {
+        bgRow = '<div class="field"><label class="field-lbl">Background color</label><div class="id-av-bg-row">' +
+          avatarBgChoices().map(function (c) {
+            return '<button type="button" class="pb-av-bg' + (w.avatar.bg === c ? ' sel' : '') + '" style="background:' + esc(c) + '" aria-label="Background ' + esc(c) + '" onclick="CueolaIdentity.wizardPickAvatarBg(\'' + esc(c) + '\')"></button>';
+          }).join('') + '</div></div>';
+      }
       var themes = themeIds().map(function (t) {
         return '<option value="' + esc(t) + '"' + (w.theme === t ? ' selected' : '') + '>' + esc(THEME_LABELS[t] || t) + '</option>';
       }).join('');
       html +=
-        '<div class="id-av-grid">' + grid + '</div>' +
+        '<div class="id-av-grid">' + grid + '</div>' + bgRow +
         '<div class="field"><label class="field-lbl">Theme</label>' +
         '<select class="field-in" id="id-create-theme">' + themes + '</select></div>' +
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
@@ -751,8 +762,15 @@
   function wizardBack() { if (wizard && wizard.step > 0) { wizard.step--; renderCreate(); } else renderHub(); }
   function wizardPickAvatar(type, value) {
     if (!wizard) return;
+    // Switching icons keeps the background the user already chose.
+    var keepBg = wizard.avatar && wizard.avatar.bg;
     wizard.avatar = normalizeAvatar(type === 'animal' || type === 'icon'
-      ? { type: type, value: value } : { type: 'initials' });
+      ? { type: type, value: value, bg: keepBg } : { type: 'initials' });
+    renderCreate();
+  }
+  function wizardPickAvatarBg(color) {
+    if (!wizard || !wizard.avatar || wizard.avatar.type !== 'icon') return;
+    wizard.avatar = normalizeAvatar({ type: 'icon', value: wizard.avatar.value, bg: color });
     renderCreate();
   }
   async function wizardFinish() {
@@ -1196,6 +1214,33 @@
   function frontDoorInitials(name) {
     return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (s) { return s.charAt(0).toUpperCase(); }).join('') || '?';
   }
+  // The signed-in user's custom look, reused wherever identity draws a person
+  // bubble. Falls back to the classic initials chip when no art is chosen or
+  // cueola-app.js has not loaded its helpers yet.
+  function avatarChipHTML(p, cls) {
+    cls = cls || 'fd-ava';
+    try {
+      var a = normalizeAvatar(p.avatar || (window.pbMyAvatar && window.pbMyAvatar()));
+      if (a && a.type !== 'initials' && typeof window.pbAvatarInner === 'function') {
+        var note = { by: p.fullName || p.username, clientId: p.username, avatar: a };
+        return '<span class="' + cls + '" style="background:' + window.pbAvatarBg(note) + '">' + window.pbAvatarInner(note) + '</span>';
+      }
+    } catch (e) {}
+    return '<span class="' + cls + '">' + esc(frontDoorInitials(p.fullName)) + '</span>';
+  }
+  // The toolbar profile button shows YOUR icon once you have one; the generic
+  // person symbol is only for the signed-out state (owner decision 2026-08-03).
+  function refreshEntryProfileBtn() {
+    var btn = document.getElementById('entryProfileBtn');
+    if (!btn) return;
+    var id = identity();
+    var p = (id && cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
+    if (!p) {
+      btn.innerHTML = '<span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span>';
+      return;
+    }
+    btn.innerHTML = avatarChipHTML(p, 'pb-note-avatar pb-av-sm');
+  }
   function frontDoorSignedOut(el, note) {
     el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
       + '<div class="ec-title">Your sessions</div>'
@@ -1208,7 +1253,7 @@
     if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSignIn(); });
   }
   function frontDoorHead(p) {
-    return '<div class="fd-head"><span class="fd-ava">' + esc(frontDoorInitials(p.fullName)) + '</span>'
+    return '<div class="fd-head">' + avatarChipHTML(p, 'fd-ava')
       + '<div><div class="fd-hi">Hi, ' + esc(String(p.fullName || '').split(' ')[0]) + '</div>'
       + '<div class="fd-user">@' + esc(p.username) + (p.role === 'admin' ? ' &middot; admin' : '') + '</div></div></div>';
   }
@@ -1229,6 +1274,7 @@
     var el = frontDoorEl(); if (!el) return;
     var gen = ++frontDoorGen;
     var id = identity();
+    refreshEntryProfileBtn();
     if (!id) { frontDoorSignedOut(el, ''); return; }
     var p = cachedProfile;
     if (!p || p.username !== id.username) {
@@ -1261,6 +1307,7 @@
                       : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>')
       + '</div>'
       + frontDoorLinks(true);
+    refreshEntryProfileBtn();
     if (!codes.length) return;
     var w = fb(); if (!w) return;
     var metas = await Promise.all(codes.map(function (code) { return frontDoorSessionMeta(w, code); }));
@@ -1349,7 +1396,7 @@
     decorateJoin: decorateJoin, pickSession: pickSession,
     openHub: openHub, openSignIn: openSignIn, renderHub: renderHub, renderSignIn: renderSignIn,
     submitSignIn: submitSignIn, startCreate: startCreate,
-    wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardFinish: wizardFinish,
+    wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardPickAvatarBg: wizardPickAvatarBg, wizardFinish: wizardFinish,
     renderPortal: renderPortal, portalAddCode: portalAddCode, portalRemoveCode: portalRemoveCode, enterSession: enterSession,
     sessionChoices: sessionChoices, renderSessionChoiceRows: renderSessionChoiceRows,
     renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,

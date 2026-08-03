@@ -3172,7 +3172,7 @@ function renderAdminPanePeople() {
   const seen = new Set();
   const people = [];
   online.forEach(p => {
-    people.push({ name:p.name, role:p.role, online:true });
+    people.push({ name:p.name, role:p.role, online:true, avatar:p.avatar, profileId:p.profileId });
     seen.add(participantNameKey(p.name));
   });
   (sessionParticipantRecords || []).forEach(p => {
@@ -3181,14 +3181,21 @@ function renderAdminPanePeople() {
     const key = participantNameKey(name);
     if (!key || seen.has(key)) return;
     seen.add(key);
-    people.push({ name, role:(typeof p === 'object' && p?.role) || 'student', online:false });
+    people.push({ name, role:(typeof p === 'object' && p?.role) || 'student', online:false,
+      avatar:(typeof p === 'object' && p?.avatar) || null, profileId:(typeof p === 'object' && p?.profileId) || '' });
   });
   let html = `<div class="admin-section">
     <div class="admin-section-label">In this session</div>
     ${people.length ? `<div class="admin-list">` + people.map(p => {
       const isMe = sameParticipantName(p.name, session.userName);
+      const av = pbNormalizeAvatar(p.avatar);
+      const note = { by: p.name, clientId: p.profileId || p.name, avatar: av };
+      const chip = (av && av.type !== 'initials')
+        ? `<span class="pb-note-avatar pb-av-sm" style="background:${pbAvatarBg(note)}">${pbAvatarInner(note)}</span>`
+        : `<span class="pb-note-avatar pb-av-sm" style="background:${pbAvatarColor(note)}">${esc(pbInitials(p.name))}</span>`;
       return `<div class="admin-item">
         <span class="admin-item-dot${p.online?' on':''}" role="img" aria-label="${p.online?'Connected now':'Not connected'}" data-tip="${p.online?'Connected now':'Not connected'}"></span>
+        ${chip}
         <div class="admin-item-name">${esc(p.name)}
           <span class="admin-level-chip u-ml7 ${p.role==='instructor'?'alc-full':'alc-standard'}">${p.role==='instructor'?'INST':'STU'}</span>
         </div>
@@ -5547,9 +5554,13 @@ async function joinPresence() {
     username: session.username || '',
     profileAliases: Array.isArray(session.profileAliases) ? session.profileAliases : [],
   } : {};
+  // Your chosen look rides the presence entry (initials are the default and
+  // stay implicit), so every bubble in the session shows the real you.
+  const myAv = pbNormalizeAvatar(pbMyAvatar());
+  const avatarField = myAv && myAv.type !== 'initials' ? { avatar: myAv } : {};
   try {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
-      [`presence.${presenceId}`]:{name,role:session.role,...identity,
+      [`presence.${presenceId}`]:{name,role:session.role,...identity,...avatarField,
         ...(groupActive() ? { groupId: activeGroupId } : {}),   // D2: group on the presence entry
         lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
     });
@@ -5571,7 +5582,7 @@ async function joinPresence() {
       const at = existing.findIndex(p => session.profileId
         ? p?.profileId === session.profileId || (!p?.profileId && sameParticipantName(p?.name, name))
         : sameParticipantName(p?.name, name));
-      const participant = { ...(at >= 0 ? existing[at] : {}), name, role:session.role, ...identity, joinedAt: at >= 0 ? (existing[at]?.joinedAt || Date.now()) : Date.now() };
+      const participant = { ...(at >= 0 ? existing[at] : {}), name, role:session.role, ...identity, ...avatarField, joinedAt: at >= 0 ? (existing[at]?.joinedAt || Date.now()) : Date.now() };
       if (at >= 0) existing[at] = participant;
       else existing.push(participant);
       tx.update(ref, { participants: existing });
@@ -5629,7 +5640,12 @@ function renderPresence(map) {
       const pos = pbPositionFor(p.name);
       const tip = `${esc(p.name)} · ${p.role==='instructor'?'Instructor':'Student'}${pos?` · ${esc(pos)}`:''}${canInspect?' · click for info':''}`;
       const click = canInspect ? ` onclick="openPersonInfo(${esc(JSON.stringify(p.name))})"` : '';
-      return `<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}${canInspect?' pi-click':''}" data-fullname="${tip}"${click}>${initials(p.name)}</div>`;
+      // A chosen avatar rides the presence entry; initials stay the fallback.
+      const av = pbNormalizeAvatar(p.avatar);
+      const hasArt = av && av.type !== 'initials';
+      const inner = hasArt ? pbAvatarInner({ by: p.name, avatar: av }) : initials(p.name);
+      const bg = hasArt ? ` style="background:${pbAvatarBg({ by: p.name, clientId: p.profileId || p.name, avatar: av })}"` : '';
+      return `<div class="p-avatar ${p.role==='instructor'?'inst':'stud'}${hasArt?' has-art':''}${canInspect?' pi-click':''}" data-fullname="${tip}"${click}${bg}>${inner}</div>`;
     }).join('')+
     (extra>0?`<div class="p-avatar extra" data-fullname="${extra} more in session">+${extra}</div>`:'');
   document.getElementById('presenceTooltip').innerHTML =
@@ -5666,9 +5682,11 @@ async function openPersonInfo(name) {
     .map(r => normalizeRoleAssignment(r))
     .find(r => sameParticipantName(r.person, name));
 
+  const piAv = pbNormalizeAvatar(newest?.avatar);
+  const piHasArt = piAv && piAv.type !== 'initials';
   const head = `
     <div class="pi-head">
-      <div class="pi-ava ${isInst ? 'inst' : 'stud'}">${esc(pbInitials(name))}</div>
+      <div class="pi-ava ${isInst ? 'inst' : 'stud'}${piHasArt ? ' has-art' : ''}"${piHasArt ? ` style="background:${pbAvatarBg({ by: name, clientId: newest?.profileId || name, avatar: piAv })}"` : ''}>${piHasArt ? pbAvatarInner({ by: name, avatar: piAv }) : esc(pbInitials(name))}</div>
       <div>
         <div class="pi-name">${esc(name)}</div>
         <div class="pi-sub">
@@ -7992,6 +8010,9 @@ function renderLiveCallBanner(stage, call=_rtrtCall, mine=true) {
 }
 
 function beginPlayoutCall(beat, rowIdx) {
+  // Advancing again while a call is still counting aborts the outgoing call
+  // properly (log line, follower banner, toast) instead of dropping it silently.
+  if (_rtrtCall) abortPlayoutCall('superseded');
   cancelPlayoutCallTimer();
   const cueId = beat?.cues?.playback?.outCueId || '';
   const manual = liveCallManualArm();
@@ -15402,9 +15423,12 @@ function rundownRowPresenceHTML(beatId) {
     .filter(([id, p]) => id !== presenceId && p && Number(p.rdBeat) === Number(beatId) && (now - (p.lastSeen || 0) < 25000))
     .map(([, p]) => p);
   if (!people.length) return '';
-  return `<span class="rd-row-presence" data-tip="Editing now">` + people.slice(0, 3).map(p =>
-    `<span class="rd-pres-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" data-fullname="${esc(p.name)} · editing">${esc(pbInitials(p.name))}</span>`
-  ).join('') + `</span>`;
+  return `<span class="rd-row-presence" data-tip="Editing now">` + people.slice(0, 3).map(p => {
+    const av = pbNormalizeAvatar(p.avatar);
+    const art = av && av.type !== 'initials';
+    const bg = art ? ` style="background:${pbAvatarBg({ by: p.name, clientId: p.profileId || p.name, avatar: av })}"` : '';
+    return `<span class="rd-pres-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}${art ? ' has-art' : ''}" data-fullname="${esc(p.name)} · editing"${bg}>${art ? pbAvatarInner({ by: p.name, avatar: av }) : esc(pbInitials(p.name))}</span>`;
+  }).join('') + `</span>`;
 }
 
 function pbActiveCollabPeople() {
@@ -15425,7 +15449,12 @@ function pbRenderPagePresence() {
     const onThisPage = here.filter(p => p.pbPage === pageId);
     const elsewhere = here.filter(p => p.pbPage && p.pbPage !== pageId);
     if (!here.length) { box.innerHTML = ''; return; }
-    const avatar = p => `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}" data-fullname="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' · ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' · on this page'}">${esc(pbInitials(p.name))}</span>`;
+    const avatar = p => {
+      const av = pbNormalizeAvatar(p.avatar);
+      const art = av && av.type !== 'initials';
+      const bg = art ? ` style="background:${pbAvatarBg({ by: p.name, clientId: p.profileId || p.name, avatar: av })}"` : '';
+      return `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}${art ? ' has-art' : ''}" data-fullname="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' · ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' · on this page'}"${bg}>${art ? pbAvatarInner({ by: p.name, avatar: av }) : esc(pbInitials(p.name))}</span>`;
+    };
     let html = '';
     if (onThisPage.length) html += `<span class="pb-collab-label">On this page</span>${onThisPage.map(avatar).join('')}`;
     if (elsewhere.length) html += `<span class="pb-collab-label dim">Elsewhere</span>${elsewhere.map(avatar).join('')}`;
@@ -16666,39 +16695,15 @@ const PB_AVATAR_ANIMALS = {
   outrangutan: { label: 'Outrangutan', src: 'assets/Brand/Outrangutan_icon.svg', bg: '#1a1817' },
   cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#123a2a' },
 };
-// v2.1 D7: FROZEN icon-avatar manifest (decision 11: ~24 launch icons; brand
-// animals above stay). Every symbol name is verified against the generated
-// sf-symbols runtime; the stored avatar value is the manifest id only. Ids are
-// append-only — removing or renaming one orphans saved profiles (they fall
-// back to initials, harmless but rude).
+// Avatar manifest (owner decision 2026-08-03): the picker is the fun picks
+// ONLY. The 24 symbol entries are retired from the manifest entirely (a saved
+// symbol avatar falls back to initials, the documented harmless path) and the
+// brand animals above stay render-only for old stamped notes, never pickable.
+// Ids below remain append-only; stored avatar values stay manifest ids.
 const PB_AVATAR_ICONS = {
-  play:        { label: 'Play',        symbol: 'media.play' },
-  playpause:   { label: 'Play/Pause',  symbol: 'media.playpause' },
-  waveform:    { label: 'Waveform',    symbol: 'media.waveform' },
-  camera:      { label: 'Camera',      symbol: 'department.video' },
-  audio:       { label: 'Audio',       symbol: 'department.audio' },
-  gfx:         { label: 'Graphics',    symbol: 'department.graphics' },
-  lighting:    { label: 'Lighting',    symbol: 'department.lighting' },
-  playback:    { label: 'Playback',    symbol: 'department.playback' },
-  script:      { label: 'Script',      symbol: 'department.script' },
-  pages:       { label: 'Pages',       symbol: 'content.script' },
-  clock:       { label: 'Clock',       symbol: 'time.clock' },
-  calendar:    { label: 'Calendar',    symbol: 'content.calendar' },
-  checklist:   { label: 'Checklist',   symbol: 'content.checklist' },
-  bookmark:    { label: 'Bookmark',    symbol: 'action.bookmark' },
-  bell:        { label: 'Bell',        symbol: 'notification.default' },
-  star:        { label: 'Star',        symbol: 'state.favorite' },
-  bolt:        { label: 'Flex',        symbol: 'state.flex' },
-  go:          { label: 'GO!',         symbol: 'marker.go' },
-  standby:     { label: 'Standby',     symbol: 'marker.ready' },
-  sunshine:    { label: 'Sunshine',    symbol: 'weather.clear' },
-  storm:       { label: 'Storm',       symbol: 'weather.thunderstorm' },
-  snow:        { label: 'Snow',        symbol: 'weather.snow' },
-  wind:        { label: 'Wind',        symbol: 'weather.wind' },
-  tree:        { label: 'Tree',        symbol: 'nature.tree' },
   // The fun picks (owner-approved 2026-07-18): vendored Twemoji 15.1.0 SVGs
-  // (CC-BY 4.0 — assets/avatars/LICENSE.txt). `src` entries render full-color
-  // like the brand animals; stored values stay manifest ids either way.
+  // (CC-BY 4.0 — assets/avatars/LICENSE.txt). All render full-color art on a
+  // user-chosen background color (avatar.bg, validated in the profile model).
   trex:        { label: 'T-Rex',       src: 'assets/avatars/trex.svg' },
   unicorn:     { label: 'Unicorn',     src: 'assets/avatars/unicorn.svg' },
   frog:        { label: 'Frog',        src: 'assets/avatars/frog.svg' },
@@ -16766,14 +16771,19 @@ function pbAvatarInner(note) {
   if (a && a.type === 'image') return `<img class="pb-av-img" src="${esc(a.value)}" alt="" draggable="false">`;
   return esc(pbInitials(note && note.by));
 }
-// Background for the avatar chip: brand bg for animals, transparent for photos,
-// else the hashed personal color (icons sit on it too — stable per user).
+// Background for the avatar chip: the user's chosen color when they picked
+// one, brand bg for legacy animals, transparent for photos, else the hashed
+// personal color (stable per user).
 function pbAvatarBg(note) {
   const a = pbNormalizeAvatar(note && note.avatar);
+  if (a && a.type === 'icon' && a.bg) return a.bg;
   if (a && a.type === 'animal') return PB_AVATAR_ANIMALS[a.value].bg;
   if (a && a.type === 'image') return 'transparent';
   return pbAvatarColor(note);
 }
+// Swatch row offered when a fun icon is selected: the 8 personal-palette hues
+// plus 4 deeper grounds so light art can sit on something calm.
+const PB_AVATAR_BG_CHOICES = PB_AVATAR_PALETTE.concat(['#334155','#1b1b1b','#0f766e','#6d28d9']);
 // My own avatar object for stamping onto a new note/reply.
 function pbMyAvatar() { return pbGetProfile().avatar; }
 
@@ -16785,7 +16795,15 @@ function openUserPortal() {
   showModal('userPortalModal');
 }
 function pbPortalPick(type, value) {
-  _pbPortalDraft = pbNormalizeAvatar({ type, value }) || { type: 'initials' };
+  // Picking a different fun icon keeps the background the user already chose.
+  const keepBg = _pbPortalDraft && _pbPortalDraft.bg;
+  _pbPortalDraft = pbNormalizeAvatar({ type, value, bg: keepBg }) || { type: 'initials' };
+  pbRenderUserPortal();
+}
+function pbPortalPickBg(color) {
+  if (!_pbPortalDraft || _pbPortalDraft.type !== 'icon') return;
+  const next = { type: 'icon', value: _pbPortalDraft.value, bg: color };
+  _pbPortalDraft = pbNormalizeAvatar(next) || _pbPortalDraft;
   pbRenderUserPortal();
 }
 function pbPortalUpload(input) {
@@ -16821,33 +16839,36 @@ function pbRenderUserPortal() {
   if (!slot) return;
   const me = { by: session.userName || 'You', clientId: CLIENT_ID, avatar: _pbPortalDraft };
   const sel = t => (_pbPortalDraft && _pbPortalDraft.type === t);
-  const animalBtns = Object.entries(PB_AVATAR_ANIMALS).map(([k, v]) =>
-    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'animal' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('animal','${k}')" data-tip="${esc(v.label)}">
-      <span class="pb-av-chip" style="background:${v.bg}"><img class="pb-av-img" src="${v.src}" alt=""></span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
-    </button>`).join('');
-  // D7: icon avatars — theme-tinted masks on the user's stable hashed color.
+  const chipBg = k => (sel('icon') && _pbPortalDraft.value === k && _pbPortalDraft.bg) ? _pbPortalDraft.bg : pbAvatarColor(me);
   const iconBtns = Object.entries(PB_AVATAR_ICONS).map(([k, v]) =>
-    `<button type="button" class="pb-av-choice${_pbPortalDraft && _pbPortalDraft.type === 'icon' && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('icon','${k}')" data-tip="${esc(v.label)}">
-      <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${pbIconEntryInner(v)}</span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
+    `<button type="button" class="pb-av-choice${sel('icon') && _pbPortalDraft.value === k ? ' sel' : ''}" onclick="pbPortalPick('icon','${k}')" data-tip="${esc(v.label)}">
+      <span class="pb-av-chip" style="background:${chipBg(k)}">${pbIconEntryInner(v)}</span><span class="pb-av-choice-lbl">${esc(v.label)}</span>
     </button>`).join('');
+  // The background swatch row only means something once a fun icon is chosen.
+  const bgRow = sel('icon') ? `
+    <div class="pb-portal-label">Background color</div>
+    <div class="pb-av-bg-row">
+      ${PB_AVATAR_BG_CHOICES.map(c =>
+        `<button type="button" class="pb-av-bg${_pbPortalDraft.bg === c ? ' sel' : ''}" style="background:${c}" onclick="pbPortalPickBg('${c}')" aria-label="Background ${esc(c)}" data-tip="Use this background"></button>`).join('')}
+    </div>` : '';
   slot.innerHTML = `
     <div class="pb-portal-preview">
       <span class="pb-note-avatar pb-av-lg" style="background:${pbAvatarBg(me)}">${pbAvatarInner(me)}</span>
-      <div class="pb-portal-who"><b>${esc(session.userName || 'You')}</b><span>This is how you appear on the notes board.</span></div>
+      <div class="pb-portal-who"><b>${esc(session.userName || 'You')}</b><span>This is how you appear across Cueola.</span></div>
     </div>
     <div class="pb-portal-label">Choose your look</div>
     <div class="pb-av-grid">
       <button type="button" class="pb-av-choice${sel('initials') ? ' sel' : ''}" onclick="pbPortalPick('initials')">
         <span class="pb-av-chip" style="background:${pbAvatarColor(me)}">${esc(pbInitials(session.userName))}</span><span class="pb-av-choice-lbl">Initials</span>
       </button>
-      ${animalBtns}
       ${iconBtns}
       <label class="pb-av-choice pb-av-upload${sel('image') ? ' sel' : ''}">
         <span class="pb-av-chip">${sel('image') ? `<img class="pb-av-img" src="${esc(_pbPortalDraft.value)}" alt="">` : sfIcon('action.attach')}</span>
         <span class="pb-av-choice-lbl">${sel('image') ? 'Change photo' : 'Upload'}</span>
         <input type="file" accept="image/*" hidden onchange="pbPortalUpload(this)">
       </label>
-    </div>`;
+    </div>
+    ${bgRow}`;
 }
 function pbSaveUserPortal() {
   pbSetProfileAvatar(_pbPortalDraft || { type: 'initials' });
@@ -16856,6 +16877,8 @@ function pbSaveUserPortal() {
   // Reflect the new avatar immediately on the board + the header chip.
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes();
   pbRenderPortalChip();
+  // Refresh the presence entry so everyone's bubbles show the new look now.
+  try { joinPresence(); } catch {}
   // A signed-in profile carries its look to every device.
   window.CueolaIdentity?.onDeviceAvatarSaved?.(_pbPortalDraft || { type: 'initials' });
 }

@@ -187,6 +187,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .roster-actions{display:flex;gap:6px;flex:0 0 auto}
 .roster-check{width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto}
 .roster-empty{font-size:12px;color:var(--text3);padding:12px}
+.roster-ava{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex:0 0 auto;overflow:hidden;background:var(--s3)}
+.roster-ava img{width:72%;height:72%;object-fit:contain;display:block}
+.roster-ava img.photo{width:100%;height:100%;object-fit:cover}
 @media(max-width:600px){.roster-row{flex-wrap:wrap}.roster-actions{width:100%;justify-content:flex-end}}
 /* Phase 4 item 5: live presence strip on session cards */
 .sc-live{display:flex;align-items:center;gap:6px;margin-top:8px}
@@ -2088,6 +2091,28 @@ function rosterAgo(ts) {
   return Math.round(d / 86400000) + 'd ago';
 }
 
+// Tiny standalone avatar chip for roster rows. The fun-icon manifest lives in
+// cueola-app.js; here an icon id maps straight to its vendored SVG (same
+// filenames), photos render their data URL, everything else shows initials.
+function rosterAvatarChip(p) {
+  const a = p && p.avatar;
+  const initials = String(p.fullName || p.username || '?').trim().split(/\s+/).slice(0, 2)
+    .map(s => (s[0] || '').toUpperCase()).join('') || '?';
+  const hue = (() => {
+    const key = String(p.username || p.fullName || '?');
+    let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return ['#5b8df8','#22d3a0','#f5b731','#f05252','#b06ef8','#f97316','#ec4899','#22d3d3'][h % 8];
+  })();
+  if (a && a.type === 'icon' && /^[a-z0-9]+$/.test(String(a.value || ''))) {
+    const bg = /^#[0-9a-fA-F]{6}$/.test(String(a.bg || '')) ? a.bg : hue;
+    return `<span class="roster-ava" style="background:${bg}"><img src="assets/avatars/${a.value}.svg" alt="" onerror="this.parentNode.textContent='${escapeHtml(initials)}'"></span>`;
+  }
+  if (a && a.type === 'image' && /^data:image\/(png|jpe?g|webp);base64,/.test(String(a.value || ''))) {
+    return `<span class="roster-ava"><img class="photo" src="${escapeHtml(a.value)}" alt=""></span>`;
+  }
+  return `<span class="roster-ava" style="background:${hue}">${escapeHtml(initials)}</span>`;
+}
+
 function renderRoster() {
   const el = document.getElementById('rosterList');
   if (!el) return;
@@ -2106,6 +2131,7 @@ function renderRoster() {
     }).join('') || '<span class="roster-sub">no sessions</span>';
     return `<div class="overview-row roster-row${active ? '' : ' inactive'}">
       <input type="checkbox" class="roster-check" data-roster-user="${escapeHtml(u)}" aria-label="Select ${escapeHtml(u)}">
+      ${rosterAvatarChip(p)}
       <span class="roster-main"><b>${escapeHtml(p.fullName || u)}</b> <span class="roster-user">@${escapeHtml(u)}</span>
         <span class="roster-sub">${p.role === 'admin' ? 'admin · ' : ''}code ${escapeHtml(p.codeUsed || '—')} · profile ${escapeHtml(dashboardProfileId(p) || 'migration pending')} · seen ${rosterAgo(p.lastSeen)}</span>
         <span class="roster-sessions">${sessions}</span></span>
