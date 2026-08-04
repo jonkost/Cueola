@@ -231,8 +231,10 @@ test('KeyWi: the paint tick pushes repaints unconditionally, sig-diffed', () => 
 test('KeyWi: wipe, pre-roll, and press flash painters follow the renderer conventions', () => {
   const draw = deckSlice('function drawKeyInto(canvas, spec, z)', '// ── Serialized HID write queue');
   // Duration wipe: translucent accent, left to right, behind the art, no glow.
+  // 0.26 alpha is the contrast-audited value: labels stay >= 4.5:1 on every
+  // theme's brightest wiped face while the wipe edge stays clearly visible.
   assert.match(draw, /spec\.progressStyle === 'wipe'/);
-  assert.match(draw, /rgba\(t\.ring, 0\.34\)/);
+  assert.match(draw, /rgba\(t\.ring, 0\.26\)/);
   assert.doesNotMatch(draw, /shadowBlur/);
   // Pre-roll: thin bottom bar; loop: static corner marker.
   assert.match(draw, /spec\.preroll != null/);
@@ -279,18 +281,94 @@ test('KeyWi: painters render all three progress styles with sharp doctrine-clean
   assert.doesNotMatch(draw, /shadowBlur/);
 });
 
-test('KeyWi: six deck themes including Liquid Glass, and the chips render from the table', () => {
+test('KeyWi: seven deck themes including Liquid Glass and RGB Flow, chips render from the table', () => {
   const themes = deckSlice('var DECK_THEMES = {', 'function glyphFor');
-  assert.equal((themes.match(/name: '/g) || []).length, 6);
+  assert.equal((themes.match(/name: '/g) || []).length, 7);
   assert.match(themes, /liquidglass: \{/);
   assert.match(themes, /name: 'Liquid Glass'/);
   const lg = themes.slice(themes.indexOf('liquidglass: {'));
   assert.doesNotMatch(lg, /shadowBlur|shadowColor/);   // hairline rims and fills only
   assert.match(lg, /rgba\(sp\.color/);                 // accent tint
-  // Toolbar and wizard chips iterate DECK_THEMES, so the sixth theme appears
-  // in both automatically; the chip accent style exists in the page CSS.
+  // RGB Flow animates via the paint signature (spec.rgbPhase), never a free
+  // timer: the phase is stepped/quantized so exactly one repaint per step,
+  // and the step slows as hardware decks join (a full wave repaints EVERY
+  // key, so the serialized HID queue must drain between waves).
+  assert.match(themes, /rgbflow: \{/);
+  const rf = themes.slice(themes.indexOf('rgbflow: {'), themes.indexOf('liquidglass: {'));
+  assert.doesNotMatch(rf, /shadowBlur|shadowColor/);
+  assert.match(rf, /sp\.rgbPhase/);
+  assert.match(rf, /sp\.cols/);                                          // painted deck's grid, not the active-deck global
+  assert.match(deck, /spec\.rgbPhase = Math\.floor\(performance\.now\(\) \/ rgbStepMs\(\)\)/);
+  assert.match(deck, /function rgbStepMs\(\) \{ return decks\.length > 1 \? 1500 : decks\.length \? 900 : 500; \}/);
+  assert.match(deck, /spec\.rgbPhase == null \? '' : spec\.rgbPhase/);   // rides specSig
+  // Toolbar and wizard chips iterate DECK_THEMES, so new themes appear in
+  // both automatically; the chip accent styles exist in the page CSS.
   assert.match(deck, /Object\.keys\(DECK_THEMES\)\.map\(function \(id\)/);
   assert.match(html, /\.sd-th-liquidglass\.cur/);
+  assert.match(html, /\.sd-th-rgbflow\.cur/);
+});
+
+test('KeyWi: key images animate GIFs through the sig-diffed paint loop with taint-safe sources', () => {
+  // Sources are validated at set time: data URLs or repo assets only, so the
+  // shared offscreen canvas can never be tainted (toBlob must keep working).
+  assert.match(deck, /SLOT_IMG_DATA_RE = \/\^data:image\\\/\(png\|jpe\?g\|webp\|gif\)/);
+  assert.match(deck, /SLOT_IMG_ASSET_RE/);
+  const toSlot = deckSlice('function toSlot(s)', 'function persist');
+  assert.match(toSlot, /delete slot\.img/);
+  // GIF frames ride the paint signature (gifFrame), decoded once per source,
+  // with a static-first-frame fallback when WebCodecs is missing.
+  assert.match(deck, /spec\.gifFrame = gifFrameIndex\(gifAnim\(slot\.img\)\)/);
+  assert.match(deck, /spec\.gifFrame == null \? '' : spec\.gifFrame/);
+  assert.match(deck, /typeof ImageDecoder === 'undefined'/);
+  const drawImg = deckSlice('// Custom key image: fills the whole face', 'var ink = t.ink');
+  assert.match(drawImg, /gifAnim\(spec\.img\)/);
+  assert.match(drawImg, /keyImage\(spec\.img\)/);
+});
+
+test('KeyWi: GIPHY rides the operator key, PG-13 only, and picks land as capped data URLs', async () => {
+  const { readFile: rf } = await import('node:fs/promises');
+  const fb = await rf(new URL('../../firebase.json', import.meta.url), 'utf8');
+  // CSP allows the API and media hosts (search + thumbnail + download).
+  assert.match(fb, /https:\/\/api\.giphy\.com/);
+  assert.match(fb, /img-src[^;]*https:\/\/\*\.giphy\.com/);
+  assert.match(fb, /connect-src[^;]*https:\/\/\*\.giphy\.com/);
+  // The key is the operator's own, from localStorage only: no key literal in
+  // the repo, and removing it is a first-class control.
+  const giphy = deckSlice('var GIPHY_KEY_LS', '// Upload pipeline');
+  assert.match(giphy, /localStorage\.getItem\(GIPHY_KEY_LS\)/);
+  assert.doesNotMatch(deck, /api_key=[A-Za-z0-9]{10}/);
+  assert.match(deck, /localStorage\.removeItem\(GIPHY_KEY_LS\)/);
+  // Classroom rating cap rides every request, search and trending alike.
+  assert.match(giphy, /&limit=24&rating=pg-13/);
+  // Picks are downloaded and stored through the same caps as uploads: remote
+  // URLs never reach a slot (the canvas-taint rule), oversize renditions are
+  // skipped, and the final data URL obeys SLOT_GIF_MAX_CHARS.
+  assert.match(giphy, /blob\.size > 300 \* 1024/);
+  assert.match(giphy, /SLOT_GIF_MAX_CHARS/);
+  assert.match(giphy, /readAsDataURL\(blob\)/);
+  // Result titles are escaped on the way into the DOM.
+  assert.match(giphy, /data-tip="' \+ esc\(g\.title\)/);
+});
+
+test('KeyWi: GIF decode is bomb-guarded, caches are pruned, and a full store warns instead of silently dropping edits', () => {
+  // Decompression-bomb guard: frames land downscaled (longest side capped),
+  // sub-20ms delays get the browser-style ~100ms substitution, and tiny loops
+  // are stretched so the 5Hz tick shows every frame instead of strobing.
+  assert.match(deck, /GIF_MAX_DIM = 224/);
+  assert.match(deck, /resizeQuality: 'medium'/);
+  assert.match(deck, /if \(d < 20\) d = 100;/);
+  assert.match(deck, /GIF_MIN_TOTAL_MS = 600/);
+  // Import-path parity: .keywi files and hand-edited stores obey the same
+  // per-image length caps as the upload pipeline.
+  assert.match(deck, /SLOT_IMG_MAX_CHARS = 90000/);
+  assert.match(deck, /SLOT_GIF_MAX_CHARS = 480000/);
+  // Cache lifecycle: every persist prunes bitmaps no slot references (across
+  // all decks), and closes GIF frames on the way out.
+  const prune = deckSlice('function pruneKeyArtCaches()', 'function drawCover');
+  assert.match(prune, /b\.close\(\)/);
+  assert.match(deckSlice('function persist(quiet)', 'function newId'), /pruneKeyArtCaches\(\)/);
+  // A full localStorage toasts a clear warning instead of failing silently.
+  assert.match(deckSlice('function writeStore(s)', 'function loadConfig'), /Layout storage is full/);
 });
 
 test('KeyWi: auto-dim drops to 20% after five idle minutes and restores on any input', () => {

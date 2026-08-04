@@ -680,7 +680,7 @@
       else teardownDevice();
     }
   }
-  function teardownDevice() { stopPaintLoop(); stopAnim(); stopAutoDim(); flushDeviceWrites(); device = null; decks = []; if (!previewMode) profile = null; keyState = []; dialPress = []; }
+  function teardownDevice() { stopPaintLoop(); stopAnim(); stopAutoDim(); flushDeviceWrites(); device = null; decks = []; if (!previewMode) profile = null; keyState = []; dialPress = []; pruneKeyArtCaches(); }
 
   // Preview mode: a virtual + XL on screen so the deck can be explored, themed,
   // and laid out with no hardware plugged in. Real Connect takes over instantly.
@@ -835,13 +835,13 @@
       }
     },
     synthwave: {
-      name: 'Synthwave', ink: '#ffe6fb', sub: '#ff9ae8', ring: '#22d3ff', glyphColor: '#ff5ff0', labelWeight: 800,
+      name: 'Synthwave', ink: '#ffe6fb', sub: '#ff9ae8', ring: '#22d3ff', glyphColor: '#ffb0f6', labelWeight: 800,
       font: function (s, w) { return (w || 800) + ' ' + s + "px 'SF Pro Display',-apple-system,sans-serif"; },
       bg: function (c, z, sp) {
         var g = c.createLinearGradient(0, 0, 0, z); g.addColorStop(0, '#3a1069'); g.addColorStop(0.55, '#7d1f7f'); g.addColorStop(1, '#140720');
         c.fillStyle = g; rr(c, 0, 0, z, z, z * 0.15); c.fill();
         c.save(); rr(c, 0, 0, z, z, z * 0.15); c.clip();
-        c.fillStyle = rgba(sp.color, 0.9); c.beginPath(); c.arc(z / 2, z * 0.42, z * 0.17, 0, 7); c.fill();
+        c.fillStyle = rgba(sp.color, 0.55); c.beginPath(); c.arc(z / 2, z * 0.42, z * 0.17, 0, 7); c.fill();
         c.strokeStyle = rgba('#ff5ff0', 0.45); c.lineWidth = 1; var hy = z * 0.62;
         for (var gy = hy; gy < z; gy += z * 0.1) { c.beginPath(); c.moveTo(0, gy); c.lineTo(z, gy); c.stroke(); }
         for (var vx = -3; vx <= 3; vx++) { c.beginPath(); c.moveTo(z / 2, hy); c.lineTo(z / 2 + vx * z * 0.42, z); c.stroke(); }
@@ -868,6 +868,36 @@
         var g2 = c.createRadialGradient(z * 0.3, z * 0.24, 0, z * 0.3, z * 0.24, z * 0.85); g2.addColorStop(0, rgba(sp.color, 0.55)); g2.addColorStop(1, 'rgba(0,0,0,0)');
         c.fillStyle = g2; rr(c, 0, 0, z, z, z * 0.15); c.fill();
         if (sp.active) { c.strokeStyle = '#7cf7d4'; c.lineWidth = z * 0.045; rr(c, z * 0.05, z * 0.05, z * 0.9, z * 0.9, z * 0.12); c.stroke(); }
+      }
+    },
+    rgbflow: {
+      // Mood lighting: a slow RGB hue wave rolling diagonally across
+      // the whole deck. Animated via spec.rgbPhase (stepped in keyArtSpec,
+      // quantized into the paint signature so exactly one repaint happens per
+      // step). Every step repaints EVERY key, so the step slows down as real
+      // hardware joins: the one serialized HID queue must drain a full wave
+      // (draw + JPEG + packets per key) before the next one lands.
+      name: 'RGB Flow', ink: '#ffffff', sub: '#e2e7f5', ring: '#ffffff', labelWeight: 800,
+      font: function (s, w) { return (w || 800) + ' ' + s + "px 'SF Pro Display',-apple-system,sans-serif"; },
+      bg: function (c, z, sp) {
+        var ph = sp.rgbPhase || 0, ki = sp.ki || 0;
+        var cols = sp.cols || 8;   // the PAINTED deck's own grid, never the active-deck global
+        var hue = (ph * 3 + ((ki % cols) + Math.floor(ki / cols)) * 24) % 360;
+        c.fillStyle = '#07080d'; rr(c, 0, 0, z, z, z * 0.15); c.fill();
+        c.save(); rr(c, 0, 0, z, z, z * 0.15); c.clip();
+        var g = c.createLinearGradient(0, 0, z, z);
+        // Active lightness capped at 46%: white labels must stay readable on
+        // the brightest hues (yellow-lime band is the constraint).
+        g.addColorStop(0, 'hsl(' + hue + ', 90%, ' + (sp.active ? 46 : 34) + '%)');
+        g.addColorStop(1, 'hsl(' + ((hue + 60) % 360) + ', 90%, ' + (sp.active ? 28 : 16) + '%)');
+        c.fillStyle = g; c.fillRect(0, 0, z, z);
+        var v = c.createRadialGradient(z / 2, z * 0.42, z * 0.1, z / 2, z / 2, z * 0.8);
+        v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.5)');
+        c.fillStyle = v; c.fillRect(0, 0, z, z);
+        c.restore();
+        c.strokeStyle = sp.active ? '#ffffff' : 'rgba(255,255,255,0.35)';
+        c.lineWidth = Math.max(1, z * (sp.active ? 0.04 : 0.02));
+        rr(c, 0.5, 0.5, z - 1, z - 1, z * 0.15); c.stroke();
       }
     },
     liquidglass: {
@@ -1081,7 +1111,13 @@
     else if (!spec.emoji) { spec.symbol = symbolFor(a); spec.glyph = glyphFor(a); }
     // Custom key image: replaces the icon layer entirely; the trigger overlays
     // (label, progress, pips, pulse) stay unless the user turned them off.
-    if (slot.img) { spec.img = slot.img; if (slot.noOverlay) { spec.noOverlay = true; spec.label = ''; } }
+    if (slot.img) {
+      spec.img = slot.img;
+      if (slot.noOverlay) { spec.noOverlay = true; spec.label = ''; }
+      if (isGifSrc(slot.img)) spec.gifFrame = gifFrameIndex(gifAnim(slot.img));
+    }
+    spec.ki = i; spec.cols = profile ? profile.cols : 8;
+    if (deckTheme === 'rgbflow') spec.rgbPhase = Math.floor(performance.now() / rgbStepMs()) % 720;
     if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
     if (slot.reactive !== false) {   // a key can opt out of animation entirely
       applyPlayoutProgress(spec, a, slot, s);
@@ -1103,7 +1139,13 @@
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
     if (slot.symbol) { spec.symbol = slot.symbol; spec.emoji = ''; }
     else if (!spec.emoji) { spec.symbol = symbolFor(a); spec.glyph = glyphFor(a); }
-    if (slot.img) { spec.img = slot.img; if (slot.noOverlay) { spec.noOverlay = true; spec.label = ''; } }
+    if (slot.img) {
+      spec.img = slot.img;
+      if (slot.noOverlay) { spec.noOverlay = true; spec.label = ''; }
+      if (isGifSrc(slot.img)) spec.gifFrame = gifFrameIndex(gifAnim(slot.img));
+    }
+    spec.ki = i; spec.cols = deck.profile ? deck.profile.cols : 8;
+    if (deckTheme === 'rgbflow') spec.rgbPhase = Math.floor(performance.now() / rgbStepMs()) % 720;
     if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
     if (slot.reactive !== false) {
       applyPlayoutProgress(spec, a, slot, s);
@@ -1117,7 +1159,11 @@
   // phase (quantized to 20 steps), pre-roll, loop marker, pulse lamps (talkback,
   // OBS stream/record, GO LIVE), the press flash, prompter/lamp active state,
   // and the show clock readout.
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.noOverlay ? '1' : '', deckTheme].join('|'); }
+  // RGB Flow wave pacing: on-screen-only preview steps at 500ms; one hardware
+  // deck slows to 900ms and multiple decks to 1500ms so a full wave of key
+  // writes always drains the HID queue before the next wave queues.
+  function rgbStepMs() { return decks.length > 1 ? 1500 : decks.length ? 900 : 500; }
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, deckTheme].join('|'); }
 
   // Cache of decoded key images. Sources are validated at set time (data URLs
   // or repo-relative assets only), so the canvas can never be tainted and the
@@ -1134,6 +1180,91 @@
     return null;
   }
   function imgSig(src) { return src.length + ':' + src.slice(-24); }
+  // Animated GIF frames, decoded once per source via WebCodecs (KeyWi is
+  // Chromium-only, same requirement as WebHID). Caps keep memory sane: at most
+  // 90 frames; longer GIFs loop what was decoded. When ImageDecoder is missing
+  // the key falls back to the static first frame via the plain image cache.
+  var _keyGifs = {};
+  function isGifSrc(src) { return /^data:image\/gif;base64,/.test(src) || /\.gif$/i.test(src); }
+  // Frames are stored DOWNSCALED (longest side capped at 224px, 2x the largest
+  // key face) so a highly-compressible huge-dimension GIF can never balloon
+  // into gigabytes of bitmaps (decompression-bomb guard); worst case per GIF
+  // is ~18 MB. Sub-20ms frame delays render at ~100ms in browsers, mirrored
+  // here; the whole loop is stretched to >= 600ms so the 5Hz paint tick shows
+  // every frame instead of strobing past them.
+  var GIF_MAX_DIM = 224, GIF_MIN_FRAME_MS = 120, GIF_MIN_TOTAL_MS = 600;
+  function gifAnim(src) {
+    var e = _keyGifs[src];
+    if (e) return e.ok ? e : null;
+    e = _keyGifs[src] = { ok: false, frames: [], durs: [], total: 0 };
+    if (typeof ImageDecoder === 'undefined') { e.err = true; return null; }
+    (function () {
+      // fetch() handles data URLs and same-origin asset paths alike.
+      fetch(src).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+        var dec = new ImageDecoder({ data: buf, type: 'image/gif' });
+        return dec.tracks.ready.then(function () {
+          var n = Math.min(dec.tracks.selectedTrack ? dec.tracks.selectedTrack.frameCount : 1, 90);
+          var chain = Promise.resolve();
+          for (var i = 0; i < n; i++) {
+            (function (idx) {
+              chain = chain.then(function () {
+                return dec.decode({ frameIndex: idx }).then(function (res) {
+                  var w = res.image.codedWidth || res.image.displayWidth || 1;
+                  var h = res.image.codedHeight || res.image.displayHeight || 1;
+                  var sc = Math.min(1, GIF_MAX_DIM / Math.max(w, h));
+                  var opts = sc < 1 ? { resizeWidth: Math.max(1, Math.round(w * sc)), resizeHeight: Math.max(1, Math.round(h * sc)), resizeQuality: 'medium' } : undefined;
+                  return createImageBitmap(res.image, opts).then(function (bmp) {
+                    var d = Math.round((res.image.duration || 100000) / 1000);
+                    if (d < 20) d = 100;                       // browser-style substitution
+                    d = Math.max(GIF_MIN_FRAME_MS, d);         // 5Hz tick shows every frame
+                    e.frames.push(bmp); e.durs.push(d); e.total += d;
+                    try { res.image.close(); } catch (e2) {}
+                  });
+                });
+              });
+            })(i);
+          }
+          return chain;
+        }).then(function () { try { dec.close(); } catch (e2) {} });
+      }).then(function () {
+        if (e.frames.length) {
+          if (e.total < GIF_MIN_TOTAL_MS && e.frames.length > 1) {
+            var k = GIF_MIN_TOTAL_MS / e.total;
+            e.durs = e.durs.map(function (d) { return Math.round(d * k); });
+            e.total = e.durs.reduce(function (a, b) { return a + b; }, 0);
+          }
+          e.ok = true; schedulePaint();
+        } else e.err = true;
+      }).catch(function () { e.err = true; });
+    })();
+    return null;
+  }
+  // Drop cached bitmaps for sources no slot references anymore (any profile,
+  // any deck): a removed or replaced GIF must release its frames, not park
+  // tens of MB for the rest of the session.
+  function pruneKeyArtCaches() {
+    var used = {};
+    var collect = function (profs) {
+      Object.keys(profs || {}).forEach(function (id) {
+        ((profs[id] && profs[id].keys) || []).forEach(function (s) { if (s && s.img) used[s.img] = 1; });
+      });
+    };
+    collect(profiles);
+    decks.forEach(function (dk) { if (dk.cfg) collect(dk.cfg.profiles); });
+    Object.keys(_keyGifs).forEach(function (src) {
+      if (used[src]) return;
+      (_keyGifs[src].frames || []).forEach(function (b) { try { b.close(); } catch (e) {} });
+      delete _keyGifs[src];
+    });
+    Object.keys(_keyImgs).forEach(function (src) { if (!used[src]) delete _keyImgs[src]; });
+  }
+  // Which frame is on show right now (wall-clock driven, loops forever).
+  function gifFrameIndex(anim) {
+    if (!anim || !anim.ok || anim.frames.length < 2 || !anim.total) return 0;
+    var t = performance.now() % anim.total, acc = 0;
+    for (var i = 0; i < anim.durs.length; i++) { acc += anim.durs[i]; if (t < acc) return i; }
+    return 0;
+  }
   function drawCover(ctx, img, z) {
     var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     if (!iw || !ih) return;
@@ -1145,9 +1276,16 @@
     var t = theme();
     ctx.clearRect(0, 0, z, z);
     ctx.save(); try { t.bg(ctx, z, spec); } catch (e) {} ctx.restore();
-    // Custom key image: fills the whole face under the overlays.
+    // Custom key image: fills the whole face under the overlays. Animated GIFs
+    // draw their current frame; without WebCodecs they fall back to the static
+    // first frame from the plain image cache.
     if (spec.img) {
-      var kim = keyImage(spec.img);
+      var kim = null;
+      if (isGifSrc(spec.img)) {
+        var anim = gifAnim(spec.img);
+        if (anim) kim = anim.frames[Math.min(spec.gifFrame || 0, anim.frames.length - 1)];
+      }
+      if (!kim) kim = keyImage(spec.img);
       if (kim) { ctx.save(); rr(ctx, 0, 0, z, z, z * 0.15); ctx.clip(); drawCover(ctx, kim, z); ctx.restore(); }
     }
     var ink = t.ink, gcol = spec.glyphColor || t.glyphColor || ink;
@@ -1163,7 +1301,9 @@
       // convention as the Outrangutan key renderer).
       if (!spec.noOverlay && spec.progress != null && spec.progressStyle === 'wipe') {
         ctx.save(); rr(ctx, 0, 0, z, z, z * 0.15); ctx.clip();
-        ctx.fillStyle = rgba(t.ring, 0.34); ctx.fillRect(0, 0, Math.round(z * spec.progress), z);
+        // 0.26 keeps the wipe edge clearly visible while the label stays
+        // >= 4.5:1 on every theme's brightest wiped face (contrast audit).
+        ctx.fillStyle = rgba(t.ring, 0.26); ctx.fillRect(0, 0, Math.round(z * spec.progress), z);
         ctx.restore();
       }
       // Loop pads carry a static corner marker instead of a wipe.
@@ -1652,7 +1792,20 @@
 
   // ── Profile config persistence ─────────────────────────────────────────────
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (e) { return {}; } }
-  function writeStore(s) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {} }
+  // A full localStorage must never fail silently: the UI keeps working from
+  // memory, so without a warning a whole session of layout edits would
+  // evaporate on reload. Toast once per session, keep working.
+  var _storeFullWarned = false;
+  function writeStore(s) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); return true; }
+    catch (e) {
+      if (!_storeFullWarned) {
+        _storeFullWarned = true;
+        toast('Layout storage is full: this change may not survive a reload. Remove some key images or GIFs, or save the layout as a .keywi file.');
+      }
+      return false;
+    }
+  }
   function loadConfig(pid) {
     var raw = readStore()[pid] || {};
     // Migrate the pre-profiles shape ({mapping, overrides}) into a Default profile.
@@ -1708,11 +1861,18 @@
   // A slot image may only be an uploaded data URL or a repo-shipped asset —
   // anything else (a remote URL from a hand-edited import) would TAINT the
   // shared canvas and break the device's toBlob encode for every key.
-  var SLOT_IMG_DATA_RE = /^data:image\/(png|jpe?g|webp);base64,/;
-  var SLOT_IMG_ASSET_RE = /^assets\/[a-zA-Z0-9_\-\/.]+\.(svg|png|webp|jpe?g)$/;
+  var SLOT_IMG_DATA_RE = /^data:image\/(png|jpe?g|webp|gif);base64,/;
+  var SLOT_IMG_ASSET_RE = /^assets\/[a-zA-Z0-9_\-\/.]+\.(svg|png|webp|jpe?g|gif)$/;
+  // Length caps mirror the upload pipeline (64KB raster / 300KB GIF, as base64
+  // chars) so an imported .keywi or hand-edited store obeys the same limits.
+  var SLOT_IMG_MAX_CHARS = 90000, SLOT_GIF_MAX_CHARS = 480000;
   function toSlot(s) {
     var slot = (typeof s === 'string') ? { a: s } : (s && typeof s === 'object' ? s : { a: 'none' });
-    if (slot.img != null && !(typeof slot.img === 'string' && (SLOT_IMG_DATA_RE.test(slot.img) || SLOT_IMG_ASSET_RE.test(slot.img)))) delete slot.img;
+    if (slot.img != null) {
+      var ok = typeof slot.img === 'string' && (SLOT_IMG_DATA_RE.test(slot.img) || SLOT_IMG_ASSET_RE.test(slot.img));
+      if (ok && /^data:/.test(slot.img)) ok = slot.img.length <= (/^data:image\/gif/.test(slot.img) ? SLOT_GIF_MAX_CHARS : SLOT_IMG_MAX_CHARS);
+      if (!ok) delete slot.img;
+    }
     return slot;
   }
   function persist(quiet) {
@@ -1721,6 +1881,7 @@
     s[profile.productId] = { overrides: overrides, profiles: profiles, activeProfile: activeProfileId, defaultProfile: defaultProfileId, seededNames: seededNames };
     writeStore(s);
     stashActiveDeck();          // keep the active deck's record current
+    pruneKeyArtCaches();        // release bitmaps for art no slot uses anymore
     if (!quiet) markDirty();    // an edit happened: offer Done → save
   }
   function newId() { var n = 1; while (profiles['p' + n]) n++; return 'p' + n; }
@@ -2242,15 +2403,20 @@
       + '<label class="sd-ed-f">Custom color (hex)<input id="sd-ed-hex" placeholder="#1c7a3e" maxlength="7" autocomplete="off" spellcheck="false" value="' + esc(customHex) + '"></label>'
       + '<label class="sd-ed-f">Symbol<input id="sd-ed-symsearch" placeholder="Search symbols" autocomplete="off"></label>'
       + '<div class="sd-symgrid" id="sd-symgrid">' + SYMBOL_PICK.map(function (row) { return '<button class="sd-symopt' + (slot.symbol === row[1] ? ' cur' : '') + '" data-sympick="' + esc(row[1]) + '" data-symname="' + esc(row[0]) + '" data-tip="' + esc(row[0]) + '" aria-label="' + esc(row[0]) + '"><canvas width="52" height="52"></canvas></button>'; }).join('') + '</div>'
-      + '<label class="sd-ed-f">Icon<input id="sd-ed-icon" placeholder="emoji or blank" maxlength="2" value="' + esc(slot.icon || '') + '"></label>'
+      + '<label class="sd-ed-f">Emoji<input id="sd-ed-icon" placeholder="Type one emoji, or leave blank" maxlength="8" data-tip="Draws one emoji big on the key. Press Control+Command+Space for the emoji picker." value="' + esc(slot.icon || '') + '"></label>'
       + '<div class="sd-ed-f">Key art<div class="sd-emoji">' + EMOJI_ART.map(function (em) { return '<button class="sd-em' + (slot.icon === em ? ' cur' : '') + '" data-emoji="' + em + '" data-tip="Use this art on the key">' + em + '</button>'; }).join('') + '</div></div>'
       + '<div class="sd-ed-f">Custom image<div class="sd-img-row">'
       + (slot.img ? '<img class="sd-img-cur" src="' + esc(slot.img) + '" alt="">' : '')
       + '<button class="sd-mini" id="sd-ed-imgup">' + (slot.img ? 'Change image' : 'Upload image') + '</button>'
       + (slot.img ? '<button class="sd-mini danger" id="sd-ed-imgclear">Remove</button>' : '')
-      + '</div><input type="file" id="sd-ed-imgfile" accept="image/png,image/jpeg,image/webp" hidden></div>'
+      + '</div><input type="file" id="sd-ed-imgfile" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>'
       + (slot.img ? '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-overlays"' + (slot.noOverlay ? '' : ' checked') + '><span>Show trigger overlays on the image</span></label>' : '')
-      + '<div class="sd-ed-f">Silly art<div class="sd-funart">' + funArtEntries().map(function (fa) { return '<button class="sd-funopt' + (slot.img === fa.src ? ' cur' : '') + '" data-funart="' + esc(fa.src) + '" data-tip="' + esc(fa.label) + '" aria-label="' + esc(fa.label) + '"><img src="' + esc(fa.src) + '" alt="" draggable="false"></button>'; }).join('') + '</div></div>'
+      + '<div class="sd-ed-f">GIPHY<div class="sd-giphy">' + giphyBoxHTML() + '</div></div>'
+      + artPacks().map(function (pack) {
+          return '<div class="sd-ed-f">' + esc(pack.name) + ' art<div class="sd-funart">'
+            + pack.items.map(function (fa) { return '<button class="sd-funopt' + (slot.img === fa.src ? ' cur' : '') + '" data-funart="' + esc(fa.src) + '" data-tip="' + esc(fa.label) + '" aria-label="' + esc(fa.label) + '"><img src="' + esc(fa.src) + '" alt="" draggable="false" loading="lazy"></button>'; }).join('')
+            + '</div></div>';
+        }).join('')
       + '<div class="sd-ed-f">Progress style<div class="sd-seg" id="sd-ed-style-seg">'
       + [['wipe', 'Wipe'], ['ring', 'Ring'], ['bar', 'Bottom bar']].map(function (opt) { return '<button data-style="' + opt[0] + '"' + (styleCur === opt[0] ? ' class="cur"' : '') + '>' + opt[1] + '</button>'; }).join('') + '</div></div>'
       + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-flash"' + (slot.flash === false ? '' : ' checked') + '><span>Press flash</span></label>'
@@ -2319,6 +2485,23 @@
     bind('sd-ed-imgclear', function () { var slot = slotAt(index); delete slot.img; delete slot.noOverlay; mapping().keys[index] = slot; persist(); openKeyEditor(index); });
     var ovl = document.getElementById('sd-ed-overlays'); if (ovl) ovl.onchange = function () { var slot = slotAt(index); if (ovl.checked) delete slot.noOverlay; else slot.noOverlay = true; mapping().keys[index] = slot; persist(); refreshKey(index); };
     o.querySelectorAll('.sd-funopt').forEach(function (fb) { fb.onclick = function () { var slot = slotAt(index), src = fb.getAttribute('data-funart'); if (slot.img === src) { delete slot.img; delete slot.noOverlay; } else slot.img = src; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
+    bind('sd-giphy-keysave', function () {
+      var inp = document.getElementById('sd-giphy-key');
+      var v = inp && inp.value.trim();
+      if (!v) { toast('Paste the API key first.'); return; }
+      try { localStorage.setItem(GIPHY_KEY_LS, v); } catch (e) {}
+      openKeyEditor(index);
+      giphySearch(index, '');
+    });
+    bind('sd-giphy-go', function () { giphySearch(index, (document.getElementById('sd-giphy-q') || {}).value || ''); });
+    var gq = document.getElementById('sd-giphy-q');
+    if (gq) {
+      gq.onkeydown = function (e) { if (e.key === 'Enter') giphySearch(index, gq.value || ''); };
+      // Fresh editor with a saved key: show trending right away.
+      if (!_giphyResults.length) giphySearch(index, '');
+      else renderGiphyResults(index);
+    }
+    bind('sd-giphy-forget', function () { try { localStorage.removeItem(GIPHY_KEY_LS); } catch (e) {} _giphyResults = []; openKeyEditor(index); });
     var done = document.getElementById('sd-ed-done'); if (done) done.onclick = closeOverlay;
     paintSymbolPicker();
   }
@@ -2334,13 +2517,130 @@
     } catch (e) {}
     return [];
   }
+  // Art packs for the key editor bucket. File-based packs come from the
+  // GENERATED manifest (assets/keywi-art/manifest.js, rebuilt by
+  // scripts/build-keywi-art-manifest.mjs whenever files are added to
+  // assets/keywi-art/<pack>/): drop in your own GIFs and PNGs, rerun the
+  // script, and they appear here. The Twemoji fun pack rides the avatar
+  // manifest so it is never listed twice.
+  function artPacks() {
+    var packs = [];
+    try {
+      var m = window.KEYWI_ART_MANIFEST;
+      if (m && Array.isArray(m.packs)) {
+        m.packs.forEach(function (p) {
+          if (!p || !Array.isArray(p.items) || !p.items.length) return;
+          var items = p.items.map(function (it) {
+            return { label: String(it.label || ''), src: String(it.src || '') };
+          }).filter(function (it) { return SLOT_IMG_ASSET_RE.test(it.src); });
+          if (items.length) packs.push({ name: String(p.name || 'Art'), items: items });
+        });
+      }
+    } catch (e) {}
+    var fun = funArtEntries();
+    if (fun.length) packs.push({ name: 'Fun', items: fun });
+    return packs;
+  }
+  // ── GIPHY: search inside the key editor ─────────────────────────────────
+  // The API key is the operator's own (developers.giphy.com), pasted once and
+  // stored on this device only, like the OBS password: never in the repo.
+  // Picks are DOWNLOADED and stored as data URLs through the same validation
+  // as uploads (300 KB cap, taint-safe), so layouts stay portable and the
+  // hardware pipeline never touches a remote URL. Results are rating-capped
+  // at pg-13: this runs in classrooms.
+  var GIPHY_KEY_LS = 'cueola_giphy_key';
+  var _giphyResults = [];
+  function giphyKey() { try { return localStorage.getItem(GIPHY_KEY_LS) || ''; } catch (e) { return ''; } }
+  function giphyBoxHTML() {
+    if (!giphyKey()) {
+      return '<div class="sd-giphy-setup">'
+        + '<div class="sd-note">Search GIPHY for key art right here. It needs a free GIPHY API key: create one at developers.giphy.com (Create an App, choose API), then paste it below. Stored on this device only.</div>'
+        + '<div class="sd-giphy-row"><input id="sd-giphy-key" placeholder="Paste your GIPHY API key" autocomplete="off" spellcheck="false"><button class="sd-mini" id="sd-giphy-keysave">Save key</button></div>'
+        + '</div>';
+    }
+    return '<div class="sd-giphy-row"><input id="sd-giphy-q" placeholder="Search GIPHY (blank shows trending)" autocomplete="off"><button class="sd-mini" id="sd-giphy-go">Search</button></div>'
+      + '<div class="sd-giphy-grid" id="sd-giphy-grid"></div>'
+      + '<div class="sd-giphy-note">Powered by GIPHY · PG-13 results only · <button type="button" class="sd-giphy-forget" id="sd-giphy-forget">Remove key</button></div>';
+  }
+  function giphySearch(index, q) {
+    var key = giphyKey(); if (!key) return;
+    var grid = document.getElementById('sd-giphy-grid');
+    if (grid) grid.innerHTML = '<div class="sd-note">Searching…</div>';
+    var url = 'https://api.giphy.com/v1/gifs/' + (q ? 'search' : 'trending')
+      + '?api_key=' + encodeURIComponent(key) + '&limit=24&rating=pg-13'
+      + (q ? '&q=' + encodeURIComponent(q) : '');
+    fetch(url).then(function (r) {
+      if (r.status === 401 || r.status === 403) throw new Error('badkey');
+      if (r.status === 429) throw new Error('rate');
+      if (!r.ok) throw new Error('http' + r.status);
+      return r.json();
+    }).then(function (j) {
+      _giphyResults = (j.data || []).map(function (g) {
+        var im = g.images || {};
+        var pickList = [im.fixed_width, im.fixed_width_small, im.downsized]
+          .filter(function (r2) { return r2 && r2.url; })
+          .map(function (r2) { return { url: r2.url, size: parseInt(r2.size, 10) || 0 }; });
+        return { title: g.title || 'GIF', thumb: (im.fixed_width_small || im.fixed_width || {}).url || '', picks: pickList };
+      }).filter(function (g) { return g.thumb && g.picks.length; });
+      renderGiphyResults(index);
+    }).catch(function (e) {
+      var msg = e.message === 'badkey' ? 'GIPHY rejected that key. Check it under your apps on developers.giphy.com.'
+        : e.message === 'rate' ? 'GIPHY rate limit reached. Give it a minute and search again.'
+        : 'Could not reach GIPHY. Check the connection and try again.';
+      if (grid) grid.innerHTML = '<div class="sd-note">' + esc(msg) + '</div>';
+    });
+  }
+  function renderGiphyResults(index) {
+    var grid = document.getElementById('sd-giphy-grid');
+    if (!grid) return;
+    if (!_giphyResults.length) { grid.innerHTML = '<div class="sd-note">No results. Try another search.</div>'; return; }
+    grid.innerHTML = _giphyResults.map(function (g, i) {
+      return '<button type="button" class="sd-giphy-thumb" data-gidx="' + i + '" data-tip="' + esc(g.title) + '" aria-label="' + esc('Use this GIF: ' + g.title) + '"><img src="' + esc(g.thumb) + '" alt="" loading="lazy" draggable="false"></button>';
+    }).join('');
+    grid.querySelectorAll('.sd-giphy-thumb').forEach(function (b) {
+      b.onclick = function () { giphyPick(index, +b.getAttribute('data-gidx')); };
+    });
+  }
+  // Download the smallest rendition that fits the same caps as an upload.
+  function giphyPick(index, gi) {
+    var g = _giphyResults[gi]; if (!g) return;
+    toast('Adding the GIF to the key…');
+    var tryNext = function (list) {
+      if (!list.length) { toast('That GIF is too large even in its small rendition. Pick another.'); return; }
+      var cand = list[0], rest = list.slice(1);
+      if (cand.size && cand.size > 300 * 1024) { tryNext(rest); return; }
+      fetch(cand.url).then(function (r) { if (!r.ok) throw new Error('http'); return r.blob(); }).then(function (blob) {
+        if (blob.size > 300 * 1024) { tryNext(rest); return; }
+        var fr = new FileReader();
+        fr.onload = function () {
+          if (String(fr.result).length > SLOT_GIF_MAX_CHARS) { tryNext(rest); return; }
+          var slot = slotAt(index); slot.img = fr.result; mapping().keys[index] = slot;
+          persist(); openKeyEditor(index);
+        };
+        fr.readAsDataURL(blob);
+      }).catch(function () { tryNext(rest); });
+    };
+    tryNext(g.picks.slice());
+  }
+
   // Upload pipeline: decode, square-crop to 256px (>= 2x the largest key face,
   // so hardware art stays sharp), then encode small enough for localStorage:
   // PNG keeps transparency when it fits, JPEG otherwise, smaller sizes as a
   // last resort. Hard cap 64 KB per key.
   function importKeyImage(index, file) {
-    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) { toast('Pick a PNG, JPEG, or WebP image.'); return; }
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) { toast('Pick a PNG, JPEG, WebP, or GIF image.'); return; }
     if (file.size > 15 * 1024 * 1024) { toast('That image is over 15 MB. Pick a smaller one.'); return; }
+    // GIFs keep their original bytes (re-encoding through a canvas would drop
+    // the animation), so the cap is on the file itself.
+    if (file.type === 'image/gif') {
+      if (file.size > 300 * 1024) { toast('That GIF is over 300 KB. Trim or shrink it (giphy-size clips work well).'); return; }
+      var gr = new FileReader();
+      gr.onload = function () {
+        var slot = slotAt(index); slot.img = gr.result; mapping().keys[index] = slot; persist(); openKeyEditor(index);
+      };
+      gr.readAsDataURL(file);
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function () {
       var img = new Image();

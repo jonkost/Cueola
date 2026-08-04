@@ -108,12 +108,13 @@ any size, tinted to the key ink), with a built-in vector fallback so a key is
 never blank while a symbol loads. To use a symbol KeyWi Bird does not map yet, add
 the SVG under the runtime folder and point the action at it in `symbolFor()`.
 
-Pick a **theme** to reskin the whole deck. Six ship: Broadcast (clean,
+Pick a **theme** to reskin the whole deck. Seven ship: Broadcast (clean,
 category colors), Neon (glowing edges on black), Synthwave (sunset grids),
-Terminal (green-on-black with scanlines), Aurora, and **Liquid Glass** (smoked
-glass keycaps that match the app chrome). Themes are one-click chips in the
-toolbar and in the wizard's last step, and apply to the physical keys and the
-on-screen preview alike.
+Terminal (green-on-black with scanlines), Aurora, **RGB Flow** (an animated
+hue wave rolling diagonally across every key, the mood-lighting option), and
+**Liquid Glass** (smoked glass keycaps that match the app chrome). Themes are
+one-click chips in the toolbar and in the wizard's last step, and apply to the
+physical keys and the on-screen preview alike.
 
 The **on-screen grid is exactly what the hardware shows**: the same canvas art
 drives both, so you can lay out and theme the deck and see the real result. The
@@ -162,12 +163,27 @@ overrides, stored with the layout:
   action's own icon.
 - **Custom image**: upload any PNG, JPEG, or WebP and it fills the whole key
   face, square-cropped and stored at 256 px (at least 2x the largest key's
-  hardware resolution, so it stays sharp on the deck). **Show trigger
-  overlays on the image** keeps the label, progress, pips, and pulse lamps
-  riding on top; uncheck it for pure art. The label sits on a soft bottom
-  scrim over an image so it stays readable.
-- **Silly art**: a bucket of the same vendored fun art the profile avatars
-  use (CC-BY Twemoji), one click to put a T-Rex or a taco on a key.
+  hardware resolution, so it stays sharp on the deck). **Animated GIFs work
+  too** (up to 300 KB): the frames play on the on-screen key AND stream to the
+  hardware through the same paint queue. **Show trigger overlays on the
+  image** keeps the label, progress, pips, and pulse lamps riding on top;
+  uncheck it for pure art. The label sits on a soft bottom scrim over an
+  image so it stays readable.
+- **GIPHY search**: search GIPHY without leaving the key editor and tap a
+  result to put it on the key. Needs your own free API key (developers.giphy.com,
+  Create an App, choose API), pasted once into the editor's GIPHY row; it is
+  stored on that device only, like the OBS password. Results are capped at
+  PG-13, and a pick is downloaded and stored like an upload (300 KB cap), so
+  the layout stays portable and works offline afterward. Remove key forgets it.
+- **Art packs**: a bucket of one-click key art in packs. **Podcast** ships
+  in-repo (original badges tuned for an 18-35 crew: CLIP THAT, HOT TAKE,
+  MIC DROP, NO CAP, REAL, BANGER, COOKED, LOCKED IN, AURA, RENT FREE, W, L,
+  GOAT, LETS GO) and **Fun** is the same vendored CC-BY Twemoji art the
+  profile avatars use. Add your own meme/GIF bank by dropping files you have
+  rights to into `assets/keywi-art/<pack-name>/` and running
+  `node scripts/build-keywi-art-manifest.mjs` then
+  `node scripts/bump-cache.mjs`; the folder becomes a pack in the editor. The
+  repo deliberately ships no third-party meme images (licensing).
 - **Progress style**: how a playing key shows time. **Wipe** (the default),
   **Ring** (a hairline track circle with a sharp accent arc from 12 o'clock),
   or **Bottom bar**.

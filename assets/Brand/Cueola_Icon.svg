@@ -24,19 +24,17 @@
     </style>
     <linearGradient id="linear-gradient" x1="511.7" y1="0" x2="511.7" y2="1024" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#569986"/>
-      <stop offset=".05" stop-color="#4f9481"/>
-      <stop offset=".23" stop-color="#3e8a75"/>
-      <stop offset=".42" stop-color="#35846e"/>
-      <stop offset=".67" stop-color="#32836c"/>
-      <stop offset=".76" stop-color="#3c8973"/>
-      <stop offset=".91" stop-color="#579986"/>
+      <stop offset=".16" stop-color="#58a99a"/>
+      <stop offset=".46" stop-color="#5ec6bd"/>
+      <stop offset=".63" stop-color="#60d1cb"/>
+      <stop offset=".72" stop-color="#61cac3"/>
+      <stop offset=".87" stop-color="#66baae"/>
       <stop offset="1" stop-color="#6ca695"/>
     </linearGradient>
     <linearGradient id="linear-gradient-2" x1="511.7" y1="630.89" x2="511.7" y2="56.78" gradientUnits="userSpaceOnUse">
-      <stop offset=".07" stop-color="#30302f"/>
-      <stop offset=".33" stop-color="#454544"/>
-      <stop offset=".7" stop-color="#5f5f5e"/>
-      <stop offset=".92" stop-color="#696968"/>
+      <stop offset="0" stop-color="#30302f"/>
+      <stop offset=".36" stop-color="#3a3a39"/>
+      <stop offset="1" stop-color="#4b4b4a"/>
     </linearGradient>
     <linearGradient id="linear-gradient-3" x1="511.7" y1="649.75" x2="511.7" y2="403.85" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#606060"/>
@@ -46,10 +44,8 @@
     </linearGradient>
     <linearGradient id="linear-gradient-4" x1="277.24" y1="938.67" x2="277.24" y2="725.06" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#f6f6f7"/>
-      <stop offset=".18" stop-color="#efeff0"/>
-      <stop offset=".43" stop-color="#dededf"/>
-      <stop offset=".71" stop-color="#c2c2c3"/>
-      <stop offset="1" stop-color="#9d9d9e"/>
+      <stop offset=".23" stop-color="#e1eded"/>
+      <stop offset=".56" stop-color="#bededd"/>
     </linearGradient>
     <linearGradient id="linear-gradient-5" x1="665.58" y1="895.73" x2="665.58" y2="768" xlink:href="#linear-gradient-4"/>
   </defs>

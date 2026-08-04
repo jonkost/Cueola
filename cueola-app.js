@@ -639,9 +639,22 @@ const CUEOLA_THEME_LABELS = {
   outrangutan: 'Outrangutan',
   prepbear: 'PrepBear',
 };
-// Canonical theme-chip swatch colors — single source for every theme picker
+// Canonical theme-chip swatch paints — single source for every theme picker
 // (settings modal, entry popover, PB bar, prompter/Flowmingo op panels).
-const CUEOLA_THEME_SWATCHES = { cool:'#0a0d18', warm:'#ffc400', white:'#fafaf7', green:'#041208', koala:'#1c1c1b', panda:'#000000', flamingo:'#0e0410', outrangutan:'#ff6a00', prepbear:'#080a14' };
+// Two-tone: the theme's own --bg body with its --accent as a diagonal wedge,
+// so near-black themes stop looking like identical circles. Any valid CSS
+// background value works; every consumer assigns via style.background.
+const CUEOLA_THEME_SWATCHES = {
+  cool:        'linear-gradient(135deg,#0a0d18 60%,#5b8df8 60%)',
+  warm:        'linear-gradient(135deg,#0c0a03 60%,#ffc400 60%)',
+  white:       'linear-gradient(135deg,#fafaf7 60%,#e50000 60%)',
+  green:       'linear-gradient(135deg,#041208 60%,#6cd234 60%)',
+  koala:       'linear-gradient(135deg,#1c1c1b 60%,#d4d4d4 60%)',
+  panda:       'linear-gradient(135deg,#000000 60%,#ffffff 60%)',
+  flamingo:    'linear-gradient(135deg,#0e0410 60%,#a560ff 60%)',
+  outrangutan: 'linear-gradient(135deg,#1a1817 60%,#ff6a00 60%)',
+  prepbear:    'linear-gradient(135deg,#080a14 60%,#eeca57 60%)',
+};
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
 function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
@@ -657,18 +670,18 @@ function hasPlandaBearThemeOverride() {
 const PLANDABEAR_SWATCH_SOURCE = { glacier:'cool', honey:'warm', 'polar-bear':'white', eucalyptus:'green' };
 function paintThemeSwatches() {
   document.querySelectorAll('.theme-swatch[data-theme] .ts-preview').forEach(el => {
-    const hex = CUEOLA_THEME_SWATCHES[el.closest('.theme-swatch').dataset.theme];
-    if (hex) el.style.background = hex;
+    const paint = CUEOLA_THEME_SWATCHES[el.closest('.theme-swatch').dataset.theme];
+    if (paint) el.style.background = paint;
   });
   document.querySelectorAll('.theme-swatch[data-plandabear-theme-choice] .ts-preview').forEach(el => {
     const name = el.closest('.theme-swatch').dataset.plandabearThemeChoice;
-    const hex = CUEOLA_THEME_SWATCHES[PLANDABEAR_SWATCH_SOURCE[name] || name];
-    if (hex) el.style.background = hex;
+    const paint = CUEOLA_THEME_SWATCHES[PLANDABEAR_SWATCH_SOURCE[name] || name];
+    if (paint) el.style.background = paint;
   });
   CUEOLA_THEMES.forEach(name => {
     const dot = document.getElementById(`pt-t-${name}`);
-    const hex = CUEOLA_THEME_SWATCHES[name];
-    if (dot && hex) dot.style.background = hex;
+    const paint = CUEOLA_THEME_SWATCHES[name];
+    if (dot && paint) dot.style.background = paint;
   });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', paintThemeSwatches, { once: true });

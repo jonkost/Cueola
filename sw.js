@@ -84,6 +84,23 @@ const SHELL_ASSETS = [
   'assets/avatars/trex.svg',
   'assets/avatars/turtle.svg',
   'assets/avatars/unicorn.svg',
+  // KeyWi podcast badge pack (original in-repo art) — precached so key art
+  // renders offline; owner-added packs under assets/keywi-art/ load online.
+  'assets/keywi-art/podcast/aura.svg',
+  'assets/keywi-art/podcast/banger.svg',
+  'assets/keywi-art/podcast/big-l.svg',
+  'assets/keywi-art/podcast/big-w.svg',
+  'assets/keywi-art/podcast/clip-that.svg',
+  'assets/keywi-art/podcast/cooked.svg',
+  'assets/keywi-art/podcast/goat.svg',
+  'assets/keywi-art/podcast/hot-take.svg',
+  'assets/keywi-art/podcast/lets-go.svg',
+  'assets/keywi-art/podcast/locked-in.svg',
+  'assets/keywi-art/podcast/mic-drop.svg',
+  'assets/keywi-art/podcast/no-cap.svg',
+  'assets/keywi-art/podcast/real.svg',
+  'assets/keywi-art/podcast/rent-free.svg',
+  'assets/keywi-art/manifest.js?v=a8af0e1bfe',
   'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=2b4cf2ea17',
@@ -102,12 +119,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=7cf2607b4f',
+  'cueola-app.js?v=f87a02914f',
   'outrangutan/outrangutan.css?v=003c1cf78e',
   'outrangutan/outrangutan.js?v=d34236e878',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=7a1d65c157',
+  'cueola-streamdeck.js?v=9e3a238cb2',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -154,7 +171,7 @@ const versionSignature = SHELL_ASSETS
 // wrong-page entries the old poisoning bug already cached in installed
 // clients, (3) index.html/dashboard.html page-HTML changes (dead
 // Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
-const WORKER_SCHEMA = '21';
+const WORKER_SCHEMA = '23';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
