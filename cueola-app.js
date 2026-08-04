@@ -5939,6 +5939,25 @@ window.cueolaSurfaceBridge = {
   holdStop:  (id) => { const a = KEYMAP.find(x => x.id === id); if (a && a.hold) sendPrompterControl(a.hold[1]); },
   prompter: (action) => sendPrompterControl(action),
   controlBus: (target, action) => { try { return window.cueolaControlBus(target, action, 'deck'); } catch (e) { return false; } },
+  // KeyWi strip prompter monitor: the script text plus the shared position
+  // (the talent heartbeat's reported spot wins over this tab's own scroll).
+  // Before anyone adopts a prompter text, fall back to assembling from the
+  // rundown, cached so the deck's 5Hz paint tick never reassembles per tick.
+  prompterStrip: () => {
+    let text = _sdSafe(() => prompterText, '') || '';
+    if (!text) {
+      const now = Date.now();
+      if (!window._sdPtAsm || now - window._sdPtAsm.at > 3000) {
+        window._sdPtAsm = { at: now, text: _sdSafe(() => assemblePrompterScriptFromBeats(), '') || '' };
+      }
+      text = window._sdPtAsm.text;
+    }
+    return {
+      text,
+      pct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : ptProgressPct()), 0) || 0,
+      playing: _sdSafe(() => !!ptPlaying, false),
+    };
+  },
   playoutCue: (id) => fireOutrangutanCommand('cue', id),
   playoutPad: (id) => fireOutrangutanCommand('pad', id),
   goLive: () => { try { goLive(); } catch (e) {} },

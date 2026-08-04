@@ -1,9 +1,16 @@
 # KeyWi Bird (Cueola control surface for any Stream Deck)
 
 Any Stream Deck, from the 6 key Mini up to the 36 key + XL, drives the whole
-rig: playback and SFX (Outrangutan), the rundown, the Flowmingo prompter, the
-Micochondria mics, and OBS Studio. It is reached from the front page under
-**KeyWi Bird** and requires a normal user sign in.
+rig: playback and SFX (Outrangutan), the rundown, the Flowmingo prompter, and
+OBS Studio, with saved layouts as pages. It is reached from the front page
+under **KeyWi Bird** and requires a normal user sign in.
+
+> **Micochondria is parked** (owner decision 2026-08-04, hardware not in hand
+> yet): every mic surface (status chip, panel, wizard step, talk keys in the
+> defaults, the strip dial) stays hidden until a talkbackd daemon is actually
+> detected on the machine, at which point it un-parks itself and stays
+> available. A quiet probe runs once a minute; nothing needs configuring.
+> Mentions of mic controls below apply to an un-parked machine.
 
 ## Quick start (your first show)
 
@@ -76,11 +83,16 @@ the bands readable. Everything trimmed is still in the catalog to bind by hand.
 Default dials, each card stating what turning and pressing does: PLBK vol
 (press: mute), Prompter speed (press: play/pause), Text size (press: reset),
 Prompter scrub (press: cue to live row), Rundown row (press: take that row),
-Show clock (a live clock face; press: start/pause). Three more live in the
+Show clock (a live clock face; press: start/pause). Five more live in the
 catalog to assign by hand: the **OBS program** dial (a live program monitor on
 the strip; turn rides the OBS stream audio volume, pick which input in the OBS
-row, press starts or stops the stream), the **Micochondria** split strip (see
-below), and **Deck light** (turn: the physical backlight, press: back to 80%).
+row, press starts or stops the stream), the **Prompter view** dial (the script
+itself on the strip: the line the talent is on plus the next line, updating as
+they scroll; turn is speed, press is play/pause), the **Playback view** dial
+(a live Outrangutan program monitor: real video frames for clips, a
+name-and-countdown card for audio; turn is the playback master volume, press
+pauses or resumes), the **Micochondria** split strip (see below), and **Deck
+light** (turn: the physical backlight, press: back to 80%).
 
 The touch strip is a glanceable dashboard: one zone per dial with an accent bar,
 the live value in tabular digits, a progress bar, and a running dot. Tap a zone
@@ -192,11 +204,12 @@ overrides, stored with the layout:
   key to the theme's default look.
 
 **Drag one key onto another to swap them**, straight on the on-screen grid.
-After any edit a floating **Done** capsule appears; it asks where the layout
-should live: **Keep on this device** (localStorage, as always), **Download
-.keywi** (a standalone file, see below), or **Save to my profile** (signed-in
-users; the layout follows the login to any machine once the keywiLayouts
-rules round is deployed).
+Edits save to this device instantly, as always. The toolbar's **Save layout**
+button lights up while changes have not been made durable yet; it opens the
+save sheet: **Keep on this device**, **Download .keywi** (a standalone file,
+see below), or **Save to my profile** (signed-in users; the layout follows
+the login to any machine). Leaving KeyWi Bird with unsaved changes asks the
+same question once on the way out; nothing nags per edit.
 
 Old saved profiles need no migration: absent overrides mean the defaults every
 existing layout already had.
@@ -259,8 +272,12 @@ Everything is customizable, live:
 - **Import / export.** Export a layout as a **`.keywi` file** (JSON inside,
   versioned, custom key images included) to back it up or hand it to another
   operator machine, and import it back. Old `.json` exports import forever.
-- **Layouts as pages.** Bind PAGE keys (next layout, or jump to one by name) so
-  the deck itself flips between rehearsal, live, and OBS-heavy pages.
+- **Layouts as pages.** PAGE ← and PAGE → cycle the saved layouts (the keys
+  read out where you are, like 2/3), HOME jumps to the deck's default layout,
+  and the key editor's **This deck's pages** section binds a key straight to
+  any one page: the key wears that page's name and lights while you are on
+  it. The default layouts ship with page keys on every deck size, so
+  multi-page setups work out of the box.
 - **Multiple decks, one computer.** Connect a second Stream Deck with **Add
   deck** and a deck-tab row appears; each deck runs its own layouts live, the
   tabs pick which one the editor configures, and one brightness slider drives
@@ -275,7 +292,8 @@ Everything is customizable, live:
 
 OBS Studio 28+ ships obs-websocket. In OBS: Tools, WebSocket Server Settings,
 enable the server (default port `4455`), and copy the password if one is set.
-In KeyWi Bird, enter `ws://localhost:4455` and the password in the OBS row (or
+In KeyWi Bird, enter `ws://localhost:4455` and the password in the OBS Studio
+row below the deck (or
 the wizard's OBS step) and click **Connect OBS**. KeyWi Bird reconnects
 automatically next time.
 

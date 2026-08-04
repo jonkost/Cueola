@@ -142,7 +142,9 @@
     registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe, the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
     registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics (TKB and VofU) instantly. The off-air safety.' });
     // Layouts as pages: a key can jump straight to a saved layout, or cycle them.
-    registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next saved layout', desc: 'Cycles to the next saved layout. Turns the deck into pages.' });
+    registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next page', desc: 'Cycles to the next saved layout. Turns the deck into pages; the key shows which page you are on.' });
+    registerAction({ id: 'layout.prev', kind: 'layoutPrev', group: 'Layouts', color: '#2e3640', label: 'PAGE ←', full: 'Previous page', desc: 'Cycles back to the previous saved layout. The key shows which page you are on.' });
+    registerAction({ id: 'layout.home', kind: 'layoutHome', group: 'Layouts', color: '#2e3640', label: 'HOME', full: 'Home page', desc: 'Jumps straight to this deck\'s default layout, from any page.' });
     registerAction({ id: 'layoutRef', kind: 'layoutRef', group: 'Layouts', color: '#2e3640', label: 'PAGE', full: 'Jump to a layout (by name)', desc: 'Switches the whole deck to one specific saved layout.', lamp: function (s, slot) { return !!(slot && slot.ref && mapping().name === slot.ref); } });
     // OBS (obs-websocket). Lamps read live OBS state so keys glow when live.
     registerAction({ id: 'obs.stream', kind: 'obs', op: 'toggleStream', group: 'OBS', color: '#8a1f1f', label: 'STREAM', full: 'OBS: start / stop streaming', desc: 'Starts or stops the OBS stream. Glows while you are live. Toggle.', toggle: true, lamp: function () { return obsState().streaming; } });
@@ -212,7 +214,24 @@
       desc: 'A live OBS program monitor. Turn: the OBS stream audio volume (choose which input in the OBS row). Press: start or stop the OBS stream.',
       readout: function () { var st = obsState(); return st.connected ? pct(obsVolume()) : 'off'; },
       bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { return !!obsState().streaming; },
-      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS row above the deck).'); } },
+      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS Studio row below the deck).'); } },
+    // The prompter, live on the strip: the talent's current spot in the
+    // script, right where the operator's thumb is.
+    ptProgram: { label: 'Prompter view', hue: '#b06ef8', turnLabel: 'Faster / slower', pressLabel: 'Play / pause', ptFrame: true,
+      desc: 'The prompter script on the strip: the line the talent is on, updating as they scroll. Turn: scroll speed. Press: start or stop the scroll.',
+      readout: function (s) { return s.prompter && s.prompter.playing ? 'ROLL' : 'HOLD'; },
+      bar: function () { var p = prompterStripInfo(); return p ? Math.max(0, Math.min(1, (p.pct || 0) / 100)) : null; },
+      live: function (s) { return !!(s.prompter && s.prompter.playing); },
+      tick: function (d) { surfacePrompter(d > 0 ? 'speed_up' : 'speed_down'); }, press: function () { surfaceRun('prompter.playpause'); } },
+    // Outrangutan program on the strip: real video frames for clips (imported
+    // media is same-origin, so this stays taint-safe), a name-and-countdown
+    // card for audio cues.
+    ogProgram: { label: 'Playback view', hue: '#f97316', turnLabel: 'Playback volume', pressLabel: 'Pause / resume', ogFrame: true,
+      desc: 'A live monitor of what Outrangutan is playing: video frames for clips, name and countdown for audio. Turn: the playback master volume. Press: pause or resume.',
+      readout: function (s) { var po = s.playout || {}; return (po.status === 'play' || po.status === 'paused') && po.remaining != null ? fmtClock(po.remaining) : 'idle'; },
+      bar: function (s) { var po = s.playout || {}; return (po.status === 'play' || po.status === 'paused') && po.dur ? Math.max(0, Math.min(1, 1 - (po.remaining || 0) / po.dur)) : null; },
+      live: function (s) { return (s.playout || {}).status === 'play'; },
+      tick: function (d) { setMaster(masterGain() + d * 0.03); }, press: function () { surfaceRun('playout.pause'); } },
     // Micochondria on the strip: one zone, split in half. TKB on the left,
     // VofU on the right, each half lit while that mic is live. Tap = off-air panic.
     micoStatus: { label: 'Micochondria', hue: '#22d3a0', turnLabel: 'Nothing (status)', pressLabel: 'All talk off', micoSplit: true,
@@ -231,26 +250,30 @@
   // size, prompter speed, the three separate clock verbs) — one control, one
   // job. The dial-less XL keeps its speed keys. Blanks are deliberate air
   // between bands, not wasted keys.
+  // Micochondria is PARKED until its hardware exists (owner 2026-08-04): the
+  // talk keys left the defaults in favor of PAGE navigation. When a talkbackd
+  // daemon is detected the mic surfaces un-park by themselves and talk keys
+  // stay assignable by hand.
   var DEFAULT_LAYOUTS = {
-    6:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next', 'talk.a', 'clock'],
+    6:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next', 'layout.next', 'clock'],
     8:  ['km:playout.go', 'km:playout.stop', 'km:playout.panic', 'km:rundown.next',
-         'km:rundown.back', 'clock', 'talk.a', 'talk.b'],
-    // 5 × 3: row 1 Outrangutan, row 2 Cueola, row 3 Flowmingo + Micochondria.
+         'km:rundown.back', 'clock', 'layout.prev', 'layout.next'],
+    // 5 × 3: row 1 Outrangutan, row 2 Cueola, row 3 Flowmingo + pages.
     15: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:playout.panic', 'pad:1',
          'km:rundown.next', 'km:rundown.back', 'golive', 'clock', 'km:prompter.playpause',
-         'km:prompter.cue.current', 'km:prompter.top', 'talk.a', 'talk.b', 'talk.off'],
+         'km:prompter.cue.current', 'km:prompter.top', 'layout.prev', 'layout.next', 'fx.hype'],
     // 8 × 4 (XL, no dials): cols 1-3 Outrangutan, 4-5 Cueola + OBS, 6-7 Flowmingo
-    // (keeps SPD keys — nothing else covers speed here), col 8 Micochondria.
-    32: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'talk.a',
-         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'talk.b',
-         'pad:2', 'pad:3', 'pad:4', 'obs.stream', 'obs.record', 'km:prompter.brake', 'km:prompter.boost', 'talk.off',
+    // (keeps SPD keys — nothing else covers speed here), col 8 pages.
+    32: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'layout.prev',
+         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'layout.home',
+         'pad:2', 'pad:3', 'pad:4', 'obs.stream', 'obs.record', 'km:prompter.brake', 'km:prompter.boost', 'fx.hype',
          'cue:1', 'cue:2', 'cue:3', 'obs.scene:1', 'obs.scene:2', 'km:prompter.speed.down', 'km:prompter.speed.up', 'layout.next'],
     // 9 × 4 (+ XL): cols 1-3 Outrangutan, 4-5 Cueola, 6-7 Flowmingo,
-    // col 8 Micochondria, col 9 OBS + pages. Dials cover volume, speed, size,
+    // col 8 pages, col 9 OBS + next page. Dials cover volume, speed, size,
     // scrub, row, clock — so those keys are gone on purpose.
-    36: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'talk.a', 'obs.stream',
-         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'talk.b', 'obs.record',
-         'pad:2', 'pad:3', 'pad:4', 'none', 'none', 'km:prompter.brake', 'km:prompter.boost', 'talk.off', 'obs.scene:1',
+    36: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'layout.prev', 'obs.stream',
+         'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'layout.home', 'obs.record',
+         'pad:2', 'pad:3', 'pad:4', 'none', 'none', 'km:prompter.brake', 'km:prompter.boost', 'none', 'obs.scene:1',
          'cue:1', 'cue:2', 'cue:3', 'none', 'fx.hype', 'km:prompter.editscript', 'km:scrub.open', 'none', 'layout.next']
   };
   function defaultKeySlots(keys) {
@@ -297,6 +320,12 @@
   // what this daemon speaks so the Micochondria panel never shows dead controls.
   var talkbackState = { A: false, B: false, connected: false, gainA: 1, gainB: 1, hasGains: false, hasLevels: false, levels: { mic: 0, a: 0, b: 0 } };
   var talkbackHeld = { A: false, B: false };
+  // Micochondria is PARKED until its hardware exists (owner 2026-08-04): every
+  // mic surface hides until a talkbackd daemon is actually seen on this
+  // machine (then it un-parks itself, and stays un-parked on later visits).
+  var MICO_SEEN_KEY = 'cueola_mico_seen';
+  function micoEverSeen() { try { return localStorage.getItem(MICO_SEEN_KEY) === '1'; } catch (e) { return false; } }
+  function micoParked() { return !talkbackState.connected && !micoEverSeen(); }
 
   // ── Bridge accessors (defensive) ────────────────────────────────────────────
   function bridge() { return window.cueolaSurfaceBridge || null; }
@@ -305,6 +334,21 @@
   function surfaceRun(id) { var b = bridge(); try { b && b.runAction(id); } catch (e) {} }
   function surfacePrompter(a) { var b = bridge(); try { b && b.prompter(a); } catch (e) {} }
   function masterGain() { var b = bridge(); try { return (b && b.masterGain ? b.masterGain() : 0) || 0; } catch (e) { return 0; } }
+  function prompterStripInfo() { var b = bridge(); try { return (b && b.prompterStrip && b.prompterStrip()) || null; } catch (e) { return null; } }
+  // The Outrangutan program video for the strip monitor. SAME-ORIGIN ONLY:
+  // drawing a remote-URL video would permanently taint the strip canvas and
+  // kill every later hardware encode, so anything else returns null and the
+  // zone falls back to the name-and-countdown card.
+  function ogProgramVideo() {
+    try {
+      var og = window.Outrangutan;
+      var el = og && og._p5 && og._p5.frontVideoEl && og._p5.frontVideoEl();
+      if (!el || !el.videoWidth) return null;
+      var src = el.currentSrc || '';
+      if (/^blob:|^data:/.test(src) || src.indexOf(location.origin) === 0) return el;
+      return null;
+    } catch (e) { return null; }
+  }
   function setMaster(v) { var b = bridge(); try { b && b.setMasterGain && b.setMasterGain(Math.max(0, Math.min(1.2, v))); } catch (e) {} }
   function toggleMasterMute() { var g = masterGain(); if (g > 0.001) { muteMemory = g; setMaster(0); } else { setMaster(muteMemory != null ? muteMemory : 0.8); muteMemory = null; } }
   function jogTick(d) { jogAccum = Math.max(0, Math.min(1, jogAccum + d * 0.02)); surfacePrompter('seek_set_' + jogAccum.toFixed(2)); }
@@ -326,7 +370,9 @@
       case 'golive': if (phase === 'down') { var bb = bridge(); try { bb && bb.goLive && bb.goLive(); } catch (e) {} } break;
       case 'bus': if (phase === 'down') { var bs = bridge(); try { bs && bs.controlBus && bs.controlBus(a.target, a.action); } catch (e) {} } break;
       case 'clock': if (phase === 'down') { var bc = bridge(); try { if (bc && bc.showClock) bc.showClock(a.verb || 'toggle'); else if (bc && bc.showClockToggle) bc.showClockToggle(); } catch (e) {} } break;
-      case 'layoutNext': if (phase === 'down') cycleLayoutFor(fromDeck); break;
+      case 'layoutNext': if (phase === 'down') cycleLayoutFor(fromDeck, 1); break;
+      case 'layoutPrev': if (phase === 'down') cycleLayoutFor(fromDeck, -1); break;
+      case 'layoutHome': if (phase === 'down') homeLayoutFor(fromDeck); break;
       case 'layoutRef': if (phase === 'down' && slot.ref) switchLayoutByNameFor(fromDeck, slot.ref); break;
       case 'talkback': talkbackSet(a.bus, phase === 'down'); break;
       case 'talkbackPanic': if (phase === 'down') releaseTalkback(true); break;
@@ -362,7 +408,7 @@
   function obsVolume() { var st = obsState(), n = obsVolInputName(); var v = st.volumes ? st.volumes[n] : null; return v == null ? 1 : Math.max(0, Math.min(1, v)); }
   function obsVolTick(d) {
     var o = OBSc();
-    if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (the OBS row above the deck).'); return; }
+    if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (the OBS Studio row below the deck).'); return; }
     var n = obsVolInputName();
     if (!n) { toast('OBS has no audio inputs to ride.'); return; }
     try { o.setVolume(n, obsVolume() + d * 0.04); } catch (e) {}
@@ -371,7 +417,7 @@
   var obsWasReady = false;
   function onObsChange() {
     var now = !!(OBSc() && OBSc().isReady());
-    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); }
+    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
     else if (now) { updateObsScene(); updateLiveBadge(); schedulePaint(); }
   }
   function updateObsScene() { var el = document.querySelector('.sd-obs-scene'); if (el) el.textContent = obsState().currentScene || '(no scene)'; }
@@ -383,7 +429,7 @@
     var url = TALKBACK_URLS[tbUrlIndex % TALKBACK_URLS.length], ws;
     try { ws = new WebSocket(url); } catch (e) { scheduleTalkbackReconnect(); return; }
     tbSocket = ws;
-    ws.onopen = function () { talkbackState.connected = true; try { ws.send('state?'); } catch (e) {} renderStatus(); renderMico(); micoPopoutSync(); if (wizardStep >= 0) wizardRender(); };
+    ws.onopen = function () { var unparked = micoParked(); talkbackState.connected = true; try { localStorage.setItem(MICO_SEEN_KEY, '1'); } catch (e) {} try { ws.send('state?'); } catch (e) {} if (unparked) { render(); toast('Micochondria daemon found. Mic controls are live.'); } renderStatus(); renderMico(); micoPopoutSync(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); };
     ws.onmessage = function (evt) {
       var m; try { m = JSON.parse(evt.data); } catch (e) { return; }
       if (m && m.type === 'state') {
@@ -403,7 +449,9 @@
     ws.onclose = function () { talkbackState.connected = false; talkbackState.A = false; talkbackState.B = false; talkbackState.hasGains = false; talkbackState.hasLevels = false; talkbackState.levels = { mic: 0, a: 0, b: 0 }; talkbackHeld.A = false; talkbackHeld.B = false; tbUrlIndex++; scheduleTalkbackReconnect(); schedulePaint(); renderStatus(); renderMico(); micoPopoutSync(); if (wizardStep >= 0) wizardRender(); };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
   }
-  function scheduleTalkbackReconnect() { clearTimeout(tbReconnect); tbReconnect = setTimeout(talkbackConnect, 2000); }
+  // While parked (no daemon ever seen) probe quietly once a minute instead of
+  // hammering every 2s: the auto-unpark stays alive without console spam.
+  function scheduleTalkbackReconnect() { clearTimeout(tbReconnect); tbReconnect = setTimeout(talkbackConnect, micoParked() ? 60000 : 2000); }
   function talkbackSend(cmd) { if (tbSocket && tbSocket.readyState === 1) { try { tbSocket.send(cmd); return true; } catch (e) {} } return false; }
   function talkbackSet(bus, on) { talkbackHeld[bus] = on; if (!talkbackSend(bus + (on ? ' on' : ' off')) && on) toast('Talkback daemon not running (start talkbackd).'); }
   function releaseTalkback(force) { ['A', 'B'].forEach(function (bus) { if (talkbackHeld[bus] || (force && talkbackState[bus])) { talkbackHeld[bus] = false; talkbackSend(bus + ' off'); } }); }
@@ -753,7 +801,14 @@
   function slotLabel(slot, s) {
     if (slot.label != null && slot.label !== '') return slot.label;
     var a = slotAction(slot);
-    if ((a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef') && slot.refName) return slot.refName;
+    // Page keys read out where you are ("PAGE → 2/3"). Reads the ACTIVE deck's
+    // pages; on a secondary deck the count can differ, a known approximation.
+    if (a.kind === 'layoutNext' || a.kind === 'layoutPrev') {
+      var pids = Object.keys(profiles), pat = pids.indexOf(activeProfileId);
+      if (pids.length > 1 && pat >= 0) return a.label + '\n' + (pat + 1) + '/' + pids.length;
+      return a.label;
+    }
+    if ((a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef' || a.kind === 'layoutRef') && slot.refName) return slot.refName;
     if (a.kind === 'pad' || a.kind === 'cue') {
       var map = (a.kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {};
       var id = Object.keys(map)[a.slot - 1];
@@ -771,7 +826,7 @@
   var THEME_KEY = 'cueola_streamdeck_theme';
   var deckTheme = 'broadcast';
   function loadTheme() { try { deckTheme = localStorage.getItem(THEME_KEY) || 'broadcast'; } catch (e) {} if (!DECK_THEMES[deckTheme]) deckTheme = 'broadcast'; }
-  function setTheme(id) { if (!DECK_THEMES[id]) return; deckTheme = id; try { localStorage.setItem(THEME_KEY, id); } catch (e) {} render(); paintMirror(); paintAll(); }
+  function setTheme(id) { if (!DECK_THEMES[id]) return; deckTheme = id; try { localStorage.setItem(THEME_KEY, id); } catch (e) {} render(); paintMirror(); paintAll(); if (settingsOpen) renderDeckSettings(); }
   function theme() { return DECK_THEMES[deckTheme] || DECK_THEMES.broadcast; }
 
   function hx(c) { c = String(c || '#000').replace('#', ''); if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]; return [parseInt(c.slice(0, 2), 16) || 0, parseInt(c.slice(2, 4), 16) || 0, parseInt(c.slice(4, 6), 16) || 0]; }
@@ -935,7 +990,8 @@
       case 'pad': case 'padRef': return 'sfx';
       case 'cue': case 'cueRef': return 'cue';
       case 'golive': return 'record';
-      case 'layoutNext': case 'layoutRef': return 'pages';
+      case 'layoutNext': case 'layoutPrev': case 'layoutRef': return 'pages';
+      case 'layoutHome': return 'top';
       case 'fx': return 'star';
     }
     return null;
@@ -1518,8 +1574,23 @@
         hue: (c && c.hue) || '#5b8df8',
         bar: c && c.bar ? (c.bar(s) == null ? null : Math.max(0, Math.min(1, c.bar(s) || 0))) : null,
         live: !!(c && c.live && c.live(s)),
-        obsFrame: !!(c && c.obsFrame)
+        obsFrame: !!(c && c.obsFrame),
+        ptFrame: !!(c && c.ptFrame),
+        ogFrame: !!(c && c.ogFrame)
       };
+      // Live-content zones fold their motion into the paint signature, so the
+      // 5Hz tick repaints exactly when the content moved: the prompter as the
+      // talent scrolls (quarter-percent steps), video at ~4fps.
+      if (cell.ptFrame) {
+        var pi = prompterStripInfo();
+        if (pi) { cell.pp = Math.round((pi.pct || 0) * 4); cell.ptLen = (pi.text || '').length; }
+      }
+      if (cell.ogFrame) {
+        var ov = ogProgramVideo();
+        cell.vt = ov ? Math.round(ov.currentTime * 4) : -1;
+        cell.ogName = String((s.playout || {}).cueName || '').slice(0, 60);
+        cell.ogStatus = (s.playout || {}).status || 'idle';
+      }
       if (c && c.micoSplit) {
         // Quantized levels keep the paint signature calm: at most ~5 strip
         // repaints a second while audio is actually moving.
@@ -1670,6 +1741,8 @@
         }
         return;
       }
+      if (cell.ptFrame) { drawStripPrompter(ctx, cell, x0, zw, ch); return; }
+      if (cell.ogFrame) { drawStripOgProgram(ctx, cell, x0, zw, ch); return; }
       if (cell.micoSplit) {
         // One block, split in half: TKB left, VofU right. A half lights green
         // while its mic is live; small meter under each when the daemon speaks
@@ -1717,6 +1790,96 @@
       }
       if (cell.tap) { ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('tap: ' + cell.tap, x, ch - 8); }
     });
+  }
+  // Prompter zone: the talent's current spot in the script, one bright line
+  // and the next line dimmed, with a position bar. Position maps pct into the
+  // text by character, the same approximation the scrub dial uses.
+  function drawStripPrompter(ctx, cell, x0, zw, ch) {
+    ctx.fillStyle = 'rgba(176,110,248,0.08)'; ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
+    ctx.fillStyle = cell.hue; ctx.fillRect(x0 + 10, 4, zw - 20, 3);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#98a2b8'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('PROMPTER', x0 + 10, 20);
+    ctx.textAlign = 'right'; ctx.fillStyle = cell.live ? '#22d3a0' : '#6b7690'; ctx.font = '700 12px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText(cell.live ? '● ROLL' : 'HOLD', x0 + zw - 10, 20);
+    var info = prompterStripInfo();
+    var text = (info && info.text) ? info.text.replace(/\s+/g, ' ').trim() : '';
+    ctx.textAlign = 'left';
+    if (!text) {
+      ctx.fillStyle = '#6b7690'; ctx.font = '600 15px -apple-system, "Segoe UI", sans-serif';
+      ctx.fillText('No script loaded', x0 + 10, ch / 2 + 10);
+    } else {
+      var idx = Math.round(Math.max(0, Math.min(100, info.pct || 0)) / 100 * text.length);
+      // Start at a word boundary so the line never opens mid-word.
+      while (idx > 0 && text[idx - 1] !== ' ') idx--;
+      var fit = function (str, font, maxW) {
+        ctx.font = font;
+        var n = str.length;
+        while (n > 0 && ctx.measureText(str.slice(0, n)).width > maxW) n = Math.floor(n * 0.9);
+        if (n < str.length) { while (n > 0 && str[n] !== ' ') n--; }
+        return n > 0 ? n : Math.min(str.length, 1);
+      };
+      var maxW = zw - 20, rest = text.slice(idx) || text.slice(-80);
+      var f1 = '700 26px -apple-system, "Segoe UI", sans-serif';
+      var n1 = fit(rest, f1, maxW);
+      ctx.fillStyle = '#ffffff'; ctx.font = f1;
+      ctx.fillText(rest.slice(0, n1).trim(), x0 + 10, ch / 2 + 4);
+      var rest2 = rest.slice(n1).trim();
+      if (rest2) {
+        var f2 = '600 17px -apple-system, "Segoe UI", sans-serif';
+        var n2 = fit(rest2, f2, maxW);
+        ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = f2;
+        ctx.fillText(rest2.slice(0, n2).trim(), x0 + 10, ch / 2 + 26);
+      }
+    }
+    if (cell.bar != null) {
+      var bw = zw - 20, bx = x0 + 10, by = ch - 8;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx, by, bw, 4);
+      ctx.fillStyle = cell.hue; ctx.fillRect(bx, by, Math.round(bw * cell.bar), 4);
+    }
+  }
+  // Outrangutan program zone: real frames for a (same-origin) video clip, a
+  // name-and-countdown card for audio, a quiet plate when idle.
+  function drawStripOgProgram(ctx, cell, x0, zw, ch) {
+    var el = ogProgramVideo();
+    if (el) {
+      var iw = el.videoWidth, ih = el.videoHeight, zr = (zw - 4) / (ch - 4), ir = iw / ih, sw, sh, sx, sy;
+      if (ir > zr) { sh = ih; sw = ih * zr; sx = (iw - sw) / 2; sy = 0; } else { sw = iw; sh = iw / zr; sx = 0; sy = (ih - sh) / 2; }
+      try { ctx.drawImage(el, sx, sy, sw, sh, x0 + 2, 2, zw - 4, ch - 4); } catch (e) {}
+    } else {
+      ctx.fillStyle = 'rgba(249,115,22,0.08)'; ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
+      if (cell.ogStatus === 'play' || cell.ogStatus === 'paused') {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff'; ctx.font = '700 34px ui-monospace, "SF Mono", Menlo, monospace';
+        ctx.fillText(cell.value, x0 + zw / 2, ch / 2 + 10);
+      } else {
+        ctx.textAlign = 'center'; ctx.fillStyle = '#6b7690'; ctx.font = '600 14px -apple-system, "Segoe UI", sans-serif';
+        ctx.fillText('Playback idle', x0 + zw / 2, ch / 2 + 5);
+      }
+    }
+    ctx.textAlign = 'left';
+    ctx.fillStyle = el ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)';
+    if (el) ctx.fillRect(x0 + 2, 2, zw - 4, 22);
+    ctx.fillStyle = '#f5c89e'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('PLAYBACK', x0 + 10, 18);
+    if (cell.ogName && (cell.ogStatus === 'play' || cell.ogStatus === 'paused')) {
+      ctx.fillStyle = '#ffffff'; ctx.font = '600 13px -apple-system, "Segoe UI", sans-serif';
+      var name = cell.ogName, maxW = zw - 96;
+      while (name.length > 1 && ctx.measureText(name).width > maxW) name = name.slice(0, -2);
+      ctx.fillText(name === cell.ogName ? name : name + '…', x0 + 82, 18);
+    }
+    if (cell.live) { ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2; ctx.strokeRect(x0 + 3, 3, zw - 6, ch - 6); }
+    if (el && cell.value) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ffffff'; ctx.font = '700 15px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillText(cell.value, x0 + zw - 10, ch - 10);
+    }
+    if (cell.bar != null) {
+      var bw = zw - 20, bx = x0 + 10, by = ch - 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 7);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(bx, by, bw, 3);
+      ctx.fillStyle = '#f97316'; ctx.fillRect(bx, by, Math.round(bw * cell.bar), 3);
+    }
   }
   // Encode the strip's content for the wire. Content is always drawn in the
   // strip's logical space (w×h, zones left to right). On the + XL the panel
@@ -1903,17 +2066,28 @@
     persist(true);   // shape-fitting on connect is not a user edit
   }
   function switchProfile(id) { if (!profiles[id]) return; activeProfileId = id; persist(true); render(); paintAll(); }
-  // Page keys: hop between saved layouts straight from the deck.
-  function cycleLayout() { var ids = Object.keys(profiles); if (ids.length < 2) { toast('Only one layout saved. Add more to page between them.'); return; } var next = ids[(ids.indexOf(activeProfileId) + 1) % ids.length]; switchProfile(next); toast('Layout: ' + profiles[next].name); }
-  function switchLayoutByName(name) { var id = Object.keys(profiles).find(function (k) { return profiles[k].name === name; }); if (id) { switchProfile(id); toast('Layout: ' + name); } else toast('No layout named "' + name + '".'); }
+  // Page keys: hop between saved layouts straight from the deck, both ways.
+  function cycleLayout(dir) { var ids = Object.keys(profiles); if (ids.length < 2) { toast('Only one page saved. Add more layouts to page between them.'); return; } var next = ids[(ids.indexOf(activeProfileId) + (dir || 1) + ids.length) % ids.length]; switchProfile(next); toast('Page: ' + profiles[next].name); }
+  function switchLayoutByName(name) { var id = Object.keys(profiles).find(function (k) { return profiles[k].name === name; }); if (id) { switchProfile(id); toast('Page: ' + name); } else toast('No layout named "' + name + '".'); }
   // Deck-aware layout paging: a PAGE key on a secondary deck pages THAT deck.
-  function cycleLayoutFor(deck) {
-    if (!deck || deck === device) { cycleLayout(); return; }
+  function cycleLayoutFor(deck, dir) {
+    if (!deck || deck === device) { cycleLayout(dir); return; }
     var c = deck.cfg || {}, ids = Object.keys(c.profiles || {});
-    if (ids.length < 2) { toast('Only one layout saved on that deck.'); return; }
-    c.activeProfileId = ids[(ids.indexOf(c.activeProfileId) + 1) % ids.length];
+    if (ids.length < 2) { toast('Only one page saved on that deck.'); return; }
+    c.activeProfileId = ids[(ids.indexOf(c.activeProfileId) + (dir || 1) + ids.length) % ids.length];
     persistDeck(deck); repaintDeck(deck);
-    toast('Layout: ' + c.profiles[c.activeProfileId].name);
+    toast('Page: ' + c.profiles[c.activeProfileId].name);
+  }
+  // HOME: straight back to the deck's default layout from any page.
+  function homeLayoutFor(deck) {
+    if (!deck || deck === device) {
+      if (!profiles[defaultProfileId]) { toast('No default layout set. Use Set default in the layout bar.'); return; }
+      if (activeProfileId !== defaultProfileId) { switchProfile(defaultProfileId); toast('Page: ' + profiles[defaultProfileId].name); }
+      return;
+    }
+    var c = deck.cfg || {};
+    if (!c.profiles || !c.profiles[c.defaultProfileId]) { toast('No default layout set on that deck.'); return; }
+    if (c.activeProfileId !== c.defaultProfileId) { c.activeProfileId = c.defaultProfileId; persistDeck(deck); repaintDeck(deck); toast('Page: ' + c.profiles[c.defaultProfileId].name); }
   }
   function switchLayoutByNameFor(deck, name) {
     if (!deck || deck === device) { switchLayoutByName(name); return; }
@@ -1967,37 +2141,47 @@
   // bar then offers to make the layout durable: on the signed-in profile (it
   // follows the user to any machine) or as a standalone .keywi download.
   var layoutDirty = false;
-  function markDirty() { if (layoutDirty) return; layoutDirty = true; updateDoneBar(); }
-  function clearDirty() { if (!layoutDirty) return; layoutDirty = false; updateDoneBar(); }
-  function updateDoneBar() {
-    var bar = document.getElementById('sd-done-bar');
-    if (bar) bar.classList.toggle('on', layoutDirty);
+  // The Save button sits in the toolbar and lights up while edits are
+  // unsaved; nothing pops up per edit (owner decision 2026-08-04, the
+  // per-edit Done bar got annoying). Leaving the page with unsaved changes
+  // asks once on the way out.
+  function markDirty() { if (layoutDirty) return; layoutDirty = true; updateSaveBtn(); }
+  function clearDirty() { if (!layoutDirty) return; layoutDirty = false; updateSaveBtn(); }
+  function updateSaveBtn() {
+    var btn = document.getElementById('sd-save');
+    if (btn) { btn.classList.toggle('sd-save-dirty', layoutDirty); btn.textContent = layoutDirty ? 'Save layout' : 'Saved'; }
   }
-  function doneBar() {
-    return '<div class="sd-done-bar' + (layoutDirty ? ' on' : '') + '" id="sd-done-bar"><span>Layout changed</span><button class="btn-primary" id="sd-done">Done</button></div>';
+  function saveBtnHTML() {
+    if (!device && !previewMode) return '';
+    return '<button class="btn-secondary' + (layoutDirty ? ' sd-save-dirty' : '') + '" id="sd-save" data-tip="Save this layout to your profile or a .keywi file">' + (layoutDirty ? 'Save layout' : 'Saved') + '</button>';
   }
-  function openSaveSheet() {
+  var _leaveAfterSave = false;
+  function openSaveSheet(leaving) {
+    _leaveAfterSave = leaving === true;
     var idmod = window.CueolaIdentity, signedIn = false;
     try { signedIn = !!(idmod && idmod.identity && idmod.identity()); } catch (e) {}
     var p = mapping();
-    var body = '<div class="sd-ed-head">Save this layout?</div>'
+    var body = '<div class="sd-ed-head">' + (_leaveAfterSave ? 'Save before you leave?' : 'Save this layout?') + '</div>'
       + '<div class="sd-ed-desc">"' + esc(p.name) + '" is already saved on this device. Saving to your profile carries it to any machine you sign in on; a .keywi file is a standalone copy you can share or import anywhere.</div>'
       + '<div class="sd-save-actions">'
-      + '<button class="btn-secondary" id="sd-save-local">Keep on this device</button>'
+      + '<button class="btn-secondary" id="sd-save-local">' + (_leaveAfterSave ? 'Just leave, keep on this device' : 'Keep on this device') + '</button>'
       + '<button class="btn-secondary" id="sd-save-file">Download .keywi</button>'
       + (signedIn ? '<button class="btn-primary" id="sd-save-cloud">Save to my profile</button>'
                   : '<span class="sd-note">Sign in on the front page to save layouts to your profile.</span>')
       + '</div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
+    // Click-out or Esc means "stay": nothing is lost, nothing leaves.
+    // Handlers capture the leaving flag at click time, BEFORE closeOverlay
+    // resets it.
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
-    bind('sd-save-local', function () { clearDirty(); closeOverlay(); toast('Kept on this device.'); });
-    bind('sd-save-file', function () { exportActive(); clearDirty(); closeOverlay(); });
-    bind('sd-save-cloud', function () { saveLayoutToProfile(); });
+    bind('sd-save-local', function () { var leave = _leaveAfterSave; clearDirty(); closeOverlay(); toast('Kept on this device.'); if (leave) hideScreen(); });
+    bind('sd-save-file', function () { var leave = _leaveAfterSave; exportActive(); clearDirty(); closeOverlay(); if (leave) hideScreen(); });
+    bind('sd-save-cloud', function () { saveLayoutToProfile(_leaveAfterSave); });
   }
   // Cloud copy: profiles/{username}.keywiLayouts[key]. Needs the staged rules
   // round that allowlists keywiLayouts on profile docs; until the owner deploys
   // it the write fails and the sheet falls back to suggesting a .keywi file.
-  function saveLayoutToProfile() {
+  function saveLayoutToProfile(leaveAfter) {
     var idmod = window.CueolaIdentity;
     var id = null; try { id = idmod && idmod.identity && idmod.identity(); } catch (e) {}
     if (!id || !id.username) { toast('Sign in on the front page first.'); return; }
@@ -2010,7 +2194,7 @@
     var key = 'k_' + slug(p.name).replace(/[^a-z0-9]/g, '_');
     var patch = {}; patch['keywiLayouts.' + key] = layout;
     window._updateDoc(window._doc(window._db, 'profiles', id.username), patch)
-      .then(function () { clearDirty(); closeOverlay(); toast('Layout saved to @' + id.username + '.'); })
+      .then(function () { clearDirty(); closeOverlay(); toast('Layout saved to @' + id.username + '.'); if (leaveAfter) hideScreen(); })
       .catch(function () { toast('Profile save failed (the updated rules may not be deployed yet). Download a .keywi file instead.'); });
   }
 
@@ -2029,7 +2213,7 @@
     var r = root(); if (!r) return;
     if (!navigator.hid) { r.innerHTML = '<div class="sd-empty">KeyWi Bird needs Chrome or Edge (WebHID). Open Cueola there to connect a Stream Deck.</div>'; return; }
     var showGrid = device || previewMode;
-    r.innerHTML = statusBar() + (showGrid ? deckTabs() + profileBar() + obsBar() + micoBar() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) + diagPanel() + doneBar() : connectHelp() + micoBar() + diagPanel());
+    r.innerHTML = statusBar() + (showGrid ? deckTabs() + toolsRow() + surfaceGrid() + (device ? learnPanel() : previewBanner()) + diagPanel() : connectHelp() + diagPanel());
     wire(); renderStatus(); updateLiveBadge();
     if (showGrid) { paintMirror(); paintStrip(true); }
   }
@@ -2040,14 +2224,16 @@
     var s = surfaceState();
     return '<div class="sd-status">'
       + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : 'Not connected'), device ? 'ok' : 'off')
-      + statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off', 'sd-chip-mico')
+      + (micoParked() ? '' : statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off', 'sd-chip-mico'))
       + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
+      + saveBtnHTML()
+      + ((device || previewMode) ? '<button class="btn-secondary sd-icon-btn" id="sd-settings" data-tip="Deck settings: theme, OBS' + (micoParked() ? '' : ', Micochondria') + '" aria-label="Deck settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>' : '')
       + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : '<button class="btn-primary" id="sd-connect">Connect deck</button>')
       + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
-      // The off-air panic (kills both mics) only makes sense once a deck/preview
-      // is up or the talkback daemon is live — hide it on the cold setup page.
-      + ((talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" data-tip="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
+      // The off-air panic (kills both mics) only makes sense once the talkback
+      // daemon exists at all — hidden entirely while Micochondria is parked.
+      + (!micoParked() && (talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" data-tip="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
       + '</div></div>';
   }
   function statusChip(label, value, cls, id) { return '<div' + (id ? ' id="' + id + '"' : '') + ' class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
@@ -2055,13 +2241,14 @@
   // the three doors (connect, preview, wizard) plus honest readiness dots.
   function connectHelp() {
     var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
+    var apps = micoParked() ? 'playback, rundown, prompter, OBS' : 'playback, rundown, prompter, mics, OBS';
     return '<div class="sd-hero">'
       + '<h3>Any Stream Deck. The whole rig.</h3>'
-      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: playback, rundown, prompter, mics, OBS. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it hogs the USB device.</p>'
+      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: ' + apps + ', with saved layouts as pages. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it hogs the USB device.</p>'
       + '<div class="sd-hero-actions"><button class="btn-primary" id="sd-connect2">Connect deck</button><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button><button class="btn-secondary" id="sd-diag">Diagnostics</button></div>'
       + '<div class="sd-hero-checks">'
       + '<span class="sd-ready">Deck</span>'
-      + '<span class="sd-ready' + (tbOn ? ' on' : '') + '">Micochondria</span>'
+      + (micoParked() ? '' : '<span class="sd-ready' + (tbOn ? ' on' : '') + '">Micochondria</span>')
       + '<span class="sd-ready' + (obsOn ? ' on' : '') + '">OBS</span>'
       + '</div></div>';
   }
@@ -2074,38 +2261,70 @@
     }).join('');
     return '<div class="sd-deck-tabs"><label class="sd-pf-lbl">Decks</label>' + chips + '<button class="sd-mini" id="sd-add-deck" data-tip="Connect another Stream Deck to this computer">Add deck</button></div>';
   }
-  function profileBar() {
-    var opts = Object.keys(profiles).map(function (id) { return '<option value="' + id + '"' + (id === activeProfileId ? ' selected' : '') + '>' + esc(profiles[id].name) + (id === defaultProfileId ? ' (default)' : '') + '</option>'; }).join('');
-    return '<div class="sd-profiles">'
-      + '<label class="sd-pf-lbl">Layout</label><select id="sd-profile">' + opts + '</select>'
-      + '<button class="sd-mini" id="sd-pf-new" data-tip="New layout">New</button>'
-      + '<button class="sd-mini" id="sd-pf-dup" data-tip="Duplicate">Duplicate</button>'
-      + '<button class="sd-mini" id="sd-pf-ren" data-tip="Rename">Rename</button>'
-      + '<button class="sd-mini" id="sd-pf-def" data-tip="Use as default on connect">Set default</button>'
-      + '<button class="sd-mini danger" id="sd-pf-del" data-tip="Delete layout">Delete</button>'
+  // Pages as bank-style tabs (owner 2026-08-04, mirroring Outrangutan's SFX
+  // banks: easier than the old dropdown): click to switch, double-click or
+  // the pencil to rename inline, x to delete, an accent dot marks HOME, and
+  // + adds a page. Export/Import moved into Deck settings.
+  var pageRenaming = null;
+  function pagesBar() {
+    var ids = Object.keys(profiles);
+    var tabs = ids.map(function (id) {
+      var on = id === activeProfileId, editing = pageRenaming === id;
+      var label = editing
+        ? '<input class="sd-page-rename" id="sd-page-rename" type="text" value="' + esc(profiles[id].name) + '" maxlength="40" spellcheck="false" aria-label="Page name">'
+        : '<span class="sd-page-name">' + esc(profiles[id].name) + '</span>';
+      return '<button class="sd-page-tab' + (on ? ' on' : '') + (editing ? ' editing' : '') + '" data-page="' + id + '" data-tip="' + (on ? 'Double-click to rename this page' : 'Switch to this page') + '">'
+        + (id === defaultProfileId ? '<span class="sd-page-homedot" data-tip="Home page (the one the deck starts on)"></span>' : '')
+        + label
+        + (on && !editing ? '<span class="sd-page-edit" data-edit="' + id + '" data-tip="Rename page" role="button" aria-label="Rename page"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span></span>' : '')
+        + (on && ids.length > 1 && !editing ? '<span class="sd-page-x" data-del="' + id + '" data-tip="Delete page" role="button" aria-label="Delete page"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></span>' : '')
+        + '</button>';
+    }).join('');
+    return '<div class="sd-pages"><label class="sd-pf-lbl">Pages</label>' + tabs
+      + '<button class="sd-mini sd-page-add" id="sd-pf-new" data-tip="Add a page (starter layout)" aria-label="Add a page"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span></button>'
       + '<span class="sd-pf-sp"></span>'
-      + '<button class="sd-mini" id="sd-pf-exp" data-tip="Export to a file">Export</button>'
-      + '<button class="sd-mini" id="sd-pf-imp" data-tip="Import from a file">Import</button>'
-      + '<input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden></div>';
+      + '<button class="sd-mini" id="sd-pf-dup" data-tip="Duplicate this page">Duplicate</button>'
+      + '<button class="sd-mini" id="sd-pf-home" data-tip="Make this page HOME: the one the deck starts on and the HOME key jumps to">Set home</button>'
+      + '</div>';
+  }
+  function startPageRename(id) { pageRenaming = id; render(); }
+  function commitPageRename(value) {
+    if (pageRenaming == null) return;   // blur after Enter must not double-fire
+    var id = pageRenaming; pageRenaming = null;
+    var name = String(value || '').trim();
+    if (name && profiles[id] && name !== profiles[id].name) { profiles[id].name = uniqueName(name); persist(); }
+    render();
+  }
+  function deletePage(id) {
+    if (!profiles[id]) return;
+    if (!window.confirm('Delete the page "' + profiles[id].name + '"? Its key layout goes with it.')) return;
+    deleteActive();
+    toast('Page deleted.');
   }
   function toolsRow() {
-    var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
+    // Configuration (theme, OBS, mics) lives in Deck settings; this row keeps
+    // only the working controls for the deck in front of you.
     return '<div class="sd-bright-row">'
-      + '<label>Theme</label><div class="sd-theme-chips">' + chips + '</div>'
       + '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>'
       + (device ? '<label>Brightness</label><input type="range" id="sd-bright" min="0" max="100" value="' + brightness + '"><span id="sd-bright-val">' + brightness + '%</span>' : '')
       + (device ? '<button class="btn-secondary" id="sd-test">Test pattern</button>' : '')
       + '<button class="btn-secondary" id="sd-reset">Reset this layout</button>'
       + '<button class="btn-secondary" id="sd-wizard-btn">Setup wizard</button></div>';
   }
-  function obsBar() {
+  // OBS lives in the Deck settings sheet (owner 2026-08-04: configuration
+  // gets the settings-menu treatment; the page keeps working controls only).
+  // A status line leads the section; the controls follow.
+  function obsSection() {
     var o = OBSc(), ready = !!(o && o.isReady && o.isReady()), cfg = (o && o.config && o.config()) || { url: 'ws://localhost:4455', password: '' }, st = obsState(), err = (o && o.lastError && o.lastError()) || '';
-    return '<div class="sd-obs">'
-      + '<span class="sd-obs-dot' + (ready ? ' on' : '') + '"></span><span class="sd-obs-lbl">OBS</span>'
+    var status = '<div class="sd-set-status"><span class="sd-obs-dot' + (ready ? ' on' : '') + '"></span>'
       + (ready
         ? '<span class="sd-obs-scene" data-tip="Current program scene">' + esc(st.currentScene || '(no scene)') + '</span>'
           + (st.streaming ? '<span class="sd-obs-tag live">LIVE</span>' : '') + (st.recording ? '<span class="sd-obs-tag rec">REC</span>' : '')
-          + ((st.inputs || []).length
+        : '<span class="sd-obs-off">Not connected. For stream, record, and scene keys, plus the program monitor on the strip.</span>')
+      + '</div>';
+    return status + '<div class="sd-obs">'
+      + (ready
+        ? ((st.inputs || []).length
             ? '<label class="sd-obs-vol-lbl" for="sd-obs-vol" data-tip="The OBS audio input the stream-volume dial rides">Stream audio</label><select id="sd-obs-vol">'
               + st.inputs.map(function (n) { return '<option value="' + esc(n) + '"' + (n === obsVolInputName() ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'
             : '')
@@ -2114,11 +2333,40 @@
           + (err ? '<span class="sd-obs-err">' + esc(err) + '</span>' : ''))
       + '</div>';
   }
+  // ── Deck settings sheet: theme, OBS, Micochondria (when un-parked) ─────────
+  var settingsOpen = false;
+  function openDeckSettings() { settingsOpen = true; renderDeckSettings(); }
+  function renderDeckSettings() {
+    if (!settingsOpen) return;
+    var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-set-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
+    var body = '<div class="sd-ed-head">Deck settings</div>'
+      + '<div class="sd-set-sec">Theme</div><div class="sd-theme-chips">' + chips + '</div>'
+      + '<div class="sd-set-sec">OBS Studio</div>' + obsSection()
+      + (micoParked() ? '' : '<div class="sd-set-sec">Micochondria</div>' + micoBar())
+      + '<div class="sd-set-sec">Layout files</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">A .keywi file is a standalone copy of the current page: back it up, share it, or move it to another machine.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini" id="sd-pf-exp">Export this page (.keywi)</button><button class="sd-mini" id="sd-pf-imp">Import a .keywi file</button><input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden></div>'
+      + '<div class="sd-save-actions"><button class="btn-primary" id="sd-set-done">Done</button></div>';
+    var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
+    o.onclick = function (e) { if (e.target === o) closeOverlay(); };
+    bind('sd-set-done', closeOverlay);
+    o.querySelectorAll('[data-set-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-set-theme')); }; });
+    bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
+    bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
+    var ov2 = document.getElementById('sd-obs-vol'); if (ov2) ov2.onchange = function () { setObsVolInput(ov2.value); toast('Stream-volume dial now rides "' + ov2.value + '".'); };
+    bind('sd-pf-exp', exportActive);
+    bind('sd-pf-imp', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
+    var file2 = document.getElementById('sd-pf-file'); if (file2) file2.onchange = function () { if (file2.files && file2.files[0]) importFile(file2.files[0]); file2.value = ''; };
+    if (!micoParked()) wireMico();
+  }
   function surfaceGrid() {
     var s = surfaceState();
     // The deck sits in a hardware-style shell: keys, then the live touch strip
     // (the SAME pixels the hardware shows), inside one dark housing. WYSIWYG.
     var html = '<div class="sd-sect-t">Deck <span class="sd-sect-hint">click a key to change what it does and how it looks · drag one key onto another to swap them</span></div>';
+    // Pages live INSIDE the Deck section (owner 2026-08-04): the tabs sit
+    // between the section title and the hardware shell they switch.
+    html += pagesBar();
     html += '<div class="sd-shell">';
     html += '<div class="sd-keys" style="grid-template-columns:repeat(' + profile.cols + ',1fr)">';
     // Mirror canvases render at device-pixel density so the on-screen keys stay
@@ -2361,14 +2609,14 @@
 
   // ── Key editor (action + cues-by-name + label + colour + icon) ─────────────
   function overlay() { return document.getElementById('sd-picker'); }
-  function closeOverlay() { var o = overlay(); if (o) o.className = 'sd-picker'; if (editingKey >= 0) { editingKey = -1; schedulePaint(); render(); } }
+  function closeOverlay() { _leaveAfterSave = false; settingsOpen = false; var o = overlay(); if (o) o.className = 'sd-picker'; if (editingKey >= 0) { editingKey = -1; schedulePaint(); render(); } }
   function openKeyEditor(index, fromLearn) {
     learnArmed = false; editingKey = index; schedulePaint();
     var slot = slotAt(index), s = surfaceState();
     var groups = {};
     // Ref kinds are bound from the live "This show" / "This OBS" sections below,
     // so their generic entries would be dead weight here.
-    Object.keys(catalog).forEach(function (id) { var a = catalog[id]; if (a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef') return; (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.full || a.label || id }); });
+    Object.keys(catalog).forEach(function (id) { var a = catalog[id]; if (a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef' || a.kind === 'layoutRef') return; if (micoParked() && a.group === 'Micochondria') return; (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.full || a.label || id }); });
     // App-by-app order, sub-groups right under their app.
     var GROUP_ORDER = ['Outrangutan', 'Outrangutan · SFX pads', 'Outrangutan · cues', 'Cueola', 'Cueola · show clock', 'Flowmingo', 'Micochondria', 'OBS', 'OBS scenes (by slot)', 'Layouts', 'Fun', 'Blank'];
     var orderedGroups = GROUP_ORDER.filter(function (g) { return groups[g]; })
@@ -2379,6 +2627,17 @@
     if (curAction.desc) body += '<div class="sd-ed-desc">' + esc(curAction.desc) + '</div>';
     body += '<div class="sd-ed-cols"><div class="sd-ed-actions"><div class="sd-ed-sub">Action</div>';
     orderedGroups.forEach(function (g) { body += '<div class="sd-picker-g">' + esc(g) + '</div>'; groups[g].forEach(function (o) { body += '<button class="sd-picker-opt' + (o.id === slot.a && !slot.ref ? ' cur' : '') + '" data-pick="' + esc(o.id) + '">' + esc(o.label || '(blank)') + '</button>'; }); });
+    // This deck's pages: every saved layout as a one-click jump key. Rides the
+    // same generic ref binding as cues and scenes; the key wears the page's
+    // name and lights while that page is active.
+    var pageIds = Object.keys(profiles);
+    if (pageIds.length > 1) {
+      body += '<div class="sd-picker-g">This deck’s pages</div>';
+      pageIds.forEach(function (pid, pi2) {
+        var pname = profiles[pid].name;
+        body += '<button class="sd-picker-opt' + (slot.a === 'layoutRef' && slot.ref === pname ? ' cur' : '') + '" data-ref="layoutRef" data-refid="' + esc(pname) + '" data-refname="' + esc(pname) + '">PAGE ' + (pi2 + 1) + ' · ' + esc(pname) + (pid === defaultProfileId ? ' (home)' : '') + '</button>';
+      });
+    }
     // This show: live cues + pads bound by name.
     var pads = (s.playout && s.playout.pads) || {}, cues = (s.playout && s.playout.cues) || {};
     if (Object.keys(pads).length || Object.keys(cues).length) {
@@ -2694,6 +2953,7 @@
     var body = '<div class="sd-ed-head">Dial ' + (index + 1) + (fromLearn ? ' <span class="sd-ed-learned">learned</span>' : '') + '</div><div class="sd-picker-list">';
     Object.keys(DIAL_CONTROLLERS).forEach(function (id) {
       var c = DIAL_CONTROLLERS[id];
+      if (micoParked() && c.micoSplit) return;   // parked: no mic strip option
       body += '<button class="sd-picker-opt sd-dial-opt' + (id === cur ? ' cur' : '') + '" data-dial-pick="' + id + '">'
         + '<span class="sd-dial-opt-t" style="--dc:' + (c.hue || 'var(--accent)') + '">' + esc(c.label) + '</span>'
         + '<span class="sd-dial-opt-d">turn: ' + esc(c.turnLabel || '') + ' &middot; press: ' + esc(c.pressLabel || '') + '</span></button>';
@@ -2716,22 +2976,35 @@
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
     bind('sd-learn', function () { learnArmed = !learnArmed; render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
-    bind('sd-pf-new', function () { addProfile('Layout'); }); bind('sd-pf-dup', duplicateActive); bind('sd-pf-def', setDefaultActive); bind('sd-pf-del', deleteActive);
-    bind('sd-pf-ren', function () { var n = prompt('Rename layout', mapping().name); if (n) renameActive(n.trim()); });
-    bind('sd-pf-exp', exportActive);
-    bind('sd-pf-imp', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
-    var file = document.getElementById('sd-pf-file'); if (file) file.onchange = function () { if (file.files && file.files[0]) importFile(file.files[0]); file.value = ''; };
-    var sel = document.getElementById('sd-profile'); if (sel) sel.onchange = function () { switchProfile(sel.value); };
-    bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
-    bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
-    var ov = document.getElementById('sd-obs-vol'); if (ov) ov.onchange = function () { setObsVolInput(ov.value); toast('Stream-volume dial now rides "' + ov.value + '".'); };
+    bind('sd-pf-new', function () { addProfile('Page'); }); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive);
+    r.querySelectorAll('.sd-page-tab').forEach(function (tab) {
+      var id = tab.getAttribute('data-page');
+      tab.onclick = function (e) {
+        var t = e.target.closest && e.target.closest('[data-edit],[data-del]');
+        if (t && t.hasAttribute('data-edit')) { startPageRename(id); return; }
+        if (t && t.hasAttribute('data-del')) { deletePage(id); return; }
+        if (pageRenaming) return;
+        if (id !== activeProfileId) switchProfile(id);
+      };
+      tab.ondblclick = function () { if (id === activeProfileId && !pageRenaming) startPageRename(id); };
+    });
+    var pr = document.getElementById('sd-page-rename');
+    if (pr) {
+      pr.focus(); pr.select();
+      pr.onclick = function (e) { e.stopPropagation(); };
+      pr.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commitPageRename(pr.value); }
+        else if (e.key === 'Escape') { e.stopPropagation(); pageRenaming = null; render(); }
+      };
+      pr.onblur = function () { commitPageRename(pr.value); };
+    }
+    bind('sd-settings', openDeckSettings);
     var br = document.getElementById('sd-bright'); if (br) br.oninput = function () { setBrightness(+br.value); };
-    r.querySelectorAll('.sd-theme-chip').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-theme')); }; });
     bind('sd-wizard-btn', function () { openWizard(0); });
     bind('sd-wizard-open', function () { openWizard(0); });
     bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
     wireMico();
-    bind('sd-done', openSaveSheet);
+    bind('sd-save', function () { openSaveSheet(false); });
     bind('sd-add-deck', addDeck);
     r.querySelectorAll('.sd-deck-tab').forEach(function (chip) { chip.onclick = function () { activateDeck(decks[+chip.getAttribute('data-deck')]); }; });
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });
@@ -2915,6 +3188,12 @@
           : '<p class="sd-wz-p">This browser has no WebHID, so real hardware needs <b>Chrome or Edge</b>. Preview mode still works everywhere.</p>'
             + '<div class="sd-wz-actions"><button class="btn-secondary" id="sd-wz-preview">Preview on screen</button></div>')
         + wzStatus(deckOn, deckOn ? (device ? 'Connected: ' + profile.name : 'Preview mode is on: the full deck, on screen.') : 'Waiting for a deck (or preview).');
+    } else if (n === 2 && micoParked()) {
+      // Micochondria is parked (no hardware yet): its wizard slot teaches
+      // pages instead, which every deck size benefits from.
+      body = '<div class="sd-wz-t">Pages</div>'
+        + '<p class="sd-wz-p">Every saved layout is a <b>page</b>, so even a six-key deck can carry a whole show: a rehearsal page, a live page, an OBS page. The default layouts ship with <b>PAGE ←</b> and <b>PAGE →</b> keys, and a <b>HOME</b> key jumps straight back to your default layout.</p>'
+        + '<p class="sd-wz-p">Make a new page with <b>New</b> or <b>Duplicate</b> in the layout bar, then flip between them from the deck itself. The page keys show where you are, like 2/3.</p>';
     } else if (n === 2) {
       body = '<div class="sd-wz-t">Mic<span class="sd-wz-hi">ochondria</span> <span class="sd-wz-opt">optional</span></div>'
         + '<p class="sd-wz-p">The powerhouse for the mics: hold <b>TKB</b> to talk to the crew, hold <b>VofU</b> to speak to the room. It needs the little talkbackd program running on this machine:</p>'
@@ -3003,7 +3282,12 @@
     if (navigator.hid && !wizardSeen() && !device && !previewMode) openWizard(0);
     return true;
   }
-  function close() { hideScreen(); }
+  function close() {
+    // Leaving with unsaved changes asks once; everything is already safe on
+    // this device either way, so click-out or Esc simply stays.
+    if (layoutDirty && (device || previewMode)) { openSaveSheet(true); return; }
+    hideScreen();
+  }
   function showScreen() { var scr = document.getElementById('streamdeck'); if (!scr) return; document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); }); scr.classList.add('on'); try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {} }
   function hideScreen() { var scr = document.getElementById('streamdeck'); if (scr) scr.classList.remove('on'); var entry = document.getElementById('entry'); if (entry) entry.classList.add('on'); }
 
