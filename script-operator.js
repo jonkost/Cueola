@@ -2,12 +2,17 @@
   'use strict';
 
   const THEMES = ['cool', 'warm', 'white', 'green', 'koala', 'panda', 'flamingo', 'outrangutan', 'prepbear'];
+  // Tab names and grouping mirror the in-app operator inspector
+  // (OP_INSP_LABELS); the pop-out stops at four tabs, so Screen rides
+  // Transport and the editor helpers ride Display & Theme.
   const TAB_LABELS = {
-    prompter: 'Prompter',
+    transport: 'Transport',
     live: 'Cue & On Air',
     clocks: 'Clocks & Alerts',
-    formatting: 'Formatting & Markers'
+    display: 'Display & Theme'
   };
+  // Remembered tab keys from the pre-regroup layout map onto their new homes.
+  const LEGACY_TAB_KEYS = { prompter: 'transport', formatting: 'display' };
   const COMMAND_RETRY_MS = 1500;
   const COMMAND_MAX_ATTEMPTS = 4;
   const params = new URLSearchParams(location.search);
@@ -42,6 +47,7 @@
   let currentSnapshot = {};
   let clockState = { mode: 'off', label: '', targetTs: 0, size: 1 };
   let questionOn = false;
+  let questionCardsFingerprint = '';
   let activeTheme = initialTheme();
   let closed = false;
   const seenMessageIds = new Map();
@@ -362,6 +368,8 @@
       return;
     }
 
+    if (button.hasAttribute('data-question-push')) { pushQuestionLane(); return; }
+
     if (button.matches('[data-nudge]')) {
       const seek = document.getElementById('seekRange');
       const next = clamp(Number(seek.value) + Number(button.dataset.nudge), 0, 100);
@@ -539,6 +547,16 @@
   }
 
   function onControlsKeydown(event) {
+    if (event.target.id === 'questionLaneInput') {
+      // Same grammar as the in-app lane: Enter pushes, Esc clears the card.
+      if (event.key === 'Enter') { event.preventDefault(); pushQuestionLane(); }
+      else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.target.value = '';
+        sendIntent('control', { action: 'question_off' });
+      }
+      return;
+    }
     const holdButton = event.target.closest?.('[data-hold-start]');
     if (holdButton && (event.key === ' ' || event.key === 'Enter')) {
       event.preventDefault();
@@ -572,6 +590,16 @@
     if (!hold || hold.keyboardKey !== event.key) return;
     event.preventDefault();
     releaseHold(holdButton, null);
+  }
+
+  // D12.6 parity: the pop-out question lane mirrors the in-app lane. One card
+  // at a time, last write wins; an empty push clears the card, same as Esc.
+  // The text rides the control command envelope (question_on carries payload).
+  function pushQuestionLane() {
+    const input = document.getElementById('questionLaneInput');
+    const text = cleanText(input?.value || '').replace(/\s+/g, ' ').slice(0, 280);
+    if (!text) { sendIntent('control', { action: 'question_off' }); return; }
+    sendIntent('control', { action: 'question_on', text });
   }
 
   // ── D11.1: window-level keycommand dispatch ───────────────────────────────
@@ -727,8 +755,22 @@
     patchField('durationMinutes', first(snapshot, ['clockDurationMinutes', 'controls.durationMinutes', 'flowClockDurationMin']));
     patchField('countToTime', first(snapshot, ['clockCountTime', 'controls.countToTime', 'flowClockCountTime']));
     patchField('wrapMinutes', first(snapshot, ['wrapMinutes', 'controls.wrapMinutes', 'flowWrapCustomMin']));
+    patchQuestionCards(first(snapshot, ['questionCards']));
     patchCueAvailability(snapshot);
     renderClockPreview();
+  }
+
+  // Prepared question cards (seeded test shows) become datalist suggestions
+  // under the question lane, same as the in-app lane's ${scope}-question-cards.
+  function patchQuestionCards(cards) {
+    if (!Array.isArray(cards)) return;
+    const list = cards.map((card) => String(card || '')).filter(Boolean).slice(0, 30);
+    const fingerprint = JSON.stringify(list);
+    if (fingerprint === questionCardsFingerprint) return;
+    questionCardsFingerprint = fingerprint;
+    const datalist = document.getElementById('questionLaneCards');
+    if (!datalist) return;
+    datalist.replaceChildren(...list.map((value) => Object.assign(document.createElement('option'), { value })));
   }
 
   function patchEditor(text) {
@@ -847,7 +889,8 @@
   }
 
   function selectTab(key, remember) {
-    if (!TAB_LABELS[key]) key = 'prompter';
+    key = LEGACY_TAB_KEYS[key] || key;
+    if (!TAB_LABELS[key]) key = 'transport';
     controlsRoot.querySelectorAll('[data-tab]').forEach((button) => {
       const active = button.dataset.tab === key;
       button.classList.toggle('is-active', active);
@@ -866,7 +909,7 @@
   }
 
   function restoreTab() {
-    let key = 'prompter';
+    let key = 'transport';
     try { key = localStorage.getItem('cueola_script_operator_tab') || key; } catch {}
     selectTab(key, false);
   }

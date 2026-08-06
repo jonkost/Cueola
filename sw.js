@@ -101,10 +101,24 @@ const SHELL_ASSETS = [
   'assets/keywi-art/podcast/real.svg',
   'assets/keywi-art/podcast/rent-free.svg',
   'assets/keywi-art/manifest.js?v=a8af0e1bfe',
+  // The Break Room demo playout media (break-room-show.js section 4):
+  // precached unversioned like the avatar art so seedBreakRoomShow()
+  // (outrangutan/outrangutan.js) can import the authored show even offline.
+  // Artwork/content changes here ride a WORKER_SCHEMA bump.
+  'demo-media/bars-16x9.mp4',
+  'demo-media/bars-4x3.mp4',
+  'demo-media/bars-9x16.mp4',
+  'demo-media/still-16x9.png',
+  'demo-media/still-4x3.jpg',
+  'demo-media/sfx-ding.wav',
+  'demo-media/demo-applause.wav',
+  'demo-media/demo-aww.wav',
+  'demo-media/demo-rimshot.wav',
+  'demo-media/demo-airhorn.wav',
   'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=2b4cf2ea17',
-  'break-room-show.js?v=c3ba5e11a0',
+  'break-room-show.js?v=c52f40feba',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
   'cueola-identity.js?v=64ff506bad',
@@ -114,17 +128,17 @@ const SHELL_ASSETS = [
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
-  'script-operator.js?v=20cc4ca0c1',
-  'script-operator.css?v=7abb39cd6e',
+  'script-operator.js?v=cee51074da',
+  'script-operator.css?v=cc6e2c5e25',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=3afbd9aec9',
-  'outrangutan/outrangutan.css?v=003c1cf78e',
-  'outrangutan/outrangutan.js?v=d34236e878',
+  'cueola-app.js?v=055944f3bc',
+  'outrangutan/outrangutan.css?v=5aab556beb',
+  'outrangutan/outrangutan.js?v=c16727af5a',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=5eddc9af0d',
+  'cueola-streamdeck.js?v=05d197e34d',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -171,7 +185,7 @@ const versionSignature = SHELL_ASSETS
 // wrong-page entries the old poisoning bug already cached in installed
 // clients, (3) index.html/dashboard.html page-HTML changes (dead
 // Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
-const WORKER_SCHEMA = '23';
+const WORKER_SCHEMA = '24';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

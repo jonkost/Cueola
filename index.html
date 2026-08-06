@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=003c1cf78e">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=5aab556beb">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -279,6 +279,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .rd-head th:nth-child(1),.rd-head th:nth-child(2),.rd-head th:nth-child(3){z-index:13;background:color-mix(in srgb,var(--s2) 96%,black)}
 /* Zebra + hover carry into the pinned cells so the left edge matches each row. */
 .cue-row:nth-child(even) td:nth-child(1),.cue-row:nth-child(even) td:nth-child(2),.cue-row:nth-child(even) td:nth-child(3){background:color-mix(in srgb,var(--text) 1.5%,var(--bg))}
+/* Guided helper rows (PREP/OUT): one quiet neutral tint, below zebra hover.
+   The role tag chip carries the color; the tint just groups the trio. */
+.cue-row.rundown-row-helper td{background:color-mix(in srgb,var(--text) 3%,transparent)}
+.cue-row.rundown-row-helper td:nth-child(1),.cue-row.rundown-row-helper td:nth-child(2),.cue-row.rundown-row-helper td:nth-child(3){background:color-mix(in srgb,var(--text) 4%,var(--bg))}
 .cue-row:hover td:nth-child(1),.cue-row:hover td:nth-child(2),.cue-row:hover td:nth-child(3){background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
 .cue-row.segment-row td{position:static;background:transparent}
 
@@ -401,6 +405,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Style pill */
 .style-pill{font-size:10px;font-family:var(--sans);font-weight:700;padding:3px 7px;border-radius:5px;letter-spacing:.02em;text-transform:uppercase;display:inline-block}
+/* PREP/OUT role tags on guided helper rows (builder table + live grid) */
+.helper-role-tag{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:5px;margin-right:6px;vertical-align:1px}
+.helper-tag-prep{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 13%,transparent)}
+.helper-tag-out{color:var(--purple);background:color-mix(in srgb,var(--purple) 13%,transparent)}
 .style-timed{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.style-flex{background:rgba(100,116,139,.15);color:var(--text3)}
 
 /* Row left accent by type */
@@ -448,11 +456,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-grid th,.live-grid td{border-bottom:1px solid var(--border);vertical-align:middle}
 .live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
 .live-grid td{padding:8px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
-/* Every row is the same comfortable size. The live row stands out by colour, a
-   bold left bar and an ON AIR badge — never by a jarring size jump. */
-.live-row-current td{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+/* Owner reversal (Aug 2026): the ON AIR row is deliberately the DOMINANT row.
+   It is taller, its name and clock are larger, and its tint and red rail are
+   stronger than every other row. Do not flatten it back to uniform height. */
+.live-row-current td{background:color-mix(in srgb,var(--accent) 24%,transparent)}
 .live-row-next td{background:color-mix(in srgb,var(--green) 7%,transparent)}
 .live-row-done{opacity:.4}
+/* Guided helper rows keep a quiet neutral tint, but ON AIR, NEXT, and
+   selection treatments always win over it. */
+.live-row-helper:not(.live-row-current):not(.live-row-next):not(.live-row-selected) td{background:color-mix(in srgb,var(--text) 4%,transparent)}
+.live-row-helper:not(.live-row-current):not(.live-row-next):not(.live-row-selected) td:nth-child(-n+3){background:color-mix(in srgb,var(--text) 5%,var(--s1))}
 /* Selection is ONE quiet treatment: a soft tint + cyan rail on rows that are
    not on air. Per-cell outlines boxed every cell of the NOW row and read as a
    broken grid. The On Air row is already the loudest thing — selecting it adds
@@ -466,8 +479,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-grid th:nth-child(2),.live-grid td:nth-child(2){left:38px;z-index:4}
 .live-grid th:nth-child(3),.live-grid td:nth-child(3){left:118px;z-index:4;box-shadow:inset -1px 0 0 var(--liquid-edge)}
 .live-grid th:nth-child(-n+3){z-index:7}
-.live-row-current td:nth-child(-n+3){background:color-mix(in srgb,var(--accent) 16%,var(--s1))}
-.live-row-current td:first-child{box-shadow:inset 5px 0 var(--red)}
+.live-row-current td:nth-child(-n+3){background:color-mix(in srgb,var(--accent) 25%,var(--s1))}
+.live-row-current td:first-child{box-shadow:inset 6px 0 var(--red)}
 .live-row-next td:nth-child(-n+3){background:color-mix(in srgb,var(--green) 8%,var(--s1))}
 .live-row-next td:first-child{box-shadow:inset 5px 0 var(--green)}
 .live-num{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--text3)}
@@ -481,10 +494,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-row-go{display:block;margin-top:5px;width:100%;border:1px solid color-mix(in srgb,var(--red) 55%,transparent);border-radius:7px;background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red);font-family:var(--mono);font-size:9px;font-weight:900;letter-spacing:.08em;padding:4px 5px;cursor:pointer}
 .live-row-go:hover,.live-row-go:focus-visible{background:var(--red);color:#fff;outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--red) 28%,transparent)}
 .live-name{font-family:var(--sans);font-size:15px;font-weight:700;line-height:1.2;color:var(--text)}
-.live-row-current .live-name{font-weight:800}
+.live-row-current .live-name{font-size:19px;font-weight:900}
 .live-note{font-size:10.5px;color:var(--text2);line-height:1.25;margin-top:2px}
 .live-time{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.3}
 .live-time strong{display:block;color:var(--text);font-size:14px;font-weight:800}
+.live-row-current .live-time strong{font-size:16px}
 /* Cue cell — Ready (standby) over Take (go), same size on every row. */
 /* height:1px on the cell lets the box stretch to the full row height (the child resolves height:100% against the row). */
 .live-grid td.live-cue-td{height:1px;padding:5px 6px}
@@ -906,6 +920,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cc-checks{display:flex;gap:16px;margin:6px 0}
 .cc-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer}
 .cc-check input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px}
+/* Guided rows section (playback cue wizard) */
+.cc-checks-stack{flex-direction:column;align-items:flex-start;gap:8px}
+.cc-guided-rows .field-hint{margin-top:6px}
 .cc-custom-in{margin-top:6px}
 /* Cue trigger block (Outrangutan links in the cue-config modal) */
 .cc-trigger{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
@@ -986,9 +1003,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sp-weather-shell.has-weather-summary .sp-weather-entry{position:absolute;inset:0;width:100%;height:100%;padding:0 14px;opacity:0;caret-color:transparent;cursor:text}
 .sp-weather-shell.has-weather-summary:focus-within .sp-weather-symbols{display:none}
 .sp-weather-shell.has-weather-summary:focus-within .sp-weather-entry{position:static;height:auto;padding:12px 0;opacity:1;caret-color:var(--accent)}
-.field-with-action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
-.field-with-action .field-in{min-width:0}
-.field-action-btn{height:100%;min-height:45px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
+.field-with-action{display:flex;gap:8px;align-items:stretch}
+.field-with-action .field-in{flex:1;min-width:0}
+.field-action-btn{flex:none;height:100%;min-height:45px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
 .field-action-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .field-action-btn.on{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,var(--s2));color:var(--text)}
 .field-in:disabled{opacity:.72;color:var(--text2);cursor:not-allowed;background:color-mix(in srgb,var(--s2) 70%,var(--bg))}
@@ -1029,7 +1046,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-theme="white"] :is(.ls-bar,.follow-bar,.ls-overview,.ls-show-card,.ls-stat-card,.live-grid-wrap,.live-grid td,.live-grid th,.ls-sidebar,.ls-prompter-text,.ls-prompter-actions,.ls-cue-script,.lv-cur-script),[data-theme="white"] #pt-edit-box,[data-theme="white"] #pt-script-input{background:#ffffff;color:#000;border-color:#c9c5bd}
 [data-theme="white"] :is(.ls-exit-btn,.ls-clock,.follow-lbl,.live-time,.live-note,.live-script-copy,.ls-prompter-status,.pt-cueola-help){color:#333}
 [data-theme="white"] :is(.live-row-current td,.live-row-next td){color:#000}
-[data-theme="white"] .live-row-current td{background:color-mix(in srgb,var(--accent) 12%,#fff)}
+[data-theme="white"] .live-row-current td{background:color-mix(in srgb,var(--accent) 20%,#fff)}
 [data-theme="white"] .live-row-next td{background:color-mix(in srgb,var(--green) 10%,#fff)}
 [data-theme="white"] .live-row-selected:not(.live-row-current) td{background:color-mix(in srgb,var(--cyan) 8%,#fff)}
 [data-theme="koala"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.lrp-cue-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border:1px solid rgba(255,255,255,.2)}
@@ -1321,7 +1338,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-builder-hint{font-size:12px;color:var(--text2);line-height:1.55;max-width:620px}
 .prepro-section{border:1px solid var(--border);background:rgba(255,255,255,.018);border-radius:10px;padding:14px;margin-top:12px}
 .prepro-section-title{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.prepro-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.prepro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+/* Short inputs (times, dates, phones) stop stretching to their grid cell. */
+.field-narrow{max-width:190px}
 /* Venue segmented control */
 .seg-group{display:inline-flex;gap:6px;background:var(--btn-fill);border:var(--btn-hairline);border-radius:12px;padding:5px;flex-wrap:wrap}
 .seg-btn{border:1px solid transparent;background:transparent;color:var(--text2);border-radius:8px;padding:8px 15px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
@@ -1396,7 +1415,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .readiness-simple-row.signed{border-color:color-mix(in srgb,var(--green) 35%,var(--border));background:color-mix(in srgb,var(--green) 6%,var(--s2))}
 .readiness-remove:hover{background:var(--red);color:#fff}
 .paperwork-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.paperwork-flow-actions{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:520;width:min(calc(100vw - 48px),1020px);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 22px;border:1px solid var(--liquid-edge);border-radius:12px;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
+.paperwork-flow-actions{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 22px;border:1px solid var(--liquid-edge);border-radius:12px;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 .paperwork-flow-left,.paperwork-flow-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .paperwork-flow-actions button{border-radius:var(--ui-radius-control);padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:background .15s var(--ease),color .15s var(--ease)}
 .paperwork-flow-actions button:hover:not(:disabled){border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
@@ -1534,6 +1553,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-note-guide-d{font-size:11.5px;color:var(--text2);line-height:1.45}
 .t-general{--tagc:var(--accent)}
 .t-audio{--tagc:var(--green)}
+.t-sfx{--tagc:#2fbfb0}
 .t-video{--tagc:var(--cyan)}
 .t-lighting{--tagc:var(--yellow)}
 .t-content{--tagc:var(--purple)}
@@ -1970,7 +1990,9 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-preview table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}
 .paper-preview th,.paper-preview td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
 .paper-preview th{background:#eee;font-size:9px;text-transform:uppercase;letter-spacing:0}
-.paper-page-break{break-after:page;page-break-after:always;margin:24px 0;border-top:2px dashed #bbb}
+/* Screen keeps no dashed divider; the print/export page break is the real seam
+   (the PDF tokenizer only reads this classList, so hiding it changes nothing there). */
+.paper-page-break{break-after:page;page-break-after:always;margin:0;border-top:0}
 .paper-landscape{width:1060px;max-width:none}
 .paper-rundown-grid{font-size:9px}
 .paper-rundown-grid th,.paper-rundown-grid td{padding:4px}
@@ -1993,6 +2015,11 @@ button.pb-todo-check:hover{border-color:var(--green)}
    nodes; these fixed Letter canvases are shared by modal preview, #printArea,
    and PDF capture so all three surfaces measure the same document. */
 .paper-export-document{width:max-content;min-width:100%;display:grid;justify-items:center;gap:24px;padding:4px 0;color:#111;font-family:Helvetica,Arial,sans-serif;font-size:10pt;line-height:1.38;font-kerning:normal;letter-spacing:0;counter-reset:paper-export-page}
+/* Preview-only scaler. fitPaperPreviewDocument() shrinks the finished pages
+   to the preview column with a transform; the frame's explicit scaled size
+   reclaims the layout box. Purely visual: pagination measured offscreen. */
+.paper-preview .paper-export-fit{width:max-content;max-width:100%;margin:0 auto;overflow:auto}
+.paper-preview .paper-export-fit .paper-export-document{min-width:0;transform-origin:top left}
 .paper-export-page{--paper-dept:transparent;box-sizing:border-box;position:relative;width:8.5in;height:11in;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;align-content:stretch;gap:10pt;padding:.5in .55in .42in;overflow:hidden;background:#fff;color:#111;border:1px solid #d8dbe2;border-radius:2px;box-shadow:0 14px 38px rgba(0,0,0,.24);font:inherit;counter-increment:paper-export-page;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .paper-export-page:is(.is-portrait,[data-orientation="portrait"]){width:8.5in;height:11in}
 .paper-export-page:is(.is-landscape,[data-orientation="landscape"]){width:11in;height:8.5in;padding:.42in .5in .38in}
@@ -2005,6 +2032,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-export-heading{min-width:0;display:grid;gap:2pt}
 .paper-export-title{min-width:0;margin:0;color:#111;font-size:18pt;font-weight:700;line-height:1.08;overflow-wrap:anywhere}
 .paper-export-doc{color:#626a78;font-size:9pt;font-weight:700;line-height:1.3;margin-top:2pt}
+.paper-export-section{display:block;color:#626a78;font-size:9pt;font-weight:700;line-height:1.3;margin-top:2pt;overflow-wrap:anywhere}
 .paper-export-cont{caption-side:top;text-align:left;color:#626a78;font-size:8pt;font-style:italic;padding:2pt 0}
 .paper-export-meta{max-width:3.2in;color:#626a78;font-size:7.5pt;line-height:1.35;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .paper-export-source{min-width:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12pt;padding:6pt 8pt;border:1px solid #d9dde4;border-radius:4pt;background:#f4f6f8;color:#4e5664;font-size:7.5pt;line-height:1.35}
@@ -2221,6 +2249,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-card-tag{font-size:8.5px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:8px;flex-shrink:0}
 .pn-card-tag.t-general{color:var(--text2);background:color-mix(in srgb,var(--text2) 9%,transparent)}
 .pn-card-tag.t-audio{color:var(--green);background:color-mix(in srgb,var(--green) 9%,transparent)}
+.pn-card-tag.t-sfx{color:#2fbfb0;background:color-mix(in srgb,#2fbfb0 9%,transparent)}
 .pn-card-tag.t-video{color:var(--video);background:color-mix(in srgb,var(--video) 9%,transparent)}
 .pn-card-tag.t-lighting{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
 .pn-card-tag.t-content{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
@@ -2307,7 +2336,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .patch-head{display:none}
   .patch-table .field-in{border-right:0}
   .paperwork-actions{grid-template-columns:1fr}
-  .paperwork-flow-actions{bottom:12px;width:calc(100vw - 24px);align-items:stretch;flex-direction:column;padding:10px}
+  .paperwork-flow-actions{align-items:stretch;flex-direction:column;padding:10px}
   .paperwork-flow-left,.paperwork-flow-right{display:grid;grid-template-columns:1fr;gap:8px}
   .call-grid-head{display:none}
   .ar-panel .chip-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -2410,6 +2439,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-setup-alt:hover{opacity:.85}
 .pt-bar-controls-btn{background:none;border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));color:var(--pt-text,#f0ead6);border-radius:7px;padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:11px;transition:background .15s;opacity:.7}
 .pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
+.pt-bar-controls-btn.icon-only{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;font-size:15px}
+.pt-bar-controls-btn.icon-only[aria-pressed="true"]{opacity:1}
 
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s;touch-action:none}
@@ -2439,8 +2470,18 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #pt-progress{position:absolute;top:env(safe-area-inset-top);left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none}
 
 /* Floating control panel */
-#pt-panel{position:absolute;bottom:0;left:0;right:0;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-width:1px 0 0;border-radius:18px 18px 0 0;padding:14px 18px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:10px;backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));transition:opacity .4s;font-family:var(--mono);font-size:11px;width:100%}
+#pt-panel{position:absolute;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:6px 18px 14px;display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:10px;backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));transition:opacity .4s;font-family:var(--mono);font-size:11px;width:max-content;max-width:min(96vw,1100px);transform:translateX(-50%) scale(var(--pt-panel-scale,1));transform-origin:bottom center}
 #pt-panel.hidden{opacity:0;pointer-events:none}
+/* Movable cards: dragging the grip strip writes the vars and floats the card; unset vars keep the stock spot */
+#pt-panel.pt-floating{left:var(--pt-panel-x);top:var(--pt-panel-y);bottom:auto;transform:scale(var(--pt-panel-scale,1));transform-origin:top left}
+.pt-hint.pt-floating{left:var(--pt-hint-x);top:var(--pt-hint-y);right:auto}
+.pt-card-grip{position:relative;flex:1 1 100%;display:flex;align-items:center;justify-content:center;min-height:26px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.pt-card-grip:active{cursor:grabbing}
+.pt-grip-bar{width:44px;height:5px;border-radius:999px;background:color-mix(in srgb,var(--pt-text,#f0ead6) 30%,transparent);pointer-events:none}
+.pt-hint .pt-card-grip{margin:-8px -10px 6px}
+.pt-panel-zoom{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:4px}
+.pt-zoom-btn{padding:1px 8px;font-size:12px}
+.pt-zoom-val{min-width:38px;text-align:center;font-size:10px;opacity:.65;letter-spacing:.04em}
 .pt-hint{position:absolute;top:68px;right:24px;z-index:120;background:var(--pt-ui-bg,rgba(20,20,20,.92));border:1px solid var(--pt-ui-border,rgba(200,169,126,.25));border-radius:16px;padding:18px 22px;backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));font-family:var(--mono);font-size:13px;transition:opacity .4s}
 .pt-hint.hidden{opacity:0;pointer-events:none}
 .pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:28px;line-height:2.15}
@@ -2506,29 +2547,27 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
    any overlay. The size stepper (S/M/L) scales WITHIN the band (vh-capped
    font preferences); the deliberate stand-by slate stays the only
    full-screen state. */
-.pt-clock-overlay{position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;min-width:min(680px,92vw);max-width:92vw;max-height:20vh;overflow:hidden;box-sizing:border-box;transform:translateX(-50%);padding:14px 26px;border-radius:18px;text-align:center;background:rgba(0,0,0,.82);color:#fff;border:2px solid rgba(255,255,255,.24);font-family:var(--mono);pointer-events:none}
+.pt-clock-overlay{--pt-ovl-scale:1;position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;width:fit-content;max-width:min(1100px,92vw);max-height:20vh;overflow:hidden;box-sizing:border-box;transform:translateX(-50%);padding:calc(11px*var(--pt-ovl-scale)) calc(24px*var(--pt-ovl-scale));border-radius:18px;text-align:center;background:color-mix(in srgb,black 45%,transparent);backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));color:#fff;border:1px solid var(--liquid-edge);font-family:var(--mono);pointer-events:none}
 .pt-clock-overlay.on{display:block}
-.pt-clock-label{font-size:clamp(13px,min(2vw,2.4vh),22px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.78);line-height:1.15}
-.pt-clock-value{font-size:clamp(38px,min(9vw,9.5vh),118px);font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff}
-.pt-clock-overlay.size-0{min-width:min(480px,88vw);padding:10px 22px}.pt-clock-overlay.size-0 .pt-clock-value{font-size:clamp(30px,min(7vw,7.5vh),76px)}
-.pt-clock-overlay.size-2{min-width:min(860px,94vw);padding:16px 30px}.pt-clock-overlay.size-2 .pt-clock-value{font-size:clamp(44px,min(13vw,10.5vh),156px)}
-.pt-clock-overlay.size-3{min-width:min(1100px,96vw);padding:18px 34px}.pt-clock-overlay.size-3 .pt-clock-value{font-size:clamp(50px,min(18vw,11.5vh),232px)}.pt-clock-overlay.size-3 .pt-clock-label{font-size:clamp(16px,min(2.6vw,2.6vh),30px)}
-.pt-clock-overlay.size-4{min-width:min(1400px,98vw);padding:20px 40px}.pt-clock-overlay.size-4 .pt-clock-value{font-size:clamp(56px,min(24vw,12.5vh),340px)}.pt-clock-overlay.size-4 .pt-clock-label{font-size:clamp(18px,min(3vw,2.8vh),40px)}
-.pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:#b31322;border-color:#ffccd2;box-shadow:0 0 0 3px rgba(255,255,255,.12) inset}
-.pt-clock-overlay.wrap .pt-clock-label{font-size:clamp(20px,min(5vw,4vh),54px);color:#fff;letter-spacing:.1em}
-.pt-clock-overlay.wrap .pt-clock-value{font-size:clamp(48px,min(14vw,10.5vh),170px)}
-.pt-clock-overlay.expired:not(.timeofday){background:#72101a;border-color:#fff}
-#pt-question-overlay{position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;max-width:min(720px,60vw);max-height:20vh;overflow:hidden;box-sizing:border-box;padding:14px 22px;border-radius:16px;background:#ffd23c;color:#121212;border:2px solid #fff;font-family:var(--syne);font-size:clamp(22px,min(4.5vw,5.5vh),52px);font-weight:900;line-height:1.1;text-transform:uppercase;letter-spacing:0;pointer-events:none}
+/* One scale var per size step drives font AND padding, so the stepper visibly
+   resizes clock, timer, wrap, and question together (the wrap banner used to
+   override the size rules entirely and never moved). */
+.pt-clock-overlay.size-0,#pt-question-overlay.size-0{--pt-ovl-scale:.85}
+.pt-clock-overlay.size-2,#pt-question-overlay.size-2{--pt-ovl-scale:1.2}
+.pt-clock-overlay.size-3,#pt-question-overlay.size-3{--pt-ovl-scale:1.45}
+.pt-clock-overlay.size-4,#pt-question-overlay.size-4{--pt-ovl-scale:1.75}
+.pt-clock-label{font-size:calc(clamp(12px,min(1.8vw,2.1vh),19px)*var(--pt-ovl-scale));font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.82);line-height:1.15}
+.pt-clock-value{font-size:calc(clamp(30px,min(7vw,7.5vh),82px)*var(--pt-ovl-scale));font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff}
+.pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:color-mix(in srgb,#b31322 84%,transparent);border-color:#ffccd2;box-shadow:0 0 0 3px rgba(255,255,255,.12) inset}
+.pt-clock-overlay.wrap .pt-clock-label{font-size:calc(clamp(15px,min(3.6vw,3vh),40px)*var(--pt-ovl-scale));color:#fff;letter-spacing:.1em}
+.pt-clock-overlay.wrap .pt-clock-value{font-size:calc(clamp(36px,min(10vw,8vh),128px)*var(--pt-ovl-scale))}
+.pt-clock-overlay.expired:not(.timeofday){background:color-mix(in srgb,#72101a 84%,transparent);border-color:#fff}
+#pt-question-overlay{--pt-ovl-scale:1;position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;max-width:min(720px,60vw);max-height:20vh;overflow:hidden;box-sizing:border-box;padding:calc(11px*var(--pt-ovl-scale)) calc(18px*var(--pt-ovl-scale));border-radius:16px;background:color-mix(in srgb,black 45%,transparent);backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));color:#ffd23c;border:1px solid var(--liquid-edge);font-family:var(--syne);font-size:calc(clamp(16px,min(3.2vw,4vh),36px)*var(--pt-ovl-scale));font-weight:900;line-height:1.1;text-transform:uppercase;letter-spacing:0;pointer-events:none}
 #pt-question-overlay.on{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 /* D12.6: the QUESTION tag reads as production signage (mono chip, like the
    wrap/clock labels) so pushed chat text can never be mistaken for script. */
-.pt-question-tag{flex:none;padding:2px 8px;border-radius:12px;background:#121212;color:#ffd23c;font-family:var(--mono);font-size:clamp(10px,1.4vh,14px);font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+.pt-question-tag{flex:none;padding:2px 8px;border-radius:12px;background:#ffd23c;color:#121212;font-family:var(--mono);font-size:clamp(10px,1.4vh,14px);font-weight:900;letter-spacing:.14em;text-transform:uppercase}
 .pt-question-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
-/* P6: question indicator follows the global overlay size (Decisions #11) */
-#pt-question-overlay.size-0{font-size:clamp(16px,min(3.2vw,4vh),36px)}
-#pt-question-overlay.size-2{font-size:clamp(26px,min(5.9vw,6.5vh),68px)}
-#pt-question-overlay.size-3{font-size:clamp(30px,min(7.7vw,7.5vh),88px)}
-#pt-question-overlay.size-4{font-size:clamp(34px,min(9.9vw,8.5vh),114px)}
 
 /* D11.3: the playback call banner — unmissable, color-stepped, abortable. */
 .ls-call-banner{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:14px;padding:14px 22px;border-radius:16px;border:1px solid var(--liquid-edge-strong);background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
@@ -2548,6 +2587,30 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* D11.4: live time-remaining chip on a playing row's playout badge. */
 .cue-out-remain{margin-left:5px;font-family:var(--mono);font-weight:800;font-variant-numeric:tabular-nums;color:var(--red)}
 .cue-out-remain[hidden]{display:none}
+
+/* R2.c: linked-playback row badge, now a designed chip. Same logic as before. */
+.cue-out-badge{display:inline-flex;align-items:center;gap:5px;margin-top:3px;padding:2px 8px;border-radius:999px;border:1px solid var(--glass-border);background:color-mix(in srgb,var(--text) 5%,transparent);font-size:10px;color:var(--text2);max-width:100%;min-width:0}
+.cue-out-badge .brand-ico{width:11px;height:11px;flex-shrink:0}
+.cue-out-name{font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cue-out-live{margin-left:2px;padding:1px 6px;border-radius:999px;font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
+.cue-out-play{background:var(--red);color:#fff}
+.cue-out-pause{background:var(--yellow);color:#1c1404}
+.cue-out-pre{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text2);border:1px solid var(--glass-border)}
+
+/* R2: the always-on playout strip. Slim liquid glass, visible only while
+   playout is actually doing something, in grid and Focus modes alike. */
+.ls-playout-strip{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;height:34px;padding:0 12px;min-width:0;flex-shrink:0;background:var(--glass-bg);border-bottom:1px solid var(--glass-border);box-shadow:var(--glass-highlight);backdrop-filter:blur(var(--liquid-blur)) saturate(150%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(150%)}
+.ls-playout-strip[hidden]{display:none}
+.ls-playout-tag{padding:2px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--red) 40%,var(--glass-border));background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;flex-shrink:0}
+.ls-playout-strip[data-status="pause"] .ls-playout-tag{border-color:color-mix(in srgb,var(--yellow) 45%,var(--glass-border));background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--yellow)}
+.ls-playout-strip[data-status="pre"] .ls-playout-tag{border-color:var(--glass-border);background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text2)}
+.ls-playout-name{font-size:12.5px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ls-playout-time{font-family:var(--mono);font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--red);white-space:nowrap;flex-shrink:0}
+.ls-playout-strip[data-status="pause"] .ls-playout-time{color:var(--yellow)}
+.ls-playout-strip[data-status="pre"] .ls-playout-time{color:var(--text2)}
+.ls-playout-bar{position:absolute;left:0;right:0;bottom:0;height:2px;pointer-events:none}
+.ls-playout-fill{height:100%;width:0;background:var(--red);transition:width .3s linear}
+.ls-playout-strip[data-status="pause"] .ls-playout-fill{background:var(--yellow)}
 
 /* D11.2: talent-position rail under the Script Op editor. */
 .ls-talent-pos{display:flex;align-items:center;gap:8px;padding:4px 2px 0}
@@ -2761,6 +2824,12 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   text-transform:none;
   color:var(--pt-text,var(--text2));
   opacity:.78;
+}
+.flow-control-slider .pt-ctrl-val{
+  display:block;
+  font:700 11px/1.2 var(--mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--pt-text,var(--text));
 }
 .flow-control-slider .pt-range{min-width:0;width:100%}
 .flow-control-segment{
@@ -3313,7 +3382,7 @@ input.pt-range::-moz-range-thumb,
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(150%);
 }
 #promptypus #pt-bar{box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
-#promptypus #pt-panel{border-radius:24px 24px 0 0}
+#promptypus #pt-panel{border-radius:24px}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn){
   background:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 48%,transparent);
   border-color:var(--flow-glass-edge);
@@ -3990,20 +4059,25 @@ input.pt-range::-moz-range-thumb,
 .live-row-disabled{opacity:.38;cursor:not-allowed}
 .live-row-disabled .live-row-go{display:none}
 .live-grid tbody tr:not(.live-segment-header) td{height:44px}
+/* Owner reversal (Aug 2026): the ON AIR row is deliberately taller than the
+   uniform 44px rows. Same specificity as the rule above, so source order wins. */
+.live-grid tbody tr.live-row-current td{height:76px}
 
-/* GO is the dominant show action; row GO and other show-critical targets use
-   the same minimum production hit area. */
+/* Show-critical toolbar targets keep the full production hit area on every
+   pointer. Row GO stays compact on desktop (its coarse-pointer inflation
+   lives in the D10.4 block below): the deflated rows make the tall ON AIR
+   row read as the dominant row. */
 #liveshow .ls-critical-action,#liveshow .ls-return-btn,#liveshow .ls-push-primary,#liveshow .ls-popout-btn{min-height:44px;height:44px}
-.live-row-go{min-height:44px;margin-top:6px;padding:8px;font-size:11px}
 .ls-nav{gap:10px}
-.ls-nav .ls-btn{min-height:44px}
-/* GO keeps its explicit next-cue label and gating, in the original compact
-   red Next-button proportions. */
-/* D11.5 fixed geometry: the GO control NEVER resizes with its label — the
-   click target must not move under the cursor mid-show. Labels ellipsize
-   inside a fixed-width control. */
-.ls-go-primary{display:inline-flex;align-items:center;gap:8px;width:min(38vw,380px);max-width:min(38vw,380px);min-height:44px!important;padding:9px 16px!important;border:1px solid color-mix(in srgb,var(--red) 62%,#fff)!important;border-radius:11px!important;background:var(--red)!important;color:#fff!important;box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 22%,transparent);text-align:left}
-.ls-go-primary .ls-go-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls-nav .ls-btn{min-height:44px;min-width:116px;justify-content:center}
+/* D11.5 fixed geometry: the GO control NEVER resizes, so the click target
+   cannot move under the cursor mid-show. The next-cue preview text is hidden
+   (it survives as hover data-tip and aria-label, set in updateLiveGoControl),
+   leaving the constant GO kicker as the only content: Prev and GO stay an
+   even compact pair. #lsGoLabel must stay in the DOM, updateLiveGoControl
+   early-returns without it. */
+.ls-go-primary{display:inline-flex;align-items:center;gap:8px;min-height:44px!important;padding:9px 16px!important;border:1px solid color-mix(in srgb,var(--red) 62%,#fff)!important;border-radius:11px!important;background:var(--red)!important;color:#fff!important;box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 22%,transparent)}
+.ls-go-primary .ls-go-label{display:none}
 .ls-go-primary:hover{filter:brightness(1.08)}
 .ls-go-primary:active{transform:scale(.985)}
 .ls-flowmingo-btn{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 30%,transparent)}
@@ -4056,8 +4130,7 @@ input.pt-range::-moz-range-thumb,
 @media(max-width:600px){
   #liveshow .ls-overview{grid-template-columns:1fr 1fr;grid-template-areas:"show show" "now next" "timer timer" "minis minis"}
   .ls-status-items{grid-template-columns:1fr}
-  .ls-go-primary{width:auto;flex:2.4}
-  .ls-nav .ls-prev{flex:1}
+  .ls-nav .ls-btn{flex:1}
 }
 @media(forced-colors:active){
   #liveshow :is(button,[role="button"],[role="separator"],[tabindex]:not([tabindex="-1"]),input,textarea,select):focus-visible{outline:3px solid Highlight;box-shadow:none}
@@ -4084,6 +4157,7 @@ input.pt-range::-moz-range-thumb,
   .e-footer-link{display:inline-flex;align-items:center;min-height:44px}
   :is(.entry-theme-panel,#modal-settings .settings-sheet,.plandabear-theme-bar) .settings-file-btn{min-height:44px}
   .ls-exit-btn,.ls-pact-btn,.ls-btn,.marker-chip,.follow-chip{min-height:44px}
+  .live-row-go{min-height:44px;margin-top:6px;padding:8px;font-size:11px}
   .admin-tab{width:44px;height:44px}
   .admin-act-btn,.admin-src-add{min-height:44px}
   .admin-src-chip .rm{min-width:32px;min-height:32px}
@@ -4577,6 +4651,16 @@ input.pt-range::-moz-range-thumb,
     <div class="ls-stat-card ls-overview-timer"><div class="ls-stat-label">Remaining</div><div class="ls-stat-value warn" id="ls-stat-remain">—</div></div>
     <div class="ls-progress"><div class="ls-progress-fill" id="ls-progress-fill"></div></div>
   </div>
+  <!-- R2: always-on playout countdown. Shows what Outrangutan is playing right
+       now on every client, in grid and Focus modes alike, linked to a rundown
+       row or not. Lives OUTSIDE #lsBody so renderLive rebuilds never touch it;
+       renderOutCountdowns patches text and width in place (P3). -->
+  <div class="ls-playout-strip" id="lsPlayoutStrip" aria-label="Playout now playing" hidden>
+    <span class="ls-playout-tag">Playout</span>
+    <span class="ls-playout-name" id="lsPlayoutName"></span>
+    <span class="ls-playout-time" id="lsPlayoutTime"></span>
+    <div class="ls-playout-bar" aria-hidden="true"><div class="ls-playout-fill" id="lsPlayoutFill"></div></div>
+  </div>
   <!-- D11.3: the playback call — READY · TRACK · ROLL · TAKE, big and
        unmissable, abortable until it resolves (decision 18). -->
   <div class="ls-call-banner" id="lsCallBanner" data-stage="ready" role="alert" hidden>
@@ -4707,13 +4791,14 @@ input.pt-range::-moz-range-thumb,
       <span class="pt-check" id="pt-check-script" data-tip="A script is loaded">Script</span>
     </div>
     <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Load Session</button>
-    <button class="pt-bar-controls-btn" onclick="ptTogglePanel()">Controls</button>
+    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptTogglePanel()" data-tip="Show or hide controls" aria-label="Show or hide controls" aria-pressed="true"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
   </div>
 
   <!-- Reading line -->
   <div id="pt-read-line"></div>
 
   <div class="pt-hint" id="pt-hint">
+    <div class="pt-card-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-hint')"><span class="pt-grip-bar" aria-hidden="true"></span></div>
     <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
     <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
     <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
@@ -4769,6 +4854,14 @@ input.pt-range::-moz-range-thumb,
 
   <!-- Floating control panel -->
   <div id="pt-panel">
+    <div class="pt-card-grip" id="pt-panel-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-panel')">
+      <span class="pt-grip-bar" aria-hidden="true"></span>
+      <span class="pt-panel-zoom" role="group" aria-label="Panel size">
+        <button class="pt-btn pt-zoom-btn" onclick="ptAdjustPanelScale(-0.1)" data-tip="Shrink this panel" aria-label="Shrink the control panel">−</button>
+        <span class="pt-zoom-val" id="pt-panel-zoom-val">100%</span>
+        <button class="pt-btn pt-zoom-btn" onclick="ptAdjustPanelScale(0.1)" data-tip="Grow this panel" aria-label="Grow the control panel">+</button>
+      </span>
+    </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" id="pt-play-btn" onclick="ptTogglePlay()">
         <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
@@ -4792,18 +4885,6 @@ input.pt-range::-moz-range-thumb,
       <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" data-tip="Align the script left" aria-label="Align script left">Left</button>
       <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" data-tip="Center the script" aria-label="Align script center">Center</button>
       <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" data-tip="Align the script right" aria-label="Align script right">Right</button>
-    </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Theme</span>
-      <button type="button" class="pt-theme-dot active" id="pt-t-cool" onclick="ptSetTheme('cool')" data-tip="Glacier theme" aria-label="Glacier theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-warm" onclick="ptSetTheme('warm')" data-tip="Honey theme" aria-label="Honey theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-white" onclick="ptSetTheme('white')" data-tip="Polar Bear theme" aria-label="Polar Bear theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-green" onclick="ptSetTheme('green')" data-tip="Eucalyptus theme" aria-label="Eucalyptus theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-koala" onclick="ptSetTheme('koala')" data-tip="Koala theme" aria-label="Koala theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-panda" onclick="ptSetTheme('panda')" data-tip="Planda Bear theme" aria-label="Planda Bear theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-flamingo" onclick="ptSetTheme('flamingo')" data-tip="Flowmingo theme" aria-label="Flowmingo theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-outrangutan" onclick="ptSetTheme('outrangutan')" data-tip="Outrangutan theme" aria-label="Outrangutan theme"></button>
-      <button type="button" class="pt-theme-dot" id="pt-t-prepbear" onclick="ptSetTheme('prepbear')" data-tip="PrepBear theme" aria-label="PrepBear theme"></button>
     </div>
     <div class="pt-ctrl-group">
       <button class="pt-btn" onclick="ptOpenEdit()"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span>Script</span></button>
@@ -4835,6 +4916,21 @@ input.pt-range::-moz-range-thumb,
       <div class="pt-cueola-help">Load a Cueola session code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
       <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
         <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
+      </div>
+      <hr class="pt-modal-sep">
+      <h2>Theme</h2>
+      <!-- Swatches painted at boot from CUEOLA_THEME_SWATCHES (INC-6: no hex here).
+           pt-theme-dot class + pt-t-* ids keep ptSetTheme's active-state sync working. -->
+      <div class="pt-ctrl-group ui-theme-grid">
+        <button type="button" class="ui-theme-tile pt-theme-dot active on" id="pt-t-cool" onclick="ptSetTheme('cool')" data-tip="Glacier theme" aria-label="Glacier theme"><span class="tt-prev"></span><span class="tt-name">Glacier</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-warm" onclick="ptSetTheme('warm')" data-tip="Honey theme" aria-label="Honey theme"><span class="tt-prev"></span><span class="tt-name">Honey</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-white" onclick="ptSetTheme('white')" data-tip="Polar Bear theme" aria-label="Polar Bear theme"><span class="tt-prev"></span><span class="tt-name">Polar Bear</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-green" onclick="ptSetTheme('green')" data-tip="Eucalyptus theme" aria-label="Eucalyptus theme"><span class="tt-prev"></span><span class="tt-name">Eucalyptus</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-koala" onclick="ptSetTheme('koala')" data-tip="Koala theme" aria-label="Koala theme"><span class="tt-prev"></span><span class="tt-name">Koala</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-panda" onclick="ptSetTheme('panda')" data-tip="Planda Bear theme" aria-label="Planda Bear theme"><span class="tt-prev"></span><span class="tt-name">Planda Bear</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-flamingo" onclick="ptSetTheme('flamingo')" data-tip="Flowmingo theme" aria-label="Flowmingo theme"><span class="tt-prev"></span><span class="tt-name">Flowmingo</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-outrangutan" onclick="ptSetTheme('outrangutan')" data-tip="Outrangutan theme" aria-label="Outrangutan theme"><span class="tt-prev"></span><span class="tt-name">Outrangutan</span></button>
+        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-prepbear" onclick="ptSetTheme('prepbear')" data-tip="PrepBear theme" aria-label="PrepBear theme"><span class="tt-prev"></span><span class="tt-name">PrepBear</span></button>
       </div>
       <hr class="pt-modal-sep">
       <h2>Or Paste / Type</h2>
@@ -5204,7 +5300,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="pb-collab" data-pb-collab="call-sheet"></div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Call Sheet</div>
+      <div class="prepro-section-title"><span>Call Sheet<button type="button" class="info-btn" aria-label="Why a show has multiple call sheets" onclick="toggleInfoPop(event,'cs-sheets')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="call-sheet-switcher">
         <div class="field">
           <label class="field-lbl">Current Call Sheet</label>
@@ -5216,21 +5312,21 @@ input.pt-range::-moz-range-thumb,
       <div class="field u-mt10"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="Setup Day, Production Day, Rehearsal Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Event Info</div>
+      <div class="prepro-section-title"><span>Event Info<button type="button" class="info-btn" aria-label="What the event info section is for" onclick="toggleInfoPop(event,'cs-event-info')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="prepro-grid">
         <div class="field"><label class="field-lbl">Production</label><input class="field-in" id="pp-production" maxlength="80" placeholder="e.g. Campus News Live"></div>
-        <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in" id="pp-date" type="date" onchange="renderCallSheetWeatherCard()"></div>
-        <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="pp-call" type="time" oninput="renderCallSheetWeatherCard()"></div>
-        <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start plus the rundown's total runtime">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in field-narrow" id="pp-date" type="date" onchange="renderCallSheetWeatherCard();maybeAutoRefreshCallSheetWeather()"></div>
+        <div class="field"><label class="field-lbl">Call Time</label><input class="field-in field-narrow" id="pp-call" type="time" oninput="renderCallSheetWeatherCard()"></div>
+        <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start plus the rundown's total runtime">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" placeholder="e.g. Studio A, Media Building" oninput="renderCallSheetWeatherCard()"></div>
-        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="Street address for maps and parking"></div>
-        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="Who to text if you're late (name and number)"></div>
+        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="e.g. 400 College Ave"><div class="field-hint">Use the full street address so maps and parking directions work.</div></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if you are running late: give a name and a number.</div></div>
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Location &amp; Weather</div>
+      <div class="prepro-section-title"><span>Location &amp; Weather<button type="button" class="info-btn" aria-label="What the location and weather section is for" onclick="toggleInfoPop(event,'cs-location-weather')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="field">
         <label class="field-lbl">Venue Type</label>
         <div class="seg-group" id="pp-venue-group" role="group" aria-label="Venue type">
@@ -5261,26 +5357,34 @@ input.pt-range::-moz-range-thumb,
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Access and Crew Notes</div>
+      <div class="prepro-section-title"><span>Access and Crew Notes<button type="button" class="info-btn" aria-label="What the access and crew notes section is for" onclick="toggleInfoPop(event,'cs-access')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="prepro-grid">
         <div class="field"><label class="field-lbl">Parking</label><input class="field-in" id="pp-parking" maxlength="160" placeholder="e.g. Lot C after 4 PM · permits not enforced"></div>
         <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160" placeholder="e.g. Loading dock door, knock twice"></div>
-        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180" placeholder="Where it streams + who runs it, e.g. YouTube · Stream op: Sam"></div>
+        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180" placeholder="e.g. YouTube · Stream op: Sam"><div class="field-hint">Say where the show streams and who runs the stream.</div></div>
         <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120" placeholder="e.g. Show blacks · closed-toe shoes"></div>
-        <div class="field"><label class="field-lbl">Meal Time</label><input class="field-in" id="pp-meal-time" type="time"></div>
+        <div class="field u-col-span">
+          <label class="field-lbl">Meals Provided</label>
+          <div class="seg-group" id="pp-meals-provided-group" role="group" aria-label="Meals provided">
+            <button type="button" class="seg-btn" data-meals-provided="provided" aria-pressed="false" onclick="setCallSheetMealsProvided('provided')">Provided</button>
+            <button type="button" class="seg-btn" data-meals-provided="not-provided" aria-pressed="false" onclick="setCallSheetMealsProvided('not-provided')">Not provided</button>
+          </div>
+        </div>
+        <div class="field"><label class="field-lbl">Meal Time</label><input class="field-in field-narrow" id="pp-meal-time" type="time"></div>
         <div class="field"><label class="field-lbl">Meals</label><input class="field-in" id="pp-meals" maxlength="120" placeholder="e.g. Pizza in the green room · vegetarian available"></div>
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Crew / Talent Contacts</div>
+      <div class="prepro-section-title"><span>Crew / Talent Contacts<button type="button" class="info-btn" aria-label="What the crew and talent contacts section is for" onclick="toggleInfoPop(event,'cs-crew')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <label class="field-lbl">Crew / Talent</label>
       <div class="field-hint">Type directly in the row below. Use Add person when you need another row.</div>
       <div class="call-grid" id="pp-crew-grid"></div>
+      <div class="field-hint" id="pp-crew-roster-hint" hidden></div>
       <button class="call-add-btn" onclick="addCallSheetPerson()"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Add person</span></button>
       <button class="call-add-btn" onclick="fillCallSheetCrewFromRoster()" data-tip="Add everyone from the saved role assignments in one tap"><span class="sf-symbol" data-symbol="people.group" aria-hidden="true"></span><span>Fill from roster</span></button>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Plans and Notes</div>
+      <div class="prepro-section-title"><span>Plans and Notes<button type="button" class="info-btn" aria-label="What the plans and notes section is for" onclick="toggleInfoPop(event,'cs-notes')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <label class="field-lbl">General Notes</label>
       <textarea class="field-in u-textarea-cozy" id="pp-notes" rows="3" placeholder="Key times, reminders, transportation, access notes"></textarea>
     </div>
@@ -5304,23 +5408,27 @@ input.pt-range::-moz-range-thumb,
     <div class="pb-collab" data-pb-collab="safety-plan"></div>
     <div class="prepro-grid">
       <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
-      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="Street address. Prints on the call sheet too."></div>
-      <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
-      <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div></div>
+      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="e.g. 1200 Health Way"><div class="field-hint">Prints on the call sheet too, so the crew can navigate fast.</div></div>
+      <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in field-narrow" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
+      <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
       <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120" placeholder="e.g. Control room shelf, by the door"></div>
       <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120" placeholder="e.g. Hallway outside Studio A"></div>
       <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
       <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
       <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
-      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="Auto-fills from the call sheet (who to text if late)"></div>
+      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if someone runs late. Auto-fills from the Call Sheet.</div></div>
     </div>
     <div class="field">
       <label class="field-lbl">Equipment Needed</label>
-      <textarea class="field-in u-textarea-cozy" id="sp-equipment" rows="3" placeholder="Gear that needs special handling: ladders, rigging, cable runs across walkways"></textarea>
+      <textarea class="field-in u-textarea-cozy" id="sp-equipment" rows="3" placeholder="e.g. Ladders, rigging, cable runs across walkways"></textarea>
+      <div class="field-hint">List gear that needs special safety handling so the crew can plan around it.</div>
     </div>
     <div class="field">
       <label class="field-lbl">Safety Notes</label>
       <textarea class="field-in u-textarea-cozy" id="sp-notes" rows="3" placeholder="Anything else the crew should know to stay safe"></textarea>
+    </div>
+    <div class="paperwork-actions">
+      <button class="btn-primary" onclick="showSafetyPlanPreview()">Preview Safety Plan</button>
     </div>
     <div id="pbCommentsSafety"></div>
     <div class="paperwork-flow-actions" id="pbNavSafety"></div>
@@ -5339,33 +5447,36 @@ input.pt-range::-moz-range-thumb,
     <div class="pb-collab" data-pb-collab="production-scheduler"></div>
     <div class="prepro-section">
       <div class="prepro-section-title u-row-between">
-        <span>Setup Day</span>
-        <button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false" style="flex:none">N/A</button>
+        <span>Setup Day<button type="button" class="info-btn" aria-label="What the setup day section is for" onclick="toggleInfoPop(event,'ps-setup-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span>
+        <button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false">N/A</button>
       </div>
       <div class="field-hint">Use this for load-in, build, tech checks, and wrap. Tap N/A if setup happens on show day or a different day.</div>
       <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Setup Date</label><input class="field-in" id="ps-date" type="date"></div>
-        <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in" id="ps-setup" type="time"></div>
-        <div class="field"><label class="field-lbl">Setup Wrap</label><input class="field-in" id="ps-wrap" type="time"></div>
+        <div class="field"><label class="field-lbl">Setup Date</label><input class="field-in field-narrow" id="ps-date" type="date"></div>
+        <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in field-narrow" id="ps-setup" type="time"></div>
+        <div class="field"><label class="field-lbl">Setup Wrap</label><input class="field-in field-narrow" id="ps-wrap" type="time"></div>
         <div class="field u-col-span"><label class="field-lbl">Setup Notes</label><textarea class="field-in u-textarea-cozy" id="ps-setup-notes" rows="2" placeholder="Load-in notes, tech check order, room access, gear reminders"></textarea></div>
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Show Day</div>
-      <div class="field-hint">These fields fill from the call sheet first. Change them here only when the production schedule needs a different view.</div>
+      <div class="prepro-section-title"><span>Show Day<button type="button" class="info-btn" aria-label="What the show day section is for" onclick="toggleInfoPop(event,'ps-show-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
+      <div class="field-hint">Crew call and show start never fill in on their own: enter the real times. The linked fields below follow the call sheet until you type a different value here.</div>
       <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Show Day</label><input class="field-in" id="ps-show-date" type="date"></div>
-        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="ps-doors" type="time"></div>
-        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
-        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="ps-location" maxlength="100"></div>
-        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="ps-address" maxlength="160"></div>
+        <div class="field"><label class="field-lbl">Show Day</label><input class="field-in field-narrow" id="ps-show-date" type="date"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in field-narrow" id="ps-call" type="time"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in field-narrow" id="ps-doors" type="time"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in field-narrow" id="ps-show" type="time"></div>
+        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="ps-location" maxlength="100"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="ps-address" maxlength="160"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
         <div class="field u-col-span"><label class="field-lbl">Show Notes</label><textarea class="field-in u-textarea-cozy" id="ps-show-notes" rows="2" placeholder="Arrival details, holding areas, final reminders, day-of timing notes"></textarea></div>
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title">Ready Before Show</div>
+      <div class="prepro-section-title"><span>Ready Before Show<button type="button" class="info-btn" aria-label="What the ready before show checklist is for" onclick="toggleInfoPop(event,'ps-ready')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div id="ps-checklist"></div>
+    </div>
+    <div class="paperwork-actions">
+      <button class="btn-primary" onclick="showProductionSchedulePreview()">Preview Production Schedule</button>
     </div>
     <div id="pbCommentsProduction"></div>
     <div class="paperwork-flow-actions" id="pbNavProduction"></div>
@@ -5383,6 +5494,9 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="pb-collab" data-pb-collab=""></div>
     <div id="patchSheetBody"></div>
+    <div class="paperwork-actions">
+      <button class="btn-primary" onclick="previewPaperworkItem()">Preview Patch Sheets</button>
+    </div>
     <div id="pbCommentsPatch"></div>
     <div class="paperwork-flow-actions" id="pbNavPatch"></div>
   </div>
@@ -5442,6 +5556,7 @@ input.pt-range::-moz-range-thumb,
           </div>
           <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
+          <div class="field-hint">Audio uploads cap at 4MB. Use mp3 or m4a for SFX.</div>
           <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
           <div>
             <div class="pb-compose-label">Tag for</div>
@@ -5460,7 +5575,7 @@ input.pt-range::-moz-range-thumb,
       <button type="button" class="pb-fab" id="pbFab" onclick="pbOpenComposer()" data-tip="Write a new note" aria-label="Write a new note"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span></button>
     </div>
 
-    <div class="paperwork-flow-actions" id="pbNavNotes"></div>
+    <div class="paperwork-flow-actions" id="pbNavNotes" hidden></div>
   </div>
 </div>
 <div class="modal-wrap" id="personInfoModal">
@@ -6328,7 +6443,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
-<script src="break-room-show.js?v=c3ba5e11a0"></script>
+<script src="break-room-show.js?v=c52f40feba"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-identity.js?v=64ff506bad"></script>
@@ -6340,12 +6455,12 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=3afbd9aec9"></script>
-<script src="outrangutan/outrangutan.js?v=d34236e878"></script>
+<script src="cueola-app.js?v=055944f3bc"></script>
+<script src="outrangutan/outrangutan.js?v=c16727af5a"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=5eddc9af0d"></script>
+<script src="cueola-streamdeck.js?v=05d197e34d"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

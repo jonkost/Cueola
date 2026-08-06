@@ -68,6 +68,7 @@
     ['prompter.mirror', '#3d2b52', 'MIRROR'], ['prompter.brake', '#5a4a12', 'BRAKE'],
     ['prompter.boost', '#5a4a12', 'BOOST'], ['prompter.nudge.back', '#3d2b52', 'NUDGE-'],
     ['prompter.nudge.fwd', '#3d2b52', 'NUDGE+'], ['prompter.editscript', '#3d2b52', 'EDIT'],
+    ['prompter.push.paste', '#3d2b52', 'PASTE'], ['prompter.overlays', '#3d2b52', 'OVERLAYS'],
     ['scrub.open', '#3d2b52', 'SCRUB']
   ];
   // Which app owns each keymap action — the key editor groups by app, so the
@@ -104,19 +105,31 @@
     'prompter.nudge.back': 'Nudges the script back 3 lines.',
     'prompter.nudge.fwd': 'Nudges the script forward 3 lines.',
     'prompter.editscript': 'Opens the current row script for editing.',
+    'prompter.push.paste': 'Pushes the text on the clipboard to the talent as a question card. Browser rule: this Cueola tab must be focused, and clipboard access must be allowed once (Enable clipboard, in Deck settings).',
+    'prompter.overlays': 'Shows or hides the prompter overlays on the talent display. Toggle.',
     'ref.open': 'Shows the keyboard shortcut reference overlay.',
     'scrub.open': 'Opens the jog-wheel scrub overlay for the prompter.'
   };
-  var KEYMAP_TOGGLES = { 'playout.pause': 1, 'prompter.playpause': 1, 'prompter.hideui': 1, 'prompter.mirror': 1 };
+  var KEYMAP_TOGGLES = { 'playout.pause': 1, 'prompter.playpause': 1, 'prompter.hideui': 1, 'prompter.mirror': 1, 'prompter.overlays': 1 };
 
   function buildCatalog() {
     catalog = {};
     registerAction({ id: 'none', kind: 'none', group: 'Blank', label: '', desc: 'Nothing. A spacer key.' });
     var km = surfaceKeymap();
+    // Two bands of the keymap table leave the local-only path: rundown NEXT and
+    // PREV ride the control bus (cross-machine, same wire as TAKE/ABORT), and
+    // the five playout transports ride bridge().playoutTransport. Their catalog
+    // ids keep the km: prefix so every saved layout and default keeps working;
+    // keymapId stays because the glyph, symbol, and progress lookups key on it.
+    var KM_BUS = { 'rundown.next': 'go', 'rundown.back': 'back' };
+    var KM_TRANSPORT = { 'playout.go': 'go', 'playout.pause': 'pause', 'playout.stop': 'stop', 'playout.fade': 'fadeStop', 'playout.panic': 'panic' };
     KEYMAP_ACTIONS.forEach(function (row) {
       var id = row[0], color = row[1], short = row[2];
       var entry = km.find(function (a) { return a.id === id; });
-      registerAction({ id: 'km:' + id, kind: 'keymap', keymapId: id, hold: !!(entry && entry.hold), group: APP_GROUP[id.split('.')[0]] || (entry && entry.group) || 'Cueola', color: color, label: short, full: (entry && entry.label) || id, desc: KEYMAP_DESCS[id] || '', toggle: !!KEYMAP_TOGGLES[id], lamp: lampFor(id) });
+      var desc = { id: 'km:' + id, kind: 'keymap', keymapId: id, hold: !!(entry && entry.hold), group: APP_GROUP[id.split('.')[0]] || (entry && entry.group) || 'Cueola', color: color, label: short, full: (entry && entry.label) || id, desc: KEYMAP_DESCS[id] || '', toggle: !!KEYMAP_TOGGLES[id], lamp: lampFor(id) };
+      if (KM_BUS[id]) { desc.kind = 'bus'; desc.target = 'rundown'; desc.action = KM_BUS[id]; }
+      else if (KM_TRANSPORT[id]) { desc.kind = 'transport'; desc.op = KM_TRANSPORT[id]; }
+      registerAction(desc);
     });
     for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'Outrangutan · SFX pads', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
     for (var c = 1; c <= 8; c++) registerAction({ id: 'cue:' + c, kind: 'cue', slot: c, group: 'Outrangutan · cues', color: '#234a8a', label: 'CUE ' + c, full: 'Playout cue slot ' + c, desc: 'Fires cue number ' + c + ' of the loaded show.' });
@@ -169,6 +182,7 @@
     if (id === 'prompter.mirror') return function (s) { return s.prompter && s.prompter.mirrored; };
     if (id === 'prompter.dir.rev') return function (s) { return s.prompter && s.prompter.reversed; };
     if (id === 'prompter.dir.fwd') return function (s) { return !!(s.prompter && s.prompter.playing && !s.prompter.reversed); };
+    if (id === 'prompter.overlays') return function (s) { return !!(s.prompter && s.prompter.overlaysOn); };
     return null;
   }
 
@@ -241,6 +255,20 @@
       tick: function () {}, press: function () { releaseTalkback(true); toast('All talk off.'); } }
   };
   var DEFAULT_DIALS = ['master', 'prompterSpeed', 'prompterSize', 'prompterScrub', 'rundownSelect', 'showClock'];
+  // The default dial set a brand-new (or reset) layout gets. Strip decks (the
+  // + and the + XL, and preview's virtual + XL) swap the plain speed dial for
+  // the Prompter view zone: ptProgram's turn IS speed and its press is play or
+  // pause, so nothing is lost (one control, one job) and a strip zone reads as
+  // a mini prompter out of the box. Only fresh defaults are shaped here; saved
+  // layouts keep whatever dials they saved.
+  function defaultDialSet(prof) {
+    var out = DEFAULT_DIALS.slice(0, prof.dials);
+    if (prof.strip && out.indexOf('ptProgram') < 0) {
+      var i = out.indexOf('prompterSpeed');
+      if (i >= 0) out[i] = 'ptProgram';
+    }
+    return out;
+  }
   function fmtClock(secs) { secs = Math.max(0, Math.round(secs || 0)); var m = Math.floor(secs / 60), s = secs % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
 
   // Curated default layouts per deck size, organized BY APP: each app owns a
@@ -363,6 +391,7 @@
     if (mode === 'cloud' && dispatchCloud(a, slot, phase)) return;
     switch (a.kind) {
       case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') surfaceRun(a.keymapId); break;
+      case 'transport': if (phase === 'down') { var bt = bridge(); try { bt && bt.playoutTransport && bt.playoutTransport(a.op); } catch (e) {} } break;
       case 'pad': if (phase === 'down') firePlayoutSlot('pad', a.slot); break;
       case 'cue': if (phase === 'down') firePlayoutSlot('cue', a.slot); break;
       case 'padRef': if (phase === 'down' && slot.ref) firePlayoutRef('pad', slot.ref); break;
@@ -522,10 +551,17 @@
       for (var i = 0; i < fresh.length; i++) await openDevice(fresh[i]);
     } catch (e) { toast('Stream Deck selection cancelled.'); }
   }
-  async function openDevice(dev) {
+  async function openDevice(dev, silent) {
     var already = deckForHid(dev);
     if (already) { activateDeck(already); return true; }
-    try { if (!dev.opened) await dev.open(); } catch (e) { toast('Could not open the Stream Deck. Quit the Elgato Stream Deck app (it grabs the device), then Connect again.'); return false; }
+    try { if (!dev.opened) await dev.open(); } catch (e) {
+      // Silent boot path: another app (usually Elgato's) holds the device.
+      // Note it in the console and move on; the explicit Connect flow keeps
+      // the loud toast.
+      if (silent) { try { console.info('[KeyWi] auto-attach skipped: the device is held by another app (quit the Elgato Stream Deck app).'); } catch (e2) {} }
+      else toast('Could not open the Stream Deck. Quit the Elgato Stream Deck app (it grabs the device), then Connect again.');
+      return false;
+    }
     stashActiveDeck();   // the new deck takes the globals; the old one keeps running from its record
     var config = loadConfig(dev.productId);
     var unitInfo = {};
@@ -552,7 +588,10 @@
     if (wizardStep >= 0) wizardRender();
     startPaintLoop();
     startAnim();
-    connectLightShow().then(function () { return paintAll(); }).then(function () { return stripProbe(); });
+    // Silent boot path: no light show and no strip format probe on a mere page
+    // load. Both stay on the explicit Connect flow.
+    if (silent) paintAll();
+    else connectLightShow().then(function () { return paintAll(); }).then(function () { return stripProbe(); });
     toast('Connected: ' + profile.name + ' (' + profile.keys + ' keys, ' + profile.dials + ' dials).');
     return true;
   }
@@ -1539,9 +1578,13 @@
   function isSurfaceVisible() { var scr = document.getElementById('streamdeck'); return !!(scr && scr.classList.contains('on')); }
   function specAnimated(spec) { return (spec.widget === 'clock' && spec.clockRunning) || !!spec.pulse || spec.progress != null || spec.preroll != null || !!spec.phase || !!spec.looping || !!spec.flash; }
   function animateKeys() {
-    if (!profile || hypeRunning || !isSurfaceVisible()) return;
+    // The hardware animates whenever a deck is attached, card open or not (the
+    // deck drives the show app-wide); the on-screen mirror only draws while
+    // the KeyWi screen is actually visible.
+    var vis = isSurfaceVisible();
+    if (!profile || hypeRunning || (!device && !vis)) return;
     animPhase++;
-    var s = surfaceState(), cur = profile, r = root();
+    var s = surfaceState(), cur = profile, r = vis ? root() : null;
     for (var i = 0; i < cur.keys; i++) {
       var spec = keyArtSpec(i, s);
       if (!specAnimated(spec)) continue;
@@ -1563,6 +1606,39 @@
     if (device) connectLightShow().then(function () { return paintAll(); }); else paintAll();
     toast('🎉 HYPE!');
   }
+  // ── Prompter strip smoothing ────────────────────────────────────────────────
+  // The shared prompter position only ticks with the talent heartbeat (about
+  // every 2s), which reads as stair-steps on the strip. Between fresh reports,
+  // while the prompter is rolling, dead-reckon: advance the last-known pct at
+  // the pct-per-second rate learned from the delta between the last two
+  // distinct reports, snapping whenever a fresh report lands. (The speed
+  // setting cannot seed the rate: it is in scroll units, and this module never
+  // knows the script's pixel height to convert.) Monotonic and clamped while
+  // rolling; the moment the prompter is held, reckoning drops and the raw
+  // report shows as-is. Pure in (state, now), so several reads per tick agree.
+  var ptSmooth = { raw: -1, rawAt: 0, rate: 0, shown: 0 };
+  function smoothedPrompterPct(info) {
+    var raw = Math.max(0, Math.min(100, info.pct || 0)), now = Date.now();
+    if (!info.playing) { ptSmooth.raw = raw; ptSmooth.rawAt = now; ptSmooth.rate = 0; ptSmooth.shown = raw; return raw; }
+    if (raw !== ptSmooth.raw) {
+      // Fresh report (heartbeat, or this tab's own continuous scroll): learn
+      // the rate, then snap. A report a hair behind the reckoned spot holds
+      // (monotonic) rather than stepping back; a real jump backward (a seek
+      // or rewind) snaps down and relearns from the next beat.
+      if (ptSmooth.raw >= 0 && raw > ptSmooth.raw && now > ptSmooth.rawAt) {
+        var r = (raw - ptSmooth.raw) * 1000 / (now - ptSmooth.rawAt);
+        if (r > 0 && r < 10) ptSmooth.rate = r;   // sanity cap: 10 pct/s would finish a script in 10s
+      } else if (raw < ptSmooth.raw) ptSmooth.rate = 0;
+      ptSmooth.raw = raw; ptSmooth.rawAt = now;
+      ptSmooth.shown = (raw < ptSmooth.shown && ptSmooth.shown - raw < 1.5) ? ptSmooth.shown : raw;
+      return ptSmooth.shown;
+    }
+    // Same report as last tick: reckon forward from it. A talent gone quiet
+    // freezes after ~3 missed heartbeats instead of running off to the end.
+    var est = Math.min(100, raw + ptSmooth.rate * Math.min(6, (now - ptSmooth.rawAt) / 1000));
+    if (est > ptSmooth.shown) ptSmooth.shown = est;
+    return ptSmooth.shown;
+  }
   async function paintStrip(force) {
     if (!profile || !profile.strip || (!device && !previewMode)) return;
     var s = surfaceState(), cells = [];
@@ -1580,10 +1656,16 @@
       };
       // Live-content zones fold their motion into the paint signature, so the
       // 5Hz tick repaints exactly when the content moved: the prompter as the
-      // talent scrolls (quarter-percent steps), video at ~4fps.
+      // talent scrolls (position smoothed between heartbeats, quantized to
+      // fortieths of a percent so sub-pixel moves still dedupe), video at ~4fps.
       if (cell.ptFrame) {
         var pi = prompterStripInfo();
-        if (pi) { cell.pp = Math.round((pi.pct || 0) * 4); cell.ptLen = (pi.text || '').length; }
+        if (pi) {
+          cell.pp = Math.round(smoothedPrompterPct(pi) * 40); cell.ptLen = (pi.text || '').length;
+          // The zone's progress bar rides the same smoothed, quantized spot:
+          // a raw float here would churn the signature on every idle tick.
+          if (cell.bar != null) cell.bar = Math.max(0, Math.min(1, cell.pp / 4000));
+        }
       }
       if (cell.ogFrame) {
         var ov = ogProgramVideo();
@@ -1692,12 +1774,14 @@
     return false;
   }
   function ensureObsFrameLoop() {
-    var want = !!((device || previewMode) && isSurfaceVisible() && stripHasObsFrame());
+    // Hardware keeps its strip OBS monitor with the card closed; preview mode
+    // (no hardware to feed) only polls while the on-screen strip is visible.
+    var want = !!(stripHasObsFrame() && (device || (previewMode && isSurfaceVisible())));
     if (want && !obsFrameLoop) obsFrameLoop = setInterval(pollObsFrame, 250);
     else if (!want && obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } }
   }
   async function pollObsFrame() {
-    if ((!device && !previewMode) || !isSurfaceVisible() || !stripHasObsFrame()) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
+    if (!stripHasObsFrame() || (!device && !(previewMode && isSurfaceVisible()))) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
     if (obsFrameBusy || !profile || !profile.strip) return;
     var o = OBSc();
     if (!o || !o.isReady || !o.isReady()) { if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } return; }
@@ -1791,17 +1875,42 @@
       if (cell.tap) { ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('tap: ' + cell.tap, x, ch - 8); }
     });
   }
-  // Prompter zone: the talent's current spot in the script, one bright line
-  // and the next line dimmed, with a position bar. Position maps pct into the
-  // text by character, the same approximation the scrub dial uses.
+  // Wrapped-line layout cache for the strip prompter. Wrapping measures every
+  // word, so it happens once per (text, font, zone width) and the 5Hz tick
+  // only translates cached lines. Each line remembers where it starts in the
+  // text, so pct (a character position, the same approximation the scrub dial
+  // uses) maps to a fractional line number for pixel scrolling.
+  var ptWrapCache = { text: '', font: '', byWidth: {} };
+  function ptWrapLines(ctx, text, font, maxW) {
+    if (ptWrapCache.text !== text || ptWrapCache.font !== font) ptWrapCache = { text: text, font: font, byWidth: {} };
+    var key = String(Math.round(maxW));
+    var hit = ptWrapCache.byWidth[key];
+    if (hit) return hit;
+    ctx.save(); ctx.font = font;
+    // Greedy word wrap. A single word wider than the zone keeps its line and
+    // clips at the zone edge; splitting it would corrupt the position map.
+    var words = text.split(' '), lines = [], line = '', lineStart = 0, idx = 0;
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i], probe = line ? line + ' ' + w : w;
+      if (line && ctx.measureText(probe).width > maxW) {
+        lines.push({ start: lineStart, str: line });
+        lineStart = idx; line = w;
+      } else line = probe;
+      idx += w.length + 1;   // plus the space that followed
+    }
+    if (line) lines.push({ start: lineStart, str: line });
+    if (!lines.length) lines.push({ start: 0, str: text });
+    ctx.restore();
+    ptWrapCache.byWidth[key] = lines;
+    return lines;
+  }
+  // Prompter zone: a pixel-scrolling mini prompter. The wrapped script slides
+  // vertically through the zone by the fractional line offset derived from
+  // pct (smoothed and quantized upstream in cell.pp), the reading line bright
+  // and its neighbours dimmed, with the badge and position bar kept on top.
   function drawStripPrompter(ctx, cell, x0, zw, ch) {
     ctx.fillStyle = 'rgba(176,110,248,0.08)'; ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
     ctx.fillStyle = cell.hue; ctx.fillRect(x0 + 10, 4, zw - 20, 3);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#98a2b8'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('PROMPTER', x0 + 10, 20);
-    ctx.textAlign = 'right'; ctx.fillStyle = cell.live ? '#22d3a0' : '#6b7690'; ctx.font = '700 12px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText(cell.live ? '● ROLL' : 'HOLD', x0 + zw - 10, 20);
     var info = prompterStripInfo();
     var text = (info && info.text) ? info.text.replace(/\s+/g, ' ').trim() : '';
     ctx.textAlign = 'left';
@@ -1809,29 +1918,36 @@
       ctx.fillStyle = '#6b7690'; ctx.font = '600 15px -apple-system, "Segoe UI", sans-serif';
       ctx.fillText('No script loaded', x0 + 10, ch / 2 + 10);
     } else {
-      var idx = Math.round(Math.max(0, Math.min(100, info.pct || 0)) / 100 * text.length);
-      // Start at a word boundary so the line never opens mid-word.
-      while (idx > 0 && text[idx - 1] !== ' ') idx--;
-      var fit = function (str, font, maxW) {
-        ctx.font = font;
-        var n = str.length;
-        while (n > 0 && ctx.measureText(str.slice(0, n)).width > maxW) n = Math.floor(n * 0.9);
-        if (n < str.length) { while (n > 0 && str[n] !== ' ') n--; }
-        return n > 0 ? n : Math.min(str.length, 1);
-      };
-      var maxW = zw - 20, rest = text.slice(idx) || text.slice(-80);
-      var f1 = '700 26px -apple-system, "Segoe UI", sans-serif';
-      var n1 = fit(rest, f1, maxW);
-      ctx.fillStyle = '#ffffff'; ctx.font = f1;
-      ctx.fillText(rest.slice(0, n1).trim(), x0 + 10, ch / 2 + 4);
-      var rest2 = rest.slice(n1).trim();
-      if (rest2) {
-        var f2 = '600 17px -apple-system, "Segoe UI", sans-serif';
-        var n2 = fit(rest2, f2, maxW);
-        ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = f2;
-        ctx.fillText(rest2.slice(0, n2).trim(), x0 + 10, ch / 2 + 26);
+      // cell.pp is the smoothed position this repaint was deduped on; drawing
+      // from it keeps the pixels in lockstep with the paint signature.
+      var pct = cell.pp != null ? cell.pp / 40 : Math.max(0, Math.min(100, info.pct || 0));
+      var maxW = zw - 20, font = '600 19px -apple-system, "Segoe UI", sans-serif', lineH = 24;
+      var lines = ptWrapLines(ctx, text, font, maxW);
+      var idx = pct / 100 * text.length;
+      var lo = 0, hi = lines.length - 1;
+      while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (lines[mid].start <= idx) lo = mid; else hi = mid - 1; }
+      var nextStart = lo + 1 < lines.length ? lines[lo + 1].start : text.length + 1;
+      var lineFloat = lo + Math.max(0, Math.min(1, (idx - lines[lo].start) / Math.max(1, nextStart - lines[lo].start)));
+      var focusY = 52;   // the reading baseline inside the zone
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x0 + 2, 24, zw - 4, ch - 38); ctx.clip();
+      ctx.font = font;
+      var first = Math.max(0, Math.floor(lineFloat) - 1), last = Math.min(lines.length - 1, Math.floor(lineFloat) + 2);
+      for (var k = first; k <= last; k++) {
+        var y = focusY + (k - lineFloat) * lineH;
+        if (y < 24 - lineH || y > ch) continue;
+        ctx.fillStyle = k === Math.round(lineFloat) ? '#ffffff' : 'rgba(255,255,255,0.45)';
+        ctx.fillText(lines[k].str, x0 + 10, y);
       }
+      ctx.restore();
     }
+    // Badge and bar sit above the scroll, never scrolled with it.
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#98a2b8'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('PROMPTER', x0 + 10, 20);
+    ctx.textAlign = 'right'; ctx.fillStyle = cell.live ? '#22d3a0' : '#6b7690'; ctx.font = '700 12px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText(cell.live ? '● ROLL' : 'HOLD', x0 + zw - 10, 20);
+    ctx.textAlign = 'left';
     if (cell.bar != null) {
       var bw = zw - 20, bx = x0 + 10, by = ch - 8;
       ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx, by, bw, 4);
@@ -2051,12 +2167,12 @@
   function uniqueName(base) { var name = base || 'Profile', names = Object.keys(profiles).map(function (id) { return profiles[id].name; }), n = name, i = 2; while (names.indexOf(n) >= 0) n = name + ' ' + (i++); return n; }
   // Make every profile fit the connected device (pad/truncate keys, dials, touch).
   function ensureProfilesShape() {
-    if (!Object.keys(profiles).length) { profiles = { p1: { name: 'Default', keys: defaultKeySlots(profile.keys), dials: DEFAULT_DIALS.slice(0, profile.dials), touch: defaultTouch(profile.strip ? profile.strip.zones : 0) } }; activeProfileId = 'p1'; defaultProfileId = 'p1'; }
+    if (!Object.keys(profiles).length) { profiles = { p1: { name: 'Default', keys: defaultKeySlots(profile.keys), dials: defaultDialSet(profile), touch: defaultTouch(profile.strip ? profile.strip.zones : 0) } }; activeProfileId = 'p1'; defaultProfileId = 'p1'; }
     Object.keys(profiles).forEach(function (id) {
       var p = profiles[id], def = defaultKeySlots(profile.keys);
       p.keys = p.keys && p.keys.length ? p.keys.slice(0, profile.keys) : def;
       while (p.keys.length < profile.keys) p.keys.push({ a: 'none' });
-      p.dials = (p.dials && p.dials.length ? p.dials : DEFAULT_DIALS).slice(0, profile.dials)
+      p.dials = (p.dials && p.dials.length ? p.dials.slice(0, profile.dials) : defaultDialSet(profile))
         .map(function (id) { return id === 'prompterJog' ? 'prompterScrub' : id; });   // pre-rename profiles migrate
       while (p.dials.length < profile.dials) p.dials.push(DEFAULT_DIALS[p.dials.length] || 'brightness');
       var zones = profile.strip ? profile.strip.zones : 0;
@@ -2103,12 +2219,12 @@
     writeStore(s);
   }
   function repaintDeck(deck) { if (deck) { deck.lastPainted = []; schedulePaint(); } }
-  function addProfile(name, keys, dials, touch) { var id = newId(); profiles[id] = { name: uniqueName(name || 'Profile'), keys: keys || defaultKeySlots(profile.keys), dials: dials || DEFAULT_DIALS.slice(0, profile.dials), touch: touch || defaultTouch(profile.strip ? profile.strip.zones : 0) }; activeProfileId = id; ensureProfilesShape(); render(); paintAll(); return id; }
+  function addProfile(name, keys, dials, touch) { var id = newId(); profiles[id] = { name: uniqueName(name || 'Profile'), keys: keys || defaultKeySlots(profile.keys), dials: dials || defaultDialSet(profile), touch: touch || defaultTouch(profile.strip ? profile.strip.zones : 0) }; activeProfileId = id; ensureProfilesShape(); render(); paintAll(); return id; }
   function duplicateActive() { var p = mapping(); addProfile(p.name + ' copy', JSON.parse(JSON.stringify(p.keys)), p.dials.slice(), JSON.parse(JSON.stringify(p.touch))); }
   function renameActive(name) { if (name) { mapping().name = uniqueName(name); persist(); render(); } }
   function deleteActive() { if (Object.keys(profiles).length <= 1) { toast('Keep at least one profile.'); return; } delete profiles[activeProfileId]; if (defaultProfileId === activeProfileId) defaultProfileId = Object.keys(profiles)[0]; activeProfileId = Object.keys(profiles)[0]; persist(); render(); paintAll(); }
   function setDefaultActive() { defaultProfileId = activeProfileId; persist(); render(); toast('"' + mapping().name + '" is the default layout for this deck.'); }
-  function resetActive() { mapping().keys = defaultKeySlots(profile.keys); mapping().dials = DEFAULT_DIALS.slice(0, profile.dials); mapping().touch = defaultTouch(profile.strip ? profile.strip.zones : 0); persist(); render(); paintAll(); }
+  function resetActive() { mapping().keys = defaultKeySlots(profile.keys); mapping().dials = defaultDialSet(profile); mapping().touch = defaultTouch(profile.strip ? profile.strip.zones : 0); persist(); render(); paintAll(); }
 
   // ── Import / export ─────────────────────────────────────────────────────────
   function slug(s) { return String(s || 'layout').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'layout'; }
@@ -2346,6 +2462,9 @@
       + '<div class="sd-set-sec">Layout files</div>'
       + '<div class="sd-set-status"><span class="sd-obs-off">A .keywi file is a standalone copy of the current page: back it up, share it, or move it to another machine.</span></div>'
       + '<div class="sd-obs"><button class="sd-mini" id="sd-pf-exp">Export this page (.keywi)</button><button class="sd-mini" id="sd-pf-imp">Import a .keywi file</button><input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden></div>'
+      + '<div class="sd-set-sec">Clipboard</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">The PASTE key reads this machine\'s clipboard, and the browser only allows that after you approve it once. Approve it here so the key never stalls mid-show.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini" id="sd-clip-enable">Enable clipboard</button></div>'
       + '<div class="sd-save-actions"><button class="btn-primary" id="sd-set-done">Done</button></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
@@ -2357,6 +2476,15 @@
     bind('sd-pf-exp', exportActive);
     bind('sd-pf-imp', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
     var file2 = document.getElementById('sd-pf-file'); if (file2) file2.onchange = function () { if (file2.files && file2.files[0]) importFile(file2.files[0]); file2.value = ''; };
+    // One-time clipboard grant: a real user click on a read is the only thing
+    // that makes the browser show its permission prompt. The text read here is
+    // thrown away; only the grant matters.
+    bind('sd-clip-enable', function () {
+      if (!navigator.clipboard || !navigator.clipboard.readText) { toast('This browser cannot read the clipboard from a page. Use Chrome or Edge.'); return; }
+      navigator.clipboard.readText()
+        .then(function () { toast('Clipboard access granted. The PASTE key is good to go.'); })
+        .catch(function () { toast('Clipboard access is blocked. Click the lock icon by the address bar, set Clipboard to Allow, then try again.'); });
+    });
     if (!micoParked()) wireMico();
   }
   function surfaceGrid() {
@@ -3263,20 +3391,45 @@
     toast('Sign in to open KeyWi Bird.');
     return false;
   }
-  function open() {
-    if (!keyWiSignInGate()) return false;
-    showScreen(); buildCatalog(); loadTheme();
+  // ── Deck service: the always-on half ────────────────────────────────────────
+  // Everything the deck needs to drive the show app-wide, with the KeyWi card
+  // never opened: the catalog, theme and brightness prefs, the talkbackd
+  // socket, the saved-OBS reconnect, and re-claiming every previously-granted
+  // deck. Runs once (open() calls it too, for the local-dev path where the
+  // boot gate below never fires). The re-attach is silent: no light show, no
+  // strip probe, quiet failure if another app holds the device.
+  var deckServiceStarted = false;
+  function startDeckService() {
+    if (deckServiceStarted) return;
+    deckServiceStarted = true;
+    buildCatalog(); loadTheme();
     try { brightness = Math.max(0, Math.min(100, parseInt(localStorage.getItem(BRIGHTNESS_KEY), 10) || 80)); } catch (e) {}
     talkbackConnect();
     // OBS: repaint on state changes, and reconnect automatically if the operator
     // set it up before (a saved config means they use OBS with this deck).
     if (OBSc()) { OBSc().onChange(onObsChange); var oc = OBSc().config(); var savedObs = false; try { savedObs = !!localStorage.getItem('cueola_obs_config'); } catch (e) {} if (savedObs && oc && oc.url) OBSc().connect(); }
-    render();
     // Auto-reattach EVERY previously-granted deck, one after another.
     if (navigator.hid) navigator.hid.getDevices().then(async function (list) {
       var grant = (list || []).filter(supportedFilter).filter(function (d) { return !deckForHid(d); });
-      for (var gi = 0; gi < grant.length; gi++) { try { await openDevice(grant[gi]); } catch (e) {} }
+      for (var gi = 0; gi < grant.length; gi++) { try { await openDevice(grant[gi], true); } catch (e) {} }
     }).catch(function () {});
+  }
+  // Boot: start the service once sign-in truth exists, mirroring
+  // keyWiSignInGate WITHOUT ever opening sign-in UI. Fail closed (INC-4): no
+  // signed-in identity, no auto-attach; opening the card runs the real gate.
+  function bootDeckService() {
+    if (deckServiceStarted) return;
+    var id = window.CueolaIdentity, signedIn = false;
+    try { signedIn = !!(id && typeof id.identity === 'function' && id.identity()); } catch (e) {}
+    if (signedIn) startDeckService();
+  }
+  if (window._firebaseReady) bootDeckService();
+  else window.addEventListener('firebaseReady', bootDeckService, { once: true });
+  function open() {
+    if (!keyWiSignInGate()) return false;
+    showScreen();
+    startDeckService();   // idempotent: usually already running from the boot path
+    render();
     // First visit: the wizard volunteers itself once. After that it lives in
     // the toolbar. If a remembered deck reconnects above, it re-renders in place.
     if (navigator.hid && !wizardSeen() && !device && !previewMode) openWizard(0);

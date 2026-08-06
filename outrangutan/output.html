@@ -31,7 +31,7 @@
 </style>
 </head>
 <body>
-  <div id="waiting">OUTRANGUTAN OUTPUT · waiting…</div>
+  <div id="waiting"></div>
   <video id="va" class="deck front" playsinline></video>
   <video id="vb" class="deck" playsinline></video>
   <img id="vimg" class="deck" alt="">
@@ -109,6 +109,7 @@
   let heartbeatTimer = null;
   let shuttingDown = false;
   let syncing = false;
+  let standbyText = '';   // operator-set idle text; empty string = pure black standby frame
 
   function send(message) {
     if (!message || shuttingDown) return;
@@ -594,12 +595,19 @@
     return { ok: true };
   }
 
+  // Standby is black by default: the idle TEXT is emptied, never the element,
+  // because #waiting also carries real error text (protocol/identity/REPLACED).
+  function setStandbyText(text) {
+    standbyText = String(text || '');
+    if (waiting.style.display !== 'none' && runtime.recoverability !== 'unrecoverable') waiting.textContent = standbyText;
+  }
   function clearProgram() {
     clearPendingUnlock();   // stop/black/replaced must not leave the chip on the program feed
     clearImage(0);
     stopDeck(decks.a);
     stopDeck(decks.b);
     keyOff();
+    waiting.textContent = standbyText;
     waiting.style.display = 'grid';
     runtime.mediaLoadStatus = 'empty';
     runtime.playbackStatus = 'stopped';
@@ -698,6 +706,9 @@
         idEl.classList.toggle('on', !!m.on);
         idLabel.textContent = m.label || ('Output ' + OUTPUT_ID);
         return { ok: true };
+      case 'standby':
+        setStandbyText(m.text);
+        return { ok: true };
       case 'audio':
         result = await applyAudio(m, context);
         if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
@@ -772,6 +783,7 @@
     syncing = true;
     idLabel.textContent = config.label || ('Output ' + OUTPUT_ID);
     idEl.classList.toggle('on', !!config.identify);
+    setStandbyText(config.standbyText);
     const audioResult = await applyAudio({ on: !!config.audioOn, sinkId: config.sinkId || '' }, context);
     if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'State sync superseded' };
 

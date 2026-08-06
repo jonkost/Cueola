@@ -81,27 +81,31 @@
 }
 .og-bar-spacer { flex: 1 1 auto; }
 
-/* shared quiet control (bar buttons, sheet buttons, recovery, …) */
+/* shared quiet control (bar buttons, sheet buttons, recovery, …):
+   paint rides the app --btn-* tokens so it matches .btn-secondary exactly */
 .og-bar .og-back, .og-bar-btn, .og-recovery button {
   display: inline-flex; align-items: center; gap: 7px;
   min-height: var(--ui-control-height-compact, 34px);
   padding: 6px 11px; font-size: 13px; font-weight: 650; cursor: pointer;
   border-radius: var(--ui-radius-control, 12px);
-  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
-  background: color-mix(in srgb, var(--s2) 80%, transparent);
-  color: var(--text2);
+  border: var(--btn-hairline);
+  background: var(--btn-fill);
+  color: var(--btn-ink);
   transition: transform .12s var(--ease, ease), background .15s var(--ease, ease), border-color .15s var(--ease, ease), color .15s var(--ease, ease);
 }
 .og-bar .og-back:hover, .og-bar-btn:hover, .og-recovery button:hover {
-  transform: translateY(-1px); color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
-  background: color-mix(in srgb, var(--text) 7%, var(--s2));
+  transform: translateY(-1px); color: var(--btn-ink-hover);
+  border-color: transparent;
+  background: var(--btn-fill-hover);
 }
 .og-bar .og-back:active, .og-bar-btn:active, .og-recovery button:active { transform: translateY(0) scale(.98); }
 .og-bar-btn .sf-symbol { font-size: 15px; }
+/* in-sheet action buttons ride the app capsule idiom (house rule 7) */
+.og-bar-btn.og-capsule { border-radius: 999px; }
 .og-bar-btn.on { background: color-mix(in srgb, var(--accent) 84%, var(--s2)); border-color: transparent; color: color-mix(in srgb, var(--bg) 18%, #000); }
 .og-bar-btn.on:hover { background: color-mix(in srgb, var(--accent) 92%, var(--s2)); border-color: transparent; color: color-mix(in srgb, var(--bg) 18%, #000); }
-.og-bar-btn.danger { color: var(--red); background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: color-mix(in srgb, var(--red) 12%, transparent); }
+.og-bar-btn.danger { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border-color: transparent; font-weight: 600; }
+.og-bar-btn.danger:hover { color: var(--red); background: color-mix(in srgb, var(--red) 20%, transparent); border-color: transparent; }
 .og-program-popout { white-space: nowrap; font-weight: 750; }
 .og-program-popout.on { background: color-mix(in srgb, var(--green) 16%, var(--s2)); border-color: color-mix(in srgb, var(--green) 45%, var(--og-edge)); color: var(--green); }
 .og-program-popout.dead { background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: color-mix(in srgb, var(--red) 55%, var(--og-edge)); color: var(--red); }
@@ -795,18 +799,16 @@
 }
 .og-sheet-head h3 { font-family: var(--syne); font-weight: 800; margin: 0; font-size: 16px; display: flex; align-items: center; gap: 9px; }
 .og-sheet-head .sf-symbol { font-size: 15px; color: var(--text2); }
-.og-sheet-x, .og-help-close {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: var(--ui-control-height-compact, 34px); padding: 6px 16px;
-  border: none; border-radius: 999px;   /* confirming sheet action = capsule (house rule 7) */
-  background: color-mix(in srgb, var(--accent) 84%, var(--s2));
-  color: color-mix(in srgb, var(--bg) 18%, #000);
-  font-weight: 800; font-size: 14px; cursor: pointer;
-  transition: background .15s var(--ease, ease), transform .12s var(--ease, ease);
+/* Done = app .btn-primary (per-theme paint inherits); these keep sheet layout
+   only. Compound selectors on purpose: outrangutan.css loads before the app's
+   inline styles, so a bare .og-sheet-x would lose the metrics to .btn-primary
+   by source order. */
+.btn-primary.og-sheet-x, .btn-primary.og-help-close {
+  width: auto; min-height: var(--ui-control-height-compact, 34px);
+  padding: 6px 16px; font-size: 14px;
 }
-.og-sheet-x { margin-left: auto; }
-.og-sheet-x:hover, .og-help-close:hover { background: color-mix(in srgb, var(--accent) 92%, var(--s2)); transform: translateY(-1px); }
-.og-help-close { margin-top: 14px; width: 100%; padding: 10px; }
+.btn-primary.og-sheet-x { margin-left: auto; }
+.btn-primary.og-help-close { margin-top: 14px; width: 100%; padding: 10px; }
 #og-outputs-body, #og-sd-body, #og-integrations-body, #og-midi-body { padding: 18px 20px; }
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.5; margin: 14px 0 0; max-width: 68ch; }
 .og-sheet-hint { color: var(--text2); font-size: 12px; margin: 12px 0 0; }
@@ -832,6 +834,9 @@
 .og-out-mastersink { flex: 1 1 220px; min-width: 200px; }
 .og-out-mastersink label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
 .og-out-mastersink select { min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; width: 100%; }
+.og-out-standby { flex: 1 1 200px; min-width: 180px; }
+.og-out-standby label { font-size: 11px; }
+.og-out-standby input { font-size: 13px; }
 .og-out-row { border: 1px solid var(--og-edge); border-radius: var(--og-r); padding: 12px; margin-bottom: 12px; background: color-mix(in srgb, var(--s2) 70%, transparent); }
 .og-out-main { display: flex; align-items: center; gap: 8px; }
 .og-out-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); flex: 0 0 auto; }

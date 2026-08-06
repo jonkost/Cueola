@@ -10,10 +10,10 @@
   <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
   <meta name="theme-color" content="#080b12">
   <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-  <link rel="stylesheet" href="script-operator.css?v=7abb39cd6e">
+  <link rel="stylesheet" href="script-operator.css?v=cc6e2c5e25">
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=209555b4d7" defer></script>
-  <script src="script-operator.js?v=20cc4ca0c1" defer></script>
+  <script src="script-operator.js?v=cee51074da" defer></script>
 </head>
 <body>
   <main class="script-operator" id="scriptOperatorRoot">
@@ -72,9 +72,9 @@
       <section class="inspector" aria-label="Script Operator controls">
         <div class="inspector-head">
           <div class="inspector-tabs" role="tablist" aria-label="Script Operator control groups">
-            <button class="inspector-tab is-active" id="tab-prompter" type="button" role="tab" aria-selected="true" aria-controls="pane-prompter" data-tab="prompter" data-tip="Prompter">
+            <button class="inspector-tab is-active" id="tab-transport" type="button" role="tab" aria-selected="true" aria-controls="pane-transport" data-tab="transport" data-tip="Transport">
               <span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
-              <span class="visually-hidden">Prompter</span>
+              <span class="visually-hidden">Transport</span>
             </button>
             <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" data-tip="Cue and On Air">
               <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
@@ -84,15 +84,20 @@
               <span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span>
               <span class="visually-hidden">Clocks &amp; Alerts</span>
             </button>
-            <button class="inspector-tab" id="tab-formatting" type="button" role="tab" aria-selected="false" aria-controls="pane-formatting" data-tab="formatting" data-tip="Formatting and markers">
-              <span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span>
-              <span class="visually-hidden">Formatting &amp; Markers</span>
+            <button class="inspector-tab" id="tab-display" type="button" role="tab" aria-selected="false" aria-controls="pane-display" data-tab="display" data-tip="Display and theme">
+              <span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span>
+              <span class="visually-hidden">Display &amp; Theme</span>
             </button>
           </div>
-          <div class="inspector-caption" id="inspectorCaption">Prompter</div>
+          <div class="inspector-caption" id="inspectorCaption">Transport</div>
         </div>
 
-        <div class="inspector-pane is-active" id="pane-prompter" role="tabpanel" aria-labelledby="tab-prompter" data-pane="prompter">
+        <!-- Tab grouping mirrors the in-app operator inspector (OP_INSP_LABELS):
+             Transport / Cue & On Air / Clocks & Alerts / Display & Theme. The
+             in-app Screen group rides the Transport tab here, and the editor
+             helpers that exist only in this pop-out (Formatting & Markers,
+             Panel Text) ride Display & Theme: this layout stops at four tabs. -->
+        <div class="inspector-pane is-active" id="pane-transport" role="tabpanel" aria-labelledby="tab-transport" data-pane="transport">
           <section class="control-section">
             <h2>Transport</h2>
             <div class="control-grid one-column">
@@ -106,45 +111,6 @@
               <button class="control-button" type="button" data-hold-start="boost_start" data-hold-stop="boost_stop" aria-pressed="false" data-requires-state>Boost</button>
               <button class="control-button" type="button" data-command-kind="control" data-action="direction_reverse" data-state-button="reversing" data-requires-state>Reverse</button>
               <button class="control-button" type="button" data-command-kind="control" data-action="direction_forward" data-state-button="forward" data-requires-state>Forward</button>
-            </div>
-          </section>
-
-          <section class="control-section">
-            <h2>Display</h2>
-            <div class="slider-row">
-              <label for="speedRange">Speed <output id="speedValue" for="speedRange">50</output></label>
-              <button class="step-button" type="button" data-command-kind="control" data-action="speed_down" aria-label="Decrease speed" data-requires-state>−</button>
-              <input id="speedRange" type="range" min="5" max="200" value="50" data-preview-prefix="speed_set_" aria-label="Prompter speed" data-requires-state>
-              <button class="step-button" type="button" data-command-kind="control" data-action="speed_up" aria-label="Increase speed" data-requires-state>+</button>
-            </div>
-            <div class="slider-row">
-              <label for="sizeRange">Size <output id="sizeValue" for="sizeRange">48</output></label>
-              <button class="step-button" type="button" data-command-kind="control" data-action="size_down" aria-label="Decrease text size" data-requires-state>−</button>
-              <input id="sizeRange" type="range" min="24" max="120" value="48" data-preview-prefix="size_set_" aria-label="Prompter text size" data-requires-state>
-              <button class="step-button" type="button" data-command-kind="control" data-action="size_up" aria-label="Increase text size" data-requires-state>+</button>
-            </div>
-            <div class="segmented-row">
-              <span>Align</span>
-              <div class="segmented-control" role="group" aria-label="Text alignment">
-                <button type="button" data-command-kind="control" data-action="align_left" data-align="left" data-requires-state>Left</button>
-                <button type="button" data-command-kind="control" data-action="align_center" data-align="center" data-requires-state>Center</button>
-                <button type="button" data-command-kind="control" data-action="align_right" data-align="right" data-requires-state>Right</button>
-              </div>
-            </div>
-          </section>
-
-          <section class="control-section">
-            <h2>Theme</h2>
-            <div class="theme-grid" role="group" aria-label="Flowmingo theme">
-              <button class="theme-tile" type="button" data-theme-choice="cool" data-command-kind="control" data-action="theme_cool" aria-pressed="false" data-requires-state><span class="theme-preview preview-cool"></span><span>Glacier</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="warm" data-command-kind="control" data-action="theme_warm" aria-pressed="false" data-requires-state><span class="theme-preview preview-warm"></span><span>Honey</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="white" data-command-kind="control" data-action="theme_white" aria-pressed="false" data-requires-state><span class="theme-preview preview-white"></span><span>Polar Bear</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="green" data-command-kind="control" data-action="theme_green" aria-pressed="false" data-requires-state><span class="theme-preview preview-green"></span><span>Eucalyptus</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="koala" data-command-kind="control" data-action="theme_koala" aria-pressed="false" data-requires-state><span class="theme-preview preview-koala"></span><span>Koala</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="panda" data-command-kind="control" data-action="theme_panda" aria-pressed="false" data-requires-state><span class="theme-preview preview-panda"></span><span>Planda Bear</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="flamingo" data-command-kind="control" data-action="theme_flamingo" aria-pressed="false" data-requires-state><span class="theme-preview preview-flamingo"></span><span>Flowmingo</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="outrangutan" data-command-kind="control" data-action="theme_outrangutan" aria-pressed="false" data-requires-state><span class="theme-preview preview-outrangutan"></span><span>Outrangutan</span></button>
-              <button class="theme-tile" type="button" data-theme-choice="prepbear" data-command-kind="control" data-action="theme_prepbear" aria-pressed="false" data-requires-state><span class="theme-preview preview-prepbear"></span><span>PrepBear</span></button>
             </div>
           </section>
 
@@ -231,6 +197,16 @@
             <button class="control-button full-width" id="questionButton" type="button" data-command-kind="control" data-action="question_on" aria-pressed="false" data-requires-state>
               <span class="sf-symbol" id="questionButtonSymbol" data-symbol="notification.default" aria-hidden="true"></span><span id="questionButtonLabel">Question</span>
             </button>
+            <button class="control-button full-width" type="button" data-command-kind="control" data-action="overlays_clear" data-tip="Drop the clock, wrap, question, and slates in one go" data-requires-state>
+              <span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Clear all overlays</span>
+            </button>
+            <div class="question-lane">
+              <input id="questionLaneInput" type="text" maxlength="280" placeholder="Paste a chat question · Enter pushes · Esc clears" aria-label="Question for the talent" list="questionLaneCards" data-requires-state>
+              <datalist id="questionLaneCards"></datalist>
+              <button class="control-button question-lane-push" id="questionLanePush" type="button" data-question-push data-tip="Push this question to the talent as a QUESTION card" data-requires-state>
+                <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push</span>
+              </button>
+            </div>
             <div class="stepper-row">
               <span>Overlay size</span>
               <div class="stepper">
@@ -242,7 +218,46 @@
           </section>
         </div>
 
-        <div class="inspector-pane" id="pane-formatting" role="tabpanel" aria-labelledby="tab-formatting" data-pane="formatting" hidden>
+        <div class="inspector-pane" id="pane-display" role="tabpanel" aria-labelledby="tab-display" data-pane="display" hidden>
+          <section class="control-section">
+            <h2>Display</h2>
+            <div class="slider-row">
+              <label for="speedRange">Speed <output id="speedValue" for="speedRange">50</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_down" aria-label="Decrease speed" data-requires-state>−</button>
+              <input id="speedRange" type="range" min="5" max="200" value="50" data-preview-prefix="speed_set_" aria-label="Prompter speed" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_up" aria-label="Increase speed" data-requires-state>+</button>
+            </div>
+            <div class="slider-row">
+              <label for="sizeRange">Size <output id="sizeValue" for="sizeRange">48</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_down" aria-label="Decrease text size" data-requires-state>−</button>
+              <input id="sizeRange" type="range" min="24" max="120" value="48" data-preview-prefix="size_set_" aria-label="Prompter text size" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_up" aria-label="Increase text size" data-requires-state>+</button>
+            </div>
+            <div class="segmented-row">
+              <span>Align</span>
+              <div class="segmented-control" role="group" aria-label="Text alignment">
+                <button type="button" data-command-kind="control" data-action="align_left" data-align="left" data-requires-state>Left</button>
+                <button type="button" data-command-kind="control" data-action="align_center" data-align="center" data-requires-state>Center</button>
+                <button type="button" data-command-kind="control" data-action="align_right" data-align="right" data-requires-state>Right</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <h2>Theme</h2>
+            <div class="theme-grid" role="group" aria-label="Flowmingo theme">
+              <button class="theme-tile" type="button" data-theme-choice="cool" data-command-kind="control" data-action="theme_cool" aria-pressed="false" data-requires-state><span class="theme-preview preview-cool"></span><span>Glacier</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="warm" data-command-kind="control" data-action="theme_warm" aria-pressed="false" data-requires-state><span class="theme-preview preview-warm"></span><span>Honey</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="white" data-command-kind="control" data-action="theme_white" aria-pressed="false" data-requires-state><span class="theme-preview preview-white"></span><span>Polar Bear</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="green" data-command-kind="control" data-action="theme_green" aria-pressed="false" data-requires-state><span class="theme-preview preview-green"></span><span>Eucalyptus</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="koala" data-command-kind="control" data-action="theme_koala" aria-pressed="false" data-requires-state><span class="theme-preview preview-koala"></span><span>Koala</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="panda" data-command-kind="control" data-action="theme_panda" aria-pressed="false" data-requires-state><span class="theme-preview preview-panda"></span><span>Planda Bear</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="flamingo" data-command-kind="control" data-action="theme_flamingo" aria-pressed="false" data-requires-state><span class="theme-preview preview-flamingo"></span><span>Flowmingo</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="outrangutan" data-command-kind="control" data-action="theme_outrangutan" aria-pressed="false" data-requires-state><span class="theme-preview preview-outrangutan"></span><span>Outrangutan</span></button>
+              <button class="theme-tile" type="button" data-theme-choice="prepbear" data-command-kind="control" data-action="theme_prepbear" aria-pressed="false" data-requires-state><span class="theme-preview preview-prepbear"></span><span>PrepBear</span></button>
+            </div>
+          </section>
+
           <section class="control-section">
             <h2>Formatting &amp; Markers</h2>
             <p class="section-help">Formatting is inserted into the script at the current selection.</p>
@@ -259,7 +274,7 @@
           </section>
           <section class="control-section">
             <h2>Panel Text</h2>
-            <p class="section-help">Sizes this control panel and the script editor for your reading distance. The talent's prompter size is set under Prompter.</p>
+            <p class="section-help">Sizes this control panel and the script editor for your reading distance. The talent's prompter size is set in the Display section above.</p>
             <div class="slider-row">
               <label for="panelZoomRange">Size <output id="panelZoomValue" for="panelZoomRange">100%</output></label>
               <button class="step-button" type="button" id="panelZoomDown" aria-label="Smaller panel text">−</button>

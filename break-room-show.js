@@ -17,10 +17,14 @@
 // THE BREAK ROOM · advanced demo show content for Cueola full-system testing
 // ============================================================================
 // WIRING CONTRACT (read before touching):
-//   This file is CONTENT ONLY. It ships zero behavior. A later wiring phase
-//   imports or inlines this data into the app's demo loader (see loadDemo()
-//   and DEMO_BEATS in cueola-app.js) and into an Outrangutan .ogshow build.
-//   Nothing here runs, registers, or mutates anything.
+//   This file is CONTENT ONLY. It ships zero behavior; nothing here runs,
+//   registers, or mutates anything. The wiring EXISTS now, in two consumers:
+//     1. the Kit below feeds cueola-app.js (maybeStageTestShowDeckLayouts)
+//        and the dashboard admin "Create Test Show" seeder;
+//     2. the section 4 PLAYBACK data is built into a real Outrangutan show by
+//        seedBreakRoomShow() in outrangutan/outrangutan.js: first join of a
+//        testShow:'break-room' session whose local show is still empty, with
+//        media fetched from the tracked demo-media/ folder.
 //
 // FIELD-SHAPE SOURCES (verified against the repo on 2026-07-27):
 //   rows[]                  = exact DEMO_BEATS beat shape (cueola-app.js ~21890):
@@ -406,11 +410,12 @@ Good night.
 
   // ──────────────────────────────────────────────────────────────────────────
   // 4 · PLAYBACK (Outrangutan show content)
-  //   Files below are the ACTUAL contents of test-media/ (verified):
-  //     bars-16x9.mp4, bars-4x3.mp4, bars-9x16.mp4, corrupt-truncated.mp4,
-  //     unplayable-prores.mov, sfx-ding.wav, still-16x9.png, still-4x3.jpg
-  //   Wiring phase: import each file, swap `file` for the resulting mediaId,
-  //   and let makeCue fill the remaining defaults (eq, fades, key, obs, fit).
+  //   WIRED: seedBreakRoomShow() (outrangutan/outrangutan.js) imports each
+  //   `file` from the tracked demo-media/ folder (precached by sw.js), swaps
+  //   it for the resulting mediaId, and lets makeCue fill the remaining
+  //   defaults (eq, fades, key, obs, fit). The importRejectDrillFiles below
+  //   are NEVER fetched and live only in test-media/ (gitignored), so the
+  //   BROKEN CUE keeps pointing at media that is really missing.
   // ──────────────────────────────────────────────────────────────────────────
   playback: {
     showName: 'The Break Room · Demo Playout',
@@ -447,9 +452,9 @@ Good night.
     importRejectDrillFiles: ['corrupt-truncated.mp4', 'unplayable-prores.mov'],
 
     // SFX pad board: one bank, 8 pads. Hotkeys are the first eight PAD_KEYS.
-    // All files live in test-media/ (gitignored, local): sfx-ding.wav ships
-    // with the repo history, the four demo-*.wav files are synthesized by
-    // scripts/make-demo-sfx.mjs (run it once per machine before the drill).
+    // All pad files ship tracked in demo-media/ (the seeder imports them);
+    // test-media/ keeps regenerable local copies (scripts/make-demo-sfx.mjs)
+    // for hand-run drills.
     pads: [
       { slot: 1, name: 'DESK STINGER', emoji: '⚡', key: '1', file: 'sfx-ding.wav', trimIn: 0,   gain: 1.0, retrigger: 'restart', fileNeeded: false,
         notes: 'Punchline button. Stand-in: the ding with no trim.' },

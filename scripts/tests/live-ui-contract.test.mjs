@@ -59,6 +59,35 @@ test('Live cue renderers share READY and TAKE vocabulary', () => {
   assert.doesNotMatch(app.slice(app.indexOf('function renderLiveCurrent'), app.indexOf('function liveRowPreview')), />[▶■○]\s*\$\{esc/);
 });
 
+test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted beats (R1)', () => {
+  // Playback-only chip overrides; every other cue type keeps READY/TAKE above.
+  assert.match(app, /ready:\{ label:'ROLL'/);
+  assert.match(app, /take:\{ label:'OUT'/);
+  assert.match(app, /LIVE_CUE_OPERATION_OVERRIDES\[cueType\]/);
+  assert.match(app, /function liveCueOperationLine\(operation, text, className='', style='', cueType=''\)/);
+  // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
+  // silently drops every beat field it does not list.
+  assert.match(app, /\['style','info','notes','min','sec','done','helperFor','helperRole','_createdAt','_createdBy'\]/);
+  // saveCueConfig is the single chokepoint that generates PREP/OUT rows.
+  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
+  assert.match(save, /syncPlaybackHelperRows\(b, prevCell, d\)/);
+  const sync = app.slice(app.indexOf('function syncPlaybackHelperRows('), app.indexOf('function removeCueCfg()'));
+  assert.match(sync, /helperFor: String\(parent\.id\), helperRole: role/);
+  assert.match(sync, /beats\.splice\(role === 'prep' \? pIdx : pIdx \+ 1, 0, row\)/);
+  // The wizard offers the guided rows as opt-in checkboxes.
+  assert.match(app, /id="cc-guided-prep"/);
+  assert.match(app, /id="cc-guided-out"/);
+  // Helper rows render with role tags in the builder table and the live grid.
+  assert.match(app, /rundown-row-helper helper-\$\{b\.helperRole\}/);
+  assert.match(app, /live-row-helper helper-\$\{b\.helperRole\}/);
+  assert.match(html, /\.helper-tag-prep/);
+  assert.match(html, /\.helper-tag-out/);
+  // Deleting a parent playback row sweeps its helpers in the same pass.
+  assert.match(app, /Removed the row and its PREP\/OUT helper rows\./);
+  // The printed rundown legend teaches the playback vocabulary too.
+  assert.match(app, /For playback rows: <b>ROLL<\/b> = start the clip · <b>OUT<\/b> = the plan for getting out/);
+});
+
 test('subsystem failures have persistent local recovery surfaces', () => {
   for (const id of ['ls-status-flowmingo', 'ls-status-playback', 'ls-status-script', 'ls-status-sync']) {
     assert.match(html, new RegExp(`id="${id}"`));
@@ -199,6 +228,47 @@ test('questions lane replaces push-paste: QUESTION card in, script pollution out
   assert.match(app, /applyRemoteControlOnce\(control\.action, control\.ts, control\.sender, control\.controlId, control\.payload\)/);
 });
 
+test('Script Operator pop-out parity: question lane, numeric readouts, in-app tab grouping (3.5)', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
+  // The pop-out question lane rides the allowlisted command channel with the
+  // card text as payload; the host forwards it with the same 280-char cap.
+  assert.match(scriptOpHtml, /id="questionLaneInput"/);
+  assert.match(scriptOpHtml, /id="questionLaneCards"/);
+  assert.match(scriptOp, /function pushQuestionLane\(\)/);
+  assert.match(scriptOp, /sendIntent\('control', \{ action: 'question_on', text \}\)/);
+  assert.match(app, /'clock_size_up','clock_size_down','question_on','question_off','overlays_clear'/);
+  assert.match(app, /questionText \? sendPrompterControl\(action, \{ text: questionText \}\) : sendPrompterControl\(action\)/);
+  // Prepared question cards reach the pop-out datalist through the snapshot.
+  assert.match(app, /questionCards:\(sessionQuestionCards \|\| \[\]\)\.slice\(0, 30\)/);
+  assert.match(scriptOp, /function patchQuestionCards\(cards\)/);
+  // In-app speed/size slider rows carry the pop-out's live numeric readouts.
+  assert.match(app, /data-prompter-speed-value/);
+  assert.match(app, /data-prompter-size-value/);
+  assert.match(app, /function syncPrompterSliderReadouts\(\)/);
+  // Tab names and grouping mirror OP_INSP_LABELS within the 4-tab layout, and
+  // remembered pre-regroup tab keys map onto their new homes.
+  assert.match(scriptOp, /transport: 'Transport',\s*\n\s*live: 'Cue & On Air',\s*\n\s*clocks: 'Clocks & Alerts',\s*\n\s*display: 'Display & Theme'/);
+  assert.match(scriptOp, /LEGACY_TAB_KEYS = \{ prompter: 'transport', formatting: 'display' \}/);
+  assert.match(scriptOpHtml, /data-pane="transport"/);
+  assert.match(scriptOpHtml, /data-pane="display"/);
+  assert.doesNotMatch(scriptOpHtml, /data-pane="prompter"|data-pane="formatting"/);
+});
+
+test('Production Notes SFX bridge: taggable uploads and a pull API for Outrangutan (3.3)', () => {
+  // The pull surface Outrangutan's Import from Production Notes consumes:
+  // list() rows for every isAudio attachment, getFile() through the chunked
+  // loader. Pull-only, so the closed-Outrangutan anti-clobber rule holds.
+  assert.match(app, /window\.CueolaPBSfx = \{/);
+  assert.match(app, /async list\(\)/);
+  assert.match(app, /async getFile\(item\)/);
+  // SFX is a first-class board tag, and the composer states the audio cap.
+  assert.match(app, /sfx:\s+\{ label:'SFX',\s+symbol:'media\.waveform' \}/);
+  assert.match(html, /Audio uploads cap at 4MB\. Use mp3 or m4a for SFX\./);
+  // The closed-Outrangutan hand-off toast points at the pull path too.
+  assert.match(app, /Import from Production Notes/);
+});
+
 test('runtime stays slim: no boot vendor libs, owned timers, recorded budgets (D12.7)', async () => {
   // No vendor library rides boot — everything loads on first use.
   assert.doesNotMatch(html, /<script src="assets\/vendor/);
@@ -290,16 +360,49 @@ test('Ready·Track·Roll·Take: armed call with an abort window, published for a
 
 test('playout countdown publishes once per start and ticks locally everywhere (D11.4)', () => {
   // Outrangutan publishes ONE additive write per clip start — no per-second writes.
-  assert.match(playbackJs, /function publishPlayingStart\(cue\)/);
+  assert.match(playbackJs, /function publishPlayingStart\(cue, opts\)/);
   assert.match(playbackJs, /'outrangutan\.playingStart'/);
   const starts = playbackJs.match(/publishPlayingStart\(cue\)/g) || [];
   assert.ok(starts.length >= 2, 'both beginMedia and beginImage publish the start');
+  // Resume re-anchors the countdown from the real media position, and a
+  // recovery start publishes only the remaining play length.
+  assert.match(playbackJs, /publishPlayingStart\(active\.cue, \{ elapsedMs/);
+  assert.match(playbackJs, /publishPlayingStart\(cue, \{ durMs/);
   // Every client ingests it stamp-guarded and ticks locally with an owned timer.
   assert.match(app, /outrangutanState\.playingStart = og\.playingStart/);
   assert.match(app, /function outCountdownText\(cueId\)/);
   assert.match(app, /function syncOutCountdownTicker\(\)/);
   assert.match(app, /data-outremain/);
   assert.match(html, /\.cue-out-remain\{/);
+});
+
+test('the always-on playout strip rides the Live screen outside the rebuilt grid (R2)', () => {
+  // The strip lives OUTSIDE #lsBody, so renderLive rebuilds never touch it.
+  const stripAt = html.indexOf('id="lsPlayoutStrip"');
+  const bodyAt = html.indexOf('id="lsBody"');
+  assert.ok(stripAt >= 0 && bodyAt > stripAt, 'strip markup sits above (outside) #lsBody');
+  assert.match(html, /\.ls-playout-strip\{/);
+  assert.match(html, /\.ls-playout-fill\{/);
+  // One shared accessor answers "what is playout doing": same-tab progress
+  // first, playingStart wall-clock math next, published remaining last.
+  assert.match(app, /function playoutNow\(\)/);
+  assert.match(app, /function _playoutNowCue\(\)/);
+  assert.match(app, /function _playoutNowPad\(\)/);
+  // The countdown pass patches the strip in place (P3), and the owned ticker
+  // runs whenever playout is active, linked to a rundown row or not.
+  const render = app.slice(app.indexOf('function renderOutCountdowns()'), app.indexOf('function syncOutCountdownTicker()'));
+  assert.match(render, /renderPlayoutStrip\(\)/);
+  const sync = app.slice(app.indexOf('function syncOutCountdownTicker()'), app.indexOf('function applySfxFireEvent('));
+  assert.match(sync, /playoutNow\(\) != null/);
+  const strip = app.slice(app.indexOf('function renderPlayoutStrip()'), app.indexOf('function outCountdownText('));
+  assert.match(strip, /textContent !== /);
+  // Pad fires remember their timing so followers can count them down too.
+  assert.match(app, /_sfxLast = \{/);
+  // Row badge chips are styled states (ON AIR red, PAUSE amber, PRE neutral).
+  assert.match(html, /\.cue-out-badge\{/);
+  assert.match(html, /\.cue-out-play\{/);
+  assert.match(html, /\.cue-out-pause\{/);
+  assert.match(html, /\.cue-out-pre\{/);
 });
 
 test('controls never lie, never move, never silently refuse (D11.5)', () => {
@@ -311,9 +414,10 @@ test('controls never lie, never move, never silently refuse (D11.5)', () => {
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
   assert.match(next, /toast\('End of rundown\. There is no next row\.'\)/);
   assert.match(app, /Live commands are paused\. The show screen is still settling/);
-  // Fixed geometry: the GO control has a fixed width and its label ellipsizes.
-  assert.match(html, /\.ls-go-primary\{[^}]*width:min\(38vw,380px\)/);
-  assert.match(html, /\.ls-go-primary \.ls-go-label\{[^}]*text-overflow:ellipsis/);
+  // Fixed geometry: Previous and GO share one even min-width and the next-cue
+  // preview text stays out of the button (hover tip/aria carry it instead).
+  assert.match(html, /\.ls-nav \.ls-btn\{[^}]*min-width:116px/);
+  assert.match(html, /\.ls-go-primary \.ls-go-label\{display:none\}/);
   assert.match(html, /\.ls-start-btn\{[^}]*min-width:112px/);
   // Click-row-to-cue is independent of the show clock — no clock state feeds
   // the activation path.

@@ -364,6 +364,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   font-family: var(--mono);
 }
 .single-field { margin-top: 9px; }
+.question-lane { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.question-lane input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-control);
+  color: var(--text);
+  background: var(--s1);
+  font-family: var(--mono);
+}
+.question-lane-push { flex: none; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; }
+
 .stepper { display: grid; grid-template-columns: 36px 46px 36px; }
 .stepper button { height: 34px; border-radius: 0; }
 .stepper button:first-child { border-radius: var(--ui-radius-control) 0 0 var(--ui-radius-control); }
