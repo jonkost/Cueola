@@ -34,7 +34,7 @@
   --btn-fill-2-hover: color-mix(in srgb, var(--s4) 88%, transparent);
   --btn-ink: var(--text2);
   --btn-ink-hover: var(--text);
-  --btn-hairline: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  --btn-hairline: 1px solid transparent;
   color-scheme: dark;
   font-family: var(--sans);
 }
@@ -116,8 +116,11 @@ button { color: inherit; }
   justify-content: space-between;
   gap: 16px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid transparent;
   background: color-mix(in srgb, var(--s1) 94%, transparent);
+  /* Top chrome vs workspace: the 94% --s1 bar is 1.05:1 against the page, so the
+     layer boundary needs the shadow rule to exist at all. */
+  box-shadow: inset 0 -1px 0 var(--glass-border);
 }
 .operator-identity { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
 .operator-brand { flex: 0 0 auto; font-family: var(--syne); font-size: 18px; font-weight: 800; letter-spacing: -.04em; }
@@ -130,18 +133,19 @@ button { color: inherit; }
   gap: 6px;
   min-height: 30px;
   padding: 5px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 999px;
   color: var(--text2);
-  background: var(--s2);
+  /* --s3 so the capsule silhouette survives inside the --s1 operator bar. */
+  background: var(--s3);
   font: 700 11px/1.2 var(--mono);
   letter-spacing: .04em;
   white-space: nowrap;
 }
 .connection-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
-.connection-status[data-state="ready"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 34%, var(--border)); }
+.connection-status[data-state="ready"] { color: var(--green); border-color: transparent; }
 .connection-status[data-state="ready"] .connection-dot { background: var(--green); }
-.connection-status[data-state="disconnected"] { color: var(--red); border-color: color-mix(in srgb, var(--red) 38%, var(--border)); }
+.connection-status[data-state="disconnected"] { color: var(--red); border-color: transparent; }
 .connection-status[data-state="disconnected"] .connection-dot { background: var(--red); }
 
 .icon-button, .quiet-button, .primary-button, .control-button, .step-button, .inspector-tab, .theme-tile, .format-button, .segmented-control button, .stepper button {
@@ -171,14 +175,14 @@ button:disabled, input:disabled, textarea:disabled { cursor: not-allowed; opacit
   justify-content: center;
   gap: 8px;
   padding: 8px 15px;
-  border-color: color-mix(in srgb, var(--green) 64%, #fff);
+  border-color: transparent;
   color: #03150c;
   background: color-mix(in srgb, var(--green) 86%, #fff);
   font-size: 12px;
   font-weight: 800;
 }
 .primary-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--green) 64%, #fff);
+  border-color: transparent;
   color: #03150c;
   background: color-mix(in srgb, var(--green) 86%, #fff);
   filter: brightness(1.05);
@@ -191,7 +195,7 @@ button:disabled, input:disabled, textarea:disabled { cursor: not-allowed; opacit
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--red) 42%, var(--border));
+  border-bottom: 1px solid transparent;
   color: var(--text);
   background: color-mix(in srgb, var(--red) 12%, var(--s1));
 }
@@ -226,17 +230,24 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
   display: block;
   resize: vertical;
   padding: 13px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-control);
   color: var(--text);
-  background: var(--s1);
+  /* Primary input of the page. With no edge, an --s1 plate was 1.05:1 against
+     the page and did not read as a field at all; --s3 carries the boundary as
+     contrast instead (1.16:1 to 1.45:1 across the nine themes, at or above the
+     hairline it replaces, and over the whole field area rather than 1px). */
+  background: var(--s3);
   caret-color: var(--accent);
   font: 13px/1.65 var(--sans);
 }
 .script-editor::placeholder { color: var(--text3); }
 .script-actions { display: grid; grid-template-columns: auto auto minmax(150px, 1fr); gap: 8px; margin-top: 8px; }
 
-.inspector { border-top: 1px solid var(--border); }
+.inspector { border-top: 1px solid transparent; box-shadow: inset 0 1px 0 var(--glass-border); }
+/* Sticky header: content scrolls under it, so the lower edge is correctness, not
+   decoration. The glass plate is only 1.05:1 against the page, so the boundary is
+   carried by an inset shadow rule (the blur alone is invisible on flat colour). */
 .inspector-head {
   position: sticky;
   top: -14px;
@@ -245,7 +256,8 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
   background: color-mix(in srgb, var(--s1) 94%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-bottom: 1px solid transparent;
+  box-shadow: inset 0 -1px 0 var(--glass-border);
 }
 .inspector-tabs { display: flex; justify-content: center; gap: 9px; }
 .inspector-tab {
@@ -256,7 +268,7 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
   place-items: center;
   border-radius: 50%;
   color: var(--text3);
-  border-color: var(--glass-border);
+  border-color: transparent;
   background: color-mix(in srgb, var(--s2) 64%, transparent);
   box-shadow: var(--glass-highlight);
   font-size: 19px;
@@ -264,16 +276,22 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
 }
 .inspector-tab:hover:not(:disabled) {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 28%, var(--glass-border));
+  border-color: transparent;
   background: color-mix(in srgb, var(--s3) 72%, transparent);
   transform: translateY(-1px);
 }
-.inspector-tab.is-active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border)); background: color-mix(in srgb, var(--accent) 18%, var(--s2)); box-shadow: var(--glass-highlight); }
+/* :hover twin required: .inspector-tab:hover:not(:disabled) is (0,3,0) and was
+   replacing both the accent ink and the accent fill on the selected tab. */
+.inspector-tab.is-active,
+.inspector-tab.is-active:hover { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 26%, var(--s2)); box-shadow: var(--glass-highlight); }
 .inspector-caption { padding: 7px 2px 0; color: var(--text3); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .inspector-pane { padding-bottom: 12px; }
 
-.control-section { padding: 14px 0; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
-.control-section:first-child { border-top: 0; }
+/* This was the only separator between inspector sections (no per-section plate),
+   so without it every pane ran together as one column. Returned as an inset
+   shadow rule rather than a border: same 1px line, still a shadow not a stroke. */
+.control-section { padding: 14px 0; border-top: 1px solid transparent; box-shadow: inset 0 1px 0 var(--glass-border); }
+.control-section:first-child { border-top: 0; box-shadow: none; }
 .control-section h2 { margin: 0 0 10px; font-size: 12px; line-height: 1.2; }
 .section-help { margin: -3px 0 11px; color: var(--text2); font-size: 11px; line-height: 1.45; }
 .control-grid { display: grid; gap: 7px; }
@@ -292,9 +310,14 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
   font-size: 11px;
   font-weight: 750;
 }
-.control-button.is-active, .control-button[aria-pressed="true"] { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+/* The :hover twins keep the generic button:hover:not(:disabled) (0,2,1) from
+   outranking these (0,2,0) state fills. Without them a pressed control, and a
+   running playback button, looked idle whenever the pointer was on it. */
+.control-button.is-active, .control-button[aria-pressed="true"],
+.control-button.is-active:hover, .control-button[aria-pressed="true"]:hover { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .play-button { min-height: 46px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-.play-button.is-active { color: var(--red); border-color: transparent; background: color-mix(in srgb, var(--red) 16%, transparent); }
+.play-button.is-active,
+.play-button.is-active:hover { color: var(--red); border-color: transparent; background: color-mix(in srgb, var(--red) 16%, transparent); }
 .warning-button { color: var(--yellow); }
 .full-width { width: 100%; }
 
@@ -313,15 +336,34 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .segmented-row, .stepper-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--text2); font-size: 11px; font-weight: 700; }
 .segmented-control { flex: 1; max-width: 330px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .segmented-control button { min-height: var(--ui-control-height-compact); font-size: 11px; }
-.segmented-control button.is-active { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.segmented-control button.is-active,
+.segmented-control button.is-active:hover { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, transparent); }
 
 .theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .theme-tile { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 4px; border: 0; border-radius: var(--ui-radius-control); background: transparent; color: var(--text2); font: 700 11px/1.2 var(--mono); text-align: center; }
-.theme-tile:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+/* :not(:disabled) added only to outrank the generic button:hover (0,2,1); this
+   tile's own quiet tint was being replaced by --btn-fill-hover. */
+.theme-tile:hover:not(:disabled) { color: var(--btn-ink-hover); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .theme-tile > span:last-child { overflow: hidden; max-width: 100%; padding: 0 2px; text-overflow: ellipsis; white-space: nowrap; }
-.theme-tile.is-active { color: var(--accent); }
-.theme-preview { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--bord2); }
-.theme-tile.is-active .theme-preview { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+/* Selection reads as a fill, not a ring: the accent-tinted tile plus the accent
+   label carry the state (matches .control-button.is-active). The :hover twin is
+   required: once a fill is the sole carrier of state, the generic
+   button:hover:not(:disabled) (0,2,1) must not be allowed to outrank it. */
+.theme-tile.is-active,
+.theme-tile.is-active:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); }
+/* The swatch's entire job is to show a theme colour, so it cannot be tinted or
+   filled without destroying the data it displays. Seven of the nine swatches are
+   byte-identical to some theme's own --bg, so on those themes the chip vanishes.
+   The rim is an inset shadow (not a stroke) mixed from the CURRENT theme's --text,
+   so it reads light-on-dark and dark-on-light: 2.3:1 to 3.0:1 against the page on
+   every theme, better than the 1.6:1 to 2.8:1 outline it replaces. */
+.theme-preview {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
+}
 .preview-cool { background: #0a0d18; }
 .preview-warm { background: #ffc400; }
 .preview-white { background: #fafaf7; }
@@ -344,23 +386,25 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   min-height: 58px;
   margin-bottom: 13px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-group);
-  background: var(--s1);
+  background: var(--s3);
 }
 .clock-preview span { color: var(--text2); font: 700 11px/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
 .clock-preview strong { font: 700 20px/1 var(--mono); font-variant-numeric: tabular-nums; }
 .clock-preview em { grid-column: 1 / -1; color: var(--yellow); font-size: 11px; font-style: normal; font-weight: 700; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
 .field-grid label, .single-field { display: grid; gap: 5px; color: var(--text2); font-size: 11px; font-weight: 700; }
+/* Field surfaces all sit at --s3 so a field still reads as a field with no
+   stroke: --s1 was 1.04:1 to 1.11:1 against the page on every theme. */
 .field-grid input, .single-field input {
   min-width: 0;
   height: 38px;
   padding: 7px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-control);
   color: var(--text);
-  background: var(--s1);
+  background: var(--s3);
   font-family: var(--mono);
 }
 .single-field { margin-top: 9px; }
@@ -370,10 +414,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   min-width: 0;
   height: 38px;
   padding: 7px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-control);
   color: var(--text);
-  background: var(--s1);
+  background: var(--s3);
   font-family: var(--mono);
 }
 .question-lane-push { flex: none; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; }
@@ -382,7 +426,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .stepper button { height: 34px; border-radius: 0; }
 .stepper button:first-child { border-radius: var(--ui-radius-control) 0 0 var(--ui-radius-control); }
 .stepper button:last-child { border-radius: 0 var(--ui-radius-control) var(--ui-radius-control) 0; }
-.stepper output { display: grid; place-items: center; border-block: 1px solid var(--border); color: var(--text); background: var(--s1); font: 700 11px/1 var(--mono); }
+/* The value well was --s1 between two --btn-fill buttons, so with the outer edge
+   gone the stepper read as two blocks with a hole. --s3 makes the middle the
+   deepest surface of the three, so the group reads as one control. */
+.stepper output { display: grid; place-items: center; border-block: 1px solid transparent; color: var(--text); background: var(--s3); font: 700 11px/1 var(--mono); }
 
 .format-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .format-button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; }
@@ -410,7 +457,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   overflow: auto;
   overscroll-behavior: contain;
   padding: 20px;
-  border: 1px solid var(--liquid-edge);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-panel);
   background: var(--glass-bg-strong);
   box-shadow: var(--glass-highlight);
@@ -431,13 +478,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   font-weight: 700;
 }
 .km-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 20px; }
-.km-group-t { margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid var(--border); color: var(--accent); font-size: 12px; font-weight: 800; }
+/* The overlay is an auto-fit multi-column grid, so this underline is what binds
+   each group's rows to its own title across columns. Inset shadow rule. */
+.km-group-t { margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid transparent; box-shadow: inset 0 -1px 0 var(--glass-border); color: var(--accent); font-size: 12px; font-weight: 800; }
 .km-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
 .km-lbl { flex: 1; color: var(--text2); font-size: 12.5px; }
 .km-keys { display: flex; gap: 4px; }
-.km-key { padding: 2px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--text); background: var(--s3); font: 700 11px/1.4 var(--mono); white-space: nowrap; }
+/* --s4 so a keycap still reads as a cap inside the --glass-bg-strong card. */
+.km-key { padding: 2px 7px; border: 1px solid transparent; border-radius: 5px; color: var(--text); background: var(--s4); font: 700 11px/1.4 var(--mono); white-space: nowrap; }
 .km-note { margin-top: 6px; color: var(--text3); font-size: 11px; line-height: 1.5; }
-.km-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text3); font-size: 11px; line-height: 1.6; }
+.km-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid transparent; box-shadow: inset 0 1px 0 var(--glass-border); color: var(--text3); font-size: 11px; line-height: 1.6; }
 .km-foot code { padding: 1px 5px; border-radius: 4px; background: var(--s3); font-family: var(--mono); font-size: 11px; }
 
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(1px, 1px, 1px, 1px) !important; white-space: nowrap !important; }
@@ -474,13 +524,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--liquid-edge);
+  /* Every elevation token in this file is a deliberate no-op, so a floating
+     toast has no drop shadow to separate it from whatever it covers. It gets the
+     opaque top surface plus an inset rim: it can land over the page, the --s3
+     editor or the inspector, so no single fill can outrank all of them. */
+  background: var(--s4);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-control);
   padding: 9px 18px;
   font-size: 14px;
   color: var(--text);
-  box-shadow: var(--glass-highlight);
+  box-shadow: var(--glass-highlight), inset 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent);
   backdrop-filter: blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   -webkit-backdrop-filter: blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   z-index: 999;

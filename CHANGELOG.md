@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.2.1: Stroke pass, Planda Bear header, new brand art (built 2026-08-07)
+
+A look round: the app sheds its hairlines, the Planda Bear header stops
+colliding with its own icon, and the Cueola and Flowmingo marks are replaced.
+
+### Strokes removed app-wide
+- Aggressive stroke pass across index.html, dashboard.html,
+  script-operator.css and outrangutan.css: decorative borders are gone and
+  separation now comes from fills and glass, not hairlines. Inputs and table
+  grids are included, per the owner's call.
+- Every blanked stroke keeps its original width as `transparent`, so nothing
+  reflows: the line disappears, the box does not move.
+- `--btn-hairline` is retired to `1px solid transparent` at its definitions,
+  which clears the button hairline everywhere at once without touching the
+  hundreds of `border:var(--btn-hairline)` call sites.
+- Kept on purpose: every `:focus` / `:focus-visible` ring (keyboard focus
+  visibility is not part of this pass), state strokes that are a state's only
+  signal, glass inset highlights (lighting, not strokes), and the print and
+  PDF paperwork rules, which need real borders on paper.
+
+### Planda Bear
+- Header lockup spacing fixed. The 74px brand icon was sitting in a 58px box,
+  so it overflowed 16px right and down instead of centring: the title text
+  landed 2px *inside* the artwork and the icon hung into the header's bottom
+  edge. Box and artwork are now the same size with an honest 16px gap.
+- Production Notes moved out of the body. It was a page-wide banner wedged
+  between the header and the six numbered pages; it is now a compact Notes
+  button in the header tools row, carrying the note count as a badge and the
+  old descriptive line as its tooltip. The paperwork grid leads the workspace,
+  and the board stays one click away from every section.
+
+### Brand
+- New Cueola and Flowmingo icons, re-inlined into the index.html and
+  dashboard.html sprites from `assets/Brand/`.
+- `WORKER_SCHEMA` 25 -> 26: brand SVGs are precached unversioned, so installed
+  clients only pick up new artwork when the shell cache rolls.
+
 ## v2.2.0: Overhaul round (built 2026-07-27; live on cueola.live since the 2026-08-03 push)
 
 One round between terms: the whole app on one visual language, a control

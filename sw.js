@@ -129,16 +129,16 @@ const SHELL_ASSETS = [
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=209555b4d7',
   'script-operator.js?v=cee51074da',
-  'script-operator.css?v=cc6e2c5e25',
+  'script-operator.css?v=8cc1efb59a',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=3b93f90fc5',
-  'outrangutan/outrangutan.css?v=5aab556beb',
+  'cueola-app.js?v=7dc4098c8a',
+  'outrangutan/outrangutan.css?v=75dfbd64d2',
   'outrangutan/outrangutan.js?v=48addea3ef',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=05d197e34d',
+  'cueola-streamdeck.js?v=54805dc823',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -185,7 +185,14 @@ const versionSignature = SHELL_ASSETS
 // wrong-page entries the old poisoning bug already cached in installed
 // clients, (3) index.html/dashboard.html page-HTML changes (dead
 // Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
-const WORKER_SCHEMA = '25';
+// 25->26: v2.2.1. Three reasons at once, all of which the shell caches:
+// (1) new Cueola + Flowmingo brand art re-inlined into the index.html /
+// dashboard.html sprites AND sitting in assets/Brand/ (brand SVGs are
+// precached UNVERSIONED, so artwork only reaches installed clients when the
+// cache name rolls), (2) the project-wide stroke pass rewrote page CSS in
+// index.html and dashboard.html, (3) Planda Bear's header lockup and the
+// Production Notes move are page-HTML markup changes.
+const WORKER_SCHEMA = '26';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

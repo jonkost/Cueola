@@ -2648,10 +2648,18 @@
   // backdrop-filter. It also cannot read the main page's custom properties, so
   // the --mw-* vars below are local copies mirroring the index.html token sheet
   // (--liquid-fill/-strong, --liquid-edge/-strong, --ui-radius-*) at dark-base
-  // values. No box-shadows, no glows: rims and fills only, LEDs are solid.
+  // values. No glows and after the app-wide stroke pass no rims either: fills
+  // carry the surfaces, LEDs are solid. The one shadow left is the inset hairline
+  // that splits the two mic strips, which is why --mw-edge is still live;
+  // --mw-edge-strong is kept only so this sheet still mirrors the token list.
   var MICO_POP_CSS = ':root{'
     + '--mw-base:#0b0d12;'
-    + '--mw-fill:linear-gradient(145deg,rgba(255,255,255,.06),rgba(255,255,255,.02));' // mirrors --liquid-fill
+    // --liquid-fill is body + sheen; the flat body stop is what the pop-out was
+    // missing. Sheen alone faded to rgba(255,255,255,.02) at the bottom right,
+    // about 1.04:1 over --mw-base, so the card's lower edge dissolved into a
+    // window that has no page behind it to supply depth. Body .07 holds the
+    // dimmest corner at 1.23:1 and the lit corner at 1.38:1.
+    + '--mw-fill:linear-gradient(145deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),rgba(255,255,255,.07);' // mirrors --liquid-fill
     + '--mw-fill-strong:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.04));' // mirrors --liquid-fill-strong
     + '--mw-edge:rgba(255,255,255,.14);' // mirrors --liquid-edge
     + '--mw-edge-strong:rgba(255,255,255,.26);' // mirrors --liquid-edge-strong
@@ -2660,21 +2668,30 @@
     + '--mw-ok:#22d3a0;--mw-hot:#ff3b3b;--mw-accent:#7ea6ff}'
     + 'body{margin:0;font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;background:var(--mw-base);color:var(--mw-text);padding:14px 16px;user-select:none;-webkit-user-select:none}'
     + '#mw-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px}'
-    + '#mw-dot{width:9px;height:9px;box-sizing:border-box;border-radius:50%;background:rgba(255,255,255,.10);border:1px solid var(--mw-edge-strong)}'
-    + '#mw-dot.on{background:var(--mw-ok);border-color:rgba(255,255,255,.38)}' // sharp LED: solid fill + rim, zero blur
+    + '#mw-dot{width:9px;height:9px;box-sizing:border-box;border-radius:50%;background:rgba(255,255,255,.22);border:1px solid transparent}' // off LED reads by fill, not rim
+    + '#mw-dot.on{background:var(--mw-ok);border-color:transparent}' // sharp LED: solid fill, zero blur
     + '#mw-name{font-weight:800;font-size:15px}#mw-name span{color:var(--mw-accent)}'
     + '#mw-status{color:var(--mw-text-dim);font-size:12.5px}'
-    + '#mw-card{background:var(--mw-fill);border:1px solid var(--mw-edge);border-radius:var(--mw-radius-group);overflow:hidden}'
+    + '#mw-card{background:var(--mw-fill);border:1px solid transparent;border-radius:var(--mw-radius-group);overflow:hidden}'
     + '.mw-strip{display:flex;align-items:center;gap:10px;padding:9px 11px}'
-    + '.mw-strip+.mw-strip{border-top:1px solid var(--mw-edge)}'
-    + '.mw-talk{min-width:64px;padding:8px 12px;border-radius:var(--mw-radius-control);border:1px solid var(--mw-edge);background:var(--mw-fill-strong);color:var(--mw-text);font-weight:800;font-size:13px;cursor:pointer;touch-action:none}'
-    + '.mw-strip.onair .mw-talk{background:rgba(34,211,160,.22);border-color:var(--mw-ok);color:#dffff5}'
+    // Structural divider, not a rim: TKB and VofU are two independently keyed
+    // mic buses and #mw-card is one continuous fill, so without this they read as
+    // one block. Drawn as an inset shadow rather than a rule, and as a hairline
+    // rather than a tone step on the lower strip, because a permanently brighter
+    // second strip would read as "VofU is hot" next to the real .onair fills.
+    + '.mw-strip+.mw-strip{border-top:1px solid transparent;box-shadow:inset 0 1px 0 var(--mw-edge)}'
+    + '.mw-talk{min-width:64px;padding:8px 12px;border-radius:var(--mw-radius-control);border:1px solid transparent;background:var(--mw-fill-strong);color:var(--mw-text);font-weight:800;font-size:13px;cursor:pointer;touch-action:none}'
+    + '.mw-strip.onair .mw-talk{background:rgba(34,211,160,.34);border-color:transparent;color:#dffff5}' // live talk state = stronger green fill, no rim
     + '.mw-mid{flex:1;min-width:80px}.mw-sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mw-text-faint);margin-bottom:4px}'
-    + '.mw-meter{height:8px;border-radius:4px;background:rgba(0,0,0,.38);border:1px solid var(--mw-edge);overflow:hidden}' // solid-fill bar, 1px rim
+    + '.mw-meter{height:8px;border-radius:4px;background:rgba(0,0,0,.46);border:1px solid transparent;overflow:hidden}' // solid-fill bar in a sunken well, no rim
     + '.mw-fill{height:100%;width:0;background:var(--mw-ok);transition:width 90ms linear}.mw-fill.idle{opacity:.45}.mw-fill.hot{background:var(--mw-hot)}'
-    + '.mw-lamp{min-width:52px;box-sizing:border-box;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:var(--mw-radius-control);padding:4px 7px;background:var(--mw-fill-strong);border:1px solid var(--mw-edge);color:var(--mw-text-faint)}'
-    + '.mw-strip.onair .mw-lamp{background:var(--mw-hot);border-color:rgba(255,255,255,.38);color:#fff}'
-    + '#mw-off{margin-top:10px;width:100%;padding:9px;border-radius:var(--mw-radius-control);border:1px solid rgba(255,59,59,.5);background:var(--mw-fill-strong);color:#ff8f8f;font-weight:700;font-size:13px;cursor:pointer}';
+    // Lamp ink is --mw-text-dim, not --mw-text-faint: the card gained a body
+    // fill in the stroke pass, which lifted the surface under this 10px/800
+    // label and pushed the faint ink to ~3.4-4.6:1. Dim clears AA on both
+    // gradient corners without touching the new card edge.
+    + '.mw-lamp{min-width:52px;box-sizing:border-box;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:var(--mw-radius-control);padding:4px 7px;background:var(--mw-fill-strong);border:1px solid transparent;color:var(--mw-text-dim)}'
+    + '.mw-strip.onair .mw-lamp{background:var(--mw-hot);border-color:transparent;color:#fff}' // on-air lamp: solid hot fill carries it
+    + '#mw-off{margin-top:10px;width:100%;padding:9px;border-radius:var(--mw-radius-control);border:1px solid transparent;background:rgba(255,59,59,.16);color:#ff8f8f;font-weight:700;font-size:13px;cursor:pointer}';
   function micoPopoutAlive() { try { return !!(micoWin && !micoWin.closed); } catch (e) { return false; } }
   function micoPopStrip(bus, name, sub) {
     return '<div class="mw-strip" data-bus="' + bus + '"><button class="mw-talk" data-talk="' + bus + '" data-tip="Hold to talk on ' + name + '">' + name + '</button>'

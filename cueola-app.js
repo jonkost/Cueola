@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '2.2.0';
+const CUEOLA_VERSION = '2.2.1';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 
 // ── v2.1 D12.7: runtime budgets — measure, then defer, then gate ────────────
@@ -9745,9 +9745,26 @@ function applyLivePrompterPanelState() {
     .forEach(element => { element.inert = drawerOpen; });
   if (btn) {
     setSymbolButtonLabel(btn, 'content.script', livePrompterOpen ? 'Hide Script Op' : 'Script Op');
-    btn.style.color = livePrompterOpen ? 'var(--cyan)' : '';
-    btn.style.borderColor = livePrompterOpen ? 'rgba(34,211,211,.35)' : '';
+    paintLiveToggleOpenState(btn, livePrompterOpen);
   }
+}
+
+// Open state on the Live bar toggles reads as a cyan tint plus cyan label, not a
+// rim: fills carry state now. The tint has to be inline, and an inline
+// background outranks .ls-exit-btn:hover (index.html), so while the panel is
+// open the sheet's hover fill step would never land: the button would sit frozen
+// at its open colour under the cursor. These handlers step the same fill
+// themselves so hover keeps answering; when the state is off they are cleared
+// and the sheet's own :hover takes back over untouched.
+const LIVE_TOGGLE_ON_FILL = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
+const LIVE_TOGGLE_ON_FILL_HOVER = 'color-mix(in srgb,var(--cyan) 22%,transparent)';
+function paintLiveToggleOpenState(btn, on) {
+  if (!btn) return;
+  btn.style.color = on ? 'var(--cyan)' : '';
+  btn.style.borderColor = on ? 'transparent' : '';
+  btn.style.background = on ? LIVE_TOGGLE_ON_FILL : '';
+  btn.onpointerenter = on ? () => { btn.style.background = LIVE_TOGGLE_ON_FILL_HOVER; } : null;
+  btn.onpointerleave = on ? () => { btn.style.background = LIVE_TOGGLE_ON_FILL; } : null;
 }
 
 const FLOWMINGO_OP_LABEL = `${sfIcon('content.display')} <span>Flow<span class="brand-hi">mingo</span></span> Op`;
@@ -9755,17 +9772,9 @@ const FLOWMINGO_OP_LABEL = `${sfIcon('content.display')} <span>Flow<span class="
 function setFlowmingoOpButton(active) {
   const btn = document.getElementById('promptOpBtn');
   if (!btn) return;
-  if (active) {
-    btn.style.color = 'var(--cyan)';
-    btn.style.borderColor = 'var(--cyan)';
-    btn.style.background = 'color-mix(in srgb,var(--cyan) 12%,transparent)';
-    setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
-  } else {
-    btn.style.color = '';
-    btn.style.borderColor = '';
-    btn.style.background = '';
-    btn.innerHTML = FLOWMINGO_OP_LABEL;
-  }
+  paintLiveToggleOpenState(btn, active);
+  if (active) setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
+  else btn.innerHTML = FLOWMINGO_OP_LABEL;
 }
 
 function toggleLivePrompterPanel() {
@@ -9873,7 +9882,13 @@ function renderLiveCurrent(b, i) {
     const d = b.cues[t], tc = CT[t];
     const on  = getCueOn(d);
     const off = getCueOff(d);
-    return `<div class="lv-cue-block" style="border-left-color:${tc.color}">
+    // Department identity is a fill, not a rail. It has to be an OPAQUE fill on
+    // this one surface: .lv-cur-card is already accent-tinted (13%->6%) and sits
+    // on #liveshow's radial accent wash, so a see-through tint stacked on top of
+    // both and pushed .lv-cue-take (12px, --text2) under 4.5:1. Mixing the same
+    // 14% into --s1 lands the block on its own plate, immune to the card
+    // gradient and the wash, at 4.6-5.2:1 on every theme (light one included).
+    return `<div class="lv-cue-block" style="border-left-color:transparent;background:color-mix(in srgb,${tc.color} 14%,var(--s1))">
       <div class="lv-cue-label" style="color:${tc.color}">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${liveCueOperationLine('ready', on, 'lv-cue-ready', '', t)}
       ${liveCueOperationLine('take', off, 'lv-cue-take', '', t)}
@@ -9901,7 +9916,7 @@ function renderLiveNext(b, i, isRunner) {
     const d = b.cues[t], tc = CT[t];
     const on  = getCueOn(d);
     const off = getCueOff(d);
-    return `<div class="lv-next-cue" style="border-left-color:${tc.color}">
+    return `<div class="lv-next-cue" style="border-left-color:transparent;background:${tc.bg}">
       <span style="color:${tc.color}">${sfIcon(tc.symbol)}</span>
       ${liveCueOperationLine('ready', on, 'lv-next-cue-line', '', t)}
       ${liveCueOperationLine('take', off, 'lv-next-cue-line muted', '', t)}
@@ -9932,11 +9947,15 @@ function liveRowPreview(idx) {
     const d = b.cues[t], tc = CT[t];
     const on  = getCueOn(d);
     const off = getCueOff(d);
-    html += `<div style="border-left:3px solid ${tc.color};padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:var(--s2)">
+    // The script body used to be split off the operation lines by a rule. It gets
+    // its own inset plate instead: --s1 steps away from the cyan cue tint in both
+    // directions (darker on the dark themes, white on Polar Bear), so the break
+    // survives without a stroke.
+    html += `<div style="border-left:3px solid transparent;padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:${tc.bg}">
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${liveCueOperationLine('ready', on, 'live-preview-cue-line', '', t)}
       ${liveCueOperationLine('take', off, 'live-preview-cue-line emphasized', '', t)}
-      ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:8px">${esc(scriptCueText(d))}</div>`:''}
+      ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid transparent;padding:8px 10px;background:var(--s1);border-radius:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
   if (!types.length) html = '<div class="empty-rundown"><div class="empty-rundown-sub">No cues configured for this row.</div></div>';
@@ -19256,14 +19275,24 @@ function pbHydrateNoteImages(scope) {
 }
 
 function annotatePlandaBearNoteCards() {
-  // The hub's Production Notes count lives in the wide bar above the numbered grid.
+  // The hub's Production Notes count rides the header tools button (it used to
+  // be a page-wide banner above the numbered grid). The badge is just the note
+  // count so it stays legible at button size; the sentence the banner used to
+  // show moves into the tooltip, so nothing is lost.
   const countEl = document.getElementById('paperworkNotesBarCount');
   if (!countEl) return;
   const total = plandaBearNotes.length;
   const openTodos = plandaBearNotes.filter(n => n.tag === 'todo' && !n.done).length;
-  countEl.textContent = total
-    ? `${total} note${total===1?'':'s'}${openTodos ? ` · ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}`
-    : '';
+  countEl.textContent = total ? String(total) : '';
+  const btn = document.getElementById('paperworkNotesBtn');
+  if (btn) {
+    const tally = total
+      ? `${total} note${total===1?'':'s'}${openTodos ? `, ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}. `
+      : '';
+    const tip = `${tally}The crew’s message board. Tag a department and the thread stays with the show.`;
+    btn.setAttribute('data-tip', tip);
+    btn.setAttribute('aria-label', total ? `Production Notes, ${total} note${total===1?'':'s'}` : 'Production Notes');
+  }
 }
 
 /* ── Notifications ─────────────────────────────────────────────────────

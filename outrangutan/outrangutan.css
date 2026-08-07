@@ -62,8 +62,11 @@
   position: relative; z-index: 6;
   display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex: 0 0 auto;
   padding: 9px 14px;
-  border-bottom: 1px solid var(--liquid-edge, var(--og-edge));
+  border-bottom: 1px solid transparent;
   background: var(--liquid-fill-strong, color-mix(in srgb, var(--s2) 82%, transparent));
+  /* the glass strip has to terminate somewhere. --liquid-shadow is a no-op by
+     doctrine, so the bottom rim rides an INSET shadow, not a border. */
+  box-shadow: inset 0 -1px 0 var(--liquid-edge, var(--og-edge));
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -107,15 +110,17 @@
 .og-bar-btn.danger { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border-color: transparent; font-weight: 600; }
 .og-bar-btn.danger:hover { color: var(--red); background: color-mix(in srgb, var(--red) 20%, transparent); border-color: transparent; }
 .og-program-popout { white-space: nowrap; font-weight: 750; }
-.og-program-popout.on { background: color-mix(in srgb, var(--green) 16%, var(--s2)); border-color: color-mix(in srgb, var(--green) 45%, var(--og-edge)); color: var(--green); }
-.og-program-popout.dead { background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: color-mix(in srgb, var(--red) 55%, var(--og-edge)); color: var(--red); }
-#og-output-btn.dead { color: var(--red); border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+.og-program-popout.on { background: color-mix(in srgb, var(--green) 16%, var(--s2)); border-color: transparent; color: var(--green); }
+.og-program-popout.dead { background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: transparent; color: var(--red); }
+/* dead state now reads as a red FILL (matching .og-program-popout.dead) instead
+   of a red rim, so the stroke could go without the state going quiet */
+#og-output-btn.dead { color: var(--red); background: color-mix(in srgb, var(--red) 14%, var(--s2)); border-color: transparent; }
 
 /* Playback / SFX segmented pill */
 .og-tabs {
   display: inline-flex; gap: 3px; height: 44px; padding: 3px; margin-left: 4px;
   border-radius: 999px; overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid transparent;
   background: color-mix(in srgb, var(--s1) 66%, transparent);
 }
 .og-tab {
@@ -147,13 +152,13 @@
   display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; list-style: none; cursor: pointer;
   min-height: var(--ui-control-height-compact, 34px);
   border-radius: var(--ui-radius-control, 12px);
-  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid transparent;
   background: color-mix(in srgb, var(--s2) 80%, transparent);
   color: var(--text2); font-size: 13px; font-weight: 800;
 }
 .og-theme-control:hover, .og-theme-menu > summary:hover, .og-tools-menu > summary:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  border-color: transparent;
   background: color-mix(in srgb, var(--text) 7%, var(--s2));
 }
 .og-theme-menu, .og-tools-menu { position: relative; }
@@ -166,9 +171,13 @@
 
 .og-theme-pop, .og-tools-pop, .og-settings-pop {
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 21; display: none;
-  border: 1px solid var(--liquid-edge, var(--og-edge));
+  border: 1px solid transparent;
   border-radius: 16px;
   background: color-mix(in srgb, var(--s1) 92%, transparent);
+  /* a popover opens over the bar, which is itself s1/s2 glass. With shadows
+     disabled by doctrine the rim IS the layer boundary, so it is carried as an
+     inset shadow (same idiom as the .og-tr-ico and .og-sdk-preview rims). */
+  box-shadow: inset 0 0 0 1px var(--liquid-edge, var(--og-edge));
   -webkit-backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
 }
@@ -199,7 +208,10 @@
 .og-settings-pop .og-tools-pop-inline .og-bar-btn.on { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, transparent) !important; }
 .og-settings-pop .theme-swatch.active::after, .og-settings-pop .theme-swatch[aria-pressed="true"]::after,
 .og-settings-pop .og-tools-pop-inline .og-bar-btn.on::after { content: "✓"; grid-column: 3; color: var(--accent); font-weight: 900; }
-.og-settings-pop .theme-swatch .ts-preview { grid-column: 1; width: 18px; height: 18px; border-radius: 4px; border: 1px solid color-mix(in srgb, var(--text) 26%, transparent); box-shadow: none; }
+/* the preview chip's whole job is to SHOW a theme colour (background comes in
+   inline from CUEOLA_THEME_SWATCHES), so it cannot be given a fill. It gets an
+   inset rim instead of a border: the colour data survives, the chip still ends. */
+.og-settings-pop .theme-swatch .ts-preview { grid-column: 1; width: 18px; height: 18px; border-radius: 4px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 26%, transparent); }
 .og-settings-pop .theme-swatch .ts-name,
 .og-settings-pop .og-tools-pop-inline .og-bar-btn > span:not(.sf-symbol) { grid-column: 2; min-width: 0; justify-self: start; overflow: hidden; text-overflow: ellipsis; }
 .og-settings-pop .og-tools-pop-inline .og-bar-btn .sf-symbol { grid-column: 1; width: 18px; height: 18px; justify-self: start; color: currentColor; }
@@ -234,8 +246,8 @@
 .og-settings-pop .og-themes-submenu .theme-swatch:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent) !important; }
 .og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) { background: transparent !important; }
 .og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"])::after { content: none; }
-.og-settings-pop .og-themes-submenu .ts-preview { width: 34px; height: 34px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--text) 22%, var(--border)); box-shadow: none; }
-.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-preview { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.og-settings-pop .og-themes-submenu .ts-preview { width: 34px; height: 34px; border-radius: 50%; border: 1px solid transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
+.og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-preview { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent), inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
 .og-settings-pop .og-themes-submenu .ts-name { max-width: 100%; font-size: 11px; line-height: 1.15; overflow-wrap: anywhere; color: var(--text2); }
 .og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-name { color: var(--accent); }
 
@@ -302,12 +314,12 @@
   min-height: 40px; padding: 6px 16px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--s2) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid transparent;
   color: var(--text2); font-size: 13px; font-weight: 700; cursor: pointer;
   transition: background .15s var(--ease, ease), color .15s var(--ease, ease), border-color .15s var(--ease, ease);
 }
-.og-bottom-tab:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 10%, transparent); background: color-mix(in srgb, var(--text) 7%, var(--s2)); }
-.og-bottom-tab.on { color: var(--text); background: color-mix(in srgb, var(--accent) 18%, var(--s2)); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.og-bottom-tab:hover { color: var(--text); border-color: transparent; background: color-mix(in srgb, var(--text) 7%, var(--s2)); }
+.og-bottom-tab.on { color: var(--text); background: color-mix(in srgb, var(--accent) 18%, var(--s2)); border-color: transparent; }
 .og-bottom-hint { margin-left: auto; font-size: 12px; color: var(--text3); white-space: nowrap; }
 .og-main.og-has-sel .og-bottom-hint { display: none; }
 
@@ -346,8 +358,12 @@
 .og-cue-meta { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; }
 .og-cue-cont { font-size: 9.5px; font-weight: 700; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--og-edge-strong); color: var(--text2); }
 .og-cue-cont .sf-symbol { font-size: 10px; vertical-align: -1px; }
-.og-cue-sfx { border-color: color-mix(in srgb, var(--green) 42%, transparent); color: var(--green); font-weight: 800; letter-spacing: .04em; }
-.og-cue-bad { color: var(--red) !important; border-color: color-mix(in srgb, var(--red) 55%, var(--og-edge)) !important; font-weight: 800; }
+/* these two sit shoulder to shoulder with plain .og-cue-cont chips that still
+   carry a rim, so each needs a FILL to stay a pill once its own rim is gone */
+.og-cue-sfx { border-color: transparent; background: color-mix(in srgb, var(--green) 9%, transparent); color: var(--green); font-weight: 800; letter-spacing: .04em; }
+/* the broken row also carries a red fill (.og-cue.broken) + red name; the chip
+   still needs its own wash so it reads as a pill next to its siblings */
+.og-cue-bad { color: var(--red) !important; border-color: transparent !important; background: color-mix(in srgb, var(--red) 10%, transparent); font-weight: 800; }
 .og-cue-color-dot { position: absolute; left: 4px; top: 8px; bottom: 8px; width: 3px; border-radius: 999px; }
 .og-cue-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; text-align: center; color: var(--text2); }
 .og-cue-empty-title { font-family: var(--syne); font-size: 16px; font-weight: 800; color: var(--text); }
@@ -434,9 +450,9 @@
   width: 20px; min-height: 40px; padding: 0; margin: 0;
   background: transparent; cursor: pointer; touch-action: none; accent-color: var(--accent);
 }
-.og-vfader::-webkit-slider-runnable-track { width: 7px; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, .16)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.og-vfader::-webkit-slider-runnable-track { width: 7px; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, .16)); border: 1px solid transparent; }
 .og-vfader::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-left: -6.5px; border-radius: 50%; background: var(--accent); border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff); box-shadow: none; }
-.og-vfader::-moz-range-track { width: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 32%, rgba(255, 255, 255, .16)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.og-vfader::-moz-range-track { width: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 32%, rgba(255, 255, 255, .16)); border: 1px solid transparent; }
 .og-vfader::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff); }
 .og-vfader:focus-visible { outline: none; }
 .og-vfader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -466,7 +482,9 @@
   border: 1px solid var(--og-edge-strong); border-radius: var(--og-r-sm, 8px);
   background: color-mix(in srgb, var(--s2) 80%, transparent); color: var(--text2); cursor: pointer;
 }
-.og-clock-dir:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+/* hover ADDS paint: deeper fill, and the resting rim above is left standing
+   (it used to be overridden to transparent, which erased the button on hover) */
+.og-clock-dir:hover { color: var(--text); background: color-mix(in srgb, var(--text) 9%, var(--s2)); }
 .og-clock-dir .sf-symbol { font-size: 12px; transition: transform .16s ease; transform: rotate(90deg); }   /* down = counting down */
 .og-clock-dir.is-elapsed .sf-symbol { transform: rotate(-90deg); }                                          /* up = counting up */
 .og-clock-duration { color: var(--text3); font: 800 10px/1 var(--mono-num, monospace); letter-spacing: .08em; }
@@ -483,30 +501,40 @@
 .og-transport-group { display: flex; align-items: flex-start; gap: 18px; }
 .og-tctl { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 60px; }
 .og-tctl-go { min-width: 84px; }
+/* the rule IS the element here: a bare vertical hairline holding the destructive
+   column apart from the four safe transport buttons. Nothing to fill. */
 .og-tctl-panic { margin-left: 4px; padding-left: 22px; border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
 .og-tbtn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 54px; height: 54px; padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: 50%;
+  border: 1px solid transparent; border-radius: 50%;
   background: color-mix(in srgb, var(--s2) 92%, transparent); color: var(--text); cursor: pointer;
   transition: background .14s ease, border-color .14s ease, transform .1s ease, color .14s ease;
 }
 .og-tbtn .sf-symbol { font-size: 21px; }
-.og-tbtn:hover { background: color-mix(in srgb, var(--text) 9%, var(--s2)); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.og-tbtn:hover { background: color-mix(in srgb, var(--text) 9%, var(--s2)); border-color: transparent; }
 .og-tbtn:active { transform: scale(.94); }
+/* transport identity is 100% fill now: solid green = ready, solid yellow =
+   paused, red-tinted disc = panic. No rims. */
 .og-tbtn-go {
   width: 72px; height: 72px;
   background: color-mix(in srgb, var(--green) 86%, #fff);
-  border-color: color-mix(in srgb, var(--green) 68%, #fff);
+  border-color: transparent;
   color: color-mix(in srgb, var(--bg) 18%, #000);
 }
 .og-tbtn-go .sf-symbol { font-size: 30px; }
-.og-tbtn-go:hover { background: color-mix(in srgb, var(--green) 94%, #fff); border-color: color-mix(in srgb, var(--green) 80%, #fff); }
-.og-tbtn-go.paused { background: color-mix(in srgb, var(--yellow) 82%, #fff); border-color: color-mix(in srgb, var(--yellow) 66%, #fff); }
-.og-tbtn-panic { background: transparent; border: 1.5px solid color-mix(in srgb, var(--red) 55%, transparent); color: var(--red); }
-.og-tbtn-panic:hover { background: var(--red); border-color: var(--red); color: #fff; }
+.og-tbtn-go:hover { background: color-mix(in srgb, var(--green) 94%, #fff); border-color: transparent; }
+.og-tbtn-go.paused { background: color-mix(in srgb, var(--yellow) 82%, #fff); border-color: transparent; }
+/* panic had NO fill: it was a red outline and nothing else, so de-stroking it
+   left a 20% tint that vanished on the monochrome themes (panda's --red is a
+   grey). It now mirrors GO exactly: a SOLID disc with dark ink, so it stays the
+   loudest thing in the cluster on all nine themes. */
+.og-tbtn-panic { background: color-mix(in srgb, var(--red) 86%, #fff); border: 1.5px solid transparent; color: color-mix(in srgb, var(--bg) 18%, #000); }
+.og-tbtn-panic:hover { background: color-mix(in srgb, var(--red) 86%, #000); border-color: transparent; color: #fff; }
 .og-tcap { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text3); white-space: nowrap; }
-.og-tbtn-key { font-family: var(--mono); font-size: 9px; line-height: 1; font-weight: 600; padding: 2px 5px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 4px; color: var(--text3); }
+/* keycap chip: no fill of its own once the rim went, so it takes the .og-foot
+   .og-kbd fill. The two keycap treatments have to read the same. */
+.og-tbtn-key { font-family: var(--mono); font-size: 9px; line-height: 1; font-weight: 600; padding: 2px 5px; border: 1px solid transparent; border-radius: 4px; background: color-mix(in srgb, var(--s3) 80%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent); color: var(--text2); }
 .og-tbtn-key:empty { display: none; }
 @container (max-width: 560px) {
   .og-transport { gap: 12px; }
@@ -531,6 +559,8 @@
 .og-inspector .insp-head { padding: 9px 10px 8px; }
 .og-insp-body { padding: 11px 14px 14px; }
 .og-insp-empty { color: var(--text3); font-size: 13px; line-height: 1.45; padding: 16px 14px; }
+/* section + subsection dividers: pure rules, no box to fill and no shadow to
+   hang depth on, so the stroke stays (doctrine case "the element IS the line") */
 .og-insp-sec + .og-insp-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
 .og-sec-title { font-family: var(--sans); font-size: 13px; font-weight: 800; color: var(--text); margin: 2px 0 3px; }
 .og-insp-sub { font-family: var(--sans); font-size: 12px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--accent); margin: 8px 0 -2px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
@@ -540,10 +570,16 @@
 /* fields */
 .og-field { display: flex; flex-direction: column; gap: 3px; }
 .og-field label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+/* FIELD IDENTITY (all nine input/select rules in this file follow this recipe).
+   Two moves, no border: the fill steps down one surface (s2 -> s3) so the field
+   is a different plane from its container, and a 1px INSET shadow rings it. The
+   fill alone cannot do it: on the dark themes even --s4 only reaches 1.34:1
+   against the inspector card, so the ring is what actually ends the field. */
 .og-field input, .og-field select {
   min-height: var(--ui-control-height, 40px);
-  background: color-mix(in srgb, var(--s2) 76%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border));
+  background: color-mix(in srgb, var(--s3) 88%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border));
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-control, 12px);
   color: var(--text); font-size: 14px; padding: 8px 10px; font-family: var(--sans); width: 100%;
 }
@@ -596,13 +632,13 @@
   background: transparent; box-shadow: none; cursor: pointer; touch-action: pan-y; accent-color: var(--accent);
 }
 .og-field input[type="range"]::-webkit-slider-runnable-track, .og-sfx-master input[type="range"]::-webkit-slider-runnable-track, .og-pad-inspector input[type="range"]::-webkit-slider-runnable-track {
-  height: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, .16)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  height: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, .16)); border: 1px solid transparent;
 }
 .og-field input[type="range"]::-webkit-slider-thumb, .og-sfx-master input[type="range"]::-webkit-slider-thumb, .og-pad-inspector input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9.5px; border-radius: 50%; background: var(--accent); border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff); box-shadow: none;
 }
 .og-field input[type="range"]::-moz-range-track, .og-sfx-master input[type="range"]::-moz-range-track, .og-pad-inspector input[type="range"]::-moz-range-track {
-  height: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 32%, rgba(255, 255, 255, .16)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  height: 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 32%, rgba(255, 255, 255, .16)); border: 1px solid transparent;
 }
 .og-field input[type="range"]::-moz-range-thumb, .og-sfx-master input[type="range"]::-moz-range-thumb, .og-pad-inspector input[type="range"]::-moz-range-thumb {
   width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 2px solid color-mix(in srgb, var(--bg) 86%, #fff);
@@ -619,11 +655,11 @@
   min-height: var(--ui-control-height-compact, 34px); margin-top: 4px; padding: 8px;
   border-radius: var(--ui-radius-control, 12px); font-size: 13.5px; cursor: pointer; grid-column: 1 / -1;
   background: color-mix(in srgb, var(--red) 14%, var(--s2));
-  border: 1px solid color-mix(in srgb, var(--red) 12%, transparent);
+  border: 1px solid transparent;
   color: var(--red);
   transition: transform .12s var(--ease, ease), background .15s var(--ease, ease);
 }
-.og-cue-del:hover, .og-p-clear:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--red) 22%, var(--s2)); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
+.og-cue-del:hover, .og-p-clear:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--red) 22%, var(--s2)); border-color: transparent; }
 .og-inspector .og-cue-del { margin-top: 12px; }
 .og-p-clear { flex: 1; margin-top: 0; }
 
@@ -671,17 +707,17 @@
 
 #og-sfx-stop {
   background: color-mix(in srgb, var(--red) 20%, var(--s3)) !important;
-  border-color: color-mix(in srgb, var(--red) 54%, var(--og-edge)) !important;
+  border-color: transparent !important;
   color: color-mix(in srgb, var(--text) 88%, var(--red)) !important;
 }
 #og-sfx-stop .sf-symbol { font-size: 19px; }
-#og-sfx-stop:hover { background: color-mix(in srgb, var(--red) 27%, var(--s3)) !important; border-color: color-mix(in srgb, var(--red) 70%, var(--og-edge)) !important; }
+#og-sfx-stop:hover { background: color-mix(in srgb, var(--red) 27%, var(--s3)) !important; border-color: transparent !important; }
 
 /* bank bar: segmented pills */
 .og-bank-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--og-edge); overflow-x: auto; flex: 0 0 auto; }
-.og-bank-tab { display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--s2) 80%, transparent); border: 1px solid color-mix(in srgb, var(--text) 6%, transparent); border-radius: 999px; padding: 5px 13px; font-size: 13px; font-weight: 650; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.og-bank-tab { display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--s2) 80%, transparent); border: 1px solid transparent; border-radius: 999px; padding: 5px 13px; font-size: 13px; font-weight: 650; color: var(--text2); cursor: pointer; white-space: nowrap; }
 .og-bank-tab:hover { background: var(--s3); color: var(--text); }
-.og-bank-tab.on { background: color-mix(in srgb, var(--accent) 18%, var(--s2)); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); }
+.og-bank-tab.on { background: color-mix(in srgb, var(--accent) 18%, var(--s2)); border-color: transparent; color: var(--text); }
 .og-bank-tab.editing { cursor: text; padding-top: 3px; padding-bottom: 3px; }
 .og-bank-rename { width: 9ch; min-width: 5ch; max-width: 22ch; background: transparent; border: none; outline: none; padding: 0; margin: 0; font: inherit; color: var(--text); caret-color: var(--accent); }
 .og-bank-rename:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 78%, white); outline-offset: 2px; }
@@ -695,7 +731,16 @@
 .og-bank-add:hover { border-color: var(--accent); color: var(--accent); }
 
 /* search */
-.og-pad-search { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--s2) 82%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--og-edge)); }
+.og-pad-search { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--s2) 82%, transparent); border: 1px solid transparent; }
+/* the inner input carries outline:none, so the PILL is the field's only keyboard
+   focus indicator. It uses the same 2px accent outline as every other focus mark
+   in the module (og-wallclock, og-bank-rename) and joins the forced-colors group
+   at the bottom of the file, instead of a lone 1px border nobody else uses. */
+.og-pad-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 78%, white);
+  outline: 2px solid color-mix(in srgb, var(--accent) 78%, white);
+  outline-offset: 2px;
+}
 .og-pad-search .sf-symbol { font-size: 15px; color: var(--accent); }
 .og-pad-search input { background: transparent; border: 0; color: var(--text); font-size: 13px; font-weight: 600; width: clamp(120px, 15vw, 210px); outline: none; font-family: var(--sans); }
 .og-pad-search input::placeholder { color: var(--text3); font-weight: 400; }
@@ -712,8 +757,8 @@
 .og-search-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
 .og-search-name { flex: 1 1 auto; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .og-search-bank { font-size: 11px; color: var(--text3); white-space: nowrap; }
-.og-search-fire { background: var(--s3); border: 1px solid color-mix(in srgb, var(--text) 6%, transparent); border-radius: 6px; color: var(--text2); width: 30px; height: 26px; font-size: 14px; cursor: pointer; display: grid; place-items: center; flex: 0 0 auto; }
-.og-search-fire:hover { background: var(--green); color: var(--s1); border-color: var(--green); }
+.og-search-fire { background: var(--s3); border: 1px solid transparent; border-radius: 6px; color: var(--text2); width: 30px; height: 26px; font-size: 14px; cursor: pointer; display: grid; place-items: center; flex: 0 0 auto; }
+.og-search-fire:hover { background: var(--green); color: var(--s1); border-color: transparent; }
 .og-search-none { padding: 16px; text-align: center; color: var(--text3); font-size: 12.5px; }
 
 /* pads: color-lit tiles */
@@ -763,7 +808,7 @@
 .og-namerow { grid-template-columns: 1fr 72px; }
 .og-emoji-in { text-align: center; font-size: 18px !important; }
 .og-emoji-quick { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
-.og-emoji-pick { font-size: 18px; background: color-mix(in srgb, var(--s2) 80%, transparent); border: 1px solid color-mix(in srgb, var(--text) 6%, transparent); border-radius: 7px; padding: 3px 0; cursor: pointer; line-height: 1.1; }
+.og-emoji-pick { font-size: 18px; background: color-mix(in srgb, var(--s2) 80%, transparent); border: 1px solid transparent; border-radius: 7px; padding: 3px 0; cursor: pointer; line-height: 1.1; }
 .og-emoji-pick:hover { background: var(--s3); transform: translateY(-1px); }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -776,16 +821,20 @@
 .og-join-code-in { font-size: 24px; font-family: var(--mono); letter-spacing: .2em; text-align: center; }
 .og-sheet-card, .og-help-card {
   width: min(680px, 94vw); max-height: 86vh; overflow: auto; padding: 0;
-  border: 1px solid var(--liquid-edge, var(--og-edge));
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-panel, 20px);
   background: color-mix(in srgb, var(--s1) 90%, transparent);
+  /* same reason as the popovers: shadows are a no-op in this module, so the
+     card's edge is an inset rim. Without it the sticky head's own border-bottom
+     reads as a rule floating in space. */
+  box-shadow: inset 0 0 0 1px var(--liquid-edge, var(--og-edge));
   -webkit-backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
 }
 .og-help-card { padding: 20px; width: min(520px, 92vw); }
 .og-help-card h3 { font-family: var(--syne); font-weight: 800; margin: 0 0 12px; }
 .og-help-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--og-edge); }
-.og-help-row input { width: 110px; text-align: center; font-family: var(--mono); min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); color: var(--text); border-radius: var(--ui-radius-control, 12px); padding: 6px; }
+.og-help-row input { width: 110px; text-align: center; font-family: var(--mono); min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; color: var(--text); border-radius: var(--ui-radius-control, 12px); padding: 6px; }
 .og-help-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 /* quiet fixed-shortcut rows (not rebindable) */
 .og-help-row.og-help-note { color: var(--text2); }
@@ -825,7 +874,11 @@
 .og-matte-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 14px; }
 .og-matte-swatch { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--og-edge); border-radius: var(--og-r); background: color-mix(in srgb, var(--s2) 80%, transparent); color: var(--text); font: 600 12px var(--sans, inherit); cursor: pointer; }
 .og-matte-swatch:hover { border-color: var(--accent); background: var(--s3); }
-.og-matte-chip { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
+/* the chip IS the colour (JS sets background inline: #000000 for Black, #ffffff
+   for White), so it cannot take a fill: white vanishes on Polar Bear, black on
+   Planda Bear. Inset rim on the span; the native colour input paints its swatch
+   OVER an inset shadow, so that one keeps a real 1px stroke. */
+.og-matte-chip { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent); }
 .og-matte-custom { position: relative; }
 .og-matte-custom input[type="color"] { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); border-radius: 6px; background: none; cursor: pointer; }
 
@@ -833,7 +886,7 @@
 .og-out-tools { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--og-edge); }
 .og-out-mastersink { flex: 1 1 220px; min-width: 200px; }
 .og-out-mastersink label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
-.og-out-mastersink select { min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; width: 100%; }
+.og-out-mastersink select { min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; width: 100%; }
 .og-out-standby { flex: 1 1 200px; min-width: 180px; }
 .og-out-standby label { font-size: 11px; }
 .og-out-standby input { font-size: 13px; }
@@ -843,11 +896,11 @@
 .og-out-dot.live { background: var(--green); }
 .og-out-dot.dead { background: var(--red); animation: og-dot-pulse 1s ease-in-out infinite; }
 @keyframes og-dot-pulse { 50% { opacity: .35; } }
-.og-out-label { flex: 1 1 auto; min-width: 80px; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13.5px; font-weight: 600; padding: 7px 10px; }
+.og-out-label { flex: 1 1 auto; min-width: 80px; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13.5px; font-weight: 600; padding: 7px 10px; }
 .og-out-label:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .og-out-cfg { display: grid; grid-template-columns: 1.4fr 1fr 1.4fr; gap: 10px; align-items: center; margin-top: 10px; }
 .og-out-cfg .og-field label { font-size: 10px; }
-.og-out-cfg select { min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 12.5px; padding: 7px 9px; width: 100%; }
+.og-out-cfg select { min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 12.5px; padding: 7px 9px; width: 100%; }
 .og-out-audiochk { align-self: end; padding-bottom: 8px; }
 .og-out-note { font-size: 11.5px; color: var(--text3); align-self: center; }
 .og-out-open, .og-out-del, .og-out-recover { flex: 0 0 auto; }
@@ -858,17 +911,21 @@
 .og-sd-status { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text); padding-bottom: 12px; border-bottom: 1px solid var(--og-edge); }
 .og-sd-device-tools { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 .og-sd-device-tools label { display: grid; gap: 5px; min-width: 250px; font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--text2); }
-.og-sd-device-tools select { min-height: 44px; background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; }
+.og-sd-device-tools select { min-height: 44px; background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; }
 .og-sd-device-tools select:disabled { opacity: .7; }
-.og-sd-error { margin-top: 12px; border-left: 3px solid var(--red); padding: 9px 11px; background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--text); font-size: 12.5px; line-height: 1.4; }
+/* the red wash carries the state; the left callout bar comes back as an INSET
+   shadow (same idiom as .og-cue.selected / .og-cue.playing) rather than a
+   border. The §12 rule only exists under forced-colors and paints nothing here. */
+.og-sd-error { margin-top: 12px; border-left: 3px solid transparent; padding: 9px 11px; background: color-mix(in srgb, var(--red) 16%, var(--s2)); box-shadow: inset 3px 0 0 var(--red); color: var(--text); font-size: 12.5px; line-height: 1.4; }
 .og-sd-grid { display: grid; grid-template-columns: repeat(var(--sd-cols, 5), minmax(104px, 1fr)); gap: 8px; margin-top: 14px; overflow-x: auto; padding-bottom: 4px; }
 .og-sdk { border: 1px solid var(--og-edge); border-radius: var(--og-r); background: color-mix(in srgb, var(--s2) 70%, transparent); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; position: relative; min-width: 0; }
-.og-sdk.mapped { border-color: color-mix(in srgb, var(--accent) 50%, var(--og-edge)); background: color-mix(in srgb, var(--accent) 9%, var(--s2)); }
+/* mapped = a stronger accent wash instead of an accent rim */
+.og-sdk.mapped { border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, var(--s2)); }
 .og-sdk-i { font-family: var(--mono-num, monospace); font-size: 9px; font-weight: 750; letter-spacing: .05em; color: var(--text3); }
 .og-sdk-preview { display: block; align-self: center; width: min(100%, 96px); height: auto; aspect-ratio: 1; border-radius: 8px; background: #05070a; box-shadow: inset 0 0 0 1px var(--liquid-edge-lit); }
 .og-sdk-preview[data-active="true"] { box-shadow: 0 0 0 2px var(--green), inset 0 0 0 1px var(--liquid-edge-lit); }
 .og-sdk-preview-missing { display: grid; place-items: center; aspect-ratio: 1; min-height: 72px; border-radius: 8px; background: #05070a; color: var(--text3); font-size: 10px; text-align: center; }
-.og-sdk select { min-height: 44px; background: color-mix(in srgb, var(--s1) 80%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
+.og-sdk select { min-height: 44px; background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
 .og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
 .og-sd-proof { margin-top: 20px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
 .og-sd-proof h4 { margin: 0; font-family: var(--syne); font-size: 14px; }
@@ -886,7 +943,7 @@
 .og-midi-actions { display: flex; align-items: center; gap: 10px; }
 .og-midi-status { font-size: 11px; font-family: var(--mono); color: var(--green); }
 .og-midi-del { flex: none; }
-.og-midi-act, .og-midi-ref { min-height: var(--ui-control-height-compact, 34px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 12.5px; padding: 5px 8px; }
+.og-midi-act, .og-midi-ref { min-height: var(--ui-control-height-compact, 34px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 12.5px; padding: 5px 8px; }
 
 /* integrations sheet (OBS · Dropbox · Transcode) */
 .og-intg-sect { padding: 16px 0; border-bottom: 1px solid var(--og-edge); }
@@ -898,7 +955,7 @@
 .og-push-right { margin-left: auto; }   /* pushes a row's trailing item (e.g. the OBS status dot) to the right edge */
 .og-intg-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 .og-intg-row:last-child { margin-bottom: 0; }
-.og-intg-in { flex: 1 1 120px; min-width: 80px; box-sizing: border-box; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s2) 76%, transparent); border: 1px solid color-mix(in srgb, var(--text) 13%, var(--border)); border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 12px; }
+.og-intg-in { flex: 1 1 120px; min-width: 80px; box-sizing: border-box; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 12px; }
 .og-intg-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .og-intg-port { flex: 0 0 80px; }
 .og-obs-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -913,8 +970,11 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 .og-foot {
   flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 7px 14px;
-  border-top: 1px solid var(--liquid-edge, var(--og-edge));
+  border-top: 1px solid transparent;
   background: var(--liquid-fill-strong, color-mix(in srgb, var(--s2) 82%, transparent));
+  /* matches .og-bar: the strip's edge against the scrolling well is an inset
+     rim, since --liquid-shadow is a deliberate no-op in this module */
+  box-shadow: inset 0 1px 0 var(--liquid-edge, var(--og-edge));
   -webkit-backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 22px)) saturate(var(--liquid-saturation, 150%));
   font-size: 11.5px; color: var(--text2);
@@ -933,6 +993,9 @@
 .cue-out-pre { background: var(--yellow); color: #000; }
 .cue-out-pause { background: var(--orange); color: #000; }
 .cc-out-glyph { font-size: 13px; vertical-align: -1px; }
+/* this one renders inside MAIN Cueola's cue-config panel, where there is no
+   og fill hierarchy to lean on: the rule is the only thing marking where the
+   Outrangutan block starts. */
 .cc-outrangutan { border-top: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .cc-out-hint { font-size: 11px; color: var(--text3); margin-top: 5px; }
 .lf-out-go { background: color-mix(in srgb, var(--accent) 24%, transparent) !important; border-color: transparent !important; color: var(--text) !important; }
@@ -1042,7 +1105,8 @@
 
 #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (forced-colors: active) {
-  #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible { outline-color: Highlight; }
+  #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible,
+  #outrangutan .og-pad-search:focus-within { outline-color: Highlight; }
   .og-bottom-tab.on { border-color: Highlight; }
   .og-sdk.mapped, .og-sdk-preview[data-active="true"], .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
 }
