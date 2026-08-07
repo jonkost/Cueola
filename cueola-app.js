@@ -6226,12 +6226,12 @@ const INFO_POPS = {
   'cs-event-info': {
     title: 'What Event Info covers',
     lesson: 'plandabear', section: 'steps',
-    body: 'The basics the whole crew reads first: what the production is, when to arrive, when the show starts, and where it happens. Fill this section early; the production schedule and safety plan borrow from it.',
+    body: 'The basics the whole crew reads first: what the production is, when to arrive, and when the show starts. Fill this section early; the production schedule and safety plan borrow from it.',
   },
   'cs-location-weather': {
-    title: 'Venue and weather',
+    title: 'Location and weather',
     lesson: 'plandabear', section: 'steps',
-    body: 'Venue type tells the crew how much the weather matters. Get forecast fills the card from the shoot date and location, and every value stays editable. The safety plan reuses this forecast for its weather note.',
+    body: 'Where the show happens, with the full street address so maps work. Venue type tells the crew how much the weather matters. Get forecast fills the card from the shoot date and location, and every value stays editable. The safety plan reuses this forecast for its weather note.',
   },
   'cs-access': {
     title: 'Access and crew notes',
@@ -6262,6 +6262,21 @@ const INFO_POPS = {
     title: 'Ready Before Show',
     lesson: 'plandabear', section: 'steps',
     body: 'The final walk-through. Check a row only when that item is actually ready; the sheet records who signed it off and when. Add rows for anything this production needs.',
+  },
+  'sp-contacts': {
+    title: 'Emergency contacts and hospital',
+    lesson: 'plandabear', section: 'steps',
+    body: 'Who to call when something goes wrong: the nearest hospital with its address and phone, emergency and non-emergency numbers, security, and the late or lost contact. The hospital info prints on the call sheet too.',
+  },
+  'sp-site': {
+    title: 'Site, weather and equipment',
+    lesson: 'plandabear', section: 'steps',
+    body: 'What the crew needs to know about the space itself: where the first aid kit and fire extinguisher live, the forecast for the shoot, and any gear that needs special safety handling. Weather auto-fills from the call sheet forecast.',
+  },
+  'sp-notes': {
+    title: 'Safety notes',
+    lesson: 'plandabear', section: 'steps',
+    body: 'Anything else the crew should know to stay safe that the other fields have no home for. Notes print at the bottom of the safety plan.',
   },
   'cueola-file': {
     title: 'The .cueola show file',
@@ -16522,9 +16537,12 @@ function renderPaperworkNav(id, slotId='') {
   // save-status chip and "Preview" only make sense on the form pages.
   const saveStatus = (id === 'rundown' || id === 'production-notes') ? '' : `<span class="pb-save-status" data-pb-save-status role="status" aria-live="polite"></span>`;
   const previewButton = (slotId === 'pbNavPreview' || id === 'production-notes') ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
+  // The preview panel's title bar already carries the Planda Bear back button;
+  // its step nav drops the duplicate so back exists once per panel.
+  const backButton = slotId === 'pbNavPreview' ? '' : `<button type="button" onclick="returnToPaperworkHub()">${sfIcon('chevron.left')}<span>Planda Bear</span></button>`;
   slot.innerHTML = `
     <div class="paperwork-flow-left">
-      <button type="button" onclick="returnToPaperworkHub()">${sfIcon('chevron.left')}<span>Planda Bear</span></button>
+      ${backButton}
     </div>
     <div class="pb-step-pill">Step ${idx + 1} of ${items.length}</div>
     <div class="paperwork-flow-right">
@@ -18646,6 +18664,10 @@ async function publishPlandaBearNote() {
     pbRenderComposerTags();
     try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
     pbCloseComposer();
+    // Posting from mid-feed used to look like nothing happened: the sheet slides
+    // away and the note lands above (or below) the fold. Reuse the notification
+    // jump so the board scrolls to it and flashes it once.
+    pbPendingFlashId = note.id;
     renderPlandaBearNotes();
   } catch (err) {
     // Upload or write failed — keep the composer contents so nothing is lost, but say so.
@@ -19367,8 +19389,9 @@ function pbApplyPendingFlash() {
   const rootId = t ? t.root.id : id;
   const el = document.querySelector(`#pbNotesThread .pb-thread[data-note-id="${rootId}"]`);
   if (!el) return;             // not painted yet — a later render will catch it
+  const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
   requestAnimationFrame(() => {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' });
     el.classList.remove('pb-thread-flash');
     void el.offsetWidth;
     el.classList.add('pb-thread-flash');
@@ -20382,7 +20405,12 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
   lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence, fromPlandaBear };
   previewBody.style.background = 'transparent';
   previewBody.style.padding = '0';
-  previewBody.innerHTML = `${controls}<div class="paper-export-loading" role="status">Building fixed-page preview…</div>`;
+  // The .no-print option toggles render in their own slot between the title
+  // bar and the paper, where they ride theme tokens instead of the paper
+  // body's pinned print-safe colors (design audit Aug 2026).
+  const controlsSlot = document.getElementById('paperPreviewControls');
+  if (controlsSlot) controlsSlot.innerHTML = controls;
+  previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-loading" role="status">Building fixed-page preview…</div>`;
   const primary = document.getElementById('paperPreviewPrimary');
   const isExportAction = /\b(export|download)\b/i.test(primaryLabel || '');
   primary.classList.toggle('export-action', isExportAction);
@@ -20409,6 +20437,8 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
       return;
     }
     releasePaperExportDocument(root);
+    // Any .no-print stragglers in the body (legacy embeddings without the
+    // controls slot) survive the swap to the finished pages.
     const preservedControls = [...previewBody.children].filter(node => node.matches?.('.no-print'));
     const fitFrame = document.createElement('div');
     fitFrame.className = 'paper-export-fit';
@@ -20417,7 +20447,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
     fitPaperPreviewDocument();
   }).catch(error => {
     if (sequence !== paperPreviewBuildSequence) return;
-    previewBody.innerHTML = `${controls}<div class="paper-export-preview-error" role="alert">Could not build the fixed-page preview. ${esc(error?.message || 'Unknown export error')}</div>`;
+    previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-preview-error" role="alert">Could not build the fixed-page preview. ${esc(error?.message || 'Unknown export error')}</div>`;
   });
 }
 
@@ -21644,10 +21674,7 @@ function renderProductionChecklist(items) {
   const complete = rows.filter(row => row.done).length;
   el.innerHTML = `<div class="readiness-builder">
     <div class="readiness-builder-head">
-      <div>
-        <div class="readiness-title">Ready Before Show</div>
-        <div class="readiness-copy">Use this as the final walk-through. Check a row only when that item is actually ready.</div>
-      </div>
+      <div class="readiness-copy">Use this as the final walk-through. Check a row only when that item is actually ready.</div>
       <div class="readiness-progress">${complete} of ${rows.length} ready</div>
     </div>
     <div class="readiness-simple-head" aria-hidden="true">
@@ -21840,8 +21867,10 @@ function renderPatchTable(kind, title) {
           <button class="patch-remove" onclick="removePatchRow('${kind}',${i})" data-tip="Remove row" aria-label="Remove ${kind} row ${i + 1}">${sfIcon('action.close')}</button>
         `)).join('')}
       </div>
-      <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
-      <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import CSV/TSV</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
+      <div class="patch-table-actions">
+        <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
+        <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import CSV/TSV</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
+      </div>
     </div>`;
 }
 
@@ -23032,7 +23061,7 @@ function renderCallSheetPeople() {
     <div class="call-grid-head">Call</div>
     <div class="call-grid-head"></div>
     ${rows.map((p,i)=>`
-      <div class="call-person-row" data-idx="${i}"${p.id ? ` data-row-id="${esc(p.id)}"` : ''} style="display:contents">
+      <div class="call-person-row" data-idx="${i}"${p.id ? ` data-row-id="${esc(p.id)}"` : ''}>
         <div class="call-drag-handle" onpointerdown="callPointerDown(event, ${i})" data-tip="Drag to reorder" aria-label="Drag to reorder">${sfIcon('action.drag')}</div>
         <input class="field-in" data-call-field="name" value="${esc(p.name||'')}" placeholder="Name" oninput="syncCallSheetPeopleFromDOM()">
         <input class="field-in" data-call-field="position" list="ppPositionOptions" value="${esc(p.position||p.role||'')}" placeholder="Position" oninput="syncCallSheetPeopleFromDOM()">

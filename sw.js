@@ -133,7 +133,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=1e635836bf',
+  'cueola-app.js?v=3b93f90fc5',
   'outrangutan/outrangutan.css?v=5aab556beb',
   'outrangutan/outrangutan.js?v=48addea3ef',
   'cueola-streamdeck-device.js?v=48990ed663',
@@ -185,7 +185,7 @@ const versionSignature = SHELL_ASSETS
 // wrong-page entries the old poisoning bug already cached in installed
 // clients, (3) index.html/dashboard.html page-HTML changes (dead
 // Create-a-Session modal removed, focus/diag CSS) ride the shell cache.
-const WORKER_SCHEMA = '24';
+const WORKER_SCHEMA = '25';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

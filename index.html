@@ -1005,7 +1005,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sp-weather-shell.has-weather-summary:focus-within .sp-weather-entry{position:static;height:auto;padding:12px 0;opacity:1;caret-color:var(--accent)}
 .field-with-action{display:flex;gap:8px;align-items:stretch}
 .field-with-action .field-in{flex:1;min-width:0}
-.field-action-btn{flex:none;height:100%;min-height:45px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:0 13px;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
+.field-action-btn{flex:none;height:100%;min-height:var(--ui-control-height);border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:var(--ui-radius-control);padding:0 13px;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:0;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease),box-shadow .2s var(--ease)}
 .field-action-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .field-action-btn.on{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,var(--s2));color:var(--text)}
 .field-in:disabled{opacity:.72;color:var(--text2);cursor:not-allowed;background:color-mix(in srgb,var(--s2) 70%,var(--bg))}
@@ -1275,15 +1275,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Planda Bear local themes */
 .plandabear-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-4px}
-.plandabear-settings-btn{width:38px;height:38px;border-radius:9px;border:var(--btn-hairline);background:var(--btn-fill);color:var(--btn-ink);font-size:19px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
+.plandabear-settings-btn{width:40px;height:40px;border:var(--btn-hairline);background:var(--btn-fill);color:var(--btn-ink);font-size:19px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
 .plandabear-settings-btn:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
 .plandabear-settings-btn:active{transform:scale(.96)}
 .plandabear-settings-btn.active{color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--accent) 14%,transparent)}
-.plandabear-theme-bar{display:none;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--s2) 88%,transparent);margin-bottom:4px}
+.plandabear-theme-bar{display:none;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--border);border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent)}
 .plandabear-theme-bar.on{display:flex}
-.plandabear-theme-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border)}
+.plandabear-theme-label{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);padding-bottom:6px;border-bottom:1px solid var(--border)}
 [data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
 [data-plandabear-theme="honey"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
+/* Eucalyptus runs a bright leaf-green accent: accent-filled buttons take dark
+   ink (white on #6cd234 is about 1.9:1, far under AA). */
+[data-plandabear-theme="eucalyptus"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
 [data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
 [data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
 [data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
@@ -1296,6 +1299,31 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 [data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border:1px solid rgba(255,255,255,.2)}
 [data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 [data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#262626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+/* The derived control and material tokens (--btn-*, --ui-label*, --glass-*,
+   --liquid-*) resolve at :root against the APP theme, so a Planda-themed panel
+   used to render app-theme title bars, seg shells, and N/A pills over its own
+   surfaces (dark chrome on the polar-bear white panel and the reverse).
+   Re-declaring the same recipes inside the scope makes them recompute from the
+   scoped surface and text vars, so one rule fixes all nine themes.
+   Never write a star followed by a slash inside this comment: it closes the
+   comment early and the whole block below silently stops parsing. */
+[data-plandabear-theme] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+  --glass-bg:color-mix(in srgb,var(--s1) 78%,transparent);
+  --glass-bg-strong:color-mix(in srgb,var(--s2) 88%,transparent);
+  --glass-border:color-mix(in srgb,var(--text) 14%,transparent);
+  --ui-label:var(--text);--ui-label-secondary:var(--text2);--ui-label-tertiary:var(--text3);
+  --liquid-fill:linear-gradient(145deg,color-mix(in srgb,var(--s2) 60%,transparent),color-mix(in srgb,var(--s1) 42%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));
+  --liquid-fill-strong:linear-gradient(145deg,color-mix(in srgb,var(--s2) 88%,transparent),color-mix(in srgb,var(--s1) 64%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 10%,transparent),color-mix(in srgb,#fff 3%,transparent));
+  --liquid-edge:color-mix(in srgb,var(--text) 24%,var(--border));
+  --liquid-edge-strong:color-mix(in srgb,var(--text) 28%,var(--bord2));
+  --btn-fill:color-mix(in srgb,var(--s2) 80%,transparent);
+  --btn-fill-hover:color-mix(in srgb,var(--s3) 90%,transparent);
+  --btn-fill-2:color-mix(in srgb,var(--s3) 82%,transparent);
+  --btn-fill-2-hover:color-mix(in srgb,var(--s4) 88%,transparent);
+  --btn-ink:var(--text2);
+  --btn-ink-hover:var(--text);
+  --btn-hairline:1px solid color-mix(in srgb,var(--text) 6%,transparent);
+}
 
 /* Prompt Op */
 .prompt-op-active .ls-body{position:relative;background:var(--pt-bg,#08090f)}
@@ -1321,9 +1349,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-sidebar .prompt-op-panel{position:static;transform:none;width:100%;z-index:auto;background:var(--pt-ui-bg,rgba(20,20,20,.92));border-color:var(--pt-ui-border,rgba(200,169,126,.25));border-radius:18px;padding:14px 18px;margin-top:2px}
 
 /* Planda Bear paperwork */
-.pb-modal{display:flex;flex-direction:column;padding:0!important;border-radius:14px!important;overflow:hidden;max-height:92vh}
+.pb-modal{display:flex;flex-direction:column;gap:0;padding:0!important;overflow:hidden;max-height:92vh}
 .pb-builder-modal{max-width:1020px!important;padding-bottom:96px!important}
-.pb-hub-modal{max-width:980px!important}
 .pb-modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 22px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--s1),color-mix(in srgb,var(--s2) 82%,transparent))}
 .pb-modal-kicker{font-size:10px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
 .pb-modal-sub{font-size:13px;color:var(--text2);line-height:1.55;max-width:650px}
@@ -1331,68 +1358,77 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .paperwork-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:2px}
 .paperwork-modal-head .modal-title{line-height:1.2}
 .paperwork-modal-head .modal-sub{margin-top:7px;line-height:1.55;max-width:760px}
-.paperwork-back{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:8px;padding:6px 11px;font-size:12px;font-family:var(--mono);cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
-.paperwork-back:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
+.paperwork-back{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bord2);background:var(--btn-fill);color:var(--text2);border-radius:var(--ui-radius-control);padding:8px 14px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
+.paperwork-back:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--s2) 82%,transparent)}
 .pb-flow-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.pb-step-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--accent);border-radius:999px;padding:5px 12px;font-size:11px;font-family:var(--mono);font-weight:800;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;flex:none}
+.pb-step-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--text) 16%,transparent);background:color-mix(in srgb,var(--s2) 68%,transparent);color:var(--text2);border-radius:999px;padding:5px 12px;font-size:11px;font-family:var(--mono);font-weight:800;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;flex:none}
 .pb-builder-hint{font-size:12px;color:var(--text2);line-height:1.55;max-width:620px}
-.prepro-section{border:1px solid var(--border);background:rgba(255,255,255,.018);border-radius:10px;padding:14px;margin-top:12px}
-.prepro-section-title{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.prepro-section{border:1px solid var(--border);background:rgba(255,255,255,.018);border-radius:10px;padding:14px}
+.prepro-section-title{font-size:11px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .prepro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
-/* Short inputs (times, dates, phones) stop stretching to their grid cell. */
-.field-narrow{max-width:190px}
+/* Short inputs (times, dates, phones) stop stretching to their grid cell.
+   One shared width, including inside .field-with-action rows, so sibling time
+   fields line up instead of flexing to whatever space their buttons leave. */
+.field-narrow{max-width:150px}
+.field-with-action .field-in.field-narrow{flex:0 1 150px}
 /* Venue segmented control */
 .seg-group{display:inline-flex;gap:6px;background:var(--btn-fill);border:var(--btn-hairline);border-radius:12px;padding:5px;flex-wrap:wrap}
+/* Owner rule (Aug 2026): in paperwork forms a segmented control (venue, meals
+   provided) hugs its options; the bordered pill never spans the whole row. */
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal) .seg-group{width:fit-content;max-width:100%}
 .seg-btn{border:1px solid transparent;background:transparent;color:var(--text2);border-radius:8px;padding:8px 15px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
 .seg-btn:hover{color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .seg-btn.on{background:color-mix(in srgb,var(--accent) 20%,var(--s2));border-color:transparent;color:var(--text)}
 /* Weather card */
-.wx-card{margin-top:12px;border:1px solid var(--border);background:linear-gradient(180deg,color-mix(in srgb,var(--cyan) 7%,var(--s2)),var(--s2));border-radius:14px;padding:14px}
+.wx-card{margin-top:12px;border:1px solid var(--border);background:color-mix(in srgb,var(--cyan) 5%,var(--s2));border-radius:var(--ui-radius-group);padding:14px}
 .wx-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .wx-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .wx-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);background:var(--s3);border:1px solid var(--bord2);border-radius:999px;padding:5px 11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wx-chip-ico{font-size:13px;line-height:1}
-.wx-fetch-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid transparent;background:color-mix(in srgb,var(--cyan) 16%,transparent);color:var(--text);border-radius:10px;padding:8px 15px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),border-color .15s var(--ease),transform .15s var(--ease)}
-.wx-fetch-btn:hover{background:color-mix(in srgb,var(--cyan) 26%,transparent);transform:translateY(-1px)}
-.wx-fetch-btn:disabled{opacity:.6;cursor:default;transform:none}
-.wx-status{font-size:11.5px;color:var(--text3);margin:10px 0 12px;line-height:1.5}
+.wx-fetch-btn{display:inline-flex;align-items:center;gap:7px;min-height:var(--ui-control-height);border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:var(--ui-radius-control);padding:8px 15px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
+.wx-fetch-btn:hover{color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
+.wx-fetch-btn:disabled{opacity:.6;cursor:default}
+.wx-status{font-size:11px;color:var(--text3);margin:10px 0 12px;line-height:1.5}
 .wx-status.warn{color:var(--yellow)}
-.wx-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+/* 3 columns so the six fields fill two complete rows (High/Low/Precip, Wind/Sunrise/Sunset). */
+.wx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .wx-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .wx-field.wx-wide{grid-column:1/-1}
-.wx-field>span{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.wx-field>span{font-size:12px;font-family:var(--sans);font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--text2)}
 .wx-field .field-in{padding:8px 10px;font-size:13px}
 @media(max-width:640px){.wx-grid{grid-template-columns:1fr 1fr}}
 .call-sheet-switcher{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+/* Wrapped rows (Delete) hug their content instead of filling the 1fr track. */
+.call-sheet-switcher .call-delete-btn{justify-self:start}
 .call-sheet-switcher .field-in{font-size:14px;padding:10px 12px}
 .call-grid{display:grid;grid-template-columns:30px 1.1fr 1fr 1.2fr .9fr .75fr 44px;gap:0;align-items:stretch;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2);margin-top:8px}
-.call-grid-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
+.call-grid-head{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
 .call-grid-head:nth-child(7){border-right:0}
 .call-drag-handle{display:flex;align-items:center;justify-content:center;min-height:42px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:grab;user-select:none;font-size:13px;line-height:1;touch-action:none}
 .call-drag-handle:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--s3))}
 .call-drag-handle:active{cursor:grabbing}
+.call-person-row{display:contents} /* the row is a grouping node; its cells sit in the .call-grid tracks */
 .call-person-row.dragging>*{opacity:.45}
 .call-person-row.drag-target>*{box-shadow:inset 0 2px 0 0 var(--accent)}
 .call-grid .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .call-row-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .call-row-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
-.call-add-btn{width:100%;padding:10px;border-radius:var(--ui-radius-control);border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer}
+.call-add-btn{width:auto;padding:10px 22px;border-radius:var(--ui-radius-control);border:1px dashed var(--bord2);background:transparent;color:var(--text2);font-size:12px;font-weight:700;font-family:var(--sans);cursor:pointer}
 .call-add-btn:hover{border-color:var(--accent);color:var(--accent)}
-.patch-table{display:grid;gap:0;margin-top:8px;border:1px solid var(--bord2);border-radius:8px;overflow:hidden;background:var(--s2)}
+.patch-table{display:grid;gap:0;margin-top:8px;border:1px solid var(--bord2);overflow:hidden;background:var(--s2)}
 .patch-table.video,.patch-table.audio{grid-template-columns:1fr 1fr 1fr 1fr 1.2fr 34px 38px}
 .patch-table.comms{grid-template-columns:1.1fr .55fr 1fr 1.4fr 34px 38px}
 .patch-move{display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--s3)}
-.patch-move-btn{flex:1 1 50%;min-height:0;border:0;border-radius:0;background:transparent;color:var(--text3);cursor:pointer;display:grid;place-items:center;padding:0}
-.patch-move-btn .sf-symbol{font-size:9px}
+.patch-move-btn{flex:1 1 50%;min-height:0;border:0;border-radius:0;background:transparent;color:var(--text2);cursor:pointer;display:grid;place-items:center;padding:0}
+.patch-move-btn .sf-symbol{font-size:10px}
 .patch-move-btn:hover:not(:disabled){color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .patch-move-btn:disabled{opacity:.3;cursor:default}
-.patch-head{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
+.patch-head{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);background:var(--s3);border-right:1px solid var(--bord2);border-bottom:1px solid var(--bord2);padding:9px 10px}
 .patch-table .field-in{border-radius:0;border-width:0 1px 1px 0;border-color:var(--border);background:transparent;font-size:13px}
 .patch-remove{height:100%;min-height:42px;border-radius:0;border:0;border-bottom:1px solid var(--border);background:var(--s3);color:var(--text3);cursor:pointer}
 .patch-remove:hover{color:var(--red);border-color:rgba(240,82,82,.35)}
 .readiness-builder{display:flex;flex-direction:column;gap:10px}
 .readiness-builder-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;border:1px solid var(--border);background:color-mix(in srgb,var(--s2) 82%,transparent);border-radius:10px;padding:13px}
-.readiness-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px}
 .readiness-copy{font-size:12px;color:var(--text2);line-height:1.5}
 .readiness-progress{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid color-mix(in srgb,var(--green) 30%,transparent);background:color-mix(in srgb,var(--green) 8%,transparent);border-radius:999px;padding:5px 9px;white-space:nowrap}
 .readiness-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:8px;align-items:center}
@@ -1416,13 +1452,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .readiness-remove:hover{background:var(--red);color:#fff}
 .paperwork-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .paperwork-flow-actions{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 22px;border:1px solid var(--liquid-edge);border-radius:12px;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
+/* The display:flex above used to beat the hidden attribute, pinning an empty
+   glass strip across the package preview (#pbNavPreview) and the notes board
+   (#pbNavNotes). Same treatment as .pb-group-bar: gone when hidden or empty. */
+.paperwork-flow-actions[hidden],.paperwork-flow-actions:empty{display:none!important}
 .paperwork-flow-left,.paperwork-flow-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .paperwork-flow-actions button{border-radius:var(--ui-radius-control);padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:background .15s var(--ease),color .15s var(--ease)}
 .paperwork-flow-actions button:hover:not(:disabled){border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .paperwork-flow-actions button:disabled{opacity:.35;cursor:not-allowed}
 .paperwork-flow-actions .primary{background:linear-gradient(135deg,var(--accent),var(--acg));border-color:transparent;color:#fff}
 /* Live save state (paperwork autosaves — Google-Docs-style chip, no Save button) */
-.pb-save-status{display:inline-flex;align-items:center;gap:6px;padding:9px 6px;font-size:12px;font-weight:600;color:var(--text3);white-space:nowrap}
+.pb-save-status{display:inline-flex;align-items:center;gap:6px;padding:9px 6px;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap}
 .pb-save-status .sf-symbol{font-size:14px}
 .pb-save-status.is-saved .sf-symbol{color:var(--green)}
 .pb-save-status.is-offline{color:var(--yellow)}
@@ -1470,11 +1510,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .paperwork-card-comments{grid-column:2;font-size:11px;font-family:var(--mono);color:var(--yellow);display:none;align-items:center;gap:6px;margin-top:4px}
 .paperwork-card-comments.on{display:flex}
 .paperwork-card-comments::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--yellow);box-shadow:0 0 0 1px color-mix(in srgb,var(--yellow) 55%,transparent)}
-.pb-comments{border:1px solid color-mix(in srgb,var(--yellow) 28%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s1));border-radius:10px;padding:13px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.pb-comments{border:1px solid color-mix(in srgb,var(--yellow) 28%,var(--border));background:color-mix(in srgb,var(--yellow) 5%,var(--s1));border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:10px}
 .pb-comments-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .pb-comments-title{font-size:12px;font-family:var(--mono);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--yellow)}
 .pb-comments-sub{font-size:12px;color:var(--text2);line-height:1.45;margin-top:3px}
-.pb-comments-count{font-size:10px;font-family:var(--mono);color:var(--yellow);border:1px solid color-mix(in srgb,var(--yellow) 32%,transparent);border-radius:999px;padding:4px 8px;white-space:nowrap}
+.pb-comments-count{font-size:11px;font-family:var(--mono);color:var(--yellow);border:1px solid color-mix(in srgb,var(--yellow) 32%,transparent);border-radius:999px;padding:4px 8px;white-space:nowrap}
 .pb-comment-list{display:flex;flex-direction:column;gap:8px}
 .pb-comment-card{border:1px solid color-mix(in srgb,var(--yellow) 20%,var(--bord2));background:color-mix(in srgb,var(--s2) 92%,var(--yellow));border-radius:9px;padding:10px 11px;display:flex;flex-direction:column;gap:8px}
 .pb-comment-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--text3)}
@@ -1488,22 +1528,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-comment-form{border-top:1px solid color-mix(in srgb,var(--yellow) 18%,var(--border));padding-top:10px;display:grid;grid-template-columns:minmax(160px,220px) minmax(0,1fr) auto;gap:8px;align-items:start}
 .pb-comment-form textarea{min-height:42px;resize:vertical}
 .pb-comment-form .field-in{font-size:12px}
-.pb-comment-add{height:42px;border:1px solid transparent;background:color-mix(in srgb,var(--yellow) 14%,var(--s2));color:var(--yellow);border-radius:8px;padding:0 13px;font-size:13.5px;font-weight:800;cursor:pointer;white-space:nowrap}
-.pb-comment-add:hover,.pb-comment-review:hover,.pb-comment-delete:hover{filter:brightness(1.08)}
-.pb-hub-activity{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent);overflow:hidden}
+.pb-comment-add{height:42px;border:1px solid var(--bord2);background:color-mix(in srgb,var(--s2) 68%,transparent);color:var(--text2);border-radius:var(--ui-radius-control);padding:0 14px;font-size:13px;font-weight:700;font-family:var(--sans);cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
+.pb-comment-add:hover{color:var(--text);background:color-mix(in srgb,var(--s2) 86%,transparent)}
+.pb-comment-review:hover,.pb-comment-delete:hover{filter:brightness(1.08)}
+.pb-hub-activity{border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent);overflow:hidden}
 .pb-hub-activity-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
 .pb-hub-activity-head:hover{color:var(--text)}
-.pb-hub-activity-head .pb-hub-caret{margin-left:auto;font-size:9px;color:var(--text3);transition:transform .15s}
+.pb-hub-activity-head .pb-hub-caret{margin-left:auto;font-size:11px;color:var(--text2);transition:transform .15s}
 .pb-hub-activity.open .pb-hub-caret{transform:rotate(90deg)}
 .pb-hub-activity-body{display:none;padding:2px 14px 14px;flex-direction:column;gap:5px}
 .pb-hub-activity.open .pb-hub-activity-body{display:flex}
-.pb-hub-row{display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center;background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:7px 10px}
+.pb-hub-row{display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
 .pb-hub-row .s{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap}
 .pb-hub-row .b{font-size:11px;color:var(--text2);font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pb-hub-row .w{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
 .pb-hub-empty{font-size:12px;color:var(--text3);padding:4px 0}
-.pb-assign-card{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--s2) 88%,transparent);padding:12px 14px}
-.pb-assign-title{font-size:12px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.pb-assign-card{border:1px solid var(--border);border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent);padding:12px 14px}
+.pb-assign-title{font-size:11px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px}
 .pb-assign-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:6px 0;border-top:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
 .pb-assign-row:first-of-type{border-top:0}
 .pb-assign-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -1535,35 +1576,55 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #productionNotesModal .modal{height:92vh;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;gap:14px}
 .pb-board{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--s1) 72%,transparent);overflow:hidden}
 .pb-board-toolbar{position:relative;z-index:40;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s2) 70%,transparent);flex-wrap:wrap}
-.pb-note-count{font-size:10px;font-family:var(--mono);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);border-radius:999px;padding:4px 8px;white-space:nowrap}
-.pb-board-search{flex:1;min-width:130px;max-width:260px;background:var(--s2);border:1px solid var(--bord2);border-radius:9px;color:var(--text);font-family:var(--sans);font-size:12px;padding:6px 10px;outline:0}
+/* The hub bar runs on ONE control height (28px) and ONE radius: the count
+   capsule stays a capsule because it is a status chip, not a button. */
+.pb-note-count{display:inline-flex;align-items:center;height:28px;font-size:10px;font-family:var(--mono);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);border-radius:999px;padding:0 11px;white-space:nowrap}
+.pb-board-search{flex:1;min-width:130px;max-width:260px;height:28px;background:var(--s2);border:1px solid var(--bord2);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:12px;padding:0 10px;outline:0}
 .pb-board-search:focus{border-color:color-mix(in srgb,var(--accent) 60%,var(--bord2));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 .pb-board-search::placeholder{color:var(--text3)}
 .pb-board-tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
-.pb-chat-tool{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
+.pb-chat-tool{height:28px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:8px;padding:0 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-chat-tool[hidden]{display:none!important}
 .pb-chat-tool:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .pb-chat-tool.on{border-color:transparent;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .pb-chat-tool.active{border-color:transparent;color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent)}
-.pb-note-guide{display:none;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--s2) 55%,transparent);max-height:32vh;overflow-y:auto;flex:none}
-.pb-note-guide.open{display:block}
+/* Tips expand out of the toolbar they belong to instead of snapping in and
+   shoving the feed down (the 0fr/1fr grid row is the height-animation idiom).
+   The global prefers-reduced-motion block kills the ride. */
+.pb-note-guide{display:grid;grid-template-rows:0fr;opacity:0;border-bottom:0 solid var(--border);background:color-mix(in srgb,var(--s2) 55%,transparent);flex:none;transition:grid-template-rows var(--dur-normal) var(--ease),opacity var(--dur-normal) var(--ease)}
+.pb-note-guide>.pb-note-guide-body{min-height:0;overflow:hidden}
+.pb-note-guide.open{grid-template-rows:1fr;opacity:1;border-bottom-width:1px}
+.pb-note-guide.open>.pb-note-guide-body{max-height:32vh;overflow-y:auto}
 .pb-note-guide-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;padding:12px 14px}
 .pb-note-guide-row{display:flex;flex-direction:column;gap:2px;border-left:2px solid color-mix(in srgb,var(--accent) 50%,transparent);padding-left:10px}
 .pb-note-guide-t{font-size:12px;font-weight:800;color:var(--text)}
 .pb-note-guide-d{font-size:11.5px;color:var(--text2);line-height:1.45}
-.t-general{--tagc:var(--accent)}
-.t-audio{--tagc:var(--green)}
-.t-sfx{--tagc:#2fbfb0}
-.t-video{--tagc:var(--cyan)}
-.t-lighting{--tagc:var(--yellow)}
-.t-content{--tagc:var(--purple)}
-.t-gfx{--tagc:#e05fa9}
-.t-question{--tagc:#4aa3ff}
-.t-todo{--tagc:var(--orange)}
+/* ── The one tag map ──
+   Every tag chip in the app reads --tagc from these classes: the board badges,
+   the filter popover, the composer picker, and the rundown-side pn cards. One
+   map means a Lighting note is the same color wherever it appears (it used to
+   be yellow on the board and purple in the side panel).
+   Departments follow the guidelines (audio green, lighting purple, gfx yellow)
+   and every hue rides a theme token so the nine Planda themes retune it, with
+   a small push toward the panel ink so the 9px chips still clear AA on the
+   light themes (raw #2fbfb0 sat at 2.3:1 on the polar bear panel).
+   Question keeps a literal blue: no department token carries one, and the ink
+   push darkens it on light panels and lightens it on dark ones. */
+.t-general{--tag-base:var(--text2)}
+.t-audio{--tag-base:var(--green)}
+.t-sfx{--tag-base:var(--cyan)}
+.t-video{--tag-base:var(--accent)}
+.t-lighting{--tag-base:var(--purple)}
+.t-content{--tag-base:var(--acg)}
+.t-gfx{--tag-base:var(--yellow)}
+.t-question{--tag-base:#4aa3ff}
+.t-todo{--tag-base:var(--orange)}
+:is(.t-general,.t-audio,.t-sfx,.t-video,.t-lighting,.t-content,.t-gfx,.t-todo){--tagc:color-mix(in srgb,var(--tag-base) 85%,var(--text))}
+.t-question{--tagc:color-mix(in srgb,var(--tag-base) 62%,var(--text))}
 /* Filter button + popover */
 .pb-filter-wrap{position:relative;display:inline-flex}
 .pb-chat-tool .pb-tool-count{font-family:var(--mono);font-size:9px;font-weight:800;margin-left:4px;color:var(--accent)}
-.pb-filter-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;width:210px;display:flex;flex-direction:column;gap:3px;padding:7px;border:1px solid var(--liquid-edge);border-radius:12px;background:var(--liquid-fill-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
+.pb-filter-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;width:210px;display:flex;flex-direction:column;gap:3px;padding:7px;border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-control);background:var(--liquid-fill-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 .pb-filter-pop[hidden]{display:none}
 .pb-filter-chip{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text2);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:left;width:100%}
 .pb-filter-chip .pb-filter-dot{width:9px;height:9px;border-radius:50%;background:var(--tagc,var(--accent));flex:none}
@@ -1588,11 +1649,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-fab .sf-symbol{width:24px;height:24px;display:block}
 .pb-board.composing .pb-fab{opacity:0;transform:scale(.5);pointer-events:none}
 /* Compose sheet — slides up from the bottom of the board */
-.pb-compose-sheet{position:absolute;left:0;right:0;bottom:0;z-index:26;padding:0 12px 12px;transform:translateY(110%);transition:transform .26s var(--ease);pointer-events:none;max-height:calc(100% - 10px);display:flex;flex-direction:column}
+.pb-compose-sheet{position:absolute;left:0;right:0;bottom:0;z-index:42;padding:0 12px 12px;transform:translateY(110%);transition:transform .26s var(--ease);pointer-events:none;max-height:calc(100% - 10px);display:flex;flex-direction:column}
 .pb-board.composing .pb-compose-sheet{transform:none;pointer-events:auto}
 /* a tall composer (long note + checklist) scrolls itself — it must never force the board to scroll */
 .pb-compose-sheet .pb-compose-card{min-height:0;overflow-y:auto}
-.pb-compose-backdrop{position:absolute;inset:0;z-index:25;background:color-mix(in srgb,var(--bg) 55%,transparent);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+/* Above the toolbar (z 40): composing dims and locks the whole board, so the
+   search and sort controls stop reading as live behind the sheet. */
+.pb-compose-backdrop{position:absolute;inset:0;z-index:41;background:color-mix(in srgb,var(--bg) 55%,transparent);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
 .pb-board.composing .pb-compose-backdrop{opacity:1;pointer-events:auto}
 .pb-compose-card{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--bord2));border-radius:18px;background:color-mix(in srgb,var(--s2) 98%,transparent)}
 .pb-compose-card.dragover{border-color:var(--accent);border-style:dashed;background:color-mix(in srgb,var(--accent) 10%,var(--s2))}
@@ -1600,7 +1663,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-compose-head .pb-compose-title{display:flex;align-items:center;gap:8px}
 .pb-compose-close{border:0;background:transparent;color:var(--text3);width:26px;height:26px;border-radius:50%;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .pb-compose-close:hover{background:var(--s3);color:var(--text)}
-#pbNoteInput{width:100%;background:var(--s1);border:1px solid var(--bord2);border-radius:11px;color:var(--text);font-family:var(--sans);font-size:14.5px;line-height:1.6;padding:14px 15px;resize:none;outline:0;min-height:160px;max-height:42vh;transition:border-color .15s var(--ease)}
+#pbNoteInput{width:100%;background:var(--s1);border:1px solid var(--bord2);border-radius:var(--ui-radius-control);color:var(--text);font-family:var(--sans);font-size:14.5px;line-height:1.6;padding:14px 15px;resize:none;outline:0;min-height:160px;max-height:42vh;transition:border-color .15s var(--ease)}
 #pbNoteInput:focus{border-color:color-mix(in srgb,var(--accent) 60%,var(--bord2));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 #pbNoteInput::placeholder{color:var(--text3)}
 .pb-compose-label{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:1px}
@@ -1609,14 +1672,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-fmt-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-2-hover)}
 .pb-fmt-btn b{font-weight:900}
 .pb-fmt-div{width:1px;height:18px;background:var(--bord2);margin:0 4px}
-.pb-compose-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* Post never falls below the composer fold. A tall note (long text, a
+   checklist) scrolls the card, so the action row sticks to its bottom edge
+   wearing the card surface. Phones already worked this way; every panel
+   height gets it now. */
+.pb-compose-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;bottom:-18px;z-index:1;margin:0 -18px -18px;padding:8px 18px 18px;background:color-mix(in srgb,var(--s1) 90%,var(--bg))}
 .pb-attach-add{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-attach-add:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
-.pb-post-btn{border:0;background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-radius:10px;padding:8px 18px;font-size:13.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:filter .15s var(--ease);margin-left:auto}
+.pb-post-btn{border:0;background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-radius:999px;padding:8px 20px;font-size:13.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:filter .15s var(--ease);margin-left:auto}
 .pb-post-btn:hover{filter:brightness(1.12)}
 .pb-post-btn:disabled{opacity:.55;cursor:default}
 .pb-post-btn.small{padding:7px 13px;font-size:11px;margin-left:0}
-.pb-composer-hint{font-size:9.5px;font-family:var(--mono);color:var(--text3);user-select:none;flex:1;min-width:90px}
+/* One hint voice per card: this matches .field-hint instead of shouting in
+   9.5px mono next to it. */
+.pb-composer-hint{font-size:11px;font-family:var(--sans);line-height:1.5;color:var(--text3);user-select:none;flex:1;min-width:90px}
+/* The 4MB cap only matters once something is attached, so it rides the tray. */
+.pb-attach-cap-hint{display:none}
+#pbAttachTray:not([hidden])+.pb-attach-cap-hint{display:block}
 .pb-attach-tray{display:flex;flex-wrap:wrap;gap:8px}
 .pb-attach-tray[hidden]{display:none}
 .pb-attach-chip{position:relative;display:flex;align-items:center;gap:8px;border:1px solid var(--bord2);background:var(--s2);border-radius:10px;padding:6px 30px 6px 8px;max-width:240px}
@@ -1635,7 +1707,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-collapse-btn:hover{background:var(--s3);color:var(--text)}
 .pb-thread .pb-note-head{padding-right:38px}
 .pb-thread.collapsed{padding:0}
-.pb-collapsed-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 12px;border:0;background:transparent;color:var(--text2);cursor:pointer;text-align:left;border-radius:13px;min-width:0}
+.pb-collapsed-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 12px;border:0;background:transparent;color:var(--text2);cursor:pointer;text-align:left;border-radius:var(--ui-radius-group);min-width:0}
 .pb-collapsed-row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
 .pb-note-avatar.sm{width:24px;height:24px;font-size:10px}
 .pb-collapsed-author{font-size:12.5px;font-weight:800;color:var(--text);flex:none;white-space:nowrap}
@@ -1649,7 +1721,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-note-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);flex:none;user-select:none;overflow:hidden}
 .pb-av-img{width:100%;height:100%;object-fit:cover;display:block}
 .pb-note-avatar.pb-av-lg{width:56px;height:56px;font-size:19px}
-.pb-note-avatar.pb-av-sm{width:26px;height:26px;font-size:10px}
+.pb-note-avatar.pb-av-sm{width:28px;height:28px;font-size:10px}
 /* Portal chip in the toolbar */
 .pb-portal-chip{display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;cursor:pointer;border-radius:50%;flex:none}
 .pb-portal-chip:hover{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
@@ -1746,12 +1818,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-note-role{font-size:8px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:5px;padding:2px 5px}
 /* Crew position chip (Phase 4 item 4) — quieter than the role badge */
 .pb-note-pos{font-size:8px;font-family:var(--mono);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);border:1px solid var(--border);border-radius:5px;padding:2px 5px;white-space:nowrap}
-.pb-note-tag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--tagc,var(--accent));border:1px solid color-mix(in srgb,var(--tagc,var(--accent)) 40%,transparent);background:color-mix(in srgb,var(--tagc,var(--accent)) 10%,transparent);border-radius:5px;padding:2px 6px;white-space:nowrap}
+.pb-note-tag{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--tagc,var(--accent));border:1px solid color-mix(in srgb,var(--tagc,var(--accent)) 40%,transparent);background:color-mix(in srgb,var(--tagc,var(--accent)) 10%,transparent);border-radius:6px;padding:2px 6px;white-space:nowrap}
 .pb-note-assign{font-size:9px;font-family:var(--mono);font-weight:800;letter-spacing:.04em;color:var(--yellow);border:1px solid color-mix(in srgb,var(--yellow) 40%,transparent);background:color-mix(in srgb,var(--yellow) 10%,transparent);border-radius:5px;padding:2px 6px;white-space:nowrap}
 .pb-note-assign.done{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,transparent);background:color-mix(in srgb,var(--green) 10%,transparent)}
 .pb-assign-pick{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--text2)}
 .pb-assign-pick select{background:var(--s2);color:var(--text);border:1px solid var(--bord2);border-radius:8px;padding:6px 8px;font-size:12px;font-weight:600}
-.pb-note-tag.done{--tagc:var(--green)}
+.pb-note-tag.done{--tag-base:var(--green)}
 .pb-note-time{font-size:10px;font-family:var(--mono);color:var(--text3);white-space:nowrap}
 .pb-note-body{display:flex;gap:10px;align-items:flex-start}
 .pb-note-main{display:flex;flex-direction:column;gap:7px;min-width:0;flex:1}
@@ -1771,7 +1843,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-mention{color:var(--accent);font-weight:700;background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:5px;padding:0 4px}
 .pb-mention.me{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 18%,transparent)}
 /* @mention autocomplete popover */
-.pb-mention-menu{position:fixed;z-index:460;max-width:300px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--liquid-edge);border-radius:12px;background:var(--liquid-fill-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
+.pb-mention-menu{position:fixed;z-index:460;max-width:300px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-control);background:var(--liquid-fill-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 .pb-mention-menu[hidden]{display:none}
 .pb-mention-item{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;color:var(--text2);border-radius:8px;padding:7px 9px;font-size:13px;font-weight:700;cursor:pointer;text-align:left}
 .pb-mention-item.sel,.pb-mention-item:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text)}
@@ -1788,7 +1860,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-cl-rows{display:flex;flex-direction:column;gap:6px}
 .pb-cl-row{display:flex;align-items:center;gap:8px}
 .pb-cl-box{width:18px;height:18px;flex:none;border-radius:6px;border:2px solid color-mix(in srgb,var(--orange) 55%,var(--bord2))}
-.pb-cl-input{flex:1;min-width:0;background:var(--s3);border:1px solid var(--bord2);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px}
+.pb-cl-input{flex:1;min-width:0;background:var(--s3);border:1px solid var(--bord2);border-radius:var(--ui-radius-control);padding:8px 10px;color:var(--text);font-size:13px}
 .pb-cl-input:focus{outline:none;border-color:var(--accent)}
 .pb-cl-del{width:28px;height:28px;flex:none;border:0;background:transparent;color:var(--text3);border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .pb-cl-del:hover{background:var(--s3);color:var(--red)}
@@ -1849,9 +1921,11 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-audio-head .pb-file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:700;color:var(--text)}
 .pb-audio-dl{border:0;background:transparent;color:var(--text3);cursor:pointer;padding:3px;border-radius:6px;flex:none;display:flex}
 .pb-audio-dl:hover{color:var(--accent);background:var(--s3)}
-.pb-audio-og{display:inline-flex;align-items:center;gap:4px;flex:none;border:1px solid color-mix(in srgb,#ff6a00 45%,var(--bord2));background:color-mix(in srgb,#ff6a00 12%,transparent);color:#ff8a3d;border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.03em;cursor:pointer}
+/* Outrangutan keeps its orange, but the ink rides the panel text so the chip
+   stays legible on the light themes (flat #ff8a3d sat at 2.3:1 on polar bear). */
+.pb-audio-og{display:inline-flex;align-items:center;gap:4px;flex:none;border:1px solid color-mix(in srgb,#ff6a00 45%,var(--bord2));background:color-mix(in srgb,#ff6a00 12%,transparent);color:color-mix(in srgb,#ff8a3d 62%,var(--text));border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.03em;cursor:pointer}
 .pb-audio-og .sf-symbol{font-size:11px}
-.pb-audio-og:hover{background:color-mix(in srgb,#ff6a00 22%,transparent);color:#ffa566}
+.pb-audio-og:hover{background:color-mix(in srgb,#ff6a00 22%,transparent);color:color-mix(in srgb,#ff8a3d 48%,var(--text))}
 .pb-audio-slot{min-height:34px}
 .pb-audio-el{width:100%;height:34px;display:block}
 .pb-audio-loading{font-size:11px;font-family:var(--mono);color:var(--text3);padding:8px 0}
@@ -1895,7 +1969,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-reply-acts button.danger:hover{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
 .pb-reply-compose{display:flex;flex-direction:column;gap:7px;padding-top:4px}
 .pb-reply-compose-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
-#pbReplyInput{flex:1;min-width:160px;background:var(--s2);border:1px solid var(--bord2);border-radius:10px;color:var(--text);font-family:var(--sans);font-size:12.5px;line-height:1.5;padding:8px 10px;resize:none;outline:0;min-height:36px;max-height:132px}
+#pbReplyInput{flex:1;min-width:160px;background:var(--s2);border:1px solid var(--bord2);border-radius:var(--ui-radius-control);color:var(--text);font-family:var(--sans);font-size:12.5px;line-height:1.5;padding:8px 10px;resize:none;outline:0;min-height:36px;max-height:132px}
 #pbReplyInput:focus{border-color:color-mix(in srgb,var(--accent) 60%,var(--bord2));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 #pbReplyInput::placeholder{color:var(--text3)}
 .pb-reply-attach{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
@@ -1906,7 +1980,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-editbtns{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .pb-mini-btn{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:7px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-mini-btn:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
-.pb-mini-btn.save{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-color:transparent}
+.pb-mini-btn.save{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-color:transparent;border-radius:999px}
 .pb-edit-hint{font-size:10px;font-family:var(--mono);color:var(--text3)}
 .pb-note-empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.55;max-width:380px;padding:28px 20px}
 .pb-note-empty-ico{font-size:30px}
@@ -1940,8 +2014,9 @@ button.pb-todo-check:hover{border-color:var(--green)}
   /* Composer becomes a proper bottom sheet that never clips the Post button */
   .pb-compose-sheet{padding:0 8px 8px;max-height:88vh}
   .pb-compose-card{max-height:86vh;overflow-y:auto;padding:15px;-webkit-overflow-scrolling:touch}
+  /* the pinned action row follows the card's tighter phone padding */
+  .pb-compose-actions{bottom:-15px;margin:0 -15px -15px;padding:8px 15px 15px}
   .pb-compose-card textarea#pbNoteInput{min-height:96px}
-  .pb-compose-actions{position:sticky;bottom:0;background:var(--s2);padding-top:8px;margin:0 -3px -3px;z-index:1}
   .pb-post-btn{min-height:44px}
   /* Bigger tap targets for checkable items */
   .pb-clitem-check,.pb-todo-check{width:24px;height:24px}
@@ -1952,28 +2027,26 @@ button.pb-todo-check:hover{border-color:var(--green)}
      grid min-content overflows a phone-width modal behind a nested h-scroll) */
   .pb-av-grid,#userPortalModal .pb-av-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   .pb-collapse-btn{top:7px;right:7px;width:34px;height:34px}
-  /* keep the step nav inside the modal on phones so it never covers the board */
-  #productionNotesModal .modal{padding-bottom:14px!important;gap:10px}
-  #pbNavNotes{position:static;transform:none;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:10px 0 0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
-  #pbNavNotes .paperwork-flow-left,#pbNavNotes .paperwork-flow-right{display:flex;gap:6px;flex-wrap:wrap}
-  #pbNavNotes button{padding:7px 10px;font-size:11px}
-  #pbNavNotes .pb-step-pill{display:none}
+  /* Phone edges are tighter than the desktop 26px. Class-qualified so it still
+     outranks the desktop rule further down the sheet (source order decides). */
+  #productionNotesModal .modal.pb-builder-modal{padding-bottom:14px!important;gap:10px}
 }
 .paper-preview .paper-note-body{font-size:13px;line-height:1.6;white-space:pre-wrap;margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:6px;background:#fafafa}
-.paper-preview{background:#fff;color:#111;border-radius:8px;padding:28px;font-family:Helvetica,Arial,sans-serif;max-height:58vh;overflow:auto;letter-spacing:0;font-kerning:normal;text-rendering:geometricPrecision}
-.paper-preview .pb-pkg-optin{display:flex;align-items:center;gap:9px;margin:0 0 18px;padding:11px 14px;border:1px solid #d4d9e6;border-radius:9px;background:#f4f6fb;font-family:-apple-system,system-ui,sans-serif;font-size:13.5px;font-weight:600;color:#31384a;cursor:pointer}
-.paper-preview .pb-pkg-optin input{width:17px;height:17px;accent-color:#5b6ef5;cursor:pointer}
+.paper-preview{background:#fff;color:#111;padding:28px;font-family:Helvetica,Arial,sans-serif;max-height:58vh;overflow:auto;letter-spacing:0;font-kerning:normal;text-rendering:geometricPrecision}
 /* v2.1 D9.1 — hub-side call-sheet export picker */
-.pb-pkg-sheet-picker{border:1px solid var(--border);border-radius:var(--r);background:var(--s1);padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:7px}
+.pb-pkg-sheet-picker{border:1px solid var(--border);border-radius:var(--ui-radius-control);background:var(--s1);padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:7px}
 .pb-pkg-sheet-picker-title{font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
 .pb-pkg-sheet-picker .pb-pkg-optin{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text2);cursor:pointer}
 .pb-pkg-sheet-picker .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
-.pb-pkg-sheet-warning{font-size:12.5px;line-height:1.5;color:var(--yellow);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:8px;padding:9px 12px;background:var(--s2)}
+.pb-pkg-sheet-warning{font-size:12.5px;line-height:1.5;color:var(--yellow);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:var(--ui-radius-control);padding:9px 12px;background:var(--s2)}
 /* v2.1 D2 — group picker + hub group bar */
 .group-chip-grid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
 .group-chip{padding:10px 18px;border:1px solid var(--border);border-radius:999px;background:var(--s1);color:var(--text);font-size:14px;font-weight:700;cursor:pointer}
 .group-chip.sel{border-color:var(--accent);color:var(--accent)}
-.pb-group-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--s1);margin-bottom:10px;font-size:13px}
+.pb-group-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--ui-radius-group);background:var(--s1);font-size:13px}
+/* The display:flex above used to beat the hidden attribute, leaving an empty
+   pill on the hub. Owner: remove it. It only renders with group content. */
+.pb-group-bar[hidden],.pb-group-bar:empty{display:none!important}
 .pb-group-bar-label{font-size:10.5px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
 .pb-group-bar-note{font-size:11.5px;color:var(--text3)}
 .pb-group-select{max-width:220px;padding:6px 10px;font-size:13px}
@@ -2020,6 +2093,12 @@ button.pb-todo-check:hover{border-color:var(--green)}
    reclaims the layout box. Purely visual: pagination measured offscreen. */
 .paper-preview .paper-export-fit{width:max-content;max-width:100%;margin:0 auto;overflow:auto}
 .paper-preview .paper-export-fit .paper-export-document{min-width:0;transform-origin:top left}
+/* Preview intermediate states: quiet centered captions on the section's glass
+   card, no spinner idiom. The min-height holds the panel steady while the
+   offscreen pagination runs, so pages landing does not jump the layout.
+   Colors ride the panel tokens, not the pinned print-safe paper set. */
+.paper-export-loading{display:grid;place-items:center;min-height:38vh;padding:24px;border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 68%,transparent);color:var(--ui-label-secondary);font-family:var(--sans);font-size:13px;font-weight:600;text-align:center}
+.paper-export-preview-error{width:fit-content;max-width:min(520px,100%);margin:18px auto;padding:12px 16px;border:1px solid color-mix(in srgb,var(--red) 35%,var(--liquid-edge));border-left:3px solid var(--red);border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--red) 8%,transparent);color:var(--ui-label-secondary);font-family:var(--sans);font-size:13px;line-height:1.5}
 .paper-export-page{--paper-dept:transparent;box-sizing:border-box;position:relative;width:8.5in;height:11in;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;align-content:stretch;gap:10pt;padding:.5in .55in .42in;overflow:hidden;background:#fff;color:#111;border:1px solid #d8dbe2;border-radius:2px;box-shadow:0 14px 38px rgba(0,0,0,.24);font:inherit;counter-increment:paper-export-page;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .paper-export-page:is(.is-portrait,[data-orientation="portrait"]){width:8.5in;height:11in}
 .paper-export-page:is(.is-landscape,[data-orientation="landscape"]){width:11in;height:8.5in;padding:.42in .5in .38in}
@@ -2246,16 +2325,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-card:hover{background:color-mix(in srgb,var(--accent) 3%,transparent)}
 .pn-card:last-child{border-bottom:none}
 .pn-card-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
-.pn-card-tag{font-size:8.5px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:8px;flex-shrink:0}
-.pn-card-tag.t-general{color:var(--text2);background:color-mix(in srgb,var(--text2) 9%,transparent)}
-.pn-card-tag.t-audio{color:var(--green);background:color-mix(in srgb,var(--green) 9%,transparent)}
-.pn-card-tag.t-sfx{color:#2fbfb0;background:color-mix(in srgb,#2fbfb0 9%,transparent)}
-.pn-card-tag.t-video{color:var(--video);background:color-mix(in srgb,var(--video) 9%,transparent)}
-.pn-card-tag.t-lighting{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
-.pn-card-tag.t-content{color:var(--purple);background:color-mix(in srgb,var(--purple) 9%,transparent)}
-.pn-card-tag.t-gfx{color:#e05fa9;background:color-mix(in srgb,#e05fa9 9%,transparent)}
-.pn-card-tag.t-question{color:#4aa3ff;background:color-mix(in srgb,#4aa3ff 9%,transparent)}
-.pn-card-tag.t-todo{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 9%,transparent)}
+/* Side-panel tags wear the board's map and the board's mini badge shape: one
+   9px badge at one radius, so the same note reads the same on both surfaces. */
+.pn-card-tag{font-size:9px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;flex-shrink:0;color:var(--tagc,var(--text2));background:color-mix(in srgb,var(--tagc,var(--text2)) 9%,transparent)}
 .pn-card-by{font-size:11px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pn-card-time{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0}
 .pn-card-text{font-size:12px;color:var(--text2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
@@ -2335,6 +2407,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .readiness-prompt{grid-column:auto}
   .patch-head{display:none}
   .patch-table .field-in{border-right:0}
+  .patch-table-actions{flex-direction:column;align-items:stretch}
+  .patch-upload-btn{width:100%}
   .paperwork-actions{grid-template-columns:1fr}
   .paperwork-flow-actions{align-items:stretch;flex-direction:column;padding:10px}
   .paperwork-flow-left,.paperwork-flow-right{display:grid;grid-template-columns:1fr;gap:8px}
@@ -2973,8 +3047,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   color:var(--btn-ink-hover);
 }
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn):active{transform:scale(.98)}
-/* Post stays a filled accent action — the liquid-glass chip treatment above made it read as disabled. */
-.pb-post-btn{border-radius:var(--ui-radius-control)}
+/* Post stays a filled accent action (the liquid-glass chip treatment above made
+   it read as disabled), and it is the sheet's confirming action, so it wears the
+   house capsule like every other primary. */
+.pb-post-btn{border-radius:999px}
 .tbtn-live{
   background:#e9433a;
   color:#fff;
@@ -3349,12 +3425,11 @@ input.pt-range::-moz-range-thumb,
   border-radius:16px;
   box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 12%,transparent);
 }
-:is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){
+:is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){
   background:var(--pb-glass-raised,color-mix(in srgb,var(--s2) 74%,transparent));
   border-color:color-mix(in srgb,var(--text) 11%,var(--border));
   box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 8%,transparent);
 }
-.paperwork-card{border-radius:14px}
 .paperwork-card:hover{
   background:color-mix(in srgb,var(--accent) 10%,var(--pb-glass-raised));
   box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 13%,transparent);
@@ -3419,7 +3494,7 @@ input.pt-range::-moz-range-thumb,
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
-  :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
+  :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 
@@ -3440,25 +3515,118 @@ input.pt-range::-moz-range-thumb,
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
 }
 
-/* ── Planda Bear fills the whole page, and the step nav docks to the bottom ──
-   The nav was position:fixed, but the modal's backdrop-filter makes the modal
-   (not the viewport) its containing block, so it floated mid-page. Full-height
-   modals + a sticky footer keep it locked to the bottom of the page. Placed last
-   so it wins over the themed .modal !important rules above. */
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){
+/* ── Planda Bear layout (owner redesign Aug 2026) ──
+   The HUB is a full-page workspace whose content rides a centered column, the
+   same sizing discipline as the Cueola front page: the old everything-full-bleed
+   pass stretched cards and buttons edge to edge on wide monitors. Each SECTION
+   opens OVER the hub as a floating liquid-glass window; when the window is
+   small the overlay promotes to full screen (media query below). The section
+   footer nav stays a sticky flush footer inside the scrolling modal. */
+#paperworkHubModal{
   padding:0!important;align-items:stretch!important;justify-content:stretch!important;
 }
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+#paperworkHubModal .modal{
   max-width:none!important;width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
 }
+/* Hub column cap: the sticky glass header band spans the page while its
+   content and the body share one centered 1100px column. */
+.pb-hub-modal .pb-modal-header,
+.pb-hub-modal .pb-modal-body{
+  padding-left:max(clamp(18px,3vw,30px),calc((100% - 1100px)/2));
+  padding-right:max(clamp(18px,3vw,30px),calc((100% - 1100px)/2));
+}
+.pb-hub-modal .paperwork-grid{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+/* One rhythm for the hub column: the body is a flex column and its gap is the
+   only spacer, so the stacked blocks stop bringing their own margins. */
+.pb-hub-modal .pb-modal-body{display:flex;flex-direction:column;align-items:stretch;gap:16px}
+#pbAssignmentsCard:empty,#pbCommentsHub:empty,#plandabearHubActivity:empty,#pbCommentsPreview:empty,#packageExportOptions:empty{display:none}
+/* The notes entry is a centered card, not a page-wide banner. */
+.pb-hub-modal .paperwork-notes-bar{width:auto;max-width:680px;margin:0 auto}
+.pb-hub-modal .paperwork-actions{display:flex;flex-wrap:wrap;grid-template-columns:none;justify-content:center;margin-top:0}
+.pb-hub-modal .paperwork-actions>button{width:auto;flex:0 1 auto;padding-left:22px;padding-right:22px}
+
+/* Section overlays: floating glass windows over the hub. */
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){
+  padding:clamp(10px,3vh,34px) clamp(10px,3vw,34px)!important;
+  align-items:center!important;justify-content:center!important;
+  background:color-mix(in srgb,#000 46%,transparent);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);
+  backdrop-filter:blur(14px) saturate(1.1);
+}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+  width:100%!important;max-width:min(1020px,100%)!important;
+  height:auto!important;max-height:min(94dvh,1040px)!important;
+  border-radius:var(--ui-radius-panel)!important;
+  border:1px solid var(--liquid-edge-strong,var(--liquid-edge));
+  box-shadow:0 20px 60px rgba(0,0,0,.38),inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent);
+}
+#patchSheetModal .modal{max-width:min(1100px,100%)!important}
 :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
   overflow-y:auto!important;padding-bottom:0!important;
+}
+/* The notes board is a feed, not a form: the panel keeps ONE stable viewport
+   and the board scrolls inside it. Left on auto height it collapsed to content
+   on a sparse board, which crushed the compose sheet at the exact moment a
+   first note gets written, and grew the window under the reader note by note.
+   The floating step nav never renders here (renderPaperworkNav returns early),
+   so the 96px it reserved becomes the panel's own 26px bottom margin. */
+#productionNotesModal .modal{
+  min-height:min(60dvh,760px);
+  padding-bottom:26px!important;
 }
 :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .paperwork-flow-actions{
   position:sticky;left:auto;right:auto;bottom:0;transform:none;width:auto;z-index:5;
   margin:20px -26px 0;border-radius:0;border-left:0;border-right:0;border-bottom:0;
+  padding-left:26px;padding-right:26px; /* footer controls share the body's 26px alignment line */
   box-shadow:none; /* flush footer: also cancels the glass inset sheen */
 }
+/* One vertical rhythm inside the forms: the modal's flex gap owns block-to-block
+   spacing, so the in-body action row stops adding its own margin on top. */
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal) .paperwork-actions{margin-top:0}
+/* Scroll hygiene (audit Aug 2026): tabbed-to fields clear the sticky glass
+   bars, a flick past either end stops at the panel instead of scrolling the
+   page behind it, and Firefox gets the same thin scrollbars WebKit shows. */
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
+  scroll-padding-top:96px;scroll-padding-bottom:84px;
+  overscroll-behavior:contain;
+}
+.pb-modal-body{scroll-padding-top:96px;overscroll-behavior:contain}
+:is(.paper-preview,.pn-scroll,.modal-wrap,.paper-export-fit){overscroll-behavior:contain}
+:is(.pb-modal-body,.paper-preview,.u-modal-scroll,.u-modal-scroll-tall,.u-modal-scroll-short),
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
+  scrollbar-width:thin;scrollbar-color:var(--bord2) transparent;
+}
+/* Preview panel: the panel is the one scroller (no 58vh inner pane), and Done
+   is a compact centered capsule, never a full-width slab. */
+#paperPreviewModal .paper-preview{max-height:none;overflow:visible}
+#paperPreviewModal #paperPreviewPrimary{width:auto;align-self:center;padding:12px 28px}
+/* Export option toggles live between the title bar and the paper, on theme
+   tokens (the paper body pins print-safe colors that fought them), wearing
+   the hub picker's checkbox recipe on a quiet glass chip. */
+#paperPreviewControls{display:flex;flex-direction:column;align-items:center;gap:8px}
+#paperPreviewControls:empty{display:none}
+#paperPreviewControls .pb-pkg-optin{display:flex;align-items:center;gap:9px;width:fit-content;margin:0;padding:9px 14px;border:1px solid var(--liquid-edge);border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--s2) 68%,transparent);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer}
+#paperPreviewControls .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+/* One capsule primary per panel: the preview's confirming action is the
+   centered capsule above, so the step nav's Next stays a quiet utility here. */
+#pbNavPreview .primary{background:color-mix(in srgb,var(--s2) 68%,transparent);border-color:color-mix(in srgb,var(--text) 14%,var(--border));color:var(--text2)}
+#pbNavPreview .primary:hover:not(:disabled){color:var(--text);background:color-mix(in srgb,var(--s2) 86%,transparent)}
+/* Scaled-down window: the overlay takes the whole screen instead. */
+@media (max-width:900px),(max-height:640px){
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+    max-width:none!important;width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
+  }
+}
+/* Panels arrive, they don't pop: a brief fade-and-settle when a section
+   overlay opens (guidelines: transitions communicate relationships). The
+   full-screen fallback keeps the same quiet fade. */
+@media (prefers-reduced-motion:no-preference){
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal).on .modal{
+    animation:pbPanelIn .18s var(--ease) both;
+  }
+}
+@keyframes pbPanelIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
 
 /* Planda Bear HIG pass: glass chrome, calm document surfaces, clear actions. */
 :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .pb-modal,
@@ -3467,6 +3635,27 @@ input.pt-range::-moz-range-thumb,
   background:
     radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 70%),
     color-mix(in srgb,var(--bg) 94%,var(--s1));
+}
+/* HIG panel material (owner request, Apple HIG Panels): section overlays are
+   LESS prominent than the main window: translucent material over the blurred
+   hub, panel radius token, hairline edge, quiet shadow, and a brief compact
+   title bar. The hub keeps its opaque full-page surface. */
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+  background:
+    radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 70%),
+    color-mix(in srgb,var(--bg) 84%,transparent);
+  -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+  backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
+  padding-top:13px;
+  padding-bottom:12px;
+}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-title{
+  font-size:17px;font-weight:700;
+}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-sub{
+  font-size:12px;margin-top:2px;
 }
 .pb-modal-header,.paperwork-modal-head{
   position:sticky;top:0;z-index:9;
@@ -3480,16 +3669,20 @@ input.pt-range::-moz-range-thumb,
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
 .pb-modal-header{margin:0;padding:18px clamp(18px,3vw,30px)}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal.pb-builder-modal{padding-top:0!important}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .paperwork-modal-head{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal.pb-builder-modal{padding-top:0!important}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
   z-index:30;
-  margin:0 -26px 18px!important;
+  margin:0 -26px!important; /* the modal's flex gap owns head-to-content spacing */
   padding-top:22px;
   padding-bottom:20px;
+  padding-left:26px;padding-right:26px; /* title shares the body's 26px alignment line */
 }
 .pb-modal-body{padding:20px clamp(18px,3vw,30px) 28px}
 .pb-modal-kicker,.pb-modal-sub,.paperwork-modal-head .modal-sub{font-family:var(--sans);letter-spacing:0;text-transform:none}
-.pb-modal-kicker{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:3px}
+/* The kicker rides the accent, but a bare accent misses AA on the softer
+   palettes (flamingo purple measured 4.32:1). Pushing it toward the panel ink
+   keeps the accent identity and clears 4.5:1 on all nine themes. */
+.pb-modal-kicker{font-size:12px;font-weight:700;color:color-mix(in srgb,var(--accent) 76%,var(--text));margin-bottom:3px}
 .pb-modal-header .modal-title,.paperwork-modal-head .modal-title{font-size:clamp(20px,2.4vw,28px);font-weight:800;letter-spacing:0}
 .pb-modal-sub,.paperwork-modal-head .modal-sub{font-size:13px;color:var(--ui-label-secondary);max-width:720px}
 .pb-brand-lockup{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px;min-width:0}
@@ -3531,7 +3724,7 @@ input.pt-range::-moz-range-thumb,
 }
 .pnb-ico{width:38px;height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent)}
 .pnb-arrow{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 10%,transparent)}
-:is(.prepro-section,.pb-board,.pb-thread,.pb-compose-card,.pb-comments,.pb-hub-activity,.wx-card,.readiness-builder-head){
+:is(.prepro-section,.pb-board,.pb-thread,.pb-compose-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.wx-card,.readiness-builder-head){
   border-radius:var(--ui-radius-group);
   background:color-mix(in srgb,var(--s1) 90%,var(--bg));
   border-color:color-mix(in srgb,var(--text) 11%,var(--border));
@@ -3548,8 +3741,13 @@ input.pt-range::-moz-range-thumb,
   border-radius:var(--ui-radius-control);
   background:color-mix(in srgb,var(--s2) 68%,transparent);
   border-color:color-mix(in srgb,var(--text) 14%,var(--border));
+  color:var(--text2); /* scoped ink: stays AA on the light themes' glass */
   font-family:var(--sans);
   letter-spacing:0;
+}
+.paperwork-flow-actions button:hover:not(:disabled):not(.primary){
+  color:var(--text);
+  background:color-mix(in srgb,var(--s2) 86%,transparent);
 }
 .paperwork-flow-actions .primary{
   border-color:color-mix(in srgb,var(--accent) 48%,transparent);
@@ -3568,11 +3766,18 @@ input.pt-range::-moz-range-thumb,
   border-color:rgba(255,255,255,.24);
   color:#fff;
 }
+/* Glacier's #5b8df8 is too light for white ink (about 3.2:1); deepen the
+   primary fill so white clears AA while the theme accent stays bright. */
+[data-plandabear-theme="glacier"] .modal :is(.btn-primary,.save-btn,.admin-add-btn),
+[data-plandabear-theme="glacier"] .modal .paperwork-flow-actions .primary{
+  background:linear-gradient(135deg,#3b6de8,#5b4ce8);
+  color:#fff;
+}
 
 /* ── Planda Bear live collaboration: who's here + who's editing what ── */
-.pb-collab{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-height:0;margin:0 0 4px}
+.pb-collab{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-height:0;margin:0}
 .pb-collab:empty{display:none}
-.pb-collab-label{font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-right:1px}
+.pb-collab-label{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);margin-right:1px}
 .pb-collab-label.dim{opacity:.7;margin-left:8px}
 .pb-collab-avatar{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:10px;font-weight:800;font-family:var(--mono);color:var(--bg);border:1.5px solid var(--s1)}
 .pb-collab-avatar.inst{background:linear-gradient(135deg,var(--accent),var(--acg))}
@@ -3581,8 +3786,8 @@ input.pt-range::-moz-range-thumb,
 .pb-field-editor-chip{position:absolute;top:-9px;right:8px;z-index:6;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:.04em;color:var(--bg);background:linear-gradient(135deg,var(--accent),var(--acg));border-radius:999px;padding:2px 8px;pointer-events:none;white-space:nowrap}
 
 /* ── Back-to-Cueola button in Planda Bear header — mirrors the build "Planda Bear" tbtn-ghost ── */
-.pb-back-rundown-btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;font-size:14px;font-weight:600;font-family:var(--sans);letter-spacing:0;color:var(--text2);border:1.5px solid var(--bord2);border-radius:9px;background:transparent;cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;line-height:1}
-.pb-back-rundown-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.pb-back-rundown-btn{display:inline-flex;align-items:center;gap:6px;min-height:var(--ui-control-height);padding:0 14px;font-size:14px;font-weight:600;font-family:var(--sans);letter-spacing:0;color:var(--text2);border:1.5px solid var(--bord2);border-radius:var(--ui-radius-control);background:transparent;cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;line-height:1}
+.pb-back-rundown-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--s2) 82%,transparent)}
 .pb-back-rundown-btn:active{transform:scale(.96)}
 
 /* ── Rundown table clarity ── */
@@ -3718,8 +3923,11 @@ input.pt-range::-moz-range-thumb,
 .sf-symbol[data-symbol="action.export"]{--sf-symbol:url("/assets/icons/EXPORT_ARROW.svg?v=1")}
 :is(.settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.pb-note-act.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action){display:inline-flex;align-items:center;justify-content:center;gap:7px}
 /* Per-note PDF buttons (.pb-note-act) stay ghost-style like Reply/Pin/Delete — red is for the page-level exports only. */
+/* Export red is deepened 22% so the white label clears AA (4.5:1) on every
+   Planda Bear theme: the raw --red hues ranged 2.99:1 (eucalyptus) to 3.5:1,
+   all failing. Deepening keeps the red affordance where dark ink would not. */
 .settings-file-btn.export-action,.pb-chat-tool.export-action,.pb-attach-add.export-action,.btn-export,#paperPreviewPrimary.export-action,.btn-secondary.export-action{
-  background:var(--red)!important;
+  background:color-mix(in srgb,var(--red) 78%,#000)!important;
   border-color:color-mix(in srgb,var(--red) 55%,#fff)!important;
   color:#fff!important;
   text-shadow:none!important;
@@ -3800,7 +4008,7 @@ input.pt-range::-moz-range-thumb,
   width:100%;
   padding:5px var(--settings-row-pad-x);
   border:0!important;
-  border-radius:7px;
+  border-radius:8px;
   background:transparent!important;
   box-shadow:none!important;
   color:var(--text2);
@@ -3834,7 +4042,7 @@ input.pt-range::-moz-range-thumb,
   align-items:center;
   min-height:34px;
   padding:5px var(--settings-row-pad-x,8px);
-  border-radius:7px;
+  border-radius:8px;
   cursor:pointer;
   color:var(--text2);
   font-size:13px;
@@ -3965,18 +4173,30 @@ input.pt-range::-moz-range-thumb,
 }
 .paperwork-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .paperwork-notes-bar{padding:12px 14px;margin-bottom:10px}
-.paperwork-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:12px}
+/* Owner rule (Aug 2026): Planda Bear buttons hug their content, never the row. */
+.paperwork-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.paperwork-actions>button{width:auto;flex:0 1 auto;padding-left:22px;padding-right:22px}
 .paperwork-actions :is(.btn-primary,.btn-secondary){width:auto;min-height:38px;padding:8px 12px;font-size:13px}
 .pb-hub-activity{margin-top:12px}
 .pb-hub-activity-head{padding:9px 10px;font-size:10px}
 .paperwork-flow-actions{gap:8px;padding:10px 14px}
 .paperwork-flow-left,.paperwork-flow-right{gap:7px}
 .paperwork-flow-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 12px}
-.call-grid,.patch-table{border-radius:10px;background:color-mix(in srgb,var(--s2) 92%,transparent)}
+.call-grid,.patch-table{border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--s2) 92%,transparent)}
 .call-grid .field-in,.patch-table .field-in{min-height:43px;background:color-mix(in srgb,var(--s1) 36%,transparent)}
 .call-grid .field-in:focus,.patch-table .field-in:focus{background:color-mix(in srgb,var(--accent) 7%,var(--s1))}
-.call-add-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;font-weight:800}
-.patch-upload-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:38px;margin-top:8px;border:1px dashed var(--bord2);border-radius:9px;background:transparent;color:var(--text2);font-size:12px;font-weight:800;cursor:pointer}
+/* Keyboard focus survives the table's corner clipping: an inset ring, since
+   the outset box-shadow ring vanishes under overflow:hidden and neighbors. */
+.patch-table .field-in:focus-visible,.call-grid .field-in:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Koala and Panda run a white accent; 7% white is invisible, raise the tint. */
+[data-plandabear-theme="koala"] .patch-table .field-in:focus,[data-plandabear-theme="panda"] .patch-table .field-in:focus{background:color-mix(in srgb,var(--accent) 14%,var(--s1))}
+/* The audio and comms documents read as two sections, not one run-on table. */
+#patchSheetBody{display:grid;gap:26px}
+.call-add-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--ui-control-height);font-weight:700}
+/* Add row and Import sit together in one compact row under each table
+   (owner rule Aug 2026: Planda Bear buttons hug their content, never the row). */
+.patch-table-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+.patch-upload-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;min-height:var(--ui-control-height);padding:10px 18px;border:1px dashed var(--bord2);border-radius:var(--ui-radius-control);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer}
 .patch-upload-btn:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .pb-board-tools{gap:5px}
 .pb-chat-tool{padding:6px 9px;font-size:11.5px}
@@ -3986,7 +4206,9 @@ input.pt-range::-moz-range-thumb,
 }
 @media(max-width:640px){
   .settings-action-grid{grid-template-columns:1fr}
-  .paperwork-actions{grid-template-columns:1fr}
+  /* Phones stack the actions; full-width tap targets are correct there. */
+  .paperwork-actions{flex-direction:column}
+  .paperwork-actions>button{width:100%}
 }
 
 /* ── Phase 8: Live operation hierarchy, state language, and recovery rail ── */
@@ -4165,6 +4387,18 @@ input.pt-range::-moz-range-thumb,
   .ls-pact-circle{width:44px;height:44px}
   #liveshow .ls-exit-btn.icon-only{width:44px;height:44px}
   .pb-av-bg{width:36px;height:36px}
+  /* Production Notes board: every control a finger can reach. The reply actions
+     also stop hiding behind :hover, which a touch screen never delivers. */
+  .pb-reply-acts{opacity:1}
+  .pb-reply-acts button{width:36px;height:36px}
+  .pb-collapse-btn{width:38px;height:38px}
+  .pb-compose-close,.pb-attach-x{width:32px;height:32px}
+  .pb-attach-x{top:5px;right:5px}
+  .pb-fmt-btn{min-width:40px;height:40px}
+  .pb-chat-tool{height:auto;min-height:44px}
+  .pb-board-search{height:auto;min-height:44px}
+  /* Tag chips keep the sanctioned dense-chip exemption; their spacing separates them. */
+  .pb-note-act,.pb-like,.pb-attach-add,.pb-post-btn,.pb-mini-btn,.pb-active-clear,.pb-filter-chip{min-height:44px}
 }
 </style>
 </head>
@@ -5226,7 +5460,6 @@ input.pt-range::-moz-range-thumb,
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')" aria-pressed="false"><div class="ts-preview"></div><div class="ts-name">PrepBear</div></button>
       </div>
       </details>
-      <div id="plandabearHubActivity"></div>
     </div>
     <button class="paperwork-notes-bar" id="paperworkNotesBar" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')">
       <span class="pnb-ico sf-symbol" data-symbol="content.note" aria-hidden="true"></span>
@@ -5241,6 +5474,7 @@ input.pt-range::-moz-range-thumb,
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
+    <div id="plandabearHubActivity"></div>
     <div id="packageExportOptions" hidden></div>
     <div class="paperwork-actions">
       <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
@@ -5274,11 +5508,12 @@ input.pt-range::-moz-range-thumb,
 </div>
 
 <div class="modal-wrap" id="paperPreviewModal">
-  <div class="modal u-modal-scroll-tall" style="max-width:900px">
+  <div class="modal pb-builder-modal u-modal-scroll-tall">
     <div class="paperwork-modal-head">
       <div class="modal-title" id="paperPreviewTitle"><span id="paperPreviewTitleText">Preview</span><button type="button" class="info-btn" aria-label="About exports and the verified stamp" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
+    <div id="paperPreviewControls"></div>
     <div class="paper-preview" id="paperPreviewBody"></div>
     <div id="pbCommentsPreview"></div>
     <button class="btn-primary" id="paperPreviewPrimary" onclick="dismissPaperPreview()">Done</button>
@@ -5290,7 +5525,7 @@ input.pt-range::-moz-range-thumb,
      CALL SHEET
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="preProModal">
-  <div class="modal pb-builder-modal u-modal-scroll" style="max-width:900px">
+  <div class="modal pb-builder-modal u-modal-scroll">
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Call Sheet</div>
@@ -5320,14 +5555,16 @@ input.pt-range::-moz-range-thumb,
         <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start plus the rundown's total runtime">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" placeholder="e.g. Studio A, Media Building" oninput="renderCallSheetWeatherCard()"></div>
-        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="e.g. 400 College Ave"><div class="field-hint">Use the full street address so maps and parking directions work.</div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="pp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if you are running late: give a name and a number.</div></div>
       </div>
     </div>
     <div class="prepro-section">
-      <div class="prepro-section-title"><span>Location &amp; Weather<button type="button" class="info-btn" aria-label="What the location and weather section is for" onclick="toggleInfoPop(event,'cs-location-weather')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
-      <div class="field">
+      <div class="prepro-section-title"><span>Location and Weather<button type="button" class="info-btn" aria-label="What the location and weather section is for" onclick="toggleInfoPop(event,'cs-location-weather')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
+      <div class="prepro-grid">
+        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="pp-location" maxlength="100" placeholder="e.g. Studio A, Media Building" oninput="renderCallSheetWeatherCard()"></div>
+        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="pp-address" maxlength="160" placeholder="e.g. 400 College Ave"><div class="field-hint">Use the full street address so maps and parking directions work.</div></div>
+      </div>
+      <div class="field u-mt10">
         <label class="field-lbl">Venue Type</label>
         <div class="seg-group" id="pp-venue-group" role="group" aria-label="Venue type">
           <button type="button" class="seg-btn" data-venue="indoors" aria-pressed="false" onclick="setCallSheetVenue('indoors')"><span class="sf-symbol" data-symbol="action.home" aria-hidden="true"></span> Indoors</button>
@@ -5363,7 +5600,7 @@ input.pt-range::-moz-range-thumb,
         <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160" placeholder="e.g. Loading dock door, knock twice"></div>
         <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180" placeholder="e.g. YouTube · Stream op: Sam"><div class="field-hint">Say where the show streams and who runs the stream.</div></div>
         <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120" placeholder="e.g. Show blacks · closed-toe shoes"></div>
-        <div class="field u-col-span">
+        <div class="field">
           <label class="field-lbl">Meals Provided</label>
           <div class="seg-group" id="pp-meals-provided-group" role="group" aria-label="Meals provided">
             <button type="button" class="seg-btn" data-meals-provided="provided" aria-pressed="false" onclick="setCallSheetMealsProvided('provided')">Provided</button>
@@ -5376,7 +5613,6 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Crew / Talent Contacts<button type="button" class="info-btn" aria-label="What the crew and talent contacts section is for" onclick="toggleInfoPop(event,'cs-crew')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
-      <label class="field-lbl">Crew / Talent</label>
       <div class="field-hint">Type directly in the row below. Use Add person when you need another row.</div>
       <div class="call-grid" id="pp-crew-grid"></div>
       <div class="field-hint" id="pp-crew-roster-hint" hidden></div>
@@ -5397,7 +5633,7 @@ input.pt-range::-moz-range-thumb,
 </div>
 
 <div class="modal-wrap" id="safetyPlanModal">
-  <div class="modal pb-builder-modal u-modal-scroll" style="max-width:900px">
+  <div class="modal pb-builder-modal u-modal-scroll">
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Safety Plan</div>
@@ -5406,29 +5642,35 @@ input.pt-range::-moz-range-thumb,
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div class="pb-collab" data-pb-collab="safety-plan"></div>
-    <div class="prepro-grid">
-      <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
-      <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="e.g. 1200 Health Way"><div class="field-hint">Prints on the call sheet too, so the crew can navigate fast.</div></div>
-      <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in field-narrow" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
-      <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
-      <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120" placeholder="e.g. Control room shelf, by the door"></div>
-      <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120" placeholder="e.g. Hallway outside Studio A"></div>
-      <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
-      <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
-      <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
-      <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if someone runs late. Auto-fills from the Call Sheet.</div></div>
+    <div class="prepro-section">
+      <div class="prepro-section-title"><span>Emergency Contacts and Hospital<button type="button" class="info-btn" aria-label="What the emergency contacts section is for" onclick="toggleInfoPop(event,'sp-contacts')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
+      <div class="prepro-grid">
+        <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
+        <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="e.g. 1200 Health Way"><div class="field-hint">Prints on the call sheet too, so the crew can navigate fast.</div></div>
+        <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in field-narrow" id="sp-hospital-phone" maxlength="40" placeholder="(555) 210-4400"></div>
+        <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
+        <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
+        <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if someone runs late. Auto-fills from the Call Sheet.</div></div>
+      </div>
     </div>
-    <div class="field">
-      <label class="field-lbl">Equipment Needed</label>
-      <textarea class="field-in u-textarea-cozy" id="sp-equipment" rows="3" placeholder="e.g. Ladders, rigging, cable runs across walkways"></textarea>
-      <div class="field-hint">List gear that needs special safety handling so the crew can plan around it.</div>
+    <div class="prepro-section">
+      <div class="prepro-section-title"><span>Site, Weather and Equipment<button type="button" class="info-btn" aria-label="What the site and equipment section is for" onclick="toggleInfoPop(event,'sp-site')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
+      <div class="prepro-grid">
+        <div class="field sp-weather-field"><label class="field-lbl">Weather</label><div class="sp-weather-shell"><span class="sp-weather-symbols" id="sp-weather-symbols" hidden></span><input class="sp-weather-entry" id="sp-weather" maxlength="120" placeholder="Conditions, temperature, rain, wind" oninput="renderSafetyPlanWeatherSymbols()"></div><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">First Aid Kit Location</label><input class="field-in" id="sp-first-aid" maxlength="120" placeholder="e.g. Control room shelf, by the door"></div>
+        <div class="field"><label class="field-lbl">Fire Extinguisher Location</label><input class="field-in" id="sp-fire" maxlength="120" placeholder="e.g. Hallway outside Studio A"></div>
+        <div class="field u-col-span">
+          <label class="field-lbl">Equipment Needed</label>
+          <textarea class="field-in u-textarea-cozy" id="sp-equipment" rows="3" placeholder="e.g. Ladders, rigging, cable runs across walkways"></textarea>
+          <div class="field-hint">List gear that needs special safety handling so the crew can plan around it.</div>
+        </div>
+      </div>
     </div>
-    <div class="field">
+    <div class="prepro-section">
+      <div class="prepro-section-title"><span>Notes<button type="button" class="info-btn" aria-label="What the safety notes section is for" onclick="toggleInfoPop(event,'sp-notes')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <label class="field-lbl">Safety Notes</label>
       <textarea class="field-in u-textarea-cozy" id="sp-notes" rows="3" placeholder="Anything else the crew should know to stay safe"></textarea>
-    </div>
-    <div class="paperwork-actions">
-      <button class="btn-primary" onclick="showSafetyPlanPreview()">Preview Safety Plan</button>
     </div>
     <div id="pbCommentsSafety"></div>
     <div class="paperwork-flow-actions" id="pbNavSafety"></div>
@@ -5436,7 +5678,7 @@ input.pt-range::-moz-range-thumb,
 </div>
 
 <div class="modal-wrap" id="productionScheduleModal">
-  <div class="modal pb-builder-modal u-modal-scroll" style="max-width:1020px">
+  <div class="modal pb-builder-modal u-modal-scroll">
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Production Schedule</div>
@@ -5446,13 +5688,10 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="pb-collab" data-pb-collab="production-scheduler"></div>
     <div class="prepro-section">
-      <div class="prepro-section-title u-row-between">
-        <span>Setup Day<button type="button" class="info-btn" aria-label="What the setup day section is for" onclick="toggleInfoPop(event,'ps-setup-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span>
-        <button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false">N/A</button>
-      </div>
+      <div class="prepro-section-title"><span>Setup Day<button type="button" class="info-btn" aria-label="What the setup day section is for" onclick="toggleInfoPop(event,'ps-setup-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="field-hint">Use this for load-in, build, tech checks, and wrap. Tap N/A if setup happens on show day or a different day.</div>
       <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Setup Date</label><input class="field-in field-narrow" id="ps-date" type="date"></div>
+        <div class="field"><label class="field-lbl">Setup Date</label><div class="field-with-action"><input class="field-in field-narrow" id="ps-date" type="date"><button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in field-narrow" id="ps-setup" type="time"></div>
         <div class="field"><label class="field-lbl">Setup Wrap</label><input class="field-in field-narrow" id="ps-wrap" type="time"></div>
         <div class="field u-col-span"><label class="field-lbl">Setup Notes</label><textarea class="field-in u-textarea-cozy" id="ps-setup-notes" rows="2" placeholder="Load-in notes, tech check order, room access, gear reminders"></textarea></div>
@@ -5475,9 +5714,6 @@ input.pt-range::-moz-range-thumb,
       <div class="prepro-section-title"><span>Ready Before Show<button type="button" class="info-btn" aria-label="What the ready before show checklist is for" onclick="toggleInfoPop(event,'ps-ready')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div id="ps-checklist"></div>
     </div>
-    <div class="paperwork-actions">
-      <button class="btn-primary" onclick="showProductionSchedulePreview()">Preview Production Schedule</button>
-    </div>
     <div id="pbCommentsProduction"></div>
     <div class="paperwork-flow-actions" id="pbNavProduction"></div>
   </div>
@@ -5494,9 +5730,6 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="pb-collab" data-pb-collab=""></div>
     <div id="patchSheetBody"></div>
-    <div class="paperwork-actions">
-      <button class="btn-primary" onclick="previewPaperworkItem()">Preview Patch Sheets</button>
-    </div>
     <div id="pbCommentsPatch"></div>
     <div class="paperwork-flow-actions" id="pbNavPatch"></div>
   </div>
@@ -5510,7 +5743,7 @@ input.pt-range::-moz-range-thumb,
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span> Production Notes</div>
-        <div class="modal-sub">Post what changed, tag the department it affects, and replies stay threaded under the note. Everyone in this session sees it live.</div>
+        <div class="modal-sub">Post what changed, tag the department, and replies stay threaded. Everyone in this session sees it live.</div>
       </div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
@@ -5556,7 +5789,7 @@ input.pt-range::-moz-range-thumb,
           </div>
           <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
-          <div class="field-hint">Audio uploads cap at 4MB. Use mp3 or m4a for SFX.</div>
+          <div class="field-hint pb-attach-cap-hint">Audio uploads cap at 4MB. Use mp3 or m4a for SFX.</div>
           <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
           <div>
             <div class="pb-compose-label">Tag for</div>
@@ -6315,7 +6548,7 @@ input.pt-range::-moz-range-thumb,
 .u-c-purple{color:var(--purple)}
 .u-c-cyan{color:var(--cyan)}
 .u-btn-bare{background:none;border:none;cursor:pointer;color:inherit;padding:6px 4px}
-.u-callbtn{height:43px;white-space:nowrap}
+.u-callbtn{height:auto;min-height:var(--ui-control-height);align-self:stretch;white-space:nowrap}
 .u-textarea-cozy{font-size:14px;line-height:1.6}
 .u-script-edit{resize:vertical;line-height:1.7;white-space:pre-wrap;font-size:14px}
 .u-sub-note{font-size:12px;color:var(--text2);line-height:1.5;margin-top:-8px}
@@ -6455,7 +6688,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=1e635836bf"></script>
+<script src="cueola-app.js?v=3b93f90fc5"></script>
 <script src="outrangutan/outrangutan.js?v=48addea3ef"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
