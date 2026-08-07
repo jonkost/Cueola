@@ -666,7 +666,7 @@ Good night.
       { area: 'Lighting look',      item: 'Cues 1, 8, and 20 stepped through, house preset verified.', hint: 'Confirm focus, color, cue looks, house lights, and fixture safety.', done: false },
       { area: 'Stage and talent',   item: 'Desk props set, cart mats down, water for three, IFB checked with Finn for the live shot.', hint: 'Confirm marks, chairs, props, IFB, scripts, water, and talent positions.', done: false },
       { area: 'Crew comms',         item: 'Channel A roll call, TKB and VofU each verified with a hold-and-release test, ALL TALK OFF tested.', hint: 'Confirm headsets, channels, hand signals, and show-caller expectations.', done: false },
-      { area: 'Flowmingo',          item: 'Both [BREAK - AUTO PAUSE] marks pause the prompter, [STOP HERE] holds at the Showdown and the signoff, question lane dry run with all six cards.', hint: 'Confirm session code, script, theme, mirror, speed, size, and auto-pause marks.', done: false },
+      { area: 'Flowmingo',          item: 'Both [BREAK - AUTO PAUSE] marks pause the prompter, [STOP HERE] holds at the Showdown and the signoff, question lane dry run with all six cards.', hint: 'Confirm show code, script, theme, mirror, speed, size, and auto-pause marks.', done: false },
       { area: 'Final go/no-go',     item: 'Every department answers ready by name before the slate rolls.', hint: 'Confirm every department is ready before the show starts.', done: false },
     ],
   },

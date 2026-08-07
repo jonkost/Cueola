@@ -26,7 +26,7 @@ recorded (decision 14).*
    dashboard's **Create Test Show** button: it mints a real session
    pre-loaded with a complete late-night show (segments, scripts, complete
    paperwork, a KeyWi Stream Deck profile, an Outrangutan pad board), and
-   the session code it mints is what you hand to the crew. Everyone who
+   the show code it mints is what you hand to the crew. Everyone who
    joins that code gets the whole drill, seeded KeyWi layouts included.
 
 ## 2 · Start a production
@@ -35,7 +35,7 @@ recorded (decision 14).*
    code is what the whole crew shares; new codes look like `2607KWXR`
    (year + month + four letters), and older short codes still work.
    Students assigned to the session see it on their sign-in card and enter
-   with one tap; anyone with just the code uses the **Have a session code?**
+   with one tap; anyone with just the code uses the **Have a show code?**
    link under that card. The join doors in Planda Bear, Flowmingo Remote Op,
    Outrangutan, and the typed-code window lead with the same assigned-session
    list for signed-in students; typed codes are the fallback everywhere.

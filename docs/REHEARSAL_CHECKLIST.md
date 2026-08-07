@@ -25,7 +25,7 @@ One extra device (phone/laptop) for the Flowmingo follower.
 - [ ] Drop `sfx-ding.wav` on an SFX pad; name it. Link rundown cells: segment-3 playback
       cell → the 16:9 cue (AUTO on advance); one audio cell → the SFX pad.
 - [ ] Open the **output window**, drag to the second display, fullscreen.
-- [ ] On the second device, open Flowmingo with the session code. **Expected:** script
+- [ ] On the second device, open Flowmingo with the show code. **Expected:** script
       loads; talent heartbeat shows **Connected** in Cueola.
 
 ## 1 · Preflight (2 min)

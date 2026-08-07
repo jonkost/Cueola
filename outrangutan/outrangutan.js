@@ -4758,10 +4758,10 @@
       + '<div class="og-sheet" id="og-pbsfx"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.note') + ' Import from Production Notes</h3><button class="btn-primary og-sheet-x" id="og-pbsfx-x">Done</button></div><div id="og-pbsfx-body"></div></div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
-        + '<div class="modal-sub">Enter the session code to run playback for this show.</div>'
+        + '<div class="modal-sub">Enter the show code to run playback for this show.</div>'
         + '<div class="join-your-sessions" id="og-join-sessions" hidden></div>'
         + '<div class="join-altcode-label" id="og-join-altcode" hidden>Have a different code?</div>'
-        + '<div class="field"><label class="field-lbl">Session Code</label><input class="field-in og-join-code-in" id="og-join-code" type="text" placeholder="Session code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
+        + '<div class="field"><label class="field-lbl">Show Code</label><input class="field-in og-join-code-in" id="og-join-code" type="text" placeholder="Show code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
         + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
         + '<div class="join-identity-strip" id="og-join-identity" hidden></div>'
         + '<div class="modal-err" id="og-join-err">Please fill in both fields.</div>'
@@ -5195,7 +5195,7 @@
     }
     // INC-3: stamp the join with the shared profile identity, the same shape
     // cueola-app.js joinSession stamps (userName/profileId/username/aliases).
-    // noteJoin also auto-attaches this session code to the signed-in profile.
+    // noteJoin also auto-attaches this show code to the signed-in profile.
     let joined = null;
     if (ogJoinProfile()) {
       try { joined = window.CueolaIdentity.noteJoin(code, name) || null; } catch (e) { joined = null; }
@@ -5239,7 +5239,7 @@
   // pad's audio decodes, and per-bank pad counts (empty banks get flagged).
   async function preflightReport() {
     // Use the live module state when loaded. Otherwise read the right show
-    // record straight from IndexedDB — the show for the joined session code
+    // record straight from IndexedDB — the show for the joined show code
     // (one show per code), never via loadShow(): a preflight must not mutate
     // the running app, and on a fresh tab loadShow() would pull the
     // *standalone* show and validate the wrong library (dress-rehearsal find).

@@ -90,9 +90,9 @@ ride Master level). Rehearse mappings without hardware:
 
 **Sign in:** the front page opens on the **Your sessions** card. Type your
 **username**, press **Sign in** (no password), and every session assigned to
-you is one tap away. Only have a code? Use the **Have a session code?** link
+you is one tap away. Only have a code? Use the **Have a show code?** link
 under the card. New crew: **New here? Create your profile**, with the class
-login code. New session codes look like `2607KWXR` (year, month, four
+login code. New show codes look like `2607KWXR` (year, month, four
 letters); older short codes still work. Your portal shows your position, open
 to-dos, and unseen notes per session. The join doors in Planda Bear,
 Flowmingo Remote Op, and Outrangutan lead with the same one-tap list of your

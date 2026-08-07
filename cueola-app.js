@@ -43,7 +43,7 @@ window.CueolaPerf = (() => {
     },
   };
 })();
-// The live session code, readable by sibling modules (Outrangutan's join
+// The live show code, readable by sibling modules (Outrangutan's join
 // prefill) — `session` is a top-level `let` in a classic script, so it never
 // lands on window by itself.
 Object.defineProperty(window, 'cueolaActiveSessionCode', {
@@ -119,7 +119,7 @@ let show  = { name:'Untitled Show', start:'' };
 let session = { code:'', role:'', userName:'', profileId:'', username:'', profileAliases:[], isDemo:false, isExpert:false };
 let lsIdx = -1; // compatibility projection of liveSessionController.selectedCueIndex
 let lastLiveStatusAnnouncement = '';
-let cloudSyncProjection = { state:'off', detail:'No shared session code.' };
+let cloudSyncProjection = { state:'off', detail:'No shared show code.' };
 
 const LIVE_STATUS_SURFACES = Object.freeze({
   prompter:{ id:'ls-status-flowmingo', actions:'ls-status-flowmingo-actions', label:'Flowmingo' },
@@ -2249,13 +2249,13 @@ const LEARNING_LESSONS = [
       'Use Planda Bear before show day for call sheets, schedules, safety plans, patch sheets, comments, and PDF exports.',
       'Use Flowmingo when talent needs a clean script screen that can be controlled from another window or device.',
       'Use Outrangutan to cue and play video and sound, and KeyWi Bird when one operator should drive it all from a Stream Deck.',
-      'Keep one shared session code. That code is the bridge between the rundown, paperwork, prompter, and playback.'
+      'Keep one shared show code. That code is the bridge between the rundown, paperwork, prompter, and playback.'
     ],
     callouts:[
-      ['Session code','The same code connects collaborators, Planda Bear, Flowmingo Talent Display, Flowmingo Remote Op, and Outrangutan in Session mode.'],
+      ['Show code','The same code connects collaborators, Planda Bear, Flowmingo Talent Display, Flowmingo Remote Op, and Outrangutan in Session mode.'],
       ['Best first move','Load the Campus News demo (10 rows), open this guide beside it, and walk through the lessons once.']
     ],
-    checks:['I know what each of the five apps does.','I know the session code is the shared connection point.'],
+    checks:['I know what each of the five apps does.','I know the show code is the shared connection point.'],
     actions:[['Load Demo','demo'],['Open Blank Slate','blank']]
   },
   {
@@ -2290,7 +2290,7 @@ const LEARNING_LESSONS = [
     time:'5 min',
     intro:'A Cueola rundown is built from rows. Each row is one beat in the production, and each cue cell holds the instructions for one department.',
     navigation:[
-      'From the home screen, sign in and tap one of Your sessions, use the Have a session code? link to type one, or open Blank Slate or a Demo.',
+      'From the home screen, sign in and tap one of Your sessions, use the Have a show code? link to type one, or open Blank Slate or a Demo.',
       'Inside the rundown, use Add Row to create the next beat, then click cue cells across that row.',
       'Use Edit in the topbar when you need to reorder rows, rename labels, or remove old beats.'
     ],
@@ -2374,12 +2374,12 @@ const LEARNING_LESSONS = [
     intro:'The Talent Display is the screen talent reads. It should be opened in its own browser window or device and controlled remotely.',
     navigation:[
       'Open Flowmingo Talent Display from the home screen or the live bar Flowmingo button.',
-      'Put the talent display in its own window or device, enter the same session code, then go fullscreen.',
+      'Put the talent display in its own window or device, enter the same show code, then go fullscreen.',
       'After it shows ready, leave that window alone and control it from Script Op or Flowmingo Remote Op.'
     ],
     steps:[
       'Open Flowmingo Talent Display from the home screen or live screen.',
-      'Enter the same session code used by the show.',
+      'Enter the same show code used by the show.',
       'Wait for the READY state and confirm the Script check is on.',
       'Use Controls only for local setup: speed, size, alignment, theme, mirror, and fullscreen.',
       'Once live, leave the talent display alone. Run it from Script Op or Flowmingo Remote Op.'
@@ -2388,7 +2388,7 @@ const LEARNING_LESSONS = [
       ['Do not touch the talent window','The remote path is built so the operator can control play, pause, speed, size, theme, mirror, and reset without focusing the talent screen.'],
       ['Break markers','Markers like [BREAK - AUTO PAUSE] and [STOP HERE] can help the prompter stop at planned moments.']
     ],
-    checks:['I can open the Talent Display.','I can connect it with a session code.','I know the talent window should stay untouched during operation.'],
+    checks:['I can open the Talent Display.','I can connect it with a show code.','I know the talent window should stay untouched during operation.'],
     actions:[['Open Talent Display','talent']]
   },
   {
@@ -2398,12 +2398,12 @@ const LEARNING_LESSONS = [
     time:'5 min',
     intro:'Flowmingo Remote Op is the dedicated control surface for the talent display. It is meant to work from another tab, window, or device.',
     navigation:[
-      'Open Flowmingo Remote Op on the operator window or device and enter the same session code as talent.',
+      'Open Flowmingo Remote Op on the operator window or device and enter the same show code as talent.',
       'Keep Remote Op focused. The talent display does not need to be clicked or touched.',
       'Use the on-screen controls or hotkeys, then watch sent and applied status to confirm the talent display obeyed.'
     ],
     steps:[
-      'Open Remote Op and load the same session code as the talent screen.',
+      'Open Remote Op and load the same show code as the talent screen.',
       'Confirm the status says ready, then use Play to start talent scrolling.',
       'Use Space for play/pause, hold Down to brake, hold Up to boost, Left/Right for text size, and Option plus Down or Up for direction.',
       'Use Reset if the talent needs to return to the top.',
@@ -2411,7 +2411,7 @@ const LEARNING_LESSONS = [
     ],
     callouts:[
       ['Control ownership','If Flowmingo Remote Op is active, Script Op pauses its own remote control briefly so operators do not fight each other.'],
-      ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its session code.']
+      ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its show code.']
     ],
     checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
     actions:[['Open Remote Op','remote']]
@@ -2478,12 +2478,12 @@ const LEARNING_LESSONS = [
     time:'4 min',
     intro:'Most show-day problems come from code mismatch, a missing script, or a talent screen that was closed, reloaded, or asleep.',
     navigation:[
-      'Start with the session code: every Cueola, Planda Bear, Talent Display, and Remote Op window must match.',
+      'Start with the show code: every Cueola, Planda Bear, Talent Display, and Remote Op window must match.',
       'Use live Script Op to push missing or changed script text to Flowmingo.',
       'Use Talent Display and Remote Op together to test Play, Reset, Mirror, then Reset again before the room depends on it.'
     ],
     steps:[
-      'If collaborators cannot see the show, confirm everyone has the same session code.',
+      'If collaborators cannot see the show, confirm everyone has the same show code.',
       'If Flowmingo is blank, confirm there is Script cue text and push to Flowmingo from live Script Op.',
       'If the remote says sent but not applied, reload the Talent Display and enter the same code again.',
       'If the wrong row is live, use Prev or Next until Now matches the room.',
@@ -2493,7 +2493,7 @@ const LEARNING_LESSONS = [
     callouts:[
       ['Fast rehearsal check','Before doors open: open Talent Display, open Remote Op, press Play, Reset, Mirror, then Reset again.'],
       ['Snapshot cadence','Cueola saves a snapshot when you join, every two minutes while the session changes, when you go live, and when you leave. Admins also get a cloud copy that survives the machine.'],
-      ['When in doubt','A clean reload plus the same session code should reconnect the show, paperwork, and prompter surfaces.']
+      ['When in doubt','A clean reload plus the same show code should reconnect the show, paperwork, and prompter surfaces.']
     ],
     checks:['I know the first three things to check: code, script, talent connection.','I know how to recover Flowmingo without touching the live talent window.','I know where Session History lives and what restore replaces.'],
     actions:[['Open Guide Start','start']]
@@ -3127,7 +3127,7 @@ function renderAdminPaneSession() {
     html += `<div class="admin-section">
       <div class="admin-section-label">Invite</div>
       <div class="admin-btn-row">
-        <button class="admin-act-btn" onclick="copySessionCode()" data-tip="Copy the session code">Copy code</button>
+        <button class="admin-act-btn" onclick="copySessionCode()" data-tip="Copy the show code">Copy code</button>
         <button class="admin-act-btn" onclick="copySessionLink()" data-tip="Copy a join link">Copy link</button>
         <button class="admin-act-btn" onclick="shareSessionInvite()" data-tip="Share a join invite">Share invite</button>
         <button class="admin-act-btn" onclick="openPaperworkHub()" data-tip="Open the Planda Bear paperwork hub">Open Planda Bear</button>
@@ -4108,7 +4108,7 @@ function writeClipboard(text, doneMsg) {
 
 function copySessionCode() {
   if (!session.code) return;
-  writeClipboard(session.code, 'Session code copied.');
+  writeClipboard(session.code, 'Show code copied.');
 }
 
 function copySessionLink() {
@@ -4160,7 +4160,7 @@ async function removePersonFromSession(name) {
 // the old doc. Every connected client sees `movedTo` and follows automatically.
 async function moveSessionToNewCode() {
   if (!session.code || !window._firebaseReady || session.isDemo || session.isExpert) { toast('A cloud session is required to move codes.'); return; }
-  if (!dangerConfirm('Move this session to a new code?', 'Cueola copies the whole show (rundown, Planda Bear paperwork, and notes) to a fresh session code. Everyone connected right now follows automatically. The old code stops updating, and anyone joining later needs the new code.')) return;
+  if (!dangerConfirm('Move this session to a new code?', 'Cueola copies the whole show (rundown, Planda Bear paperwork, and notes) to a fresh show code. Everyone connected right now follows automatically. The old code stops updating, and anyone joining later needs the new code.')) return;
   const oldCode = session.code;
   try {
     let newCode = '';
@@ -4198,7 +4198,7 @@ async function moveSessionToNewCode() {
   }
 }
 
-// Switch this client onto a new session code (as the mover, or following a
+// Switch this client onto a new show code (as the mover, or following a
 // movedTo pointer another instructor wrote).
 function followSessionMove(newCode, isMover = false) {
   const wasLive = document.getElementById('liveshow')?.classList.contains('on');
@@ -4415,7 +4415,7 @@ function openLocalPlandaBear(code='', name='You') {
   }
 }
 
-// Remember the last session code + name so the user only enters them once,
+// Remember the last show code + name so the user only enters them once,
 // whether they came in through Cueola (Join Session) or Planda Bear.
 function rememberLastSession(code, name) {
   try {
@@ -4444,7 +4444,7 @@ function prefillJoinFields(codeId, nameId) {
 }
 
 // Owner directive, app wide: a signed-in user should never have to type a
-// session code the app already knows. Join modals lead with the profile's
+// show code the app already knows. Join modals lead with the profile's
 // assigned sessions (the same rows as the front-door hero, via
 // CueolaIdentity.sessionChoices) and the typed-code fields demote to a
 // "Have a different code?" fallback below. Signed out: unchanged.
@@ -4515,8 +4515,8 @@ function openPreProJoinModal(target) {
     const go = modal.querySelector('.btn-primary');
     if (title) title.innerHTML = notes ? `${sfIcon('content.note')} Production Notes` : 'Open Planda Bear';
     if (sub) sub.textContent = notes
-      ? 'Enter the session code to open your crew’s notes board.'
-      : 'Enter the session code to work on the Planda Bear package.';
+      ? 'Enter the show code to open your crew’s notes board.'
+      : 'Enter the show code to work on the Planda Bear package.';
     if (go) go.textContent = notes ? 'Open Production Notes' : 'Open Planda Bear';
   }
   prefillJoinFields('pp-join-code', 'pp-join-name');
@@ -4746,7 +4746,7 @@ function loadDemo() {
 }
 
 // The Break Room test show is minted from the dashboard (Create Test Show) and
-// handed out as a normal session code. Everything content-wise rides the
+// handed out as a normal show code. Everything content-wise rides the
 // session document; the one device-local piece is the pair of authored KeyWi
 // deck pages. When a joined session's doc carries the test-show marker, stage
 // them as named layouts: the deck module adds each once per device the next
@@ -4809,7 +4809,7 @@ function enterRundown() {
       session.isDemo ? 'Demo mode: same-browser sync only.' : (window._firebaseReady ? `Confirming cloud session · ${session.code}` : 'Connecting to cloud sync...'));
   } else {
     badge.style.display='none';
-    setCloudSyncState('off', 'No shared session code.');
+    setCloudSyncState('off', 'No shared show code.');
   }
 
   renderRundown();
@@ -6281,7 +6281,7 @@ const INFO_POPS = {
   'join-session': {
     title: 'Joining a session',
     lesson: 'start', section: 'steps',
-    body: 'The session code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
+    body: 'The show code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
   },
 };
 let _infoPopOpenId = '';
@@ -8763,7 +8763,7 @@ function preLiveCheck() {
   const cloudLabel = isDemo
     ? 'Demo mode · same-browser sync only'
     : !session.code
-      ? 'No session code: cross-device sync off'
+      ? 'No show code: cross-device sync off'
       : cloudReady
         ? `Syncing · ${session.code}`
         : 'Cloud not connected';
@@ -12478,7 +12478,7 @@ function ptLoadSavedOrDefault() {
   ptSetScriptText(
     'Welcome to Flowmingo\n\n' +
     'Upload a PDF, DOCX, Pages, TXT, or Markdown file, or paste your script directly.\n\n' +
-    'Cueola can feed Flowmingo when you have a session code, but it is optional.\n\n' +
+    'Cueola can feed Flowmingo when you have a show code, but it is optional.\n\n' +
     'Press PLAY, or tap the stage, to begin scrolling.\n\n' +
     'Use the controls to adjust speed, text size, alignment, theme, mirror, and fullscreen.'
   );
@@ -14410,7 +14410,7 @@ function flowOpRenderSession(data=null) {
   if (!data) {
     if (titleEl) titleEl.textContent = 'Flowmingo Op';
     if (meta) meta.innerHTML = `<div class="flowop-session-title">No session loaded</div><div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>`;
-    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a session code to control Flowmingo remotely.</div>`;
+    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a show code to control Flowmingo remotely.</div>`;
     flowOpOfferAssignedSessions();
     return true;
   }
@@ -14457,7 +14457,7 @@ async function flowOpOfferAssignedSessions() {
   preview.innerHTML = '<div class="flowop-empty flowop-choices">'
     + '<div class="join-yours-label">Your sessions</div>'
     + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
-    + '<div class="flowop-note" style="margin-top:12px">Or type a session code above.</div>'
+    + '<div class="flowop-note" style="margin-top:12px">Or type a show code above.</div>'
     + '</div>';
 }
 function flowOpPickAssignedSession(code) { flowOpLoadSession(String(code || '').toUpperCase()); }
@@ -15432,7 +15432,7 @@ const PRODUCTION_CHECKLIST_GUIDES = [
   { area:'Stage and talent', hint:'Confirm marks, chairs, props, IFB, scripts, water, and talent positions.' },
   { area:'Crew comms', hint:'Confirm headsets, channels, hand signals, and show-caller expectations.' },
   { area:'Safety and access', hint:'Confirm exits, cables, weather, security, first aid, and trip hazards.' },
-  { area:'Flowmingo', hint:'Confirm session code, script, theme, mirror, speed, size, and auto-pause marks.' },
+  { area:'Flowmingo', hint:'Confirm show code, script, theme, mirror, speed, size, and auto-pause marks.' },
   { area:'Final go/no-go', hint:'Confirm every department is ready before the show starts.' },
 ];
 const DEFAULT_PRODUCTION_CHECKS = [
@@ -16871,7 +16871,7 @@ function annotatePlandaBearCommentCards() {
 
 /* ══════════════════════════════════════════════════════════════════════
    PRODUCTION NOTES — a shared discussion board inside Planda Bear.
-   Anyone on the session code can post a note (tagged by department or as
+   Anyone on the show code can post a note (tagged by department or as
    a To-Do), reply in a thread under any note, edit their own posts, and
    attach images or documents. Instructors can pin notes to the top.
    Notes live on the session doc (preProNotes) so the whole team sees the
@@ -22296,7 +22296,7 @@ function paperExportTokens(source, defaultOrientation='portrait') {
 
 // v2.1 D9.3 de-branding: production-title-led header (production name, sheet
 // title, date, Page N of M), small revision-stamp footer only. No wordmark,
-// session code, export timestamps, or authority bands on the printed body —
+// show code, export timestamps, or authority bands on the printed body —
 // the fingerprint/authority system stays INTERNAL (it still gates what gets
 // exported; it just stops printing itself on every page).
 function createPaperExportPage(root, orientation, meta, sectionLabel='') {

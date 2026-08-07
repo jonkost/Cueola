@@ -716,9 +716,9 @@
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     } else {
-      setTitle('Create your profile', 'Step 4: the session codes you have been given (optional).');
+      setTitle('Create your profile', 'Step 4: the show codes you have been given (optional).');
       html +=
-        '<div class="field"><label class="field-lbl">Session codes</label>' +
+        '<div class="field"><label class="field-lbl">Show codes</label>' +
         '<input class="field-in" id="id-create-sessions" type="text" placeholder="e.g. SHOW42, NEWS7 (optional)" autocapitalize="characters" value="' + esc(w.sessions) + '">' +
         '<div class="id-field-hint">Separate multiple codes with commas. You can always add more later.</div></div>' +
         '<div class="modal-err" id="id-create-err"></div>' +
@@ -1103,9 +1103,9 @@
     body().innerHTML = profileWarnings +
       '<div class="id-portal-cards" id="id-portal-cards">' +
       (codes.length ? '<div class="id-portal-loading">Checking your sessions…</div>'
-                    : '<div class="id-portal-empty">No sessions on your profile yet. Add a session code below.</div>') +
+                    : '<div class="id-portal-empty">No sessions on your profile yet. Add a show code below.</div>') +
       '</div>' +
-      '<div class="id-addcode-row"><input class="field-in" id="id-portal-addcode" type="text" placeholder="Add a session code…" autocapitalize="characters">' +
+      '<div class="id-addcode-row"><input class="field-in" id="id-portal-addcode" type="text" placeholder="Add a show code…" autocapitalize="characters">' +
       '<button type="button" class="jis-btn" onclick="CueolaIdentity.portalAddCode()">Add</button></div>' +
       '<div class="id-portal-foot">' +
       '  <button type="button" class="btn-secondary" onclick="CueolaIdentity.deviceOnlyLook()">Edit look</button>' +
@@ -1197,7 +1197,7 @@
    * Signed out: username sign-in right on the page, plus create-profile.
    * Signed in: your assigned sessions (the profile's sessions array, the same
    * membership the portal uses), one tap to enter via enterSession so every
-   * join guard still applies. The typed session code survives as a quiet
+   * join guard still applies. The typed show code survives as a quiet
    * fallback link: guests and remote operators still arrive with only a code. */
   var frontDoorGen = 0;
   var FRONT_DOOR_MAX = 6;
@@ -1207,7 +1207,7 @@
       + (signedIn
         ? '<button type="button" class="fd-link" onclick="CueolaIdentity.openHub()">All sessions &amp; notes</button><span>&middot;</span>'
         : '<button type="button" class="fd-link" onclick="CueolaIdentity.startCreate()">New here? Create your profile</button><span>&middot;</span>')
-      + '<button type="button" class="fd-link" onclick="openJoinSession()">Have a session code?</button>'
+      + '<button type="button" class="fd-link" onclick="openJoinSession()">Have a show code?</button>'
       + (signedIn ? '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.signOut()">Sign out</button>' : '')
       + '</div>';
   }
@@ -1342,7 +1342,7 @@
 
   /* ══════════════════ assigned-session picker (shared) ══════════════════
    * The owner directive behind the front-door hero applies app wide: a
-   * signed-in user should never have to type a session code the app already
+   * signed-in user should never have to type a show code the app already
    * knows. Any join surface (Planda Bear, Flowmingo Remote Op, Outrangutan,
    * the typed-code modal) awaits sessionChoices() for the profile's assigned
    * sessions and leads with one-tap rows; the typed code stays as a fallback.

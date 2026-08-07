@@ -24,8 +24,8 @@ pause a beat on every toast. Demo content: **Load Demo** unless stated.
    intro names them.
 2. **Load Demo** → rundown appears.
 3. Topbar: open **Guide**, show the lesson list, click through two lessons.
-4. Point at the session code badge while the narration hits "one shared
-   session code".
+4. Point at the show code badge while the narration hits "one shared
+   show code".
 
 ## V2 · Your Profile And Portal (`LH-profile`, ~2.5 min)
 1. Front page: the **Your sessions** card is the way in now. Click
@@ -117,7 +117,7 @@ sections aloud.
 4. [1:00] Come back to the front page (topbar home). Point at the links under
    the card: **All sessions & notes** opens your portal, **Sign out** does
    what it says.
-5. [1:15] The fallback: click **Have a session code?** below the card → the
+5. [1:15] The fallback: click **Have a show code?** below the card → the
    familiar join dialog. Type a code. Say: new codes are the year-month plus
    four letters, like 2607KWXR; older shorter codes still work. Guests and
    remote operators arrive this way with only a code.
@@ -159,12 +159,12 @@ sections aloud.
 
 ## V13 · Drill Night: The Break Room (`v22-breakroom`, ~5 min)
 1. [0:00] Instructor dashboard: press **Create Test Show**, keep the
-   suggested name, confirm. The modal shows the freshly minted session code
+   suggested name, confirm. The modal shows the freshly minted show code
    and share link. Say: this code is the drill; hand it to your crew like
    any show code.
 2. [0:10] Front page: join the minted session. Assigned crew see it as one
    tap on the **Your sessions** card; anyone else types the code behind the
-   **Have a session code?** link. Say: a full late-night talk show (29
+   **Have a show code?** link. Say: a full late-night talk show (29
    rows), built to rehearse every part of the rig in one sitting.
 3. [0:20] Walk the rundown top to bottom, slowly: cold open, monologue, desk
    segments, guest, closer. Click into two script cues so the script pages

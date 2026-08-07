@@ -4465,7 +4465,7 @@ input.pt-range::-moz-range-thumb,
       <!-- The front door: sign-in first, assigned sessions one tap away.
            CueolaIdentity.renderFrontDoor() owns this card; the static content
            below is only the pre-script skeleton. Typed codes live behind the
-           "Have a session code?" link inside the rendered card. -->
+           "Have a show code?" link inside the rendered card. -->
       <div class="e-card stud e-card-full" id="entryFrontDoor">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>
         <div class="ec-title">Your sessions</div>
@@ -4476,7 +4476,7 @@ input.pt-range::-moz-range-thumb,
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-plandabear"/></svg></div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
         <div class="ec-desc">View and build the paperwork package for your session.</div>
-        <span class="ec-pill ec-pill-yellow">Session code required</span>
+        <span class="ec-pill ec-pill-yellow">Show code required</span>
       </button>
       <div class="e-card e-card-app flowmingo-card oc-cyan">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
@@ -4909,11 +4909,11 @@ input.pt-range::-moz-range-thumb,
       <hr class="pt-modal-sep">
       <div class="pt-cueola-bar">
         <span class="pt-cueola-label">Cueola</span>
-        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Session code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
+        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Show code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
         <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
         <span class="pt-cueola-status" id="pt-cueola-status"></span>
       </div>
-      <div class="pt-cueola-help">Load a Cueola session code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
+      <div class="pt-cueola-help">Load a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
       <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
         <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
       </div>
@@ -4956,7 +4956,7 @@ input.pt-range::-moz-range-thumb,
       <div class="flowop-title" id="flowOpTitle">Flowmingo Op</div>
     </div>
     <div class="flowop-connect">
-      <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SESSION CODE" maxlength="20" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
+      <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SHOW CODE" maxlength="20" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
       <button class="pt-btn" id="flowOpLoadBtn" onclick="flowOpLoadSession()">Load</button>
       <span class="flowop-status" id="flowOpStatus">Not connected</span>
     </div>
@@ -4966,7 +4966,7 @@ input.pt-range::-moz-range-thumb,
     <div class="flowop-preview">
       <div class="flowop-readline"></div>
       <div class="flowop-script" id="flowOpScriptPreview">
-        <div class="flowop-empty">Load a session code to control Flowmingo remotely.</div>
+        <div class="flowop-empty">Load a show code to control Flowmingo remotely.</div>
       </div>
     </div>
     <aside class="flowop-side">
@@ -5598,11 +5598,11 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="modal-prepro-join">
   <div class="modal">
     <div class="modal-title">Open Planda Bear<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
-    <div class="modal-sub">Enter the session code to work on the Planda Bear package.</div>
+    <div class="modal-sub">Enter the show code to work on the Planda Bear package.</div>
     <div class="join-identity-strip" id="pp-identity-strip" hidden></div>
     <div class="join-your-sessions" id="pp-your-sessions" hidden></div>
     <div class="join-altcode-label" id="pp-altcode-label" hidden>Have a different code?</div>
-    <div class="field"><label class="field-lbl">Session Code</label><input class="field-in u-code-input" id="pp-join-code" type="text" placeholder="Session code" maxlength="20"></div>
+    <div class="field"><label class="field-lbl">Show Code</label><input class="field-in u-code-input" id="pp-join-code" type="text" placeholder="Show code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="pp-join-err">Fill in both fields.</div>
@@ -5743,11 +5743,11 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="modal-stud">
   <div class="modal">
     <div class="modal-title">Join a Session<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
-    <div class="modal-sub">Enter the session code your director gave you.</div>
+    <div class="modal-sub">Enter the show code your director gave you.</div>
     <div class="join-identity-strip" id="stud-identity-strip" hidden></div>
     <div class="join-your-sessions" id="stud-your-sessions" hidden></div>
     <div class="join-altcode-label" id="stud-altcode-label" hidden>Have a different code?</div>
-    <div class="field"><label class="field-lbl">Session Code</label><input class="field-in u-code-input" id="stud-code" type="text" placeholder="Session code" maxlength="20"></div>
+    <div class="field"><label class="field-lbl">Show Code</label><input class="field-in u-code-input" id="stud-code" type="text" placeholder="Show code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
     <div class="field join-entrycode" id="stud-entrycode-row" hidden><label class="field-lbl">Class login code</label><input class="field-in" id="stud-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="stud-err">Fill in both fields.</div>
@@ -6443,10 +6443,10 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
-<script src="break-room-show.js?v=c52f40feba"></script>
+<script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=64ff506bad"></script>
+<script src="cueola-identity.js?v=2c2c797b9f"></script>
 <script src="cueola-admin-auth.js?v=84a9727118"></script>
 <script src="cueola-live-session.js?v=2352bc00d1"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -6455,8 +6455,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=055944f3bc"></script>
-<script src="outrangutan/outrangutan.js?v=c16727af5a"></script>
+<script src="cueola-app.js?v=1e635836bf"></script>
+<script src="outrangutan/outrangutan.js?v=48addea3ef"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
