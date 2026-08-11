@@ -50,6 +50,62 @@ access. Firebase App Check and the Firestore rules stay the real perimeter.
 - `WORKER_SCHEMA` rolls so the gate reaches installed clients; the new
   `cueola-pin.js` is precached.
 
+### Server-side authentication, Phase 1 (real auth, additive) — needs deploy
+On the Blaze plan the PIN becomes real authentication. A new `functions/` Cloud
+Function `signInWithPin` verifies the PIN server-side (the hash never leaves the
+server), rate-limits guessing (5 tries, then a 15 minute lock), and mints a
+Firebase custom token; the client exchanges it for a real Firebase Auth session
+(`request.auth.uid` = the profile id), cleanly separate from the admin
+email/password path. This ships additively: the client falls back to the old
+in-browser check when the function is not reachable, so nothing breaks before
+the function is deployed, and a wrong PIN or a lock never falls back (the lock
+cannot be bypassed offline). Rules are unchanged in Phase 1, so there is no
+lockout risk. Phase 2 (tighten the rules to require auth) and Phase 3 (move the
+PIN hashes fully server-side) follow once the fleet is authenticating. The
+function has no REST-deploy shortcut: deploy it from Google Cloud Shell. Full
+steps and the phase order are in `docs/auth-migration-runbook.md`.
+
+### Server-side authentication, Phase 2 (no more anonymous writes) — needs deploy
+Shared show data stops being writable by anyone who merely knows a show code.
+
+- **Signing in is required for anything shared.** Joining a session, opening
+  shared paperwork, driving a live prompter, linking a talent screen, and
+  Outrangutan session mode all need a profile now. Signed out you still get the
+  whole product on your own: the demo, the guides, and a blank slate that saves
+  to your device. Creating a *shared* workspace is what needs an account.
+- **Three more Cloud Functions** cover everything that used to need an
+  unauthenticated database read: which sign-in gate to show, checking a class
+  login code, and creating a profile. Profile creation is now server-side, which
+  also means PIN strength is enforced on the server, not just in the browser.
+- **The rules require real authentication.** Sessions and every subcollection
+  need a signed-in student or instructor to write; the class roster is no longer
+  readable by the open internet; a student can only edit their own profile; and
+  a student can no longer enumerate instructor accounts.
+- Two safeguards worth naming: a migration script backfills the stable id every
+  profile needs before the rules land (it refuses to pass unless every profile
+  is complete), and the rules test suite now replays the nine highest-frequency
+  live-show writes as both an authenticated student and an anonymous caller,
+  because those writes fail silently and would otherwise break mid-show.
+- Deploy order is strict and documented: functions, then the backfill, then the
+  hosting, then the rules. `docs/auth-migration-runbook.md` has the sequence.
+
+### Server-side authentication, Phase 3 (PINs go out of reach) — needs deploy
+The last two ways a PIN could be taken are closed.
+
+- **PIN codes are stored where nothing can read them.** They move to a separate
+  store that is closed to every browser, including the account's own owner. Only
+  Cueola's server code can check a PIN. Previously a signed-in classmate could
+  read the stored code and work it out offline.
+- **Setting a PIN on an account that has none now needs the class login code.**
+  This was the last impersonation gap: if someone had not set a PIN yet, or an
+  instructor had just reset it, anyone who knew the username could claim the
+  account. The set-PIN screen now asks for the class code as proof, and the
+  server refuses to overwrite a PIN that already exists.
+- Resetting a PIN from the instructor dashboard also clears any lockout, so a
+  student who got locked out by wrong guesses can use the new PIN right away.
+- The migration copies, verifies, then removes the old copies, and sign-in keeps
+  working from either location while it runs, so nobody is locked out mid-way.
+
 ## Unreleased: Position assignments move to Planda Bear (built 2026-08-11)
 
 Position assignments now live where the paperwork lives. The Admin panel's

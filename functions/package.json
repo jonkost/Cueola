@@ -1,0 +1,16 @@
+{
+  "name": "cueola-functions",
+  "description": "Cueola Cloud Functions: server-side student PIN authentication.",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "node pin.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.0"
+  }
+}

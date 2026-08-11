@@ -1302,7 +1302,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <script src="cueola-session-clone.js?v=7a666657a8"></script>
 <script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-admin-auth.js?v=84a9727118"></script>
+<script src="cueola-admin-auth.js?v=799642cdd2"></script>
 <script>
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
@@ -2328,6 +2328,28 @@ async function rosterResetPin(username) {
   const pin = String(entered).trim();
   const v = window.CueolaPin.validate(pin);
   if (!v.ok) { showToast(v.msg); return; }
+  // Phase 3: the reset happens SERVER-side. PIN salts and hashes live in
+  // pinSecrets, which no client can read or write, so the dashboard asks the
+  // resetStudentPin Cloud Function (which re-checks admin standing itself,
+  // because the Admin SDK bypasses the rules). It also clears the rate-limit
+  // lockout, so a student locked out by wrong guesses can use the new PIN now.
+  try {
+    if (window._functions && window._httpsCallable) {
+      await window._httpsCallable(window._functions, 'resetStudentPin')({ username, pin });
+      showToast(`@${username} PIN set to ${pin}. Share it with them.`);
+      await loadIdentityAdminData();
+      return;
+    }
+  } catch (e) {
+    const code = e && e.code ? String(e.code) : '';
+    // Real refusals stop here; anything else falls through to the legacy path.
+    if (code.indexOf('permission-denied') >= 0 || code.indexOf('invalid-argument') >= 0
+      || code.indexOf('failed-precondition') >= 0 || code.indexOf('not-found') >= 0) {
+      showToast(e.message || 'Reset failed.');
+      return;
+    }
+  }
+  // Pre-Phase-3 path: write the hash onto the profile doc directly.
   let fields;
   try { fields = await window.CueolaPin.make(pin, adminSession.name || adminSession.username || 'admin'); }
   catch (e) { showToast(e.message || 'That PIN is too easy to guess.'); return; }
@@ -4102,8 +4124,9 @@ window.addEventListener('load', ()=>{
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
   import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, arrayRemove, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
+  import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
   const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
   const APP_CHECK_ENABLED = false;
   const APP_CHECK_DEBUG_LOCAL = false;
@@ -4189,7 +4212,10 @@ window.addEventListener('load', ()=>{
     console.info('Auth emulator connected · 127.0.0.1:9099');
   }
   window._adminAuth = adminAuth;
-  window._authFns = { initializeApp, deleteApp, getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword };
+  window._authFns = { initializeApp, deleteApp, getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword };
+  // Cloud Functions handle: the roster's Reset PIN calls resetStudentPin, since
+  // PIN secrets are server-side only from Phase 3 on.
+  window._functions = getFunctions(app, 'us-central1'); window._httpsCallable = httpsCallable;
   window._firebaseReady = true;
   window.dispatchEvent(new Event('firebaseReady'));
 </script>

@@ -122,8 +122,8 @@ const SHELL_ASSETS = [
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
   'cueola-pin.js?v=e599f35d21',
-  'cueola-identity.js?v=020a885a95',
-  'cueola-admin-auth.js?v=84a9727118',
+  'cueola-identity.js?v=56fbfa3647',
+  'cueola-admin-auth.js?v=799642cdd2',
   'cueola-live-session.js?v=3c5ac415fc',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
@@ -134,9 +134,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=73c7860c9b',
+  'cueola-app.js?v=0613a455ac',
   'outrangutan/outrangutan.css?v=75dfbd64d2',
-  'outrangutan/outrangutan.js?v=48addea3ef',
+  'outrangutan/outrangutan.js?v=d9d163e098',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
   'cueola-streamdeck.js?v=54805dc823',
@@ -217,7 +217,25 @@ const versionSignature = SHELL_ASSETS
 // gate markup in index.html and the Reset PIN control in dashboard.html are all
 // shell-cached. A stale shell would serve the old passwordless card and never
 // load cueola-pin.js, so the gate must ride a cache-name roll.
-const WORKER_SCHEMA = '31';
+// 31->32: server-side auth Phase 1. index.html's Firebase bootstrap now loads
+// the functions SDK and exposes the student sign-in callable path; the shell
+// caches index.html, so installed clients need the roll to pick up the
+// custom-token sign-in wiring. (The Cloud Function itself deploys separately;
+// see docs/auth-migration-runbook.md.)
+// 32->33: server-side auth Phase 2. The cloud entry gate (a signed-in profile
+// is now required to join a session, open shared paperwork, drive a prompter,
+// or create a SHARED blank slate) lives in cueola-app.js, and the pre-auth
+// sign-in/create flows now route through Cloud Functions. A stale shell would
+// keep the old code-only doors open and then fail every write once the Phase 2
+// rules land, silently, mid-show. The fleet MUST be on this shell before those
+// rules deploy: see docs/auth-migration-runbook.md.
+// 33->34: server-side auth Phase 3. PIN salts and hashes moved to a
+// client-unreadable pinSecrets collection, so setting or resetting a PIN is a
+// Cloud Function call now. The set-PIN gate grew a class login code field
+// (index.html markup) and the dashboard's Reset PIN calls a function, both of
+// which the shell caches. A stale shell would keep trying to write a hash onto
+// the profile doc, which the Phase 3 rules refuse.
+const WORKER_SCHEMA = '34';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

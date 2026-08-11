@@ -638,12 +638,40 @@ test('Phase 10: list tightening is admin-gated and the profiles residual stays d
   assert.match(sessionsBlock, /allow list: if isAdmin\(\);/);
   const codesBlock = rules.slice(rules.indexOf('match /accessCodes/{code} {'), rules.indexOf('match /profiles/{username}'));
   assert.match(codesBlock, /allow list: if isAdmin\(\);/);
-  // profiles list is deliberately open: student crew exports and roster
-  // hydration read it without Auth. The rationale comment must survive —
-  // a silent "cleanup" to isAdmin() breaks student exports.
+  // Phase 2 (2026-08-12) CLOSED the Phase 10 open-profiles-list residual:
+  // students authenticate now, so the roster no longer has to be world
+  // readable. It stays collection-wide for signed-in callers (presence chips,
+  // note authorship and paperwork exports all render other people), which is
+  // why this is isSignedIn() and not a self-only rule.
   const profilesBlock = rules.slice(rules.indexOf('match /profiles/{username} {'), rules.indexOf('match /{document=**}'));
-  assert.match(profilesBlock, /allow list: if true;/);
+  assert.match(profilesBlock, /allow list: if isSignedIn\(\);/);
+  assert.doesNotMatch(profilesBlock, /allow list: if true;/);
   assert.match(rules, /Phase 10 residual/);
+});
+
+test('Phase 2: the authenticated write floor is in place across shared show data', async () => {
+  const rules = await readFile(new URL('../../firestore.rules', import.meta.url), 'utf8');
+  // The claim check must come first in isCueolaPrincipal: it is free, while
+  // isAdmin() costs a document read on every high-frequency write.
+  assert.match(rules, /function isCueolaStudent\(\)[\s\S]*?request\.auth\.token\.cueolaStudent == true/);
+  assert.match(rules, /function isCueolaPrincipal\(\)\s*\{\s*return isCueolaStudent\(\) \|\| isAdmin\(\);/);
+  // Every shared-show write path carries the floor. Slice ONLY the sessions
+  // block (it is followed by admins/accessCodes/profiles, whose write rules are
+  // gated differently).
+  const sessionsBlock = rules.slice(rules.indexOf('match /sessions/{code} {'), rules.indexOf('match /admins/{docId} {'));
+  const writeRules = sessionsBlock.split('\n').filter(l => /allow (create|update|create, update)/.test(l));
+  assert.ok(writeRules.length >= 5, `expected the session write rules, found ${writeRules.length}`);
+  for (const line of writeRules) {
+    assert.ok(/isCueolaPrincipal\(\)|isAdmin\(\)/.test(line), `unguarded session write rule: ${line.trim()}`);
+  }
+  // A student may only write their OWN profile, matched on profileId (the auth
+  // uid), never on the {username} doc id.
+  const profilesBlock = rules.slice(rules.indexOf('match /profiles/{username} {'), rules.indexOf('match /{document=**}'));
+  assert.match(profilesBlock, /request\.auth\.uid == resource\.data\.profileId/);
+  assert.match(profilesBlock, /allow create: if isAdmin\(\)/);
+  // A student must not be able to enumerate instructor accounts.
+  const adminsBlock = rules.slice(rules.indexOf('match /admins/{docId} {'), rules.indexOf('match /accessCodes/{code} {'));
+  assert.match(adminsBlock, /request\.auth\.uid == docId \|\| isAdmin\(\)/);
 });
 
 for (const { name, run } of tests) {

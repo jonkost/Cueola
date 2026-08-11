@@ -4606,7 +4606,28 @@ document.addEventListener('cueola-identity-change', () => {
   } catch {}
 });
 
+/* ── Cloud entry gate (owner decision 2026-08-11) ────────────────────────────
+ * Anything that reads or writes a SHARED cloud session now needs a signed-in
+ * profile. A show code alone used to be enough, which meant every write was
+ * unattributable and the Phase 2 rules (request.auth required) would have
+ * locked those doors anyway, silently, mid-show.
+ *
+ * Not signed in, you still get the whole product on your own: the demo, a local
+ * blank slate that saves to this device, the guides, and (later) the tour. What
+ * you cannot do is write into someone else's production.
+ *
+ * Returns true when the caller may proceed. Otherwise it explains why and opens
+ * the sign-in gate, returning the person to `returnTo` once they are in. */
+function requireProfileForCloud(what, returnTo) {
+  if (window.CueolaIdentity?.identity?.()) return true;
+  if (adminSession) return true;   // a signed-in instructor is already authenticated
+  toast(`Sign in to ${what}. You can still explore the demo and a local blank slate.`);
+  try { window.CueolaIdentity.openSignIn(returnTo ? { returnTo } : undefined); } catch {}
+  return false;
+}
+
 function openJoinSession() {
+  if (!requireProfileForCloud('join a session')) return;
   prefillJoinFields('stud-code', 'stud-name');
   window.CueolaIdentity?.decorateJoin('stud');
   populateJoinSessionChoices('stud', 'pickAssignedStudSession');
@@ -4623,6 +4644,7 @@ function openJoinSession() {
 let preProJoinTarget = 'hub';
 
 function openPreProJoinModal(target) {
+  if (!requireProfileForCloud('open shared paperwork')) return;
   preProJoinTarget = target === 'notes' ? 'notes' : 'hub';
   const notes = preProJoinTarget === 'notes';
   const modal = document.getElementById('modal-prepro-join');
@@ -4651,6 +4673,9 @@ function openPlandaBearJoin() {
 }
 
 async function joinSession() {
+  // The real chokepoint: deep links and the resume banner call this directly,
+  // so the gate lives here and not only on the modal opener.
+  if (!requireProfileForCloud('join a session')) return;
   const code = document.getElementById('stud-code').value.trim().toUpperCase();
   const typedName = document.getElementById('stud-name').value.trim();
   const signedProfile = window.CueolaIdentity?.profile?.();
@@ -4714,6 +4739,7 @@ async function joinSession() {
 }
 
 async function joinPreProSession() {
+  if (!requireProfileForCloud('open shared paperwork')) return;
   const code = document.getElementById('pp-join-code').value.trim().toUpperCase();
   const typedName = document.getElementById('pp-join-name').value.trim();
   const signedProfile = window.CueolaIdentity?.profile?.();
@@ -4814,12 +4840,18 @@ async function startBlankSlate() {
   const btn = document.getElementById('blank-create-btn');
   if (!name) { if (err) { err.textContent='Please enter your name.'; err.classList.add('on'); } return; }
   if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
-  const ready = await waitForFirebaseReady();
+  // Not signed in: a blank slate stays on THIS device (owner decision
+  // 2026-08-11). Guests get the whole editor and it saves locally; creating a
+  // SHARED workspace in the cloud is what needs a profile. This reuses the
+  // offline path below, which is exactly the same local-only behavior.
+  const signedInForCloud = Boolean(window.CueolaIdentity?.identity?.() || adminSession);
+  const ready = signedInForCloud ? await waitForFirebaseReady() : false;
   if (!ready) {
     if (btn) { btn.disabled = false; btn.textContent = 'Create Shared Blank Slate'; }
     hideModal('modal-blank');
     localStorage.setItem('cueola_last_name', name);
     openLocalSession(code, name, 'instructor', showName);
+    if (!signedInForCloud) toast('Working locally on this device. Sign in to share a workspace with your crew.');
     return;
   }
   try {
@@ -5037,6 +5069,10 @@ async function restoreMissingSessionDocument(ref, payload) {
 }
 
 function markSharedSessionUnavailable(kind='missing') {
+  // A deliberately local workspace (offline copy, or a guest's blank slate) has
+  // no server copy BY DESIGN, so "not found on the server" is not a fault and
+  // must not greet a first-time guest as if something broke.
+  if (session.local) return;
   const incomplete = kind === 'incomplete';
   rundownSyncBlockedMissing = true;
   const detail = incomplete
@@ -14636,6 +14672,13 @@ async function flowOpLoadSession(codeOverride='') {
     input?.focus();
     return;
   }
+  // Gate at the code load, not at the screen: the remote can be opened and
+  // arranged on a second device, but connecting it to a real show starts
+  // writing prompter control commands, which needs a signed-in operator.
+  if (!requireProfileForCloud('drive a live prompter', 'flowop')) {
+    flowOpSetStatus('Sign in to connect', true);
+    return;
+  }
   if (input) input.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   // Phase 5: the in-panel loader honors the class-key gate like the side doors.
@@ -14922,6 +14965,12 @@ async function ptLoadFromCueolaCode(codeOverride='') {
   const code = (codeOverride || codeIn?.value || '').trim().toUpperCase();
   const btn = ptEl('pt-cueola-load-btn');
   if (!code) return;
+  // Linking the talent screen to a show starts a 2 second heartbeat write, so
+  // the device has to be signed in. The prompter itself still runs unlinked.
+  if (!requireProfileForCloud('link this screen to a show')) {
+    ptSetCueolaStatus('Sign in to link', true);
+    return;
+  }
   if (codeIn) codeIn.value = code;
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   // Phase 5: the in-panel loader honors the class-key gate like the side doors.
@@ -24563,6 +24612,7 @@ async function cueolaEntryGateAllows(code, doorLabel = 'This session') {
   return false;
 }
 window.cueolaEntryGateAllows = cueolaEntryGateAllows;   // Outrangutan's module calls this
+window.requireProfileForCloud = requireProfileForCloud; // and so does its session-join gate
 
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);

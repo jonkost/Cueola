@@ -6984,8 +6984,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=020a885a95"></script>
-<script src="cueola-admin-auth.js?v=84a9727118"></script>
+<script src="cueola-identity.js?v=56fbfa3647"></script>
+<script src="cueola-admin-auth.js?v=799642cdd2"></script>
 <script src="cueola-live-session.js?v=3c5ac415fc"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
@@ -6993,8 +6993,8 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=73c7860c9b"></script>
-<script src="outrangutan/outrangutan.js?v=48addea3ef"></script>
+<script src="cueola-app.js?v=0613a455ac"></script>
+<script src="outrangutan/outrangutan.js?v=d9d163e098"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
@@ -7005,8 +7005,9 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, setDoc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion, arrayRemove, runTransaction, waitForPendingWrites, disableNetwork, enableNetwork, collection, getDocs, getDocsFromCache, getDocsFromServer, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
+import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 const APP_CHECK_RECAPTCHA_V3_SITE_KEY = "";
 const APP_CHECK_ENABLED = false;
 const APP_CHECK_DEBUG_LOCAL = false;
@@ -7087,7 +7088,12 @@ if (useAuthEmulator) {
   console.info('Auth emulator connected · 127.0.0.1:9099');
 }
 window._adminAuth = adminAuth;
-window._authFns = { initializeApp, deleteApp, getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword };
+window._authFns = { initializeApp, deleteApp, getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword };
+// Cloud Functions handle for the student PIN sign-in callable (us-central1,
+// pinned so httpsCallable targets the deployed region). Student auth calls
+// signInWithPin then signInWithCustomToken; see cueola-identity.js.
+const functions = getFunctions(app, 'us-central1');
+window._functions = functions; window._httpsCallable = httpsCallable;
 window._firebaseReady=true;
 window.dispatchEvent(new Event('firebaseReady'));
 </script>

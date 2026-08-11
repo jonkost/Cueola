@@ -2,6 +2,9 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "functions": {
+    "source": "functions"
+  },
   "emulators": {
     "firestore": {
       "host": "127.0.0.1",
@@ -21,6 +24,7 @@
       "**/.*",
       ".agents/**",
       ".codex/**",
+      "functions/**",
       "docs/**",
       "scripts/**",
       "talkback/**",
@@ -85,7 +89,7 @@
           },
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' ws: wss: https://api.dropboxapi.com https://content.dropboxapi.com https://firestore.googleapis.com https://firebase.googleapis.com https://firebaseinstallations.googleapis.com https://content-firebaseappcheck.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://www.google.com https://api.giphy.com https://*.giphy.com; worker-src 'self' blob:; frame-src https://www.google.com;"
+            "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' ws: wss: https://api.dropboxapi.com https://content.dropboxapi.com https://firestore.googleapis.com https://firebase.googleapis.com https://firebaseinstallations.googleapis.com https://content-firebaseappcheck.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://us-central1-cueola.cloudfunctions.net https://*.run.app https://api.open-meteo.com https://geocoding-api.open-meteo.com https://www.google.com https://api.giphy.com https://*.giphy.com; worker-src 'self' blob:; frame-src https://www.google.com;"
           }
         ]
       }

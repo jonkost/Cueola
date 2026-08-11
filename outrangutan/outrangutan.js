@@ -5193,6 +5193,14 @@
       closeSessionJoin();
       return;
     }
+    // 2026-08-11: joining a SHARED session writes playback cues and the control
+    // bus onto the session doc, so it needs a signed-in profile. Standalone
+    // Outrangutan (its own front-page card) never touches Firestore and stays
+    // open to everyone, which is where a guest should land.
+    if (window.requireProfileForCloud && !window.requireProfileForCloud('join a session for playback')) {
+      closeSessionJoin();
+      return;
+    }
     // INC-3: stamp the join with the shared profile identity, the same shape
     // cueola-app.js joinSession stamps (userName/profileId/username/aliases).
     // noteJoin also auto-attaches this show code to the signed-in profile.

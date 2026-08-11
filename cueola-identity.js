@@ -216,9 +216,18 @@
     try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
     clearUnlocked();
     pendingGate = null;
-    // An admin who signs out of the front door drops their real Auth session
-    // too, so instructor standing cannot linger behind a signed-out card.
+    // Drop the real Firebase Auth session too, so neither an admin's instructor
+    // standing nor a student's custom-token session lingers behind a signed-out
+    // card. CueolaAdminAuth.signOut() also resets the admin UI state; the direct
+    // signOut covers a student custom-token session (which has no admin doc, so
+    // CueolaAdminAuth.current() is null for it).
     try { if (window.CueolaAdminAuth && window.CueolaAdminAuth.current()) window.CueolaAdminAuth.signOut(); } catch (e) {}
+    try {
+      var wOut = fb();
+      if (wOut && wOut._adminAuth && wOut._adminAuth.currentUser && wOut._authFns && wOut._authFns.signOut) {
+        wOut._authFns.signOut(wOut._adminAuth);
+      }
+    } catch (e) {}
     cachedProfile = null;
     announceIdentityChange();
     say('Signed out on this device.');
@@ -311,11 +320,40 @@
    * the gate the first time this ships (they have no marker yet). */
   var pendingGate = null;   // { username, profile, stage } while a gate is open
 
+  // Call a Cloud Function, or return null when the functions SDK is not wired
+  // up (so callers can fall back while Phase 1 rolls out).
+  async function callFn(name, payload) {
+    var w = fb();
+    if (!w || !w._functions || !w._httpsCallable) return null;
+    var res = await w._httpsCallable(w._functions, name)(payload || {});
+    return (res && res.data) || {};
+  }
+
   async function resolveGate(rawUsername) {
     var username = normalizeUsername(rawUsername);
     if (!username) return { ok: false, msg: 'Usernames are 3 to 40 characters: letters, numbers, dots, dashes.' };
     var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
-    var p;
+
+    // Which gate to show is decided by getSignInStage, a Cloud Function, because
+    // this runs BEFORE the person has a token: once the Phase 2 rules land, an
+    // unauthenticated client cannot read profiles at all. The callable returns
+    // only the stage plus the display name and avatar, never the PIN hash.
+    var p = null;
+    try {
+      var stageInfo = await callFn('getSignInStage', { username: username });
+      if (stageInfo) {
+        if (stageInfo.renamedTo) return { ok: false, msg: 'This username was renamed. Sign in as “' + esc(stageInfo.renamedTo) + '”.' };
+        if (stageInfo.mergedInto) return { ok: false, msg: 'This profile was merged into “' + esc(stageInfo.mergedInto) + '”. Use that username.' };
+        if (stageInfo.deactivated) return { ok: false, msg: 'This profile was deactivated by an instructor.' };
+        if (!stageInfo.found) return { ok: false, msg: 'No profile with that username. Check the spelling, or create one with your class login code.' };
+        p = { username: username, fullName: stageInfo.fullName, avatar: stageInfo.avatar, theme: stageInfo.theme };
+        pendingGate = { username: username, profile: p, stage: stageInfo.stage };
+        return { ok: true, profile: p, stage: stageInfo.stage, username: username };
+      }
+    } catch (e) { /* not deployed yet, or unreachable: fall through to the read */ }
+
+    // Pre-Phase-2 path: read the profile directly. Still correct while the
+    // rules allow it, and the only path when the functions are not yet live.
     try { p = await fetchProfile(username); }
     catch (e) { return { ok: false, msg: 'Could not reach the profile service. Check the connection.' }; }
     if (!p) return { ok: false, msg: 'No profile with that username. Check the spelling, or create one with your class login code.' };
@@ -340,30 +378,105 @@
     return { ok: true, profile: p };
   }
 
-  // Student PIN check. Verifies against the stored salted hash, client-side
-  // (a deterrent, not real auth: see cueola-pin.js).
-  async function enterWithPin(username, p, pin) {
+  // Authenticate a student by PIN. The real check is the signInWithPin Cloud
+  // Function: it verifies the PIN server-side (the hash never leaves the
+  // server), rate-limits guessing, and returns a custom token the client
+  // exchanges for a real Firebase Auth session (request.auth.uid = profileId).
+  //
+  // Graceful fallback: if the function is not reachable (not deployed yet, or a
+  // transient infra/network error), fall back to the client-side hash check so
+  // sign-in keeps working during the additive rollout, BEFORE the function is
+  // live. A wrong PIN or a rate-limit lock is NEVER a fallback trigger, so the
+  // server lock cannot be bypassed by going offline. Once the rules require
+  // request.auth (Phase 2), this fallback is removed and the token is mandatory.
+  // Returns { ok:true } or { ok:false, msg }.
+  async function authenticateStudentPin(username, p, pin) {
+    var w = fb();
+    if (w && w._functions && w._httpsCallable) {
+      try {
+        var callable = w._httpsCallable(w._functions, 'signInWithPin');
+        var res = await callable({ username: username, pin: String(pin) });
+        var token = res && res.data && res.data.token;
+        if (token && w._authFns && w._authFns.signInWithCustomToken) {
+          await w._authFns.signInWithCustomToken(w._adminAuth, token);
+        }
+        return { ok: true };
+      } catch (err) {
+        var code = err && err.code ? String(err.code) : '';
+        if (code === 'functions/permission-denied' || code === 'permission-denied'
+          || code === 'functions/invalid-argument' || code === 'invalid-argument') {
+          return { ok: false, msg: 'That PIN is not right. Try again, or ask your instructor to reset it.' };
+        }
+        if (code === 'functions/resource-exhausted' || code === 'resource-exhausted') {
+          return { ok: false, msg: (err && err.message) || 'Too many tries. Wait a few minutes and try again.' };
+        }
+        // Anything else (not-found = not deployed, unavailable, internal,
+        // network) falls through to the local check below.
+      }
+    }
     if (!window.CueolaPin) return { ok: false, msg: 'PIN check is not available. Reload and try again.' };
+    // Once the server owns sign-in, the gate profile no longer carries the hash
+    // (getSignInStage deliberately withholds it), so there is nothing to check
+    // locally. Fail closed with an honest message rather than reporting a
+    // correct PIN as wrong.
+    if (!p || !p.pinSalt || !p.pinHash) {
+      return { ok: false, msg: 'Could not reach the sign-in service. Check the connection and try again.' };
+    }
     var good = false;
     try { good = await window.CueolaPin.verify(pin, p.pinSalt, p.pinHash); } catch (e) { good = false; }
     if (!good) return { ok: false, msg: 'That PIN is not right. Try again, or ask your instructor to reset it.' };
+    return { ok: true };
+  }
+
+  // Student PIN check: server-verified, then adopt identity.
+  async function enterWithPin(username, p, pin) {
+    var auth = await authenticateStudentPin(username, p, pin);
+    if (!auth.ok) return { ok: false, msg: auth.msg };
     return finalizeSignIn(username, p);
   }
 
-  // Student sets a first PIN (legacy profile with none, or after a reset).
-  // Writes the salt+hash to the profile with a masked patch, then continues.
-  async function enterWithNewPin(username, p, pin, confirmPin) {
+  // Student sets a first PIN (a legacy profile with none, or after an
+  // instructor reset).
+  //
+  // SECURITY (Phase 3): this used to be open. Anyone who knew a username could
+  // arrive at the set-PIN gate and take the account, which was the original
+  // impersonation hole surviving in a corner. Claiming a PIN now requires the
+  // ACTIVE class login code, the same proof of class membership that creating a
+  // profile requires, and the server refuses to overwrite a PIN that already
+  // exists (that path is sign-in, or an instructor reset).
+  async function enterWithNewPin(username, p, pin, confirmPin, code) {
     if (!window.CueolaPin) return { ok: false, msg: 'PIN setup is not available. Reload and try again.' };
     var v = window.CueolaPin.validate(pin);
     if (!v.ok) return { ok: false, msg: v.msg };
     if (String(pin) !== String(confirmPin)) return { ok: false, msg: 'The two PINs do not match.' };
-    var w = fb(); if (!w || !w._updateDoc) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
+    var cleanCode = normalizeCode(code);
+    if (!cleanCode) return { ok: false, msg: 'Enter your class login code to set a PIN.' };
+    var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
+
+    try {
+      var res = await callFn('claimPin', { username: username, code: cleanCode, pin: pin });
+      if (res && res.token && w._authFns && w._authFns.signInWithCustomToken) {
+        await w._authFns.signInWithCustomToken(w._adminAuth, res.token);
+      }
+      if (res) return finalizeSignIn(username, p);
+    } catch (err) {
+      var c = err && err.code ? String(err.code) : '';
+      if (c.indexOf('permission-denied') >= 0 || c.indexOf('failed-precondition') >= 0 || c.indexOf('invalid-argument') >= 0) {
+        return { ok: false, msg: (err && err.message) || 'Could not set that PIN.' };
+      }
+      // Not deployed / unreachable: fall through to the legacy path below.
+    }
+
+    // Pre-Phase-3 path: write the hash onto the profile, then sign in.
+    if (!w._updateDoc) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
     var fields;
     try { fields = await window.CueolaPin.make(pin, username); }
     catch (e) { return { ok: false, msg: (e && e.message) || 'That PIN is too easy to guess.' }; }
     try { await w._updateDoc(w._doc(w._db, 'profiles', username), fields); }
     catch (e) { return { ok: false, msg: 'Could not save your PIN. Check the connection and try again.' }; }
     p.pinSalt = fields.pinSalt; p.pinHash = fields.pinHash; p.pinSetAt = fields.pinSetAt;
+    var auth = await authenticateStudentPin(username, p, pin);
+    if (!auth.ok) return { ok: false, msg: auth.msg };
     return finalizeSignIn(username, p);
   }
 
@@ -429,6 +542,41 @@
     var username = normalizeUsername(input.username);
     if (!username) return { ok: false, msg: 'Pick a username: 3 to 40 characters, lowercase letters, numbers, dots or dashes, starting with a letter or number.' };
 
+    // Server-side creation is the Phase 2 path: profiles/{username} create
+    // becomes admin-only, and a brand-new student has no token to satisfy any
+    // rule. createStudentProfile validates the code, checks the username
+    // atomically, enforces PIN strength server-side, writes the doc with the
+    // Admin SDK, and returns a token in the SAME call, which guarantees
+    // uid === profileId (the invariant every self-write rule depends on).
+    try {
+      var made = await callFn('createStudentProfile', {
+        code: code, username: username, fullName: fullName, pin: input.pin,
+        avatar: normalizeAvatar(input.avatar),
+        theme: themeIds().indexOf(input.theme) >= 0 ? input.theme : 'cool',
+        sessions: String(input.sessions || ''),
+      });
+      if (made && made.profile) {
+        if (made.token && w._authFns && w._authFns.signInWithCustomToken) {
+          try { await w._authFns.signInWithCustomToken(w._adminAuth, made.token); } catch (e) {}
+        }
+        rememberIdentity(username, made.profile);
+        markUnlocked(username);
+        cachedProfile = made.profile;
+        announceIdentityChange();
+        adoptProfileLocally(made.profile);
+        renderFrontDoor();
+        return { ok: true, profile: made.profile };
+      }
+    } catch (err) {
+      var c = err && err.code ? String(err.code) : '';
+      // Real, actionable rejections stop here. Anything else (not deployed,
+      // unavailable, network) falls through to the legacy client-side create.
+      if (c.indexOf('already-exists') >= 0) return { ok: false, msg: 'That username is taken. Pick another one.' };
+      if (c.indexOf('invalid-argument') >= 0 || c.indexOf('permission-denied') >= 0) {
+        return { ok: false, msg: (err && err.message) || 'Could not create the profile.' };
+      }
+    }
+
     var codeDoc;
     try { codeDoc = await fetchCode(code); }
     catch (e) { return { ok: false, msg: 'Could not check that login code. Check the connection.' }; }
@@ -475,6 +623,11 @@
         ? 'The profile was rejected. The login code may have just been revoked.'
         : 'Could not save the profile. Check the connection and try again.' };
     }
+    // A brand-new student authenticates through the same server path so they
+    // leave the wizard already holding a real token (best-effort in Phase 1:
+    // if the function is not live yet, they proceed with the local unlock and
+    // pick up a token on their next PIN sign-in).
+    if (role !== 'admin') { try { await authenticateStudentPin(username, doc, input.pin); } catch (e) {} }
     rememberIdentity(username, doc);
     markUnlocked(username);   // creating your profile proves who you are on this device
     cachedProfile = doc;
@@ -769,8 +922,10 @@
       return;
     }
     if (g.stage === 'setPin') {
-      setTitle('Set a PIN to continue', 'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Avoid easy ones like 1234.');
+      setTitle('Set a PIN to continue', 'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Your class login code confirms this account is yours.');
       body().innerHTML =
+        '<div class="field"><label class="field-lbl">Class login code</label>' +
+        '<input class="field-in id-code-in" id="id-gate-code" type="text" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="e.g. FALL26TV"></div>' +
         '<div class="field"><label class="field-lbl">New PIN</label>' +
         '<input class="field-in" id="id-gate-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div>' +
         '<div class="field"><label class="field-lbl">Repeat PIN</label>' +
@@ -778,7 +933,7 @@
         '<div class="modal-err" id="id-gate-err"></div>' +
         '<button class="btn-primary" onclick="CueolaIdentity.submitModalNewPin()">Save and continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button>';
-      focusGate('id-gate-pin', submitModalNewPin, 'id-gate-pin2');
+      focusGate('id-gate-code', submitModalNewPin, 'id-gate-pin2');
       return;
     }
     setTitle('Enter your PIN', 'Enter your 4 digit PIN to continue as @' + esc(g.username) + '.');
@@ -823,7 +978,8 @@
   async function submitModalNewPin() {
     var g = pendingGate; if (!g) return renderSignIn();
     var a = document.getElementById('id-gate-pin'), b = document.getElementById('id-gate-pin2');
-    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value);
+    var codeEl = document.getElementById('id-gate-code');
+    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
     if (!res.ok) return modalGateErr(res.msg);
     afterModalSignIn(res.profile);
   }
@@ -949,15 +1105,33 @@
     if (key === 'code') {
       var code = normalizeCode((document.getElementById('id-create-code') || {}).value);
       if (!code) return wizardErr('Enter the login code your instructor gave you.');
-      var codeDoc = await fetchCode(code).catch(function () { return null; });
-      if (!codeDoc) return wizardErr('That login code does not exist. Check it with your instructor.');
-      if (codeDoc.active !== true) return wizardErr('That login code has been revoked. Ask your instructor for the current one.');
-      w.code = code; w.codeRole = codeDoc.role; w.codeLabel = codeDoc.label;
+      // checkAccessCode is a Cloud Function: a brand-new student has no token,
+      // and once the Phase 2 rules land they cannot read accessCodes directly.
+      // It returns only ok + role, so it cannot be used to harvest class labels
+      // or instructor names. Falls back to the direct read until it is live.
+      var checked = null;
+      try { checked = await callFn('checkAccessCode', { code: code }); } catch (e) { checked = null; }
+      if (checked) {
+        if (!checked.ok) {
+          return wizardErr(checked.reason === 'revoked'
+            ? 'That login code has been revoked. Ask your instructor for the current one.'
+            : 'That login code does not exist. Check it with your instructor.');
+        }
+        w.code = code; w.codeRole = checked.role;
+      } else {
+        var codeDoc = await fetchCode(code).catch(function () { return null; });
+        if (!codeDoc) return wizardErr('That login code does not exist. Check it with your instructor.');
+        if (codeDoc.active !== true) return wizardErr('That login code has been revoked. Ask your instructor for the current one.');
+        w.code = code; w.codeRole = codeDoc.role; w.codeLabel = codeDoc.label;
+      }
     } else if (key === 'name') {
       w.fullName = String((document.getElementById('id-create-fullname') || {}).value || '').trim().replace(/\s+/g, ' ');
       var u = normalizeUsername((document.getElementById('id-create-username') || {}).value);
       if (!w.fullName) return wizardErr('Enter your full name.');
       if (!u) return wizardErr('Usernames are 3 to 40 characters: lowercase letters, numbers, dots and dashes.');
+      // Best-effort early "taken" check. It needs an unauthenticated profiles
+      // read, which Phase 2 removes, so a miss here is not fatal: the authority
+      // is createStudentProfile's atomic create(), which rejects a duplicate.
       var taken = await fetchProfile(u).catch(function () { return null; });
       if (taken) return wizardErr('“' + esc(u) + '” is taken. Pick another username.');
       w.username = u;
@@ -1620,11 +1794,12 @@
     }
     if (g.stage === 'setPin') {
       el.innerHTML = gateShell(g.username, 'Set a PIN to continue',
-        'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Avoid easy ones like 1234 or 1111.',
-        '<div class="fd-row"><input class="field-in" id="fd-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="new PIN"></div>'
+        'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Your class login code confirms this account is yours.',
+        '<div class="fd-row"><input class="field-in id-code-in" id="fd-code" type="text" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="class login code"></div>'
+        + '<div class="fd-row"><input class="field-in" id="fd-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="new PIN"></div>'
         + '<div class="fd-row"><input class="field-in" id="fd-pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="repeat PIN">'
         + '<button type="button" class="btn-primary fd-go" onclick="CueolaIdentity.frontDoorSubmitNewPin()">Save and continue</button></div>');
-      var np = document.getElementById('fd-pin');
+      var np = document.getElementById('fd-code');
       if (np) np.focus();
       var np2 = document.getElementById('fd-pin2');
       if (np2) np2.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSubmitNewPin(); });
@@ -1651,7 +1826,8 @@
   async function frontDoorSubmitNewPin() {
     var g = pendingGate; if (!g) return renderFrontDoor();
     var a = document.getElementById('fd-pin'), b = document.getElementById('fd-pin2');
-    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value);
+    var codeEl = document.getElementById('fd-code');
+    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
     if (!res.ok) gateErr(res.msg);
   }
   async function frontDoorSubmitPassword() {

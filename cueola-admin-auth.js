@@ -88,6 +88,17 @@
     var generation = ++resolveGeneration;
     if (!user) { publish(null); return Promise.resolve(null); }
     if (!window._db || !window._doc || !window._getDoc) { publish(null); return Promise.resolve(null); }
+    // A student custom-token session (cueolaStudent claim, minted by the
+    // signInWithPin Cloud Function) is never an admin. Resolve it quietly, with
+    // no admins/{uid} read and no warning, so student sign-ins do not look like
+    // failed admin logins.
+    return Promise.resolve(user.getIdTokenResult ? user.getIdTokenResult().catch(function () { return null; }) : null).then(function (tok) {
+      if (generation !== resolveGeneration) return current();
+      if (tok && tok.claims && tok.claims.cueolaStudent) { publish(null); return null; }
+      return resolveAdminDoc(user, generation);
+    });
+  }
+  function resolveAdminDoc(user, generation) {
     return window._getDoc(window._doc(window._db, 'admins', user.uid)).then(function (snap) {
       if (generation !== resolveGeneration) return current();
       if (!snap.exists()) {

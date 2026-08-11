@@ -35,16 +35,21 @@ function document(data) {
 // ONLY to seed admins/{uid} fixtures the way the service-account bootstrap
 // script does in production). setAuth(null) restores anonymous requests.
 let authToken = null;
-function fakeToken(uid) {
+function fakeToken(uid, claims = {}) {
   const b64 = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
   return `${b64({ alg: 'none', typ: 'JWT' })}.${b64({
     iss: `https://securetoken.google.com/${project}`, aud: project, auth_time: 1,
-    user_id: uid, sub: uid, iat: 1, exp: 9999999999, firebase: { sign_in_provider: 'password' },
+    user_id: uid, sub: uid, iat: 1, exp: 9999999999, firebase: { sign_in_provider: 'custom' },
+    ...claims,
   })}.`;
 }
-function setAuth(uid) {
-  authToken = uid === null ? null : (uid === 'owner' ? 'owner' : fakeToken(uid));
+function setAuth(uid, claims = {}) {
+  authToken = uid === null ? null : (uid === 'owner' ? 'owner' : fakeToken(uid, claims));
 }
+// Phase 2: a student's token carries the cueolaStudent claim and its uid IS the
+// profileId. setStudent() mints exactly that shape, which is what
+// isCueolaStudent()/isCueolaPrincipal() and the profile self-write rule check.
+function setStudent(profileId) { setAuth(profileId, { cueolaStudent: true }); }
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -83,6 +88,22 @@ const session = {
 };
 
 console.log(`Firestore rules contract · ${host} · ${project}`);
+
+// ── Phase 2 (2026-08-12): shared show data is no longer writable by the open
+// internet. Prove the floor FIRST, while the collection is still empty, so a
+// regression that re-opens anonymous access cannot hide behind fixtures.
+setAuth(null);
+denied(await write('sessions/ANON1', session), 'anonymous cannot create a session');
+denied(await write('sessions/RULES1', { showName: 'anon' }, ['showName']), 'anonymous cannot patch a session');
+denied(await request('sessions/RULES1'), 'anonymous cannot read a session');
+denied(await request('profiles?pageSize=20'), 'anonymous cannot list profiles (class-list leak closed)');
+denied(await request('profiles/alex.smith'), 'anonymous cannot read a profile');
+denied(await request('accessCodes/FALL26'), 'anonymous cannot read a class code');
+
+// Everything below runs as a real signed-in student: uid === profileId, with
+// the cueolaStudent claim the Cloud Function mints.
+const STUDENT_ID = 'profile_legacy_legacy_profile_qa_student_abc123def456';
+setStudent(STUDENT_ID);
 
 allowed(await write('sessions/RULES1', session), 'Cueola creates session');
 allowed(await write('sessions/BOOTSTRAP1', {
@@ -211,21 +232,47 @@ allowed(await request('sessions?pageSize=20'), 'admin lists sessions (dashboard 
 allowed(await request('accessCodes?pageSize=20'), 'admin lists class codes (Class Keys panel)');
 setAuth(null);
 denied(await request('accessCodes?pageSize=20'), 'anonymous accessCodes list denied (Phase 10)');
-allowed(await request('profiles?pageSize=20'), 'profiles list stays open (student export residual)');
-setAuth(null);   // student flows below stay anonymous — the university rule
+// Phase 2 closes the Phase 10 residual: the roster is no longer world-readable.
+denied(await request('profiles?pageSize=20'), 'anonymous profiles list denied (Phase 2)');
 
+// Profile fixtures are created the way production now does it: server-side via
+// the createStudentProfile Cloud Function, which runs with Admin SDK
+// privileges. 'owner' is this suite's stand-in for that bypass.
+const ALEX_ID = 'profile_legacy_legacy_profile_alex_smith_0a1b2c3d4e5f';
 const profile = {
   username: 'alex.smith', fullName: 'Alex Smith', role: 'student', avatar: { type: 'initials' },
   theme: 'cool', sessions: ['RULES1'], codeUsed: 'CLASS2026', createdAt: 1, lastSeen: 1,
+  profileId: ALEX_ID, profileAliases: [],
 };
-allowed(await write('profiles/alex.smith', profile), 'profile create with active code');
-denied(await write('profiles/no.code', { ...profile, username: 'no.code', codeUsed: 'MISSING' }), 'profile create without active code');
-denied(await write('profiles/casey.k', { ...profile, username: 'casey.k', codeUsed: 'REVOKED1' }), 'profile create with revoked code');
+
+// A client can no longer create a profile, whatever it is signed in as.
+setAuth(null);
+denied(await write('profiles/alex.smith', profile), 'anonymous cannot create a profile');
+setStudent(STUDENT_ID);
+denied(await write('profiles/sneaky.new', { ...profile, username: 'sneaky.new', profileId: 'profile_sneaky' }),
+  'a student cannot create a profile (server-side only now)');
+
+setAuth('owner');   // stands in for the Admin SDK / createStudentProfile
+allowed(await write('profiles/alex.smith', profile), 'server creates the profile');
+setAuth('uid_std_1');   // an instructor may still create via the roster tools
+denied(await write('profiles/no.code', { ...profile, username: 'no.code', codeUsed: 'MISSING', profileId: 'profile_nocode' }), 'profile create without active code');
+denied(await write('profiles/casey.k', { ...profile, username: 'casey.k', codeUsed: 'REVOKED1', profileId: 'profile_casey' }), 'profile create with revoked code');
+
+// Alex is now signed in as themselves: uid === their profileId.
+setStudent(ALEX_ID);
 denied(await write('profiles/alex.smith', { ...profile, role: 'admin', lastSeen: 2 }), 'profile role elevation');
 denied(await write('profiles/alex.smith', { ...profile, codeUsed: 'REVOKED1', lastSeen: 2 }), 'profile codeUsed mutation');
 allowed(await write('profiles/alex.smith', { ...profile, lastSeen: 2 }), 'profile mutable fields update');
-denied(await write('profiles/ab', { ...profile, username: 'ab' }), 'username shorter than 3 chars');
 denied(await remove('profiles/alex.smith'), 'profile delete denied (deactivate instead)');
+
+// THE self-write boundary: a different student cannot touch Alex's profile.
+setStudent(STUDENT_ID);
+denied(await write('profiles/alex.smith', { lastSeen: 99 }, ['lastSeen']), 'another student cannot write my profile');
+denied(await write('profiles/alex.smith', { avatar: { type: 'animal', value: 'koala' } }, ['avatar']), 'another student cannot change my avatar');
+denied(await write('profiles/alex.smith', { pinSalt: 'Hijack_salt99', pinHash: 'c'.repeat(64), pinSetAt: 5 },
+  ['pinSalt', 'pinHash', 'pinSetAt']), 'another student cannot reset my PIN');
+allowed(await request('profiles/alex.smith'), 'a signed-in student may READ another profile (rosters, avatars)');
+setStudent(ALEX_ID);
 
 // Phase 3 client/dashboard patches verbatim (masked updates merge, rules see the whole doc).
 allowed(await write('profiles/alex.smith', { avatar: { type: 'animal', value: 'koala' }, lastSeen: 3 },
@@ -233,20 +280,25 @@ allowed(await write('profiles/alex.smith', { avatar: { type: 'animal', value: 'k
 allowed(await write('profiles/alex.smith', { sessions: ['RULES1', 'SHOW42'], lastSeen: 4 },
   ['sessions', 'lastSeen']), 'attach a session code to the profile');
 allowed(await write('profiles/alex.smith', { lastSeen: 5 }, ['lastSeen']), 'sign-in lastSeen bump');
+setAuth('uid_std_1');   // roster actions are instructor-side
 allowed(await write('profiles/alex.smith', { active: false }, ['active']), 'roster deactivate');
 allowed(await write('profiles/alex.smith', { active: true }, ['active']), 'roster reactivate');
+setStudent(ALEX_ID);
 denied(await write('profiles/alex.smith', { role: 'admin' }, ['role']), 'masked role elevation still denied');
 denied(await write('profiles/alex.smith', { sessions: Array.from({ length: 101 }, (_, i) => `S${i}`) },
   ['sessions']), 'profile sessions list over the 100 cap');
-denied(await write('profiles/mismatch.role', { ...profile, username: 'mismatch.role', role: 'admin' }),
+setAuth('uid_std_1');
+denied(await write('profiles/mismatch.role', { ...profile, username: 'mismatch.role', role: 'admin', profileId: 'profile_mismatch' }),
   'create with role not matching the code doc');
+setStudent(ALEX_ID);
 
-// Phase 6 stable identity migration. Legacy profiles may omit profileId; once
-// one is added it cannot be changed or removed. Aliases stay mutable but bounded.
-const alexProfileId = 'profile_alex_smith_01';
+// Phase 6 stable identity. Under Phase 2 every profile carries profileId before
+// the rules deploy (functions/backfill-profile-ids.js is the go/no-go gate), and
+// the id is the student's auth uid, so it must never move.
+const alexProfileId = ALEX_ID;
 allowed(await write('profiles/alex.smith', {
-  profileId: alexProfileId, profileAliases: ['alex.smith'], lastSeen: 6,
-}, ['profileId', 'profileAliases', 'lastSeen']), 'legacy profile adds its stable id once');
+  profileAliases: ['alex.smith'], lastSeen: 6,
+}, ['profileAliases', 'lastSeen']), 'aliases and lastSeen stay writable by their owner');
 denied(await write('profiles/alex.smith', { profileId: 'profile_alex_changed_02' }, ['profileId']), 'stable profile id cannot change');
 denied(await write('profiles/alex.smith', {}, ['profileId']), 'stable profile id cannot be removed');
 allowed(await write('profiles/alex.smith', { profileAliases: ['alex.smith', 'alex.s'] }, ['profileAliases']), 'profile aliases may grow within the bound');
@@ -256,6 +308,8 @@ denied(await write('profiles/alex.smith', {
 }, ['profileAliases']), 'profile aliases over the 40-entry cap');
 
 // Rename = new doc under the (still active) code, then tombstone the old name.
+// Instructor-side: creation is admin/server-only under Phase 2.
+setAuth('uid_std_1');
 allowed(await write('profiles/alexs.new', {
   ...profile, username: 'alexs.new', profileId: alexProfileId, profileAliases: ['alex.smith', 'alexs.new'],
 }), 'rename creates the new doc with the same stable id');
@@ -263,19 +317,23 @@ allowed(await write('profiles/alex.smith', { active: false, renamedTo: 'alexs.ne
   ['active', 'renamedTo']), 'rename tombstones the old doc');
 allowed(await write('profiles/alexs.new', { active: false, mergedInto: 'alex.smith' },
   ['active', 'mergedInto']), 'merge tombstone points at the target');
+setStudent(ALEX_ID);
 
 // Student PIN (2026-08-11, additive). A 64-hex hash and an 8-64 char base64url
-// salt. The PIN is a client-side impersonation deterrent, so these rules only
-// pin the SHAPE, not any authorization; a student writes their own PIN with no
-// Auth (masked patch), and a super-admin reset rides the same open update rule.
+// salt. Under Phase 2 the PIN is verified SERVER-side, and these rules pin the
+// shape plus the self-write boundary: a student may set their own PIN, an
+// instructor may reset anyone's, and nobody else can touch it.
 const goodPinHash = 'a'.repeat(64);
 const goodPinSalt = 'Xy9_-aB2cD3e';
 // A dedicated PIN-FREE profile. The shape guards below must run against a doc
 // with no existing pinSalt: a masked patch MERGES with the stored doc, so the
 // salt+hash pairing clause can only be exercised to a denial when the target
 // genuinely lacks the sibling field.
-allowed(await write('profiles/pin.tester', { ...profile, username: 'pin.tester' }),
+const PIN_TESTER_ID = 'profile_legacy_legacy_profile_pin_tester_9f8e7d6c5b4a';
+setAuth('owner');   // server-side create, as createStudentProfile does
+allowed(await write('profiles/pin.tester', { ...profile, username: 'pin.tester', profileId: PIN_TESTER_ID }),
   'pin-test profile create');
+setStudent(PIN_TESTER_ID);   // the owner of that profile
 // Shape guards, all against the still-PIN-free doc so each stays a real denial.
 denied(await write('profiles/pin.tester', { pinHash: goodPinHash, pinSetAt: 22 },
   ['pinHash', 'pinSetAt']), 'pinHash without pinSalt (pairing) denied');
@@ -289,7 +347,7 @@ denied(await write('profiles/pin.tester', { pinSalt: goodPinSalt, pinHash: goodP
   ['pinSalt', 'pinHash', 'pinSetAt']), 'string pinSetAt denied (int only)');
 denied(await write('profiles/pin.tester', { pinPlain: '1930', lastSeen: 27 },
   ['pinPlain', 'lastSeen']), 'unknown pinPlain key denied (hasOnly)');
-// Student sets a PIN at sign-in (masked patch, anonymous) once the pair is whole.
+// The student sets their OWN PIN once the pair is whole.
 allowed(await write('profiles/pin.tester',
   { pinSalt: goodPinSalt, pinHash: goodPinHash, pinSetAt: 20, pinSetBy: 'pin.tester' },
   ['pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy']), 'student sets own PIN (masked patch)');
@@ -299,10 +357,10 @@ setAuth('uid_std_1');
 allowed(await write('profiles/pin.tester',
   { pinSalt: 'Reset_salt_9zQ', pinHash: 'b'.repeat(64), pinSetAt: 21, pinSetBy: 'Instructor One' },
   ['pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy']), 'admin resets a student PIN (masked patch)');
-setAuth(null);
+setStudent(STUDENT_ID);
 
-// Phase 6 canonical assignments. Cueola has no Firebase Auth, so these are
-// role-neutral shape/consistency checks, not instructor/student authorization.
+// Phase 6 canonical assignments. These are shape/consistency checks; the
+// authorization floor is isCueolaPrincipal() on the subcollection.
 const assignment = {
   assignmentId: 'asn_alex_producer_01', productionSession: 'RULES1',
   profileId: alexProfileId, displayName: 'Alex Smith',
@@ -495,4 +553,64 @@ allowed(await remove('sessions/pbfile_file1'), 'admin purge deletes legacy attac
 allowed(await remove('sessions/RULES1'), 'admin deletes session');
 setAuth(null);
 
-console.log('PASS: Cueola/dashboard/Flowmingo/Outrangutan/Prompt-Up write patterns, type/bound denials, and future collection guards');
+// ── Phase 2 live-show regression guard ──────────────────────────────────────
+// The highest-frequency masked writes in a real show, replayed verbatim as an
+// authenticated student and then as an anonymous caller. These are the writes
+// that fail SILENTLY in production (every one has a swallowed .catch), so if a
+// future rule edit breaks them, it has to break here first and loudly.
+setStudent(STUDENT_ID);
+allowed(await write('sessions/LIVE1', {
+  code: 'LIVE1', showName: 'Live guard', createdBy: 'QA',
+  beats: [], cues: [], participants: [], presence: {}, prompter: {}, outrangutan: {},
+}), 'authed student creates the live-guard session');
+const liveWrites = [
+  [{ presence: { p1: { name: 'QA', role: 'student', lastSeen: 1 } } }, ['presence'], 'joinPresence map'],
+  [{ 'presence.p1.lastSeen': 2 }, ['presence.p1.lastSeen'], 'presence heartbeat (field path)'],
+  [{ participants: [{ name: 'QA', role: 'student' }] }, ['participants'], 'participants transaction'],
+  [{ activeIdx: 3 }, ['activeIdx'], 'syncLiveIdx cue move'],
+  [{ controlBus: { target: 'outrangutan', action: 'go', id: 'cb_1', ts: 1 } }, ['controlBus'], 'control bus command'],
+  [{ prompter: { control: 'play', updatedAt: 1 } }, ['prompter'], 'prompter command'],
+  [{ showClock: { startedAt: 1, running: true } }, ['showClock'], 'show clock broadcast'],
+  [{ 'prePro.production': 'Edited live' }, ['prePro.production'], 'Planda Bear masked paperwork patch'],
+  [{ 'outrangutan.live': { status: 'playing' } }, ['outrangutan.live'], 'Outrangutan live state'],
+];
+for (const [data, mask, label] of liveWrites) {
+  allowed(await write('sessions/LIVE1', data, mask), `authed student: ${label}`);
+}
+allowed(await write('sessions/LIVE1/notes/n1', {
+  id: 'n1', text: 'Guard note', by: 'QA', at: 1,
+}), 'authed student writes a production note');
+allowed(await write('sessions/LIVE1/notes/n1', { 'seenBy.qa': 1 }, ['seenBy.qa']), 'authed student read receipt');
+
+setAuth(null);
+for (const [data, mask, label] of liveWrites) {
+  denied(await write('sessions/LIVE1', data, mask), `anonymous DENIED: ${label}`);
+}
+denied(await write('sessions/LIVE1/notes/n2', { id: 'n2', text: 'nope', by: 'anon', at: 1 }),
+  'anonymous DENIED: production note');
+denied(await request('sessions/LIVE1/notes?pageSize=10'), 'anonymous DENIED: notes list');
+setAuth('uid_std_1');
+allowed(await remove('sessions/LIVE1/notes/n1'), 'admin cleans up the guard note');
+allowed(await remove('sessions/LIVE1'), 'admin cleans up the guard session');
+setAuth(null);
+
+// ── Phase 3: PIN secrets are unreachable from any client ────────────────────
+// The whole point of moving the salt+hash off the profile doc: not even a
+// signed-in student or an instructor can read them. Only the Cloud Functions
+// (Admin SDK, which bypasses rules) touch this collection.
+const SECRET_PATH = `pinSecrets/${ALEX_ID}`;
+for (const [who, label] of [[null, 'anonymous'], ['uid_std_1', 'an instructor']]) {
+  setAuth(who);
+  denied(await request(SECRET_PATH), `${label} cannot read a PIN secret`);
+  denied(await write(SECRET_PATH, { pinSalt: 'Xy9_-aB2cD3e', pinHash: 'a'.repeat(64) }), `${label} cannot write a PIN secret`);
+}
+setStudent(ALEX_ID);
+denied(await request(SECRET_PATH), 'the OWNING student cannot read their own PIN secret');
+denied(await write(SECRET_PATH, { pinSalt: 'Xy9_-aB2cD3e', pinHash: 'b'.repeat(64) }), 'the owning student cannot write their own PIN secret');
+denied(await request('pinSecrets?pageSize=20'), 'nobody can enumerate PIN secrets');
+// The rate limiter is equally closed, or a guesser could clear their own lockout.
+denied(await request('pinGuard/alex.smith'), 'the rate limiter is not readable');
+denied(await write('pinGuard/alex.smith', { attempts: 0, lockedUntil: 0 }), 'nobody can clear their own lockout');
+setAuth(null);
+
+console.log('PASS: Cueola/dashboard/Flowmingo/Outrangutan/Prompt-Up write patterns, type/bound denials, future collection guards, and the Phase 2 auth floor');
