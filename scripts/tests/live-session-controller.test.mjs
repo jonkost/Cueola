@@ -448,9 +448,15 @@ test('show-caller predicate: the TH2607 Jul 20 scenarios (D12.3)', () => {
   const admin = resolve({ code:'TH07', role:'student', hasAdminSession:true });
   assert.equal(admin.isShowCaller, true);
   assert.equal(admin.followingSelf, true);
-  // Instructor drives.
-  const instructor = resolve({ code:'TH07', role:'instructor', hasAdminSession:false });
-  assert.equal(instructor.isShowCaller, true);
+  // PIN-build tightening (2026-08-11): the client role string no longer confers
+  // show-caller standing in a shared session. A device claiming role
+  // 'instructor' WITHOUT a live admin auth session cannot move the shared cue;
+  // real Firebase admin auth is the only key. (This closes the impersonation
+  // and forged-localStorage paths: profile.role 'admin' alone is not enough.)
+  const roleOnly = resolve({ code:'TH07', role:'instructor', hasAdminSession:false });
+  assert.equal(roleOnly.isShowCaller, false);
+  const authedInstructor = resolve({ code:'TH07', role:'instructor', hasAdminSession:true });
+  assert.equal(authedInstructor.isShowCaller, true);
 });
 
 test('show-caller predicate: solo carve-outs and follow semantics', () => {
@@ -460,15 +466,16 @@ test('show-caller predicate: solo carve-outs and follow semantics', () => {
   // Expert mode and an unsynced local workspace likewise.
   assert.equal(resolve({ code:'', role:'student' }).isShowCaller, true);
   assert.equal(resolve({ code:'X', isExpert:true, role:'student' }).isShowCaller, true);
-  // Mirroring someone else never calls the show, whatever the role.
-  assert.equal(resolve({ code:'X', role:'instructor', followTarget:'Sam' }).isShowCaller, false);
+  // Mirroring someone else never calls the show, even with a live admin session.
+  assert.equal(resolve({ code:'X', hasAdminSession:true, followTarget:'Sam' }).isShowCaller, false);
   // Explicitly browsing on my own restores my own position — but a student
   // in a shared session still cannot move the SHARED cue.
   const browsingStudent = resolve({ code:'X', role:'student', browsingSelf:true });
   assert.equal(browsingStudent.followingSelf, true);
   assert.equal(browsingStudent.isShowCaller, false);
-  // An instructor browsing self drives.
-  assert.equal(resolve({ code:'X', role:'instructor', browsingSelf:true }).isShowCaller, true);
+  // An admin browsing self drives; the same device without the admin unlock does not.
+  assert.equal(resolve({ code:'X', hasAdminSession:true, browsingSelf:true }).isShowCaller, true);
+  assert.equal(resolve({ code:'X', role:'instructor', browsingSelf:true, hasAdminSession:false }).isShowCaller, false);
 });
 
 for (const { name, fn } of tests) {

@@ -16,6 +16,11 @@
   'use strict';
 
   var IDENTITY_KEY = 'cueola_identity';
+  // The device "this person proved who they are" marker. A stored identity is
+  // LOCKED (reads as signed out everywhere) until the person clears the gate on
+  // this device: a student enters their PIN, an admin enters their password.
+  // Cleared on sign-out. See the gate section below.
+  var PIN_OK_KEY = 'cueola_pin_ok';
   var USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,39}$/;      // mirrors firestore.rules validUsername
   var CODE_RE = /^[A-Za-z0-9_-]{4,80}$/;                // mirrors firestore.rules accessCodes id
   var SESSION_CODE_RE = /^[A-Za-z0-9_.-]{1,160}$/;
@@ -165,11 +170,35 @@
   }
 
   /* ── local device identity ── */
-  function identity() {
+  // The raw stored record, ignoring the lock. Used only by the gate to know
+  // WHOM to prompt; everything else must go through identity().
+  function storedIdentity() {
     try {
       var raw = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
       return raw && typeof raw.username === 'string' ? raw : null;
     } catch (e) { return null; }
+  }
+  // Signed-in identity, but ONLY once this device is unlocked for that username.
+  // A stored identity with no matching unlock marker returns null, so every
+  // consumer (join flows, toolbar, KeyWi gate, portal) reads it as signed out
+  // until the person clears the PIN or password gate. This is what forces a
+  // returning or migrated user through the gate before anything trusts them.
+  function identity() {
+    var raw = storedIdentity();
+    if (!raw) return null;
+    return deviceUnlocked(raw.username) ? raw : null;
+  }
+  function deviceUnlocked(username) {
+    try {
+      var m = JSON.parse(localStorage.getItem(PIN_OK_KEY) || 'null');
+      return !!(m && m.username === username);
+    } catch (e) { return false; }
+  }
+  function markUnlocked(username) {
+    try { localStorage.setItem(PIN_OK_KEY, JSON.stringify({ username: username, at: Date.now() })); } catch (e) {}
+  }
+  function clearUnlocked() {
+    try { localStorage.removeItem(PIN_OK_KEY); } catch (e) {}
   }
   function rememberIdentity(username, profile) {
     var value = { username: username };
@@ -185,6 +214,11 @@
   function signOut() {
     portalRequestGeneration++;
     try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
+    clearUnlocked();
+    pendingGate = null;
+    // An admin who signs out of the front door drops their real Auth session
+    // too, so instructor standing cannot linger behind a signed-out card.
+    try { if (window.CueolaAdminAuth && window.CueolaAdminAuth.current()) window.CueolaAdminAuth.signOut(); } catch (e) {}
     cachedProfile = null;
     announceIdentityChange();
     say('Signed out on this device.');
@@ -265,7 +299,19 @@
     return snap.exists() ? snap.data() : null;
   }
 
-  async function signIn(rawUsername) {
+  /* ══════════════════════════ sign-in gate ══════════════════════════
+   * Username alone no longer signs anyone in. resolveGate() fetches the
+   * profile and decides which second factor the person must clear on this
+   * device: a student enters their PIN ('pin'), a student with no PIN yet
+   * sets one to continue ('setPin'), an admin enters their Firebase Auth
+   * password ('password'). Only when that factor passes does finalizeSignIn()
+   * write the unlock marker and adopt the identity. Because identity() reads
+   * as null until the marker is set, a wrong username or an abandoned gate
+   * never grants access, and every existing signed-in user is forced through
+   * the gate the first time this ships (they have no marker yet). */
+  var pendingGate = null;   // { username, profile, stage } while a gate is open
+
+  async function resolveGate(rawUsername) {
     var username = normalizeUsername(rawUsername);
     if (!username) return { ok: false, msg: 'Usernames are 3 to 40 characters: letters, numbers, dots, dashes.' };
     var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
@@ -276,13 +322,68 @@
     if (p.renamedTo) return { ok: false, msg: 'This username was renamed. Sign in as “' + esc(p.renamedTo) + '”.' };
     if (p.mergedInto) return { ok: false, msg: 'This profile was merged into “' + esc(p.mergedInto) + '”. Use that username.' };
     if (p.active === false) return { ok: false, msg: 'This profile was deactivated by an instructor.' };
+    var stage = p.role === 'admin' ? 'password' : (p.pinHash ? 'pin' : 'setPin');
+    pendingGate = { username: username, profile: p, stage: stage };
+    return { ok: true, profile: p, stage: stage, username: username };
+  }
+
+  // Shared tail once a factor passes: persist who, unlock this device, adopt.
+  function finalizeSignIn(username, p) {
     rememberIdentity(username, p);
+    markUnlocked(username);
+    pendingGate = null;
     cachedProfile = p;
     announceIdentityChange();
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
     renderFrontDoor();
     return { ok: true, profile: p };
+  }
+
+  // Student PIN check. Verifies against the stored salted hash, client-side
+  // (a deterrent, not real auth: see cueola-pin.js).
+  async function enterWithPin(username, p, pin) {
+    if (!window.CueolaPin) return { ok: false, msg: 'PIN check is not available. Reload and try again.' };
+    var good = false;
+    try { good = await window.CueolaPin.verify(pin, p.pinSalt, p.pinHash); } catch (e) { good = false; }
+    if (!good) return { ok: false, msg: 'That PIN is not right. Try again, or ask your instructor to reset it.' };
+    return finalizeSignIn(username, p);
+  }
+
+  // Student sets a first PIN (legacy profile with none, or after a reset).
+  // Writes the salt+hash to the profile with a masked patch, then continues.
+  async function enterWithNewPin(username, p, pin, confirmPin) {
+    if (!window.CueolaPin) return { ok: false, msg: 'PIN setup is not available. Reload and try again.' };
+    var v = window.CueolaPin.validate(pin);
+    if (!v.ok) return { ok: false, msg: v.msg };
+    if (String(pin) !== String(confirmPin)) return { ok: false, msg: 'The two PINs do not match.' };
+    var w = fb(); if (!w || !w._updateDoc) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
+    var fields;
+    try { fields = await window.CueolaPin.make(pin, username); }
+    catch (e) { return { ok: false, msg: (e && e.message) || 'That PIN is too easy to guess.' }; }
+    try { await w._updateDoc(w._doc(w._db, 'profiles', username), fields); }
+    catch (e) { return { ok: false, msg: 'Could not save your PIN. Check the connection and try again.' }; }
+    p.pinSalt = fields.pinSalt; p.pinHash = fields.pinHash; p.pinSetAt = fields.pinSetAt;
+    return finalizeSignIn(username, p);
+  }
+
+  // Admin password gate. If a real Firebase Auth session is already live for
+  // this username (persisted, or the dashboard signed in on this origin), it
+  // stands in for the password; otherwise the password is required. No
+  // password, no admin sign-in, so profile.role 'admin' alone never confers
+  // instructor standing.
+  async function enterAsAdmin(username, p, password) {
+    var A = window.CueolaAdminAuth;
+    if (!A) return { ok: false, msg: 'Admin sign-in is not available on this page.' };
+    var existing = null;
+    try { existing = A.current(); } catch (e) {}
+    if (existing && existing.username === username) return finalizeSignIn(username, p);
+    if (!password) return { ok: false, msg: 'needs-password', needsPassword: true };
+    try { await A.signIn(username, password); }
+    catch (e) { return { ok: false, msg: (e && e.message) || 'Wrong username or password.' }; }
+    var sess = null; try { sess = A.current(); } catch (e2) {}
+    if (!sess || sess.username !== username) return { ok: false, msg: 'Signed in, but this account is not an authorized admin.' };
+    return finalizeSignIn(username, p);
   }
 
   // Pull the cloud profile's look and theme onto this device.
@@ -344,12 +445,13 @@
       if (s && SESSION_CODE_RE.test(s) && sessions.indexOf(s) < 0) sessions.push(s);
     });
 
+    var role = codeDoc.role === 'admin' ? 'admin' : 'student';
     var doc = {
       username: username,
       profileId: newProfileId(),
       profileAliases: [],
       fullName: fullName,
-      role: codeDoc.role === 'admin' ? 'admin' : 'student',   // rules verify this matches the code doc
+      role: role,   // rules verify this matches the code doc
       avatar: normalizeAvatar(input.avatar),
       theme: themeIds().indexOf(input.theme) >= 0 ? input.theme : 'cool',
       sessions: sessions.slice(0, 100),
@@ -357,6 +459,15 @@
       createdAt: Date.now(),
       lastSeen: Date.now(),
     };
+    // Students carry a PIN from the wizard; admins authenticate with their
+    // Firebase password, so their profile carries no PIN.
+    if (role !== 'admin') {
+      if (!window.CueolaPin) return { ok: false, msg: 'PIN setup is not available. Reload and try again.' };
+      var pinFields;
+      try { pinFields = await window.CueolaPin.make(input.pin, username); }
+      catch (e) { return { ok: false, msg: (e && e.message) || 'Pick a 4 digit PIN that is not too easy to guess.' }; }
+      doc.pinSalt = pinFields.pinSalt; doc.pinHash = pinFields.pinHash; doc.pinSetAt = pinFields.pinSetAt;
+    }
     try {
       await w._setDoc(w._doc(w._db, 'profiles', username), doc);
     } catch (e) {
@@ -365,6 +476,7 @@
         : 'Could not save the profile. Check the connection and try again.' };
     }
     rememberIdentity(username, doc);
+    markUnlocked(username);   // creating your profile proves who you are on this device
     cachedProfile = doc;
     announceIdentityChange();
     adoptProfileLocally(doc);
@@ -634,9 +746,62 @@
   async function submitSignIn() {
     var el = document.getElementById('id-signin-username');
     var err = document.getElementById('id-signin-err');
-    var res = await signIn(el && el.value);
-    if (!res.ok) { if (err) { err.innerHTML = res.msg; err.classList.add('on'); } return; }
-    say('Signed in as ' + res.profile.fullName + '.');
+    var r = await resolveGate(el && el.value);
+    if (!r.ok) { if (err) { err.innerHTML = r.msg; err.classList.add('on'); } return; }
+    rememberIdentity(r.username, r.profile);   // persist WHO; device stays locked until the factor passes
+    await renderModalGate();
+  }
+  // The same PIN / set-PIN / admin-password gate as the front door, rendered
+  // inside the identity modal so the join flows keep working.
+  async function renderModalGate() {
+    var g = pendingGate; if (!g) return renderSignIn();
+    if (g.stage === 'password') {
+      var pre = await enterAsAdmin(g.username, g.profile, '');
+      if (pre.ok) return afterModalSignIn(pre.profile);
+      setTitle('Instructor sign-in', 'Enter your instructor password to continue as @' + esc(g.username) + '.');
+      body().innerHTML =
+        '<div class="field"><label class="field-lbl">Password</label>' +
+        '<input class="field-in" id="id-gate-pw" type="password" autocomplete="current-password"></div>' +
+        '<div class="modal-err" id="id-gate-err"></div>' +
+        '<button class="btn-primary" onclick="CueolaIdentity.submitModalPassword()">Sign in</button>' +
+        '<button class="btn-secondary" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button>';
+      focusGate('id-gate-pw', submitModalPassword);
+      return;
+    }
+    if (g.stage === 'setPin') {
+      setTitle('Set a PIN to continue', 'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Avoid easy ones like 1234.');
+      body().innerHTML =
+        '<div class="field"><label class="field-lbl">New PIN</label>' +
+        '<input class="field-in" id="id-gate-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div>' +
+        '<div class="field"><label class="field-lbl">Repeat PIN</label>' +
+        '<input class="field-in" id="id-gate-pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div>' +
+        '<div class="modal-err" id="id-gate-err"></div>' +
+        '<button class="btn-primary" onclick="CueolaIdentity.submitModalNewPin()">Save and continue</button>' +
+        '<button class="btn-secondary" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button>';
+      focusGate('id-gate-pin', submitModalNewPin, 'id-gate-pin2');
+      return;
+    }
+    setTitle('Enter your PIN', 'Enter your 4 digit PIN to continue as @' + esc(g.username) + '.');
+    body().innerHTML =
+      '<div class="field"><label class="field-lbl">PIN</label>' +
+      '<input class="field-in" id="id-gate-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div>' +
+      '<div class="modal-err" id="id-gate-err"></div>' +
+      '<button class="btn-primary" onclick="CueolaIdentity.submitModalPin()">Sign in</button>' +
+      '<button class="btn-secondary" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button>';
+    focusGate('id-gate-pin', submitModalPin);
+  }
+  function focusGate(id, onEnter, enterFromId) {
+    var el = document.getElementById(id);
+    if (el) el.focus();
+    var trigger = document.getElementById(enterFromId || id);
+    if (trigger) trigger.addEventListener('keydown', function (e) { if (e.key === 'Enter') onEnter(); });
+  }
+  function modalGateErr(msg) {
+    var err = document.getElementById('id-gate-err');
+    if (err) { err.innerHTML = esc(msg); err.classList.add('on'); }
+  }
+  function afterModalSignIn(profile) {
+    say('Signed in as ' + (profile && profile.fullName ? profile.fullName : 'you') + '.');
     if (afterSignIn) {
       var kind = afterSignIn; afterSignIn = null;
       if (kind === 'stud') { close('identityModal'); try { window.openJoinSession(); } catch (e) {} return; }
@@ -648,31 +813,65 @@
     }
     renderPortal();
   }
+  async function submitModalPin() {
+    var g = pendingGate; if (!g) return renderSignIn();
+    var el = document.getElementById('id-gate-pin');
+    var res = await enterWithPin(g.username, g.profile, el && el.value);
+    if (!res.ok) return modalGateErr(res.msg);
+    afterModalSignIn(res.profile);
+  }
+  async function submitModalNewPin() {
+    var g = pendingGate; if (!g) return renderSignIn();
+    var a = document.getElementById('id-gate-pin'), b = document.getElementById('id-gate-pin2');
+    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value);
+    if (!res.ok) return modalGateErr(res.msg);
+    afterModalSignIn(res.profile);
+  }
+  async function submitModalPassword() {
+    var g = pendingGate; if (!g) return renderSignIn();
+    var el = document.getElementById('id-gate-pw');
+    var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
+    if (!res.ok) return modalGateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
+    afterModalSignIn(res.profile);
+  }
 
   /* ── create-profile wizard ── */
   function startCreate() {
-    wizard = { step: 0, code: '', fullName: '', username: '', avatar: { type: 'initials' }, theme: themeIds()[0] || 'cool', sessions: '' };
+    wizard = { step: 0, code: '', fullName: '', username: '', pin: '', pin2: '', avatar: { type: 'initials' }, theme: themeIds()[0] || 'cool', sessions: '' };
     open('identityModal');
     renderCreate();
   }
+  // The wizard walks an ordered list of step KEYS, not fixed indices, so the
+  // student-only PIN step can slot in without renumbering. Admins authenticate
+  // with a Firebase password, never a PIN, so their code skips it entirely.
+  function wizardKeys() {
+    var w = wizard;
+    if (w && w.codeRole === 'admin') return ['code', 'name', 'look', 'sessions'];
+    return ['code', 'name', 'pin', 'look', 'sessions'];
+  }
+  var WIZ_STEP_LABEL = { code: 'Login code', name: 'Name & username', pin: 'Your PIN', look: 'Look & theme', sessions: 'Your sessions' };
   function renderCreate() {
     var w = wizard; if (!w) return startCreate();
-    var steps = ['Login code', 'Name & username', 'Look & theme', 'Your sessions'];
-    var dots = steps.map(function (s, i) {
-      return '<span class="id-step' + (i === w.step ? ' on' : i < w.step ? ' done' : '') + '">' + esc(s) + '</span>';
+    var keys = wizardKeys();
+    if (w.step >= keys.length) w.step = keys.length - 1;
+    var key = keys[w.step];
+    var n = keys.length;
+    var dots = keys.map(function (k, i) {
+      return '<span class="id-step' + (i === w.step ? ' on' : i < w.step ? ' done' : '') + '">' + esc(WIZ_STEP_LABEL[k]) + '</span>';
     }).join('');
     var html = '<div class="id-steps">' + dots + '</div>';
+    var stepNo = w.step + 1;
 
-    if (w.step === 0) {
-      setTitle('Create your profile', 'Step 1: the login code your instructor gave the class.');
+    if (key === 'code') {
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': the login code your instructor gave the class.');
       html +=
         '<div class="field"><label class="field-lbl">Class login code</label>' +
         '<input class="field-in id-code-in" id="id-create-code" type="text" maxlength="80" placeholder="e.g. FALL26TV" autocapitalize="characters" autocomplete="off" value="' + esc(w.code) + '"></div>' +
         '<div class="modal-err" id="id-create-err"></div>' +
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.renderHub()">Back</button>';
-    } else if (w.step === 1) {
-      setTitle('Create your profile', 'Step 2: how you appear to the crew, and your username.');
+    } else if (key === 'name') {
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': how you appear to the crew, and your username.');
       html +=
         '<div class="field"><label class="field-lbl">Full name</label>' +
         '<input class="field-in" id="id-create-fullname" type="text" maxlength="120" placeholder="e.g. Alex Johnson" value="' + esc(w.fullName) + '"></div>' +
@@ -682,8 +881,19 @@
         '<div class="modal-err" id="id-create-err"></div>' +
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
-    } else if (w.step === 2) {
-      setTitle('Create your profile', 'Step 3: pick your look and theme (changeable later).');
+    } else if (key === 'pin') {
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': a 4 digit PIN so only you can sign in.');
+      html +=
+        '<div class="field"><label class="field-lbl">PIN</label>' +
+        '<input class="field-in" id="id-create-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 digits" value="' + esc(w.pin) + '"></div>' +
+        '<div class="field"><label class="field-lbl">Repeat PIN</label>' +
+        '<input class="field-in" id="id-create-pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 digits" value="' + esc(w.pin2) + '">' +
+        '<div class="id-field-hint">You type this with your username to sign in. Avoid easy ones like 1234, 1111, or your birth year.</div></div>' +
+        '<div class="modal-err" id="id-create-err"></div>' +
+        '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
+        '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
+    } else if (key === 'look') {
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': pick your look and theme (changeable later).');
       var initialSel = w.avatar.type === 'initials';
       var grid = '<button type="button" class="id-av' + (initialSel ? ' sel' : '') + '" onclick="CueolaIdentity.wizardPickAvatar(\'initials\')">' +
         '<span class="id-av-chip">' + esc((w.fullName || 'You').split(/\s+/).map(function (p) { return p[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?') + '</span><span>Initials</span></button>';
@@ -716,7 +926,7 @@
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     } else {
-      setTitle('Create your profile', 'Step 4: the show codes you have been given (optional).');
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': the show codes you have been given (optional).');
       html +=
         '<div class="field"><label class="field-lbl">Show codes</label>' +
         '<input class="field-in" id="id-create-sessions" type="text" placeholder="e.g. SHOW42, NEWS7 (optional)" autocapitalize="characters" value="' + esc(w.sessions) + '">' +
@@ -735,15 +945,15 @@
   }
   async function wizardNext() {
     var w = wizard; if (!w) return;
-    if (w.step === 0) {
+    var key = wizardKeys()[w.step];
+    if (key === 'code') {
       var code = normalizeCode((document.getElementById('id-create-code') || {}).value);
       if (!code) return wizardErr('Enter the login code your instructor gave you.');
       var codeDoc = await fetchCode(code).catch(function () { return null; });
       if (!codeDoc) return wizardErr('That login code does not exist. Check it with your instructor.');
       if (codeDoc.active !== true) return wizardErr('That login code has been revoked. Ask your instructor for the current one.');
       w.code = code; w.codeRole = codeDoc.role; w.codeLabel = codeDoc.label;
-      w.step = 1;
-    } else if (w.step === 1) {
+    } else if (key === 'name') {
       w.fullName = String((document.getElementById('id-create-fullname') || {}).value || '').trim().replace(/\s+/g, ' ');
       var u = normalizeUsername((document.getElementById('id-create-username') || {}).value);
       if (!w.fullName) return wizardErr('Enter your full name.');
@@ -751,15 +961,30 @@
       var taken = await fetchProfile(u).catch(function () { return null; });
       if (taken) return wizardErr('“' + esc(u) + '” is taken. Pick another username.');
       w.username = u;
-      w.step = 2;
-    } else if (w.step === 2) {
+    } else if (key === 'pin') {
+      var pin = String((document.getElementById('id-create-pin') || {}).value || '');
+      var pin2 = String((document.getElementById('id-create-pin2') || {}).value || '');
+      var v = window.CueolaPin ? window.CueolaPin.validate(pin) : { ok: false, msg: 'PIN setup is not available. Reload and try again.' };
+      if (!v.ok) return wizardErr(v.msg);
+      if (pin !== pin2) return wizardErr('The two PINs do not match.');
+      w.pin = pin; w.pin2 = pin2;
+    } else if (key === 'look') {
       var sel = document.getElementById('id-create-theme');
       if (sel) w.theme = sel.value;
-      w.step = 3;
     }
+    w.step = Math.min(w.step + 1, wizardKeys().length - 1);
     renderCreate();
   }
-  function wizardBack() { if (wizard && wizard.step > 0) { wizard.step--; renderCreate(); } else renderHub(); }
+  function wizardBack() {
+    if (!wizard) return renderHub();
+    // Persist the PIN fields before leaving the step so Back does not lose them.
+    var key = wizardKeys()[wizard.step];
+    if (key === 'pin') {
+      wizard.pin = String((document.getElementById('id-create-pin') || {}).value || '');
+      wizard.pin2 = String((document.getElementById('id-create-pin2') || {}).value || '');
+    }
+    if (wizard.step > 0) { wizard.step--; renderCreate(); } else renderHub();
+  }
   function wizardPickAvatar(type, value) {
     if (!wizard) return;
     // Switching icons keeps the background the user already chose.
@@ -1275,7 +1500,14 @@
     var gen = ++frontDoorGen;
     var id = identity();
     refreshEntryProfileBtn();
-    if (!id) { frontDoorSignedOut(el, ''); return; }
+    if (!id) {
+      // A stored identity with no unlock marker is LOCKED: resume the gate
+      // (enter PIN, set a PIN, or admin password) instead of the generic card.
+      var stored = storedIdentity();
+      if (stored) { await renderLockGate(el, stored.username, gen); return; }
+      frontDoorSignedOut(el, '');
+      return;
+    }
     var p = cachedProfile;
     if (!p || p.username !== id.username) {
       el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
@@ -1327,11 +1559,108 @@
     var el = document.getElementById('fd-username');
     var err = document.getElementById('fd-err');
     if (err) err.classList.remove('on');
-    var res = await signIn(el && el.value);
-    if (!res.ok) { if (err) { err.innerHTML = res.msg; err.classList.add('on'); } return; }
-    say('Signed in as ' + res.profile.fullName + '.');
+    var r = await resolveGate(el && el.value);
+    if (!r.ok) { if (err) { err.innerHTML = r.msg; err.classList.add('on'); } return; }
+    // Persist WHO now; the device stays locked (no unlock marker) until the
+    // second factor passes, so a reload resumes the same gate.
+    rememberIdentity(r.username, r.profile);
     renderFrontDoor();
   }
+
+  // The gate card shares the front-door shell: brand mark, a "continuing as"
+  // line, one factor field, an error slot, submit, and a "not you" escape.
+  function gateShell(username, title, sub, body) {
+    return '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+      + '<div class="ec-title">' + esc(title) + '</div>'
+      + '<div class="ec-desc">' + sub + '</div>'
+      + body
+      + '<div class="modal-err" id="fd-err"></div>'
+      + '<div class="fd-links"><span class="fd-user">Continuing as @' + esc(username) + '</span>'
+      + '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button></div>';
+  }
+  async function renderLockGate(el, username, gen) {
+    var g = (pendingGate && pendingGate.username === username) ? pendingGate : null;
+    if (!g) {
+      el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+        + '<div class="ec-title">Welcome back</div><div class="fd-loading">Checking your profile&hellip;</div>';
+      if (!fb() && typeof window.waitForFirebaseReady === 'function') { try { await window.waitForFirebaseReady(); } catch (e) {} }
+      if (gen !== frontDoorGen) return;
+      if (!fb()) {
+        el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
+          + '<div class="ec-title">Welcome back</div>'
+          + '<div class="ec-desc">@' + esc(username) + ', the cloud is not reachable. Your sign-in will continue when it is.</div>'
+          + '<div class="fd-links"><button type="button" class="fd-link" onclick="CueolaIdentity.frontDoorNotMe()">Not you?</button></div>';
+        return;
+      }
+      var r = await resolveGate(username);
+      if (gen !== frontDoorGen) return;
+      if (!r.ok) {
+        // Stored identity no longer resolvable (renamed, merged, deactivated,
+        // or gone): forget it and fall back to the signed-out card.
+        try { localStorage.removeItem(IDENTITY_KEY); } catch (e) {}
+        clearUnlocked();
+        frontDoorSignedOut(el, r.msg || '');
+        return;
+      }
+      g = pendingGate;
+    }
+    if (g.stage === 'password') {
+      // A live admin session (persisted or from the dashboard) stands in for
+      // the password, so an already-authed admin is not asked twice.
+      var pre = await enterAsAdmin(g.username, g.profile, '');
+      if (gen !== frontDoorGen) return;
+      if (pre.ok) return;   // finalizeSignIn re-rendered the front door
+      el.innerHTML = gateShell(g.username, 'Instructor sign-in',
+        'Enter your instructor password to continue.',
+        '<div class="fd-row"><input class="field-in" id="fd-pw" type="password" autocomplete="current-password" placeholder="password">'
+        + '<button type="button" class="btn-primary fd-go" onclick="CueolaIdentity.frontDoorSubmitPassword()">Sign in</button></div>');
+      var pw = document.getElementById('fd-pw');
+      if (pw) { pw.focus(); pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSubmitPassword(); }); }
+      return;
+    }
+    if (g.stage === 'setPin') {
+      el.innerHTML = gateShell(g.username, 'Set a PIN to continue',
+        'Pick a 4 digit PIN so only you can sign in as @' + esc(g.username) + '. Avoid easy ones like 1234 or 1111.',
+        '<div class="fd-row"><input class="field-in" id="fd-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="new PIN"></div>'
+        + '<div class="fd-row"><input class="field-in" id="fd-pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="repeat PIN">'
+        + '<button type="button" class="btn-primary fd-go" onclick="CueolaIdentity.frontDoorSubmitNewPin()">Save and continue</button></div>');
+      var np = document.getElementById('fd-pin');
+      if (np) np.focus();
+      var np2 = document.getElementById('fd-pin2');
+      if (np2) np2.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSubmitNewPin(); });
+      return;
+    }
+    // stage 'pin'
+    el.innerHTML = gateShell(g.username, 'Enter your PIN',
+      'Enter your 4 digit PIN to continue as @' + esc(g.username) + '.',
+      '<div class="fd-row"><input class="field-in" id="fd-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="PIN">'
+      + '<button type="button" class="btn-primary fd-go" onclick="CueolaIdentity.frontDoorSubmitPin()">Sign in</button></div>');
+    var pin = document.getElementById('fd-pin');
+    if (pin) { pin.focus(); pin.addEventListener('keydown', function (e) { if (e.key === 'Enter') frontDoorSubmitPin(); }); }
+  }
+  function gateErr(msg) {
+    var err = document.getElementById('fd-err');
+    if (err) { err.innerHTML = esc(msg); err.classList.add('on'); }
+  }
+  async function frontDoorSubmitPin() {
+    var g = pendingGate; if (!g) return renderFrontDoor();
+    var el = document.getElementById('fd-pin');
+    var res = await enterWithPin(g.username, g.profile, el && el.value);
+    if (!res.ok) gateErr(res.msg);
+  }
+  async function frontDoorSubmitNewPin() {
+    var g = pendingGate; if (!g) return renderFrontDoor();
+    var a = document.getElementById('fd-pin'), b = document.getElementById('fd-pin2');
+    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value);
+    if (!res.ok) gateErr(res.msg);
+  }
+  async function frontDoorSubmitPassword() {
+    var g = pendingGate; if (!g) return renderFrontDoor();
+    var el = document.getElementById('fd-pw');
+    var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
+    if (!res.ok) gateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
+  }
+  function frontDoorNotMe() { signOut(); }
   // The card follows identity wherever it changes; a zero-delay timer lets
   // cueola-app.js (which loads after us) finish defining the firebase bridge.
   setTimeout(function () { try { renderFrontDoor(); } catch (e) {} }, 0);
@@ -1389,7 +1718,7 @@
     identity: identity, profile: function () { return cachedProfile; },
     profileIdentity: function () { return canonicalProfileIdentity(cachedProfile); },
     profileIdentityForJoin: profileIdentityForJoin,
-    signIn: signIn, signOut: signOut, createProfile: createProfile,
+    signOut: signOut, createProfile: createProfile,
     attachSessions: attachSessions, detachSessions: detachSessions, noteJoin: noteJoin,
     entrySatisfied: entrySatisfied, revealEntryCodeRow: revealEntryCodeRow,
     onDeviceAvatarSaved: onDeviceAvatarSaved,
@@ -1400,6 +1729,10 @@
     renderPortal: renderPortal, portalAddCode: portalAddCode, portalRemoveCode: portalRemoveCode, enterSession: enterSession,
     sessionChoices: sessionChoices, renderSessionChoiceRows: renderSessionChoiceRows,
     renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,
+    // Sign-in gate (student PIN, set-PIN, admin password) handlers, front door + modal.
+    frontDoorNotMe: frontDoorNotMe,
+    frontDoorSubmitPin: frontDoorSubmitPin, frontDoorSubmitNewPin: frontDoorSubmitNewPin, frontDoorSubmitPassword: frontDoorSubmitPassword,
+    submitModalPin: submitModalPin, submitModalNewPin: submitModalNewPin, submitModalPassword: submitModalPassword,
     deviceOnlyLook: deviceOnlyLook,
     _normalizeUsername: normalizeUsername, _normalizeCode: normalizeCode,
   };

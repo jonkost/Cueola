@@ -1,5 +1,145 @@
 # Changelog
 
+## Unreleased: Sign-in gate, student PINs and admin passwords (built 2026-08-11)
+
+Closes the impersonation gap where a username alone let anyone sign in as
+someone else. Students now unlock with a 4 digit PIN, admins with their real
+password, and instructor powers ride real sign-in, not a role label.
+
+### What is honest about this
+A student browser has no server-checked secret (the university prohibits
+student passwords), so the PIN is verified in the browser against a salted hash
+on the profile. That makes it a strong deterrent against a classmate typing
+your username, but NOT cryptographic authentication: profiles are readable, so
+a 4 digit hash is guessable by someone with developer tools and database
+access. Firebase App Check and the Firestore rules stay the real perimeter.
+
+### Student PIN
+- New `cueola-pin.js`: a 4 digit PIN helper (salted SHA-256, one way) shared by
+  the front door and the dashboard. Weak PINs are refused: repeats (1111),
+  runs (1234, 4321), fewer than three distinct digits (1212, 1122), and a
+  blocklist of well-worn PINs.
+- The front door and the identity modal now gate sign-in. A stored login on a
+  device is LOCKED (reads as signed out everywhere) until the person clears the
+  gate: a student enters their PIN, an admin enters their password. Every
+  currently signed-in student is forced through the gate the first time this
+  ships, since no device is unlocked yet.
+- The create-profile wizard gained a student PIN step (set and confirm, weak
+  PINs refused). Admins skip it: they sign in with a password.
+- Super admins can reset a student PIN from the dashboard Class Roster (they
+  set a new one and share it; they can never read the current one). Renaming a
+  student carries their PIN forward.
+
+### Admin password everywhere, instructor powers on real auth
+- An admin-role profile must enter its Firebase password at the front door, not
+  only in the instructor dashboard. A live admin session (persisted, or from
+  the dashboard on the same origin) stands in so nobody is asked twice.
+- Instructor standing now requires a real admin auth session, not a profile
+  whose role merely reads "admin". Joining by code lands as a student unless an
+  admin session is live, and the show-caller predicate
+  (`resolveCallerState`) grants control only to a live admin session or a solo
+  workspace (demo, expert, or an unsynced local copy). This closes both the
+  impersonation path and the forgeable dashboard-launch localStorage path.
+
+### Rules and cache
+- `profiles/{username}` may carry optional `pinSalt`, `pinHash`, `pinSetAt`,
+  `pinSetBy` (shape-validated, salt+hash always paired). Shipped as an ADDITIVE
+  staged ruleset, `docs/rules-additive-2026-08-11-pin.rules`, which must deploy
+  BEFORE the hosting that carries the PIN code, or profile writes fail closed.
+  Rollback copy: `docs/rules-rollback-2026-08-11-pre-pin.rules`.
+- `WORKER_SCHEMA` rolls so the gate reaches installed clients; the new
+  `cueola-pin.js` is precached.
+
+## Unreleased: Position assignments move to Planda Bear (built 2026-08-11)
+
+Position assignments now live where the paperwork lives. The Admin panel's
+Crew tab is retired; the hub's assignments card is the app's editor (the
+instructor dashboard's session inspector keeps its own). WORKER_SCHEMA 30.
+
+- The Planda Bear hub's Crew Assignments card becomes the Position
+  Assignments editor for signed-in admins: positions list, per-person
+  profile/position/paperwork rows, the save-state pill, and Save
+  assignments, all on the hub. Everyone else keeps the read-only roster
+  card. Admins can do this at any point: sign in as admin, open Planda Bear
+  with the show code, and the card is ready to edit.
+- The editor keeps the canonical save flow untouched (revision-guarded
+  transaction, conflict states, draft preservation). Remote updates and
+  group switches never rebuild the card over an unsaved draft or under the
+  operator's cursor, and a draft survives closing the hub.
+- The Planda Bear gear menu grows an Admin sign-in row (shown only while
+  signed out), so entering PB first and signing in second also works. After
+  a sign-in inside Planda Bear the card lights up in place instead of the
+  Admin panel opening behind the workspace.
+- The Admin panel keeps Session, People, and Sources; People gains a pointer
+  to the new home. Admin panel and hub opens no longer reload assignments
+  over an in-progress draft.
+- Group workspaces: assignments and position options are whole-class data,
+  and now always read and write the parent session doc and the ungrouped
+  local mirror, even while a group workspace is active. The read-only card
+  in a grouped hub now shows the whole-class roster instead of nothing.
+
+## Unreleased: Stage Plot (built 2026-08-11)
+
+The parked Phase 8 paperwork page ships as a working skeleton. Planda Bear
+gains a birdseye drag-and-drop Stage Plot for the intro courses: the Keynote
+replacement the class currently uses to place gear in the room.
+
+### Stage Plot editor (Planda Bear page 7)
+- Three-column editor: an Object Bank on the left (camera, microphone,
+  projector, pipe and drape, video switcher, monitor, speaker, light, table,
+  person, riser, door, text label), the gridded stage in the middle, and a
+  Keynote-style inspector on the right. Bank glyphs are placeholder line art
+  in one swappable registry, ready for the owner's final icon designs.
+- Objects come out of the bank as many times as needed: click adds at center,
+  or drag one straight onto the stage. Every placed object auto-labels itself
+  (Camera 1, Camera 2) and the label stays editable in the inspector, along
+  with color, rotation, size in feet, front/back order, and delete.
+- The stage is a real floor plan: feet-based coordinates, a 1 ft grid with
+  half-foot snap (toggleable), editable space size, dimension labels, a
+  FRONT / AUDIENCE edge, and a scale badge. Arrow keys nudge, Delete clears,
+  Esc deselects, Cmd+Z undoes.
+- Multiple named plots per session with a dropdown and Add Plot, exactly like
+  call sheets (min one, instructor-gated add/delete, delete tombstones), so
+  each learning environment keeps its own saved layout.
+- Live collab rides the standard Planda Bear spine: 650ms autosave, the save
+  chip, advisory "X is editing" presence on the canvas, and mid-drag guards
+  so remote refreshes never fight the pointer.
+- Session snapshots and restores carry plots automatically; Start Next
+  Episode clones them via the clone whitelist.
+
+### Paperwork package and export
+- Stage Plot registers as its own numbered section: one landscape sheet per
+  plot with a production/venue/date/scale title block. Preview is vector SVG;
+  PDF export embeds a pre-rasterized 2x PNG keyed to the snapshot
+  fingerprint, since html2canvas mangles complex inline SVG.
+- Standalone preview and Export Stage Plot PDF from the editor's step nav,
+  same flow as the call sheet.
+- Show-code setup and Session Setup both grow a Stage Plot checkbox in the
+  paperwork config. Decision 10 amended by the owner: the Intro preset now
+  INCLUDES Stage Plot (it is built for the intro courses), and missing =
+  enabled lights it in existing sessions.
+- WORKER_SCHEMA 29; paper export contract suite pins the new section's
+  registration, landscape wrapper, and raster path.
+
+### Review hardening (same day)
+An adversarial review pass confirmed seven issues; all are fixed:
+- Saves are merge-splices now: only locally-edited plots replace their stored
+  versions over a fresh read, so two people editing different plots of the
+  same session no longer clobber each other's whole array, and exit saves
+  cannot push a stale working copy over remote edits.
+- Esc closing the editor inside the 650ms autosave window no longer drops
+  the last canvas edit; the save dispatcher rescues the pending working copy.
+- Undo frames invalidate when remote state is adopted, so Cmd+Z can no
+  longer resurrect pre-merge state over a collaborator's work.
+- Oversized spaces back off the raster scale and validate the PNG result
+  (Safari's canvas limit fails silently), falling back to inline SVG instead
+  of exporting a blank sheet.
+- The min-1 fallback plot walks past tombstoned ids, so a session whose
+  original first plot was deleted cannot strand edits on a ghost plot.
+- The dashboard's read-only Stage Plot summary coerces plot dimensions to
+  numbers before rendering; raw wire strings could otherwise reach
+  innerHTML in the admin dashboard (stored XSS).
+
 ## v2.2.1: Stroke pass, Planda Bear header, new brand art (built 2026-08-07)
 
 A look round: the app sheds its hairlines, the Planda Bear header stops
@@ -25,17 +165,40 @@ colliding with its own icon, and the Cueola and Flowmingo marks are replaced.
   so it overflowed 16px right and down instead of centring: the title text
   landed 2px *inside* the artwork and the icon hung into the header's bottom
   edge. Box and artwork are now the same size with an honest 16px gap.
-- Production Notes moved out of the body. It was a page-wide banner wedged
-  between the header and the six numbered pages; it is now a compact Notes
-  button in the header tools row, carrying the note count as a badge and the
-  old descriptive line as its tooltip. The paperwork grid leads the workspace,
-  and the board stays one click away from every section.
+- Production Notes is a full-width card above the paperwork grid. It was a
+  page-wide banner, then briefly a compact header button; it now sits as the
+  same card body as the six numbered pages in a row of its own, leading the
+  workspace with the note count as a pill in its title. A major part of the
+  production process reads like one.
+- The gear menu grew up into Planda Bear Settings: alongside the theme picker
+  it now carries Export PDF Package, Preview Package, and Export Call Sheet
+  Only, the same actions as the row at the bottom of the hub.
+
+### Owner punch list (2026-08-11)
+- Flowmingo Op's Hotkeys panel is key-first rows again (key chip leading, dim
+  description trailing, like the talent screen's hint card), replacing the
+  prose paragraph, and now lists every binding including F, R, H, M, and ESC.
+- Theme picker swatches fill their circles. The background shorthand was
+  sizing the two-tone gradient to the disc minus its 1px rim and wrapping the
+  leading colour into the border zone, which read as a dark gap ring inside
+  the rim on all nine swatches; the swatch table now pins the gradient to
+  border-box so the fill reaches the rim on every picker surface.
+- The front page profile button fills its circle: signed out the
+  person-in-circle glyph is the full button face, signed in the avatar chip
+  covers it edge to edge.
 
 ### Brand
 - New Cueola and Flowmingo icons, re-inlined into the index.html and
   dashboard.html sprites from `assets/Brand/`.
-- `WORKER_SCHEMA` 25 -> 26: brand SVGs are precached unversioned, so installed
-  clients only pick up new artwork when the shell cache rolls.
+- Second Cueola icon revision (2026-08-11): the koala now hangs onto the green
+  play triangle. Propagated to the page sprites, all seven PWA and touch PNGs
+  in `assets/icons/app/`, and the avatar picker's paired background colour.
+  The Illustrator export embedded a 230KB raster of the background squircle;
+  it is replaced with a 10-stop vector gradient (icon 326KB -> 19KB, verified
+  pixel-identical), keeping both pages at their normal size.
+- `WORKER_SCHEMA` 25 -> 28 across this release: brand art, icon PNGs, and
+  page HTML are all shell-cached, so installed clients only pick up the new
+  artwork and markup when the cache name rolls.
 
 ## v2.2.0: Overhaul round (built 2026-07-27; live on cueola.live since the 2026-08-03 push)
 

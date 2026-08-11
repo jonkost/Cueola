@@ -50,7 +50,8 @@ recorded (decision 14).*
 
 ## 3 · During the run
 
-- Your position roster lives in the Admin panel; assignments land on each
+- Your position roster lives on the Planda Bear hub (sign in as admin and the
+  assignments card is editable right there); assignments land on each
   student's **portal** with to-do and unseen-note badges.
 - **Pinned** notes show you who hasn't read them; **Open items** shows who
   owes what.

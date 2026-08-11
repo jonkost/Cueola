@@ -54,6 +54,7 @@ assert.match(app, /UNVERIFIED PREVIEW: NOT A SAVED EXPORT/);
 assert.match(app, /Image attachment: \$\{esc\(a\.name\)\} \(open the saved original in Cueola\)/);
 
 const formalExports = [
+  ['async function downloadStagePlotPDF()', 'function renderCallSheetSelector'],
   ['async function downloadCallSheetPDF()', 'async function exportPreProPackagePDF()'],
   ['async function exportPreProPackagePDF()', '// ─────────────────────────────────────────────────────────────\n// PDF EXPORT'],
   ['async function exportPDF()', '// ─────────────────────────────────────────────────────────────\n// HELPERS'],
@@ -88,5 +89,20 @@ assert.doesNotMatch(showPack, /[📌↩🔁▶⏸⏹]/u);
 assert.match(page, /cueola-export-model\.js\?v=/);
 assert.match(sw, /cueola-export-model\.js\?v=/);
 assert.match(bump, /'cueola-export-model\.js'/);
+
+// v2.2 D4: Stage Plot rides the shared export spine. The section registers in
+// the single-source numbering builder, the package gates on numbers.has, the
+// sheet prints landscape, and PDF exports embed the pre-rasterized 2x PNG
+// (html2canvas renders complex inline SVG unreliably).
+assert.match(app, /PAPERWORK_PACKAGE_SECTION_ORDER = \[[^\]]*'stage-plot'/);
+assert.match(app, /if \(numbers\.has\('stage-plot'\)\)/);
+assert.match(app, /sectionAttr\('stage-plot', `Stage Plot: \$\{stagePlotDisplayName\(plot, i\)\}`\)/);
+const plotSheet = section(app, 'function stagePlotPreviewHTML(', 'let _stagePlotRasterCache');
+assert.match(plotSheet, /paper-landscape/);
+assert.match(plotSheet, /paperSectionTitle\(sectionNumber/);
+const plotRaster = section(app, 'async function prepareStagePlotRasters(', 'let lastStagePlotExportSnapshot');
+assert.match(plotRaster, /fingerprint === snapshot\.fingerprint/);
+assert.match(section(app, 'async function preparePaperworkExportSnapshot(', 'const PAPER_EXPORT_DOCUMENT_TITLES'), /prepareStagePlotRasters\(resolved\)/);
+assert.match(app, /'stage-plot':'Stage Plot'/);
 
 console.log('PASS paper export static contract');

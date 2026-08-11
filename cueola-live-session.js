@@ -629,14 +629,17 @@
   //                   mirror of someone else); solo surfaces and privileged
   //                   roles default to driving their own position.
   //   isShowCaller  — followingSelf AND allowed to move the shared cue:
-  //                   solo surfaces always; in a shared session any
-  //                   non-student role, or ANY role holding an admin unlock
-  //                   (rejoining by code lands as 'student' — the admin
-  //                   device must still be able to call the show).
+  //                   solo surfaces always; in a SHARED session ONLY a live
+  //                   admin auth session (real Firebase password). The client
+  //                   role string is spoofable and no longer confers this: a
+  //                   student, or a profile whose role merely reads 'admin'
+  //                   without passing the password gate, cannot call the show
+  //                   in a shared session. Rejoining by code lands as 'student';
+  //                   the admin unlock is what returns the wheel.
   function resolveCallerState(input) {
     input = input || {};
     var solo = Boolean(input.isDemo || input.isExpert || !input.code);
-    var privileged = input.role !== 'student' || Boolean(input.hasAdminSession);
+    var privileged = Boolean(input.hasAdminSession);
     var followingSelf = Boolean(input.browsingSelf) ||
       (!input.followTarget && (solo || privileged));
     return Object.freeze({

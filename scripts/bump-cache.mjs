@@ -24,6 +24,7 @@ export const ASSETS = [
   'break-room-show.js',
   'cueola-export-model.js',
   'cueola-prepro-sync.js',
+  'cueola-pin.js',
   'cueola-identity.js',
   'cueola-admin-auth.js',
   'cueola-live-session.js',

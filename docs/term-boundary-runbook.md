@@ -81,6 +81,17 @@ order only:
    capture fails silently (fire-and-forget). Full procedure:
    admin-accounts-runbook.md step 0. Verify by watching a capture doc appear
    in `sessions/{code}/snapshots` on the next join.
+0b. **Student PIN additive (2026-08-11), also BEFORE hosting:** deploy
+   `docs/rules-additive-2026-08-11-pin.rules` (the current deployed baseline
+   plus optional `pinSalt`/`pinHash`/`pinSetAt`/`pinSetBy` on profiles). If the
+   PIN hosting ships first, every profile create and set-PIN write is DENIED
+   (validProfile's `hasOnly` rejects the new keys), so no student can sign up
+   or clear the gate. Snapshot the live ruleset to
+   `docs/rules-rollback-2026-08-11-pre-pin.rules` first (done). Verify live with
+   a throwaway QA profile: an anonymous masked pin patch succeeds and a
+   `pinPlain` write is denied. Then ship the PIN hosting (WORKER_SCHEMA already
+   bumped). The same widening is folded into the repo `firestore.rules` so the
+   eventual round-2 tightening carries it forward.
 1. Hosting deploy (clients that understand the tightened rules).
 2. Fleet refresh (every show machine reloads — WORKER_SCHEMA bump covers it).
 3. Instructor/admin accounts confirmed working (sign-in on the dashboard).

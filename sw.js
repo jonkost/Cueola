@@ -117,13 +117,14 @@ const SHELL_ASSETS = [
   'demo-media/demo-airhorn.wav',
   'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
-  'cueola-session-clone.js?v=2b4cf2ea17',
+  'cueola-session-clone.js?v=7a666657a8',
   'break-room-show.js?v=0d8b8b324b',
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
-  'cueola-identity.js?v=2c2c797b9f',
+  'cueola-pin.js?v=a47e3ea31d',
+  'cueola-identity.js?v=020a885a95',
   'cueola-admin-auth.js?v=84a9727118',
-  'cueola-live-session.js?v=2352bc00d1',
+  'cueola-live-session.js?v=bc0db7a3e5',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=1002259f73',
@@ -133,7 +134,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=7dc4098c8a',
+  'cueola-app.js?v=b9be9132b6',
   'outrangutan/outrangutan.css?v=75dfbd64d2',
   'outrangutan/outrangutan.js?v=48addea3ef',
   'cueola-streamdeck-device.js?v=48990ed663',
@@ -192,7 +193,31 @@ const versionSignature = SHELL_ASSETS
 // cache name rolls), (2) the project-wide stroke pass rewrote page CSS in
 // index.html and dashboard.html, (3) Planda Bear's header lockup and the
 // Production Notes move are page-HTML markup changes.
-const WORKER_SCHEMA = '26';
+// 26->27: second Cueola app-icon revision (koala on the play triangle). It
+// lands in three precached places at once: assets/Brand/Cueola_Icon.svg, the
+// re-inlined #ic-cueola sprites in index.html/dashboard.html, and every PNG in
+// assets/icons/app/ (all unversioned), so only a cache-name roll reaches
+// installed clients. 26 was never shipped, but a local preview may already
+// hold it, and same-schema art would be served stale from that shell.
+// 27->28: owner punch list, all of it page HTML the shell caches: the
+// Flowmingo Op Hotkeys panel back to key-first rows, Production Notes as a
+// full-width card above the paperwork grid (header button retired), the
+// Planda Bear gear menu gaining the export and preview actions, and the
+// entry profile chip filling its circle. 27 never shipped either, but a
+// local preview may hold its shell.
+// 28->29: Stage Plot (D4) ships. The editor markup, its CSS (incl. the
+// modal-id theme lists), and the paper sheet styles are all page HTML the
+// shell caches, so the new paperwork page only reaches installed clients on
+// a cache-name roll.
+// 29->30: position assignments move to the Planda Bear hub. The gear menu's
+// new Admin sign-in row is page HTML the shell caches, and a stale shell
+// would pair old markup with the relocated editor's JS.
+// 30->31: sign-in gate. Students now enter a 4 digit PIN and admins their
+// password at the front door; a new precached module (cueola-pin.js) plus the
+// gate markup in index.html and the Reset PIN control in dashboard.html are all
+// shell-cached. A stale shell would serve the old passwordless card and never
+// load cueola-pin.js, so the gate must ride a cache-name roll.
+const WORKER_SCHEMA = '31';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

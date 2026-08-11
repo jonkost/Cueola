@@ -644,16 +644,21 @@ const CUEOLA_THEME_LABELS = {
 // Two-tone: the theme's own --bg body with its --accent as a diagonal wedge,
 // so near-black themes stop looking like identical circles. Any valid CSS
 // background value works; every consumer assigns via style.background.
+// The trailing border-box keyword matters: the inline background shorthand
+// resets background-origin to padding-box, which sizes the gradient tile to
+// the circle minus its 1px rim and wraps the leading colour into the border
+// zone, reading as a dark gap ring between disc and rim. border-box sets both
+// origin and clip so the two-tone fill reaches the rim cleanly.
 const CUEOLA_THEME_SWATCHES = {
-  cool:        'linear-gradient(135deg,#0a0d18 60%,#5b8df8 60%)',
-  warm:        'linear-gradient(135deg,#0c0a03 60%,#ffc400 60%)',
-  white:       'linear-gradient(135deg,#fafaf7 60%,#e50000 60%)',
-  green:       'linear-gradient(135deg,#041208 60%,#6cd234 60%)',
-  koala:       'linear-gradient(135deg,#1c1c1b 60%,#d4d4d4 60%)',
-  panda:       'linear-gradient(135deg,#000000 60%,#ffffff 60%)',
-  flamingo:    'linear-gradient(135deg,#0e0410 60%,#a560ff 60%)',
-  outrangutan: 'linear-gradient(135deg,#1a1817 60%,#ff6a00 60%)',
-  prepbear:    'linear-gradient(135deg,#080a14 60%,#eeca57 60%)',
+  cool:        'linear-gradient(135deg,#0a0d18 60%,#5b8df8 60%) border-box',
+  warm:        'linear-gradient(135deg,#0c0a03 60%,#ffc400 60%) border-box',
+  white:       'linear-gradient(135deg,#fafaf7 60%,#e50000 60%) border-box',
+  green:       'linear-gradient(135deg,#041208 60%,#6cd234 60%) border-box',
+  koala:       'linear-gradient(135deg,#1c1c1b 60%,#d4d4d4 60%) border-box',
+  panda:       'linear-gradient(135deg,#000000 60%,#ffffff 60%) border-box',
+  flamingo:    'linear-gradient(135deg,#0e0410 60%,#a560ff 60%) border-box',
+  outrangutan: 'linear-gradient(135deg,#1a1817 60%,#ff6a00 60%) border-box',
+  prepbear:    'linear-gradient(135deg,#080a14 60%,#eeca57 60%) border-box',
 };
 function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'; }
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
@@ -2355,6 +2360,7 @@ const LEARNING_LESSONS = [
       'Post a To-Do with an assignee, or add a checklist to one note and assign each item. Assigned items land on that person’s profile portal, and instructors can open "Open items" to see who owes what.',
       'Pinned notes show instructors who has not read them yet. "Seen by" on every note tracks reads across devices.',
       'Working in groups? Pick your group when the door asks. Each group keeps its own paperwork, and exports follow the group picker. Instructors review any group from the Reviewing menu; you can Switch group until the instructor locks groups.',
+      'Admins: the Position Assignments card on the hub is where each person gets a position and required paperwork. Sign in as admin, open Planda Bear with the show code, and edit right there; the saved roster shows on the hub for the whole crew.',
       'Only some sheets showing? That is the session’s paperwork setup. Instructors choose it on the dashboard, where Intro course keeps the starter sheets and Full production shows everything.',
       'Preview or export the PDF package when the paperwork is ready to share.'
     ],
@@ -2927,12 +2933,12 @@ window.addEventListener('beforeunload', e => {
 });
 
 document.addEventListener('input', e => {
-  if (e.target?.closest?.('#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal')) {
+  if (e.target?.closest?.('#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal')) {
     markPaperworkDirty();
   }
 });
 document.addEventListener('change', e => {
-  if (e.target?.closest?.('#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal')) {
+  if (e.target?.closest?.('#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal')) {
     markPaperworkDirty();
   }
 });
@@ -2964,6 +2970,17 @@ function initAdminAuthAdapter() {
     adminSession = session ? { id:session.id, uid:session.uid, username:session.username, name:session.name, level:session.level } : null;
     updateAdminUI();
     try { renderPresence(currentPresence); } catch {}
+    // The Planda Bear hub hosts the assignments editor: admin standing
+    // arriving (or leaving) while the hub is open must swap the card live.
+    // The card render stashes any live draft before a sign-out replaces it,
+    // and hydrate itself protects a draft that reappears mid-load.
+    try {
+      renderPlandaBearAssignmentsCard({ force:true });
+      if (adminSession && pbOpenPageId() === 'hub' && session.code && session.code !== 'LOCAL'
+          && !session.isDemo && !session.isExpert) {
+        hydrateRoleAssignments({ force:true });
+      }
+    } catch {}
   });
 }
 
@@ -2982,6 +2999,12 @@ function logoutAdmin() {
 }
 
 function updateAdminUI() {
+  // Planda Bear gear: the Admin sign-in row shows only while no admin is
+  // signed in; once they are, the hub's assignments card is the admin surface.
+  const gearLabel = document.getElementById('pbGearAdminLabel');
+  const gearTools = document.getElementById('pbGearAdminTools');
+  if (gearLabel) gearLabel.hidden = Boolean(adminSession);
+  if (gearTools) gearTools.hidden = Boolean(adminSession);
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
   if (adminSession) {
@@ -3024,7 +3047,9 @@ async function submitAdminLogin() {
     hideModal('adminLoginModal');
     document.getElementById('adminPassIn').value = '';
     toast(`Welcome, ${result.name}`);
-    if (document.getElementById('rundown').classList.contains('on')) openAdminPanel();
+    // Signed in from inside Planda Bear: the hub's assignments card lights up
+    // by itself (adapter onChange), so no panel on top of the workspace.
+    if (!pbOpenPageId() && document.getElementById('rundown').classList.contains('on')) openAdminPanel();
   } catch (e) {
     err.textContent = e?.message || 'Sign-in failed.';
     err.classList.add('on');
@@ -3046,7 +3071,10 @@ function openAdminPanel() {
   chip.className = `admin-level-chip alc-${adminSession.level}`;
   renderAdminBody();
   showOverlay('adminPanel');
-  hydrateRoleAssignments({ force:true });
+  // The People pane rides the same hydration as the assignments editor (now
+  // on the Planda Bear hub); refresh it unless a draft is in progress there,
+  // because a reload would clobber that draft.
+  if (!assignmentDraftInProgress()) hydrateRoleAssignments({ force:true });
 }
 
 function closeAdminPanel(e) {
@@ -3061,14 +3089,15 @@ function closeAdminPanel(e) {
 const ADMIN_TABS = [
   { id:'session', label:'Session', symbol:'action.attach',     when:() => true },
   { id:'people',  label:'People',  symbol:'action.profile',    when:() => Boolean(session.code && !session.isDemo && !session.isExpert) },
-  { id:'crew',    label:'Crew',    symbol:'content.checklist', when:() => Boolean(session.code || session.isExpert) },
   { id:'sources', label:'Sources', symbol:'content.display',   when:() => Boolean(session.code || session.isExpert) },
 ];
 let adminActiveTab = '';
-// Unsaved Crew edits carried across a tab switch, so browsing People never
-// costs an in-progress assignment draft. Cleared whenever the server copy is
-// (re)confirmed: save, revert, reload, hydrate.
-let adminAssignmentTabDraft = null;
+// Unsaved assignment edits carried across editor rebuilds (hub close, group
+// switch, a save that fails after the rows leave the DOM). The editor lives
+// on the Planda Bear hub; this stash is what survives when its DOM does not.
+// Cleared whenever the server copy is (re)confirmed: save, revert, reload,
+// hydrate.
+let assignmentDraftStash = null;
 
 function adminAvailableTabs() { return ADMIN_TABS.filter(t => t.when()); }
 
@@ -3080,14 +3109,6 @@ function currentAdminTab() {
 }
 
 function setAdminTab(id) {
-  // 'saving' is included: a save can fail after the switch, and its failure
-  // copy promises the draft is still here. The DOM rows at switch time ARE
-  // that draft; a later success clears this stash anyway.
-  if (currentAdminTab() === 'crew' && id !== 'crew'
-      && document.querySelector('#adminBody [data-role-assignment-row]')
-      && ['unsaved','saving','failed','conflict'].includes(assignmentSaveState)) {
-    adminAssignmentTabDraft = getRoleAssignmentsFromAdminDOM(true);
-  }
   adminActiveTab = id;
   try { localStorage.setItem('cueola_admin_tab', id); } catch {}
   renderAdminBody();
@@ -3095,12 +3116,6 @@ function setAdminTab(id) {
 
 function renderAdminBody() {
   const body = document.getElementById('adminBody');
-  // Presence heartbeats rebuild this panel while it is open. Safari never gives
-  // checkboxes/selects focus, so the activeElement guard can't protect mid-edit
-  // assignment rows — carry any unsaved edits into the rebuild instead of
-  // silently resetting them to the last saved state.
-  const pendingAssignments = body?.querySelector('[data-role-assignment-row]')
-    ? getRoleAssignmentsFromAdminDOM(true) : null;
   const tabs = adminAvailableTabs();
   const active = currentAdminTab();
 
@@ -3112,7 +3127,6 @@ function renderAdminBody() {
     : '';
 
   if (active === 'people') html += renderAdminPanePeople();
-  else if (active === 'crew') html += renderAdminPaneCrew(pendingAssignments);
   else if (active === 'sources') html += renderAdminPaneSources();
   else html += renderAdminPaneSession();
 
@@ -3232,31 +3246,12 @@ function renderAdminPanePeople() {
       <button class="admin-act-btn" onclick="adminAssignProfileToSession()">Assign</button>
     </div>
   </div>`;
-  return html;
-}
-
-function renderAdminPaneCrew(pendingAssignments) {
-  const positionOptions = getRolePositionOptions();
-  const draft = pendingAssignments?.length ? pendingAssignments
-    : (adminAssignmentTabDraft?.length && ['unsaved','saving','failed','conflict'].includes(assignmentSaveState)
-      ? adminAssignmentTabDraft : undefined);
-  return `<div class="admin-section">
-    <div class="admin-section-label">Role and Planda Bear assignments</div>
-    <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. Changes remain unsaved until Firestore confirms <b>Save assignments</b>.</div>
-    <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
-    <div class="admin-src-row u-mb10">
-      <span class="admin-src-label">Positions</span>
-      <div class="admin-src-chips">
-        ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
-        <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
-      </div>
-    </div>
-    <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(draft)}</div>
-    <div class="admin-assignment-actions">
-      <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
-      <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save assignments</button>
-    </div>
+  html += `<div class="admin-section">
+    <div class="admin-section-label">Position assignments</div>
+    <div class="u-note u-mb8">Positions and required paperwork are set on the Planda Bear hub now. Open Planda Bear with the show code and the assignments card is ready to edit.</div>
+    <button class="admin-act-btn" onclick="closeAdminPanel();openPaperworkHub()">Open Planda Bear</button>
   </div>`;
+  return html;
 }
 
 function renderAdminPaneSources() {
@@ -3424,16 +3419,54 @@ let _assignmentLoadDenied = false;
 // register honestly says no canonical records exist, and the call sheet roster
 // comes from prePro either way.
 let _assignmentLegacyPending = false;
+// Which operation produced the current 'failed' state: 'load' or 'save'. A
+// load failure holds no draft, so hub and panel opens may re-run the load;
+// a save failure holds the operator's draft and must never be reloaded over.
+let _assignmentFailureOrigin = '';
+// Which show code the editor state above belongs to. Joining a different
+// code resets the whole register, so show A's draft can never render (or
+// save) as show B's roster.
+let assignmentStateForCode = null;
 
 function assignmentModel() {
   return window.CueolaAssignmentModel || null;
+}
+
+// A draft worth protecting exists only in these states. 'failed' counts only
+// when the SAVE produced it: a failed load has nothing to lose, and treating
+// it as a draft would wedge hydration off forever after one network blip.
+function assignmentDraftInProgress() {
+  if (['unsaved','saving','conflict'].includes(assignmentSaveState)) return true;
+  return assignmentSaveState === 'failed' && _assignmentFailureOrigin === 'save';
+}
+
+// Joining a different show code invalidates every piece of editor state: the
+// draft, the canonical register, the optimistic-lock revision, and any rows
+// still parked in the card's DOM.
+function resetAssignmentStateForSessionChange() {
+  if (assignmentStateForCode === session.code) return false;
+  assignmentStateForCode = session.code;
+  canonicalRoleAssignments = [];
+  confirmedRoleAssignmentRows = [];
+  assignmentProfiles = [];
+  assignmentRevision = 0;
+  assignmentDraftStash = null;
+  assignmentFromCache = false;
+  _assignmentLoadDenied = false;
+  _assignmentLegacyPending = false;
+  _assignmentFailureOrigin = '';
+  assignmentSaveState = 'loading';
+  assignmentSaveDetail = 'Loading saved profiles and assignments…';
+  const rows = document.getElementById('adminRoleAssignments');
+  if (rows) rows.innerHTML = '';
+  return true;
 }
 
 function assignmentSaveStateHTML() {
   const state = assignmentSaveState || 'unsaved';
   const labels = { loading:'Loading', unsaved:'Unsaved', saving:'Saving', saved:'Saved', failed:'Failed', conflict:'Conflict' };
   const actions = state === 'failed'
-    ? assignmentFromCache
+    ? (assignmentFromCache || _assignmentFailureOrigin === 'load')
       ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="retryRoleAssignmentLoad()">Retry connection</button></span>`
       : `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="saveRoleAssignmentsFromAdmin()">Retry</button><button class="admin-act-btn" onclick="revertRoleAssignments()">Revert draft</button></span>`
     : state === 'conflict'
@@ -3514,7 +3547,7 @@ function paperworkIdForLabel(label='') {
   return `paperwork_${String(positionId).replace(/^position_/, '').replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160);
 }
 
-function plandaBearAssignmentCatalog(data=loadPreProData()) {
+function plandaBearAssignmentCatalog(data=basePreProData()) {
   const sheets = getCallSheets(data);
   const catalog = sheets.map((sheet, i) => ({
     id: `paperwork_${String(sheet.id || `call_sheet_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160),
@@ -3543,11 +3576,11 @@ function plandaBearAssignmentCatalog(data=loadPreProData()) {
   return catalog;
 }
 
-function basePlandaBearAssignmentOptions(data=loadPreProData()) {
+function basePlandaBearAssignmentOptions(data=basePreProData()) {
   return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
-function plandaBearAssignmentOptions(data=loadPreProData()) {
+function plandaBearAssignmentOptions(data=basePreProData()) {
   return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
@@ -3620,7 +3653,7 @@ function getRoleAssignments() {
   if (canonicalRoleAssignments.length) {
     return canonicalRoleAssignments.map(record => normalizeRoleAssignment(record));
   }
-  const data = loadPreProData();
+  const data = basePreProData();
   const options = plandaBearAssignmentOptions(data);
   const saved = Array.isArray(data.roleAssignments) ? data.roleAssignments.map(row => normalizeRoleAssignment(row, options)) : [];
   const rows = saved.filter(row => row.person || row.position || row.paperwork.length);
@@ -3631,7 +3664,7 @@ function getRoleAssignments() {
 // the built-in list minus anything this session removed, plus anything it
 // added, alphabetical. Stored on the session's prePro doc so every device
 // on the code sees the same list.
-function getRolePositionOptions(data=loadPreProData()) {
+function getRolePositionOptions(data=basePreProData()) {
   const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : []).map(v => String(v || '').trim().toLowerCase());
   const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom : [];
   return cleanUniqueStrings([
@@ -3643,7 +3676,7 @@ function getRolePositionOptions(data=loadPreProData()) {
 function addPositionOption() {
   const name = (prompt('Add a position for this production:') || '').trim();
   if (!name) return;
-  const data = loadPreProData();
+  const data = basePreProData();
   const key = name.toLowerCase();
   const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom.slice() : [];
   const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : [])
@@ -3654,24 +3687,48 @@ function addPositionOption() {
   } else {
     custom.push(name);
   }
-  persistPreProData({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
-  renderAdminBody();
+  persistWholeClassPreProPatch({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
+  renderPlandaBearAssignmentsCard({ force:true });
   toast(`Position "${name}" added.`);
 }
 
 function removePositionOption(name) {
   const key = String(name || '').trim().toLowerCase();
   if (!key) return;
-  const data = loadPreProData();
+  const data = basePreProData();
   const custom = (Array.isArray(data.positionsCustom) ? data.positionsCustom : [])
     .filter(p => String(p || '').trim().toLowerCase() !== key);
   const removed = Array.isArray(data.positionsRemoved) ? data.positionsRemoved.slice() : [];
   if (ROLE_POSITION_OPTIONS.some(p => p.toLowerCase() === key) && !removed.some(r => String(r || '').trim().toLowerCase() === key)) {
     removed.push(String(name).trim());
   }
-  persistPreProData({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
-  renderAdminBody();
+  persistWholeClassPreProPatch({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
+  renderPlandaBearAssignmentsCard({ force:true });
   toast(`Position "${name}" removed. Anyone already assigned to it keeps it.`);
+}
+
+// Position options are whole-class data on the PARENT session doc.
+// persistPreProData targets the ACTIVE workspace, which is the group subdoc
+// while a group is open, so the grouped case writes the parent doc and the
+// ungrouped local mirror directly, in the same masked-key shape the main
+// session listener merges.
+function persistWholeClassPreProPatch(patch, section) {
+  if (!groupActive()) { persistPreProData(patch, section); return; }
+  const now = Date.now();
+  const previous = basePreProData();
+  const fieldTimes = { ...(previous._fieldUpdatedAt || {}) };
+  Object.keys(patch || {}).forEach(key => { fieldTimes[key] = now; });
+  const next = { ...previous, ...(patch || {}), _fieldUpdatedAt:fieldTimes, updatedAt:now };
+  try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
+  if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
+  const updates = { 'prePro.updatedAt':now };
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    updates[`prePro.${key}`] = value;
+    updates[`prePro._fieldUpdatedAt.${key}`] = now;
+  });
+  if (section && window._arrayUnion) updates.preProActivity = preProActivityValue({ section, by:preProActor(), clientId:CLIENT_ID, at:now });
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), updates)
+    .catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
 }
 
 function rolePositionOptionsHTML(selected='', selectedId='') {
@@ -3699,7 +3756,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
       const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
       const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
       return `<div class="admin-assignment-row" data-role-assignment-row="${i}"
-        data-assignment-id="${esc(row.assignmentId)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
+        data-assignment-id="${esc(row.assignmentId)}" data-person="${esc(row.person)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
         data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
         <div class="admin-assignment-top">
           <div class="field">
@@ -3737,7 +3794,10 @@ function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
     const paperwork = paperworkInputs.map(input => input.dataset.paperworkLabel || input.value);
     return {
       assignmentId:rowEl.dataset.assignmentId || '', profileId,
-      username:profile?.username || '', person:profile?.fullName || '',
+      username:profile?.username || '',
+      // No profile picked yet: keep the row's legacy name so migration rows
+      // survive a DOM round-trip with their 'Unlinked legacy name' label.
+      person:profile?.fullName || (!profileId && rowEl.dataset.person) || '',
       positionId, position, paperworkIds, paperwork,
       status:rowEl.dataset.status || 'assigned',
       assignedBy:rowEl.dataset.assignedBy || '', assignedByLabel:rowEl.dataset.assignedByLabel || '',
@@ -3748,9 +3808,13 @@ function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
   return includeBlank ? rows : rows.filter(row => row.profileId || row.positionId || row.paperworkIds.length);
 }
 
-function rerenderRoleAssignments(rows) {
+function rerenderRoleAssignments(rows, opts={}) {
   const wrap = document.getElementById('adminRoleAssignments');
-  if (wrap) wrap.innerHTML = renderRoleAssignmentRows(rows.length ? rows : defaultRoleAssignments());
+  if (!wrap) return;
+  // A background refresh must not rebuild the rows under the operator's
+  // cursor (an open select would snap shut); the next repaint catches up.
+  if (opts.guardFocus && wrap.contains(document.activeElement)) return;
+  wrap.innerHTML = renderRoleAssignmentRows(rows.length ? rows : defaultRoleAssignments());
 }
 
 function addRoleAssignmentRow() {
@@ -3825,18 +3889,24 @@ async function loadAssignmentSnapshots(sessionRef, profileRef, assignmentRef) {
 }
 
 async function hydrateRoleAssignments({ force=false }={}) {
+  resetAssignmentStateForSessionChange();
   if (assignmentHydratePromise && !force) return assignmentHydratePromise;
-  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert || !assignmentModel()) {
+  _assignmentFailureOrigin = 'load';
+  if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert || !assignmentModel()) {
     setAssignmentSaveState('failed', 'Canonical assignments need a shared session, Firebase, and the assignment model.');
     return null;
   }
   setAssignmentSaveState('loading', 'Loading saved profiles and assignments…');
+  const forCode = session.code;
   assignmentHydratePromise = (async () => {
     try {
-      const sessionRef = window._doc(window._db, 'sessions', session.code);
+      const sessionRef = window._doc(window._db, 'sessions', forCode);
       const profileRef = window._collection(window._db, 'profiles');
-      const assignmentRef = window._collection(window._db, 'sessions', session.code, 'assignments');
+      const assignmentRef = window._collection(window._db, 'sessions', forCode, 'assignments');
       const loaded = await loadAssignmentSnapshots(sessionRef, profileRef, assignmentRef);
+      // The operator may have joined a different show while this load was in
+      // flight; these results describe the old session and must be dropped.
+      if (forCode !== session.code) return null;
       const [sessionSnap, profileSnap, assignmentSnap] = loaded.snapshots;
       if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
       const sessionData = sessionSnap.data() || {};
@@ -3850,26 +3920,34 @@ async function hydrateRoleAssignments({ force=false }={}) {
       const profiles = [];
       profileSnap.forEach(docSnap => profiles.push({ id:docSnap.id, ...(docSnap.data() || {}) }));
       const legacyRows = legacyAssignmentRowsFromSession(sessionData);
+      // The operator may have edited rows while this load was in flight (the
+      // editor renders before hydration resolves). Their draft owns the DOM
+      // and the state pill: adopt the fresh register and revision below so
+      // the next save validates correctly, but leave the rows alone.
+      const draftMaterialized = assignmentDraftInProgress();
       assignmentAllProfiles = profiles.filter(p => p && p.username && !p.renamedTo && !p.mergedInto && p.active !== false);
       assignmentProfiles = assignmentProfilesForSession(profiles, records, legacyRows);
       canonicalRoleAssignments = records;
       assignmentRevision = Math.max(0, Number(sessionData.assignmentRevision) || 0);
       assignmentFromCache = fromCache;
       _assignmentLoadDenied = false;
-
       _assignmentLegacyPending = !records.length && legacyRows.length > 0;
+      // Grouped clients skip the parent doc's prePro merge, so the roster and
+      // position options they read from the base mirror would otherwise go
+      // stale the moment an admin saves. Network-confirmed data only.
+      if (!fromCache) projectAssignmentFieldsToBaseMirror(sessionData);
       let rows;
       if (records.length) {
         rows = records.map(record => normalizeRoleAssignment(record));
         confirmedRoleAssignmentRows = rows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
-        setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
+        if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
           ? `${records.length} cached assignment record${records.length === 1 ? '' : 's'} shown. Reconnect before saving; cached data is not a Firestore confirmation.`
           : `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
       } else if (legacyRows.length) {
         rows = legacyRows.map(row => normalizeRoleAssignment(row));
         confirmedRoleAssignmentRows = [];
         const unresolved = rows.filter(row => !row.profileId || !row.positionId).length;
-        setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
+        if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
           ? 'Cached legacy assignments are shown, but cloud availability was not confirmed. Reconnect before migration.'
           : unresolved
             ? `${unresolved} legacy row${unresolved === 1 ? '' : 's'} cannot be linked uniquely to a saved profile and position.`
@@ -3877,13 +3955,15 @@ async function hydrateRoleAssignments({ force=false }={}) {
       } else {
         rows = defaultRoleAssignments();
         confirmedRoleAssignmentRows = [];
-        setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
+        if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
           ? 'The cached assignment set is empty, but Firestore could not confirm that it is current.'
           : 'No assignments saved yet.');
       }
-      adminAssignmentTabDraft = null;   // the server copy is now the truth
-      rerenderRoleAssignments(rows);
-      renderPlandaBearAssignmentsCard();
+      if (!draftMaterialized) {
+        assignmentDraftStash = null;   // the server copy is now the truth
+        rerenderRoleAssignments(rows, { guardFocus:true });
+        renderPlandaBearAssignmentsCard();
+      }
       // The People pane's membership list and assign picker ride the same
       // hydration; repaint them if they are on screen.
       const membershipWrap = document.getElementById('adminMembershipList');
@@ -3892,6 +3972,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
       if (assignOptions) assignOptions.innerHTML = adminAssignOptionsHTML();
       return rows;
     } catch (error) {
+      if (forCode !== session.code) return null;
       assignmentFromCache = false;
       const denied = error?.code === 'permission-denied';
       _assignmentLoadDenied = denied;
@@ -3907,20 +3988,51 @@ async function hydrateRoleAssignments({ force=false }={}) {
   return assignmentHydratePromise;
 }
 
+// Server-confirmed assignment fields written into the ungrouped base mirror,
+// newest stamp wins per field. This is what keeps grouped devices honest:
+// their main listener skips the parent doc's prePro merge, so without this
+// projection the roster card, person chips, and position options would show
+// the join-time snapshot forever.
+function projectAssignmentFieldsToBaseMirror(sessionData={}) {
+  const serverPre = sessionData.prePro && typeof sessionData.prePro === 'object' ? sessionData.prePro : {};
+  const serverTimes = serverPre._fieldUpdatedAt && typeof serverPre._fieldUpdatedAt === 'object' ? serverPre._fieldUpdatedAt : {};
+  const local = basePreProData();
+  const localTimes = { ...(local._fieldUpdatedAt || {}) };
+  const next = { ...local };
+  let changed = false;
+  for (const key of ['roleAssignments', 'positionsCustom', 'positionsRemoved']) {
+    if (serverPre[key] === undefined) continue;
+    const serverAt = Number(serverTimes[key]) || Number(serverPre.updatedAt) || 0;
+    const localAt = Number(localTimes[key]) || 0;
+    if (serverAt < localAt) continue;   // a newer local edit wins until its own save round-trips
+    if (preProValuesEqual(next[key], serverPre[key])) continue;
+    next[key] = cloneRundownValue(serverPre[key]);
+    localTimes[key] = serverAt || localAt;
+    changed = true;
+  }
+  if (!changed) return;
+  next._fieldUpdatedAt = localTimes;
+  next.updatedAt = Math.max(Number(local.updatedAt) || 0, Number(serverPre.updatedAt) || 0);
+  try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
+}
+
 function markRoleAssignmentsUnsaved() {
   if (assignmentSaveState === 'saving') return;
   setAssignmentSaveState('unsaved', 'Draft changed. Save Assignments to confirm it in Firestore.');
 }
 
 function localizeConfirmedAssignmentProjection(rows, updatedAt) {
-  const local = loadPreProData();
+  // The transaction writes the PARENT session doc; the local mirror of it is
+  // the ungrouped base key, even while a group workspace is open.
+  const local = basePreProData();
   const fieldTimes = { ...(local._fieldUpdatedAt || {}), roleAssignments:updatedAt };
   const next = { ...local, roleAssignments:rows, _fieldUpdatedAt:fieldTimes, updatedAt:Math.max(Number(local.updatedAt) || 0, updatedAt) };
-  try { localStorage.setItem(preProKey(), JSON.stringify(next)); } catch {}
+  try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
 }
 
 async function saveRoleAssignmentsFromAdmin() {
   if (assignmentSaveState === 'saving') return;
+  _assignmentFailureOrigin = 'save';   // any 'failed' below holds the draft
   const model = assignmentModel();
   if (!model || !window._runTransaction || !window._getDocs || !session.code || session.isDemo || session.isExpert) {
     setAssignmentSaveState('failed', 'Canonical cloud saving is unavailable in this workspace.');
@@ -4022,7 +4134,7 @@ async function saveRoleAssignmentsFromAdmin() {
     assignmentRevision = expectedRevision + 1;
     assignmentFromCache = false;
     canonicalRoleAssignments = records;
-    adminAssignmentTabDraft = null;
+    assignmentDraftStash = null;
     confirmedRoleAssignmentRows = records.map(record => normalizeRoleAssignment(record));
     localizeConfirmedAssignmentProjection(compatibility, now);
     rerenderRoleAssignments(confirmedRoleAssignmentRows);
@@ -4031,9 +4143,9 @@ async function saveRoleAssignmentsFromAdmin() {
     toast('Assignments saved to Firestore.');
     return true;
   } catch (error) {
-    // If the operator switched tabs mid-save, the Crew rows are gone from the
-    // DOM; stash the draft we just tried so "the draft remains" stays true.
-    if (!document.getElementById('adminRoleAssignments')) adminAssignmentTabDraft = draft;
+    // If the editor's rows left the DOM mid-save (a rebuild replaced the hub
+    // card), stash the draft we just tried so "the draft remains" stays true.
+    if (!document.getElementById('adminRoleAssignments')) assignmentDraftStash = draft;
     if (error?.code === 'assignment-conflict') {
       setAssignmentSaveState('conflict', `${error.message} Your draft is still here; load the server copy before deciding what to reapply.`);
     } else if (error?.code === 'permission-denied') {
@@ -4047,7 +4159,8 @@ async function saveRoleAssignmentsFromAdmin() {
 }
 
 function revertRoleAssignments() {
-  adminAssignmentTabDraft = null;
+  assignmentDraftStash = null;
+  _assignmentFailureOrigin = 'load';   // the only 'failed' below is the cache copy
   rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
   setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
     ? 'Reverted to the cached assignment copy. Reconnect before treating it as confirmed.'
@@ -4571,8 +4684,10 @@ async function joinSession() {
       }
       // Joining by code always landed as 'student' — even for the teacher who
       // created the session — which silently removed the ability to advance
-      // the live rundown (TH2607). A signed-in admin profile keeps the wheel.
-      const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+      // the live rundown (TH2607). A live admin AUTH session (real Firebase
+      // password, not just a profile whose role reads 'admin') keeps the wheel;
+      // profile.role alone is spoofable and no longer confers standing.
+      const joinRole = adminSession ? 'instructor' : 'student';
       session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
       show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
       beats = Array.isArray(d.beats) ? d.beats.map(migrateBeat) : [];
@@ -4606,8 +4721,10 @@ async function joinPreProSession() {
   if (btn) { btn.disabled=true; btn.textContent='Checking…'; }
   const openLocal = snap => {
     const d = snap.data() || {};
-    // Same role rule as joinSession: an admin profile keeps instructor standing.
-    const joinRole = signedProfile?.role === 'admin' ? 'instructor' : 'student';
+    // Same rule as joinSession: only a live admin AUTH session keeps instructor
+    // standing. A profile whose role reads 'admin' but has not passed the
+    // password gate joins as a student.
+    const joinRole = adminSession ? 'instructor' : 'student';
     session = sessionWithProfileIdentity({ code, role:joinRole, userName:name, isDemo:false, isExpert:false }, name);
     freeTextMode = false;
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
@@ -5693,7 +5810,7 @@ async function openPersonInfo(name) {
   }
   const following = newest?.following && !sameParticipantName(newest.following, name) ? newest.following : '';
 
-  const assignment = (Array.isArray(loadPreProData().roleAssignments) ? loadPreProData().roleAssignments : [])
+  const assignment = (Array.isArray(basePreProData().roleAssignments) ? basePreProData().roleAssignments : [])
     .map(r => normalizeRoleAssignment(r))
     .find(r => sameParticipantName(r.person, name));
 
@@ -5715,7 +5832,7 @@ async function openPersonInfo(name) {
     <div class="pi-card">${assignment && (assignment.position || assignment.paperwork.length)
       ? `${assignment.position ? `Position: <b>${esc(assignment.position)}</b>` : 'No position picked yet'}
          ${assignment.paperwork.length ? `<div class="pi-chips">${assignment.paperwork.map(p => `<span class="admin-src-chip">${esc(p)}</span>`).join('')}</div>` : ''}`
-      : 'No assignment yet. Set one in Admin → Role and Planda Bear Assignments.'}</div>`;
+      : 'No assignment yet. Admins set positions on the Planda Bear hub.'}</div>`;
 
   body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
   actions.innerHTML = `
@@ -6222,6 +6339,11 @@ const INFO_POPS = {
     title: 'Why multiple call sheets',
     lesson: 'plandabear', section: 'steps',
     body: 'A call sheet covers one day. When the production spans more than one day (setup, rehearsal, show), add a sheet per day and name each for the day it covers. The export package can include every sheet you check.',
+  },
+  'plot-sheets': {
+    title: 'How the stage plot works',
+    lesson: 'plandabear', section: 'steps',
+    body: 'A plot is a birdseye map of one setup: drag gear from the bank onto the stage, then click anything to rename, rotate, resize, or recolor it. Keep a separate plot per space or per show style and switch between them here. Every plot prints as its own landscape page in the paperwork package.',
   },
   'cs-event-info': {
     title: 'What Event Info covers',
@@ -15395,7 +15517,8 @@ const PAPERWORK_ITEMS = [
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
-  { order:7, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
+  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A birdseye plot of your space: drag cameras, mics, and set pieces where they go.' },
+  { order:8, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
 ];
 // ── v2.1 D6: per-session paperwork config (sparse override map on the parent
 // session doc's prePro — identifier-safe underscore keys, MISSING = ENABLED,
@@ -15434,8 +15557,8 @@ function disabledPaperworkOptions() {
 // slot 1, so downstream numbers match today's package when nothing is
 // disabled and renumber coherently when something is.
 const PAPERWORK_PACKAGE_SECTION_ORDER = ['call-sheet', 'production-scheduler', 'safety-plan',
-  'assignment-register', 'rundown', 'video-patch', 'audio-comms-patch', 'production-notes',
-  'operator-card'];
+  'assignment-register', 'rundown', 'video-patch', 'audio-comms-patch', 'stage-plot',
+  'production-notes', 'operator-card'];
 function paperworkSectionNumbers(snapshot=null) {
   const disabled = snapshot?.options?.paperwork || null;
   const isOn = id => {
@@ -15551,8 +15674,12 @@ function preProDocRef() {
     : window._doc(window._db, 'sessions', session.code);
 }
 
+function preProBaseKey() {
+  return `cueola_prepro_${session.code || session.userName || 'local'}`;
+}
+
 function preProKey() {
-  const base = `cueola_prepro_${session.code || session.userName || 'local'}`;
+  const base = preProBaseKey();
   return groupActive() ? `${base}__${activeGroupId}` : base;
 }
 
@@ -15711,6 +15838,14 @@ function resolveActiveCallSheetIndex(sheets=getCallSheets()) {
 
 function loadPreProData() {
   try { return JSON.parse(localStorage.getItem(preProKey()) || '{}') || {}; } catch { return {}; }
+}
+
+// Assignments and position options are whole-class data. While a group
+// workspace is active, loadPreProData() reads the group mirror, so anything
+// roster-shaped must read the ungrouped session mirror instead.
+function basePreProData() {
+  if (!groupActive()) return loadPreProData();
+  try { return JSON.parse(localStorage.getItem(preProBaseKey()) || '{}') || {}; } catch { return {}; }
 }
 
 function preProActor() {
@@ -16103,7 +16238,7 @@ async function hydratePreProFromFirestore() {
 const PB_PAGE_LABELS = {
   'hub':'Planda Bear', 'call-sheet':'Call Sheet', 'production-scheduler':'Production Schedule',
   'safety-plan':'Safety Plan', 'video-patch':'Video Patch', 'audio-comms-patch':'Audio / Comms Patch',
-  'production-notes':'Production Notes',
+  'stage-plot':'Stage Plot', 'production-notes':'Production Notes',
 };
 let _pbFieldSaveTimer = null;
 let _pbFieldBlurTimer = null;
@@ -16114,6 +16249,7 @@ function pbOpenPageId() {
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
   if (document.getElementById('preProModal')?.classList.contains('on')) return 'call-sheet';
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) return (typeof activePatchKind !== 'undefined' && activePatchKind === 'video') ? 'video-patch' : 'audio-comms-patch';
+  if (document.getElementById('stagePlotModal')?.classList.contains('on')) return 'stage-plot';
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) return 'production-notes';
   if (document.getElementById('paperworkHubModal')?.classList.contains('on')) return 'hub';
   return null;
@@ -16422,6 +16558,7 @@ function pbRefreshOpenPaperworkFields() {
   else if (pageId === 'production-scheduler') pbRefreshScheduleFields();
   else if (pageId === 'call-sheet') pbRefreshCallSheetFields();
   else if (pageId === 'video-patch' || pageId === 'audio-comms-patch') pbRefreshPatchFields();
+  else if (pageId === 'stage-plot') pbRefreshStagePlot();
 }
 
 // Called from the session snapshot after presence is updated.
@@ -16458,7 +16595,7 @@ let _pbCollabListenersReady = false;
 function pbInitCollabListeners() {
   if (_pbCollabListenersReady) return;
   _pbCollabListenersReady = true;
-  ['preProModal', 'productionScheduleModal', 'safetyPlanModal', 'patchSheetModal'].forEach(id => {
+  ['preProModal', 'productionScheduleModal', 'safetyPlanModal', 'patchSheetModal', 'stagePlotModal'].forEach(id => {
     const modal = document.getElementById(id);
     if (!modal) return;
     modal.addEventListener('focusin', e => {
@@ -16502,12 +16639,13 @@ function currentPaperworkItemId() {
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) return 'production-scheduler';
   if (document.getElementById('safetyPlanModal')?.classList.contains('on')) return 'safety-plan';
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) return activePatchKind === 'video' ? 'video-patch' : 'audio-comms-patch';
+  if (document.getElementById('stagePlotModal')?.classList.contains('on')) return 'stage-plot';
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) return 'production-notes';
   return activePaperworkItemId || 'call-sheet';
 }
 
 function hidePaperworkEditors() {
-  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal'].forEach(hideModal);
+  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal'].forEach(hideModal);
   pbUpdatePlandaBearBadge();
 }
 
@@ -16518,6 +16656,7 @@ function previewPaperworkItem(id=currentPaperworkItemId()) {
   if (id === 'rundown') return showRundownPaperPreview();
   if (id === 'video-patch') return showPatchSheetPaperPreview('video');
   if (id === 'audio-comms-patch') return showPatchSheetPaperPreview('audio-comms');
+  if (id === 'stage-plot') return showStagePlotPreview();
   if (id === 'production-notes') return showProductionNotesPreview();
 }
 
@@ -16526,6 +16665,7 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
   if (id === 'production-scheduler') { saveProductionSchedule(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'safety-plan') { saveSafetyPlan(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'video-patch' || id === 'audio-comms-patch') { savePatchSheet(showToastOnSave); paperworkDirty = false; return; }
+  if (id === 'stage-plot') { saveStagePlot(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'production-notes') { saveProductionNoteDraft(); paperworkDirty = false; if (showToastOnSave) toast('Published notes save automatically. Draft kept.'); return; }
   if (showToastOnSave) toast('Rundown is already part of the package.');
 }
@@ -16545,6 +16685,7 @@ function renderPaperworkNav(id, slotId='') {
     'safety-plan':'pbNavSafety',
     'video-patch':'pbNavPatch',
     'audio-comms-patch':'pbNavPatch',
+    'stage-plot':'pbNavPlot',
     'production-notes':'pbNavNotes',
   };
   const slot = document.getElementById(slotId || slotMap[id]);
@@ -16594,10 +16735,18 @@ function openPaperworkHub() {
   renderPbGroupBar();
   applyPlandaBearTheme(plandaBearTheme);
   hydratePreProFromFirestore().then(() => renderPlandaBearAssignmentsCard());
-  // Assignments otherwise hydrate only when the Admin panel opens; warm them
-  // here so Export PDF Package never dead-ends on "still loading its saved
-  // state" for a crew member who never touches Admin.
-  if (paperworkExportAuthority() === 'server' && assignmentSaveState === 'loading') hydrateRoleAssignments();
+  // The hub hosts the assignments editor now. Joining a different show code
+  // resets the register first; then admins refresh the canonical copy on
+  // open, unless a draft is in progress (a reload would clobber it), and
+  // everyone else warms the load so Export PDF Package never dead-ends on
+  // "still loading its saved state".
+  resetAssignmentStateForSessionChange();
+  if (adminSession && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert
+      && !assignmentDraftInProgress()) {
+    hydrateRoleAssignments({ force:true });
+  } else if (paperworkExportAuthority() === 'server' && assignmentSaveState === 'loading') {
+    hydrateRoleAssignments();
+  }
   const grid = document.getElementById('paperworkGrid');
   if (grid) {
     // Production Notes lives in its own wide bar above the grid, not in the
@@ -16622,15 +16771,61 @@ function openPaperworkHub() {
   renderPlandaBearAssignmentsCard();
 }
 
-// Crew assignments (set in Admin → Role and Planda Bear Assignments) shown to
-// everyone on the hub — proof the instructor's assignments actually landed.
-function renderPlandaBearAssignmentsCard() {
+// The app's assignments editor (the Admin panel's Crew tab retired in its
+// favor; the instructor dashboard's session inspector keeps its own): a
+// signed-in admin gets the editor right on the hub, everyone else sees the
+// read-only roster. The editor keeps the #adminRoleAssignments and
+// #adminAssignmentSaveState ids plus the [data-role-assignment-row] draft
+// contract, so the hydrate/save/conflict machinery carries over unchanged.
+function renderPlandaBearAssignmentsCard(opts={}) {
   const wrap = document.getElementById('pbAssignmentsCard');
   if (!wrap) return;
-  const data = loadPreProData();
-  const rows = Array.isArray(data.roleAssignments)
-    ? data.roleAssignments.map(row => normalizeRoleAssignment(row)).filter(row => row.person && (row.position || row.paperwork.length))
-    : [];
+  resetAssignmentStateForSessionChange();
+  if (adminSession && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert) {
+    const liveRows = wrap.querySelector('[data-role-assignment-row]');
+    const draftish = assignmentDraftInProgress();
+    // Remote collab ticks and group switches repaint this card. Never rebuild
+    // over an unsaved draft or under the operator's cursor; positions
+    // add/remove passes force:true and rebuilds WITH the captured draft.
+    if (liveRows && !opts.force && (draftish || wrap.contains(document.activeElement))) return;
+    const draft = liveRows && draftish ? getRoleAssignmentsFromAdminDOM(true)
+      : (assignmentDraftStash?.length && draftish ? assignmentDraftStash : undefined);
+    const positionOptions = getRolePositionOptions();
+    wrap.innerHTML = `<div class="pb-assign-card pb-assign-editor">
+      <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
+      <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. The saved roster shows here for the whole crew. Changes remain unsaved until Firestore confirms <b>Save assignments</b>.</div>
+      <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
+      <div class="admin-src-row u-mb10">
+        <span class="admin-src-label">Positions</span>
+        <div class="admin-src-chips">
+          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
+          <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
+        </div>
+      </div>
+      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(draft)}</div>
+      <div class="admin-assignment-actions">
+        <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
+        <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save assignments</button>
+      </div>
+    </div>`;
+    return;
+  }
+  // Every branch below replaces the editor DOM (admin sign-out, a workspace
+  // without a code): park a live draft in the stash first, exactly like
+  // closing the hub does, so a later sign-in can restore it.
+  if (wrap.querySelector('[data-role-assignment-row]') && assignmentDraftInProgress()) {
+    assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
+  }
+  if (adminSession && (session.code || session.isDemo || session.isExpert)) {
+    wrap.innerHTML = `<div class="pb-assign-card">
+      <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
+      <div class="u-note">This workspace is not on a shared show code. Open Planda Bear with the show code to set position assignments.</div>
+    </div>`;
+    return;
+  }
+  // Prefer the hydrated canonical register (it also heals grouped devices,
+  // whose base mirror can lag); fall back to the base mirror projection.
+  const rows = getRoleAssignments().filter(row => row.person && (row.position || row.paperwork.length));
   if (!rows.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = `<div class="pb-assign-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
@@ -16645,6 +16840,12 @@ function renderPlandaBearAssignmentsCard() {
 // Leave the Planda Bear workspace and clear my page presence so collaborators
 // stop seeing me "here".
 function closePlandaBear() {
+  // An unsaved assignments draft survives the hub closing: stash the DOM rows
+  // now, re-rendered on the next hub open. A confirmed save clears the stash.
+  if (assignmentDraftInProgress()
+      && document.querySelector('#pbAssignmentsCard [data-role-assignment-row]')) {
+    assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
+  }
   saveOpenPaperworkSection(false);
   hidePaperworkEditors();
   hideModal('paperworkHubModal');
@@ -16659,6 +16860,7 @@ const PB_SECTION_FOR_ITEM = {
   'rundown':'Full Rendered Rundown',
   'video-patch':'Video Patch',
   'audio-comms-patch':'Audio & Comms Patch',
+  'stage-plot':'Stage Plot',
   'production-notes':'Production Notes',
 };
 
@@ -16762,6 +16964,7 @@ function visiblePlandaBearCommentSlots() {
     ['Production Schedule', 'pbCommentsProduction'],
     ['Safety Plan', 'pbCommentsSafety'],
     [activePatchKind === 'video' ? 'Video Patch' : 'Audio & Comms Patch', 'pbCommentsPatch'],
+    ['Stage Plot', 'pbCommentsPlot'],
   ].filter(([,slot]) => document.getElementById(slot));
 }
 
@@ -16889,7 +17092,9 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
 }
 
 function annotatePlandaBearCommentCards() {
-  const cards = document.querySelectorAll('#paperworkGrid [data-pb-section]');
+  // The Production Notes card sits above #paperworkGrid but is a full peer of
+  // the numbered cards, so it takes the same instructor-comment badge.
+  const cards = document.querySelectorAll('#paperworkNotesBtn[data-pb-section], #paperworkGrid [data-pb-section]');
   if (!cards.length) return;
   cards.forEach(card => {
     const section = card.getAttribute('data-pb-section');
@@ -17437,7 +17642,7 @@ const PB_AVATAR_ANIMALS = {
   plandabear:  { label: 'Planda Bear', src: 'assets/Brand/Planda_Bear_icon.svg', bg: '#1b1b1b' },
   flowmingo:   { label: 'Flowmingo',   src: 'assets/Brand/Flowmingo_Icon.svg',   bg: '#3a0f1e' },
   outrangutan: { label: 'Outrangutan', src: 'assets/Brand/Outrangutan_icon.svg', bg: '#1a1817' },
-  cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#123a2a' },
+  cueola:      { label: 'Cueola',      src: 'assets/Brand/Cueola_Icon.svg',      bg: '#141414' },
 };
 // Avatar manifest (owner decision 2026-08-03): the picker is the fun picks
 // ONLY. The 24 symbol entries are retired from the manifest entirely (a saved
@@ -19275,10 +19480,10 @@ function pbHydrateNoteImages(scope) {
 }
 
 function annotatePlandaBearNoteCards() {
-  // The hub's Production Notes count rides the header tools button (it used to
-  // be a page-wide banner above the numbered grid). The badge is just the note
-  // count so it stays legible at button size; the sentence the banner used to
-  // show moves into the tooltip, so nothing is lost.
+  // The hub's Production Notes count rides the full-width notes card above the
+  // numbered grid (#paperworkNotesBtn). The badge is just the note count so it
+  // stays legible at pill size; the running tally lands in the tooltip and
+  // aria-label below.
   const countEl = document.getElementById('paperworkNotesBarCount');
   if (!countEl) return;
   const total = plandaBearNotes.length;
@@ -19286,11 +19491,13 @@ function annotatePlandaBearNoteCards() {
   countEl.textContent = total ? String(total) : '';
   const btn = document.getElementById('paperworkNotesBtn');
   if (btn) {
+    // The card already prints the descriptive line, so the tooltip carries
+    // only the running tally and disappears when there is nothing to count.
     const tally = total
-      ? `${total} note${total===1?'':'s'}${openTodos ? `, ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}. `
+      ? `${total} note${total===1?'':'s'}${openTodos ? `, ${openTodos} open to-do${openTodos===1?'':'s'}` : ''}.`
       : '';
-    const tip = `${tally}The crew’s message board. Tag a department and the thread stays with the show.`;
-    btn.setAttribute('data-tip', tip);
+    if (tally) btn.setAttribute('data-tip', tally);
+    else btn.removeAttribute('data-tip');
     btn.setAttribute('aria-label', total ? `Production Notes, ${total} note${total===1?'':'s'}` : 'Production Notes');
   }
 }
@@ -19932,7 +20139,8 @@ function togglePbHub(head) {
 // shared activity log in Firestore.
 async function renderPlandaBearHubActivity() {
   const panel = document.getElementById('plandabearHubActivity');
-  const cards = document.querySelectorAll('#paperworkGrid [data-pb-section]');
+  // Same scope as the comment badges: the notes card above the grid counts too.
+  const cards = document.querySelectorAll('#paperworkNotesBtn[data-pb-section], #paperworkGrid [data-pb-section]');
   const clearCards = () => cards.forEach(c => {
     const by = c.querySelector('[data-pb-by]');
     if (by) { by.hidden = true; by.textContent = ''; by.classList.remove('done'); }
@@ -20007,6 +20215,7 @@ function openPaperworkItem(id) {
   if (id === 'rundown') return showRundownPaperPreview();
   if (id === 'video-patch') return showPatchSheetPreview('video');
   if (id === 'audio-comms-patch') return showPatchSheetPreview('audio-comms');
+  if (id === 'stage-plot') return openStagePlotEditor();
   if (id === 'production-notes') return openProductionNotes();
 }
 
@@ -20021,6 +20230,11 @@ function saveOpenPaperworkSection(showToastOnSave=true) {
   if (document.getElementById('productionScheduleModal')?.classList.contains('on')) saveProductionSchedule(showToastOnSave);
   if (document.getElementById('safetyPlanModal')?.classList.contains('on')) saveSafetyPlan(showToastOnSave);
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) savePatchSheet(showToastOnSave);
+  if (document.getElementById('stagePlotModal')?.classList.contains('on')) saveStagePlot(showToastOnSave);
+  // Esc can close the plot editor while its 650ms debounce is still armed;
+  // without this rescue the timer fires, the modal-gated line above skips,
+  // and the last canvas edit silently evaporates from the working copy.
+  else if (_plotPendingSave) saveStagePlot(false);
 }
 
 // ── Phase 7: one authority boundary for every formal paperwork export. ──
@@ -20061,7 +20275,7 @@ function flushPaperworkDraftForExport() {
     _pbFieldSaveTimer = null;
     try { pbRefreshOpenPaperworkFields(); } catch {}
   }
-  if (paperworkDirty || document.querySelector('#preProModal.on,#productionScheduleModal.on,#safetyPlanModal.on,#patchSheetModal.on')) {
+  if (paperworkDirty || document.querySelector('#preProModal.on,#productionScheduleModal.on,#safetyPlanModal.on,#patchSheetModal.on,#stagePlotModal.on')) {
     _pbSuppressActivity = true;
     try {
       saveOpenPaperworkSection(false);
@@ -20117,7 +20331,8 @@ function paperworkExportReadinessMessage(readiness) {
 
 async function waitForPaperworkSaves(options={}) {
   flushPaperworkDraftForExport();
-  // Assignments hydrate lazily (Admin panel or hub open). If an export gates on
+  // Assignments hydrate lazily (hub open, or the Admin panel's People pane).
+  // If an export gates on
   // them while they still sit in their initial 'loading' state, start — or join
   // — that load instead of polling a state nothing else is going to change.
   if (options.includeAssignments !== false && paperworkExportAuthority() === 'server'
@@ -20332,6 +20547,11 @@ async function preparePaperworkExportSnapshot(options={}) {
     error.readiness = readiness;
     throw error;
   }
+  // D4: pre-rasterize stage plot SVGs into 2x PNGs keyed to this snapshot's
+  // fingerprint. The snapshot itself is deep-frozen by the export model, so
+  // the pixels live in a module cache instead of on the snapshot. A raster
+  // failure never blocks the export: the sheet falls back to inline SVG.
+  try { await prepareStagePlotRasters(resolved); } catch {}
   return resolved;
 }
 
@@ -20339,6 +20559,7 @@ const PAPER_EXPORT_DOCUMENT_TITLES = {
   'plandabear-package':'Production Paperwork',
   'rundown':'Rundown',
   'call-sheet':'Call Sheet',
+  'stage-plot':'Stage Plot',
   'production-notes':'Production Notes',
 };
 
@@ -20382,7 +20603,7 @@ let lastPaperPreview = null;
 function dismissPaperPreview() {
   hideModal('paperPreviewModal');
   if (!lastPaperPreview?.fromPlandaBear) return;
-  const pbStillOpen = ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal']
+  const pbStillOpen = ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal']
     .some(id => document.getElementById(id)?.classList.contains('on'));
   if (!pbStillOpen) openPaperworkHub();
 }
@@ -20429,7 +20650,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
   // Captured BEFORE the hub/editors get hidden below: dismissing the preview
   // must land back on the Planda Bear workspace it replaced, not the front page.
   const fromPlandaBear = Boolean(flowId)
-    || ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','productionNotesModal']
+    || ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal']
       .some(id => document.getElementById(id)?.classList.contains('on'));
   lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence, fromPlandaBear };
   previewBody.style.background = 'transparent';
@@ -20458,6 +20679,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
   hideModal('productionScheduleModal');
   hideModal('safetyPlanModal');
   hideModal('patchSheetModal');
+  hideModal('stagePlotModal');
   showModal('paperPreviewModal');
   renderPlandaBearComments(flowId ? pbSectionLabel(flowId) : 'All', 'pbCommentsPreview');
   buildPaperExportDocument(printableHTML, exportOptions).then(root => {
@@ -20830,6 +21052,919 @@ function getCallSheets(data=loadPreProData()) {
 function callSheetDisplayName(sheet, i=0) {
   const label = (sheet?.label || '').trim();
   return label || `Call Sheet ${i + 1}`;
+}
+
+// ═════════════════════════════════════════════════════════════════
+// STAGE PLOT (v2.2 D4): birdseye drag-and-drop plot diagram.
+// Data is ONE top-level key, prePro.stagePlots: an ARRAY of named plots
+// (min-1) riding the legacy whole-key sync exactly like callSheets. Item
+// coordinates are feet from the space's top-left corner; array order is the
+// paint order (later items draw on top). Selection, snap, zoom, and the undo
+// stack are device-local and never synced. Glyphs are placeholder line art in
+// PLOT_ELEMENT_TYPES.sym; the owner's final icon designs drop in there
+// without touching the editor.
+// ═════════════════════════════════════════════════════════════════
+const PLOT_PX_PER_FT = 24;         // drawing scale, editor and print
+const PLOT_SNAP_FT = 0.5;          // grid snap step (grid squares are 1 ft)
+const PLOT_STAGE_MIN_FT = 8;
+const PLOT_STAGE_MAX_FT = 200;
+const PLOT_DEFAULT_STAGE_W_FT = 40;
+const PLOT_DEFAULT_STAGE_H_FT = 24;
+
+// Placeholder glyphs: simple birdseye line art in a 24x24 box, stroked with
+// currentColor. Rotation 0 faces "up" the plot. Swap sym markup per type when
+// the real icon set arrives; footprints (w/h in feet) are the defaults a new
+// item takes and stay editable per item.
+const PLOT_ELEMENT_TYPES = [
+  { type:'camera', label:'Camera', w:2, h:2.5, sym:'<rect x="7" y="10" width="10" height="9" rx="1.5"/><path d="M9.5 10 7.5 4.5h9L14.5 10"/><circle cx="12" cy="14.5" r="2"/>' },
+  { type:'mic', label:'Microphone', w:1.5, h:1.5, sym:'<circle cx="12" cy="10" r="4.5"/><path d="M12 14.5v5M9.5 19.5h5"/>' },
+  { type:'projector', label:'Projector', w:2, h:1.5, sym:'<rect x="6.5" y="9" width="11" height="9" rx="2"/><circle cx="12" cy="9" r="1.6"/><path d="M10.3 7 6.5 2.5M13.7 7l3.8-4.5"/>' },
+  { type:'pipe-drape', label:'Pipe and Drape', w:10, h:1, sym:'<path d="M3 11h18"/><circle cx="3" cy="11" r="1.2"/><circle cx="21" cy="11" r="1.2"/><path d="M3 15c1.5 0 1.5-2 3-2s1.5 2 3 2 1.5-2 3-2 1.5 2 3 2 1.5-2 3-2 1.5 2 3 2"/>' },
+  { type:'switcher', label:'Video Switcher', w:3, h:2, sym:'<rect x="4.5" y="8" width="15" height="9" rx="1.5"/><circle cx="7.5" cy="11" r=".8"/><circle cx="10.5" cy="11" r=".8"/><circle cx="7.5" cy="14" r=".8"/><circle cx="10.5" cy="14" r=".8"/><path d="M16.5 10.5v4"/>' },
+  { type:'monitor', label:'Monitor', w:3, h:1, sym:'<rect x="4" y="10" width="16" height="4" rx="1"/><path d="M12 14v3M9 17h6"/>' },
+  { type:'speaker', label:'Speaker', w:1.5, h:2, sym:'<rect x="7" y="5.5" width="10" height="13" rx="1.5"/><circle cx="12" cy="14" r="2.6"/><circle cx="12" cy="8.7" r="1.1"/>' },
+  { type:'light', label:'Light', w:1.5, h:1.5, sym:'<circle cx="12" cy="13.5" r="4.5"/><path d="M9.4 9.9 7.8 5.2M14.6 9.9l1.6-4.7"/>' },
+  { type:'table', label:'Table', w:6, h:2.5, sym:'<rect x="4" y="8" width="16" height="8" rx="1"/>' },
+  { type:'person', label:'Person', w:1.5, h:1.5, sym:'<circle cx="12" cy="9.5" r="3"/><path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>' },
+  { type:'riser', label:'Riser', w:8, h:6, sym:'<rect x="4" y="6" width="16" height="12"/><path d="M4 12 10 6M4 18 20 6M14 18l6-6"/>' },
+  { type:'door', label:'Door', w:3, h:3, sym:'<path d="M5 19h14M6.5 19V6.5"/><path d="M6.5 6.5A12.5 12.5 0 0 1 19 19"/>' },
+  { type:'label', label:'Text Label', w:4, h:1, sym:'<path d="M6 7h12M12 7v10M9.5 17h5"/>' },
+];
+
+// Color chips: '' means theme ink on screen, near-black on paper. The rest
+// map to the department tokens on screen and print-safe hexes on paper.
+const PLOT_ITEM_COLORS = [
+  { key:'', label:'Ink', css:'var(--text)', print:'#1d1d1f' },
+  { key:'video', label:'Video', css:'var(--video)', print:'#2563eb' },
+  { key:'audio', label:'Audio', css:'var(--green)', print:'#16a34a' },
+  { key:'playback', label:'Playback', css:'var(--red)', print:'#dc2626' },
+  { key:'gfx', label:'Graphics', css:'var(--yellow)', print:'#ca8a04' },
+  { key:'lighting', label:'Lighting', css:'var(--purple)', print:'#9333ea' },
+  { key:'script', label:'Script', css:'var(--cyan)', print:'#0891b2' },
+  { key:'orange', label:'Orange', css:'var(--orange)', print:'#ea580c' },
+];
+
+function plotTypeDef(type) {
+  return PLOT_ELEMENT_TYPES.find(t => t.type === type) || null;
+}
+function plotClamp(v, lo, hi) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return lo;
+  return Math.max(lo, Math.min(hi, n));
+}
+function plotSnapValue(v) {
+  const step = plotSnapOn ? PLOT_SNAP_FT : 0.05;
+  return Math.round(v / step) * step;
+}
+function plotItemColor(item, print=false) {
+  const c = PLOT_ITEM_COLORS.find(c => c.key === (item?.color || '')) || PLOT_ITEM_COLORS[0];
+  return print ? c.print : c.css;
+}
+function plotItemDisplayLabel(item) {
+  const label = (item?.label || '').trim();
+  return label || plotTypeDef(item?.type)?.label || 'Item';
+}
+
+// ── Boundary functions (array-on-wire, min-1, scrub, id minting) ──
+function normalizeStagePlotItem(item={}, i=0) {
+  const def = plotTypeDef(item.type) || PLOT_ELEMENT_TYPES[0];
+  const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
+  return {
+    id: String(item.id || `pi_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60),
+    type: def.type,
+    x_ft: plotClamp(num(item.x_ft) ?? 4, -400, 400),
+    y_ft: plotClamp(num(item.y_ft) ?? 4, -400, 400),
+    rot: ((num(item.rot) ?? 0) % 360 + 360) % 360,
+    w_ft: plotClamp(num(item.w_ft) ?? def.w, 0.5, 100),
+    h_ft: plotClamp(num(item.h_ft) ?? def.h, 0.5, 100),
+    label: String(item.label ?? '').slice(0, 60),
+    color: PLOT_ITEM_COLORS.some(c => c.key === item.color) ? item.color : '',
+  };
+}
+function normalizeStagePlot(plot={}, i=0) {
+  const stage = (plot.stage && typeof plot.stage === 'object') ? plot.stage : {};
+  const seen = new Set();
+  const items = (Array.isArray(plot.items) ? plot.items : [])
+    .map((item, j) => normalizeStagePlotItem(item, j))
+    .filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
+  return {
+    id: String(plot.id || `stage_plot_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 150),
+    label: String(plot.label || '').slice(0, 80),
+    stage: {
+      w_ft: plotClamp(stage.w_ft ?? PLOT_DEFAULT_STAGE_W_FT, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT),
+      h_ft: plotClamp(stage.h_ft ?? PLOT_DEFAULT_STAGE_H_FT, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT),
+    },
+    items,
+    userCreated: plot.userCreated === true,
+  };
+}
+// Delete convergence under whole-array LWW: same tombstone idiom as call sheets.
+const STAGE_PLOT_TOMBSTONE_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
+const STAGE_PLOT_TOMBSTONE_MAX_ENTRIES = 20;
+function stagePlotTombstones(data=loadPreProData()) {
+  const map = data?.stagePlotTombstones;
+  return (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
+}
+function pruneStagePlotTombstones(map) {
+  const now = Date.now();
+  const entries = Object.entries(map || {})
+    .filter(([, at]) => Number.isFinite(Number(at)) && now - Number(at) < STAGE_PLOT_TOMBSTONE_MAX_AGE_MS)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, STAGE_PLOT_TOMBSTONE_MAX_ENTRIES);
+  return Object.fromEntries(entries);
+}
+function getStagePlots(data=loadPreProData()) {
+  const raw = Array.isArray(data.stagePlots) && data.stagePlots.length ? data.stagePlots : [];
+  const tombstones = stagePlotTombstones(data);
+  const seen = new Set();
+  const plots = raw.map((plot, i) => normalizeStagePlot(plot, i))
+    .filter(plot => !tombstones[plot.id])
+    .filter(plot => { if (seen.has(plot.id)) return false; seen.add(plot.id); return true; });
+  if (plots.length) return plots;
+  // Min-1 fallback. The default id can itself be tombstoned (the original
+  // first plot was deleted, then the raw array read back empty), which would
+  // make every edit to the fallback vanish on the next read. Walk to a
+  // deterministic untombstoned id; the tombstone map is capped at 20 entries
+  // so this terminates, and determinism keeps the id stable across calls.
+  const fallback = normalizeStagePlot({}, 0);
+  while (tombstones[fallback.id]) fallback.id += 'r';
+  return [fallback];
+}
+function stagePlotDisplayName(plot, i=0) {
+  const label = (plot?.label || '').trim();
+  return label || `Stage Plot ${i + 1}`;
+}
+
+// ── Editor state (device-local) ──
+let stagePlotsWorking = null;      // deep working copy while the editor is open
+let activeStagePlotId = '';
+let activeStagePlotIndex = 0;
+let plotSelectedItemId = '';
+// Which plots the LOCAL user actually touched since the last save. Saves
+// splice only these over a fresh read (the getPreProData invariant), so a
+// whole-array write can never push stale copies of plots a collaborator is
+// editing at the same time.
+const _plotDirtyIds = new Set();
+// Armed while an edit sits in the 650ms debounce; lets the save dispatcher
+// rescue the last edit when Esc closes the editor inside that window.
+let _plotPendingSave = false;
+let plotSnapOn = localStorage.getItem('cueola_plot_snap') !== '0';
+let _plotUndoStack = [];
+let _plotDrag = null;
+let _plotPalDrag = null;
+let _plotPointerActive = false;
+let _plotPresenceTimer = null;
+let _plotListenersReady = false;
+
+function resolveActiveStagePlotIndex(plots=stagePlotsWorking || getStagePlots()) {
+  const byId = activeStagePlotId ? plots.findIndex(plot => plot.id === activeStagePlotId) : -1;
+  activeStagePlotIndex = byId >= 0 ? byId : Math.max(0, Math.min(Number(activeStagePlotIndex) || 0, Math.max(0, plots.length - 1)));
+  activeStagePlotId = plots[activeStagePlotIndex]?.id || activeStagePlotId;
+  return activeStagePlotIndex;
+}
+function activeStagePlot() {
+  if (!stagePlotsWorking?.length) return null;
+  return stagePlotsWorking[resolveActiveStagePlotIndex()] || null;
+}
+
+function openStagePlotEditor() {
+  activePaperworkItemId = 'stage-plot';
+  pbSetPresencePage('stage-plot');
+  hideModal('paperworkHubModal');
+  // An edit can still sit in the debounce window from a previous Esc-closed
+  // visit; persist it before the fresh copy below would discard it.
+  if (_plotPendingSave) saveStagePlot(false);
+  stagePlotsWorking = getStagePlots().map(plot => JSON.parse(JSON.stringify(plot)));
+  _plotDirtyIds.clear();
+  resolveActiveStagePlotIndex();
+  plotSelectedItemId = '';
+  _plotUndoStack = [];
+  renderStagePlotSelector();
+  renderPlotPalette();
+  renderStagePlotEditor();
+  renderPaperworkNav('stage-plot');
+  renderPlandaBearComments('Stage Plot', 'pbCommentsPlot');
+  showModal('stagePlotModal');
+  pbInitStagePlotListeners();
+}
+
+// Merge-splice save: load the store fresh and replace ONLY the plots the
+// local user touched (plus locally-added ones). Two people on different
+// plots of the same session can then autosave concurrently without either
+// whole-array write clobbering the other's plot.
+function stagePlotsMergedForSave() {
+  const stored = getStagePlots();
+  const workingById = new Map(stagePlotsWorking.map((plot, i) => [plot.id, normalizeStagePlot(plot, i)]));
+  const merged = stored.map(plot => (_plotDirtyIds.has(plot.id) && workingById.has(plot.id)) ? workingById.get(plot.id) : plot);
+  stagePlotsWorking.forEach((plot, i) => {
+    if (_plotDirtyIds.has(plot.id) && !merged.some(m => m.id === plot.id)) merged.push(normalizeStagePlot(plot, i));
+  });
+  return merged;
+}
+function saveStagePlot(showToastOnSave=true) {
+  if (!stagePlotsWorking) return;
+  _plotPendingSave = false;
+  const merged = stagePlotsMergedForSave();
+  persistPreProData({ stagePlots: merged, updatedAt: Date.now() }, 'Stage Plot');
+  stagePlotsWorking = merged.map(plot => JSON.parse(JSON.stringify(plot)));
+  _plotDirtyIds.clear();
+  resolveActiveStagePlotIndex();
+  if (document.getElementById('stagePlotModal')?.classList.contains('on')
+      && document.activeElement?.id !== 'pp-plot-select') {
+    renderStagePlotSelector();
+  }
+  if (showToastOnSave) toast('Stage plot saved.');
+}
+
+// Canvas edits are pointer moves, not input events, so the shared modal
+// autosave listeners never see them. Mirror that debounce body exactly: the
+// shared timer keeps the save chip's "saving" state truthful. Edits always
+// target the active plot, so this is the one place dirty ids are marked.
+function queueStagePlotAutosave() {
+  paperworkDirty = true;
+  _plotPendingSave = true;
+  if (activeStagePlotId) _plotDirtyIds.add(activeStagePlotId);
+  pbNoteLocalEdit('pp-plot-canvas');
+  clearTimeout(_pbFieldSaveTimer);
+  _pbFieldSaveTimer = setTimeout(() => {
+    _pbFieldSaveTimer = null;
+    pbRefreshOpenPaperworkFields();
+    _pbSuppressActivity = true;
+    try {
+      saveOpenPaperworkSection(false);
+      paperworkDirty = false;
+    } finally { _pbSuppressActivity = false; }
+    updatePbSaveStatus();
+  }, 650);
+  updatePbSaveStatus();
+}
+
+// Remote-change refresh. Runs mid-edit by design (the debounced autosave
+// runs through here before saving). While the local user is actively editing
+// it still adopts remote versions of every plot they have NOT touched (the
+// dirty ones keep the working copy until the next merge-splice save), but it
+// never re-renders under a captured pointer or a focused inspector field.
+function pbRefreshStagePlot() {
+  if (!document.getElementById('stagePlotModal')?.classList.contains('on') || !stagePlotsWorking) return;
+  const stored = getStagePlots();
+  const editing = _plotPointerActive
+    || pbFieldRecentlyEdited('pp-plot-canvas')
+    || (pbIsCollabField(document.activeElement) && document.activeElement.closest('#stagePlotModal'));
+  if (editing) {
+    const prevById = new Map(stagePlotsWorking.map(plot => [plot.id, plot]));
+    const next = stored.map(plot => {
+      const local = prevById.get(plot.id);
+      if (_plotDirtyIds.has(plot.id) && local) return local;
+      // Adopting a remote version invalidates undo frames for that plot:
+      // popping one later would resurrect pre-merge state over the
+      // collaborator's edits.
+      if (!local || JSON.stringify(normalizeStagePlot(local, 0)) !== JSON.stringify(plot)) {
+        _plotUndoStack = _plotUndoStack.filter(entry => entry.plotId !== plot.id);
+      }
+      return JSON.parse(JSON.stringify(plot));
+    });
+    stagePlotsWorking.forEach(plot => {
+      if (_plotDirtyIds.has(plot.id) && !next.some(p => p.id === plot.id)) next.push(plot);
+    });
+    stagePlotsWorking = next;
+    resolveActiveStagePlotIndex();
+    return;
+  }
+  const working = stagePlotsWorking.map((plot, i) => normalizeStagePlot(plot, i));
+  if (JSON.stringify(stored) === JSON.stringify(working)) return;
+  stagePlotsWorking = stored.map(plot => JSON.parse(JSON.stringify(plot)));
+  _plotUndoStack = [];
+  resolveActiveStagePlotIndex();
+  if (plotSelectedItemId && !activeStagePlot()?.items.some(item => item.id === plotSelectedItemId)) plotSelectedItemId = '';
+  renderStagePlotSelector();
+  renderStagePlotEditor();
+}
+
+// Advisory presence: the room sees "X is editing" on the plot canvas while a
+// pointer works it, clearing shortly after the last touch.
+function plotNotePresenceEdit() {
+  pbNoteLocalEdit('pp-plot-canvas');
+  pbSetPresenceField('pp-plot-canvas');
+  clearTimeout(_plotPresenceTimer);
+  _plotPresenceTimer = setTimeout(() => pbSetPresenceField(null), 2500);
+}
+
+// ── Multi-plot switcher (the call sheet pattern) ──
+function renderStagePlotSelector() {
+  const select = document.getElementById('pp-plot-select');
+  const plots = stagePlotsWorking || getStagePlots();
+  if (select) {
+    select.innerHTML = plots.map((plot, i) => `<option value="${i}" ${i === activeStagePlotIndex ? 'selected' : ''}>${esc(stagePlotDisplayName(plot, i))}</option>`).join('');
+  }
+  const labelInput = document.getElementById('pp-plot-label');
+  if (labelInput && labelInput !== document.activeElement) {
+    labelInput.value = plots[activeStagePlotIndex]?.label || '';
+  }
+}
+function switchStagePlot(index) {
+  const nextIndex = Number(index);
+  if (!Number.isFinite(nextIndex) || !stagePlotsWorking) return;
+  activeStagePlotIndex = Math.max(0, Math.min(nextIndex, stagePlotsWorking.length - 1));
+  activeStagePlotId = stagePlotsWorking[activeStagePlotIndex]?.id || '';
+  plotSelectedItemId = '';
+  renderStagePlotSelector();
+  renderStagePlotEditor();
+}
+function updateActiveStagePlotLabel(value) {
+  const plot = activeStagePlot();
+  if (!plot) return;
+  plot.label = String(value || '').slice(0, 80);
+  const select = document.getElementById('pp-plot-select');
+  if (select?.options?.[activeStagePlotIndex]) {
+    select.options[activeStagePlotIndex].textContent = (value || '').trim() || `Stage Plot ${activeStagePlotIndex + 1}`;
+  }
+  pbNoteLocalEdit('pp-plot-canvas');
+  queueStagePlotAutosave();
+}
+function addAnotherStagePlot() {
+  if (!canManageCallSheetStructure()) {
+    toast('Only instructors and admins can add stage plots.');
+    return;
+  }
+  if (!stagePlotsWorking) return;
+  const source = activeStagePlot();
+  const plot = normalizeStagePlot({
+    id: `stage_plot_${Date.now().toString(36)}`,
+    label: `Stage Plot ${stagePlotsWorking.length + 1}`,
+    stage: { ...(source?.stage || {}) },   // same room, empty floor
+    items: [],
+    userCreated: true,
+  }, stagePlotsWorking.length);
+  stagePlotsWorking.push(plot);
+  activeStagePlotId = plot.id;
+  plotSelectedItemId = '';
+  resolveActiveStagePlotIndex();
+  renderStagePlotSelector();
+  renderStagePlotEditor();
+  queueStagePlotAutosave();
+  toast('Added another stage plot.');
+}
+function deleteStagePlot() {
+  if (!canManageCallSheetStructure()) {
+    toast('Only instructors and admins can delete a stage plot.');
+    return;
+  }
+  if (!stagePlotsWorking) return;
+  if (stagePlotsWorking.length <= 1) {
+    toast('A session always keeps at least one stage plot.');
+    return;
+  }
+  const idx = resolveActiveStagePlotIndex();
+  const plot = stagePlotsWorking[idx];
+  if (!dangerConfirm(`Delete "${stagePlotDisplayName(plot, idx)}"?`, 'The plot and everything placed on it are removed for the whole session.')) return;
+  stagePlotsWorking.splice(idx, 1);
+  _plotDirtyIds.delete(plot.id);
+  const tombstones = pruneStagePlotTombstones({ ...stagePlotTombstones(), [plot.id]: Date.now() });
+  activeStagePlotId = stagePlotsWorking[Math.max(0, Math.min(idx, stagePlotsWorking.length - 1))]?.id || '';
+  plotSelectedItemId = '';
+  resolveActiveStagePlotIndex();
+  // Same merge-splice as saveStagePlot so the delete write cannot push stale
+  // copies of the surviving plots; the tombstone removes the deleted one.
+  persistPreProData({
+    stagePlots: stagePlotsMergedForSave().filter(p => p.id !== plot.id),
+    stagePlotTombstones: tombstones,
+    updatedAt: Date.now(),
+  }, 'Stage Plot');
+  renderStagePlotSelector();
+  renderStagePlotEditor();
+  toast('Stage plot deleted.');
+}
+
+// ── Undo (device-local, discrete actions: add, delete, drag, arrange) ──
+function plotUndoPush() {
+  const plot = activeStagePlot();
+  if (!plot) return;
+  _plotUndoStack.push({ plotId: plot.id, state: JSON.stringify(plot) });
+  if (_plotUndoStack.length > 50) _plotUndoStack.shift();
+}
+function plotUndo() {
+  const entry = _plotUndoStack.pop();
+  if (!entry || !stagePlotsWorking) return;
+  const idx = stagePlotsWorking.findIndex(plot => plot.id === entry.plotId);
+  if (idx < 0) return;
+  stagePlotsWorking[idx] = JSON.parse(entry.state);
+  activeStagePlotId = entry.plotId;
+  plotSelectedItemId = '';
+  resolveActiveStagePlotIndex();
+  renderStagePlotSelector();
+  renderStagePlotEditor();
+  queueStagePlotAutosave();
+}
+
+// ── Items ──
+function plotMintItemId() {
+  return `pi_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+}
+function plotMintItemLabel(plot, def) {
+  const count = plot.items.filter(item => item.type === def.type).length;
+  return `${def.label} ${count + 1}`;
+}
+function addPlotItem(type, xFt=null, yFt=null) {
+  const plot = activeStagePlot();
+  const def = plotTypeDef(type);
+  if (!plot || !def) return;
+  plotUndoPush();
+  const n = plot.items.length;
+  // Click-to-add cascades placements around center so stacked adds stay visible.
+  const fallbackX = plot.stage.w_ft / 2 + ((n % 5) - 2) * 1.5;
+  const fallbackY = plot.stage.h_ft / 2 + (Math.floor(n / 5) % 3 - 1) * 2;
+  const item = normalizeStagePlotItem({
+    id: plotMintItemId(),
+    type: def.type,
+    x_ft: plotSnapValue(plotClamp(xFt ?? fallbackX, 0, plot.stage.w_ft)),
+    y_ft: plotSnapValue(plotClamp(yFt ?? fallbackY, 0, plot.stage.h_ft)),
+    w_ft: def.w,
+    h_ft: def.h,
+    label: plotMintItemLabel(plot, def),
+  }, n);
+  plot.items.push(item);
+  plotSelectedItemId = item.id;
+  plotNotePresenceEdit();
+  renderStagePlotEditor();
+  queueStagePlotAutosave();
+}
+function selectedPlotItem() {
+  const plot = activeStagePlot();
+  return plot?.items.find(item => item.id === plotSelectedItemId) || null;
+}
+function selectPlotItem(id) {
+  plotSelectedItemId = id || '';
+  if (id) localStorage.setItem('cueola_plot_insp_tab', 'element');
+  renderPlotStage();
+  renderPlotInspector();
+}
+function deleteSelectedPlotItem() {
+  const plot = activeStagePlot();
+  const item = selectedPlotItem();
+  if (!plot || !item) return;
+  plotUndoPush();
+  plot.items = plot.items.filter(it => it.id !== item.id);
+  plotSelectedItemId = '';
+  plotNotePresenceEdit();
+  renderStagePlotEditor();
+  queueStagePlotAutosave();
+}
+function reorderSelectedPlotItem(delta) {
+  const plot = activeStagePlot();
+  const item = selectedPlotItem();
+  if (!plot || !item) return;
+  const idx = plot.items.indexOf(item);
+  const next = idx + (delta > 0 ? 1 : -1);
+  if (next < 0 || next >= plot.items.length) return;
+  plotUndoPush();
+  plot.items.splice(idx, 1);
+  plot.items.splice(next, 0, item);
+  renderPlotStage();
+  queueStagePlotAutosave();
+}
+function updateSelectedPlotItem(field, value) {
+  const item = selectedPlotItem();
+  if (!item) return;
+  if (field === 'label') item.label = String(value ?? '').slice(0, 60);
+  else if (field === 'color') item.color = PLOT_ITEM_COLORS.some(c => c.key === value) ? value : '';
+  else if (field === 'rot') item.rot = ((Math.round(Number(value) || 0) % 360) + 360) % 360;
+  else if (field === 'w_ft') item.w_ft = plotClamp(value, 0.5, 100);
+  else if (field === 'h_ft') item.h_ft = plotClamp(value, 0.5, 100);
+  pbNoteLocalEdit('pp-plot-canvas');
+  renderPlotStage();
+  const rotVal = document.getElementById('plot-rot-val');
+  if (rotVal) rotVal.textContent = `${Math.round(item.rot)}°`;
+  if (field === 'color') renderPlotInspector();
+  queueStagePlotAutosave();
+}
+function rotateSelectedPlotItem(deltaDeg) {
+  const item = selectedPlotItem();
+  if (!item) return;
+  plotUndoPush();
+  updateSelectedPlotItem('rot', (item.rot + deltaDeg) % 360);
+  const slider = document.getElementById('plot-item-rot');
+  if (slider) slider.value = String(Math.round(item.rot));
+}
+function updateStagePlotStage(field, value) {
+  const plot = activeStagePlot();
+  if (!plot || (field !== 'w_ft' && field !== 'h_ft')) return;
+  plot.stage[field] = plotClamp(value, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
+  plot.items.forEach(item => {
+    item.x_ft = plotClamp(item.x_ft, 0, plot.stage.w_ft);
+    item.y_ft = plotClamp(item.y_ft, 0, plot.stage.h_ft);
+  });
+  pbNoteLocalEdit('pp-plot-canvas');
+  renderPlotStage();
+  queueStagePlotAutosave();
+}
+function togglePlotSnap(on) {
+  plotSnapOn = on !== false;
+  localStorage.setItem('cueola_plot_snap', plotSnapOn ? '1' : '0');
+}
+
+// ── Rendering ──
+function renderStagePlotEditor() {
+  renderPlotStage();
+  renderPlotInspector();
+}
+
+// One geometry builder serves the editor (theme tokens, hit targets,
+// selection ring) and the paper sheet (print-safe fixed colors, standalone
+// SVG with explicit size for rasterization).
+function stagePlotSheetSVG(plot, opts={}) {
+  const print = opts.print === true;
+  const K = PLOT_PX_PER_FT;
+  const W = plot.stage.w_ft * K;
+  const H = plot.stage.h_ft * K;
+  const PAD_X = 34, PAD_TOP = 30, PAD_BOT = 44;
+  const vb = `${-PAD_X} ${-PAD_TOP} ${W + PAD_X * 2} ${H + PAD_TOP + PAD_BOT}`;
+  const gridColor = print ? '#e4e4e4' : 'color-mix(in srgb, var(--text) 7%, transparent)';
+  const gridMajor = print ? '#c9c9c9' : 'color-mix(in srgb, var(--text) 13%, transparent)';
+  const outline = print ? '#111111' : 'color-mix(in srgb, var(--text) 55%, transparent)';
+  const dimColor = print ? '#555555' : 'var(--text3)';
+  const floor = print ? '#ffffff' : 'color-mix(in srgb, var(--s2) 40%, transparent)';
+  const labelColor = print ? '#1d1d1f' : 'var(--text2)';
+  let grid = '';
+  for (let x = 1; x < plot.stage.w_ft; x++) {
+    grid += `<line x1="${x * K}" y1="0" x2="${x * K}" y2="${H}" stroke="${x % 5 ? gridColor : gridMajor}" stroke-width="1"/>`;
+  }
+  for (let y = 1; y < plot.stage.h_ft; y++) {
+    grid += `<line x1="0" y1="${y * K}" x2="${W}" y2="${y * K}" stroke="${y % 5 ? gridColor : gridMajor}" stroke-width="1"/>`;
+  }
+  const items = plot.items.map(item => {
+    const def = plotTypeDef(item.type) || PLOT_ELEMENT_TYPES[0];
+    const w = item.w_ft * K, h = item.h_ft * K;
+    const color = plotItemColor(item, print);
+    const selected = !print && item.id === plotSelectedItemId;
+    const labelY = Math.max(w, h) / 2 + 15;
+    return `<g class="plot-item" data-plot-item="${esc(item.id)}" transform="translate(${item.x_ft * K} ${item.y_ft * K})">
+      <g transform="rotate(${item.rot})">
+        ${print ? '' : `<rect class="plot-item-hit" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>`}
+        ${selected ? `<rect class="plot-item-sel" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>` : ''}
+        <svg class="plot-item-glyph" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" viewBox="0 0 24 24" preserveAspectRatio="none" ${print ? `stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"` : `style="color:${color}"`}>${def.sym}</svg>
+      </g>
+      <text class="plot-item-label" x="0" y="${labelY}" text-anchor="middle" ${print ? `fill="${labelColor}" font-size="11" font-family="Helvetica, Arial, sans-serif" font-weight="600"` : ''}>${esc(plotItemDisplayLabel(item))}</text>
+    </g>`;
+  }).join('');
+  const dims = `
+    <text class="plot-dim-label" x="${W / 2}" y="-12" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.w_ft} ft</text>
+    <text class="plot-dim-label" x="-12" y="${H / 2}" text-anchor="middle" transform="rotate(-90 -12 ${H / 2})" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.h_ft} ft</text>
+    <text class="plot-front-label" x="${W / 2}" y="${H + 24}" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="11" font-family="Menlo, monospace" letter-spacing="2"` : ''}>FRONT · AUDIENCE</text>
+    <text class="plot-dim-label" x="${W}" y="${H + 24}" text-anchor="end" ${print ? `fill="${dimColor}" font-size="10" font-family="Menlo, monospace"` : ''}>1 square = 1 ft</text>`;
+  const inner = `
+    <rect class="plot-outline" x="0" y="0" width="${W}" height="${H}" ${print ? `fill="${floor}" stroke="${outline}" stroke-width="2"` : ''}/>
+    ${grid}
+    <rect x="0" y="0" width="${W}" height="${H}" fill="none" ${print ? `stroke="${outline}" stroke-width="2"` : 'class="plot-outline-top"'}/>
+    ${dims}
+    <g id="plotItemsLayer">${items}</g>`;
+  if (print) {
+    const vw = Math.round(W + PAD_X * 2);
+    const vh = Math.round(H + PAD_TOP + PAD_BOT);
+    // Page CSS never reaches an SVG decoded as an image, so the glyph stroke
+    // rules ride inside the document. non-scaling-stroke keeps line weight
+    // uniform when a footprint stretches a glyph.
+    const style = '<style>.plot-item-glyph *{vector-effect:non-scaling-stroke;fill:none;stroke-linecap:round;stroke-linejoin:round}</style>';
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${vw}" height="${vh}">${style}<rect x="${-PAD_X}" y="${-PAD_TOP}" width="${vw}" height="${vh}" fill="#ffffff"/>${inner}</svg>`;
+  }
+  return `<svg id="plotStageSvg" viewBox="${vb}" role="img" aria-label="Stage plot editor canvas">${inner}</svg>`;
+}
+
+function renderPlotStage() {
+  const host = document.getElementById('pp-plot-canvas');
+  const plot = activeStagePlot();
+  if (!host || !plot) return;
+  host.innerHTML = stagePlotSheetSVG(plot);
+}
+
+function renderPlotPalette() {
+  const host = document.getElementById('plotPalette');
+  if (!host) return;
+  host.innerHTML = PLOT_ELEMENT_TYPES.map(def => `
+    <button type="button" class="plot-pal-item" data-plot-type="${def.type}" data-tip="Click to add, or drag onto the stage">
+      <svg viewBox="0 0 24 24" aria-hidden="true">${def.sym}</svg>
+      <span>${esc(def.label)}</span>
+    </button>`).join('');
+}
+
+function plotInspectorTab() {
+  const tab = localStorage.getItem('cueola_plot_insp_tab');
+  return tab === 'stage' ? 'stage' : 'element';
+}
+function setPlotInspectorTab(tab) {
+  localStorage.setItem('cueola_plot_insp_tab', tab === 'stage' ? 'stage' : 'element');
+  renderPlotInspector();
+}
+function renderPlotInspector() {
+  const host = document.getElementById('plotInspector');
+  const plot = activeStagePlot();
+  if (!host || !plot) return;
+  const tab = plotInspectorTab();
+  const item = selectedPlotItem();
+  const chip = c => `<button type="button" class="plot-color-chip ${((item?.color || '') === c.key) ? 'on' : ''}" style="background:${c.css}" data-tip="${esc(c.label)}" aria-label="${esc(c.label)}" onclick="updateSelectedPlotItem('color','${c.key}')"></button>`;
+  const elementPane = item ? `
+    <div class="plot-insp-h">Label</div>
+    <div class="plot-insp-body">
+      <input class="field-in" id="plot-item-label" maxlength="60" value="${esc(item.label)}" placeholder="${esc(plotTypeDef(item.type)?.label || 'Label')}" oninput="updateSelectedPlotItem('label', this.value)">
+    </div>
+    <div class="plot-insp-h">Color</div>
+    <div class="plot-insp-body"><div class="plot-color-chips">${PLOT_ITEM_COLORS.map(chip).join('')}</div></div>
+    <div class="plot-insp-h">Rotation <span class="plot-insp-val" id="plot-rot-val">${Math.round(item.rot)}°</span></div>
+    <div class="plot-insp-body">
+      <input type="range" id="plot-item-rot" min="0" max="359" step="1" value="${Math.round(item.rot)}" oninput="updateSelectedPlotItem('rot', this.value)">
+      <div class="plot-insp-actions">
+        <button type="button" class="u-callbtn call-add-btn" onclick="rotateSelectedPlotItem(-45)">Rotate -45°</button>
+        <button type="button" class="u-callbtn call-add-btn" onclick="rotateSelectedPlotItem(45)">Rotate +45°</button>
+      </div>
+    </div>
+    <div class="plot-insp-h">Size (feet)</div>
+    <div class="plot-insp-body plot-insp-row">
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-item-w" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-item-h" type="number" min="0.5" max="100" step="0.5" value="${item.h_ft}" onchange="updateSelectedPlotItem('h_ft', this.value)"></div>
+    </div>
+    <div class="plot-insp-h">Arrange</div>
+    <div class="plot-insp-body plot-insp-actions">
+      <button type="button" class="u-callbtn call-add-btn" onclick="reorderSelectedPlotItem(1)">Bring Forward</button>
+      <button type="button" class="u-callbtn call-add-btn" onclick="reorderSelectedPlotItem(-1)">Send Back</button>
+      <button type="button" class="u-callbtn call-add-btn call-delete-btn u-c-red" onclick="deleteSelectedPlotItem()">Delete</button>
+    </div>` : `
+    <div class="plot-insp-empty">Select something on the stage, or click an item in the bank to add one.</div>`;
+  const stagePane = `
+    <div class="plot-insp-h">Space size (feet)</div>
+    <div class="plot-insp-body plot-insp-row">
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-stage-w" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.w_ft}" onchange="updateStagePlotStage('w_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-stage-h" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.h_ft}" onchange="updateStagePlotStage('h_ft', this.value)"></div>
+    </div>
+    <div class="plot-insp-h">Grid</div>
+    <div class="plot-insp-body">
+      <label class="plot-snap-row"><input type="checkbox" id="plot-snap-toggle" ${plotSnapOn ? 'checked' : ''} onchange="togglePlotSnap(this.checked)"> <span>Snap to the half-foot grid</span></label>
+      <div class="plot-insp-hint">Each grid square is one foot. The front of the space faces the audience.</div>
+    </div>`;
+  host.innerHTML = `
+    <div class="insp-head">
+      <div class="insp-tabs">
+        <button type="button" class="insp-tab ${tab === 'element' ? 'on' : ''}" onclick="setPlotInspectorTab('element')" data-tip="Selected item" aria-label="Selected item">${sfIcon('action.edit')}</button>
+        <button type="button" class="insp-tab ${tab === 'stage' ? 'on' : ''}" onclick="setPlotInspectorTab('stage')" data-tip="Space and grid" aria-label="Space and grid">${sfIcon('action.grid')}</button>
+      </div>
+      <div class="insp-caption">${tab === 'stage' ? 'Space' : 'Element'}</div>
+    </div>
+    <div class="insp-pane ${tab === 'element' ? 'on' : ''}">${elementPane}</div>
+    <div class="insp-pane ${tab === 'stage' ? 'on' : ''}">${stagePane}</div>`;
+}
+
+// ── Pointer interactions (mouse and touch in one path) ──
+function plotSvgPointFromEvent(e) {
+  const svg = document.getElementById('plotStageSvg');
+  const ctm = svg?.getScreenCTM?.();
+  if (!svg || !ctm) return null;
+  const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+  return { x: pt.x / PLOT_PX_PER_FT, y: pt.y / PLOT_PX_PER_FT };
+}
+function pbInitStagePlotListeners() {
+  if (_plotListenersReady) return;
+  _plotListenersReady = true;
+  const canvas = document.getElementById('pp-plot-canvas');
+  if (canvas) {
+    canvas.addEventListener('pointerdown', e => {
+      const itemG = e.target?.closest?.('[data-plot-item]');
+      if (itemG) {
+        const id = itemG.getAttribute('data-plot-item');
+        const plot = activeStagePlot();
+        const item = plot?.items.find(it => it.id === id);
+        if (!item) return;
+        if (plotSelectedItemId !== id) selectPlotItem(id);
+        const p = plotSvgPointFromEvent(e);
+        if (!p) return;
+        plotUndoPush();
+        _plotDrag = { itemId: id, dx: item.x_ft - p.x, dy: item.y_ft - p.y, moved: false };
+        _plotPointerActive = true;
+        plotNotePresenceEdit();
+        try { canvas.setPointerCapture(e.pointerId); } catch {}
+        e.preventDefault();
+      } else if (e.target?.closest?.('#plotStageSvg')) {
+        if (plotSelectedItemId) selectPlotItem('');
+      }
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!_plotDrag) return;
+      const plot = activeStagePlot();
+      const item = plot?.items.find(it => it.id === _plotDrag.itemId);
+      const p = plotSvgPointFromEvent(e);
+      if (!plot || !item || !p) return;
+      item.x_ft = plotSnapValue(plotClamp(p.x + _plotDrag.dx, 0, plot.stage.w_ft));
+      item.y_ft = plotSnapValue(plotClamp(p.y + _plotDrag.dy, 0, plot.stage.h_ft));
+      _plotDrag.moved = true;
+      pbNoteLocalEdit('pp-plot-canvas');
+      const g = canvas.querySelector(`[data-plot-item="${CSS.escape(item.id)}"]`);
+      if (g) g.setAttribute('transform', `translate(${item.x_ft * PLOT_PX_PER_FT} ${item.y_ft * PLOT_PX_PER_FT})`);
+    });
+    const endDrag = () => {
+      if (!_plotDrag) return;
+      const moved = _plotDrag.moved;
+      _plotDrag = null;
+      _plotPointerActive = false;
+      if (moved) queueStagePlotAutosave();
+      else _plotUndoStack.pop();   // click-select pushed a no-op undo frame
+    };
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+  }
+  const palette = document.getElementById('plotPalette');
+  if (palette) {
+    palette.addEventListener('pointerdown', e => {
+      const btn = e.target?.closest?.('.plot-pal-item');
+      if (!btn) return;
+      _plotPalDrag = { type: btn.getAttribute('data-plot-type'), startX: e.clientX, startY: e.clientY, moved: false, ghost: null };
+      try { btn.setPointerCapture(e.pointerId); } catch {}
+    });
+    palette.addEventListener('pointermove', e => {
+      if (!_plotPalDrag) return;
+      if (!_plotPalDrag.moved && Math.hypot(e.clientX - _plotPalDrag.startX, e.clientY - _plotPalDrag.startY) < 6) return;
+      _plotPalDrag.moved = true;
+      if (!_plotPalDrag.ghost) {
+        const def = plotTypeDef(_plotPalDrag.type);
+        const ghost = document.createElement('div');
+        ghost.className = 'plot-ghost';
+        ghost.innerHTML = `<svg viewBox="0 0 24 24">${def?.sym || ''}</svg>`;
+        document.body.appendChild(ghost);
+        _plotPalDrag.ghost = ghost;
+      }
+      _plotPalDrag.ghost.style.left = `${e.clientX}px`;
+      _plotPalDrag.ghost.style.top = `${e.clientY}px`;
+    });
+    const endPalDrag = e => {
+      if (!_plotPalDrag) return;
+      const { type, moved, ghost } = _plotPalDrag;
+      _plotPalDrag = null;
+      ghost?.remove();
+      if (!moved) { addPlotItem(type); return; }   // plain click adds at center
+      const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('#pp-plot-canvas');
+      if (!over) return;
+      const p = plotSvgPointFromEvent(e);
+      const plot = activeStagePlot();
+      if (!p || !plot) return;
+      addPlotItem(type, plotClamp(p.x, 0, plot.stage.w_ft), plotClamp(p.y, 0, plot.stage.h_ft));
+    };
+    palette.addEventListener('pointerup', endPalDrag);
+    palette.addEventListener('pointercancel', () => { _plotPalDrag?.ghost?.remove(); _plotPalDrag = null; });
+  }
+  // Capture phase so Esc means "deselect" before the dialog stack sees it,
+  // and Delete clears the selected item without touching form typing.
+  document.addEventListener('keydown', e => {
+    if (!document.getElementById('stagePlotModal')?.classList.contains('on')) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+    if (e.key === 'Escape' && plotSelectedItemId && !typing) {
+      e.stopPropagation();
+      e.preventDefault();
+      selectPlotItem('');
+      return;
+    }
+    if (typing) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && plotSelectedItemId) {
+      e.preventDefault();
+      deleteSelectedPlotItem();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      plotUndo();
+      return;
+    }
+    const nudge = { ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[0, 1] }[e.key];
+    if (nudge && plotSelectedItemId) {
+      const plot = activeStagePlot();
+      const item = selectedPlotItem();
+      if (!plot || !item) return;
+      e.preventDefault();
+      item.x_ft = plotClamp(item.x_ft + nudge[0] * PLOT_SNAP_FT, 0, plot.stage.w_ft);
+      item.y_ft = plotClamp(item.y_ft + nudge[1] * PLOT_SNAP_FT, 0, plot.stage.h_ft);
+      pbNoteLocalEdit('pp-plot-canvas');
+      renderPlotStage();
+      queueStagePlotAutosave();
+    }
+  }, true);
+}
+
+// ── Paper sheet, preview, and export ──
+function stagePlotPreviewHTML(plot, data=loadPreProData(), sectionNumber=paperworkSectionNumber('stage-plot'), forExport=false) {
+  const plots = getStagePlots(data);
+  const idx = Math.max(0, plots.findIndex(p => p.id === plot?.id));
+  const safePlot = normalizeStagePlot(plot || plots[0] || {}, idx);
+  const title = paperSectionTitle(sectionNumber, `Stage Plot: ${stagePlotDisplayName(safePlot, idx)}`);
+  const sheets = getCallSheets(data);
+  const cs = sheets[0] || {};
+  const raster = forExport ? _stagePlotRasterCache?.byPlotId?.[safePlot.id] : '';
+  const figure = raster
+    ? `<img class="paper-plot-img" src="${raster}" alt="Stage plot diagram">`
+    : stagePlotSheetSVG(safePlot, { print: true });
+  return `<div class="paper-landscape">
+    <h1 class="psec-h psec-plot">${esc(title)}</h1>
+    <table class="paper-plot-meta"><tr>
+      <td><span>Production</span>${esc(show.name || cs.production || 'Untitled Production')}</td>
+      <td><span>Venue</span>${esc((cs.location || '').trim() || 'TBD')}</td>
+      <td><span>Date</span>${esc(cs.date ? paperDate(cs.date) : 'TBD')}</td>
+      <td><span>Scale</span>1 square = 1 ft · space ${safePlot.stage.w_ft} ft x ${safePlot.stage.h_ft} ft</td>
+    </tr></table>
+    <div class="paper-plot-figure">${figure}</div>
+  </div>`;
+}
+
+// forExport rasterization: html2canvas renders complex inline SVG
+// unreliably, so PDF exports embed a 2x PNG instead. The pixels are cached
+// against the snapshot fingerprint because the snapshot itself is frozen.
+let _stagePlotRasterCache = null;
+async function rasterizeStagePlotSVG(plot) {
+  const markup = stagePlotSheetSVG(plot, { print: true });
+  const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Stage plot raster decode failed.'));
+      image.src = url;
+    });
+    // 2x normally, backed off for big spaces: past ~16.7M pixels Safari's
+    // canvas silently no-ops and toDataURL returns the truthy string
+    // 'data:,'. Budget well under the limit, and validate the result so a
+    // failed raster falls back to inline SVG instead of a blank sheet.
+    const pixels = Math.max(1, img.width * img.height);
+    const scale = Math.min(2, Math.sqrt(14000000 / pixels));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    if (!dataUrl.startsWith('data:image/png')) throw new Error('Stage plot raster exceeded the canvas limit.');
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+async function prepareStagePlotRasters(snapshot) {
+  const documentType = snapshot?.options?.documentType;
+  if (documentType !== 'stage-plot' && documentType !== 'plandabear-package') return;
+  if (documentType === 'plandabear-package' && snapshot?.options?.paperwork?.stage_plot === false) return;
+  if (_stagePlotRasterCache?.fingerprint === snapshot.fingerprint) return;
+  const plots = getStagePlots(snapshot.prePro || {});
+  const byPlotId = {};
+  for (const plot of plots) {
+    try { byPlotId[plot.id] = await rasterizeStagePlotSVG(plot); } catch {}
+  }
+  _stagePlotRasterCache = { fingerprint: snapshot.fingerprint, byPlotId };
+}
+
+let lastStagePlotExportSnapshot = null;
+let lastStagePlotExportIndex = 0;
+async function showStagePlotPreview() {
+  try {
+    saveStagePlot(false);
+    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot' });
+    const plots = getStagePlots(snapshot.prePro);
+    const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
+    const index = byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
+    lastStagePlotExportSnapshot = snapshot;
+    lastStagePlotExportIndex = index;
+    const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
+    showPaperPreview('Stage Plot Preview', stagePlotPreviewHTML(plots[index], snapshot.prePro, undefined, true),
+      'Export Stage Plot PDF', 'downloadStagePlotPDF()', 'stage-plot', options);
+  } catch (error) {
+    lastStagePlotExportSnapshot = null;
+    toast(`Stage plot preview blocked: ${paperworkExportFailureMessage(error)}`);
+  }
+}
+async function downloadStagePlotPDF() {
+  let snapshot;
+  try {
+    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+      && lastPaperPreview?.options?.snapshotFingerprint === lastStagePlotExportSnapshot?.fingerprint;
+    snapshot = previewIsOpen ? lastStagePlotExportSnapshot
+      : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot' });
+  } catch (error) {
+    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    return;
+  }
+  const plots = getStagePlots(snapshot.prePro);
+  const index = Math.max(0, Math.min(lastStagePlotExportIndex, plots.length - 1));
+  const plot = plots[index];
+  const html = stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true);
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
+  const fileName = `${cleanPdfName(stagePlotDisplayName(plot, index), 'cueola-stage-plot')}.pdf`;
+  try {
+    const result = await exportPaperHTMLAsPDF(html, fileName, options);
+    toast(`Stage plot PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
+  } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+    } catch (printError) {
+      toast(`Could not render the saved stage plot: ${paperworkExportFailureMessage(printError)}`);
+    }
+  }
 }
 
 function renderCallSheetSelector(sheets=getCallSheets()) {
@@ -22236,6 +23371,13 @@ function preProPackageHTML(forExport=false, snapshot=null) {
     ${patchTableHTML('comms', 'Comms Patch Sheet', data)}
     </section>`);
   }
+  if (numbers.has('stage-plot')) {
+    // D4: one landscape sheet per plot, page-break between plots like the
+    // multi-day call sheet. forExport swaps the vector SVG for the 2x PNG.
+    sections.push(getStagePlots(data).map((plot, i) => `
+      ${i > 0 ? '<div class="paper-page-break"></div>' : ''}
+      <section${sectionAttr('stage-plot', `Stage Plot: ${stagePlotDisplayName(plot, i)}`)}>${stagePlotPreviewHTML(plot, data, numbers.get('stage-plot'), forExport)}</section>`).join(''));
+  }
   if (includePackageNotes) {
     sections.push(`<section${sectionAttr('production-notes', 'Production Notes')}>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, numbers.get('production-notes'))}</section>`);
   }
@@ -23123,7 +24265,7 @@ function addCallSheetPerson() {
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
-  if (!roster.length) { toast('No saved role assignments yet. Assign positions in Admin first.'); return; }
+  if (!roster.length) { toast('No saved role assignments yet. Assign positions on the Planda Bear hub first.'); return; }
   const have = new Set(callSheetPeople.map(p => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
   const defaultCall = timeInputValue('pp-call');
   let added = 0;

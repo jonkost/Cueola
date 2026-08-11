@@ -25,7 +25,7 @@
   // Paperwork STRUCTURE inside prePro that carries (D6 config included).
   const CLONE_PREPRO_FIELDS = ['callSheets', 'callSheetTombstones', 'productionSchedule',
     'safety', 'videoPatchRows', 'audio-commsPatchRows', 'commsPatchRows', 'paperworkEnabled',
-    'positionsCustom', 'positionsRemoved'];
+    'positionsCustom', 'positionsRemoved', 'stagePlots', 'stagePlotTombstones'];
 
   function deepCopy(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));

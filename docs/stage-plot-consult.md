@@ -1,5 +1,14 @@
 # Stage Plot — Owner Design Consult (prepared 2026-07-21)
 
+> **ANSWERED AND BUILT 2026-08-11.** The owner's directive: drag-and-drop for
+> the intro courses, Keynote feel, object bank with infinite takes, editable
+> auto-labels, snap grid, owner supplies final icon art later (placeholder
+> line art ships in PLOT_ELEMENT_TYPES). Deviations from the baseline below:
+> question 5's Intro=off is REVERSED (Intro now includes Stage Plot, decision
+> 10 amended), and per-element z rides array order instead of a z field. The
+> rest of the baseline shipped as written. See CHANGELOG "Unreleased: Stage
+> Plot".
+
 Phase 8 opens with this consult (your directive, 2026-07-16). Nothing is
 built; every visual/behavioral call below is yours at zero sunk cost. The
 **engineering baseline is already verified** and isn't on the table unless

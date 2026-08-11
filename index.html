@@ -982,13 +982,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── MODALS ── */
 .modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(var(--liquid-blur)) saturate(140%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(140%);z-index:300;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s var(--ease) both;overflow-y:auto}
 .modal-wrap.on{display:flex}
-#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
+#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
 /* margin:auto (not just flex centering): a modal TALLER than the viewport
    scrolls inside the overflow-y wrap from its top edge — plain flex centering
    clips both ends off-screen and strands the action buttons (the avatar-grid
    mouse-trap, checkout fix 2026-07-21). Short modals center identically. */
 .modal{background:linear-gradient(145deg,color-mix(in srgb,var(--s1) 97%,transparent),color-mix(in srgb,var(--s1) 88%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));border: 1px solid transparent;border-radius:18px;padding:28px 26px;width:100%;max-width:440px;margin:auto;display:flex;flex-direction:column;gap:18px;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .28s var(--ease) both}
-#paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#patchSheetModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
+#paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#patchSheetModal .modal,#stagePlotModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
 .modal-title{font-family:var(--syne);font-size:24px;font-weight:700;letter-spacing:0;line-height:1.15}
 .modal-sub{font-size:14px;color:var(--text2);line-height:1.5;margin-top:-8px;letter-spacing:0}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -1300,23 +1300,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .plandabear-theme-bar{display:none;flex-direction:column;gap:12px;padding:16px;border: 1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent)}
 .plandabear-theme-bar.on{display:flex}
 .plandabear-theme-label{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);padding-bottom:6px;border-bottom: 1px solid transparent}
-[data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
+[data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
 [data-plandabear-theme="honey"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
 /* Eucalyptus runs a bright leaf-green accent: accent-filled buttons take dark
    ink (white on #6cd234 is about 1.9:1, far under AA). */
 [data-plandabear-theme="eucalyptus"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
-[data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
-[data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
-[data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7e7e7e;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;position:relative}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;position:relative}
-[data-plandabear-theme="flamingo"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0e0410;--s1:#160820;--s2:#1d0d28;--s3:#251234;--s4:#2e1842;--border:#241338;--bord2:#3e2658;--text:#f5edff;--text2:#a890c4;--text3:#79618f;--accent:#9d4ed8;--acg:#c14fa0;--green:#5cd0a8;--cyan:#5ec0e8;--purple:#a560ff;--yellow:#e8b850;--red:#e85a78;--orange:#e88858;position:relative}
-[data-plandabear-theme="outrangutan"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1a1817;--s1:#222020;--s2:#2b2928;--s3:#373533;--s4:#454240;--border:#3a352f;--bord2:#5b534a;--text:#ffffff;--text2:#d8d3cd;--text3:#928b82;--accent:#ff6a00;--acg:#ff9133;--green:#5fd07a;--cyan:#36c6c0;--purple:#bb8cff;--yellow:#ffc24d;--red:#ff5247;--orange:#ff6a00;position:relative}
-[data-plandabear-theme="prepbear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#080a14;--s1:#0d1124;--s2:#141930;--s3:#1e2548;--s4:#2a346a;--border:#1e2548;--bord2:#3a4585;--text:#f5f0dc;--text2:#b8b89c;--text3:#7a7868;--accent:#eeca57;--acg:#d4a830;--green:#7ed68c;--cyan:#7ec8e0;--purple:#c878d8;--yellow:#eeca57;--red:#e85a40;--orange:#f5933a;position:relative}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border: 1px solid transparent}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border: 1px solid transparent}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#262626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+[data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
+[data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
+[data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7e7e7e;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;position:relative}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;position:relative}
+[data-plandabear-theme="flamingo"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0e0410;--s1:#160820;--s2:#1d0d28;--s3:#251234;--s4:#2e1842;--border:#241338;--bord2:#3e2658;--text:#f5edff;--text2:#a890c4;--text3:#79618f;--accent:#9d4ed8;--acg:#c14fa0;--green:#5cd0a8;--cyan:#5ec0e8;--purple:#a560ff;--yellow:#e8b850;--red:#e85a78;--orange:#e88858;position:relative}
+[data-plandabear-theme="outrangutan"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1a1817;--s1:#222020;--s2:#2b2928;--s3:#373533;--s4:#454240;--border:#3a352f;--bord2:#5b534a;--text:#ffffff;--text2:#d8d3cd;--text3:#928b82;--accent:#ff6a00;--acg:#ff9133;--green:#5fd07a;--cyan:#36c6c0;--purple:#bb8cff;--yellow:#ffc24d;--red:#ff5247;--orange:#ff6a00;position:relative}
+[data-plandabear-theme="prepbear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#080a14;--s1:#0d1124;--s2:#141930;--s3:#1e2548;--s4:#2a346a;--border:#1e2548;--bord2:#3a4585;--text:#f5f0dc;--text2:#b8b89c;--text3:#7a7868;--accent:#eeca57;--acg:#d4a830;--green:#7ed68c;--cyan:#7ec8e0;--purple:#c878d8;--yellow:#eeca57;--red:#e85a40;--orange:#f5933a;position:relative}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border: 1px solid transparent}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border: 1px solid transparent}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#262626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 /* The derived control and material tokens (--btn-*, --ui-label*, --glass-*,
    --liquid-*) resolve at :root against the APP theme, so a Planda-themed panel
    used to render app-theme title bars, seg shells, and N/A pills over its own
@@ -1325,7 +1325,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    scoped surface and text vars, so one rule fixes all nine themes.
    Never write a star followed by a slash inside this comment: it closes the
    comment early and the whole block below silently stops parsing. */
-[data-plandabear-theme] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+[data-plandabear-theme] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   --glass-bg:color-mix(in srgb,var(--s1) 78%,transparent);
   --glass-bg-strong:color-mix(in srgb,var(--s2) 88%,transparent);
   --glass-border:color-mix(in srgb,var(--text) 14%,transparent);
@@ -1393,7 +1393,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .seg-group{display:inline-flex;gap:6px;background:var(--btn-fill);border:var(--btn-hairline);border-radius:12px;padding:5px;flex-wrap:wrap}
 /* Owner rule (Aug 2026): in paperwork forms a segmented control (venue, meals
    provided) hugs its options; the bordered pill never spans the whole row. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal) .seg-group{width:fit-content;max-width:100%}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal) .seg-group{width:fit-content;max-width:100%}
 .seg-btn{border:1px solid transparent;background:transparent;color:var(--text2);border-radius:8px;padding:8px 15px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
 .seg-btn:hover{color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .seg-btn.on{background:color-mix(in srgb,var(--accent) 20%,var(--s2));border-color:transparent;color:var(--text)}
@@ -2157,6 +2157,18 @@ h1.psec-video{border-left-color:#d97706 !important;background:#fdf3e3 !important
 h1.psec-audio{border-left-color:#0d9488 !important;background:#e6f7f5 !important;color:#0b4f49}
 h1.psec-notes{border-left-color:#db2777 !important;background:#fdeef5 !important;color:#801747}
 h1.psec-operator{border-left-color:#475569 !important;background:#eef1f5 !important;color:#25313f}
+h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;color:#0b4666}
+/* Stage plot paper sheet: the diagram owns the landscape page, so it escapes
+   the generic 3.15in image cap; the title block prints as one thin strip. */
+.paper-plot-meta{width:100%;border-collapse:collapse;margin:0 0 6pt}
+.paper-plot-meta td{border:1px solid #cfd3da;padding:3.5pt 6pt;font-size:8.5pt}
+.paper-plot-meta td span{display:block;font-size:6.5pt;letter-spacing:.08em;text-transform:uppercase;color:#5b6572;margin-bottom:1pt}
+.paper-plot-figure{margin:0}
+/* 5.35in keeps heading + title block + diagram on ONE landscape page: the
+   pagination treats the img as unbreakable and shoves it to its own page the
+   moment the trio overruns the 7.7in content column. */
+.paper-plot-figure svg{display:block;width:100%;height:auto;max-height:5.35in}
+.paper-export-page img.paper-plot-img{max-height:5.35in;width:auto;max-width:100%;margin:0 auto}
 /* D11.1: operator cheat card — printable keycaps, multi-column at page width. */
 .paper-key-rule{margin:4pt 0 8pt;padding:4pt 8pt;border-radius:4pt;background:#eef1f5;color:#25313f;font-size:8.5pt}
 .paper-keycols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150pt,1fr));gap:8pt 14pt}
@@ -3412,6 +3424,10 @@ input.pt-range::-moz-range-thumb,
 .flowop-theme-dot:hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
 .flowop-theme-dot.active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg),0 0 0 4px var(--pt-accent)}
 .flowop-note{font-size:12px;line-height:1.5;color:var(--pt-text);opacity:.62}
+/* The Hotkeys panel reuses the talent screen's key-first hint rows (.pt-hint-row,
+   key chip leading, dim description trailing); the card container brings the mono
+   face itself, so this panel restates it. */
+.flowop-panel .pt-hint-row{font-family:var(--mono);font-size:13px;line-height:1.9}
 .flowop-empty{font-family:var(--mono);font-size:14px;color:var(--pt-accent);opacity:.72;text-align:center;padding:30vh 24px}
 @media(max-width:900px){
   .flowop-top{height:auto;grid-template-columns:auto minmax(0,1fr);align-items:center;padding:8px 10px;gap:8px}
@@ -3427,12 +3443,12 @@ input.pt-range::-moz-range-thumb,
 /* ── Basic Liquid Glass: Planda Bear + Flowmingo ──
    Glass stays on navigation and grouping surfaces; reading and form surfaces
    retain stronger opacity so the visual update never competes with the work. */
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
   background:rgba(3,6,14,.34);
   backdrop-filter:blur(var(--liquid-blur)) saturate(135%);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(135%);
 }
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   --pb-glass-surface:color-mix(in srgb,var(--s1) 78%,transparent);
   --pb-glass-raised:color-mix(in srgb,var(--s2) 74%,transparent);
   --pb-glass-edge:color-mix(in srgb,var(--text) 14%,var(--border));
@@ -3519,26 +3535,26 @@ input.pt-range::-moz-range-thumb,
 }
 
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal,
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 
 @media(prefers-reduced-transparency:reduce){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal),
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal,
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal),
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.plandabear-settings-btn,.paperwork-back,.pb-chat-tool,.pb-tag-chip,.pb-attach-add,.pb-mini-btn),
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
   }
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 @media(prefers-contrast:more){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
 }
 
@@ -3572,14 +3588,14 @@ input.pt-range::-moz-range-thumb,
 .pb-hub-modal .paperwork-actions>button{width:auto;flex:0 1 auto;padding-left:22px;padding-right:22px}
 
 /* Section overlays: floating glass windows over the hub. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
   padding:clamp(10px,3vh,34px) clamp(10px,3vw,34px)!important;
   align-items:center!important;justify-content:center!important;
   background:color-mix(in srgb,#000 46%,transparent);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);
   backdrop-filter:blur(14px) saturate(1.1);
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   width:100%!important;max-width:min(1020px,100%)!important;
   height:auto!important;max-height:min(94dvh,1040px)!important;
   border-radius:var(--ui-radius-panel)!important;
@@ -3587,7 +3603,9 @@ input.pt-range::-moz-range-thumb,
   box-shadow:0 20px 60px rgba(0,0,0,.38),inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent);
 }
 #patchSheetModal .modal{max-width:min(1100px,100%)!important}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
+/* The plot editor carries three columns (bank, stage, inspector): wider panel. */
+#stagePlotModal .modal{max-width:min(1320px,100%)!important}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   overflow-y:auto!important;padding-bottom:0!important;
 }
 /* The notes board is a feed, not a form: the panel keeps ONE stable viewport
@@ -3600,7 +3618,7 @@ input.pt-range::-moz-range-thumb,
   min-height:min(60dvh,760px);
   padding-bottom:26px!important;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .paperwork-flow-actions{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .paperwork-flow-actions{
   position:sticky;left:auto;right:auto;bottom:0;transform:none;width:auto;z-index:5;
   margin:20px -26px 0;border-radius:0;border-left:0;border-right:0;border-bottom:0;
   padding-left:26px;padding-right:26px; /* footer controls share the body's 26px alignment line */
@@ -3608,18 +3626,18 @@ input.pt-range::-moz-range-thumb,
 }
 /* One vertical rhythm inside the forms: the modal's flex gap owns block-to-block
    spacing, so the in-body action row stops adding its own margin on top. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal) .paperwork-actions{margin-top:0}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal) .paperwork-actions{margin-top:0}
 /* Scroll hygiene (audit Aug 2026): tabbed-to fields clear the sticky glass
    bars, a flick past either end stops at the panel instead of scrolling the
    page behind it, and Firefox gets the same thin scrollbars WebKit shows. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   scroll-padding-top:96px;scroll-padding-bottom:84px;
   overscroll-behavior:contain;
 }
 .pb-modal-body{scroll-padding-top:96px;overscroll-behavior:contain}
 :is(.paper-preview,.pn-scroll,.modal-wrap,.paper-export-fit){overscroll-behavior:contain}
 :is(.pb-modal-body,.paper-preview,.u-modal-scroll,.u-modal-scroll-tall,.u-modal-scroll-short),
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   scrollbar-width:thin;scrollbar-color:var(--bord2) transparent;
 }
 /* Preview panel: the panel is the one scroller (no 58vh inner pane), and Done
@@ -3639,8 +3657,8 @@ input.pt-range::-moz-range-thumb,
 #pbNavPreview .primary:hover:not(:disabled){color:var(--text);background:color-mix(in srgb,var(--s2) 86%,transparent)}
 /* Scaled-down window: the overlay takes the whole screen instead. */
 @media (max-width:900px),(max-height:640px){
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
     max-width:none!important;width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
   }
 }
@@ -3648,15 +3666,15 @@ input.pt-range::-moz-range-thumb,
    overlay opens (guidelines: transitions communicate relationships). The
    full-screen fallback keeps the same quiet fade. */
 @media (prefers-reduced-motion:no-preference){
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal).on .modal{
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal).on .modal{
     animation:pbPanelIn .18s var(--ease) both;
   }
 }
 @keyframes pbPanelIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
 
 /* Planda Bear HIG pass: glass chrome, calm document surfaces, clear actions. */
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .pb-modal,
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .pb-modal,
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   color:var(--ui-label);
   background:
     radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 70%),
@@ -3666,21 +3684,21 @@ input.pt-range::-moz-range-thumb,
    LESS prominent than the main window: translucent material over the blurred
    hub, panel radius token, hairline edge, quiet shadow, and a brief compact
    title bar. The hub keeps its opaque full-page surface. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   background:
     radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 70%),
     color-mix(in srgb,var(--bg) 84%,transparent);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
   padding-top:13px;
   padding-bottom:12px;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-title{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-title{
   font-size:17px;font-weight:700;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-sub{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-sub{
   font-size:12px;margin-top:2px;
 }
 .pb-modal-header,.paperwork-modal-head{
@@ -3695,8 +3713,8 @@ input.pt-range::-moz-range-thumb,
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
 .pb-modal-header{margin:0;padding:18px clamp(18px,3vw,30px)}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .modal.pb-builder-modal{padding-top:0!important}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal.pb-builder-modal{padding-top:0!important}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
   z-index:30;
   margin:0 -26px!important; /* the modal's flex gap owns head-to-content spacing */
   padding-top:22px;
@@ -3807,18 +3825,62 @@ input.pt-range::-moz-range-thumb,
 .pb-field-busy{outline:2px solid color-mix(in srgb,var(--accent) 75%,transparent)!important;outline-offset:1px;background:color-mix(in srgb,var(--accent) 7%,transparent)!important}
 .pb-field-editor-chip{position:absolute;top:-9px;right:8px;z-index:6;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:.04em;color:var(--bg);background:linear-gradient(135deg,var(--accent),var(--acg));border-radius:999px;padding:2px 8px;pointer-events:none;white-space:nowrap}
 
+/* ── Stage Plot editor (v2.2 D4): bank rail, snap-grid stage, inspector ── */
+.plot-editor{display:grid;grid-template-columns:172px minmax(0,1fr) 252px;gap:12px;align-items:start;margin-top:14px}
+.plot-rail-title{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 8px 2px}
+.plot-palette{display:flex;flex-direction:column;gap:6px;max-height:580px;overflow:auto;padding-right:2px}
+.plot-pal-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:12.5px;font-weight:600;cursor:grab;text-align:left;touch-action:none;transition:background .15s var(--ease),color .15s var(--ease)}
+.plot-pal-item:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
+.plot-pal-item svg{width:22px;height:22px;flex:none;color:var(--accent);fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.plot-stage-wrap{background:color-mix(in srgb,var(--s1) 82%,transparent);border:1px solid transparent;border-radius:var(--ui-radius-group);padding:10px;touch-action:none;user-select:none;-webkit-user-select:none}
+.plot-stage-wrap svg{display:block;width:100%;height:auto;max-height:72dvh}
+.plot-outline{fill:color-mix(in srgb,var(--s2) 44%,transparent);stroke:color-mix(in srgb,var(--text) 50%,transparent);stroke-width:2}
+.plot-outline-top{stroke:color-mix(in srgb,var(--text) 50%,transparent);stroke-width:2}
+.plot-dim-label{fill:var(--text3);font-size:12px;font-family:var(--mono);letter-spacing:.08em}
+.plot-front-label{fill:var(--text3);font-size:11px;font-family:var(--mono);letter-spacing:.16em}
+.plot-item{cursor:grab}
+.plot-item:active{cursor:grabbing}
+.plot-item-hit{fill:transparent;stroke:none;pointer-events:all}
+.plot-item-sel{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 4;pointer-events:none}
+.plot-item-glyph{pointer-events:none;overflow:visible}
+.plot-item-glyph *{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.plot-item-label{fill:var(--text2);font-size:11.5px;font-weight:600;font-family:var(--sans);pointer-events:none}
+.plot-inspector{background:color-mix(in srgb,var(--s1) 82%,transparent);border:1px solid transparent;border-radius:var(--ui-radius-group);overflow:hidden;position:sticky;top:8px}
+.plot-insp-empty{padding:20px 14px;color:var(--text3);font-size:12.5px;text-align:center}
+.plot-insp-h{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;color:var(--text);padding:11px 12px 5px;border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent)}
+.insp-pane > .plot-insp-h:first-child{border-top:0}
+.plot-insp-val{font-size:11px;font-weight:700;font-family:var(--mono);color:var(--text3)}
+.plot-insp-body{padding:0 12px 10px}
+.plot-insp-body input[type="range"]{width:100%}
+.plot-insp-row{display:flex;gap:8px}
+.plot-insp-row .field{flex:1;min-width:0}
+.plot-insp-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.plot-color-chips{display:flex;flex-wrap:wrap;gap:8px;padding-top:4px}
+.plot-color-chip{width:24px;height:24px;border-radius:50%;border:1px solid transparent;cursor:pointer;box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent)}
+.plot-color-chip.on{outline:2px solid var(--accent);outline-offset:2px}
+.plot-snap-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2);cursor:pointer}
+.plot-insp-hint{margin-top:8px;font-size:11.5px;color:var(--text3);line-height:1.45}
+.plot-ghost{position:fixed;z-index:10000;width:44px;height:44px;color:var(--accent);opacity:.9;transform:translate(-50%,-50%);pointer-events:none}
+.plot-ghost svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:940px){
+  .plot-editor{grid-template-columns:1fr}
+  .plot-palette{flex-direction:row;flex-wrap:wrap;max-height:none}
+  .plot-pal-item span{display:none}
+  .plot-inspector{position:static}
+}
+
 /* ── Back-to-Cueola button in Planda Bear header — mirrors the build "Planda Bear" tbtn-ghost ── */
 .pb-back-rundown-btn{display:inline-flex;align-items:center;gap:6px;min-height:var(--ui-control-height);padding:0 14px;font-size:14px;font-weight:600;font-family:var(--sans);letter-spacing:0;color:var(--text2);border: 1.5px solid transparent;border-radius:var(--ui-radius-control);background:transparent;cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;line-height:1}
 .pb-back-rundown-btn:hover{color:var(--text);border-color:var(--text2);background:color-mix(in srgb,var(--s2) 82%,transparent)}
 .pb-back-rundown-btn:active{transform:scale(.96)}
-/* Production Notes moved out of the body (it was a page-wide banner between the
-   header and the six numbered pages) into the header tools row, so the grid
-   leads and the board stays one click away from every section. Fill-based, no
+/* Production Notes rides a full-width paperwork card above the numbered grid
+   (the header shortcut era is over): same card body as the six pages, so the
+   board reads as part of the package, just a row of its own. Fill-based, no
    stroke, per the Aug 2026 stroke pass. */
-.pb-notes-btn{display:inline-flex;align-items:center;gap:7px;min-height:var(--ui-control-height);padding:0 13px;font-size:14px;font-weight:600;font-family:var(--sans);letter-spacing:0;color:var(--text2);border:0;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--accent) 12%,transparent);cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease),color .15s var(--ease);white-space:nowrap;line-height:1}
-.pb-notes-btn .sf-symbol{font-size:18px;color:var(--accent)}
-.pb-notes-btn:hover{color:var(--text);background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.pb-notes-btn:active{transform:scale(.96)}
+.pb-notes-card{width:100%}
+.pb-notes-card .paperwork-card-num{background:color-mix(in srgb,var(--accent) 16%,var(--s3))}
+.pb-notes-card .paperwork-card-num .sf-symbol{font-size:16px;color:var(--accent)}
+.pb-notes-card .paperwork-card-title{display:flex;align-items:center;gap:8px}
 .pb-notes-btn-count{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);border-radius:999px;padding:4px 7px;min-width:19px;text-align:center}
 .pb-notes-btn-count:empty{display:none}
 /* ── Light-theme field floor (stroke pass, Aug 2026) ──
@@ -3958,6 +4020,12 @@ input.pt-range::-moz-range-thumb,
 .entry-admin-link .sf-symbol{font-size:18px}
 .tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:42px;height:42px;border-radius:50%;font-size:21px}
 .tbtn.icon-only .sf-symbol,.entry-theme-center .tbtn.icon-only .sf-symbol,.entry-notif .tbtn.icon-only .sf-symbol{font-size:21px}
+/* The profile button's art fills the whole circle: signed out, the
+   person.crop.circle glyph becomes the button face; signed in, the avatar chip
+   cueola-identity.js injects covers it edge to edge. Scoped by id so the other
+   thirteen pb-note-avatar render sites keep their own sizes. */
+#entryProfileBtn > .sf-symbol{width:100%;height:100%}
+#entryProfileBtn .pb-note-avatar.pb-av-sm{width:100%;height:100%;font-size:14px}
 .topbar .brand{gap:8px;padding:5px 4px!important}
 .topbar .brand .brand-ico,.ls-brand .brand-ico{width:42px;height:42px;vertical-align:-.42em}
 .ls-brand{display:inline-flex;align-items:center;gap:8px}
@@ -4465,15 +4533,25 @@ input.pt-range::-moz-range-thumb,
     <symbol id="ic-cueola" viewBox="0 0 1024 1024">
       <g style="isolation:isolate">
 <defs>
-    <linearGradient id="cue3-linear-gradient" x1="512" y1="-4.31" x2="512" y2="1019.69" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3d3dba"/>
-      <stop offset=".54" stop-color="#2929ff"/>
-      <stop offset=".6" stop-color="#353fff"/>
-      <stop offset=".79" stop-color="#597fff"/>
-      <stop offset=".93" stop-color="#6fa7ff"/>
-      <stop offset="1" stop-color="#78b7ff"/>
+    <clipPath id="cue3-clippath">
+      <path fill="none" d="M1024,293.99c0-.27-.01-.54-.02-.82-.71-26.13-2.25-52.49-6.89-78.34-4.71-26.22-12.4-50.62-24.53-74.44-11.92-23.41-27.49-44.84-46.07-63.41s-40-34.15-63.41-46.07c-23.82-12.12-48.22-19.82-74.44-24.53-25.84-4.65-52.2-6.18-78.34-6.89-11.99-.33-23.99-.46-35.98-.53-14.24-.09-28.48-.08-42.73-.08h-278c-14.24,0-28.48,0-42.73.08-12,.07-23.99.21-35.98.53-26.13.71-52.49,2.25-78.34,6.89-26.22,4.71-50.62,12.4-74.44,24.53-23.41,11.92-44.84,27.49-63.41,46.07s-34.15,40-46.07,63.41c-12.12,23.82-19.82,48.22-24.53,74.44-4.65,25.84-6.18,52.2-6.89,78.34-.33,11.99-.46,23.99-.53,35.98-.09,14.24-.08,28.48-.08,42.73v278c0,14.24,0,28.48.08,42.73.07,12,.21,23.99.53,35.98.71,26.13,2.25,52.49,6.89,78.34,4.71,26.22,12.4,50.62,24.53,74.44,11.92,23.41,27.49,44.84,46.07,63.41s40,34.15,63.41,46.07c23.82,12.12,48.22,19.82,74.44,24.53,25.84,4.65,52.2,6.18,78.34,6.89,11.99.33,23.99.46,35.98.53,14.24.09,28.48.08,42.73.08h278c14.24,0,28.48,0,42.73-.08,12-.07,23.99-.21,35.98-.53,26.13-.71,52.49-2.25,78.34-6.89,26.22-4.71,50.62-12.4,74.44-24.53,23.41-11.92,44.84-27.49,63.41-46.07s34.15-40,46.07-63.41c12.12-23.82,19.82-48.22,24.53-74.44,4.65-25.84,6.18-52.2,6.89-78.34,0-.27.01-.54.02-.82v-433.79Z"/>
+    </clipPath>
+    <linearGradient id="cue3-linear-gradient" x1="813.22" y1="1031.58" x2="211.97" y2="-9.81" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset=".19" stop-color="#030303"/>
+      <stop offset=".33" stop-color="#0c0c0c"/>
+      <stop offset=".46" stop-color="#1c1c1c"/>
+      <stop offset=".57" stop-color="#333"/>
+      <stop offset=".68" stop-color="#515151"/>
+      <stop offset=".79" stop-color="#757575"/>
+      <stop offset=".89" stop-color="#a0a0a0"/>
+      <stop offset=".99" stop-color="#d1d1d1"/>
+      <stop offset="1" stop-color="#d6d6d6"/>
     </linearGradient>
-    <linearGradient id="cue3-linear-gradient-2" x1="0" y1="-4.31" x2="0" y2="1019.69" xlink:href="#cue3-linear-gradient"/>
+    <clipPath id="cue3-clippath-1">
+      <rect fill="none" x="0" y="-1.12" width=".6" height="1024"/>
+    </clipPath>
+    <linearGradient id="cue3-linear-gradient-2" x1="222.08" y1="895.01" x2="-221.48" y2="126.76" xlink:href="#cue3-linear-gradient"/>
     <linearGradient id="cue3-linear-gradient-3" x1="1404.56" y1="211.3" x2="1529.5" y2="228.18" gradientTransform="translate(-2207.7167 714.4144) rotate(-16.5637) scale(1.6651 2.6646)" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#454344"/>
       <stop offset=".11" stop-color="#4d4b4c"/>
@@ -4523,7 +4601,7 @@ input.pt-range::-moz-range-thumb,
       <stop offset="1" stop-color="#757275"/>
     </linearGradient>
     <linearGradient id="cue3-linear-gradient-9" x1="313.7" y1="204.5" x2="313.7" y2="372.29" xlink:href="#cue3-linear-gradient-8"/>
-    <linearGradient id="cue3-linear-gradient-10" x1="292.72" y1="914.01" x2="292.72" y2="676.72" gradientTransform="translate(-9.26 -416.82) rotate(3.14)" gradientUnits="userSpaceOnUse">
+    <linearGradient id="cue3-linear-gradient-10" x1="292.71" y1="913.93" x2="292.71" y2="676.79" gradientTransform="translate(-9.26 -416.82) rotate(3.14)" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#454344"/>
       <stop offset="1" stop-color="#f2ecf0"/>
     </linearGradient>
@@ -4533,12 +4611,34 @@ input.pt-range::-moz-range-thumb,
     </linearGradient>
     <linearGradient id="cue3-linear-gradient-12" x1="178.3" y1="368.43" x2="200.66" y2="368.43" gradientTransform="translate(65.57 -.51) rotate(11.52)" xlink:href="#cue3-linear-gradient-11"/>
     <linearGradient id="cue3-linear-gradient-13" x1="245.23" y1="768.06" x2="326.87" y2="768.06" gradientTransform="translate(-15.55 -354.97) rotate(1.99)" xlink:href="#cue3-linear-gradient-11"/>
+    <linearGradient id="cue3-icon-bg" x1="0" y1="-.12" x2="0" y2="1022.88" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4c4c4c"/>
+      <stop offset=".0078" stop-color="#4a4a4a"/>
+      <stop offset=".1074" stop-color="#393939"/>
+      <stop offset=".2158" stop-color="#292929"/>
+      <stop offset=".334" stop-color="#1b1b1b"/>
+      <stop offset=".4512" stop-color="#101010"/>
+      <stop offset=".5742" stop-color="#080808"/>
+      <stop offset=".707" stop-color="#030303"/>
+      <stop offset=".8535" stop-color="#000"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
   </defs>
   <g style="isolation:isolate">
     <g id="cue3-App_Icon_Shape" data-name="App Icon Shape">
       <g>
-        <path fill="url(#cue3-linear-gradient)" d="M1023.7,290.8c0-.27-.01-.54-.02-.82-.71-26.13-2.25-52.49-6.89-78.34-4.71-26.22-12.4-50.62-24.53-74.44-11.92-23.41-27.49-44.84-46.07-63.41s-40-34.15-63.41-46.07c-23.82-12.12-48.22-19.82-74.44-24.53-25.84-4.65-52.2-6.18-78.34-6.89-11.99-.33-23.99-.46-35.98-.53-14.24-.09-28.48-.08-42.73-.08h-278c-14.24,0-28.48,0-42.73.08-12,.07-23.99.21-35.98.53-26.13.71-52.49,2.25-78.34,6.89-26.22,4.71-50.62,12.4-74.44,24.53-23.41,11.92-44.84,27.49-63.41,46.07s-34.15,40-46.07,63.41c-12.12,23.82-19.82,48.22-24.53,74.44-4.65,25.84-6.18,52.2-6.89,78.34-.33,11.99-.46,23.99-.53,35.98-.09,14.24-.08,28.48-.08,42.73v278c0,14.24,0,28.48.08,42.73.07,12,.21,23.99.53,35.98.71,26.13,2.25,52.49,6.89,78.34,4.71,26.22,12.4,50.62,24.53,74.44,11.92,23.41,27.49,44.84,46.07,63.41s40,34.15,63.41,46.07c23.82,12.12,48.22,19.82,74.44,24.53,25.84,4.65,52.2,6.18,78.34,6.89,11.99.33,23.99.46,35.98.53,14.24.09,28.48.08,42.73.08h278c14.24,0,28.48,0,42.73-.08,12-.07,23.99-.21,35.98-.53,26.13-.71,52.49-2.25,78.34-6.89,26.22-4.71,50.62-12.4,74.44-24.53,23.41-11.92,44.84-27.49,63.41-46.07s34.15-40,46.07-63.41c12.12-23.82,19.82-48.22,24.53-74.44,4.65-25.84,6.18-52.2,6.89-78.34,0-.27.01-.54.02-.82v-433.79Z"/>
-        <rect fill="url(#cue3-linear-gradient-2)" x="-.3" y="-4.31" width=".6" height="1024"/>
+        <g>
+          <g style="clip-path:url(#cue3-clippath)">
+            <rect x="-2" y="-4" width="1029" height="1032" fill="url(#cue3-icon-bg)"/>
+          </g>
+          <path fill="url(#cue3-linear-gradient)" d="M656.62-.12c13.34,0,25.39,0,37.69.08,14.14.08,25.57.25,35.96.53,23.25.63,50.73,1.94,78.19,6.88,27.21,4.89,51.47,12.88,74.16,24.44,23.35,11.89,44.6,27.32,63.16,45.88s33.99,39.81,45.88,63.16c11.55,22.69,19.54,46.95,24.44,74.16,4.94,27.46,6.25,54.94,6.88,78.19v.41s.02.38.02.38v433.76s0,.4,0,.4v.41c-.64,23.25-1.95,50.72-6.89,78.19-4.89,27.21-12.88,51.47-24.44,74.16-11.89,23.35-27.32,44.6-45.88,63.16s-39.81,34-63.16,45.88c-22.69,11.55-46.95,19.54-74.16,24.44-27.46,4.94-54.94,6.25-78.19,6.88-10.4.28-21.82.45-35.96.53-12.3.08-24.35.08-37.69.08h-5.03s-278,0-278,0h-2.51s-2.51,0-2.51,0c-13.34,0-25.39,0-37.69-.08-14.14-.08-25.56-.25-35.96-.53-23.25-.63-50.73-1.94-78.19-6.88-27.21-4.89-51.47-12.88-74.16-24.44-23.35-11.89-44.6-27.32-63.16-45.88s-33.99-39.81-45.88-63.16c-11.55-22.69-19.54-46.95-24.44-74.16-4.94-27.46-6.25-54.94-6.88-78.19-.28-10.39-.45-21.82-.53-35.96-.08-13.4-.08-27.03-.08-40.21v-283.03c0-13.18,0-26.8.08-40.21.08-14.14.25-25.57.53-35.96.63-23.25,1.94-50.73,6.88-78.19,4.89-27.21,12.88-51.47,24.44-74.16,11.89-23.35,27.32-44.6,45.88-63.16,18.56-18.56,39.81-33.99,63.16-45.88,22.69-11.55,46.95-19.54,74.16-24.44,27.46-4.94,54.94-6.25,78.19-6.88,10.4-.28,21.82-.45,35.96-.53,12.3-.08,24.35-.08,37.69-.08h5.03s278,0,278,0h2.51s2.51,0,2.51,0h0ZM656.62-1.12c-1.68,0-3.35,0-5.03,0h-278c-1.68,0-3.35,0-5.03,0-12.57,0-25.13,0-37.7.08-12,.07-23.99.21-35.98.53-26.13.71-52.49,2.25-78.34,6.89-26.22,4.71-50.62,12.4-74.44,24.53-23.41,11.92-44.84,27.49-63.41,46.07-18.58,18.58-34.15,40-46.07,63.41-12.12,23.82-19.82,48.22-24.53,74.44-4.65,25.84-6.18,52.2-6.89,78.34-.33,11.99-.46,23.99-.53,35.98-.09,14.24-.08,28.48-.08,42.73v278c0,14.24,0,28.48.08,42.73.07,12,.21,23.99.53,35.98.71,26.13,2.25,52.49,6.89,78.34,4.71,26.22,12.4,50.62,24.53,74.44,11.92,23.41,27.49,44.84,46.07,63.41,18.58,18.58,40,34.15,63.41,46.07,23.82,12.12,48.22,19.82,74.44,24.53,25.84,4.65,52.2,6.18,78.34,6.89,11.99.33,23.99.46,35.98.53,12.57.08,25.13.08,37.7.08,1.68,0,3.35,0,5.03,0h278c1.68,0,3.35,0,5.03,0,12.57,0,25.13,0,37.7-.08,12-.07,23.99-.21,35.98-.53,26.13-.71,52.49-2.25,78.34-6.89,26.22-4.71,50.62-12.4,74.44-24.53,23.41-11.92,44.84-27.49,63.41-46.07,18.58-18.58,34.15-40,46.07-63.41,12.12-23.82,19.82-48.22,24.53-74.44,4.65-25.84,6.18-52.2,6.89-78.34,0-.27.01-.54.02-.82v-433.79c0-.27-.01-.54-.02-.82-.71-26.13-2.25-52.49-6.89-78.34-4.71-26.22-12.4-50.62-24.53-74.44-11.92-23.41-27.49-44.84-46.07-63.41-18.58-18.58-40-34.15-63.41-46.07-23.82-12.12-48.22-19.82-74.44-24.53-25.84-4.65-52.2-6.18-78.34-6.89-11.99-.32-23.99-.46-35.98-.53-12.57-.08-25.13-.08-37.7-.08h0Z"/>
+        </g>
+        <g>
+          <g style="clip-path:url(#cue3-clippath-1)">
+            <image width="5" height="1028" transform="translate(-2 -3.12)" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAQFCAYAAAB5IAL2AAAACXBIWXMAAAsSAAALEgHS3X78AAABpUlEQVR4nO2aSw7DIAxEk14v9z8PXbWKGiu14t8YhlX1RD2GGGNIts2nHccxPr9fUod7uO/7FY4xrlBvU4RGm+LfRedr1SOExJ616mmw9XwaXaoVMk5I7YJtbdOoXjvJetglWUUIpWUbEaYthPmGSZfw1QGLqNqFoIeAzgMKAU5I6wBLs7nyLAG6lFZZRaivXHsv4pIR1pbZRpv6vxshn7uvkDEFAW6RgH62Dtr5nAdMgMagZSHhCyMeB+DYAV0SYe0kA+4dgG9G5ktWRpg2dsD4jBAyQsDqt/YlckQV1HrjSysLuzz32k8CANPaIjuXCCOWjF7IaBMwlsSeXfJnLZwvQowwLVF3OQKnJSujS2nqRgh44osIsC5JIG3FrVzw6CFrRV/Y5bgK+B4BENYWEvMtQ8DKSuwZUR7oXUo7mXapGSJgbaqstQn4NdrKodgatr6OZtBCQZ74fmDriwKujioIeMcS4Wfa1ZzeZpeNj3BWeG7faPCKT0d4bvd+3vfUq/8du5fQM3Uvl9KEnqlHCHnZNEK6REhISEhISEhISEhI6A7F9gaekwIeYG26GQAAAABJRU5ErkJggg=="/>
+          </g>
+          <polygon fill="url(#cue3-linear-gradient-2)" points=".6 -1.12 0 -1.12 0 1022.88 .6 1022.88 .6 -1.12 .6 -1.12"/>
+        </g>
       </g>
     </g>
     <g id="cue3-Layer_22" data-name="Layer 22">
@@ -4549,7 +4649,7 @@ input.pt-range::-moz-range-thumb,
     </g>
     <g id="cue3-R_Claws" data-name="R Claws">
       <path fill="#22211b" d="M415.12,724.15s-14.57-9.83-3.94-17c10.62-7.17,25.14-5.48,29.7-2.53,0,0-29,4.14-25.76,19.53Z"/>
-      <path fill="#22211b" d="M425.01,739.62s-14.57-9.83-3.94-17c10.62-7.17,25.14-5.48,29.7-2.53,0,0-29,4.14-25.76,19.53Z"/>
+      <path fill="#22211b" d="M425.01,739.62s-14.57-9.83-3.94-17,25.14-5.48,29.7-2.53c0,0-29,4.14-25.76,19.53Z"/>
       <path fill="#22211b" d="M421.85,727.53s-10.99,13.71,1.28,17.4c12.27,3.69,25.55-2.76,29.03-6.92,0,0-28.84,5.18-30.31-10.48Z"/>
       <path fill="#22211b" d="M420.68,747.3s-11.98,12.86-.01,17.45c11.97,4.59,25.7-.52,29.49-4.42,0,0-29.17,2.69-29.47-13.03Z"/>
     </g>
@@ -4576,7 +4676,7 @@ input.pt-range::-moz-range-thumb,
       <path fill="url(#cue3-linear-gradient-9)" d="M298,380.92s135.99-92.82,2.17-151.9c-52.75-23.29-72.87,77.62-72.87,77.62,0,0,63.47,36.8,70.7,74.28Z"/>
     </g>
     <g id="cue3-Head">
-      <path fill="url(#cue3-linear-gradient-10)" d="M246.27,276.96c-21.59-7.17-45.73-.14-66.55,9.65-10.92,5.03-21.38,11.12-29.69,18.29-16.33,13.6-23.65,32.32-24.13,53.74-1.6,64.04,29.65,164.79,104.63,150.97,38.47-6.26,82.1-38.94,110.23-66.31,5.85-5.98,10.74-12.07,11.91-18.41,1.84-9.79.47-19.29-1.87-29.45-9.17-34.75-33.1-66.07-59.99-89.15-15.28-12.78-26.37-23.35-44.47-29.3l-.1-.03Z"/>
+      <path fill="url(#cue3-linear-gradient-10)" d="M246.27,277.02c-21.58-7.16-45.7-.14-66.5,9.64-10.91,5.03-21.37,11.11-29.67,18.28-16.32,13.6-23.64,32.3-24.11,53.71-1.6,64,29.63,164.69,104.57,150.87,38.44-6.26,82.05-38.91,110.16-66.27,5.85-5.97,10.73-12.06,11.91-18.39,1.84-9.79.47-19.27-1.87-29.43-9.16-34.72-33.08-66.03-59.95-89.09-15.27-12.77-26.36-23.33-44.44-29.28l-.1-.03Z"/>
       <ellipse fill="url(#cue3-linear-gradient-11)" style="mix-blend-mode:luminosity" cx="268.63" cy="357.29" rx="11.71" ry="12.92" transform="translate(-122.11 140.17) rotate(-24)"/>
       <ellipse fill="url(#cue3-linear-gradient-12)" style="mix-blend-mode:luminosity" cx="177.62" cy="398.35" rx="11.11" ry="12.68" transform="translate(-107.6 68.37) rotate(-16.81)"/>
     </g>
@@ -5354,7 +5454,17 @@ input.pt-range::-moz-range-thumb,
       </section>
       <section class="flowop-panel">
         <div class="flowop-panel-title">Hotkeys</div>
-        <div class="flowop-note">Space plays and pauses. Hold down arrow to brake, hold up arrow to boost. Left and right resize text. Option plus down reverses; Option plus up returns forward.</div>
+        <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">LEFT / RIGHT</span><span class="pt-hint-desc">text size</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">OPT + DOWN</span><span class="pt-hint-desc">reverse</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">OPT + UP</span><span class="pt-hint-desc">forward</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">fullscreen</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">reset</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">hide controls</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">mirror</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">ESC</span><span class="pt-hint-desc">exit</span></div>
       </section>
     </aside>
   </div>
@@ -5572,19 +5682,18 @@ input.pt-range::-moz-range-thumb,
         <div class="pb-brand-copy">
           <div class="pb-modal-kicker">Pre-production workspace</div>
           <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
-          <div class="pb-modal-sub">Six pages in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
+          <div class="pb-modal-sub">Your paperwork in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
         </div>
       </div>
       <div class="plandabear-tools">
-      <button class="pb-notes-btn" id="paperworkNotesBtn" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')" data-tip="The crew’s message board. Tag a department and the thread stays with the show." aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="pb-notes-btn-lbl">Notes</span><span class="pb-notes-btn-count" id="paperworkNotesBarCount"></span></button>
       <button class="pb-back-rundown-btn" onclick="closePlandaBear()" data-tip="Go back to the Cueola rundown" aria-label="Back to Cueola rundown"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
-      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" data-tip="Change the Planda Bear theme" aria-label="Planda Bear theme settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
+      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" data-tip="Planda Bear settings: theme, exports, and previews" aria-label="Planda Bear settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       </div>
     </div>
     <div class="pb-modal-body">
     <div class="pb-collab" data-pb-collab="hub"></div>
-    <div class="plandabear-theme-bar" aria-label="Planda Bear themes">
-      <div class="plandabear-theme-label">Planda Bear Theme</div>
+    <div class="plandabear-theme-bar" aria-label="Planda Bear settings">
+      <div class="plandabear-theme-label">Planda Bear Settings</div>
       <details class="themes-submenu">
         <summary class="themes-row"><span class="tr-ico" aria-hidden="true"></span><span class="tr-lbl">Themes</span><span class="tr-val">Choose<span class="tr-chev" aria-hidden="true">›</span></span></summary>
       <div class="theme-grid">
@@ -5599,8 +5708,29 @@ input.pt-range::-moz-range-thumb,
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')" aria-pressed="false"><div class="ts-preview"></div><div class="ts-name">PrepBear</div></button>
       </div>
       </details>
+      <!-- The bottom action row's exports live here too, so the gear menu covers
+           the whole package without a scroll to the end of the hub. Each button
+           closes the popover first or it would sit open behind the preview. -->
+      <div class="plandabear-theme-label">Exports</div>
+      <div class="settings-file-grid">
+        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="togglePlandaBearThemes();exportPreProPackagePDF()" data-tip="Export the whole paperwork package as one PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" onclick="togglePlandaBearThemes();showPreProPackagePreview()" data-tip="See the package before you export"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Preview Package</span></button>
+        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="togglePlandaBearThemes();downloadCallSheetPDF()" data-tip="Export just the call sheet"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export Call Sheet Only</span></button>
+      </div>
+      <div class="plandabear-theme-label" id="pbGearAdminLabel" hidden>Admin</div>
+      <div class="settings-file-grid" id="pbGearAdminTools" hidden>
+        <button type="button" class="btn-secondary settings-file-btn" onclick="togglePlandaBearThemes();openAdminLogin()" data-tip="Sign in as admin to edit position assignments on the hub"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span>Admin sign in</span></button>
+      </div>
     </div>
     <div id="pbGroupBar" class="pb-group-bar" hidden></div>
+    <button type="button" class="paperwork-card pb-notes-card" id="paperworkNotesBtn" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')" aria-label="Production Notes">
+      <div class="paperwork-card-num"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span></div>
+      <div>
+        <div class="paperwork-card-title">Production Notes <span class="pb-notes-btn-count" id="paperworkNotesBarCount"></span></div>
+        <div class="paperwork-card-sub">The crew’s message board. Tag a department and the thread stays with the show.</div>
+      </div>
+      <div class="paperwork-card-by" data-pb-by hidden></div>
+    </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
@@ -5862,6 +5992,44 @@ input.pt-range::-moz-range-thumb,
     <div id="patchSheetBody"></div>
     <div id="pbCommentsPatch"></div>
     <div class="paperwork-flow-actions" id="pbNavPatch"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     STAGE PLOT (v2.2 D4)
+══════════════════════════════════════════ -->
+<div class="modal-wrap" id="stagePlotModal">
+  <div class="modal pb-builder-modal u-modal-scroll-tall">
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">Stage Plot</div>
+        <div class="modal-sub">Drag gear from the bank onto the stage. Click anything to rename, rotate, or resize it.</div>
+      </div>
+      <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
+    </div>
+    <div class="pb-collab" data-pb-collab="stage-plot"></div>
+    <div class="prepro-section">
+      <div class="prepro-section-title"><span>Stage Plot<button type="button" class="info-btn" aria-label="How the stage plot works" onclick="toggleInfoPop(event,'plot-sheets')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
+      <div class="call-sheet-switcher">
+        <div class="field">
+          <label class="field-lbl">Current Plot</label>
+          <select class="field-in" id="pp-plot-select" onchange="switchStagePlot(this.value)"></select>
+        </div>
+        <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherStagePlot()">+ Add Plot</button>
+        <button class="call-add-btn call-delete-btn u-callbtn u-c-red" type="button" onclick="deleteStagePlot()" data-tip="Delete this plot. Instructors and admins only.">Delete</button>
+      </div>
+      <div class="field u-mt10"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="Studio A talk show, Black box band night" oninput="updateActiveStagePlotLabel(this.value)"></div>
+    </div>
+    <div class="plot-editor">
+      <div class="plot-palette-rail">
+        <div class="plot-rail-title">Object Bank</div>
+        <div class="plot-palette" id="plotPalette"></div>
+      </div>
+      <div class="plot-stage-wrap" id="pp-plot-canvas"></div>
+      <aside class="plot-inspector" id="plotInspector"></aside>
+    </div>
+    <div id="pbCommentsPlot"></div>
+    <div class="paperwork-flow-actions" id="pbNavPlot"></div>
   </div>
 </div>
 
@@ -6811,20 +6979,21 @@ input.pt-range::-moz-range-thumb,
 
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
-<script src="cueola-session-clone.js?v=2b4cf2ea17"></script>
+<script src="cueola-session-clone.js?v=7a666657a8"></script>
 <script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
-<script src="cueola-identity.js?v=2c2c797b9f"></script>
+<script src="cueola-pin.js?v=a47e3ea31d"></script>
+<script src="cueola-identity.js?v=020a885a95"></script>
 <script src="cueola-admin-auth.js?v=84a9727118"></script>
-<script src="cueola-live-session.js?v=2352bc00d1"></script>
+<script src="cueola-live-session.js?v=bc0db7a3e5"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
 <script src="cueola-prompter-session.js?v=1002259f73"></script>
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=7dc4098c8a"></script>
+<script src="cueola-app.js?v=b9be9132b6"></script>
 <script src="outrangutan/outrangutan.js?v=48addea3ef"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
