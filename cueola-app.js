@@ -335,7 +335,7 @@ function _callerStateInputs() {
   return {
     browsingSelf, followTarget,
     isDemo: session.isDemo, isExpert: session.isExpert, code: session.code,
-    role: session.role, hasAdminSession: adminSession != null,
+    local: session.local, role: session.role, hasAdminSession: adminSession != null,
   };
 }
 
@@ -4498,7 +4498,11 @@ function firebaseConnectionHint(err) {
 }
 
 function openLocalSession(code='', name='You', role='instructor', showName='Untitled Show') {
-  session = sessionWithProfileIdentity({ code:(code || '').trim().toUpperCase(), role, userName:name || 'You', isDemo:false, isExpert:false }, name);
+  // local:true marks an offline copy with no live cloud authority, so the show
+  // caller resolver treats it as a solo surface (this device drives its own
+  // view). It never touches the shared control bus, so this cannot hijack a
+  // real session even if the role was restored from a forgeable resume blob.
+  session = sessionWithProfileIdentity({ code:(code || '').trim().toUpperCase(), role, userName:name || 'You', isDemo:false, isExpert:false, local:true }, name);
   show = { name:showName || 'Untitled Show', start:'' };
   beats = [];
   freeTextMode = true;
@@ -4840,7 +4844,12 @@ async function startBlankSlate() {
       return;
     }
     localStorage.setItem('cueola_last_name', name);
-    session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false }, name);
+    // The creator of a Blank Slate owns and drives their own sandbox. local:true
+    // marks it solo so the show-caller resolver lets them drive without a real
+    // admin session. Only THIS device (which minted the code) is marked; anyone
+    // who later joins the code goes through joinSession and lands as a student,
+    // so a shared Blank Slate cannot be hijacked by a joiner spoofing a role.
+    session = sessionWithProfileIdentity({ code, role:'instructor', userName:name, isDemo:false, isExpert:false, local:true }, name);
     show = { name:showName, start:'' };
     beats = [];
     freeTextMode = true;

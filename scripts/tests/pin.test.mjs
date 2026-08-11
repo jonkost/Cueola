@@ -49,7 +49,7 @@ for (const good of ['1930', '8261', '5079', '3814']) {
 // ── every strength message is em/en-dash free (owner copy ban) ──
 for (const weak of ['0000', '1234', '12', '2580']) {
   const msg = Pin.validate(weak).msg || '';
-  ok(`message for ${weak} has no em/en dash`, !/[—–]/.test(msg));
+  ok(`message for ${weak} has no em/en dash`, !/[\u2014\u2013]/.test(msg));
 }
 
 // ── salt shape matches the rules regex ^[A-Za-z0-9_-]{8,64}$ ──

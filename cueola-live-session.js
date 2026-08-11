@@ -629,16 +629,25 @@
   //                   mirror of someone else); solo surfaces and privileged
   //                   roles default to driving their own position.
   //   isShowCaller  — followingSelf AND allowed to move the shared cue:
-  //                   solo surfaces always; in a SHARED session ONLY a live
-  //                   admin auth session (real Firebase password). The client
-  //                   role string is spoofable and no longer confers this: a
-  //                   student, or a profile whose role merely reads 'admin'
-  //                   without passing the password gate, cannot call the show
-  //                   in a shared session. Rejoining by code lands as 'student';
-  //                   the admin unlock is what returns the wheel.
+  //                   solo surfaces always; in a JOINED shared session ONLY a
+  //                   live admin auth session (real Firebase password). The
+  //                   client role string is spoofable and no longer confers
+  //                   this: a student, or a profile whose role merely reads
+  //                   'admin' without passing the password gate, cannot call a
+  //                   joined show. Rejoining by code lands as 'student'; the
+  //                   admin unlock is what returns the wheel.
+  //   solo          — a surface with no shared cloud authority to protect: the
+  //                   demo, expert mode, an unsynced local copy (no code), or a
+  //                   session this device OWNS (input.local: an offline local
+  //                   copy, or a Blank Slate this device just created). Owned
+  //                   and offline surfaces always drive their own view; they
+  //                   cannot hijack anyone else's show, because offline copies
+  //                   never touch the live control bus and a Blank Slate mints
+  //                   its own code. Only JOIN paths (which carry the forgeable
+  //                   role) stay gated on a real admin session.
   function resolveCallerState(input) {
     input = input || {};
-    var solo = Boolean(input.isDemo || input.isExpert || !input.code);
+    var solo = Boolean(input.isDemo || input.isExpert || !input.code || input.local);
     var privileged = Boolean(input.hasAdminSession);
     var followingSelf = Boolean(input.browsingSelf) ||
       (!input.followTarget && (solo || privileged));

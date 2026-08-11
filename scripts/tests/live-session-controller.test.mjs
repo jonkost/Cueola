@@ -466,6 +466,14 @@ test('show-caller predicate: solo carve-outs and follow semantics', () => {
   // Expert mode and an unsynced local workspace likewise.
   assert.equal(resolve({ code:'', role:'student' }).isShowCaller, true);
   assert.equal(resolve({ code:'X', isExpert:true, role:'student' }).isShowCaller, true);
+  // An OWNED surface with a real code but no cloud authority (offline local copy
+  // or a Blank Slate this device created) drives itself, even without an admin
+  // session. It cannot hijack a joined show: offline copies never touch the
+  // control bus and a Blank Slate mints its own code.
+  assert.equal(resolve({ code:'LOCAL', role:'instructor', local:true, hasAdminSession:false }).isShowCaller, true);
+  assert.equal(resolve({ code:'AB12', role:'student', local:true, hasAdminSession:false }).isShowCaller, true);
+  // But the SAME code JOINED (no local flag, no admin) cannot drive.
+  assert.equal(resolve({ code:'AB12', role:'instructor', local:false, hasAdminSession:false }).isShowCaller, false);
   // Mirroring someone else never calls the show, even with a live admin session.
   assert.equal(resolve({ code:'X', hasAdminSession:true, followTarget:'Sam' }).isShowCaller, false);
   // Explicitly browsing on my own restores my own position — but a student

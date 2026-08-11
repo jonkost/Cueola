@@ -270,30 +270,36 @@ allowed(await write('profiles/alexs.new', { active: false, mergedInto: 'alex.smi
 // Auth (masked patch), and a super-admin reset rides the same open update rule.
 const goodPinHash = 'a'.repeat(64);
 const goodPinSalt = 'Xy9_-aB2cD3e';
-// Student sets a PIN at sign-in (masked patch, anonymous).
-allowed(await write('profiles/alex.smith',
-  { pinSalt: goodPinSalt, pinHash: goodPinHash, pinSetAt: 20, pinSetBy: 'alex.smith' },
+// A dedicated PIN-FREE profile. The shape guards below must run against a doc
+// with no existing pinSalt: a masked patch MERGES with the stored doc, so the
+// salt+hash pairing clause can only be exercised to a denial when the target
+// genuinely lacks the sibling field.
+allowed(await write('profiles/pin.tester', { ...profile, username: 'pin.tester' }),
+  'pin-test profile create');
+// Shape guards, all against the still-PIN-free doc so each stays a real denial.
+denied(await write('profiles/pin.tester', { pinHash: goodPinHash, pinSetAt: 22 },
+  ['pinHash', 'pinSetAt']), 'pinHash without pinSalt (pairing) denied');
+denied(await write('profiles/pin.tester', { pinSalt: goodPinSalt, pinHash: 'A'.repeat(64), pinSetAt: 23 },
+  ['pinSalt', 'pinHash', 'pinSetAt']), 'uppercase pinHash denied (lowercase hex only)');
+denied(await write('profiles/pin.tester', { pinSalt: goodPinSalt, pinHash: 'a'.repeat(63), pinSetAt: 24 },
+  ['pinSalt', 'pinHash', 'pinSetAt']), 'short pinHash denied (must be 64 hex)');
+denied(await write('profiles/pin.tester', { pinSalt: 'short', pinHash: goodPinHash, pinSetAt: 25 },
+  ['pinSalt', 'pinHash', 'pinSetAt']), 'too-short pinSalt denied');
+denied(await write('profiles/pin.tester', { pinSalt: goodPinSalt, pinHash: goodPinHash, pinSetAt: '26' },
+  ['pinSalt', 'pinHash', 'pinSetAt']), 'string pinSetAt denied (int only)');
+denied(await write('profiles/pin.tester', { pinPlain: '1930', lastSeen: 27 },
+  ['pinPlain', 'lastSeen']), 'unknown pinPlain key denied (hasOnly)');
+// Student sets a PIN at sign-in (masked patch, anonymous) once the pair is whole.
+allowed(await write('profiles/pin.tester',
+  { pinSalt: goodPinSalt, pinHash: goodPinHash, pinSetAt: 20, pinSetBy: 'pin.tester' },
   ['pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy']), 'student sets own PIN (masked patch)');
 // A super admin resets someone else's PIN. immutableProfileIdentity must pass
 // on a foreign profile via a masked patch.
 setAuth('uid_std_1');
-allowed(await write('profiles/alex.smith',
+allowed(await write('profiles/pin.tester',
   { pinSalt: 'Reset_salt_9zQ', pinHash: 'b'.repeat(64), pinSetAt: 21, pinSetBy: 'Instructor One' },
   ['pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy']), 'admin resets a student PIN (masked patch)');
 setAuth(null);
-// Shape guards.
-denied(await write('profiles/alex.smith', { pinHash: goodPinHash, pinSetAt: 22 },
-  ['pinHash', 'pinSetAt']), 'pinHash without pinSalt (pairing) denied');
-denied(await write('profiles/alex.smith', { pinSalt: goodPinSalt, pinHash: 'A'.repeat(64), pinSetAt: 23 },
-  ['pinSalt', 'pinHash', 'pinSetAt']), 'uppercase pinHash denied (lowercase hex only)');
-denied(await write('profiles/alex.smith', { pinSalt: goodPinSalt, pinHash: 'a'.repeat(63), pinSetAt: 24 },
-  ['pinSalt', 'pinHash', 'pinSetAt']), 'short pinHash denied (must be 64 hex)');
-denied(await write('profiles/alex.smith', { pinSalt: 'short', pinHash: goodPinHash, pinSetAt: 25 },
-  ['pinSalt', 'pinHash', 'pinSetAt']), 'too-short pinSalt denied');
-denied(await write('profiles/alex.smith', { pinSalt: goodPinSalt, pinHash: goodPinHash, pinSetAt: '26' },
-  ['pinSalt', 'pinHash', 'pinSetAt']), 'string pinSetAt denied (int only)');
-denied(await write('profiles/alex.smith', { pinPlain: '1930', lastSeen: 27 },
-  ['pinPlain', 'lastSeen']), 'unknown pinPlain key denied (hasOnly)');
 
 // Phase 6 canonical assignments. Cueola has no Firebase Auth, so these are
 // role-neutral shape/consistency checks, not instructor/student authorization.

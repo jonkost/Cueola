@@ -1,4 +1,4 @@
-/* Cueola student PIN helper — shared by the front door (cueola-identity.js)
+/* Cueola student PIN helper. Shared by the front door (cueola-identity.js)
  * and the instructor dashboard (dashboard.html).
  *
  * Threat model, stated honestly so nobody mistakes this for real auth:
