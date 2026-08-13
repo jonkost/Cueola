@@ -3862,6 +3862,47 @@ input.pt-range::-moz-range-thumb,
 .plot-insp-hint{margin-top:8px;font-size:11.5px;color:var(--text3);line-height:1.45}
 .plot-ghost{position:fixed;z-index:10000;width:44px;height:44px;color:var(--accent);opacity:.9;transform:translate(-50%,-50%);pointer-events:none}
 .plot-ghost svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.plot-layer-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.plot-layer-chip{display:flex;align-items:stretch;border:1px solid transparent;border-radius:999px;background:color-mix(in srgb,var(--s2) 72%,transparent);overflow:hidden;transition:background .15s var(--ease),box-shadow .15s var(--ease)}
+.plot-layer-chip.on{background:color-mix(in srgb,var(--s3) 92%,transparent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.plot-layer-chip.off .plot-layer-name{opacity:.45}
+.plot-layer-name{display:flex;align-items:center;gap:7px;padding:7px 4px 7px 12px;border:0;background:transparent;color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s var(--ease)}
+.plot-layer-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.plot-layer-eye{display:flex;align-items:center;justify-content:center;width:32px;border:0;background:transparent;color:var(--text3);cursor:pointer;transition:color .15s var(--ease)}
+.plot-layer-eye:hover{color:var(--text)}
+.plot-layer-eye svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.plot-pal-item.bank-off{opacity:.35}
+.plot-pal-item.bank-off span{text-decoration:line-through}
+.plot-bank-manage-row{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.plot-bank-manage-btn{padding:6px 10px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.plot-bank-manage-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
+.plot-bank-manage-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
+.plot-bank-manage-row .plot-insp-hint{margin-top:0}
+.plot-pal-group{display:flex;flex-direction:column;gap:6px}
+.plot-pal-group + .plot-pal-group{margin-top:10px}
+.plot-pal-group-h{font-size:10.5px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 1px 2px}
+.plot-flow-btn{display:flex;align-items:center;gap:7px;margin-left:auto;padding:7px 14px;border-radius:999px;border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:12.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease),box-shadow .15s var(--ease)}
+.plot-flow-btn.plot-layerset-btn{margin-left:0}
+.plot-flow-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
+.plot-flow-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
+.plot-flow-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.plot-stage-wrap.flow-mode svg{cursor:crosshair}
+.plot-stage-wrap.flow-mode .plot-item{cursor:crosshair}
+.plot-flow-line{stroke:currentColor;stroke-width:1.75;fill:none;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.plot-flow-arrow{fill:currentColor;stroke:none}
+.plot-flow-hit{stroke:transparent;stroke-width:14;fill:none;pointer-events:stroke;cursor:pointer}
+.plot-flow-sel{stroke:var(--accent);stroke-width:6;fill:none;opacity:.4;stroke-linecap:round}
+.plot-flow-pill{fill:currentColor;stroke:none}
+.plot-flow-pill-text{fill:var(--bg);font-size:8.5px;font-weight:700;font-family:var(--mono);pointer-events:none}
+.plot-item-src{fill:none;stroke:var(--acg);stroke-width:2;stroke-dasharray:3 3;pointer-events:none}
+.plot-floor-walls{pointer-events:none;overflow:visible}
+.plot-floor-walls *{fill:none;stroke:color-mix(in srgb,var(--text) 55%,transparent);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.plot-flow-ends{font-size:12.5px;color:var(--text);padding:2px 0}
+.plot-flow-ends span{display:inline-block;min-width:44px;font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
+.plot-layer-seg{display:flex;gap:6px;flex-wrap:wrap;padding-top:2px}
+.plot-seg-btn{padding:5px 10px;border-radius:999px;border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.plot-seg-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
+.plot-seg-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
 @media (max-width:940px){
   .plot-editor{grid-template-columns:1fr}
   .plot-palette{flex-direction:row;flex-wrap:wrap;max-height:none}
@@ -6003,7 +6044,7 @@ input.pt-range::-moz-range-thumb,
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Stage Plot</div>
-        <div class="modal-sub">Drag gear from the bank onto the stage. Click anything to rename, rotate, or resize it.</div>
+        <div class="modal-sub">Build each system as its own layer: drag gear from the bank, then draw the signal flow between it.</div>
       </div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
@@ -6020,6 +6061,7 @@ input.pt-range::-moz-range-thumb,
       </div>
       <div class="field u-mt10"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="Studio A talk show, Black box band night" oninput="updateActiveStagePlotLabel(this.value)"></div>
     </div>
+    <div class="plot-layer-bar" id="plotLayerBar"></div>
     <div class="plot-editor">
       <div class="plot-palette-rail">
         <div class="plot-rail-title">Object Bank</div>
@@ -6979,7 +7021,7 @@ input.pt-range::-moz-range-thumb,
 
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
-<script src="cueola-session-clone.js?v=7a666657a8"></script>
+<script src="cueola-session-clone.js?v=4a94fe587e"></script>
 <script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
@@ -6993,7 +7035,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=0613a455ac"></script>
+<script src="cueola-app.js?v=a02fb31ef4"></script>
 <script src="outrangutan/outrangutan.js?v=d9d163e098"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>

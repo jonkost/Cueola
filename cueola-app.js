@@ -6388,7 +6388,7 @@ const INFO_POPS = {
   'plot-sheets': {
     title: 'How the stage plot works',
     lesson: 'plandabear', section: 'steps',
-    body: 'A plot is a birdseye map of one setup: drag gear from the bank onto the stage, then click anything to rename, rotate, resize, or recolor it. Keep a separate plot per space or per show style and switch between them here. Every plot prints as its own landscape page in the paperwork package.',
+    body: 'A plot is a birdseye map of one setup, built in layers: Room for the space itself, then Audio, Video, and Lighting for each system. Drag gear from the bank, then use Draw Flow to cable it up: click the source, then the destination, and the arrow shows the signal direction with its connector type. The eye on each layer chip shows or hides that layer for you only, and exports include exactly the layers you have showing. Keep a separate plot per space or show style and switch between them here.',
   },
   'cs-event-info': {
     title: 'What Event Info covers',
@@ -15575,7 +15575,7 @@ const PAPERWORK_ITEMS = [
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
-  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A birdseye plot of your space: drag cameras, mics, and set pieces where they go.' },
+  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A birdseye plot of your space: audio, video, and lighting layers with signal flow between the gear.' },
   { order:8, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
 ];
 // ── v2.1 D6: per-session paperwork config (sparse override map on the parent
@@ -20540,10 +20540,23 @@ async function readServerPaperworkSnapshot(options={}) {
         includeNotes:options.includeNotes === true,
         includeAssignments:options.includeAssignments !== false,
         documentType:options.documentType || 'package',
+        ...paperworkPlotLayerOptions(options),
       },
     });
   }
   throw new Error('Could not capture one stable production revision.');
+}
+
+// Stage plot exports carry their layer selection inside the fingerprinted
+// options (stable order via plotLayerSetNormalize), so a preview of one
+// combination can never be reused to export another.
+function paperworkPlotLayerOptions(options={}) {
+  const out = {};
+  if (Array.isArray(options.plotLayers)) out.plotLayers = plotLayerSetNormalize(options.plotLayers);
+  if (Array.isArray(options.plotLayerSets) && options.plotLayerSets.length) {
+    out.plotLayerSets = options.plotLayerSets.map(keys => plotLayerSetNormalize(keys));
+  }
+  return out;
 }
 
 function localPaperworkAssignments() {
@@ -20588,6 +20601,7 @@ function readLocalPaperworkSnapshot(options={}) {
       includeNotes:options.includeNotes === true,
       includeAssignments:options.includeAssignments !== false,
       documentType:options.documentType || 'package',
+      ...paperworkPlotLayerOptions(options),
     },
   });
 }
@@ -21129,25 +21143,123 @@ const PLOT_STAGE_MAX_FT = 200;
 const PLOT_DEFAULT_STAGE_W_FT = 40;
 const PLOT_DEFAULT_STAGE_H_FT = 24;
 
-// Placeholder glyphs: simple birdseye line art in a 24x24 box, stroked with
-// currentColor. Rotation 0 faces "up" the plot. Swap sym markup per type when
-// the real icon set arrives; footprints (w/h in feet) are the defaults a new
-// item takes and stay editable per item.
-const PLOT_ELEMENT_TYPES = [
-  { type:'camera', label:'Camera', w:2, h:2.5, sym:'<rect x="7" y="10" width="10" height="9" rx="1.5"/><path d="M9.5 10 7.5 4.5h9L14.5 10"/><circle cx="12" cy="14.5" r="2"/>' },
-  { type:'mic', label:'Microphone', w:1.5, h:1.5, sym:'<circle cx="12" cy="10" r="4.5"/><path d="M12 14.5v5M9.5 19.5h5"/>' },
-  { type:'projector', label:'Projector', w:2, h:1.5, sym:'<rect x="6.5" y="9" width="11" height="9" rx="2"/><circle cx="12" cy="9" r="1.6"/><path d="M10.3 7 6.5 2.5M13.7 7l3.8-4.5"/>' },
-  { type:'pipe-drape', label:'Pipe and Drape', w:10, h:1, sym:'<path d="M3 11h18"/><circle cx="3" cy="11" r="1.2"/><circle cx="21" cy="11" r="1.2"/><path d="M3 15c1.5 0 1.5-2 3-2s1.5 2 3 2 1.5-2 3-2 1.5 2 3 2 1.5-2 3-2 1.5 2 3 2"/>' },
-  { type:'switcher', label:'Video Switcher', w:3, h:2, sym:'<rect x="4.5" y="8" width="15" height="9" rx="1.5"/><circle cx="7.5" cy="11" r=".8"/><circle cx="10.5" cy="11" r=".8"/><circle cx="7.5" cy="14" r=".8"/><circle cx="10.5" cy="14" r=".8"/><path d="M16.5 10.5v4"/>' },
-  { type:'monitor', label:'Monitor', w:3, h:1, sym:'<rect x="4" y="10" width="16" height="4" rx="1"/><path d="M12 14v3M9 17h6"/>' },
-  { type:'speaker', label:'Speaker', w:1.5, h:2, sym:'<rect x="7" y="5.5" width="10" height="13" rx="1.5"/><circle cx="12" cy="14" r="2.6"/><circle cx="12" cy="8.7" r="1.1"/>' },
-  { type:'light', label:'Light', w:1.5, h:1.5, sym:'<circle cx="12" cy="13.5" r="4.5"/><path d="M9.4 9.9 7.8 5.2M14.6 9.9l1.6-4.7"/>' },
-  { type:'table', label:'Table', w:6, h:2.5, sym:'<rect x="4" y="8" width="16" height="8" rx="1"/>' },
-  { type:'person', label:'Person', w:1.5, h:1.5, sym:'<circle cx="12" cy="9.5" r="3"/><path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>' },
-  { type:'riser', label:'Riser', w:8, h:6, sym:'<rect x="4" y="6" width="16" height="12"/><path d="M4 12 10 6M4 18 20 6M14 18l6-6"/>' },
-  { type:'door', label:'Door', w:3, h:3, sym:'<path d="M5 19h14M6.5 19V6.5"/><path d="M6.5 6.5A12.5 12.5 0 0 1 19 19"/>' },
-  { type:'label', label:'Text Label', w:4, h:1, sym:'<path d="M6 7h12M12 7v10M9.5 17h5"/>' },
+// The three assignment layers plus the always-there Room base. Layer colors
+// are the department tokens (owner decision 2026-08-13): audio green, video
+// blue, lighting purple; room draws in ink. Print hexes match
+// PLOT_ITEM_COLORS so a manual chip and a layer default agree on paper.
+const PLOT_LAYERS = [
+  { key:'room',     label:'Room',     css:'var(--text)',   print:'#1d1d1f', symbol:'action.home' },
+  { key:'audio',    label:'Audio',    css:'var(--green)',  print:'#16a34a', symbol:'department.audio' },
+  { key:'video',    label:'Video',    css:'var(--video)',  print:'#2563eb', symbol:'department.video' },
+  { key:'lighting', label:'Lighting', css:'var(--purple)', print:'#9333ea', symbol:'department.lighting' },
 ];
+function plotLayerDef(key) {
+  return PLOT_LAYERS.find(l => l.key === key) || null;
+}
+
+// Connector types a cable can carry. Registry-driven so the future patching
+// exercise (and new gear) can extend it without touching the editor. Every
+// flow ALWAYS has one: the normalizer fills gaps with the layer's default,
+// so "required" holds without ever blocking a save.
+const PLOT_CONN_TYPES = [
+  { key:'xlr',  label:'XLR' },
+  { key:'bnc',  label:'BNC' },
+  { key:'dmx5', label:'DMX 5-pin' },
+];
+const PLOT_CONN_LAYER_DEFAULT = { room:'xlr', audio:'xlr', video:'bnc', lighting:'dmx5' };
+function plotConnDef(key) {
+  return PLOT_CONN_TYPES.find(c => c.key === key) || null;
+}
+function plotConnDefault(layerKey) {
+  return PLOT_CONN_LAYER_DEFAULT[layerKey] || 'xlr';
+}
+
+// Floor plans. Same drop-in idiom as the gear glyphs: wall line art in the
+// template's own viewBox, stretched across the stage rect, so the owner's
+// final room traces replace sym without touching the editor. Suggested
+// dimensions apply when an instructor assigns the floor (both stay
+// editable). fs4e-123 is traced from the course's System Plot Plan slides;
+// the real room feet are still owed by the owner.
+const PLOT_FLOOR_TEMPLATES = [
+  { id:'blank', label:'Blank rectangle' },
+  { id:'fs4e-123', label:'FS4E-123 lab room', w_ft:40, h_ft:30, vb:'0 0 1000 750', sym:
+      '<path d="M14 736 V160"/>'
+    + '<path d="M14 160 H86"/><path d="M86 160 A72 72 0 0 0 14 88"/>'
+    + '<path d="M14 88 L232 36 H768 L986 88"/>'
+    + '<path d="M986 160 H914"/><path d="M914 160 A72 72 0 0 1 986 88"/>'
+    + '<path d="M986 160 C999 320 999 560 986 736"/>'
+    + '<path d="M14 736 H986"/>' },
+];
+function plotFloorDef(id) {
+  return PLOT_FLOOR_TEMPLATES.find(t => t.id === id) || null;
+}
+
+// Placeholder glyphs: simple line art stroked with currentColor. Rotation 0
+// faces "up" the plot. Swap sym markup per type when the real icon set
+// arrives. Sizing model per type:
+//   resize:'uniform' (default) keeps the glyph's proportions: one Size field,
+//     depth follows the type's aspect (the "icons must not stretch" fix);
+//   resize:'free' keeps independent Wide/Deep (simple room shapes only);
+//   resize:'panels' sizes by drape panel count instead of feet.
+// vb is the art's viewBox (default 0 0 24 24); wide types draw in a viewBox
+// matching their footprint aspect so nothing letterboxes. Each type lives on
+// one of the PLOT_LAYERS; an item can override that with item.layer.
+const PLOT_DRAPE_PANEL_FT = 4;   // one drape panel, in feet (owner to confirm)
+const PLOT_ELEMENT_TYPES = [
+  // Room
+  { type:'pipe-drape', label:'Pipe and Drape', layer:'room', w:8, h:1, resize:'panels', panels:2, sym:'<path d="M3 11h18"/><circle cx="3" cy="11" r="1.2"/><circle cx="21" cy="11" r="1.2"/><path d="M3 15c1.5 0 1.5-2 3-2s1.5 2 3 2 1.5-2 3-2 1.5 2 3 2 1.5-2 3-2 1.5 2 3 2"/>' },
+  { type:'table', label:'Table', layer:'room', w:6, h:2.5, resize:'free', sym:'<rect x="4" y="8" width="16" height="8" rx="1"/>' },
+  { type:'person', label:'Person', layer:'room', w:1.5, h:1.5, sym:'<circle cx="12" cy="9.5" r="3"/><path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>' },
+  { type:'riser', label:'Riser', layer:'room', w:8, h:6, resize:'free', sym:'<rect x="4" y="6" width="16" height="12"/><path d="M4 12 10 6M4 18 20 6M14 18l6-6"/>' },
+  { type:'door', label:'Door', layer:'room', w:3, h:3, sym:'<path d="M5 19h14M6.5 19V6.5"/><path d="M6.5 6.5A12.5 12.5 0 0 1 19 19"/>' },
+  { type:'label', label:'Text Label', layer:'room', w:4, h:1, resize:'free', sym:'<path d="M6 7h12M12 7v10M9.5 17h5"/>' },
+  // Audio
+  { type:'sound-console', label:'Audio Console (SQ6)', layer:'audio', w:4, h:2.5, vb:'0 0 38 24', sym:'<rect x="3" y="4.5" width="32" height="15" rx="2"/><path d="M8 8.5v7M13 8.5v7M18 8.5v7"/><circle cx="26" cy="9.5" r="1.2"/><circle cx="30.5" cy="9.5" r="1.2"/><circle cx="26" cy="14.5" r="1.2"/><circle cx="30.5" cy="14.5" r="1.2"/>' },
+  { type:'stage-box', label:'Stage Box', layer:'audio', w:2, h:1.5, vb:'0 0 32 24', sym:'<rect x="4" y="4" width="24" height="16" rx="2"/><circle cx="10" cy="9.5" r="1.4"/><circle cx="16" cy="9.5" r="1.4"/><circle cx="22" cy="9.5" r="1.4"/><circle cx="10" cy="14.5" r="1.4"/><circle cx="16" cy="14.5" r="1.4"/><circle cx="22" cy="14.5" r="1.4"/>' },
+  { type:'mic', label:'Wired Mic SM58', layer:'audio', w:1.5, h:1.5, sym:'<circle cx="12" cy="10" r="4.5"/><path d="M12 14.5v5M9.5 19.5h5"/>' },
+  { type:'mic-wireless', label:'Wireless Mic SM58', layer:'audio', w:1.5, h:1.5, sym:'<circle cx="12" cy="10" r="4.5"/><path d="M12 14.5v5M9.5 19.5h5"/><path d="M17.5 5.5 20.5 2.5"/>' },
+  { type:'wireless-rx', label:'Wireless Rx', layer:'audio', w:1.5, h:1, vb:'0 0 24 16', sym:'<rect x="3" y="6" width="18" height="8" rx="1.5"/><path d="M7 6V1.5M17 6V1"/><circle cx="7.5" cy="10" r="1.1"/><path d="M11 8.5h6M11 11.5h6"/>' },
+  { type:'laptop', label:'Computer Source', layer:'audio', w:2, h:1.5, vb:'0 0 32 24', sym:'<rect x="9" y="4" width="14" height="9.5" rx="1"/><path d="M6 19.5h20l-3-6H9Z"/>' },
+  { type:'speaker', label:'PA Speaker', layer:'audio', w:1.5, h:2, vb:'0 0 18 24', sym:'<rect x="4" y="2.5" width="10" height="19" rx="1.5"/><circle cx="9" cy="15.5" r="3.4"/><circle cx="9" cy="7.5" r="1.6"/>' },
+  { type:'pa-sub', label:'PA Sub (K181)', layer:'audio', w:2, h:2, sym:'<rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>' },
+  { type:'foldback', label:'Foldback Monitor', layer:'audio', w:2, h:1.5, vb:'0 0 32 24', sym:'<path d="M8 4.5h16l-4 15H12Z"/><circle cx="16" cy="11.5" r="3.4"/>' },
+  // Video
+  { type:'camera', label:'Camera', layer:'video', w:2, h:2.5, sym:'<rect x="7" y="10" width="10" height="9" rx="1.5"/><path d="M9.5 10 7.5 4.5h9L14.5 10"/><circle cx="12" cy="14.5" r="2"/>' },
+  { type:'flypack', label:'Video Flypack', layer:'video', w:3, h:2.5, vb:'0 0 29 24', sym:'<rect x="3" y="3" width="23" height="18" rx="2"/><path d="M3 9h23M3 15h23"/><circle cx="6.5" cy="6" r=".9"/><circle cx="22.5" cy="6" r=".9"/><circle cx="6.5" cy="12" r=".9"/><circle cx="22.5" cy="12" r=".9"/><circle cx="6.5" cy="18" r=".9"/><circle cx="22.5" cy="18" r=".9"/>' },
+  { type:'switcher', label:'Video Switch', layer:'video', w:3, h:2, vb:'0 0 36 24', sym:'<rect x="3" y="7" width="30" height="10" rx="1.5"/><circle cx="8" cy="10.5" r=".9"/><circle cx="12" cy="10.5" r=".9"/><circle cx="8" cy="13.5" r=".9"/><circle cx="12" cy="13.5" r=".9"/><path d="M18 10v4M22 10v4"/><rect x="26" y="9.5" width="4.5" height="5" rx="1"/>' },
+  { type:'media-recorder', label:'AJA Media Recorder', layer:'video', w:2, h:1.5, vb:'0 0 32 24', sym:'<rect x="3" y="6" width="26" height="12" rx="2"/><circle cx="10" cy="12" r="2.4"/><path d="M16 9.5h10M16 14.5h7"/>' },
+  { type:'sdi-hdmi', label:'SDI to HDMI Converter', layer:'video', w:1, h:1, sym:'<rect x="5" y="8" width="14" height="8" rx="1.5"/><path d="M1.5 12H5M19 12h3.5"/>' },
+  { type:'monitor', label:'Display', layer:'video', w:3, h:1, vb:'0 0 36 12', sym:'<rect x="2" y="1.5" width="32" height="6" rx="1"/><path d="M18 7.5v2.5M13 10h10"/>' },
+  { type:'projector', label:'Projector', layer:'video', w:2, h:1.5, sym:'<rect x="6.5" y="9" width="11" height="9" rx="2"/><circle cx="12" cy="9" r="1.6"/><path d="M10.3 7 6.5 2.5M13.7 7l3.8-4.5"/>' },
+  { type:'projection-screen', label:'Projection Screen', layer:'video', w:8, h:1, vb:'0 0 96 12', sym:'<rect x="2" y="3" width="92" height="6" rx="1.5"/>' },
+  // Lighting
+  { type:'crank-stand', label:'Crank Stand', layer:'lighting', w:3, h:3, sym:'<path d="M12 2.5v19M2.5 12h19"/><path d="M9.5 2.5h5M9.5 21.5h5M2.5 9.5v5M21.5 9.5v5"/>' },
+  { type:'source-four', label:'ERS Source Four', layer:'lighting', w:1.5, h:2.5, vb:'0 0 15 25', sym:'<rect x="4" y="10" width="7" height="8.5" rx="2"/><path d="M4.8 10 3.5 3.5h8L10.2 10"/><path d="M5.5 18.5v3.5M9.5 18.5v3.5"/>' },
+  { type:'fresnel', label:'Fresnel', layer:'lighting', w:1.5, h:1.5, sym:'<rect x="4" y="6" width="13" height="12" rx="2"/><path d="M17 9h4M17 15h4"/><path d="M7.5 9.5v5M10.5 9.5v5M13.5 9.5v5"/>' },
+  { type:'led-par', label:'LED Par', layer:'lighting', w:1.5, h:1.5, sym:'<path d="M7 4h10l4.5 8L17 20H7l-4.5-8Z"/><circle cx="12" cy="12" r="3"/>' },
+  { type:'parcan', label:'Parcan', layer:'lighting', w:1.5, h:1.5, sym:'<path d="M7 3.5h10V11a5 5 0 0 1-10 0Z"/><path d="M9 20.5a3 3 0 0 1 6 0"/>' },
+  { type:'dimmer', label:'Dimmer', layer:'lighting', w:1, h:1.5, vb:'0 0 16 24', sym:'<rect x="3" y="3" width="10" height="18" rx="1.5"/><circle cx="6.2" cy="7" r="1"/><circle cx="9.8" cy="7" r="1"/><circle cx="6.2" cy="12" r="1"/><circle cx="9.8" cy="12" r="1"/><circle cx="6.2" cy="17" r="1"/><circle cx="9.8" cy="17" r="1"/>' },
+  { type:'lighting-console', label:'ColorSource Lighting Console', layer:'lighting', w:3, h:2, vb:'0 0 36 24', sym:'<rect x="3" y="5" width="30" height="14" rx="2"/><path d="M7 9v6M11 9v6M15 9v6M19 9v6"/><rect x="23" y="9" width="7" height="6" rx="1"/>' },
+  { type:'light', label:'Light', layer:'lighting', w:1.5, h:1.5, sym:'<circle cx="12" cy="13.5" r="4.5"/><path d="M9.4 9.9 7.8 5.2M14.6 9.9l1.6-4.7"/>' },
+];
+// Pipe and drape tiles per panel instead of stretching: posts at every seam,
+// one wave per panel, drawn into a viewBox whose aspect always matches the
+// footprint (4 ft x 1 ft per panel), so nothing distorts at any count.
+function plotDrapeSym(panels) {
+  const n = Math.max(1, Math.min(20, Math.round(panels) || 1));
+  const W = 24 * n, left = 1.4, right = W - 1.4, span = (right - left) / n, cw = span / 6;
+  let s = `<path d="M${left} 2H${right}"/>`;
+  for (let i = 0; i <= n; i++) s += `<circle cx="${(left + i * span).toFixed(2)}" cy="2" r="1.1"/>`;
+  for (let i = 0; i < n; i++) {
+    const x0 = (left + i * span).toFixed(2);
+    let wave = `M${x0} 4.6c${cw.toFixed(2)} 0 ${cw.toFixed(2)} -1.4 ${(cw * 2).toFixed(2)} -1.4`;
+    for (let k = 1; k < 3; k++) {
+      wave += `s${cw.toFixed(2)} 1.4 ${(cw * 2).toFixed(2)} 1.4s${cw.toFixed(2)} -1.4 ${(cw * 2).toFixed(2)} -1.4`;
+    }
+    s += `<path d="${wave}"/>`;
+  }
+  return { vb: `0 0 ${W} 6`, sym: s };
+}
 
 // Color chips: '' means theme ink on screen, near-black on paper. The rest
 // map to the department tokens on screen and print-safe hexes on paper.
@@ -21174,9 +21286,20 @@ function plotSnapValue(v) {
   const step = plotSnapOn ? PLOT_SNAP_FT : 0.05;
   return Math.round(v / step) * step;
 }
+// Which layer an item lives on: an explicit item.layer override wins,
+// otherwise the type's home layer. Legacy items (no layer field) land on
+// their type's layer automatically, which is the migration.
+function plotItemLayer(item) {
+  if (plotLayerDef(item?.layer)) return item.layer;
+  return plotTypeDef(item?.type)?.layer || 'room';
+}
 function plotItemColor(item, print=false) {
-  const c = PLOT_ITEM_COLORS.find(c => c.key === (item?.color || '')) || PLOT_ITEM_COLORS[0];
-  return print ? c.print : c.css;
+  const c = PLOT_ITEM_COLORS.find(c => c.key === (item?.color || ''));
+  if (c && c.key) return print ? c.print : c.css;
+  // Ink (no chip picked) resolves to the item's layer color; room stays ink.
+  const layer = plotLayerDef(plotItemLayer(item));
+  if (layer && layer.key !== 'room') return print ? layer.print : layer.css;
+  return print ? PLOT_ITEM_COLORS[0].print : PLOT_ITEM_COLORS[0].css;
 }
 function plotItemDisplayLabel(item) {
   const label = (item?.label || '').trim();
@@ -21185,18 +21308,47 @@ function plotItemDisplayLabel(item) {
 
 // ── Boundary functions (array-on-wire, min-1, scrub, id minting) ──
 function normalizeStagePlotItem(item={}, i=0) {
-  const def = plotTypeDef(item.type) || PLOT_ELEMENT_TYPES[0];
+  const def = plotTypeDef(item.type) || plotTypeDef('camera') || PLOT_ELEMENT_TYPES[0];
   const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
+  let w = plotClamp(num(item.w_ft) ?? def.w, 0.5, 100);
+  let h = plotClamp(num(item.h_ft) ?? def.h, 0.5, 100);
+  let panels = 0;
+  if (def.resize === 'panels') {
+    // Panel-counted gear: the count is the size; width derives from it.
+    panels = Math.max(1, Math.min(20, Math.round(num(item.panels) ?? (w / PLOT_DRAPE_PANEL_FT)) || 1));
+    w = panels * PLOT_DRAPE_PANEL_FT;
+    h = def.h;
+  } else if (def.resize !== 'free') {
+    // Uniform gear keeps the type's aspect; legacy stretched items snap back
+    // to proportion here (the "icons must not stretch" fix).
+    h = Math.round(w * (def.h / def.w) * 100) / 100;
+  }
   return {
     id: String(item.id || `pi_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60),
     type: def.type,
     x_ft: plotClamp(num(item.x_ft) ?? 4, -400, 400),
     y_ft: plotClamp(num(item.y_ft) ?? 4, -400, 400),
     rot: ((num(item.rot) ?? 0) % 360 + 360) % 360,
-    w_ft: plotClamp(num(item.w_ft) ?? def.w, 0.5, 100),
-    h_ft: plotClamp(num(item.h_ft) ?? def.h, 0.5, 100),
+    w_ft: w,
+    h_ft: h,
     label: String(item.label ?? '').slice(0, 60),
     color: PLOT_ITEM_COLORS.some(c => c.key === item.color) ? item.color : '',
+    layer: plotLayerDef(item.layer) ? item.layer : '',
+    ...(panels ? { panels } : {}),
+  };
+}
+// Flows are directed cables between two items of the same plot. A flow with
+// a dangling endpoint is dropped (the delete-cascade backstop); the conn
+// field self-heals to the layer default.
+function normalizeStagePlotFlow(flow={}, i=0) {
+  const scrub = v => String(v || '').replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60);
+  const layer = plotLayerDef(flow.layer) ? flow.layer : 'audio';
+  return {
+    id: scrub(flow.id || `pf_${i + 1}`),
+    from: scrub(flow.from),
+    to: scrub(flow.to),
+    layer,
+    conn: plotConnDef(flow.conn) ? flow.conn : plotConnDefault(layer),
   };
 }
 function normalizeStagePlot(plot={}, i=0) {
@@ -21205,14 +21357,29 @@ function normalizeStagePlot(plot={}, i=0) {
   const items = (Array.isArray(plot.items) ? plot.items : [])
     .map((item, j) => normalizeStagePlotItem(item, j))
     .filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
+  const itemIds = new Set(items.map(item => item.id));
+  const flowIds = new Set();
+  const flowPairs = new Set();
+  const flows = (Array.isArray(plot.flows) ? plot.flows : [])
+    .map((flow, j) => normalizeStagePlotFlow(flow, j))
+    .filter(flow => itemIds.has(flow.from) && itemIds.has(flow.to) && flow.from !== flow.to)
+    .filter(flow => {
+      const pair = `${flow.from}>${flow.to}@${flow.layer}`;
+      if (flowIds.has(flow.id) || flowPairs.has(pair)) return false;
+      flowIds.add(flow.id);
+      flowPairs.add(pair);
+      return true;
+    });
   return {
     id: String(plot.id || `stage_plot_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 150),
     label: String(plot.label || '').slice(0, 80),
+    floor: plotFloorDef(plot.floor) ? plot.floor : 'blank',
     stage: {
       w_ft: plotClamp(stage.w_ft ?? PLOT_DEFAULT_STAGE_W_FT, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT),
       h_ft: plotClamp(stage.h_ft ?? PLOT_DEFAULT_STAGE_H_FT, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT),
     },
     items,
+    flows,
     userCreated: plot.userCreated === true,
   };
 }
@@ -21258,6 +21425,9 @@ let stagePlotsWorking = null;      // deep working copy while the editor is open
 let activeStagePlotId = '';
 let activeStagePlotIndex = 0;
 let plotSelectedItemId = '';
+let plotSelectedFlowId = '';   // a cable and an item are never both selected
+let plotFlowMode = false;      // Draw Flow armed: click source, click destination
+let plotFlowSourceId = '';     // first click while armed
 // Which plots the LOCAL user actually touched since the last save. Saves
 // splice only these over a fresh read (the getPreProData invariant), so a
 // whole-array write can never push stale copies of plots a collaborator is
@@ -21267,6 +21437,20 @@ const _plotDirtyIds = new Set();
 // rescue the last edit when Esc closes the editor inside that window.
 let _plotPendingSave = false;
 let plotSnapOn = localStorage.getItem('cueola_plot_snap') !== '0';
+// Layer view state is device-local, like snap: which layers this person is
+// looking at, and which one their new cables land on. Never synced, never
+// stored in the plot, so classmates' toggles can't fight each other.
+const PLOT_LAYERS_STORE_KEY = 'cueola_plot_layers_visible';
+let plotVisibleLayers = (() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLOT_LAYERS_STORE_KEY) || '[]');
+    const keys = (Array.isArray(raw) ? raw : []).filter(k => plotLayerDef(k));
+    if (keys.length) return new Set(keys);
+  } catch {}
+  return new Set(PLOT_LAYERS.map(l => l.key));
+})();
+let plotActiveLayer = plotLayerDef(localStorage.getItem('cueola_plot_active_layer'))
+  ? localStorage.getItem('cueola_plot_active_layer') : 'audio';
 let _plotUndoStack = [];
 let _plotDrag = null;
 let _plotPalDrag = null;
@@ -21296,8 +21480,13 @@ function openStagePlotEditor() {
   _plotDirtyIds.clear();
   resolveActiveStagePlotIndex();
   plotSelectedItemId = '';
+  plotSelectedFlowId = '';
+  plotFlowMode = false;
+  plotFlowSourceId = '';
+  document.getElementById('pp-plot-canvas')?.classList.remove('flow-mode');
   _plotUndoStack = [];
   renderStagePlotSelector();
+  renderPlotLayerBar();
   renderPlotPalette();
   renderStagePlotEditor();
   renderPaperworkNav('stage-plot');
@@ -21394,7 +21583,10 @@ function pbRefreshStagePlot() {
   _plotUndoStack = [];
   resolveActiveStagePlotIndex();
   if (plotSelectedItemId && !activeStagePlot()?.items.some(item => item.id === plotSelectedItemId)) plotSelectedItemId = '';
+  if (plotSelectedFlowId && !activeStagePlot()?.flows?.some(f => f.id === plotSelectedFlowId)) plotSelectedFlowId = '';
+  if (plotFlowSourceId && !activeStagePlot()?.items.some(item => item.id === plotFlowSourceId)) plotFlowSourceId = '';
   renderStagePlotSelector();
+  renderPlotPalette();   // remote bank curation lands with the same refresh
   renderStagePlotEditor();
 }
 
@@ -21425,6 +21617,8 @@ function switchStagePlot(index) {
   activeStagePlotIndex = Math.max(0, Math.min(nextIndex, stagePlotsWorking.length - 1));
   activeStagePlotId = stagePlotsWorking[activeStagePlotIndex]?.id || '';
   plotSelectedItemId = '';
+  plotSelectedFlowId = '';
+  plotFlowSourceId = '';
   renderStagePlotSelector();
   renderStagePlotEditor();
 }
@@ -21456,6 +21650,8 @@ function addAnotherStagePlot() {
   stagePlotsWorking.push(plot);
   activeStagePlotId = plot.id;
   plotSelectedItemId = '';
+  plotSelectedFlowId = '';
+  plotFlowSourceId = '';
   resolveActiveStagePlotIndex();
   renderStagePlotSelector();
   renderStagePlotEditor();
@@ -21480,6 +21676,8 @@ function deleteStagePlot() {
   const tombstones = pruneStagePlotTombstones({ ...stagePlotTombstones(), [plot.id]: Date.now() });
   activeStagePlotId = stagePlotsWorking[Math.max(0, Math.min(idx, stagePlotsWorking.length - 1))]?.id || '';
   plotSelectedItemId = '';
+  plotSelectedFlowId = '';
+  plotFlowSourceId = '';
   resolveActiveStagePlotIndex();
   // Same merge-splice as saveStagePlot so the delete write cannot push stale
   // copies of the surviving plots; the tombstone removes the deleted one.
@@ -21508,6 +21706,8 @@ function plotUndo() {
   stagePlotsWorking[idx] = JSON.parse(entry.state);
   activeStagePlotId = entry.plotId;
   plotSelectedItemId = '';
+  plotSelectedFlowId = '';
+  plotFlowSourceId = '';
   resolveActiveStagePlotIndex();
   renderStagePlotSelector();
   renderStagePlotEditor();
@@ -21540,6 +21740,7 @@ function addPlotItem(type, xFt=null, yFt=null) {
     h_ft: def.h,
     label: plotMintItemLabel(plot, def),
   }, n);
+  ensurePlotLayerVisible(plotItemLayer(item));   // never add invisibly
   plot.items.push(item);
   plotSelectedItemId = item.id;
   plotNotePresenceEdit();
@@ -21552,6 +21753,7 @@ function selectedPlotItem() {
 }
 function selectPlotItem(id) {
   plotSelectedItemId = id || '';
+  if (id) plotSelectedFlowId = '';
   if (id) localStorage.setItem('cueola_plot_insp_tab', 'element');
   renderPlotStage();
   renderPlotInspector();
@@ -21562,6 +21764,8 @@ function deleteSelectedPlotItem() {
   if (!plot || !item) return;
   plotUndoPush();
   plot.items = plot.items.filter(it => it.id !== item.id);
+  // Cables can't dangle: removing gear removes every run touching it.
+  plot.flows = (plot.flows || []).filter(f => f.from !== item.id && f.to !== item.id);
   plotSelectedItemId = '';
   plotNotePresenceEdit();
   renderStagePlotEditor();
@@ -21580,19 +21784,131 @@ function reorderSelectedPlotItem(delta) {
   renderPlotStage();
   queueStagePlotAutosave();
 }
+// ── Signal flow cables ──
+function selectedPlotFlow() {
+  const plot = activeStagePlot();
+  return plot?.flows?.find(f => f.id === plotSelectedFlowId) || null;
+}
+function selectPlotFlow(id) {
+  plotSelectedFlowId = id || '';
+  if (id) {
+    plotSelectedItemId = '';
+    localStorage.setItem('cueola_plot_insp_tab', 'element');
+  }
+  renderPlotStage();
+  renderPlotInspector();
+}
+function plotMintFlowId() {
+  return `pf_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+}
+function togglePlotFlowMode(on) {
+  plotFlowMode = on === undefined ? !plotFlowMode : on === true;
+  plotFlowSourceId = '';
+  if (plotFlowMode) {
+    plotSelectedItemId = '';
+    plotSelectedFlowId = '';
+    ensurePlotLayerVisible(plotActiveLayer);
+  }
+  document.getElementById('pp-plot-canvas')?.classList.toggle('flow-mode', plotFlowMode);
+  renderPlotLayerBar();
+  renderPlotStage();
+  renderPlotInspector();
+}
+function addPlotFlow(fromId, toId) {
+  const plot = activeStagePlot();
+  if (!plot || !fromId || !toId || fromId === toId) return;
+  plot.flows = plot.flows || [];
+  if (plot.flows.some(f => f.from === fromId && f.to === toId && f.layer === plotActiveLayer)) {
+    toast('That cable already runs there on this layer.');
+    renderPlotStage();
+    return;
+  }
+  plotUndoPush();
+  const flow = normalizeStagePlotFlow({
+    id: plotMintFlowId(),
+    from: fromId,
+    to: toId,
+    layer: plotActiveLayer,
+    conn: plotConnDefault(plotActiveLayer),
+  }, plot.flows.length);
+  plot.flows.push(flow);
+  plotSelectedFlowId = flow.id;
+  plotSelectedItemId = '';
+  ensurePlotLayerVisible(flow.layer);
+  plotNotePresenceEdit();
+  renderPlotStage();
+  renderPlotInspector();
+  queueStagePlotAutosave();
+}
+function updateSelectedPlotFlow(field, value) {
+  const flow = selectedPlotFlow();
+  if (!flow) return;
+  if (field === 'conn') {
+    if (!plotConnDef(value)) return;
+    flow.conn = value;
+  } else if (field === 'layer') {
+    if (!plotLayerDef(value)) return;
+    flow.layer = value;
+    ensurePlotLayerVisible(value);
+  } else return;
+  pbNoteLocalEdit('pp-plot-canvas');
+  renderPlotStage();
+  renderPlotInspector();
+  queueStagePlotAutosave();
+}
+function reverseSelectedPlotFlow() {
+  const flow = selectedPlotFlow();
+  if (!flow) return;
+  plotUndoPush();
+  [flow.from, flow.to] = [flow.to, flow.from];
+  pbNoteLocalEdit('pp-plot-canvas');
+  renderPlotStage();
+  queueStagePlotAutosave();
+}
+function deleteSelectedPlotFlow() {
+  const plot = activeStagePlot();
+  const flow = selectedPlotFlow();
+  if (!plot || !flow) return;
+  plotUndoPush();
+  plot.flows = plot.flows.filter(f => f.id !== flow.id);
+  plotSelectedFlowId = '';
+  plotNotePresenceEdit();
+  renderPlotStage();
+  renderPlotInspector();
+  queueStagePlotAutosave();
+}
+
 function updateSelectedPlotItem(field, value) {
   const item = selectedPlotItem();
   if (!item) return;
+  const def = plotTypeDef(item.type);
   if (field === 'label') item.label = String(value ?? '').slice(0, 60);
   else if (field === 'color') item.color = PLOT_ITEM_COLORS.some(c => c.key === value) ? value : '';
   else if (field === 'rot') item.rot = ((Math.round(Number(value) || 0) % 360) + 360) % 360;
-  else if (field === 'w_ft') item.w_ft = plotClamp(value, 0.5, 100);
+  else if (field === 'w_ft') {
+    item.w_ft = plotClamp(value, 0.5, 100);
+    // Uniform gear: depth follows the type's aspect, one Size field.
+    if (def && def.resize !== 'free' && def.resize !== 'panels') {
+      item.h_ft = Math.round(item.w_ft * (def.h / def.w) * 100) / 100;
+    }
+  }
   else if (field === 'h_ft') item.h_ft = plotClamp(value, 0.5, 100);
+  else if (field === 'panels') {
+    if (def?.resize !== 'panels') return;
+    item.panels = Math.max(1, Math.min(20, Math.round(Number(value)) || 1));
+    item.w_ft = item.panels * PLOT_DRAPE_PANEL_FT;
+    item.h_ft = def.h;
+  }
+  else if (field === 'layer') {
+    if (!plotLayerDef(value)) return;
+    item.layer = value;
+    ensurePlotLayerVisible(value);   // retargeting must never hide the item
+  }
   pbNoteLocalEdit('pp-plot-canvas');
   renderPlotStage();
   const rotVal = document.getElementById('plot-rot-val');
   if (rotVal) rotVal.textContent = `${Math.round(item.rot)}°`;
-  if (field === 'color') renderPlotInspector();
+  if (field === 'color' || field === 'layer' || field === 'w_ft' || field === 'panels') renderPlotInspector();
   queueStagePlotAutosave();
 }
 function rotateSelectedPlotItem(deltaDeg) {
@@ -21606,6 +21922,10 @@ function rotateSelectedPlotItem(deltaDeg) {
 function updateStagePlotStage(field, value) {
   const plot = activeStagePlot();
   if (!plot || (field !== 'w_ft' && field !== 'h_ft')) return;
+  if (!canManageCallSheetStructure()) {
+    toast('Only instructors and admins can resize the space.');
+    return;
+  }
   plot.stage[field] = plotClamp(value, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
   plot.items.forEach(item => {
     item.x_ft = plotClamp(item.x_ft, 0, plot.stage.w_ft);
@@ -21615,15 +21935,189 @@ function updateStagePlotStage(field, value) {
   renderPlotStage();
   queueStagePlotAutosave();
 }
+function updateStagePlotFloor(id) {
+  const plot = activeStagePlot();
+  const def = plotFloorDef(id);
+  if (!plot || !def) return;
+  if (!canManageCallSheetStructure()) {
+    toast('Only instructors and admins can assign the floor plan.');
+    return;
+  }
+  plotUndoPush();
+  plot.floor = def.id;
+  if (def.w_ft && def.h_ft) {
+    plot.stage.w_ft = plotClamp(def.w_ft, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
+    plot.stage.h_ft = plotClamp(def.h_ft, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
+    plot.items.forEach(item => {
+      item.x_ft = plotClamp(item.x_ft, 0, plot.stage.w_ft);
+      item.y_ft = plotClamp(item.y_ft, 0, plot.stage.h_ft);
+    });
+  }
+  pbNoteLocalEdit('pp-plot-canvas');
+  renderPlotStage();
+  renderPlotInspector();
+  queueStagePlotAutosave();
+}
 function togglePlotSnap(on) {
   plotSnapOn = on !== false;
   localStorage.setItem('cueola_plot_snap', plotSnapOn ? '1' : '0');
+}
+
+// ── Layer view (device-local) ──
+function persistPlotLayerView() {
+  localStorage.setItem(PLOT_LAYERS_STORE_KEY, JSON.stringify([...plotVisibleLayers]));
+  localStorage.setItem('cueola_plot_active_layer', plotActiveLayer);
+}
+// Anything just added or retargeted force-shows its layer, so nothing a
+// student places can land invisible.
+function ensurePlotLayerVisible(key) {
+  if (!plotLayerDef(key) || plotVisibleLayers.has(key)) return;
+  plotVisibleLayers.add(key);
+  persistPlotLayerView();
+  renderPlotLayerBar();
+}
+function setPlotActiveLayer(key) {
+  if (!plotLayerDef(key)) return;
+  plotActiveLayer = key;
+  plotVisibleLayers.add(key);
+  persistPlotLayerView();
+  renderPlotLayerBar();
+  renderPlotStage();
+}
+function togglePlotLayerVisible(key) {
+  if (!plotLayerDef(key)) return;
+  if (plotVisibleLayers.has(key)) {
+    plotVisibleLayers.delete(key);
+    // Hiding the selected item's layer would strand an invisible selection.
+    const sel = selectedPlotItem();
+    if (sel && plotItemLayer(sel) === key) plotSelectedItemId = '';
+  } else {
+    plotVisibleLayers.add(key);
+  }
+  persistPlotLayerView();
+  renderPlotLayerBar();
+  renderStagePlotEditor();
+}
+function plotEyeSVG(on) {
+  return on
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5c2 0 3.8.7 5.2 1.7M21.5 12S18 18.5 12 18.5c-2 0-3.8-.7-5.2-1.7"/><path d="M4 20 20 4"/></svg>';
+}
+function renderPlotLayerBar() {
+  const host = document.getElementById('plotLayerBar');
+  if (!host) return;
+  host.innerHTML = PLOT_LAYERS.map(l => {
+    const on = plotVisibleLayers.has(l.key);
+    const active = plotActiveLayer === l.key;
+    const dot = l.key === 'room' ? 'var(--text3)' : l.css;
+    return `<div class="plot-layer-chip${active ? ' on' : ''}${on ? '' : ' off'}" data-layer="${l.key}">
+      <button type="button" class="plot-layer-name" onclick="setPlotActiveLayer('${l.key}')" data-tip="Work on the ${esc(l.label)} layer">
+        <span class="plot-layer-dot" style="background:${dot}"></span><span>${esc(l.label)}</span>
+      </button>
+      <button type="button" class="plot-layer-eye" onclick="togglePlotLayerVisible('${l.key}')" data-tip="${on ? 'Hide' : 'Show'} the ${esc(l.label)} layer" aria-label="${on ? 'Hide' : 'Show'} the ${esc(l.label)} layer" aria-pressed="${on}">${plotEyeSVG(on)}</button>
+    </div>`;
+  }).join('') + `
+    <button type="button" class="plot-flow-btn${plotFlowMode ? ' on' : ''}" onclick="togglePlotFlowMode()" aria-pressed="${plotFlowMode}" data-tip="Draw signal flow on the ${esc(plotLayerDef(plotActiveLayer)?.label || '')} layer: click the source, then the destination. Shortcut: F">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h5c5 0 5-10 10-10"/><path d="M15.5 3.5 19 7l-3.5 3.5"/></svg><span>${plotFlowMode ? 'Drawing Flow' : 'Draw Flow'}</span>
+    </button>
+    <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF with each layer on its own page plus the combined plot">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v11M8 10.5l4 4 4-4"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg><span>Layer Set PDF</span>
+    </button>`;
 }
 
 // ── Rendering ──
 function renderStagePlotEditor() {
   renderPlotStage();
   renderPlotInspector();
+}
+
+// ── Cable geometry ──
+// Intersection parameter along segment A (a1→a2) where it crosses B, or null.
+// Crossings hugging an endpoint don't earn a hop; hence the 4% margins.
+function plotSegIntersection(a1, a2, b1, b2) {
+  const d = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / d;
+  const u = ((b1.x - a1.x) * (a2.y - a1.y) - (b1.y - a1.y) * (a2.x - a1.x)) / d;
+  if (t <= 0.04 || t >= 0.96 || u <= 0.04 || u >= 0.96) return null;
+  return t;
+}
+// Cables render under the gear: straight runs trimmed at each item's
+// footprint, an arrowhead into the destination, the connector pill at the
+// midpoint, and a semicircular "bump over" wherever a later cable crosses an
+// earlier one. Editor colors ride currentColor on the group (theme tokens);
+// print gets explicit attributes because the sheet rasterizes standalone.
+function stagePlotFlowsMarkup(plot, layerSet, print) {
+  const flows = (plot.flows || []).filter(f => layerSet.has(f.layer));
+  if (!flows.length) return '';
+  const K = PLOT_PX_PER_FT;
+  const byId = new Map(plot.items.map(item => [item.id, item]));
+  const GAP = 5, HOP_R = 6, ARROW_L = 10, ARROW_W = 4.5;
+  const segs = [];
+  flows.forEach(flow => {
+    const a = byId.get(flow.from), b = byId.get(flow.to);
+    if (!a || !b) return;
+    // A cable only shows when both ends are on visible layers too.
+    if (!layerSet.has(plotItemLayer(a)) || !layerSet.has(plotItemLayer(b))) return;
+    const p0 = { x: a.x_ft * K, y: a.y_ft * K };
+    const p1 = { x: b.x_ft * K, y: b.y_ft * K };
+    const fullLen = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+    if (fullLen < 1) return;
+    const ux = (p1.x - p0.x) / fullLen, uy = (p1.y - p0.y) / fullLen;
+    const trim = item => {
+      const hx = item.w_ft * K / 2, hy = item.h_ft * K / 2;
+      const tx = ux ? hx / Math.abs(ux) : Infinity;
+      const ty = uy ? hy / Math.abs(uy) : Infinity;
+      return Math.min(tx, ty) + GAP;
+    };
+    const t0 = trim(a), t1 = trim(b);
+    if (t0 + t1 + 6 >= fullLen) return;   // footprints overlap: no room to draw
+    const s = { x: p0.x + ux * t0, y: p0.y + uy * t0 };
+    const e = { x: p1.x - ux * t1, y: p1.y - uy * t1 };
+    segs.push({ flow, s, e, ux, uy, len: Math.hypot(e.x - s.x, e.y - s.y) });
+  });
+  return segs.map((seg, i) => {
+    const { flow, s, e, ux, uy, len } = seg;
+    const layer = plotLayerDef(flow.layer) || PLOT_LAYERS[0];
+    const color = print ? layer.print : layer.css;
+    const crossings = [];
+    for (let j = 0; j < i; j++) {
+      const t = plotSegIntersection(s, e, segs[j].s, segs[j].e);
+      if (t !== null) crossings.push(t * len);
+    }
+    crossings.sort((a, b) => a - b);
+    const hops = [];
+    let last = -Infinity;
+    crossings.forEach(d => {
+      if (d < HOP_R + 3 || d > len - HOP_R - ARROW_L - 3) return;   // too near an end
+      if (d - last < HOP_R * 2 + 2) return;                          // merge tight clusters
+      hops.push(d);
+      last = d;
+    });
+    const P = d => `${(s.x + ux * d).toFixed(2)} ${(s.y + uy * d).toFixed(2)}`;
+    let path = `M ${P(0)}`;
+    hops.forEach(d => { path += ` L ${P(d - HOP_R)} A ${HOP_R} ${HOP_R} 0 0 1 ${P(d + HOP_R)}`; });
+    path += ` L ${P(len - ARROW_L + 2)}`;
+    const px = -uy, py = ux;
+    const bx = e.x - ux * ARROW_L, by = e.y - uy * ARROW_L;
+    const arrow = `${e.x.toFixed(2)},${e.y.toFixed(2)} ${(bx + px * ARROW_W).toFixed(2)},${(by + py * ARROW_W).toFixed(2)} ${(bx - px * ARROW_W).toFixed(2)},${(by - py * ARROW_W).toFixed(2)}`;
+    const connLabel = plotConnDef(flow.conn)?.label || '';
+    const pillW = connLabel.length * 5.4 + 10, pillH = 13;
+    const mx = s.x + ux * (len / 2), my = s.y + uy * (len / 2);
+    const showPill = connLabel && len > pillW + ARROW_L + HOP_R * 2 + 12;
+    const pill = showPill ? `<g transform="translate(${mx.toFixed(2)} ${my.toFixed(2)})">
+        <rect class="plot-flow-pill" x="${(-pillW / 2).toFixed(1)}" y="${-pillH / 2}" width="${pillW.toFixed(1)}" height="${pillH}" rx="${pillH / 2}" ${print ? `fill="${color}"` : ''}/>
+        <text class="plot-flow-pill-text" x="0" y="3" text-anchor="middle" ${print ? `fill="#ffffff" font-size="8.5" font-weight="700" font-family="Helvetica, Arial, sans-serif"` : ''}>${esc(connLabel)}</text>
+      </g>` : '';
+    const selected = !print && flow.id === plotSelectedFlowId;
+    return `<g class="plot-flow" ${print ? '' : `data-plot-flow="${esc(flow.id)}" style="color:${color}"`}>
+      ${selected ? `<path class="plot-flow-sel" d="${path}"/>` : ''}
+      ${print ? '' : `<path class="plot-flow-hit" d="${path}"/>`}
+      <path class="plot-flow-line" d="${path}" ${print ? `stroke="${color}" stroke-width="1.75" fill="none" stroke-linecap="round"` : ''}/>
+      <polygon class="plot-flow-arrow" points="${arrow}" ${print ? `fill="${color}"` : ''}/>
+      ${pill}
+    </g>`;
+  }).join('');
 }
 
 // One geometry builder serves the editor (theme tokens, hit targets,
@@ -21649,17 +22143,34 @@ function stagePlotSheetSVG(plot, opts={}) {
   for (let y = 1; y < plot.stage.h_ft; y++) {
     grid += `<line x1="0" y1="${y * K}" x2="${W}" y2="${y * K}" stroke="${y % 5 ? gridColor : gridMajor}" stroke-width="1"/>`;
   }
-  const items = plot.items.map(item => {
-    const def = plotTypeDef(item.type) || PLOT_ELEMENT_TYPES[0];
+  // Layer filter: the editor shows this device's visible set; print callers
+  // pass the set the export asked for (default: everything).
+  const layerSet = opts.layers instanceof Set ? opts.layers
+    : (print ? new Set(PLOT_LAYERS.map(l => l.key)) : plotVisibleLayers);
+  const items = plot.items.filter(item => layerSet.has(plotItemLayer(item))).map(item => {
+    const def = plotTypeDef(item.type) || plotTypeDef('camera') || PLOT_ELEMENT_TYPES[0];
     const w = item.w_ft * K, h = item.h_ft * K;
     const color = plotItemColor(item, print);
     const selected = !print && item.id === plotSelectedItemId;
+    const flowSrc = !print && plotFlowMode && item.id === plotFlowSourceId;
     const labelY = Math.max(w, h) / 2 + 15;
+    // Glyphs never stretch: uniform gear letterboxes inside its footprint
+    // ('meet'), free room shapes still fill it, and drape art regenerates to
+    // the panel count so its aspect always matches exactly.
+    let vb = def.vb || '0 0 24 24';
+    let sym = def.sym;
+    let par = def.resize === 'free' ? 'none' : 'xMidYMid meet';
+    if (def.resize === 'panels') {
+      const drape = plotDrapeSym(item.panels || Math.round(item.w_ft / PLOT_DRAPE_PANEL_FT));
+      vb = drape.vb;
+      sym = drape.sym;
+    }
     return `<g class="plot-item" data-plot-item="${esc(item.id)}" transform="translate(${item.x_ft * K} ${item.y_ft * K})">
       <g transform="rotate(${item.rot})">
         ${print ? '' : `<rect class="plot-item-hit" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>`}
         ${selected ? `<rect class="plot-item-sel" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>` : ''}
-        <svg class="plot-item-glyph" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" viewBox="0 0 24 24" preserveAspectRatio="none" ${print ? `stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"` : `style="color:${color}"`}>${def.sym}</svg>
+        ${flowSrc ? `<rect class="plot-item-src" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>` : ''}
+        <svg class="plot-item-glyph" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" viewBox="${vb}" preserveAspectRatio="${par}" ${print ? `stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"` : `style="color:${color}"`}>${sym}</svg>
       </g>
       <text class="plot-item-label" x="0" y="${labelY}" text-anchor="middle" ${print ? `fill="${labelColor}" font-size="11" font-family="Helvetica, Arial, sans-serif" font-weight="600"` : ''}>${esc(plotItemDisplayLabel(item))}</text>
     </g>`;
@@ -21669,19 +22180,29 @@ function stagePlotSheetSVG(plot, opts={}) {
     <text class="plot-dim-label" x="-12" y="${H / 2}" text-anchor="middle" transform="rotate(-90 -12 ${H / 2})" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.h_ft} ft</text>
     <text class="plot-front-label" x="${W / 2}" y="${H + 24}" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="11" font-family="Menlo, monospace" letter-spacing="2"` : ''}>FRONT · AUDIENCE</text>
     <text class="plot-dim-label" x="${W}" y="${H + 24}" text-anchor="end" ${print ? `fill="${dimColor}" font-size="10" font-family="Menlo, monospace"` : ''}>1 square = 1 ft</text>`;
+  const emptyHint = (!print && layerSet.size === 0)
+    ? `<text class="plot-dim-label" x="${W / 2}" y="${H / 2}" text-anchor="middle">All layers are hidden. Show one in the layer bar above.</text>` : '';
+  // Assigned floor plan: wall art stretched across the stage rect. The rect
+  // stays as the working bounds; the walls draw over the grid.
+  const floorDef = plotFloorDef(plot.floor);
+  const walls = floorDef?.sym
+    ? `<svg class="plot-floor-walls" x="0" y="0" width="${W}" height="${H}" viewBox="${floorDef.vb}" preserveAspectRatio="none" ${print ? `stroke="${outline}" stroke-width="2.5" fill="none" stroke-linecap="round"` : ''}>${floorDef.sym}</svg>` : '';
   const inner = `
-    <rect class="plot-outline" x="0" y="0" width="${W}" height="${H}" ${print ? `fill="${floor}" stroke="${outline}" stroke-width="2"` : ''}/>
+    <rect class="plot-outline" x="0" y="0" width="${W}" height="${H}" ${print ? `fill="${floor}" stroke="${outline}" stroke-width="${floorDef?.sym ? 1 : 2}"` : ''}/>
     ${grid}
-    <rect x="0" y="0" width="${W}" height="${H}" fill="none" ${print ? `stroke="${outline}" stroke-width="2"` : 'class="plot-outline-top"'}/>
+    <rect x="0" y="0" width="${W}" height="${H}" fill="none" ${print ? `stroke="${outline}" stroke-width="${floorDef?.sym ? 1 : 2}"` : 'class="plot-outline-top"'}/>
+    ${walls}
     ${dims}
-    <g id="plotItemsLayer">${items}</g>`;
+    <g id="plotFlowsLayer">${stagePlotFlowsMarkup(plot, layerSet, print)}</g>
+    <g id="plotItemsLayer">${items}</g>
+    ${emptyHint}`;
   if (print) {
     const vw = Math.round(W + PAD_X * 2);
     const vh = Math.round(H + PAD_TOP + PAD_BOT);
     // Page CSS never reaches an SVG decoded as an image, so the glyph stroke
     // rules ride inside the document. non-scaling-stroke keeps line weight
     // uniform when a footprint stretches a glyph.
-    const style = '<style>.plot-item-glyph *{vector-effect:non-scaling-stroke;fill:none;stroke-linecap:round;stroke-linejoin:round}</style>';
+    const style = '<style>.plot-item-glyph *,.plot-floor-walls *{vector-effect:non-scaling-stroke;fill:none;stroke-linecap:round;stroke-linejoin:round}</style>';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${vw}" height="${vh}">${style}<rect x="${-PAD_X}" y="${-PAD_TOP}" width="${vw}" height="${vh}" fill="#ffffff"/>${inner}</svg>`;
   }
   return `<svg id="plotStageSvg" viewBox="${vb}" role="img" aria-label="Stage plot editor canvas">${inner}</svg>`;
@@ -21694,14 +22215,57 @@ function renderPlotStage() {
   host.innerHTML = stagePlotSheetSVG(plot);
 }
 
+// ── Bank curation (admins pick what students see) ──
+// Session-wide, one small key on prePro. Disabling a type hides it from the
+// palette only; gear already placed stays placed.
+let plotBankManage = false;
+function plotBankDisabled(data=loadPreProData()) {
+  const raw = data?.plotBank?.disabled;
+  return new Set((Array.isArray(raw) ? raw : []).filter(k => PLOT_ELEMENT_TYPES.some(t => t.type === k)));
+}
+function togglePlotBankManage() {
+  if (!canManageCallSheetStructure()) {
+    toast('Only instructors and admins can manage the bank.');
+    return;
+  }
+  plotBankManage = !plotBankManage;
+  renderPlotPalette();
+}
+function togglePlotBankType(type) {
+  if (!canManageCallSheetStructure() || !plotTypeDef(type)) return;
+  const disabled = plotBankDisabled();
+  if (disabled.has(type)) disabled.delete(type);
+  else disabled.add(type);
+  persistPreProData({ plotBank: { disabled: [...disabled] }, updatedAt: Date.now() }, 'Stage Plot');
+  renderPlotPalette();
+}
 function renderPlotPalette() {
   const host = document.getElementById('plotPalette');
   if (!host) return;
-  host.innerHTML = PLOT_ELEMENT_TYPES.map(def => `
-    <button type="button" class="plot-pal-item" data-plot-type="${def.type}" data-tip="Click to add, or drag onto the stage">
-      <svg viewBox="0 0 24 24" aria-hidden="true">${def.sym}</svg>
-      <span>${esc(def.label)}</span>
-    </button>`).join('');
+  const disabled = plotBankDisabled();
+  const canManage = canManageCallSheetStructure();
+  if (!canManage) plotBankManage = false;
+  // Grouped by layer in PLOT_LAYERS order; adding from a group puts the item
+  // on that group's layer. Manage mode shows everything and toggles instead
+  // of adding; normal mode hides what the instructor turned off.
+  const groups = PLOT_LAYERS.map(layer => {
+    const types = PLOT_ELEMENT_TYPES.filter(def => (def.layer || 'room') === layer.key)
+      .filter(def => plotBankManage || !disabled.has(def.type));
+    if (!types.length) return '';
+    return `<div class="plot-pal-group">
+      <div class="plot-pal-group-h">${esc(layer.label)}</div>
+      ${types.map(def => `
+      <button type="button" class="plot-pal-item${plotBankManage && disabled.has(def.type) ? ' bank-off' : ''}" data-plot-type="${def.type}" data-tip="${plotBankManage ? (disabled.has(def.type) ? 'Hidden from students. Tap to restore' : 'Tap to hide from students') : 'Click to add, or drag onto the stage'}">
+        <svg viewBox="${def.vb || '0 0 24 24'}" aria-hidden="true">${def.sym}</svg>
+        <span>${esc(def.label)}</span>
+      </button>`).join('')}
+    </div>`;
+  }).join('');
+  const manageBar = canManage ? `<div class="plot-bank-manage-row">
+    <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage Bank'}</button>
+    ${plotBankManage ? '<div class="plot-insp-hint">Tap gear to hide it from students. Anything already placed stays on the plot.</div>' : ''}
+  </div>` : '';
+  host.innerHTML = manageBar + groups;
 }
 
 function plotInspectorTab() {
@@ -21718,12 +22282,17 @@ function renderPlotInspector() {
   if (!host || !plot) return;
   const tab = plotInspectorTab();
   const item = selectedPlotItem();
+  const flow = item ? null : selectedPlotFlow();
   const chip = c => `<button type="button" class="plot-color-chip ${((item?.color || '') === c.key) ? 'on' : ''}" style="background:${c.css}" data-tip="${esc(c.label)}" aria-label="${esc(c.label)}" onclick="updateSelectedPlotItem('color','${c.key}')"></button>`;
+  const layerSeg = item ? `<div class="plot-layer-seg">${PLOT_LAYERS.map(l =>
+    `<button type="button" class="plot-seg-btn ${plotItemLayer(item) === l.key ? 'on' : ''}" onclick="updateSelectedPlotItem('layer','${l.key}')">${esc(l.label)}</button>`).join('')}</div>` : '';
   const elementPane = item ? `
     <div class="plot-insp-h">Label</div>
     <div class="plot-insp-body">
       <input class="field-in" id="plot-item-label" maxlength="60" value="${esc(item.label)}" placeholder="${esc(plotTypeDef(item.type)?.label || 'Label')}" oninput="updateSelectedPlotItem('label', this.value)">
     </div>
+    <div class="plot-insp-h">Layer</div>
+    <div class="plot-insp-body">${layerSeg}</div>
     <div class="plot-insp-h">Color</div>
     <div class="plot-insp-body"><div class="plot-color-chips">${PLOT_ITEM_COLORS.map(chip).join('')}</div></div>
     <div class="plot-insp-h">Rotation <span class="plot-insp-val" id="plot-rot-val">${Math.round(item.rot)}°</span></div>
@@ -21734,23 +22303,73 @@ function renderPlotInspector() {
         <button type="button" class="u-callbtn call-add-btn" onclick="rotateSelectedPlotItem(45)">Rotate +45°</button>
       </div>
     </div>
+    ${(() => {
+      const def = plotTypeDef(item.type);
+      if (def?.resize === 'panels') return `
+    <div class="plot-insp-h">Drape panels <span class="plot-insp-val">${PLOT_DRAPE_PANEL_FT} ft each</span></div>
+    <div class="plot-insp-body plot-insp-row">
+      <div class="field"><label class="field-lbl">Panels</label><input class="field-in" id="plot-item-panels" type="number" min="1" max="20" step="1" value="${item.panels || Math.round(item.w_ft / PLOT_DRAPE_PANEL_FT)}" onchange="updateSelectedPlotItem('panels', this.value)"></div>
+      <div class="field"><label class="field-lbl">Wide (feet)</label><input class="field-in" type="number" value="${item.w_ft}" disabled></div>
+    </div>`;
+      if (def && def.resize !== 'free') return `
+    <div class="plot-insp-h">Size (feet)</div>
+    <div class="plot-insp-body plot-insp-row">
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-item-w" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Deep (auto)</label><input class="field-in" id="plot-item-h" type="number" value="${item.h_ft}" disabled></div>
+    </div>`;
+      return `
     <div class="plot-insp-h">Size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
       <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-item-w" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
       <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-item-h" type="number" min="0.5" max="100" step="0.5" value="${item.h_ft}" onchange="updateSelectedPlotItem('h_ft', this.value)"></div>
-    </div>
+    </div>`;
+    })()}
     <div class="plot-insp-h">Arrange</div>
     <div class="plot-insp-body plot-insp-actions">
       <button type="button" class="u-callbtn call-add-btn" onclick="reorderSelectedPlotItem(1)">Bring Forward</button>
       <button type="button" class="u-callbtn call-add-btn" onclick="reorderSelectedPlotItem(-1)">Send Back</button>
       <button type="button" class="u-callbtn call-add-btn call-delete-btn u-c-red" onclick="deleteSelectedPlotItem()">Delete</button>
+    </div>` : (flow ? `
+    <div class="plot-insp-h">Cable</div>
+    <div class="plot-insp-body">
+      <div class="plot-flow-ends"><span>Out of</span> ${esc(plotItemDisplayLabel(plot.items.find(it => it.id === flow.from)))}</div>
+      <div class="plot-flow-ends"><span>Into</span> ${esc(plotItemDisplayLabel(plot.items.find(it => it.id === flow.to)))}</div>
+    </div>
+    <div class="plot-insp-h">Connector</div>
+    <div class="plot-insp-body">
+      <select class="field-in" id="plot-flow-conn" onchange="updateSelectedPlotFlow('conn', this.value)">
+        ${PLOT_CONN_TYPES.map(c => `<option value="${c.key}" ${flow.conn === c.key ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="plot-insp-h">Layer</div>
+    <div class="plot-insp-body"><div class="plot-layer-seg">${PLOT_LAYERS.map(l =>
+      `<button type="button" class="plot-seg-btn ${flow.layer === l.key ? 'on' : ''}" onclick="updateSelectedPlotFlow('layer','${l.key}')">${esc(l.label)}</button>`).join('')}</div></div>
+    <div class="plot-insp-h">Arrange</div>
+    <div class="plot-insp-body plot-insp-actions">
+      <button type="button" class="u-callbtn call-add-btn" onclick="reverseSelectedPlotFlow()">Reverse Direction</button>
+      <button type="button" class="u-callbtn call-add-btn call-delete-btn u-c-red" onclick="deleteSelectedPlotFlow()">Delete</button>
     </div>` : `
-    <div class="plot-insp-empty">Select something on the stage, or click an item in the bank to add one.</div>`;
+    <div class="plot-insp-empty">${plotFlowMode
+      ? 'Drawing flow: click the source gear, then the destination. Esc backs out.'
+      : 'Select gear or a cable on the stage, or click an item in the bank to add one.'}</div>`);
+  // Floor plan and space size are the instructor's call (same gate as plot
+  // add/delete): students work inside the assigned space.
+  const canShapeSpace = canManageCallSheetStructure();
+  const floorNow = plotFloorDef(plot.floor) || PLOT_FLOOR_TEMPLATES[0];
   const stagePane = `
+    <div class="plot-insp-h">Floor plan</div>
+    <div class="plot-insp-body">
+      ${canShapeSpace ? `
+      <select class="field-in" id="plot-floor-select" onchange="updateStagePlotFloor(this.value)">
+        ${PLOT_FLOOR_TEMPLATES.map(t => `<option value="${t.id}" ${floorNow.id === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
+      </select>
+      <div class="plot-insp-hint">Assign the floor plan for your learning space. Picking a room sizes the space to match it.</div>`
+      : `<div class="plot-insp-hint">${esc(floorNow.label)}. Your instructor assigns the floor plan and space size.</div>`}
+    </div>
     <div class="plot-insp-h">Space size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
-      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-stage-w" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.w_ft}" onchange="updateStagePlotStage('w_ft', this.value)"></div>
-      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-stage-h" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.h_ft}" onchange="updateStagePlotStage('h_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-stage-w" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.w_ft}" ${canShapeSpace ? `onchange="updateStagePlotStage('w_ft', this.value)"` : 'disabled'}></div>
+      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-stage-h" type="number" min="${PLOT_STAGE_MIN_FT}" max="${PLOT_STAGE_MAX_FT}" step="1" value="${plot.stage.h_ft}" ${canShapeSpace ? `onchange="updateStagePlotStage('h_ft', this.value)"` : 'disabled'}></div>
     </div>
     <div class="plot-insp-h">Grid</div>
     <div class="plot-insp-body">
@@ -21763,7 +22382,7 @@ function renderPlotInspector() {
         <button type="button" class="insp-tab ${tab === 'element' ? 'on' : ''}" onclick="setPlotInspectorTab('element')" data-tip="Selected item" aria-label="Selected item">${sfIcon('action.edit')}</button>
         <button type="button" class="insp-tab ${tab === 'stage' ? 'on' : ''}" onclick="setPlotInspectorTab('stage')" data-tip="Space and grid" aria-label="Space and grid">${sfIcon('action.grid')}</button>
       </div>
-      <div class="insp-caption">${tab === 'stage' ? 'Space' : 'Element'}</div>
+      <div class="insp-caption">${tab === 'stage' ? 'Space' : (flow ? 'Cable' : 'Element')}</div>
     </div>
     <div class="insp-pane ${tab === 'element' ? 'on' : ''}">${elementPane}</div>
     <div class="insp-pane ${tab === 'stage' ? 'on' : ''}">${stagePane}</div>`;
@@ -21784,6 +22403,27 @@ function pbInitStagePlotListeners() {
   if (canvas) {
     canvas.addEventListener('pointerdown', e => {
       const itemG = e.target?.closest?.('[data-plot-item]');
+      // Draw Flow mode swallows the canvas: first item is the source, second
+      // is the destination; empty canvas clears the pending source.
+      if (plotFlowMode) {
+        if (itemG) {
+          const id = itemG.getAttribute('data-plot-item');
+          if (!plotFlowSourceId) { plotFlowSourceId = id; renderPlotStage(); }
+          else if (plotFlowSourceId === id) { plotFlowSourceId = ''; renderPlotStage(); }
+          else { const src = plotFlowSourceId; plotFlowSourceId = ''; addPlotFlow(src, id); }
+        } else if (e.target?.closest?.('#plotStageSvg') && plotFlowSourceId) {
+          plotFlowSourceId = '';
+          renderPlotStage();
+        }
+        e.preventDefault();
+        return;
+      }
+      const flowG = e.target?.closest?.('[data-plot-flow]');
+      if (!itemG && flowG) {
+        selectPlotFlow(flowG.getAttribute('data-plot-flow'));
+        e.preventDefault();
+        return;
+      }
       if (itemG) {
         const id = itemG.getAttribute('data-plot-item');
         const plot = activeStagePlot();
@@ -21800,6 +22440,7 @@ function pbInitStagePlotListeners() {
         e.preventDefault();
       } else if (e.target?.closest?.('#plotStageSvg')) {
         if (plotSelectedItemId) selectPlotItem('');
+        else if (plotSelectedFlowId) selectPlotFlow('');
       }
     });
     canvas.addEventListener('pointermove', e => {
@@ -21831,6 +22472,11 @@ function pbInitStagePlotListeners() {
     palette.addEventListener('pointerdown', e => {
       const btn = e.target?.closest?.('.plot-pal-item');
       if (!btn) return;
+      // Manage mode repurposes the palette: taps curate, nothing adds.
+      if (plotBankManage) {
+        togglePlotBankType(btn.getAttribute('data-plot-type'));
+        return;
+      }
       _plotPalDrag = { type: btn.getAttribute('data-plot-type'), startX: e.clientX, startY: e.clientY, moved: false, ghost: null };
       try { btn.setPointerCapture(e.pointerId); } catch {}
     });
@@ -21842,7 +22488,7 @@ function pbInitStagePlotListeners() {
         const def = plotTypeDef(_plotPalDrag.type);
         const ghost = document.createElement('div');
         ghost.className = 'plot-ghost';
-        ghost.innerHTML = `<svg viewBox="0 0 24 24">${def?.sym || ''}</svg>`;
+        ghost.innerHTML = `<svg viewBox="${def?.vb || '0 0 24 24'}">${def?.sym || ''}</svg>`;
         document.body.appendChild(ghost);
         _plotPalDrag.ghost = ghost;
       }
@@ -21870,16 +22516,30 @@ function pbInitStagePlotListeners() {
   document.addEventListener('keydown', e => {
     if (!document.getElementById('stagePlotModal')?.classList.contains('on')) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
-    if (e.key === 'Escape' && plotSelectedItemId && !typing) {
+    // Esc unwinds one step at a time: flow mode, then any selection, then
+    // (via the dialog stack) the modal itself.
+    if (e.key === 'Escape' && !typing && (plotFlowMode || plotSelectedItemId || plotSelectedFlowId)) {
       e.stopPropagation();
       e.preventDefault();
-      selectPlotItem('');
+      if (plotFlowMode) togglePlotFlowMode(false);
+      else if (plotSelectedItemId) selectPlotItem('');
+      else selectPlotFlow('');
       return;
     }
     if (typing) return;
     if ((e.key === 'Delete' || e.key === 'Backspace') && plotSelectedItemId) {
       e.preventDefault();
       deleteSelectedPlotItem();
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && plotSelectedFlowId) {
+      e.preventDefault();
+      deleteSelectedPlotFlow();
+      return;
+    }
+    if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      togglePlotFlowMode();
       return;
     }
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
@@ -21903,23 +22563,42 @@ function pbInitStagePlotListeners() {
 }
 
 // ── Paper sheet, preview, and export ──
-function stagePlotPreviewHTML(plot, data=loadPreProData(), sectionNumber=paperworkSectionNumber('stage-plot'), forExport=false) {
+// Exports are layer-aware: every path below takes a layer set (default: all
+// of them) so a submission can be one system, a combination, or the whole
+// plot. The set shows up in the meta table and the file name.
+function plotLayerSetNormalize(layers) {
+  const set = layers instanceof Set ? layers : new Set(Array.isArray(layers) ? layers : []);
+  const keys = PLOT_LAYERS.map(l => l.key).filter(k => set.has(k));
+  return keys.length ? keys : PLOT_LAYERS.map(l => l.key);
+}
+function plotLayerSetKey(layers) {
+  return plotLayerSetNormalize(layers).join('+');
+}
+function plotLayerSetLabel(layers) {
+  const keys = plotLayerSetNormalize(layers);
+  if (keys.length === PLOT_LAYERS.length) return 'All layers';
+  return keys.map(k => plotLayerDef(k)?.label || k).join(' + ');
+}
+function stagePlotPreviewHTML(plot, data=loadPreProData(), sectionNumber=paperworkSectionNumber('stage-plot'), forExport=false, layers=null) {
   const plots = getStagePlots(data);
   const idx = Math.max(0, plots.findIndex(p => p.id === plot?.id));
   const safePlot = normalizeStagePlot(plot || plots[0] || {}, idx);
+  const layerKeys = plotLayerSetNormalize(layers);
+  const layerSet = new Set(layerKeys);
   const title = paperSectionTitle(sectionNumber, `Stage Plot: ${stagePlotDisplayName(safePlot, idx)}`);
   const sheets = getCallSheets(data);
   const cs = sheets[0] || {};
-  const raster = forExport ? _stagePlotRasterCache?.byPlotId?.[safePlot.id] : '';
+  const raster = forExport ? _stagePlotRasterCache?.byKey?.[`${safePlot.id}|${plotLayerSetKey(layerSet)}`] : '';
   const figure = raster
     ? `<img class="paper-plot-img" src="${raster}" alt="Stage plot diagram">`
-    : stagePlotSheetSVG(safePlot, { print: true });
+    : stagePlotSheetSVG(safePlot, { print: true, layers: layerSet });
   return `<div class="paper-landscape">
     <h1 class="psec-h psec-plot">${esc(title)}</h1>
     <table class="paper-plot-meta"><tr>
       <td><span>Production</span>${esc(show.name || cs.production || 'Untitled Production')}</td>
       <td><span>Venue</span>${esc((cs.location || '').trim() || 'TBD')}</td>
       <td><span>Date</span>${esc(cs.date ? paperDate(cs.date) : 'TBD')}</td>
+      <td><span>Layers</span>${esc(plotLayerSetLabel(layerSet))}</td>
       <td><span>Scale</span>1 square = 1 ft · space ${safePlot.stage.w_ft} ft x ${safePlot.stage.h_ft} ft</td>
     </tr></table>
     <div class="paper-plot-figure">${figure}</div>
@@ -21928,10 +22607,11 @@ function stagePlotPreviewHTML(plot, data=loadPreProData(), sectionNumber=paperwo
 
 // forExport rasterization: html2canvas renders complex inline SVG
 // unreliably, so PDF exports embed a 2x PNG instead. The pixels are cached
-// against the snapshot fingerprint because the snapshot itself is frozen.
+// against the snapshot fingerprint because the snapshot itself is frozen;
+// keys carry the layer set so one export can hold several combinations.
 let _stagePlotRasterCache = null;
-async function rasterizeStagePlotSVG(plot) {
-  const markup = stagePlotSheetSVG(plot, { print: true });
+async function rasterizeStagePlotSVG(plot, layers=null) {
+  const markup = stagePlotSheetSVG(plot, { print: true, layers: new Set(plotLayerSetNormalize(layers)) });
   const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   try {
@@ -21965,28 +22645,47 @@ async function prepareStagePlotRasters(snapshot) {
   const documentType = snapshot?.options?.documentType;
   if (documentType !== 'stage-plot' && documentType !== 'plandabear-package') return;
   if (documentType === 'plandabear-package' && snapshot?.options?.paperwork?.stage_plot === false) return;
-  if (_stagePlotRasterCache?.fingerprint === snapshot.fingerprint) return;
+  // Which layer combinations this export needs: an explicit list (the layer
+  // set export), a single selection (preview/export of what's showing), or
+  // everything (the package).
+  const requested = Array.isArray(snapshot?.options?.plotLayerSets) && snapshot.options.plotLayerSets.length
+    ? snapshot.options.plotLayerSets
+    : [snapshot?.options?.plotLayers || PLOT_LAYERS.map(l => l.key)];
+  const sets = requested.map(keys => plotLayerSetNormalize(keys));
+  const byKey = (_stagePlotRasterCache?.fingerprint === snapshot.fingerprint)
+    ? { ..._stagePlotRasterCache.byKey } : {};
   const plots = getStagePlots(snapshot.prePro || {});
-  const byPlotId = {};
   for (const plot of plots) {
-    try { byPlotId[plot.id] = await rasterizeStagePlotSVG(plot); } catch {}
+    for (const keys of sets) {
+      const key = `${plot.id}|${keys.join('+')}`;
+      if (byKey[key]) continue;
+      try { byKey[key] = await rasterizeStagePlotSVG(plot, keys); } catch {}
+    }
   }
-  _stagePlotRasterCache = { fingerprint: snapshot.fingerprint, byPlotId };
+  _stagePlotRasterCache = { fingerprint: snapshot.fingerprint, byKey };
 }
 
 let lastStagePlotExportSnapshot = null;
 let lastStagePlotExportIndex = 0;
+let lastStagePlotExportLayers = null;
+// The preview exports exactly what's showing: the layer bar is the export
+// picker. All-hidden falls back to everything rather than a blank sheet.
+function currentPlotExportLayers() {
+  return plotLayerSetNormalize(plotVisibleLayers);
+}
 async function showStagePlotPreview() {
   try {
     saveStagePlot(false);
-    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot' });
+    const layers = currentPlotExportLayers();
+    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers });
     const plots = getStagePlots(snapshot.prePro);
     const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
     const index = byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
     lastStagePlotExportSnapshot = snapshot;
     lastStagePlotExportIndex = index;
+    lastStagePlotExportLayers = layers;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
-    showPaperPreview('Stage Plot Preview', stagePlotPreviewHTML(plots[index], snapshot.prePro, undefined, true),
+    showPaperPreview('Stage Plot Preview', stagePlotPreviewHTML(plots[index], snapshot.prePro, undefined, true, layers),
       'Export Stage Plot PDF', 'downloadStagePlotPDF()', 'stage-plot', options);
   } catch (error) {
     lastStagePlotExportSnapshot = null;
@@ -21994,12 +22693,13 @@ async function showStagePlotPreview() {
   }
 }
 async function downloadStagePlotPDF() {
-  let snapshot;
+  let snapshot, layers;
   try {
     const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
       && lastPaperPreview?.options?.snapshotFingerprint === lastStagePlotExportSnapshot?.fingerprint;
+    layers = previewIsOpen && lastStagePlotExportLayers ? lastStagePlotExportLayers : currentPlotExportLayers();
     snapshot = previewIsOpen ? lastStagePlotExportSnapshot
-      : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot' });
+      : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers });
   } catch (error) {
     toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
     return;
@@ -22007,12 +22707,12 @@ async function downloadStagePlotPDF() {
   const plots = getStagePlots(snapshot.prePro);
   const index = Math.max(0, Math.min(lastStagePlotExportIndex, plots.length - 1));
   const plot = plots[index];
-  const html = stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true);
+  const html = stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true, layers);
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
-  const fileName = `${cleanPdfName(stagePlotDisplayName(plot, index), 'cueola-stage-plot')}.pdf`;
+  const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - ${plotLayerSetLabel(layers)}`, 'cueola-stage-plot')}.pdf`;
   try {
     const result = await exportPaperHTMLAsPDF(html, fileName, options);
-    toast(`Stage plot PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
+    toast(`Stage plot PDF downloaded · ${plotLayerSetLabel(layers)} · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
@@ -22021,6 +22721,48 @@ async function downloadStagePlotPDF() {
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved stage plot: ${paperworkExportFailureMessage(printError)}`);
+    }
+  }
+}
+// One click, one PDF, four pages: each system on its own sheet (with the
+// room for context), then everything combined. Matches the three checkpoint
+// submissions plus the full plot.
+const PLOT_LAYER_SET_PAGES = [
+  ['room', 'audio'],
+  ['room', 'video'],
+  ['room', 'lighting'],
+  ['room', 'audio', 'video', 'lighting'],
+];
+async function exportStagePlotLayerSetPDF() {
+  let snapshot;
+  try {
+    saveStagePlot(false);
+    snapshot = await preparePaperworkExportSnapshot({
+      includeAssignments:false, includeNotes:false, documentType:'stage-plot',
+      plotLayerSets: PLOT_LAYER_SET_PAGES,
+    });
+  } catch (error) {
+    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    return;
+  }
+  const plots = getStagePlots(snapshot.prePro);
+  const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
+  const index = byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
+  const plot = plots[index];
+  const html = PLOT_LAYER_SET_PAGES.map(layers => stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true, layers)).join('');
+  const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
+  const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - Layer Set`, 'cueola-stage-plot')}.pdf`;
+  try {
+    const result = await exportPaperHTMLAsPDF(html, fileName, options);
+    toast(`Layer set PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}: Audio, Video, Lighting, Combined.`);
+  } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+    } catch (printError) {
+      toast(`Could not render the layer set: ${paperworkExportFailureMessage(printError)}`);
     }
   }
 }

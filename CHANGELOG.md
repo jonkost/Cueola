@@ -1,5 +1,62 @@
 # Changelog
 
+## Unreleased: Stage Plot layers, signal flow, and the System Plot Plan workflow (built 2026-08-13)
+
+The Stage Plot grows into the tool for the three System Plot Plan checkpoints
+(Audio, Video, Lighting), replacing the Keynote workflow. One plot now carries
+the whole build; layers replace the copy-the-slide-forward step. Plan:
+docs/stage-plot-layers-plan.md. No grading and no peer feedback by design;
+instructor comments are unchanged.
+
+### Layers
+- Four fixed layers: Room, Audio, Video, Lighting. Gear lands on its type's
+  layer automatically (legacy plots migrate for free); the inspector can move
+  any item to another layer.
+- A layer bar above the canvas: click a chip to work on that layer, click the
+  eye to show or hide it. Visibility is per device (like grid snap), so
+  classmates' views never fight. Hidden layers drop out of the editor, the
+  preview, and exports.
+- Items with no color chip now draw in their layer's department color (audio
+  green, video blue, lighting purple); the manual chips still override.
+
+### Signal flow cables
+- Draw Flow mode (button or F): click the source gear, then the destination.
+  The cable anchors to both and follows them when they move.
+- Every cable carries a required connector type (XLR, BNC, DMX 5-pin),
+  defaulted by layer, shown in a pill at the cable's midpoint, editable per
+  cable along with its layer and direction.
+- Crossing cables draw a bump-over hop, on screen and on paper. Deleting gear
+  removes every cable touching it. Undo covers cable work.
+
+### Floor plans
+- Floor templates: blank rectangle or FS4E-123 (traced from the course
+  slides; real room feet still owed). Instructors and admins assign the floor
+  and the space size; students work inside it.
+
+### Equipment bank
+- 18 lab-specific gear types join the bank (SQ6 console, stage box, SM58s,
+  wireless Rx, computer source, PA speakers and K181 subs, foldback wedge,
+  flypack, video switch, AJA recorder, SDI-HDMI converters, displays,
+  projector and screen, crank stand, Source Four, Fresnel, LED par, parcan,
+  dimmer, ColorSource console), grouped by layer. Placeholder line art;
+  owner icons drop into the registry.
+- Glyphs no longer stretch: equipment resizes uniformly (one Size field),
+  and legacy stretched items snap back to proportion on load. Pipe and drape
+  sizes by panel count (4 ft per panel, assumed) and tiles its art.
+- Manage Bank (instructors/admins, on the palette rail): toggle which gear
+  students see. Hidden types leave the palette only; placed gear stays.
+  Curation rides `prePro.plotBank` and carries through session clones.
+
+### Layer-aware exports
+- The preview and PDF export render exactly the layers showing, the meta
+  table gains a Layers cell, and the file name carries the selection
+  ("Stage Plot 1 - Audio.pdf").
+- Layer Set PDF (one click in the layer bar): four landscape pages, each
+  system with the room for context, then everything combined. Matches the
+  three checkpoint submissions plus the full plot.
+
+WORKER_SCHEMA 35.
+
 ## Unreleased: Sign-in gate, student PINs and admin passwords (built 2026-08-11)
 
 Closes the impersonation gap where a username alone let anyone sign in as
