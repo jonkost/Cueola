@@ -27,6 +27,11 @@ const source = {
     callSheetTombstones: { cs_dead: 123 },
     productionSchedule: { call: '17:00' }, safety: { hospital: 'Mercy' },
     videoPatchRows: [{ label: 'CAM 1' }], 'audio-commsPatchRows': [{ position: 'SC' }],
+    stagePlots: [{ id: 'sp1', label: 'Studio A', floor: 'fs4e-123', stage: { w_ft: 40, h_ft: 30 },
+      items: [{ id: 'i1', type: 'mic', x_ft: 4, y_ft: 4 }],
+      flows: [{ id: 'f1', from: 'i1', to: 'i1x', layer: 'audio', conn: 'xlr' }] }],
+    stagePlotTombstones: { sp_dead: 456 },
+    plotBank: { disabled: ['parcan'] },
     preProNotes: [{ id: 'nested' }], _fieldUpdatedAt: { production: 1 },
   },
 };
@@ -65,6 +70,15 @@ test('call sheets scrub dates/weather/ids but keep times and crew', () => {
   assert.equal(seed.prePro._fieldUpdatedAt.callSheets, 999, 'fresh per-field stamps');
   assert.equal(seed.call, '17:00', 'legacy top-level re-spread');
   assert.equal(seed.date, '', 'legacy date blanked');
+});
+
+test('stage plots, their tombstones, and the bank curation carry verbatim', () => {
+  // Plot ids persist across episodes (no re-mint like call sheets), so the
+  // tombstones stay meaningful and the curated bank follows the class.
+  const seed = Clone.buildEpisodeSeed(source, { code: '2608AB', now: 999 });
+  assert.deepEqual(seed.prePro.stagePlots, source.prePro.stagePlots);
+  assert.deepEqual(seed.prePro.stagePlotTombstones, { sp_dead: 456 });
+  assert.deepEqual(seed.prePro.plotBank, { disabled: ['parcan'] });
 });
 
 test('group subdocs carry their own structure with fresh stamps', () => {

@@ -3829,7 +3829,7 @@ input.pt-range::-moz-range-thumb,
 .plot-editor{display:grid;grid-template-columns:172px minmax(0,1fr) 252px;gap:12px;align-items:start;margin-top:14px}
 .plot-rail-title{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 8px 2px}
 .plot-palette{display:flex;flex-direction:column;gap:6px;max-height:580px;overflow:auto;padding-right:2px}
-.plot-pal-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:12.5px;font-weight:600;cursor:grab;text-align:left;touch-action:none;transition:background .15s var(--ease),color .15s var(--ease)}
+.plot-pal-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:12.5px;font-weight:600;cursor:grab;text-align:left;touch-action:none;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
 .plot-pal-item:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
 .plot-pal-item svg{width:22px;height:22px;flex:none;color:var(--accent);fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .plot-stage-wrap{background:color-mix(in srgb,var(--s1) 82%,transparent);border:1px solid transparent;border-radius:var(--ui-radius-group);padding:10px;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -3863,29 +3863,34 @@ input.pt-range::-moz-range-thumb,
 .plot-ghost{position:fixed;z-index:10000;width:44px;height:44px;color:var(--accent);opacity:.9;transform:translate(-50%,-50%);pointer-events:none}
 .plot-ghost svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .plot-layer-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.plot-layer-chip{display:flex;align-items:stretch;border:1px solid transparent;border-radius:999px;background:color-mix(in srgb,var(--s2) 72%,transparent);overflow:hidden;transition:background .15s var(--ease),box-shadow .15s var(--ease)}
+.plot-layer-chip{display:flex;align-items:stretch;border:1px solid transparent;border-radius:999px;background:color-mix(in srgb,var(--s2) 72%,transparent);overflow:hidden;transition:background var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease)}
 .plot-layer-chip.on{background:color-mix(in srgb,var(--s3) 92%,transparent);box-shadow:inset 0 0 0 1.5px var(--accent)}
 .plot-layer-chip.off .plot-layer-name{opacity:.45}
-.plot-layer-name{display:flex;align-items:center;gap:7px;padding:7px 4px 7px 12px;border:0;background:transparent;color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s var(--ease)}
-.plot-layer-dot{width:10px;height:10px;border-radius:50%;flex:none}
-.plot-layer-eye{display:flex;align-items:center;justify-content:center;width:32px;border:0;background:transparent;color:var(--text3);cursor:pointer;transition:color .15s var(--ease)}
+.plot-layer-name{display:flex;align-items:center;gap:7px;padding:7px 4px 7px 12px;border:0;background:transparent;color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity var(--dur-fast) var(--ease)}
+.plot-layer-dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--text3)}
+.plot-layer-chip[data-layer="audio"] .plot-layer-dot{background:var(--green)}
+.plot-layer-chip[data-layer="video"] .plot-layer-dot{background:var(--video)}
+.plot-layer-chip[data-layer="lighting"] .plot-layer-dot{background:var(--purple)}
+.plot-layer-eye{display:flex;align-items:center;justify-content:center;width:32px;border:0;background:transparent;color:var(--text3);cursor:pointer;transition:color var(--dur-fast) var(--ease)}
 .plot-layer-eye:hover{color:var(--text)}
 .plot-layer-eye svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .plot-pal-item.bank-off{opacity:.35}
 .plot-pal-item.bank-off span{text-decoration:line-through}
 .plot-bank-manage-row{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
-.plot-bank-manage-btn{padding:6px 10px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
-.plot-bank-manage-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
-.plot-bank-manage-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
+.plot-bank-manage-btn{padding:6px 10px;border-radius:var(--ui-radius-control);font-size:11.5px}
 .plot-bank-manage-row .plot-insp-hint{margin-top:0}
 .plot-pal-group{display:flex;flex-direction:column;gap:6px}
 .plot-pal-group + .plot-pal-group{margin-top:10px}
 .plot-pal-group-h{font-size:10.5px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 1px 2px}
-.plot-flow-btn{display:flex;align-items:center;gap:7px;margin-left:auto;padding:7px 14px;border-radius:999px;border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:12.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease),box-shadow .15s var(--ease)}
+/* One pill-button base for the plot chrome (Draw Flow, Layer Set, Manage
+   Bank, layer segments): shared surface, hover, and active gradient. */
+.plot-flow-btn,.plot-bank-manage-btn,.plot-seg-btn{border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-weight:700;cursor:pointer;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.plot-flow-btn:hover,.plot-bank-manage-btn:hover,.plot-seg-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
+.plot-flow-btn.on,.plot-bank-manage-btn.on,.plot-seg-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
+.plot-flow-btn{display:flex;align-items:center;gap:7px;margin-left:auto;padding:7px 14px;border-radius:999px;font-size:12.5px}
 .plot-flow-btn.plot-layerset-btn{margin-left:0}
-.plot-flow-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
-.plot-flow-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
 .plot-flow-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.plot-flow-btn .sf-symbol{font-size:15px}
 .plot-stage-wrap.flow-mode svg{cursor:crosshair}
 .plot-stage-wrap.flow-mode .plot-item{cursor:crosshair}
 .plot-flow-line{stroke:currentColor;stroke-width:1.75;fill:none;stroke-linecap:round;vector-effect:non-scaling-stroke}
@@ -3900,13 +3905,24 @@ input.pt-range::-moz-range-thumb,
 .plot-flow-ends{font-size:12.5px;color:var(--text);padding:2px 0}
 .plot-flow-ends span{display:inline-block;min-width:44px;font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .plot-layer-seg{display:flex;gap:6px;flex-wrap:wrap;padding-top:2px}
-.plot-seg-btn{padding:5px 10px;border-radius:999px;border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-size:11.5px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
-.plot-seg-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
-.plot-seg-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
+.plot-seg-btn{padding:5px 10px;border-radius:999px;font-size:11.5px}
+/* House rule 8: new controls honor the 44px touch rule via pointer:coarse. */
+@media (pointer:coarse){
+  .plot-layer-name{min-height:44px}
+  .plot-layer-eye{width:44px}
+  .plot-flow-btn,.plot-bank-manage-btn,.plot-seg-btn,.plot-pal-item{min-height:44px}
+  .plot-color-chip{width:30px;height:30px}
+}
 @media (max-width:940px){
   .plot-editor{grid-template-columns:1fr}
-  .plot-palette{flex-direction:row;flex-wrap:wrap;max-height:none}
-  .plot-pal-item span{display:none}
+  .plot-palette{max-height:none}
+  /* Groups stack; the gear inside each group wraps as labeled chips. Labels
+     stay: touch has no hover tips, and 31 line-art icons all look alike. */
+  .plot-pal-group{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .plot-pal-group + .plot-pal-group{margin-top:8px}
+  .plot-pal-group-h{width:100%;margin:0 0 2px 2px}
+  .plot-pal-item{flex:0 0 auto}
+  .plot-bank-manage-row{flex-direction:row;align-items:center;flex-wrap:wrap}
   .plot-inspector{position:static}
 }
 
@@ -7035,7 +7051,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=a02fb31ef4"></script>
+<script src="cueola-app.js?v=475d6c6a7e"></script>
 <script src="outrangutan/outrangutan.js?v=d9d163e098"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>

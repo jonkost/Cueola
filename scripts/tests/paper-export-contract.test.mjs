@@ -54,7 +54,10 @@ assert.match(app, /UNVERIFIED PREVIEW: NOT A SAVED EXPORT/);
 assert.match(app, /Image attachment: \$\{esc\(a\.name\)\} \(open the saved original in Cueola\)/);
 
 const formalExports = [
-  ['async function downloadStagePlotPDF()', 'function renderCallSheetSelector'],
+  // The stage plot section starts at its shared fallback helper: both stage
+  // plot exporters route through exportStagePlotPaper, which owns the paged
+  // renderer + print fallback pair the loop below pins.
+  ['async function exportStagePlotPaper(', 'function renderCallSheetSelector'],
   ['async function downloadCallSheetPDF()', 'async function exportPreProPackagePDF()'],
   ['async function exportPreProPackagePDF()', '// ─────────────────────────────────────────────────────────────\n// PDF EXPORT'],
   ['async function exportPDF()', '// ─────────────────────────────────────────────────────────────\n// HELPERS'],
@@ -67,6 +70,14 @@ for (const [start, end] of formalExports) {
   assert.match(body, /exportPaperHTMLAsPDF/);
   assert.match(body, /printPaperHTML/);
   assert.doesNotMatch(body, /window\.print\(/);
+}
+// Both stage plot exporters must ride the shared fallback helper.
+{
+  const download = section(app, 'async function downloadStagePlotPDF()', 'const PLOT_LAYER_SET_PAGES');
+  assert.match(download, /await exportStagePlotPaper\(/);
+  const layerSet = section(app, 'async function exportStagePlotLayerSetPDF()', 'function renderCallSheetSelector');
+  assert.match(layerSet, /await exportStagePlotPaper\(/);
+  assert.match(layerSet, /paper-page-break/);
 }
 
 const draft = section(app, 'async function pbExportDraftPDF()', 'function pbNoteInputKeydown');

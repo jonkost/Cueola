@@ -57,6 +57,82 @@ instructor comments are unchanged.
 
 WORKER_SCHEMA 35.
 
+### Review fix round (2026-08-13, WORKER_SCHEMA 36)
+
+A 10-angle adversarial review of the layers commit confirmed 15 findings;
+all are fixed here except the deploy-window caveat below.
+
+- **DEPLOY NOTE (the one thing code cannot fix):** a browser tab still
+  running the pre-layers shell strips cables, floor plans, layer overrides,
+  and panel counts from EVERY plot the next time it autosaves, because its
+  old normalizer rebuilds plots without those fields and saves write the
+  whole array. The schema bump forces the new shell on next load, but open
+  tabs stay old until reloaded. Deploy between class days, and have everyone
+  reload (or close tabs) before the first layers session. A stripped plot
+  can be recovered from Session History.
+- Retargeting a cable's layer or reversing its direction now refuses to
+  create a duplicate run instead of letting the next save silently delete
+  one of the two cables.
+- Cables re-anchor when a drag ends; they no longer stay drawn at the
+  gear's old position until an unrelated click.
+- The package export's call-sheet picker works now (pre-existing since
+  v2.1 D9.1: the snapshot readers dropped the selection, so every sheet
+  always printed). The disabled-paperwork config and the group name now
+  reach the fingerprinted snapshot options the same way.
+- Print sheets carry no page class names anymore, so the raster-miss
+  preview and the no-PDF print fallback keep their real layer colors
+  instead of collapsing to theme ink with unreadable connector pills.
+- Pipe and drape swags now fit their panels exactly (the waves overdrew
+  the seam posts by two-thirds of a panel), and legacy drapes convert by
+  rounding DOWN so a 10 ft drape becomes 8 ft inside its alcove, never
+  12 ft through a wall.
+- Bank curation is session-level like the paperwork config (grouped
+  workspaces read the parent doc), is edited from the main workspace only,
+  lands on open students' palettes without needing a plot change, and
+  Manage Bank mode never carries over into another session or visit.
+- Hiding a layer clears any selection it strands, including a selected
+  cable or an armed Draw Flow source, so Delete can never remove something
+  invisible.
+- The Ink color chip works again on gear (a new explicit chip; the first
+  chip now means "layer color"), cable trims follow rotated gear, very
+  short cables draw cleanly or not at all instead of doubling back, the
+  auto depth of uniform gear respects the 0.5 to 100 ft clamps, adding
+  gear from the bank exits Draw Flow so the new item is movable, and the
+  Layer Set PDF separates its four sheets with explicit page breaks.
+- The plot info text now says plainly that the full paperwork package
+  always prints every layer.
+
+### Polish round (2026-08-13, same schema)
+
+The review's lower-severity overflow, applied:
+
+- Assigned floor plans now keep gear inside the drawn walls: each room
+  template carries a wall inset and every placement path (drag, nudge,
+  add, resize, floor assignment) clamps to it. Blank floors keep the full
+  rectangle.
+- Speed: single-plot exports rasterize only the plot being exported
+  instead of every plot in the session; typing in the label field updates
+  the one label instead of rebuilding the whole canvas per keystroke; the
+  palette rebuilds only when the curated bank actually changed.
+- One source of truth: layer colors resolve through the color chips
+  (nothing left to drift between screen and paper), the Layer Set pages
+  and their toast derive from the layer registry, and the drape panel
+  count is no longer stored redundantly alongside a width.
+- Design guidelines: all new plot controls honor the 44px touch rule via
+  pointer:coarse, motion rides the duration tokens, the layer dots are
+  styled from the stylesheet instead of inline, the Layer Set button uses
+  the SF Symbol download glyph, and the three plot pill buttons share one
+  CSS base (the eye and flow-arrow glyphs stay hand-rolled: the vendored
+  symbol set has no equivalents).
+- Helper dedup: one id scrub, one id mint, one instructor gate, one
+  clamp-to-stage loop, and one PDF-with-print-fallback helper shared by
+  both stage plot exporters.
+- New contract suite: scripts/tests/stage-plot-model.test.mjs evaluates
+  the real normalizer block and pins the wire format (idempotency, flow
+  dedupe rules, panel conversion, clamps, floor whitelist, tombstone
+  walks, drape geometry). The session clone suite now seeds and asserts
+  stagePlots, stagePlotTombstones, and plotBank carries.
+
 ## Unreleased: Sign-in gate, student PINs and admin passwords (built 2026-08-11)
 
 Closes the impersonation gap where a username alone let anyone sign in as

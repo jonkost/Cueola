@@ -6388,7 +6388,7 @@ const INFO_POPS = {
   'plot-sheets': {
     title: 'How the stage plot works',
     lesson: 'plandabear', section: 'steps',
-    body: 'A plot is a birdseye map of one setup, built in layers: Room for the space itself, then Audio, Video, and Lighting for each system. Drag gear from the bank, then use Draw Flow to cable it up: click the source, then the destination, and the arrow shows the signal direction with its connector type. The eye on each layer chip shows or hides that layer for you only, and exports include exactly the layers you have showing. Keep a separate plot per space or show style and switch between them here.',
+    body: 'A plot is a birdseye map of one setup, built in layers: Room for the space itself, then Audio, Video, and Lighting for each system. Drag gear from the bank, then use Draw Flow to cable it up: click the source, then the destination, and the arrow shows the signal direction with its connector type. The eye on each layer chip shows or hides that layer for you only. Stage plot exports include exactly the layers you have showing; the full paperwork package always prints every layer. Keep a separate plot per space or show style and switch between them here.',
   },
   'cs-event-info': {
     title: 'What Event Info covers',
@@ -20547,14 +20547,27 @@ async function readServerPaperworkSnapshot(options={}) {
   throw new Error('Could not capture one stable production revision.');
 }
 
-// Stage plot exports carry their layer selection inside the fingerprinted
-// options (stable order via plotLayerSetNormalize), so a preview of one
-// combination can never be reused to export another.
+// Caller options that must survive into the fingerprinted snapshot options.
+// The readers rebuild options from scratch, and any key not carried here
+// silently vanishes: that is exactly how the D9.1 call-sheet picker
+// (callSheetIds), the disabled-paperwork config, and the D2 group label
+// never reached snapshot.options despite the callers passing them. The
+// export model's normalizeOptions handles their canonical forms; this just
+// stops the readers from dropping them. Stage plot layer selections ride the
+// same channel so a preview of one combination can never be reused to
+// export another.
 function paperworkPlotLayerOptions(options={}) {
   const out = {};
   if (Array.isArray(options.plotLayers)) out.plotLayers = plotLayerSetNormalize(options.plotLayers);
   if (Array.isArray(options.plotLayerSets) && options.plotLayerSets.length) {
     out.plotLayerSets = options.plotLayerSets.map(keys => plotLayerSetNormalize(keys));
+  }
+  if (options.plotId) out.plotId = plotScrubId(options.plotId, 150);
+  if (Array.isArray(options.callSheetIds)) out.callSheetIds = options.callSheetIds;
+  if (options.paperwork && typeof options.paperwork === 'object') out.paperwork = options.paperwork;
+  if (options.groupId) {
+    out.groupId = options.groupId;
+    out.groupName = options.groupName || '';
   }
   return out;
 }
@@ -21145,16 +21158,22 @@ const PLOT_DEFAULT_STAGE_H_FT = 24;
 
 // The three assignment layers plus the always-there Room base. Layer colors
 // are the department tokens (owner decision 2026-08-13): audio green, video
-// blue, lighting purple; room draws in ink. Print hexes match
-// PLOT_ITEM_COLORS so a manual chip and a layer default agree on paper.
+// blue, lighting purple; room draws in ink. colorKey points into
+// PLOT_ITEM_COLORS so a manual chip and a layer default can never drift on
+// screen or on paper: one entry owns each department color.
 const PLOT_LAYERS = [
-  { key:'room',     label:'Room',     css:'var(--text)',   print:'#1d1d1f', symbol:'action.home' },
-  { key:'audio',    label:'Audio',    css:'var(--green)',  print:'#16a34a', symbol:'department.audio' },
-  { key:'video',    label:'Video',    css:'var(--video)',  print:'#2563eb', symbol:'department.video' },
-  { key:'lighting', label:'Lighting', css:'var(--purple)', print:'#9333ea', symbol:'department.lighting' },
+  { key:'room',     label:'Room',     colorKey:'ink',      symbol:'action.home' },
+  { key:'audio',    label:'Audio',    colorKey:'audio',    symbol:'department.audio' },
+  { key:'video',    label:'Video',    colorKey:'video',    symbol:'department.video' },
+  { key:'lighting', label:'Lighting', colorKey:'lighting', symbol:'department.lighting' },
 ];
 function plotLayerDef(key) {
   return PLOT_LAYERS.find(l => l.key === key) || null;
+}
+function plotLayerColor(layerKey, print=false) {
+  const chip = PLOT_ITEM_COLORS.find(c => c.key === (plotLayerDef(layerKey)?.colorKey || 'ink'))
+    || PLOT_ITEM_COLORS.find(c => c.key === 'ink');
+  return print ? chip.print : chip.css;
 }
 
 // Connector types a cable can carry. Registry-driven so the future patching
@@ -21182,7 +21201,8 @@ function plotConnDefault(layerKey) {
 // the real room feet are still owed by the owner.
 const PLOT_FLOOR_TEMPLATES = [
   { id:'blank', label:'Blank rectangle' },
-  { id:'fs4e-123', label:'FS4E-123 lab room', w_ft:40, h_ft:30, vb:'0 0 1000 750', sym:
+  { id:'fs4e-123', label:'FS4E-123 lab room', w_ft:40, h_ft:30, vb:'0 0 1000 750',
+    inset:{ top:1.6, right:0.7, bottom:0.7, left:0.7 }, sym:
       '<path d="M14 736 V160"/>'
     + '<path d="M14 160 H86"/><path d="M86 160 A72 72 0 0 0 14 88"/>'
     + '<path d="M14 88 L232 36 H768 L986 88"/>'
@@ -21207,7 +21227,7 @@ function plotFloorDef(id) {
 const PLOT_DRAPE_PANEL_FT = 4;   // one drape panel, in feet (owner to confirm)
 const PLOT_ELEMENT_TYPES = [
   // Room
-  { type:'pipe-drape', label:'Pipe and Drape', layer:'room', w:8, h:1, resize:'panels', panels:2, sym:'<path d="M3 11h18"/><circle cx="3" cy="11" r="1.2"/><circle cx="21" cy="11" r="1.2"/><path d="M3 15c1.5 0 1.5-2 3-2s1.5 2 3 2 1.5-2 3-2 1.5 2 3 2 1.5-2 3-2 1.5 2 3 2"/>' },
+  { type:'pipe-drape', label:'Pipe and Drape', layer:'room', w:8, h:1, resize:'panels', sym:'<path d="M3 11h18"/><circle cx="3" cy="11" r="1.2"/><circle cx="21" cy="11" r="1.2"/><path d="M3 15c1.5 0 1.5-2 3-2s1.5 2 3 2 1.5-2 3-2 1.5 2 3 2 1.5-2 3-2 1.5 2 3 2"/>' },
   { type:'table', label:'Table', layer:'room', w:6, h:2.5, resize:'free', sym:'<rect x="4" y="8" width="16" height="8" rx="1"/>' },
   { type:'person', label:'Person', layer:'room', w:1.5, h:1.5, sym:'<circle cx="12" cy="9.5" r="3"/><path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>' },
   { type:'riser', label:'Riser', layer:'room', w:8, h:6, resize:'free', sym:'<rect x="4" y="6" width="16" height="12"/><path d="M4 12 10 6M4 18 20 6M14 18l6-6"/>' },
@@ -21247,24 +21267,31 @@ const PLOT_ELEMENT_TYPES = [
 // footprint (4 ft x 1 ft per panel), so nothing distorts at any count.
 function plotDrapeSym(panels) {
   const n = Math.max(1, Math.min(20, Math.round(panels) || 1));
-  const W = 24 * n, left = 1.4, right = W - 1.4, span = (right - left) / n, cw = span / 6;
+  const W = 24 * n, left = 1.4, right = W - 1.4, span = (right - left) / n;
+  // Six half-waves fill one panel exactly: each advances span/6, controls at
+  // the quarter points, so the swags meet every seam post and never overrun.
+  const seg = span / 6, q = seg / 2;
   let s = `<path d="M${left} 2H${right}"/>`;
   for (let i = 0; i <= n; i++) s += `<circle cx="${(left + i * span).toFixed(2)}" cy="2" r="1.1"/>`;
   for (let i = 0; i < n; i++) {
     const x0 = (left + i * span).toFixed(2);
-    let wave = `M${x0} 4.6c${cw.toFixed(2)} 0 ${cw.toFixed(2)} -1.4 ${(cw * 2).toFixed(2)} -1.4`;
-    for (let k = 1; k < 3; k++) {
-      wave += `s${cw.toFixed(2)} 1.4 ${(cw * 2).toFixed(2)} 1.4s${cw.toFixed(2)} -1.4 ${(cw * 2).toFixed(2)} -1.4`;
+    let wave = `M${x0} 4.6c${q.toFixed(2)} 0 ${q.toFixed(2)} -1.4 ${seg.toFixed(2)} -1.4`;
+    for (let k = 1; k < 6; k++) {
+      const dy = k % 2 ? 1.4 : -1.4;
+      wave += `s${q.toFixed(2)} ${dy} ${seg.toFixed(2)} ${dy}`;
     }
     s += `<path d="${wave}"/>`;
   }
   return { vb: `0 0 ${W} 6`, sym: s };
 }
 
-// Color chips: '' means theme ink on screen, near-black on paper. The rest
-// map to the department tokens on screen and print-safe hexes on paper.
+// Color chips: '' means "no choice", which resolves to the item's LAYER
+// color (room items stay ink); the explicit 'ink' chip forces ink on any
+// layer. The rest map to the department tokens on screen and print-safe
+// hexes on paper.
 const PLOT_ITEM_COLORS = [
-  { key:'', label:'Ink', css:'var(--text)', print:'#1d1d1f' },
+  { key:'', label:'Layer color', css:'linear-gradient(135deg,var(--green),var(--video) 50%,var(--purple))', print:'#1d1d1f' },
+  { key:'ink', label:'Ink', css:'var(--text)', print:'#1d1d1f' },
   { key:'video', label:'Video', css:'var(--video)', print:'#2563eb' },
   { key:'audio', label:'Audio', css:'var(--green)', print:'#16a34a' },
   { key:'playback', label:'Playback', css:'var(--red)', print:'#dc2626' },
@@ -21282,6 +21309,30 @@ function plotClamp(v, lo, hi) {
   if (!Number.isFinite(n)) return lo;
   return Math.max(lo, Math.min(hi, n));
 }
+// One id scrub for every stage plot id (items, flows, plots, export targets).
+function plotScrubId(v, max=60) {
+  return String(v || '').replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, max);
+}
+// Where gear may sit: the stage rect, pulled in by the floor template's wall
+// inset so assigned rooms keep gear inside the drawn walls (the chamfered
+// corner triangles remain reachable; the inset covers the straight walls).
+function plotStageBounds(plot) {
+  const inset = plotFloorDef(plot?.floor)?.inset || {};
+  const x0 = Math.max(0, Number(inset.left) || 0);
+  const y0 = Math.max(0, Number(inset.top) || 0);
+  return {
+    x0, y0,
+    x1: Math.max(x0 + 1, plot.stage.w_ft - (Number(inset.right) || 0)),
+    y1: Math.max(y0 + 1, plot.stage.h_ft - (Number(inset.bottom) || 0)),
+  };
+}
+function plotClampItemsToStage(plot) {
+  const b = plotStageBounds(plot);
+  plot.items.forEach(item => {
+    item.x_ft = plotClamp(item.x_ft, b.x0, b.x1);
+    item.y_ft = plotClamp(item.y_ft, b.y0, b.y1);
+  });
+}
 function plotSnapValue(v) {
   const step = plotSnapOn ? PLOT_SNAP_FT : 0.05;
   return Math.round(v / step) * step;
@@ -21296,10 +21347,9 @@ function plotItemLayer(item) {
 function plotItemColor(item, print=false) {
   const c = PLOT_ITEM_COLORS.find(c => c.key === (item?.color || ''));
   if (c && c.key) return print ? c.print : c.css;
-  // Ink (no chip picked) resolves to the item's layer color; room stays ink.
-  const layer = plotLayerDef(plotItemLayer(item));
-  if (layer && layer.key !== 'room') return print ? layer.print : layer.css;
-  return print ? PLOT_ITEM_COLORS[0].print : PLOT_ITEM_COLORS[0].css;
+  // No chip picked: resolve to the item's layer color (room's colorKey is
+  // ink). The '' entry's css is a swatch gradient, never a usable color.
+  return plotLayerColor(plotItemLayer(item), print);
 }
 function plotItemDisplayLabel(item) {
   const label = (item?.label || '').trim();
@@ -21314,17 +21364,23 @@ function normalizeStagePlotItem(item={}, i=0) {
   let h = plotClamp(num(item.h_ft) ?? def.h, 0.5, 100);
   let panels = 0;
   if (def.resize === 'panels') {
-    // Panel-counted gear: the count is the size; width derives from it.
-    panels = Math.max(1, Math.min(20, Math.round(num(item.panels) ?? (w / PLOT_DRAPE_PANEL_FT)) || 1));
+    // Panel-counted gear: the count is the size; width derives from it. A
+    // legacy item with no panels field converts by FLOOR so the drape never
+    // grows past the footprint the user saved (a 10 ft drape becomes 2
+    // panels at 8 ft, staying inside whatever it was aligned against).
+    panels = Math.max(1, Math.min(20, num(item.panels) !== null
+      ? Math.round(num(item.panels)) || 1
+      : Math.floor(w / PLOT_DRAPE_PANEL_FT) || 1));
     w = panels * PLOT_DRAPE_PANEL_FT;
     h = def.h;
   } else if (def.resize !== 'free') {
     // Uniform gear keeps the type's aspect; legacy stretched items snap back
-    // to proportion here (the "icons must not stretch" fix).
-    h = Math.round(w * (def.h / def.w) * 100) / 100;
+    // to proportion here (the "icons must not stretch" fix). The derived
+    // depth honors the same 0.5..100 clamp as every other size path.
+    h = plotClamp(Math.round(w * (def.h / def.w) * 100) / 100, 0.5, 100);
   }
   return {
-    id: String(item.id || `pi_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60),
+    id: plotScrubId(item.id || `pi_${i + 1}`),
     type: def.type,
     x_ft: plotClamp(num(item.x_ft) ?? 4, -400, 400),
     y_ft: plotClamp(num(item.y_ft) ?? 4, -400, 400),
@@ -21341,12 +21397,11 @@ function normalizeStagePlotItem(item={}, i=0) {
 // a dangling endpoint is dropped (the delete-cascade backstop); the conn
 // field self-heals to the layer default.
 function normalizeStagePlotFlow(flow={}, i=0) {
-  const scrub = v => String(v || '').replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60);
   const layer = plotLayerDef(flow.layer) ? flow.layer : 'audio';
   return {
-    id: scrub(flow.id || `pf_${i + 1}`),
-    from: scrub(flow.from),
-    to: scrub(flow.to),
+    id: plotScrubId(flow.id || `pf_${i + 1}`),
+    from: plotScrubId(flow.from),
+    to: plotScrubId(flow.to),
     layer,
     conn: plotConnDef(flow.conn) ? flow.conn : plotConnDefault(layer),
   };
@@ -21371,7 +21426,7 @@ function normalizeStagePlot(plot={}, i=0) {
       return true;
     });
   return {
-    id: String(plot.id || `stage_plot_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 150),
+    id: plotScrubId(plot.id || `stage_plot_${i + 1}`, 150),
     label: String(plot.label || '').slice(0, 80),
     floor: plotFloorDef(plot.floor) ? plot.floor : 'blank',
     stage: {
@@ -21483,6 +21538,7 @@ function openStagePlotEditor() {
   plotSelectedFlowId = '';
   plotFlowMode = false;
   plotFlowSourceId = '';
+  plotBankManage = false;   // never carry curation mode into another visit
   document.getElementById('pp-plot-canvas')?.classList.remove('flow-mode');
   _plotUndoStack = [];
   renderStagePlotSelector();
@@ -21553,7 +21609,15 @@ function queueStagePlotAutosave() {
 // never re-renders under a captured pointer or a focused inspector field.
 function pbRefreshStagePlot() {
   if (!document.getElementById('stagePlotModal')?.classList.contains('on') || !stagePlotsWorking) return;
-  const stored = getStagePlots();
+  const data = loadPreProData();
+  // Bank curation can change without any plot changing, so it gets its own
+  // diff BEFORE the plot-equality early returns. Never mid palette-drag
+  // (the innerHTML swap would destroy the captured pointer) and never while
+  // this admin is curating locally.
+  if (!_plotPalDrag && !plotBankManage && plotBankKey(data) !== _plotBankRenderedKey) {
+    renderPlotPalette(data);
+  }
+  const stored = getStagePlots(data);
   const editing = _plotPointerActive
     || pbFieldRecentlyEdited('pp-plot-canvas')
     || (pbIsCollabField(document.activeElement) && document.activeElement.closest('#stagePlotModal'));
@@ -21586,7 +21650,6 @@ function pbRefreshStagePlot() {
   if (plotSelectedFlowId && !activeStagePlot()?.flows?.some(f => f.id === plotSelectedFlowId)) plotSelectedFlowId = '';
   if (plotFlowSourceId && !activeStagePlot()?.items.some(item => item.id === plotFlowSourceId)) plotFlowSourceId = '';
   renderStagePlotSelector();
-  renderPlotPalette();   // remote bank curation lands with the same refresh
   renderStagePlotEditor();
 }
 
@@ -21715,8 +21778,11 @@ function plotUndo() {
 }
 
 // ── Items ──
+function plotMintId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+}
 function plotMintItemId() {
-  return `pi_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+  return plotMintId('pi');
 }
 function plotMintItemLabel(plot, def) {
   const count = plot.items.filter(item => item.type === def.type).length;
@@ -21726,16 +21792,20 @@ function addPlotItem(type, xFt=null, yFt=null) {
   const plot = activeStagePlot();
   const def = plotTypeDef(type);
   if (!plot || !def) return;
+  // Adding gear is a statement of intent: leave Draw Flow so the new item
+  // can be selected and positioned instead of armed as a cable source.
+  if (plotFlowMode) togglePlotFlowMode(false);
   plotUndoPush();
   const n = plot.items.length;
+  const b = plotStageBounds(plot);
   // Click-to-add cascades placements around center so stacked adds stay visible.
   const fallbackX = plot.stage.w_ft / 2 + ((n % 5) - 2) * 1.5;
   const fallbackY = plot.stage.h_ft / 2 + (Math.floor(n / 5) % 3 - 1) * 2;
   const item = normalizeStagePlotItem({
     id: plotMintItemId(),
     type: def.type,
-    x_ft: plotSnapValue(plotClamp(xFt ?? fallbackX, 0, plot.stage.w_ft)),
-    y_ft: plotSnapValue(plotClamp(yFt ?? fallbackY, 0, plot.stage.h_ft)),
+    x_ft: plotSnapValue(plotClamp(xFt ?? fallbackX, b.x0, b.x1)),
+    y_ft: plotSnapValue(plotClamp(yFt ?? fallbackY, b.y0, b.y1)),
     w_ft: def.w,
     h_ft: def.h,
     label: plotMintItemLabel(plot, def),
@@ -21799,7 +21869,7 @@ function selectPlotFlow(id) {
   renderPlotInspector();
 }
 function plotMintFlowId() {
-  return `pf_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+  return plotMintId('pf');
 }
 function togglePlotFlowMode(on) {
   plotFlowMode = on === undefined ? !plotFlowMode : on === true;
@@ -21817,6 +21887,12 @@ function togglePlotFlowMode(on) {
 function addPlotFlow(fromId, toId) {
   const plot = activeStagePlot();
   if (!plot || !fromId || !toId || fromId === toId) return;
+  // Stale DOM after a collab adopt can hand over a deleted item's id; a
+  // dangling cable would render nothing and evaporate on the next save.
+  if (!plot.items.some(it => it.id === fromId) || !plot.items.some(it => it.id === toId)) {
+    renderPlotStage();
+    return;
+  }
   plot.flows = plot.flows || [];
   if (plot.flows.some(f => f.from === fromId && f.to === toId && f.layer === plotActiveLayer)) {
     toast('That cable already runs there on this layer.');
@@ -21841,13 +21917,20 @@ function addPlotFlow(fromId, toId) {
   queueStagePlotAutosave();
 }
 function updateSelectedPlotFlow(field, value) {
+  const plot = activeStagePlot();
   const flow = selectedPlotFlow();
-  if (!flow) return;
+  if (!plot || !flow) return;
   if (field === 'conn') {
     if (!plotConnDef(value)) return;
     flow.conn = value;
   } else if (field === 'layer') {
     if (!plotLayerDef(value)) return;
+    // Same guard as addPlotFlow: a duplicate (from,to,layer) pair would be
+    // silently dropped by the normalizer's dedupe on the next save.
+    if (value !== flow.layer && plot.flows.some(f => f !== flow && f.from === flow.from && f.to === flow.to && f.layer === value)) {
+      toast('That cable already runs there on that layer.');
+      return;
+    }
     flow.layer = value;
     ensurePlotLayerVisible(value);
   } else return;
@@ -21857,8 +21940,15 @@ function updateSelectedPlotFlow(field, value) {
   queueStagePlotAutosave();
 }
 function reverseSelectedPlotFlow() {
+  const plot = activeStagePlot();
   const flow = selectedPlotFlow();
-  if (!flow) return;
+  if (!plot || !flow) return;
+  // Reversing beside an existing opposite-direction run would create a
+  // duplicate pair the normalizer silently deletes; protect the other cable.
+  if (plot.flows.some(f => f !== flow && f.from === flow.to && f.to === flow.from && f.layer === flow.layer)) {
+    toast('A cable already runs that direction on this layer.');
+    return;
+  }
   plotUndoPush();
   [flow.from, flow.to] = [flow.to, flow.from];
   pbNoteLocalEdit('pp-plot-canvas');
@@ -21882,14 +21972,24 @@ function updateSelectedPlotItem(field, value) {
   const item = selectedPlotItem();
   if (!item) return;
   const def = plotTypeDef(item.type);
-  if (field === 'label') item.label = String(value ?? '').slice(0, 60);
-  else if (field === 'color') item.color = PLOT_ITEM_COLORS.some(c => c.key === value) ? value : '';
+  if (field === 'label') {
+    // Typing fast path: update the one text node instead of rebuilding the
+    // whole SVG (and re-running cable geometry) per keystroke.
+    item.label = String(value ?? '').slice(0, 60);
+    const node = document.querySelector(`#plotStageSvg [data-plot-item="${CSS.escape(item.id)}"] .plot-item-label`);
+    if (node) node.textContent = plotItemDisplayLabel(item);
+    pbNoteLocalEdit('pp-plot-canvas');
+    queueStagePlotAutosave();
+    return;
+  }
+  if (field === 'color') item.color = PLOT_ITEM_COLORS.some(c => c.key === value) ? value : '';
   else if (field === 'rot') item.rot = ((Math.round(Number(value) || 0) % 360) + 360) % 360;
   else if (field === 'w_ft') {
     item.w_ft = plotClamp(value, 0.5, 100);
-    // Uniform gear: depth follows the type's aspect, one Size field.
+    // Uniform gear: depth follows the type's aspect, one Size field, same
+    // 0.5..100 clamp as the normalizer.
     if (def && def.resize !== 'free' && def.resize !== 'panels') {
-      item.h_ft = Math.round(item.w_ft * (def.h / def.w) * 100) / 100;
+      item.h_ft = plotClamp(Math.round(item.w_ft * (def.h / def.w) * 100) / 100, 0.5, 100);
     }
   }
   else if (field === 'h_ft') item.h_ft = plotClamp(value, 0.5, 100);
@@ -21919,18 +22019,18 @@ function rotateSelectedPlotItem(deltaDeg) {
   const slider = document.getElementById('plot-item-rot');
   if (slider) slider.value = String(Math.round(item.rot));
 }
+// Shared instructor/admin gate for the space and bank controls.
+function requirePlotManager(message) {
+  if (canManageCallSheetStructure()) return true;
+  toast(message);
+  return false;
+}
 function updateStagePlotStage(field, value) {
   const plot = activeStagePlot();
   if (!plot || (field !== 'w_ft' && field !== 'h_ft')) return;
-  if (!canManageCallSheetStructure()) {
-    toast('Only instructors and admins can resize the space.');
-    return;
-  }
+  if (!requirePlotManager('Only instructors and admins can resize the space.')) return;
   plot.stage[field] = plotClamp(value, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
-  plot.items.forEach(item => {
-    item.x_ft = plotClamp(item.x_ft, 0, plot.stage.w_ft);
-    item.y_ft = plotClamp(item.y_ft, 0, plot.stage.h_ft);
-  });
+  plotClampItemsToStage(plot);
   pbNoteLocalEdit('pp-plot-canvas');
   renderPlotStage();
   queueStagePlotAutosave();
@@ -21939,20 +22039,14 @@ function updateStagePlotFloor(id) {
   const plot = activeStagePlot();
   const def = plotFloorDef(id);
   if (!plot || !def) return;
-  if (!canManageCallSheetStructure()) {
-    toast('Only instructors and admins can assign the floor plan.');
-    return;
-  }
+  if (!requirePlotManager('Only instructors and admins can assign the floor plan.')) return;
   plotUndoPush();
   plot.floor = def.id;
   if (def.w_ft && def.h_ft) {
     plot.stage.w_ft = plotClamp(def.w_ft, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
     plot.stage.h_ft = plotClamp(def.h_ft, PLOT_STAGE_MIN_FT, PLOT_STAGE_MAX_FT);
-    plot.items.forEach(item => {
-      item.x_ft = plotClamp(item.x_ft, 0, plot.stage.w_ft);
-      item.y_ft = plotClamp(item.y_ft, 0, plot.stage.h_ft);
-    });
   }
+  plotClampItemsToStage(plot);   // walls (and their inset) apply immediately
   pbNoteLocalEdit('pp-plot-canvas');
   renderPlotStage();
   renderPlotInspector();
@@ -21984,13 +22078,26 @@ function setPlotActiveLayer(key) {
   renderPlotLayerBar();
   renderPlotStage();
 }
+// A cable renders only when its own layer AND both endpoints' layers show.
+function plotFlowVisibleNow(plot, flow) {
+  if (!plot || !flow || !plotVisibleLayers.has(flow.layer)) return false;
+  const a = plot.items.find(it => it.id === flow.from);
+  const b = plot.items.find(it => it.id === flow.to);
+  return Boolean(a && b && plotVisibleLayers.has(plotItemLayer(a)) && plotVisibleLayers.has(plotItemLayer(b)));
+}
 function togglePlotLayerVisible(key) {
   if (!plotLayerDef(key)) return;
   if (plotVisibleLayers.has(key)) {
     plotVisibleLayers.delete(key);
-    // Hiding the selected item's layer would strand an invisible selection.
+    // Hiding a layer must never strand an invisible selection: not an item,
+    // not a cable (via its layer OR an endpoint's), not an armed flow source.
+    const plot = activeStagePlot();
     const sel = selectedPlotItem();
     if (sel && plotItemLayer(sel) === key) plotSelectedItemId = '';
+    const flow = selectedPlotFlow();
+    if (flow && !plotFlowVisibleNow(plot, flow)) plotSelectedFlowId = '';
+    const src = plot?.items.find(it => it.id === plotFlowSourceId);
+    if (src && !plotVisibleLayers.has(plotItemLayer(src))) plotFlowSourceId = '';
   } else {
     plotVisibleLayers.add(key);
   }
@@ -21998,6 +22105,9 @@ function togglePlotLayerVisible(key) {
   renderPlotLayerBar();
   renderStagePlotEditor();
 }
+// The eye and the flow arrow are hand-rolled: the vendored SF Symbol set has
+// no eye or curved-arrow glyph (checked 2026-08-13). Everything else on the
+// layer bar rides sfIcon().
 function plotEyeSVG(on) {
   return on
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
@@ -22009,10 +22119,9 @@ function renderPlotLayerBar() {
   host.innerHTML = PLOT_LAYERS.map(l => {
     const on = plotVisibleLayers.has(l.key);
     const active = plotActiveLayer === l.key;
-    const dot = l.key === 'room' ? 'var(--text3)' : l.css;
     return `<div class="plot-layer-chip${active ? ' on' : ''}${on ? '' : ' off'}" data-layer="${l.key}">
       <button type="button" class="plot-layer-name" onclick="setPlotActiveLayer('${l.key}')" data-tip="Work on the ${esc(l.label)} layer">
-        <span class="plot-layer-dot" style="background:${dot}"></span><span>${esc(l.label)}</span>
+        <span class="plot-layer-dot"></span><span>${esc(l.label)}</span>
       </button>
       <button type="button" class="plot-layer-eye" onclick="togglePlotLayerVisible('${l.key}')" data-tip="${on ? 'Hide' : 'Show'} the ${esc(l.label)} layer" aria-label="${on ? 'Hide' : 'Show'} the ${esc(l.label)} layer" aria-pressed="${on}">${plotEyeSVG(on)}</button>
     </div>`;
@@ -22021,7 +22130,7 @@ function renderPlotLayerBar() {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h5c5 0 5-10 10-10"/><path d="M15.5 3.5 19 7l-3.5 3.5"/></svg><span>${plotFlowMode ? 'Drawing Flow' : 'Draw Flow'}</span>
     </button>
     <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF with each layer on its own page plus the combined plot">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v11M8 10.5l4 4 4-4"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg><span>Layer Set PDF</span>
+      ${sfIcon('action.download')}<span>Layer Set PDF</span>
     </button>`;
 }
 
@@ -22066,20 +22175,26 @@ function stagePlotFlowsMarkup(plot, layerSet, print) {
     const ux = (p1.x - p0.x) / fullLen, uy = (p1.y - p0.y) / fullLen;
     const trim = item => {
       const hx = item.w_ft * K / 2, hy = item.h_ft * K / 2;
-      const tx = ux ? hx / Math.abs(ux) : Infinity;
-      const ty = uy ? hy / Math.abs(uy) : Infinity;
+      // Work in the item's own frame: rotate the cable direction by -rot so
+      // the clearance matches the footprint the glyph actually occupies.
+      const th = ((item.rot || 0) * Math.PI) / 180;
+      const co = Math.cos(th), si = Math.sin(th);
+      const lx = ux * co + uy * si, ly = uy * co - ux * si;
+      const tx = lx ? hx / Math.abs(lx) : Infinity;
+      const ty = ly ? hy / Math.abs(ly) : Infinity;
       return Math.min(tx, ty) + GAP;
     };
     const t0 = trim(a), t1 = trim(b);
-    if (t0 + t1 + 6 >= fullLen) return;   // footprints overlap: no room to draw
+    // Leave room for the whole arrowhead: anything tighter would draw the
+    // path backwards past its own start.
+    if (t0 + t1 + ARROW_L + 2 >= fullLen) return;
     const s = { x: p0.x + ux * t0, y: p0.y + uy * t0 };
     const e = { x: p1.x - ux * t1, y: p1.y - uy * t1 };
     segs.push({ flow, s, e, ux, uy, len: Math.hypot(e.x - s.x, e.y - s.y) });
   });
   return segs.map((seg, i) => {
     const { flow, s, e, ux, uy, len } = seg;
-    const layer = plotLayerDef(flow.layer) || PLOT_LAYERS[0];
-    const color = print ? layer.print : layer.css;
+    const color = plotLayerColor(flow.layer, print);
     const crossings = [];
     for (let j = 0; j < i; j++) {
       const t = plotSegIntersection(s, e, segs[j].s, segs[j].e);
@@ -22105,16 +22220,20 @@ function stagePlotFlowsMarkup(plot, layerSet, print) {
     const pillW = connLabel.length * 5.4 + 10, pillH = 13;
     const mx = s.x + ux * (len / 2), my = s.y + uy * (len / 2);
     const showPill = connLabel && len > pillW + ARROW_L + HOP_R * 2 + 12;
+    // Print output carries NO page class names: CSS rules beat presentation
+    // attributes, so when this sheet is inlined into the live document (the
+    // raster-miss preview and the printPaperHTML fallback) any matching page
+    // rule would override the explicit print colors.
     const pill = showPill ? `<g transform="translate(${mx.toFixed(2)} ${my.toFixed(2)})">
-        <rect class="plot-flow-pill" x="${(-pillW / 2).toFixed(1)}" y="${-pillH / 2}" width="${pillW.toFixed(1)}" height="${pillH}" rx="${pillH / 2}" ${print ? `fill="${color}"` : ''}/>
-        <text class="plot-flow-pill-text" x="0" y="3" text-anchor="middle" ${print ? `fill="#ffffff" font-size="8.5" font-weight="700" font-family="Helvetica, Arial, sans-serif"` : ''}>${esc(connLabel)}</text>
+        <rect ${print ? '' : 'class="plot-flow-pill" '}x="${(-pillW / 2).toFixed(1)}" y="${-pillH / 2}" width="${pillW.toFixed(1)}" height="${pillH}" rx="${pillH / 2}" ${print ? `fill="${color}"` : ''}/>
+        <text ${print ? '' : 'class="plot-flow-pill-text" '}x="0" y="3" text-anchor="middle" ${print ? `fill="#ffffff" font-size="8.5" font-weight="700" font-family="Helvetica, Arial, sans-serif"` : ''}>${esc(connLabel)}</text>
       </g>` : '';
     const selected = !print && flow.id === plotSelectedFlowId;
-    return `<g class="plot-flow" ${print ? '' : `data-plot-flow="${esc(flow.id)}" style="color:${color}"`}>
+    return `<g ${print ? '' : `class="plot-flow" data-plot-flow="${esc(flow.id)}" style="color:${color}"`}>
       ${selected ? `<path class="plot-flow-sel" d="${path}"/>` : ''}
       ${print ? '' : `<path class="plot-flow-hit" d="${path}"/>`}
-      <path class="plot-flow-line" d="${path}" ${print ? `stroke="${color}" stroke-width="1.75" fill="none" stroke-linecap="round"` : ''}/>
-      <polygon class="plot-flow-arrow" points="${arrow}" ${print ? `fill="${color}"` : ''}/>
+      <path ${print ? '' : 'class="plot-flow-line" '}d="${path}" ${print ? `stroke="${color}" stroke-width="1.75" fill="none" stroke-linecap="round"` : ''}/>
+      <polygon ${print ? '' : 'class="plot-flow-arrow" '}points="${arrow}" ${print ? `fill="${color}"` : ''}/>
       ${pill}
     </g>`;
   }).join('');
@@ -22165,30 +22284,31 @@ function stagePlotSheetSVG(plot, opts={}) {
       vb = drape.vb;
       sym = drape.sym;
     }
-    return `<g class="plot-item" data-plot-item="${esc(item.id)}" transform="translate(${item.x_ft * K} ${item.y_ft * K})">
+    return `<g ${print ? '' : `class="plot-item" data-plot-item="${esc(item.id)}" `}transform="translate(${item.x_ft * K} ${item.y_ft * K})">
       <g transform="rotate(${item.rot})">
         ${print ? '' : `<rect class="plot-item-hit" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>`}
         ${selected ? `<rect class="plot-item-sel" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>` : ''}
         ${flowSrc ? `<rect class="plot-item-src" x="${-w / 2 - 4}" y="${-h / 2 - 4}" width="${w + 8}" height="${h + 8}" rx="6"/>` : ''}
-        <svg class="plot-item-glyph" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" viewBox="${vb}" preserveAspectRatio="${par}" ${print ? `stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"` : `style="color:${color}"`}>${sym}</svg>
+        <svg ${print ? 'data-pglyph="1" ' : 'class="plot-item-glyph" '}x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" viewBox="${vb}" preserveAspectRatio="${par}" ${print ? `stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"` : `style="color:${color}"`}>${sym}</svg>
       </g>
-      <text class="plot-item-label" x="0" y="${labelY}" text-anchor="middle" ${print ? `fill="${labelColor}" font-size="11" font-family="Helvetica, Arial, sans-serif" font-weight="600"` : ''}>${esc(plotItemDisplayLabel(item))}</text>
+      <text ${print ? '' : 'class="plot-item-label" '}x="0" y="${labelY}" text-anchor="middle" ${print ? `fill="${labelColor}" font-size="11" font-family="Helvetica, Arial, sans-serif" font-weight="600"` : ''}>${esc(plotItemDisplayLabel(item))}</text>
     </g>`;
   }).join('');
+  const dimClass = print ? '' : 'class="plot-dim-label" ';
   const dims = `
-    <text class="plot-dim-label" x="${W / 2}" y="-12" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.w_ft} ft</text>
-    <text class="plot-dim-label" x="-12" y="${H / 2}" text-anchor="middle" transform="rotate(-90 -12 ${H / 2})" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.h_ft} ft</text>
-    <text class="plot-front-label" x="${W / 2}" y="${H + 24}" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="11" font-family="Menlo, monospace" letter-spacing="2"` : ''}>FRONT · AUDIENCE</text>
-    <text class="plot-dim-label" x="${W}" y="${H + 24}" text-anchor="end" ${print ? `fill="${dimColor}" font-size="10" font-family="Menlo, monospace"` : ''}>1 square = 1 ft</text>`;
+    <text ${dimClass}x="${W / 2}" y="-12" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.w_ft} ft</text>
+    <text ${dimClass}x="-12" y="${H / 2}" text-anchor="middle" transform="rotate(-90 -12 ${H / 2})" ${print ? `fill="${dimColor}" font-size="12" font-family="Menlo, monospace"` : ''}>${plot.stage.h_ft} ft</text>
+    <text ${print ? '' : 'class="plot-front-label" '}x="${W / 2}" y="${H + 24}" text-anchor="middle" ${print ? `fill="${dimColor}" font-size="11" font-family="Menlo, monospace" letter-spacing="2"` : ''}>FRONT · AUDIENCE</text>
+    <text ${dimClass}x="${W}" y="${H + 24}" text-anchor="end" ${print ? `fill="${dimColor}" font-size="10" font-family="Menlo, monospace"` : ''}>1 square = 1 ft</text>`;
   const emptyHint = (!print && layerSet.size === 0)
     ? `<text class="plot-dim-label" x="${W / 2}" y="${H / 2}" text-anchor="middle">All layers are hidden. Show one in the layer bar above.</text>` : '';
   // Assigned floor plan: wall art stretched across the stage rect. The rect
   // stays as the working bounds; the walls draw over the grid.
   const floorDef = plotFloorDef(plot.floor);
   const walls = floorDef?.sym
-    ? `<svg class="plot-floor-walls" x="0" y="0" width="${W}" height="${H}" viewBox="${floorDef.vb}" preserveAspectRatio="none" ${print ? `stroke="${outline}" stroke-width="2.5" fill="none" stroke-linecap="round"` : ''}>${floorDef.sym}</svg>` : '';
+    ? `<svg ${print ? 'data-pwalls="1" ' : 'class="plot-floor-walls" '}x="0" y="0" width="${W}" height="${H}" viewBox="${floorDef.vb}" preserveAspectRatio="none" ${print ? `stroke="${outline}" stroke-width="2.5" fill="none" stroke-linecap="round"` : ''}>${floorDef.sym}</svg>` : '';
   const inner = `
-    <rect class="plot-outline" x="0" y="0" width="${W}" height="${H}" ${print ? `fill="${floor}" stroke="${outline}" stroke-width="${floorDef?.sym ? 1 : 2}"` : ''}/>
+    <rect ${print ? '' : 'class="plot-outline" '}x="0" y="0" width="${W}" height="${H}" ${print ? `fill="${floor}" stroke="${outline}" stroke-width="${floorDef?.sym ? 1 : 2}"` : ''}/>
     ${grid}
     <rect x="0" y="0" width="${W}" height="${H}" fill="none" ${print ? `stroke="${outline}" stroke-width="${floorDef?.sym ? 1 : 2}"` : 'class="plot-outline-top"'}/>
     ${walls}
@@ -22200,9 +22320,11 @@ function stagePlotSheetSVG(plot, opts={}) {
     const vw = Math.round(W + PAD_X * 2);
     const vh = Math.round(H + PAD_TOP + PAD_BOT);
     // Page CSS never reaches an SVG decoded as an image, so the glyph stroke
-    // rules ride inside the document. non-scaling-stroke keeps line weight
-    // uniform when a footprint stretches a glyph.
-    const style = '<style>.plot-item-glyph *,.plot-floor-walls *{vector-effect:non-scaling-stroke;fill:none;stroke-linecap:round;stroke-linejoin:round}</style>';
+    // rules ride inside the document, hooked on data attributes the page
+    // stylesheet cannot match (print output carries no page class names so
+    // in-page fallbacks keep their explicit colors). non-scaling-stroke
+    // keeps line weight uniform when a footprint stretches a glyph.
+    const style = '<style>[data-pglyph] *,[data-pwalls] *{vector-effect:non-scaling-stroke;fill:none;stroke-linecap:round;stroke-linejoin:round}</style>';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${vw}" height="${vh}">${style}<rect x="${-PAD_X}" y="${-PAD_TOP}" width="${vw}" height="${vh}" fill="#ffffff"/>${inner}</svg>`;
   }
   return `<svg id="plotStageSvg" viewBox="${vb}" role="img" aria-label="Stage plot editor canvas">${inner}</svg>`;
@@ -22216,34 +22338,45 @@ function renderPlotStage() {
 }
 
 // ── Bank curation (admins pick what students see) ──
-// Session-wide, one small key on prePro. Disabling a type hides it from the
-// palette only; gear already placed stays placed.
+// SESSION-LEVEL, mirroring paperworkEnabledMapLive (D6): the parent session
+// doc wins so grouped workspaces share one curated bank; local prePro is the
+// fallback for solo/offline workspaces. Curation is therefore edited from
+// the main workspace only (outside any group), where persistPreProData
+// writes the parent doc. Disabling a type hides it from the palette only;
+// gear already placed stays placed.
 let plotBankManage = false;
-function plotBankDisabled(data=loadPreProData()) {
-  const raw = data?.plotBank?.disabled;
+let _plotBankRenderedKey = null;   // what the palette last drew, for refresh diffing
+function plotBankDisabled(data=null) {
+  const parent = sessionSnapshotLatestDoc?.prePro?.plotBank?.disabled;
+  const raw = Array.isArray(parent) ? parent : (data || loadPreProData())?.plotBank?.disabled;
   return new Set((Array.isArray(raw) ? raw : []).filter(k => PLOT_ELEMENT_TYPES.some(t => t.type === k)));
 }
+function plotBankKey(data=null) {
+  return [...plotBankDisabled(data)].sort().join(',');
+}
 function togglePlotBankManage() {
-  if (!canManageCallSheetStructure()) {
-    toast('Only instructors and admins can manage the bank.');
+  if (!requirePlotManager('Only instructors and admins can manage the bank.')) return;
+  if (groupActive()) {
+    toast('Manage the bank from the main workspace, outside a group. It applies to the whole session.');
     return;
   }
   plotBankManage = !plotBankManage;
   renderPlotPalette();
 }
 function togglePlotBankType(type) {
-  if (!canManageCallSheetStructure() || !plotTypeDef(type)) return;
+  if (!canManageCallSheetStructure() || groupActive() || !plotTypeDef(type)) return;
   const disabled = plotBankDisabled();
   if (disabled.has(type)) disabled.delete(type);
   else disabled.add(type);
   persistPreProData({ plotBank: { disabled: [...disabled] }, updatedAt: Date.now() }, 'Stage Plot');
   renderPlotPalette();
 }
-function renderPlotPalette() {
+function renderPlotPalette(data=null) {
   const host = document.getElementById('plotPalette');
   if (!host) return;
-  const disabled = plotBankDisabled();
-  const canManage = canManageCallSheetStructure();
+  const disabled = plotBankDisabled(data);
+  _plotBankRenderedKey = [...disabled].sort().join(',');
+  const canManage = canManageCallSheetStructure() && !groupActive();
   if (!canManage) plotBankManage = false;
   // Grouped by layer in PLOT_LAYERS order; adding from a group puts the item
   // on that group's layer. Manage mode shows everything and toggles instead
@@ -22308,20 +22441,20 @@ function renderPlotInspector() {
       if (def?.resize === 'panels') return `
     <div class="plot-insp-h">Drape panels <span class="plot-insp-val">${PLOT_DRAPE_PANEL_FT} ft each</span></div>
     <div class="plot-insp-body plot-insp-row">
-      <div class="field"><label class="field-lbl">Panels</label><input class="field-in" id="plot-item-panels" type="number" min="1" max="20" step="1" value="${item.panels || Math.round(item.w_ft / PLOT_DRAPE_PANEL_FT)}" onchange="updateSelectedPlotItem('panels', this.value)"></div>
+      <div class="field"><label class="field-lbl">Panels</label><input class="field-in" type="number" min="1" max="20" step="1" value="${item.panels || Math.round(item.w_ft / PLOT_DRAPE_PANEL_FT)}" onchange="updateSelectedPlotItem('panels', this.value)"></div>
       <div class="field"><label class="field-lbl">Wide (feet)</label><input class="field-in" type="number" value="${item.w_ft}" disabled></div>
     </div>`;
       if (def && def.resize !== 'free') return `
     <div class="plot-insp-h">Size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
-      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-item-w" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
-      <div class="field"><label class="field-lbl">Deep (auto)</label><input class="field-in" id="plot-item-h" type="number" value="${item.h_ft}" disabled></div>
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Deep (auto)</label><input class="field-in" type="number" value="${item.h_ft}" disabled></div>
     </div>`;
       return `
     <div class="plot-insp-h">Size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
-      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" id="plot-item-w" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
-      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" id="plot-item-h" type="number" min="0.5" max="100" step="0.5" value="${item.h_ft}" onchange="updateSelectedPlotItem('h_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Wide</label><input class="field-in" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
+      <div class="field"><label class="field-lbl">Deep</label><input class="field-in" type="number" min="0.5" max="100" step="0.5" value="${item.h_ft}" onchange="updateSelectedPlotItem('h_ft', this.value)"></div>
     </div>`;
     })()}
     <div class="plot-insp-h">Arrange</div>
@@ -22433,7 +22566,9 @@ function pbInitStagePlotListeners() {
         const p = plotSvgPointFromEvent(e);
         if (!p) return;
         plotUndoPush();
-        _plotDrag = { itemId: id, dx: item.x_ft - p.x, dy: item.y_ft - p.y, moved: false };
+        // Remember the frame this drag pushed: a mid-hold collab refresh can
+        // prune it, and a blind pop would then discard an unrelated frame.
+        _plotDrag = { itemId: id, dx: item.x_ft - p.x, dy: item.y_ft - p.y, moved: false, undoLen: _plotUndoStack.length };
         _plotPointerActive = true;
         plotNotePresenceEdit();
         try { canvas.setPointerCapture(e.pointerId); } catch {}
@@ -22449,8 +22584,9 @@ function pbInitStagePlotListeners() {
       const item = plot?.items.find(it => it.id === _plotDrag.itemId);
       const p = plotSvgPointFromEvent(e);
       if (!plot || !item || !p) return;
-      item.x_ft = plotSnapValue(plotClamp(p.x + _plotDrag.dx, 0, plot.stage.w_ft));
-      item.y_ft = plotSnapValue(plotClamp(p.y + _plotDrag.dy, 0, plot.stage.h_ft));
+      const b = plotStageBounds(plot);
+      item.x_ft = plotSnapValue(plotClamp(p.x + _plotDrag.dx, b.x0, b.x1));
+      item.y_ft = plotSnapValue(plotClamp(p.y + _plotDrag.dy, b.y0, b.y1));
       _plotDrag.moved = true;
       pbNoteLocalEdit('pp-plot-canvas');
       const g = canvas.querySelector(`[data-plot-item="${CSS.escape(item.id)}"]`);
@@ -22459,10 +22595,17 @@ function pbInitStagePlotListeners() {
     const endDrag = () => {
       if (!_plotDrag) return;
       const moved = _plotDrag.moved;
+      const undoLen = _plotDrag.undoLen;
       _plotDrag = null;
       _plotPointerActive = false;
-      if (moved) queueStagePlotAutosave();
-      else _plotUndoStack.pop();   // click-select pushed a no-op undo frame
+      if (moved) {
+        // The drag fast-path moved only the item's transform; cables anchor
+        // to gear, so re-render the stage to bring them along.
+        renderPlotStage();
+        queueStagePlotAutosave();
+      } else if (_plotUndoStack.length === undoLen) {
+        _plotUndoStack.pop();   // click-select pushed a no-op undo frame
+      }
     };
     canvas.addEventListener('pointerup', endDrag);
     canvas.addEventListener('pointercancel', endDrag);
@@ -22506,7 +22649,7 @@ function pbInitStagePlotListeners() {
       const p = plotSvgPointFromEvent(e);
       const plot = activeStagePlot();
       if (!p || !plot) return;
-      addPlotItem(type, plotClamp(p.x, 0, plot.stage.w_ft), plotClamp(p.y, 0, plot.stage.h_ft));
+      addPlotItem(type, p.x, p.y);   // addPlotItem clamps to the stage bounds
     };
     palette.addEventListener('pointerup', endPalDrag);
     palette.addEventListener('pointercancel', () => { _plotPalDrag?.ghost?.remove(); _plotPalDrag = null; });
@@ -22553,8 +22696,9 @@ function pbInitStagePlotListeners() {
       const item = selectedPlotItem();
       if (!plot || !item) return;
       e.preventDefault();
-      item.x_ft = plotClamp(item.x_ft + nudge[0] * PLOT_SNAP_FT, 0, plot.stage.w_ft);
-      item.y_ft = plotClamp(item.y_ft + nudge[1] * PLOT_SNAP_FT, 0, plot.stage.h_ft);
+      const b = plotStageBounds(plot);
+      item.x_ft = plotClamp(item.x_ft + nudge[0] * PLOT_SNAP_FT, b.x0, b.x1);
+      item.y_ft = plotClamp(item.y_ft + nudge[1] * PLOT_SNAP_FT, b.y0, b.y1);
       pbNoteLocalEdit('pp-plot-canvas');
       renderPlotStage();
       queueStagePlotAutosave();
@@ -22654,7 +22798,12 @@ async function prepareStagePlotRasters(snapshot) {
   const sets = requested.map(keys => plotLayerSetNormalize(keys));
   const byKey = (_stagePlotRasterCache?.fingerprint === snapshot.fingerprint)
     ? { ..._stagePlotRasterCache.byKey } : {};
-  const plots = getStagePlots(snapshot.prePro || {});
+  // Single-plot exports name their target so the other plots never rasterize
+  // (each raster is an SVG decode + full canvas paint); the package renders
+  // every plot and passes no plotId. Unknown/stale ids fall back to all.
+  const all = getStagePlots(snapshot.prePro || {});
+  const targeted = snapshot?.options?.plotId ? all.filter(p => p.id === snapshot.options.plotId) : all;
+  const plots = targeted.length ? targeted : all;
   for (const plot of plots) {
     for (const keys of sets) {
       const key = `${plot.id}|${keys.join('+')}`;
@@ -22667,23 +22816,41 @@ async function prepareStagePlotRasters(snapshot) {
 
 let lastStagePlotExportSnapshot = null;
 let lastStagePlotExportIndex = 0;
-let lastStagePlotExportLayers = null;
 // The preview exports exactly what's showing: the layer bar is the export
 // picker. All-hidden falls back to everything rather than a blank sheet.
 function currentPlotExportLayers() {
   return plotLayerSetNormalize(plotVisibleLayers);
 }
+// One fallback policy for every stage plot PDF: try the paged renderer,
+// surface a cancel, and fall back to the identical print representation.
+async function exportStagePlotPaper(html, fileName, options, okToast, failLabel) {
+  try {
+    const result = await exportPaperHTMLAsPDF(html, fileName, options);
+    toast(okToast(result.pageCount));
+  } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
+    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+    } catch (printError) {
+      toast(`Could not render ${failLabel}: ${paperworkExportFailureMessage(printError)}`);
+    }
+  }
+}
+function resolveExportPlotIndex(plots) {
+  const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
+  return byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
+}
 async function showStagePlotPreview() {
   try {
     saveStagePlot(false);
     const layers = currentPlotExportLayers();
-    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers });
+    const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers, plotId: activeStagePlotId });
     const plots = getStagePlots(snapshot.prePro);
-    const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
-    const index = byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
+    const index = resolveExportPlotIndex(plots);
     lastStagePlotExportSnapshot = snapshot;
     lastStagePlotExportIndex = index;
-    lastStagePlotExportLayers = layers;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
     showPaperPreview('Stage Plot Preview', stagePlotPreviewHTML(plots[index], snapshot.prePro, undefined, true, layers),
       'Export Stage Plot PDF', 'downloadStagePlotPDF()', 'stage-plot', options);
@@ -22697,9 +22864,12 @@ async function downloadStagePlotPDF() {
   try {
     const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
       && lastPaperPreview?.options?.snapshotFingerprint === lastStagePlotExportSnapshot?.fingerprint;
-    layers = previewIsOpen && lastStagePlotExportLayers ? lastStagePlotExportLayers : currentPlotExportLayers();
+    // The previewed snapshot is the source of truth for its layer selection;
+    // without a live preview, export what the layer bar is showing now.
+    layers = previewIsOpen && Array.isArray(lastStagePlotExportSnapshot?.options?.plotLayers)
+      ? lastStagePlotExportSnapshot.options.plotLayers : currentPlotExportLayers();
     snapshot = previewIsOpen ? lastStagePlotExportSnapshot
-      : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers });
+      : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers, plotId: activeStagePlotId });
   } catch (error) {
     toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
     return;
@@ -22710,61 +22880,41 @@ async function downloadStagePlotPDF() {
   const html = stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true, layers);
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
   const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - ${plotLayerSetLabel(layers)}`, 'cueola-stage-plot')}.pdf`;
-  try {
-    const result = await exportPaperHTMLAsPDF(html, fileName, options);
-    toast(`Stage plot PDF downloaded · ${plotLayerSetLabel(layers)} · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
-  } catch (error) {
-    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
-    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
-    try {
-      const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
-    } catch (printError) {
-      toast(`Could not render the saved stage plot: ${paperworkExportFailureMessage(printError)}`);
-    }
-  }
+  await exportStagePlotPaper(html, fileName, options,
+    pages => `Stage plot PDF downloaded · ${plotLayerSetLabel(layers)} · ${pages} page${pages === 1 ? '' : 's'}.`,
+    'the saved stage plot');
 }
-// One click, one PDF, four pages: each system on its own sheet (with the
-// room for context), then everything combined. Matches the three checkpoint
-// submissions plus the full plot.
-const PLOT_LAYER_SET_PAGES = [
-  ['room', 'audio'],
-  ['room', 'video'],
-  ['room', 'lighting'],
-  ['room', 'audio', 'video', 'lighting'],
-];
+// One click, one PDF: each system on its own sheet (with the room for
+// context), then everything combined. Derived from PLOT_LAYERS so a future
+// layer joins the checkpoint set automatically.
+const PLOT_LAYER_SET_PAGES = PLOT_LAYERS.filter(l => l.key !== 'room')
+  .map(l => ['room', l.key])
+  .concat([PLOT_LAYERS.map(l => l.key)]);
 async function exportStagePlotLayerSetPDF() {
   let snapshot;
   try {
     saveStagePlot(false);
     snapshot = await preparePaperworkExportSnapshot({
       includeAssignments:false, includeNotes:false, documentType:'stage-plot',
-      plotLayerSets: PLOT_LAYER_SET_PAGES,
+      plotLayerSets: PLOT_LAYER_SET_PAGES, plotId: activeStagePlotId,
     });
   } catch (error) {
     toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const plots = getStagePlots(snapshot.prePro);
-  const byId = activeStagePlotId ? plots.findIndex(p => p.id === activeStagePlotId) : -1;
-  const index = byId >= 0 ? byId : Math.max(0, Math.min(activeStagePlotIndex, plots.length - 1));
+  const index = resolveExportPlotIndex(plots);
   const plot = plots[index];
-  const html = PLOT_LAYER_SET_PAGES.map(layers => stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true, layers)).join('');
+  // Explicit page breaks, same idiom as the package: each system must start
+  // its own sheet even when a short figure leaves slack on the page.
+  const html = PLOT_LAYER_SET_PAGES.map(layers => stagePlotPreviewHTML(plot, snapshot.prePro, undefined, true, layers))
+    .join('\n    <div class="paper-page-break"></div>\n    ');
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
   const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - Layer Set`, 'cueola-stage-plot')}.pdf`;
-  try {
-    const result = await exportPaperHTMLAsPDF(html, fileName, options);
-    toast(`Layer set PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}: Audio, Video, Lighting, Combined.`);
-  } catch (error) {
-    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
-    console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
-    try {
-      const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
-    } catch (printError) {
-      toast(`Could not render the layer set: ${paperworkExportFailureMessage(printError)}`);
-    }
-  }
+  const pageList = PLOT_LAYER_SET_PAGES.map(keys => plotLayerSetLabel(keys)).join(', ');
+  await exportStagePlotPaper(html, fileName, options,
+    pages => `Layer set PDF downloaded · ${pages} page${pages === 1 ? '' : 's'}: ${pageList}.`,
+    'the layer set');
 }
 
 function renderCallSheetSelector(sheets=getCallSheets()) {
