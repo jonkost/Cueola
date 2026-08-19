@@ -343,6 +343,28 @@
   var PREVIEW_PID = 0xf1f1;
   var mode = 'local';
 
+  // ── Deck ownership: exactly ONE window drives the hardware ─────────────────
+  // Every full Cueola window loads this module, and WebHID happily lets each
+  // of them open the same Stream Deck. Two windows painting at once interleave
+  // the multi-packet key-image writes (torn, glitching key art) and every
+  // physical press dispatches in BOTH windows. The Web Locks API elects a
+  // single owner across same-origin windows; the talent display and the other
+  // output windows never even compete.
+  var DECK_LOCK = 'cueola_keywi_deck';
+  var deckOwner = false;           // this window holds the ownership lock
+  var deckOwnerRelease = null;     // resolves the held lock's callback promise
+  var deckStandbyCtl = null;       // AbortController for the queued standby claim
+  var deckHeldElsewhere = false;   // another window is the deck window (UI hint)
+  // Mirrors cueola-app.js's talent-boot detection (IS_PROMPTER_TALENT_BOOT):
+  // the dedicated output window (?prompter=1) and the in-page talent doors.
+  var AUX_OUTPUT_BOOT = (function () {
+    try {
+      var p = new URLSearchParams(location.search);
+      return p.get('prompter') === '1' || p.has('flowmingo') || p.has('promptypus')
+        || location.hash === '#flowmingo' || location.hash === '#promptypus';
+    } catch (e) { return false; }
+  })();
+
   var tbSocket = null, tbUrlIndex = 0, tbReconnect = null;
   // gains/levels arrive only from an updated talkbackd; hasGains/hasLevels flag
   // what this daemon speaks so the Micochondria panel never shows dead controls.
@@ -494,6 +516,143 @@
     tbGainTimers[bus] = setTimeout(function () { talkbackSend(bus + ' gain ' + v.toFixed(2)); }, 60);
   }
 
+  // ── Deck ownership election ─────────────────────────────────────────────────
+  function locksAvailable() { return !!(navigator.locks && navigator.locks.request); }
+  var deckLockSeq = 0;             // request identity: only the request that BACKS
+  var deckOwnerToken = 0;          // current ownership may clear it (a null
+                                   // ifAvailable probe must never clobber a lock
+                                   // held through the standby request)
+  var deckElectTimer = null;       // scheduled re-election after an empty-handed win
+  var DECK_ELECT_RETRY_MS = 20000;
+  // Acquire the cross-window deck lock and HOLD it (released by
+  // releaseDeckOwnership, a rival steal, or this window closing). Resolves true
+  // the moment the lock is ours, false when { ifAvailable } found it taken.
+  // Browsers without Web Locks keep the old single-window behavior.
+  function acquireDeckOwnership(opts) {
+    if (!locksAvailable() || deckOwner) return Promise.resolve(true);
+    return new Promise(function (done) {
+      var settled = false, token = 0;
+      function settle(v) { if (!settled) { settled = true; done(v); } }
+      navigator.locks.request(DECK_LOCK, opts || {}, function (lock) {
+        if (!lock) { settle(false); return; }        // ifAvailable: someone else has it
+        token = ++deckLockSeq;
+        deckOwnerToken = token; deckOwner = true; deckHeldElsewhere = false;
+        settle(true);
+        return new Promise(function (release) { deckOwnerRelease = release; });
+      }).then(function () {
+        if (token && deckOwnerToken === token) { deckOwnerToken = 0; deckOwner = false; deckOwnerRelease = null; }
+        settle(false);                               // voluntary release
+      }, function () {
+        settle(false);
+        // Rejected while backing ownership = a rival window stole the lock.
+        if (token && deckOwnerToken === token) { deckOwnerToken = 0; deckOwner = false; deckOwnerRelease = null; deckOwnershipLost(); }
+      });
+    });
+  }
+  function releaseDeckOwnership() {
+    var rel = deckOwnerRelease;
+    deckOwnerToken = 0; deckOwner = false; deckOwnerRelease = null;
+    if (rel) { try { rel(); } catch (e) {} }
+  }
+  // Queue a standby claim: when the owning window closes or lets go, this
+  // window is granted the lock and silently re-attaches the hardware. An
+  // attempt that comes up empty-handed (deck unplugged, Elgato app holding the
+  // USB device) gives the lock back and retries on the election timer.
+  function standbyForDeck() {
+    if (!locksAvailable() || deckOwner || deckStandbyCtl) return;
+    if (typeof AbortController !== 'function') return;
+    var ctl = new AbortController();
+    deckStandbyCtl = ctl;
+    var token = 0;
+    navigator.locks.request(DECK_LOCK, { signal: ctl.signal }, function () {
+      if (deckStandbyCtl === ctl) deckStandbyCtl = null;
+      token = ++deckLockSeq;
+      deckOwnerToken = token; deckOwner = true; deckHeldElsewhere = false;
+      return reattachGrantedDecks().then(function () {
+        if (deckOwnerToken !== token) return null;   // released or superseded mid-attach
+        if (!decks.length) { scheduleDeckElection(); return null; }   // empty-handed: let go, retry later
+        if (isSurfaceVisible()) render();
+        return new Promise(function (release) { deckOwnerRelease = release; });
+      });
+    }).then(function () {
+      if (deckStandbyCtl === ctl) deckStandbyCtl = null;
+      if (token && deckOwnerToken === token) { deckOwnerToken = 0; deckOwner = false; deckOwnerRelease = null; if (isSurfaceVisible()) render(); }
+    }, function () {
+      if (deckStandbyCtl === ctl) deckStandbyCtl = null;
+      if (token && deckOwnerToken === token) { deckOwnerToken = 0; deckOwner = false; deckOwnerRelease = null; deckOwnershipLost(); }
+    });
+  }
+  function scheduleDeckElection() {
+    if (deckElectTimer) return;
+    deckElectTimer = setTimeout(function () { deckElectTimer = null; electDeckOwner(); }, DECK_ELECT_RETRY_MS);
+  }
+  // The election: try to become the deck window and silently re-attach every
+  // granted deck. A loser queues as standby (and inherits the deck the moment
+  // the owning window closes); an empty-handed winner gives the lock back and
+  // retries later, so plugging the deck in, granting it from another window,
+  // or quitting the Elgato app gets picked up without a reload.
+  function electDeckOwner() {
+    if (!navigator.hid || deckOwner || deckStandbyCtl) return;
+    if (!locksAvailable()) { reattachGrantedDecks(); return; }   // old Chromium: single-window behavior
+    acquireDeckOwnership({ ifAvailable: true }).then(function (mine) {
+      if (!mine) {
+        if (deckOwner) return;                       // our own standby won meanwhile
+        deckHeldElsewhere = true;
+        standbyForDeck();
+        try { console.info('[KeyWi] another Cueola window is driving the Stream Deck; this window is on standby.'); } catch (e) {}
+        if (isSurfaceVisible()) render();
+        return;
+      }
+      return reattachGrantedDecks().then(function () {
+        if (!decks.length && deckOwner) { releaseDeckOwnership(); scheduleDeckElection(); }
+        if (isSurfaceVisible()) render();
+      });
+    }).catch(function () {});
+  }
+  function onHidConnect() { if (deckOwner) { reattachGrantedDecks(); } else electDeckOwner(); }
+  // Explicit Connect in a non-owner window takes the deck over: cancel our own
+  // standby claim first (a stale claim would silently re-grab the deck later),
+  // then break the other window's lock with a steal.
+  function ensureDeckOwnership() {
+    if (deckOwner || !locksAvailable()) return Promise.resolve({ ok: true, took: false });
+    return acquireDeckOwnership({ ifAvailable: true }).then(function (mine) {
+      if (mine || deckOwner) return { ok: true, took: false };   // won, or our standby won meanwhile
+      if (deckStandbyCtl) { try { deckStandbyCtl.abort(); } catch (e) {} deckStandbyCtl = null; }
+      return acquireDeckOwnership({ steal: true }).then(function (stole) { return { ok: stole, took: stole }; });
+    });
+  }
+  // A rival window stole the hardware: close every handle IMMEDIATELY (an open
+  // handle keeps receiving input reports — that is the double-dispatch bug) and
+  // skip the goodbye reset; the new owner is already painting.
+  function deckOwnershipLost() {
+    deckHeldElsewhere = true;
+    var had = decks.length;
+    var handles = decks.slice();
+    flushDeviceWrites();
+    device = null; decks = [];
+    handles.forEach(function (d) { try { d.hid.oninputreport = null; } catch (e) {} try { d.hid.close(); } catch (e) {} });
+    // Preview mode shares the paint and anim loops but holds no hardware:
+    // losing the lock must not freeze an on-screen preview.
+    if (!previewMode) teardownDevice();
+    standbyForDeck();               // if that window lets go later, take the deck back
+    if (had) { toast('Another Cueola window took over the Stream Deck.'); render(); }
+    else if (isSurfaceVisible()) render();
+  }
+  // The silent multi-deck re-attach; the election, the standby failover, and
+  // the HID connect event all share it. Resolves with how many decks opened.
+  function reattachGrantedDecks() {
+    if (!navigator.hid) return Promise.resolve(0);
+    // A background attach exits preview mode; unsaved preview edits must not
+    // be silently discarded by it. Wait for a save or an exit, retry later.
+    if (previewMode && layoutDirty) { scheduleDeckElection(); return Promise.resolve(0); }
+    return navigator.hid.getDevices().then(async function (list) {
+      var grant = (list || []).filter(supportedFilter).filter(function (d) { return !deckForHid(d); });
+      var opened = 0;
+      for (var gi = 0; gi < grant.length; gi++) { try { if (await openDevice(grant[gi], true)) opened++; } catch (e) {} }
+      return opened;
+    }).catch(function () { return 0; });
+  }
+
   // ── Device lifecycle ─────────────────────────────────────────────────────────
   function supportedFilter(d) { return d && d.vendorId === Device.ELGATO_VID; }
   function deckForHid(hid) { for (var i = 0; i < decks.length; i++) if (decks[i].hid === hid) return decks[i]; return null; }
@@ -527,23 +686,39 @@
   }
   async function connect() {
     if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return false; }
+    var own = await ensureDeckOwnership();
+    if (!own.ok) { toast('Could not take the Stream Deck over from the other Cueola window.'); return false; }
     var candidates = [];
     try {
       var have = (await navigator.hid.getDevices()).filter(supportedFilter).filter(function (d) { return !deckForHid(d); });
       if (have.length) candidates = have;
       else { var picked = await navigator.hid.requestDevice({ filters: [{ vendorId: Device.ELGATO_VID }] }); candidates = (picked || []).filter(supportedFilter).filter(function (d) { return !deckForHid(d); }); }
     }
-    catch (e) { toast('Stream Deck selection cancelled.'); return false; }
-    if (!candidates.length) { toast('No Stream Deck selected. Quit the Elgato app first, then Connect.'); return false; }
+    catch (e) { toast('Stream Deck selection cancelled.'); connectCameUpEmpty(); return false; }
+    if (!candidates.length) { toast('No Stream Deck selected. Quit the Elgato app first, then Connect.'); connectCameUpEmpty(); return false; }
     var ok = false;
     for (var i = 0; i < candidates.length; i++) { if (await openDevice(candidates[i])) ok = true; }
+    if (!ok) connectCameUpEmpty();
+    if (ok && own.took) toast('Took the Stream Deck over from another Cueola window.');
     return ok;
+  }
+  // A Connect that attached nothing must not park the lock: give it back so a
+  // standby window (say, the one this Connect just stole the deck from) can
+  // pick the hardware up again, then rejoin the election ourselves.
+  function connectCameUpEmpty() {
+    if (decks.length || !deckOwner) return;
+    releaseDeckOwnership();
+    // Give the release a beat to reach the lock manager: probing synchronously
+    // finds our own lock still held and flashes a false 'In another window'.
+    setTimeout(electDeckOwner, 250);
   }
   // Grant + open one more deck. The browser's picker only grants one device per
   // call, so adding a third deck is just pressing this again.
   async function addDeck() {
     if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return;
     }
+    var own = await ensureDeckOwnership();
+    if (!own.ok) { toast('Could not take the Stream Deck over from the other Cueola window.'); return; }
     try {
       var picked = await navigator.hid.requestDevice({ filters: [{ vendorId: Device.ELGATO_VID }] });
       var fresh = (picked || []).filter(supportedFilter).filter(function (d) { return !deckForHid(d); });
@@ -551,9 +726,34 @@
       for (var i = 0; i < fresh.length; i++) await openDevice(fresh[i]);
     } catch (e) { toast('Stream Deck selection cancelled.'); }
   }
-  async function openDevice(dev, silent) {
+  // One open per physical device at a time: the standby re-attach racing an
+  // explicit Connect on the same HIDDevice must join the in-flight open, not
+  // register the deck twice (the entry dedupe below can't see a deck that
+  // hasn't been pushed yet).
+  var openInFlight = new Map();
+  function openDevice(dev, silent) {
+    var pending = openInFlight.get(dev);
+    if (pending) {
+      // A loud Connect joining a silent in-flight attempt still owes the user
+      // an answer if that attempt fails.
+      if (!silent) pending.then(function (ok) { if (!ok && !deckForHid(dev)) toast('Could not open the Stream Deck. Quit the Elgato Stream Deck app (it grabs the device), then Connect again.'); }, function () {});
+      return pending;
+    }
+    var p = openDeviceNow(dev, silent);
+    openInFlight.set(dev, p);
+    p.then(function () { openInFlight.delete(dev); }, function () { openInFlight.delete(dev); });
+    return p;
+  }
+  // Every attach path funnels through here, so this is the one choke point
+  // that must respect ownership: a lock stolen while the chooser was up or a
+  // USB round trip was in flight means this window must NOT register the deck
+  // (registering lockless is the two-windows-drive-one-deck bug). True when
+  // this window may attach right now.
+  function deckOwnerNow() { return !locksAvailable() || deckOwner; }
+  async function openDeviceNow(dev, silent) {
     var already = deckForHid(dev);
     if (already) { activateDeck(already); return true; }
+    if (!deckOwnerNow()) return false;
     try { if (!dev.opened) await dev.open(); } catch (e) {
       // Silent boot path: another app (usually Elgato's) holds the device.
       // Note it in the console and move on; the explicit Connect flow keeps
@@ -562,10 +762,18 @@
       else toast('Could not open the Stream Deck. Quit the Elgato Stream Deck app (it grabs the device), then Connect again.');
       return false;
     }
+    if (!deckOwnerNow()) { try { await dev.close(); } catch (e) {} return false; }   // stolen during dev.open()
     stashActiveDeck();   // the new deck takes the globals; the old one keeps running from its record
     var config = loadConfig(dev.productId);
     var unitInfo = {};
     try { var fr = await dev.receiveFeatureReport(0x08); unitInfo = Device.parseUnitInfo(fr && fr.buffer ? new Uint8Array(fr.buffer) : fr) || {}; } catch (e) {}
+    if (!deckOwnerNow()) {
+      // Stolen during the unit-info read: restore the active deck's globals
+      // (stashActiveDeck saved them) and walk away without registering.
+      if (device) promoteDeck(device);
+      try { await dev.close(); } catch (e) {}
+      return false;
+    }
     profile = Device.makeProfile(dev.productId, { unitInfo: unitInfo, overrides: config.overrides });
     device = { hid: dev, profile: profile, unitInfo: unitInfo, id: ++deckSeq };
     decks.push(device);
@@ -796,13 +1004,18 @@
       keyState = evt.states;
       edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else { fireSlot(mapping().keys[i], 'down'); } });
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
-      if (edges.downs.length || edges.ups.length) schedulePaint();
+      if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
       if (evt.kind === 'rotate') evt.ticks.forEach(function (t, i) { if (t) { if (learnArmed) { openDialEditor(i, true); } else dialTick(i, t); } });
       else evt.press.forEach(function (down, i) { if (down !== dialPress[i]) { dialPress[i] = down; if (down && !learnArmed) dialPressFire(i); } });
-      schedulePaint();
-    } else if (evt.type === 'touch') { touchFire(evt); }
+      paintNow();
+    } else if (evt.type === 'touch') { touchFire(evt); paintNow(); }
   }
+  // Input feedback must not wait for the 5Hz tick: a backgrounded window's
+  // timers throttle to 1Hz (the operator is often focused on the script-op
+  // pop-out or the talent display), but HID input events keep firing, so paint
+  // straight from the event. Signature dedup makes overlap with the tick free.
+  function paintNow() { try { var p = paintChanged(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
   // A secondary deck runs its own layout live: keys fire from ITS mapping,
   // dials ride its dial list, and its art repaints from the shared paint loop.
   function onSecondaryInput(deck, e) {
@@ -815,17 +1028,18 @@
       deck.keyState = evt.states;
       edges.downs.forEach(function (i) { deck.pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'down', deck); });
       edges.ups.forEach(function (i) { fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'up', deck); });
-      if (edges.downs.length || edges.ups.length) schedulePaint();
+      if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
       deck.dialPress = deck.dialPress || [];
       if (evt.kind === 'rotate') evt.ticks.forEach(function (t, i) { if (t) { var c = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c) { try { c.tick(t); } catch (e2) {} } } });
       else evt.press.forEach(function (down, i) { if (down !== deck.dialPress[i]) { deck.dialPress[i] = down; if (down) { var c2 = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c2) { try { c2.press(); } catch (e2) {} } } } });
-      schedulePaint();
+      paintNow();
     } else if (evt.type === 'touch' && evt.zone != null) {
       var zSlot = (m.touch || [])[evt.zone] || { dial: evt.zone };
       var c3 = DIAL_CONTROLLERS[(m.dials || [])[zSlot.dial]];
       if (c3 && evt.gesture !== 'flick') { try { c3.press(); } catch (e3) {} }
       else if (c3 && evt.gesture === 'flick') { try { c3.tick(evt.x2 > evt.x ? 3 : -3); } catch (e3) {} }
+      paintNow();
     }
   }
   function controllerForDial(i) { return DIAL_CONTROLLERS[mapping().dials[i]]; }
@@ -1530,7 +1744,18 @@
   // The on-screen grid shows the SAME art the hardware shows: true WYSIWYG.
   function paintMirror() { var cur = profile; if (!cur) return; var s = surfaceState(); for (var i = 0; i < cur.keys; i++) { var cv = mirrorCanvasFor(i); if (cv) { var spec = keyArtSpec(i, s); spec.editing = (i === editingKey); drawKeyInto(cv, spec, cv.width); } } }
   async function paintAll() { var cur = profile; ensureSymbols(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); paintMirror(); await paintChanged(); if (device || previewMode) await paintStrip(true); }
+  // Single-flight: paintChanged runs from the 5Hz tick AND straight from HID
+  // input events (paintNow). Two passes interleaving across awaits could stamp
+  // a stale signature over fresh art, so one pass runs at a time and a call
+  // landing mid-pass queues exactly one re-run with fresh state.
+  var paintPassBusy = false, paintPassAgain = false;
   async function paintChanged() {
+    if (paintPassBusy) { paintPassAgain = true; return; }
+    paintPassBusy = true;
+    try { do { paintPassAgain = false; await paintChangedPass(); } while (paintPassAgain); }
+    finally { paintPassBusy = false; }
+  }
+  async function paintChangedPass() {
     var cur = profile; if (!cur) return;
     var s = surfaceState();
     for (var i = 0; i < cur.keys; i++) {
@@ -2339,7 +2564,7 @@
   function statusBar() {
     var s = surfaceState();
     return '<div class="sd-status">'
-      + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : 'Not connected'), device ? 'ok' : 'off')
+      + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : (deckHeldElsewhere ? 'In another window' : 'Not connected')), device ? 'ok' : 'off')
       + (micoParked() ? '' : statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off', 'sd-chip-mico'))
       + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
@@ -2360,6 +2585,7 @@
     var apps = micoParked() ? 'playback, rundown, prompter, OBS' : 'playback, rundown, prompter, mics, OBS';
     return '<div class="sd-hero">'
       + '<h3>Any Stream Deck. The whole rig.</h3>'
+      + (deckHeldElsewhere ? '<p><b>Another Cueola window is the deck window right now.</b> Connect here to drive the Stream Deck from this window instead; closing the other window also moves it here.</p>' : '')
       + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: ' + apps + ', with saved layouts as pages. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it hogs the USB device.</p>'
       + '<div class="sd-hero-actions"><button class="btn-primary" id="sd-connect2">Connect deck</button><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button><button class="btn-secondary" id="sd-diag">Diagnostics</button></div>'
       + '<div class="sd-hero-checks">'
@@ -3425,17 +3651,25 @@
     // OBS: repaint on state changes, and reconnect automatically if the operator
     // set it up before (a saved config means they use OBS with this deck).
     if (OBSc()) { OBSc().onChange(onObsChange); var oc = OBSc().config(); var savedObs = false; try { savedObs = !!localStorage.getItem('cueola_obs_config'); } catch (e) {} if (savedObs && oc && oc.url) OBSc().connect(); }
-    // Auto-reattach EVERY previously-granted deck, one after another.
-    if (navigator.hid) navigator.hid.getDevices().then(async function (list) {
-      var grant = (list || []).filter(supportedFilter).filter(function (d) { return !deckForHid(d); });
-      for (var gi = 0; gi < grant.length; gi++) { try { await openDevice(grant[gi], true); } catch (e) {} }
-    }).catch(function () {});
+    // One window per browser drives the hardware: run the Web Locks election
+    // (winner silently re-attaches every previously-granted deck, losers queue
+    // as standby and inherit the deck the moment the owning window closes),
+    // and re-run it whenever a granted deck is plugged in.
+    if (navigator.hid) {
+      electDeckOwner();
+      try { navigator.hid.addEventListener('connect', onHidConnect); } catch (e) {}
+    }
   }
   // Boot: start the service once sign-in truth exists, mirroring
   // keyWiSignInGate WITHOUT ever opening sign-in UI. Fail closed (INC-4): no
   // signed-in identity, no auto-attach; opening the card runs the real gate.
   function bootDeckService() {
     if (deckServiceStarted) return;
+    // The talent display (?prompter=1 / #flowmingo) and the other output
+    // windows are the SAME index.html: without this guard each of them would
+    // silently open the Stream Deck too, and rival windows painting one deck
+    // is torn key art plus every press firing once per window.
+    if (AUX_OUTPUT_BOOT) return;
     var id = window.CueolaIdentity, signedIn = false;
     try { signedIn = !!(id && typeof id.identity === 'function' && id.identity()); } catch (e) {}
     if (signedIn) startDeckService();

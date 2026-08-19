@@ -395,6 +395,65 @@ test('KeyWi: the sign-in gate fails closed and passes returnTo (INC-4)', () => {
   assert.match(deckSlice('function open() {', 'function close()'), /if \(!keyWiSignInGate\(\)\) return false;/);
 });
 
+test('KeyWi: one window drives the hardware (Web Locks election; talent windows abstain)', () => {
+  // Rival windows opening the same HID device tear the multi-packet key
+  // writes (glitching art) and double-fire every press. The talent display
+  // and the in-page talent doors never start the deck service at all.
+  const aux = deckSlice('var AUX_OUTPUT_BOOT', 'var tbSocket');
+  assert.match(aux, /get\('prompter'\) === '1'/);
+  assert.match(aux, /flowmingo/);
+  assert.match(aux, /promptypus/);
+  assert.match(deckSlice('function bootDeckService()', 'if (window._firebaseReady)'), /if \(AUX_OUTPUT_BOOT\) return;/);
+  // The service boots the election (winner silently re-attaches, losers queue
+  // standby) and re-runs it when a granted deck is plugged in.
+  const service = deckSlice('function startDeckService()', 'function bootDeckService()');
+  assert.match(service, /electDeckOwner\(\)/);
+  assert.match(service, /addEventListener\('connect', onHidConnect\)/);
+  const elect = deckSlice('function electDeckOwner()', 'function onHidConnect()');
+  assert.match(elect, /acquireDeckOwnership\(\{ ifAvailable: true \}\)/);
+  assert.match(elect, /standbyForDeck\(\)/);
+  assert.match(elect, /reattachGrantedDecks\(\)/);
+  // An empty-handed winner gives the lock back and retries on the timer, so a
+  // window that could open nothing (Elgato app holding the USB device, deck
+  // unplugged) never parks the lock and blocks the other windows.
+  assert.match(elect, /releaseDeckOwnership\(\); scheduleDeckElection\(\);/);
+  assert.match(deckSlice('function standbyForDeck()', 'function scheduleDeckElection()'), /scheduleDeckElection\(\)/);
+  assert.match(deckSlice('function connectCameUpEmpty()', 'async function addDeck()'), /releaseDeckOwnership\(\)/);
+  // Only the lock request that BACKS current ownership may clear it: a null
+  // ifAvailable probe must never clobber a standby-held lock.
+  assert.match(deckSlice('function acquireDeckOwnership(opts)', 'function releaseDeckOwnership()'), /deckOwnerToken === token/);
+  // Explicit Connect (and Add deck) in a non-owner window takes the deck over.
+  assert.match(deckSlice('async function connect()', 'function connectCameUpEmpty()'), /await ensureDeckOwnership\(\)/);
+  assert.match(deckSlice('async function addDeck()', 'var openInFlight'), /await ensureDeckOwnership\(\)/);
+  assert.match(deckSlice('function ensureDeckOwnership()', 'function deckOwnershipLost()'), /steal: true/);
+  // Concurrent opens of the same HIDDevice (standby re-attach racing Connect)
+  // join the in-flight open instead of registering the deck twice.
+  assert.match(deckSlice('var openInFlight', 'function deckOwnerNow()'), /openInFlight\.get\(dev\)/);
+  // Ownership is re-checked across every await inside the open: a lock stolen
+  // while the chooser was up or a USB round trip was in flight must close the
+  // handle instead of registering a lockless deck.
+  const openNow = deckSlice('async function openDeviceNow(dev, silent)', 'async function connectLightShow()');
+  assert.ok((openNow.match(/deckOwnerNow\(\)/g) || []).length >= 3);
+  assert.match(openNow, /await dev\.close\(\)/);
+  // Losing the lock closes every handle (an open handle still receives input
+  // reports), skips the goodbye reset, re-queues a standby claim, and never
+  // freezes an active on-screen preview.
+  const lost = deckSlice('function deckOwnershipLost()', 'function reattachGrantedDecks()');
+  assert.match(lost, /oninputreport = null/);
+  assert.match(lost, /d\.hid\.close\(\)/);
+  assert.match(lost, /standbyForDeck\(\)/);
+  assert.match(lost, /if \(!previewMode\) teardownDevice\(\);/);
+  assert.doesNotMatch(lost, /resetReport/);
+  // Hardware input (keys, dials, AND the touch strip) paints straight from the
+  // event: a backgrounded window's 5Hz tick is throttled to 1Hz, HID is not.
+  const primaryInput = deckSlice('function onInputReport(e)', 'function onSecondaryInput');
+  assert.match(primaryInput, /touchFire\(evt\); paintNow\(\);/);
+  assert.match(deckSlice('function onSecondaryInput(deck, e)', 'function controllerForDial'), /paintNow\(\)/);
+  // The immediate paints make overlapping passes routine, so paintChanged is
+  // single-flight with a queued re-run instead of interleaving stale state.
+  assert.match(deckSlice('async function paintChanged()', 'async function paintChangedPass()'), /paintPassAgain = true/);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log('PASS', name);
