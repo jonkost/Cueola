@@ -360,8 +360,10 @@
   var AUX_OUTPUT_BOOT = (function () {
     try {
       var p = new URLSearchParams(location.search);
+      var seg = (location.pathname.replace(/\/+$/, '').split('/').pop() || '').toLowerCase();
       return p.get('prompter') === '1' || p.has('flowmingo') || p.has('promptypus')
-        || location.hash === '#flowmingo' || location.hash === '#promptypus';
+        || location.hash === '#flowmingo' || location.hash === '#promptypus'
+        || seg === 'flowmingo' || (p.get('app') || '').toLowerCase() === 'flowmingo';
     } catch (e) { return false; }
   })();
 

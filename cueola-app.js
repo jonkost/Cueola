@@ -709,7 +709,8 @@ const IS_PROMPTER_OUTPUT_BOOT = new URLSearchParams(location.search).get('prompt
 const IS_PROMPTER_TALENT_BOOT = IS_PROMPTER_OUTPUT_BOOT || (() => {
   const params = new URLSearchParams(location.search);
   return ['#flowmingo', '#promptypus'].includes(location.hash)
-    || params.has('flowmingo') || params.has('promptypus');
+    || params.has('flowmingo') || params.has('promptypus')
+    || cueolaAppPath() === 'flowmingo';   // cueola.live/flowmingo is a talent door too
 })();
 const prompterSessionController = window.CueolaPrompterSession.createController({
   instanceId: FLOWMINGO_ENDPOINT_ID,
@@ -13042,7 +13043,31 @@ function openPrompterApp() {
   enterPrompter();
 }
 
-function openFlowmingoTalentWindow({ replace=false }={}) {
+// ── Multi-display placement (same mechanism as Outrangutan's outputs) ───────
+// One-shot getScreenDetails() snapshot, flattened so window.open feature
+// strings can use it. Chromium-only; everywhere else windows open unplaced
+// and get dragged by hand. The snapshot is in-memory: detection happens from
+// a button press (the permission prompt needs a gesture the first time).
+let _cueolaScreens = null;
+async function cueolaDetectScreens() {
+  if (!window.CueolaCaps?.windowManagement) { toast('Window placement needs Chrome or Edge. Drag windows to displays by hand for now.'); return null; }
+  try {
+    const det = await window.getScreenDetails();
+    _cueolaScreens = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
+    return _cueolaScreens;
+  } catch (e) { toast('Display access denied. Allow "Window management" for this site.'); return null; }
+}
+function cueolaScreenFeatures(screenId) {
+  if (screenId == null || screenId === '' || !_cueolaScreens) return '';
+  const scr = _cueolaScreens.find(s => s.id === Number(screenId));
+  return scr ? `left=${scr.availLeft},top=${scr.availTop},width=${scr.availWidth},height=${scr.availHeight}` : '';
+}
+const TALENT_SCREEN_KEY = 'cueola_talent_screen';
+function savedTalentScreen() {
+  try { const v = localStorage.getItem(TALENT_SCREEN_KEY); return v === null || v === '' ? null : Number(v); } catch { return null; }
+}
+
+function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true }={}) {
   if (replace) {
     try { _prompterTalentWin?.close(); } catch {}
     _prompterTalentWin = null;
@@ -13060,16 +13085,124 @@ function openFlowmingoTalentWindow({ replace=false }={}) {
   }
   projectPrompterSessionStatus('opening', 'Opening Flowmingo output');
   const url = new URL(location.href);
+  url.pathname = url.pathname.replace(/[^/]*$/, '') || '/';
+  url.search = '';
   url.searchParams.set('prompter', '1');
-  if (session.code) url.searchParams.set('code', session.code);
+  const targetCode = (code || session.code || '').trim().toUpperCase();
+  if (targetCode) url.searchParams.set('code', targetCode);
   url.hash = 'flowmingo';
-  _prompterTalentWin = window.open(url.toString(), 'cueola-flowmingo-talent');
+  // A chosen display places (and sizes) the window there, Outrangutan-style;
+  // no choice keeps the old browser-decides open.
+  const feats = cueolaScreenFeatures(savedTalentScreen());
+  _prompterTalentWin = feats
+    ? window.open(url.toString(), 'cueola-flowmingo-talent', feats)
+    : window.open(url.toString(), 'cueola-flowmingo-talent');
   if (!_prompterTalentWin) {
     projectPrompterSessionStatus('error', 'Popup blocked');
     toast('Allow pop-ups to open Flowmingo in a new window.');
-    enterPrompter();
+    if (fallbackInPage) enterPrompter();
   }
   return _prompterTalentWin;
+}
+
+// ── Show setup: the workspace launcher (owner 2026-08-19) ───────────────────
+// Sign in, pick a code, tick the windows: one click opens the rig. Same
+// machine first (the owner's rig): the rundown joins in THIS tab, the talent
+// display and Planda Bear open as windows inside the same click's gesture,
+// and Script Op — which needs the live in-tab host — auto-opens the moment
+// the live prompter session exists. Multi-window opening needs the site's
+// pop-up permission once; every window keeps its own manual button too.
+const WORKSPACE_KEY = 'cueola_workspace';
+function workspacePrefs() {
+  try { const v = JSON.parse(localStorage.getItem(WORKSPACE_KEY)); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
+function saveWorkspacePrefs(p) { try { localStorage.setItem(WORKSPACE_KEY, JSON.stringify(p)); } catch {} }
+
+async function openWorkspaceLauncher() {
+  const p = workspacePrefs();
+  const set = (id, on) => { const el = document.getElementById(id); if (el) el.checked = !!on; };
+  set('ws-talent', p.talent !== false);
+  set('ws-scriptop', !!p.scriptop);
+  set('ws-plandabear', !!p.plandabear);
+  renderWorkspaceScreens();
+  const sel = document.getElementById('ws-code');
+  if (sel) {
+    const last = (localStorage.getItem('cueola_last_code') || '').toUpperCase();
+    sel.innerHTML = `<option value="__other">Type a code…</option>`;
+    showModal('modal-workspace');
+    let choices = [];
+    try { choices = await (window.CueolaIdentity?.sessionChoices?.() || []); } catch {}
+    if (choices.length) {
+      sel.innerHTML = choices.map(c => `<option value="${esc(c.code)}"${c.code === last ? ' selected' : ''}>${esc(c.code)}${c.name ? ' · ' + esc(c.name) : ''}</option>`).join('')
+        + `<option value="__other">Type a code…</option>`;
+    }
+    wsCodeChanged();
+  } else {
+    showModal('modal-workspace');
+  }
+}
+function wsCodeChanged() {
+  const sel = document.getElementById('ws-code');
+  const manual = document.getElementById('ws-code-manual');
+  if (manual) manual.hidden = !(sel && sel.value === '__other');
+}
+function renderWorkspaceScreens() {
+  const sel = document.getElementById('ws-talent-screen');
+  if (!sel) return;
+  const saved = savedTalentScreen();
+  if (_cueolaScreens) {
+    sel.innerHTML = `<option value="">Browser decides</option>` + _cueolaScreens.map(s => `<option value="${s.id}"${saved === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+    sel.disabled = false;
+  } else {
+    sel.innerHTML = `<option value="">Detect displays to pick a screen</option>`;
+    sel.disabled = true;
+  }
+}
+async function wsDetectScreens() { await cueolaDetectScreens(); renderWorkspaceScreens(); }
+
+let _wsPendingScriptop = false, _wsScriptopPoll = null;
+function launchWorkspace() {
+  const sel = document.getElementById('ws-code');
+  const manual = document.getElementById('ws-code-manual');
+  const code = ((sel && sel.value !== '__other' ? sel.value : manual?.value) || '').trim().toUpperCase();
+  const err = document.getElementById('ws-err');
+  if (!code) { if (err) err.style.display = 'block'; return; }
+  if (err) err.style.display = 'none';
+  const talent = !!document.getElementById('ws-talent')?.checked;
+  const scriptop = !!document.getElementById('ws-scriptop')?.checked;
+  const plandabear = !!document.getElementById('ws-plandabear')?.checked;
+  const screenSel = document.getElementById('ws-talent-screen');
+  const screenId = screenSel && !screenSel.disabled && screenSel.value !== '' ? Number(screenSel.value) : null;
+  try { localStorage.setItem(TALENT_SCREEN_KEY, screenId == null ? '' : String(screenId)); } catch {}
+  saveWorkspacePrefs({ talent, scriptop, plandabear });
+  // Pop-ups open first, inside this click's gesture. With pop-ups allowed for
+  // the site they all open; a blocked one toasts and keeps its manual button.
+  let blocked = 0;
+  if (talent && !openFlowmingoTalentWindow({ code, fallbackInPage: false })) blocked++;
+  if (plandabear && !window.open(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code)) blocked++;
+  _wsPendingScriptop = scriptop;
+  if (scriptop) armWorkspaceScriptop();
+  hideModal('modal-workspace');
+  if (blocked) toast('Some windows were blocked. Allow pop-ups for this site, then use the toolbar buttons.');
+  // The rundown joins in THIS tab through the normal guarded path.
+  if (window.CueolaIdentity?.enterSession) window.CueolaIdentity.enterSession(code, 'cueola');
+  else { openJoinSession(); const inp = document.getElementById('stud-code'); if (inp) inp.value = code; }
+}
+// Script Op needs the live in-tab host: wait for the prompter session, then
+// open. If that pop-up is blocked outside the click's gesture, the operator
+// still has the Live toolbar button; this quietly stops after 3 minutes.
+function armWorkspaceScriptop() {
+  clearInterval(_wsScriptopPoll);
+  const startedAt = Date.now();
+  _wsScriptopPoll = setInterval(() => {
+    if (!_wsPendingScriptop || Date.now() - startedAt > 180000) { clearInterval(_wsScriptopPoll); _wsScriptopPoll = null; return; }
+    let ready = false;
+    try { ready = !!(scriptOperatorIdentity()?.sessionId); } catch {}
+    if (!ready) return;
+    _wsPendingScriptop = false;
+    clearInterval(_wsScriptopPoll); _wsScriptopPoll = null;
+    try { openScriptOpPopout(); } catch {}
+  }, 2000);
 }
 
 function sendPrompterPreviewControl(action) {
@@ -26649,8 +26782,22 @@ async function cueolaEntryGateAllows(code, doorLabel = 'This session') {
 window.cueolaEntryGateAllows = cueolaEntryGateAllows;   // Outrangutan's module calls this
 window.requireProfileForCloud = requireProfileForCloud; // and so does its session-join gate
 
+// Per-app addresses (owner 2026-08-19): cueola.live/plandabear, /flowmingo,
+// /outrangutan, /keywibird each boot straight into that app. Server side is
+// already covered twice over (Firebase Hosting rewrites everything to
+// index.html, and the service worker serves the cached shell for any
+// navigation), so routing is purely client-side: the path's last segment, or
+// a ?app= param (the GitHub Pages 404.html redirect carries the path there).
+function cueolaAppPath() {
+  const seg = (location.pathname.replace(/\/+$/, '').split('/').pop() || '').toLowerCase();
+  const fromParam = (new URLSearchParams(location.search).get('app') || '').toLowerCase();
+  const app = ['plandabear', 'flowmingo', 'outrangutan', 'keywibird'].find(a => a === seg || a === fromParam);
+  return app || '';
+}
+
 (function autoJoinFromDashboard() {
   const params = new URLSearchParams(window.location.search);
+  const appPath = cueolaAppPath();
   // Retire legacy ?scriptop= links without ever booting a second full Cueola
   // controller. Current links include the parent/session identities; an old
   // bookmark lands on the dedicated document's explicit disconnected state.
@@ -26676,7 +26823,18 @@ window.requireProfileForCloud = requireProfileForCloud; // and so does its sessi
     }, 0);
     return;
   }
-  if (location.hash === '#flowmingo' || location.hash === '#promptypus' || params.has('flowmingo') || params.has('prompter') || params.has('promptypus')) {
+  if (appPath === 'plandabear' || appPath === 'outrangutan' || appPath === 'keywibird') {
+    // Same deferral pattern as the side doors: let the identity module boot
+    // first; each opener runs its own sign-in / profile gate.
+    sessionStorage.setItem('cueola_screen', 'entry');
+    setTimeout(() => {
+      if (appPath === 'plandabear') openPlandaBearJoin();
+      else if (appPath === 'outrangutan') window.Outrangutan?.enter?.('session');
+      else openControlSurface();
+    }, 0);
+    return;
+  }
+  if (appPath === 'flowmingo' || location.hash === '#flowmingo' || location.hash === '#promptypus' || params.has('flowmingo') || params.has('prompter') || params.has('promptypus')) {
     sessionStorage.setItem('cueola_screen', 'entry');
     setTimeout(async () => {
       enterPrompter();
@@ -26704,7 +26862,10 @@ window.requireProfileForCloud = requireProfileForCloud; // and so does its sessi
 
   const code = urlCode || stored?.code;
   if (!code) return;
-  const shouldOpenPrePro = localStorage.getItem('cueola_open_prepro') === '1';
+  // ?prepro=1 is the workspace launcher's window-safe variant of the
+  // dashboard's localStorage flag (a flag would race between two tabs
+  // opened in the same gesture).
+  const shouldOpenPrePro = localStorage.getItem('cueola_open_prepro') === '1' || params.get('prepro') === '1';
   localStorage.removeItem('cueola_open_prepro');
 
   const name = stored?.userName || adminSession?.name || '';

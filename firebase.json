@@ -108,6 +108,14 @@
         "destination": "/index.html"
       },
       {
+        "source": "/plandabear",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/keywibird",
+        "destination": "/index.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

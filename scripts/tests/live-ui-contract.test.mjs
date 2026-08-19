@@ -113,7 +113,12 @@ test('a missed Flowmingo heartbeat exposes a fresh-output recovery path', () => 
   assert.match(app, /status === 'recovering'\) return 'Recover Flowmingo'/);
   assert.match(app, /openFlowmingoTalentWindow\(\{ replace:true \}\)/);
   const open = app.slice(app.indexOf('function openFlowmingoTalentWindow('), app.indexOf('function sendPrompterPreviewControl'));
-  assert.match(open, /\{ replace=false \}=\{\}/);
+  // 8/19: the launcher passes a code before this tab joins, opts out of the
+  // in-page fallback (the launcher tab is about to join the rundown), and a
+  // saved display choice places the window Outrangutan-style.
+  assert.match(open, /\{ replace=false, code='', fallbackInPage=true \}=\{\}/);
+  assert.match(open, /cueolaScreenFeatures\(savedTalentScreen\(\)\)/);
+  assert.match(open, /if \(fallbackInPage\) enterPrompter\(\)/);
   assert.match(open, /_prompterTalentWin\?\.close\(\)/);
   assert.match(open, /_activePrompterOutputInstanceId = ''/);
   // D12.1: silence detection moved to the shared link model — replacing the
@@ -731,6 +736,36 @@ test('8/19 round: strip keeps its slot, rail is damped, Script Op surfaces mirro
   // The builder's notes panel can expand any production note to full text.
   assert.match(app, /function pnToggleNote/);
   assert.match(app, /Show full note/);
+});
+
+test('8/19 round: per-app addresses, workspace launcher, talent display placement', async () => {
+  const identityJs = await readFile(new URL('../../cueola-identity.js', import.meta.url), 'utf8');
+  const deckJs = await readFile(new URL('../../cueola-streamdeck.js', import.meta.url), 'utf8');
+  const hosting = await readFile(new URL('../../firebase.json', import.meta.url), 'utf8');
+  const notFound = await readFile(new URL('../../404.html', import.meta.url), 'utf8');
+  // Per-app addresses: one client-side resolver, honored by the router, the
+  // talent-boot no-mint guard, and the deck's aux-window abstention.
+  assert.match(app, /function cueolaAppPath\(\)/);
+  assert.match(app, /\['plandabear', 'flowmingo', 'outrangutan', 'keywibird'\]/);
+  assert.match(app, /cueolaAppPath\(\) === 'flowmingo'/);
+  assert.match(deckJs, /seg === 'flowmingo'/);
+  // Hosting rewrites name all four (the catch-all covers them anyway), and
+  // the GitHub Pages 404 fallback carries the app into ?app=.
+  ['/plandabear', '/keywibird', '/flowmingo', '/outrangutan'].forEach(p => assert.match(hosting, new RegExp(`"source": "${p}"`)));
+  assert.match(notFound, /params\.set\('app', seg\)/);
+  // Workspace launcher: modal, gesture-first window opens, the deferred
+  // Script Op arm (it needs the live in-tab host), and the ?prepro=1 tab
+  // hand-off that replaces the racy localStorage flag for launcher opens.
+  assert.match(html, /id="modal-workspace"/);
+  assert.match(app, /function launchWorkspace\(\)/);
+  assert.match(app, /function armWorkspaceScriptop\(\)/);
+  assert.match(app, /params\.get\('prepro'\) === '1'/);
+  assert.match(identityJs, /openWorkspaceLauncher\(\)/);
+  // Talent display placement mirrors Outrangutan's outputs: detected screens,
+  // a remembered choice, features-string placement.
+  assert.match(app, /function cueolaDetectScreens\(\)/);
+  assert.match(app, /getScreenDetails\(\)/);
+  assert.match(app, /TALENT_SCREEN_KEY = 'cueola_talent_screen'/);
 });
 
 for (const { name, run } of tests) {

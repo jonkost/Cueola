@@ -1035,6 +1035,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .field-err{font-size:12px;color:var(--red);background:rgba(240,82,82,.08);border:1px solid rgba(240,82,82,.2);border-radius:7px;padding:9px 12px;display:none}
 .field-err.on{display:block}
 .modal-err{font-size:13px;color:var(--red);background:color-mix(in srgb,var(--red) 10%,transparent);border:1px solid transparent;border-radius:9px;padding:10px 13px;display:none;font-weight:500}
+.ws-screen-row{display:flex;gap:8px;align-items:center}
+.ws-screen-row select{flex:1;min-width:0}
+.ws-screen-row .btn-secondary{flex-shrink:0;width:auto;padding:8px 12px}
 .modal-err.on{display:block}
 /* ── Phase 9 (D10.4): ⓘ info buttons + anchored popover ──
    HIG list-item info pattern: a 22px circle that reveals a short plain-language
@@ -6414,6 +6417,34 @@ input.pt-range::-moz-range-thumb,
   </div>
 </div>
 
+<div class="modal-wrap" id="modal-workspace">
+  <div class="modal">
+    <div class="modal-title">Show setup</div>
+    <div class="modal-sub">Pick the session and the windows this machine needs. Cueola remembers the set for next time. If a window gets blocked, allow pop-ups for this site once.</div>
+    <div class="field"><label class="field-lbl">Session</label>
+      <select class="field-in" id="ws-code" onchange="wsCodeChanged()"></select>
+      <input class="field-in u-code-input-caps" id="ws-code-manual" type="text" placeholder="Show code" maxlength="20" hidden oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="field"><label class="field-lbl">Windows</label>
+      <div class="cc-checks cc-checks-stack">
+        <label class="cc-check"><input type="checkbox" checked disabled> Rundown, in this tab</label>
+        <label class="cc-check"><input type="checkbox" id="ws-talent"> Talent display (Flowmingo) window</label>
+        <label class="cc-check"><input type="checkbox" id="ws-scriptop"> Script Operator pop-out, opens itself when Live starts</label>
+        <label class="cc-check"><input type="checkbox" id="ws-plandabear"> Planda Bear paperwork, its own tab</label>
+      </div>
+    </div>
+    <div class="field"><label class="field-lbl">Talent display screen</label>
+      <div class="ws-screen-row">
+        <select class="field-in" id="ws-talent-screen"></select>
+        <button class="btn-secondary" type="button" onclick="wsDetectScreens()">Detect displays</button>
+      </div>
+      <div class="field-hint">Pick which physical display the talent window opens on (Chrome or Edge).</div>
+    </div>
+    <div class="modal-err" id="ws-err">Pick or type a session code.</div>
+    <button class="btn-primary" onclick="launchWorkspace()">Open my show</button>
+    <button class="btn-secondary" onclick="hideModal('modal-workspace')">Cancel</button>
+  </div>
+</div>
 <div class="modal-wrap" id="modal-blank">
   <div class="modal">
     <div class="modal-title">Blank Slate</div>
@@ -7112,7 +7143,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=56fbfa3647"></script>
+<script src="cueola-identity.js?v=6e8db95512"></script>
 <script src="cueola-admin-auth.js?v=680d495914"></script>
 <script src="cueola-live-session.js?v=fd0bc73200"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -7122,12 +7153,12 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=9e1366fbfe"></script>
+<script src="cueola-app.js?v=ac77d1ead5"></script>
 <script src="outrangutan/outrangutan.js?v=a5ce27e8cf"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=a4fea1a269"></script>
+<script src="cueola-streamdeck.js?v=00178015bf"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

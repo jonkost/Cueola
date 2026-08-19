@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cueola</title>
+<!-- GitHub Pages serves this for unknown paths (it honors no rewrites). The
+     per-app addresses (/plandabear, /flowmingo, /outrangutan, /keywibird)
+     redirect into the app shell with ?app=<name>, which the entrance router
+     (cueolaAppPath in cueola-app.js) treats exactly like the path. On
+     Firebase Hosting the rewrites in firebase.json make this file unused,
+     and once the service worker is installed it serves the shell for any
+     path before the network is ever asked. -->
+<script>
+(function () {
+  var seg = (location.pathname.replace(/\/+$/, '').split('/').pop() || '').toLowerCase();
+  var apps = ['plandabear', 'flowmingo', 'outrangutan', 'keywibird'];
+  var url = '/';
+  if (apps.indexOf(seg) >= 0) {
+    var params = new URLSearchParams(location.search);
+    params.set('app', seg);
+    url = '/?' + params.toString() + location.hash;
+  }
+  location.replace(url);
+})();
+</script>
+</head>
+<body></body>
+</html>

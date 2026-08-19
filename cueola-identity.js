@@ -1604,7 +1604,8 @@
   function frontDoorLinks(signedIn) {
     return '<div class="fd-links">'
       + (signedIn
-        ? '<button type="button" class="fd-link" onclick="CueolaIdentity.openHub()">All sessions &amp; notes</button><span>&middot;</span>'
+        ? '<button type="button" class="fd-link fd-link-setup" onclick="openWorkspaceLauncher()">Show setup</button><span>&middot;</span>'
+          + '<button type="button" class="fd-link" onclick="CueolaIdentity.openHub()">All sessions &amp; notes</button><span>&middot;</span>'
         : '<button type="button" class="fd-link" onclick="CueolaIdentity.startCreate()">New here? Create your profile</button><span>&middot;</span>')
       + '<button type="button" class="fd-link" onclick="openJoinSession()">Have a show code?</button>'
       + (signedIn ? '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.signOut()">Sign out</button>' : '')

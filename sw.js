@@ -122,7 +122,7 @@ const SHELL_ASSETS = [
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
   'cueola-pin.js?v=e599f35d21',
-  'cueola-identity.js?v=56fbfa3647',
+  'cueola-identity.js?v=6e8db95512',
   'cueola-admin-auth.js?v=680d495914',
   'cueola-live-session.js?v=fd0bc73200',
   'cueola-link-state.js?v=effa089bdc',
@@ -135,12 +135,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=9e1366fbfe',
+  'cueola-app.js?v=ac77d1ead5',
   'outrangutan/outrangutan.css?v=75dfbd64d2',
   'outrangutan/outrangutan.js?v=a5ce27e8cf',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=a4fea1a269',
+  'cueola-streamdeck.js?v=00178015bf',
 ];
 
 const versionSignature = SHELL_ASSETS
