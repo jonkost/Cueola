@@ -1302,7 +1302,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <script src="cueola-session-clone.js?v=4a94fe587e"></script>
 <script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-admin-auth.js?v=799642cdd2"></script>
+<script src="cueola-admin-auth.js?v=5a8797d226"></script>
 <script>
 // ── SYSTEM SETTINGS ──────────────────────────────────────────
 const DASHBOARD_THEMES = [
@@ -1435,7 +1435,10 @@ function initAdminAuth() {
     else if (had) applySignedOutUI();
   });
   CueolaAdminAuth.ready().then(session => {
-    if (!session) {
+    if (!session && !_loginInFlight) {
+      // Never clobber an in-flight sign-in's button state: the SDK's initial
+      // null auth state settles ready() while an early click's request is
+      // still pending, and re-enabling here made the click look ignored.
       btn.disabled = false;
       btn.textContent = 'Sign In →';
       showModal('modal-login');
@@ -1494,7 +1497,12 @@ function waitForFirebase(timeoutMs=12000) {
 }
 
 // ── LOGIN FLOW ────────────────────────────────────────────────
-function loginAdmin() {
+// The button is enabled from first paint: an early click waits for the
+// Firebase bootstrap instead of erroring, so the operator can type and hit
+// Sign In immediately rather than staring at a disabled Connecting label.
+let _loginInFlight = false;
+async function loginAdmin() {
+  if (_loginInFlight) return;
   const btn = document.getElementById('login-btn');
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
@@ -1503,25 +1511,28 @@ function loginAdmin() {
     return;
   }
   document.getElementById('login-err').classList.remove('on');
+  _loginInFlight = true;
   btn.disabled = true;
   const oldText = btn.textContent;
   btn.textContent = 'Signing in...';
-  CueolaAdminAuth.signIn(username, password).then(() => {
+  try {
+    await waitForFirebase();
+    await CueolaAdminAuth.signIn(username, password);
     // onChange publishes the session and runs onLoggedIn().
-    btn.textContent = 'Opening dashboard...';
-    btn.disabled = false;
-    btn.textContent = oldText;
     document.getElementById('login-password').value = '';
-  }).catch(err => {
+  } catch (err) {
     showErr('login-err', err?.message || 'Sign-in failed.');
+  } finally {
+    _loginInFlight = false;
     btn.disabled = false;
     btn.textContent = oldText;
-  });
+  }
 }
 
 // Signed-out DOM state, shared by the sign-out button and the auth listener
 // (e.g. session revoked or expired in another tab).
 function applySignedOutUI() {
+  stopSessionsListener();
   sessions = [];
   document.getElementById('sessionArea').innerHTML = '';
   document.getElementById('sessionsHead').style.display = 'none';
@@ -1584,7 +1595,7 @@ function onLoggedIn() {
     ? 'Super Admin view: manage every session, open Planda Bear, and keep assignments moving.'
     : 'Instructor view: manage sessions, open Planda Bear, and return to active rundowns.';
 
-  loadSessions();
+  startSessionsListener();   // initial emission populates; changes stream in live
   if (location.hash === '#accounts' && adminSession.level === 'super') setTimeout(openAccountsPage, 0);
 }
 
@@ -1664,40 +1675,122 @@ async function loadSessions(quiet) {
     // (verified against production 2026-07-11). deleteSession finds legacy
     // attachment docs with its own live query at delete time.
     const snap = await getDocs(query(collection(db(), 'sessions'), where('code', '>=', '')));
-    sessions = [];
-    deletedSessions = [];
-    const expired = [];
-    const now = Date.now();
-    snap.forEach(doc => {
-      const s = { id:doc.id, ...(doc.data() || {}) };
-      if (s.deletedAt) {
-        if (now - Number(s.deletedAt) > DELETED_KEEP_MS) expired.push(s);
-        else deletedSessions.push(s);
-        return;
-      }
-      sessions.push(s);
-    });
-    sessions.sort((a,b)=>{
-      if (adminSession.level !== 'super') {
-        const ownedDelta = Number(isSessionOwnedBySignedInAdmin(b)) - Number(isSessionOwnedBySignedInAdmin(a));
-        if (ownedDelta) return ownedDelta;
-      }
-      return sessionCreatedSeconds(b) - sessionCreatedSeconds(a);
-    });
-    deletedSessions.sort((a,b) => Number(b.deletedAt) - Number(a.deletedAt));
-    renderSessions();
-    updateStats();
-    renderSuperOverview();
-    renderDeletedSessions();
-    // Lazy 30-day purge: super admins clean out expired soft-deletes on load.
-    if (expired.length && adminSession.level === 'super') {
-      for (const s of expired) { try { await purgeSessionDocs(s.code || s.id); } catch (e) { console.warn('expired purge failed', s.id, e); } }
-      showToast(`${expired.length} expired deleted session${expired.length===1?'':'s'} removed (30-day window passed)`);
-    }
+    await adoptSessionsSnapshot(snap, { runPurge:true });
   } catch(e) {
     area.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load sessions</div><div class="empty-sub">${e.message}</div></div>`;
   }
 }
+
+// Shared by the explicit loaders (getDocs) and the ambient listener: one
+// query-snapshot in, the whole card surface re-rendered out.
+async function adoptSessionsSnapshot(snap, opts={}) {
+  sessions = [];
+  deletedSessions = [];
+  const expired = [];
+  const now = Date.now();
+  snap.forEach(doc => {
+    const s = { id:doc.id, ...(doc.data() || {}) };
+    if (s.deletedAt) {
+      if (now - Number(s.deletedAt) > DELETED_KEEP_MS) expired.push(s);
+      else deletedSessions.push(s);
+      return;
+    }
+    sessions.push(s);
+  });
+  sessions.sort((a,b)=>{
+    if (adminSession.level !== 'super') {
+      const ownedDelta = Number(isSessionOwnedBySignedInAdmin(b)) - Number(isSessionOwnedBySignedInAdmin(a));
+      if (ownedDelta) return ownedDelta;
+    }
+    return sessionCreatedSeconds(b) - sessionCreatedSeconds(a);
+  });
+  deletedSessions.sort((a,b) => Number(b.deletedAt) - Number(a.deletedAt));
+  renderSessions();
+  updateStats();
+  renderSuperOverview();
+  renderDeletedSessions();
+  // Lazy 30-day purge: super admins clean out expired soft-deletes on load
+  // (explicit loads and the listener's first emission only, never on every
+  // ambient change).
+  if (opts.runPurge && expired.length && adminSession.level === 'super') {
+    for (const s of expired) { try { await purgeSessionDocs(s.code || s.id); } catch (e) { console.warn('expired purge failed', s.id, e); } }
+    showToast(`${expired.length} expired deleted session${expired.length===1?'':'s'} removed (30-day window passed)`);
+  }
+}
+
+// Ambient updates ride a snapshot listener instead of the old 60-second
+// full-collection poll: after the initial emission Firestore only sends
+// CHANGED documents, so the recurring whole-project download is gone and
+// joins/presence/status flips appear in seconds instead of up to a minute.
+// Emissions that land while the tab is hidden, a modal is open, or Accounts
+// is on screen are parked and flushed once the coast is clear, so mid-edit
+// DOM (role drafts, the inspector) is never churned underneath the operator.
+let _sessionsUnsub = null;
+let _sessionsListenerPrimed = false;
+let _pendingSessionsSnap = null;
+let _lastSessionsAdoptAt = 0;
+const SESSIONS_ADOPT_MIN_MS = 5000;   // live shows write ~1.4x/s; render at most every 5s
+function sessionsRefreshBlocked() {
+  return document.hidden || !adminSession || !window._firebaseReady
+    || !!document.querySelector('.modal-wrap.on')
+    || document.getElementById('accountsPage')?.classList.contains('on');
+}
+async function startSessionsListener() {
+  if (_sessionsUnsub) return;
+  const area = document.getElementById('sessionArea');
+  area.innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Loading sessions…</div></div>`;
+  await waitForFirebase();
+  if (!window._firebaseReady || !window._onSnapshot) { loadSessions(); return; }
+  const { collection, query, where } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  _sessionsUnsub = window._onSnapshot(
+    query(collection(db(), 'sessions'), where('code', '>=', '')),
+    snap => {
+      const first = !_sessionsListenerPrimed;
+      _sessionsListenerPrimed = true;
+      // Throttle: a running show writes its doc every second or so (playout
+      // status, presence, clock); rebuilding the card surface per emission
+      // would eat clicks mid-render. Excess emissions park and the newest one
+      // flushes on the 5s interval below.
+      if (!first && (sessionsRefreshBlocked() || Date.now() - _lastSessionsAdoptAt < SESSIONS_ADOPT_MIN_MS)) {
+        _pendingSessionsSnap = snap;
+        return;
+      }
+      _pendingSessionsSnap = null;
+      _lastSessionsAdoptAt = Date.now();
+      adoptSessionsSnapshot(snap, { runPurge:first });
+    },
+    err => {
+      // One failed listen must not end ambient refresh for the rest of the
+      // day: do a guarded one-off load now, retry the listener in 30s.
+      console.warn('sessions listener failed; retrying in 30s', err);
+      stopSessionsListener();
+      if (!sessionsRefreshBlocked()) loadSessions(true);
+      setTimeout(() => { if (adminSession && !_sessionsUnsub) startSessionsListener(); }, 30000);
+    }
+  );
+}
+function stopSessionsListener() {
+  try { _sessionsUnsub?.(); } catch {}
+  _sessionsUnsub = null;
+  _sessionsListenerPrimed = false;
+  _pendingSessionsSnap = null;
+}
+setInterval(() => {
+  if (_pendingSessionsSnap && !sessionsRefreshBlocked()) {
+    const snap = _pendingSessionsSnap;
+    _pendingSessionsSnap = null;
+    _lastSessionsAdoptAt = Date.now();
+    adoptSessionsSnapshot(snap, {});
+  }
+}, 5000);
+// Presence ages out by CLOCK, not by doc changes: an orphaned heartbeat (lid
+// closed, tab killed) writes nothing further, so without this render-only
+// tick a "live now" chip would stay lit forever. No network involved.
+setInterval(() => {
+  if (sessionsRefreshBlocked() || !_sessionsListenerPrimed) return;
+  renderSessions();
+  updateStats();
+}, 60000);
 
 async function refreshSessions() {
   await loadSessions();
@@ -1803,14 +1896,9 @@ function renderRundownPeek(s) {
     <div class="peek-rows">${rows}</div>`;
 }
 
-// Quiet card refresh so the presence strips stay honest without the operator
-// touching anything — skipped while hidden, in Accounts, or under any modal.
-setInterval(() => {
-  if (document.hidden || !adminSession || !window._firebaseReady) return;
-  if (document.querySelector('.modal-wrap.on')) return;
-  if (document.getElementById('accountsPage')?.classList.contains('on')) return;
-  loadSessions(true);
-}, 60000);
+// The old 60-second full-collection poll is gone: ambient updates ride the
+// sessions snapshot listener (startSessionsListener above), which delivers
+// only changed documents and honors the same hidden/modal/accounts guards.
 
 // ── v2.1 Phase 6 (D5): Start Next Episode — fork the living template ──
 async function startNextEpisode() {
@@ -4111,8 +4199,10 @@ function escapeHtml(s) {
 
 // ── INIT ──────────────────────────────────────────────────────
 window.addEventListener('load', ()=>{
-  document.getElementById('login-btn').textContent = 'Connecting…';
-  document.getElementById('login-btn').disabled = true;
+  // The sign-in button starts ENABLED: loginAdmin waits for the Firebase
+  // bootstrap itself, and a restored session dismisses the modal when it
+  // resolves. No more dead Connecting button gating first interaction on a
+  // network round trip.
   showModal('modal-login');
   initAdminAuth();
 });

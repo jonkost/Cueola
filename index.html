@@ -19,6 +19,12 @@
   --accent:#5b8df8;--acg:#7b6cf8;
   --green:#22d3a0;--yellow:#f5b731;--red:#f05252;--orange:#f97316;--purple:#b06ef8;--cyan:#22d3d3;
   --video:#5b8df8;--video-bg:rgba(91,141,248,.12);--cue-add:#8fb0ff;--cue-add-bg:rgba(91,141,248,.045);--cue-add-border:rgba(91,141,248,.36);
+  /* Semantic cue-type colours (pre-show fix plan): the theme changes the
+     chrome, never the department coding — a video cue reads as a video cue in
+     every theme. Defined ONCE here for all dark themes; the white theme remaps
+     to darker variants of the SAME hues (hue is the identity, luminance adapts
+     to the light background). Paper exports pin their own print-safe hexes. */
+  --cue-video:#3f8cff;--cue-audio:#22c17e;--cue-lighting:#ab6ef8;--cue-playback:#f0524f;--cue-gfx:#f0a422;--cue-script:#2fc4d8;
   --syne:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;
   --display:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;
   /* Small UI text (labels, badges, times, codes): modern system sans, not monospace.
@@ -301,13 +307,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cue-add-btn:hover span:last-child{display:inline}
 .rd-row:hover .cue-add-btn{opacity:.5}
 /* Filled cues carry a bold department-coloured edge, tint, and a coloured glow on hover. */
-.cue-cell-filled{display:flex;flex-direction:column;gap:4px;padding:8px 10px 8px 12px;border-radius:8px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease),transform .12s var(--ease);border: 1px solid transparent;border-left:3px solid transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 17%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 5%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 12%,transparent);min-height:40px;height:100%;position:relative}
+.cue-cell-filled{display:flex;flex-direction:column;gap:4px;padding:8px 10px 8px 12px;border-radius:8px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease),transform .12s var(--ease);border: 1px solid transparent;border-left:3px solid transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 26%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 8%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 12%,transparent);min-height:40px;height:100%;position:relative}
 .cue-cell-filled:hover{border-color:transparent;border-left-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--accent)) 24%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--accent)) 9%,var(--s3)));box-shadow:0 0 0 1px transparent;transform:translateY(-1px)}
 .rd-table .cd-cue-cell{padding:4px 5px}
-.rd-table .cue-cell-filled{gap:3px;padding:8px 9px;border-radius:7px;background:color-mix(in srgb,var(--cue-clr,var(--s2)) 14%,var(--s2));box-shadow:none}
+.rd-table .cue-cell-filled{gap:3px;padding:8px 9px;border-radius:7px;background:color-mix(in srgb,var(--cue-clr,var(--s2)) 24%,var(--s2));box-shadow:none}
 .rd-table .cue-cell-filled:hover{background:color-mix(in srgb,var(--cue-clr,var(--accent)) 18%,var(--s2));box-shadow:none}
 .rd-table .cue-cell-info{font-size:12.5px;line-height:1.28}
-.rd-table .cue-cell-icon{font-size:14px}
+.rd-table .cue-cell-icon{font-size:16px}
 .rd-table .cue-add-btn{opacity:.18}
 .rd-table .cd-cue-cell:hover .cue-add-btn{opacity:.48}
 .cue-cell-filled::after{content:'EDIT';position:absolute;right:7px;top:6px;font-size:9px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;color:var(--text3);opacity:0;transition:opacity .15s var(--ease)}
@@ -400,12 +406,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Type badge */
 .type-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:5px;font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.05em;white-space:nowrap}
-.tb-video{background:var(--video-bg);color:var(--video)}
-.tb-audio{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
-.tb-lighting{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}
-.tb-playback{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
-.tb-gfx{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
-.tb-script{background:color-mix(in srgb,var(--cyan) 15%,transparent);color:var(--cyan)}
+.tb-video{background:color-mix(in srgb,var(--cue-video) 15%,transparent);color:var(--cue-video)}
+.tb-audio{background:color-mix(in srgb,var(--cue-audio) 15%,transparent);color:var(--cue-audio)}
+.tb-lighting{background:color-mix(in srgb,var(--cue-lighting) 15%,transparent);color:var(--cue-lighting)}
+.tb-playback{background:color-mix(in srgb,var(--cue-playback) 15%,transparent);color:var(--cue-playback)}
+.tb-gfx{background:color-mix(in srgb,var(--cue-gfx) 15%,transparent);color:var(--cue-gfx)}
+.tb-script{background:color-mix(in srgb,var(--cue-script) 15%,transparent);color:var(--cue-script)}
 
 /* Style pill */
 .style-pill{font-size:10px;font-family:var(--sans);font-weight:700;padding:3px 7px;border-radius:5px;letter-spacing:.02em;text-transform:uppercase;display:inline-block}
@@ -417,12 +423,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Row left accent by type */
 .cue-row td:first-child{border-left:3px solid transparent}
-.cue-row.type-video td:first-child{border-left-color:var(--video)}
-.cue-row.type-audio td:first-child{border-left-color:var(--green)}
-.cue-row.type-lighting td:first-child{border-left-color:var(--purple)}
-.cue-row.type-playback td:first-child{border-left-color:var(--red)}
-.cue-row.type-gfx td:first-child{border-left-color:var(--yellow)}
-.cue-row.type-script td:first-child{border-left-color:var(--cyan)}
+.cue-row.type-video td:first-child{border-left-color:var(--cue-video)}
+.cue-row.type-audio td:first-child{border-left-color:var(--cue-audio)}
+.cue-row.type-lighting td:first-child{border-left-color:var(--cue-lighting)}
+.cue-row.type-playback td:first-child{border-left-color:var(--cue-playback)}
+.cue-row.type-gfx td:first-child{border-left-color:var(--cue-gfx)}
+.cue-row.type-script td:first-child{border-left-color:var(--cue-script)}
 
 /* Script text multi-line */
 .script-text{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-break:break-word;max-height:100px;overflow:hidden;cursor:pointer;letter-spacing:0;font-weight:500}
@@ -435,6 +441,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .add-row-tr td{padding:10px;text-align:center;position:sticky;left:0;background:linear-gradient(180deg,var(--bg),var(--s1));z-index:6}
 .add-row-btn-el{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;color:var(--cue-add);border:2px dashed transparent;border-radius:8px;padding:11px 20px;cursor:pointer;background:color-mix(in srgb,var(--cue-add) 11%,transparent);transition:all .15s;width:100%;justify-content:center;text-transform:uppercase}
 .add-row-btn-el:hover{border-color:transparent;color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+/* Contextual per-segment add: same affordance, quieter, sits inside the block */
+.seg-add-tr td{padding:4px 10px 12px}
+.seg-add-btn{font-size:12px;padding:7px 14px;background:color-mix(in srgb,var(--cue-add) 7%,transparent)}
 .empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
 .empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
 .empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2);text-align:center}
@@ -458,7 +467,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-grid-wrap{overflow:auto;min-height:0;border: 1px solid transparent;border-radius:8px;background:rgba(255,255,255,.012)}
 .live-grid{width:100%;min-width:860px;border-collapse:separate;border-spacing:0;table-layout:fixed}   /* same sticky-column stroke fix as .rd-table */
 .live-grid th,.live-grid td{border-bottom: 1px solid transparent;vertical-align:middle}
-.live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
+.live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
 .live-grid td{padding:8px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
 /* Owner reversal (Aug 2026): the ON AIR row is deliberately the DOMINANT row.
    It is taller, its name and clock are larger, and its tint and red rail are
@@ -513,7 +522,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Cue cell — Ready (standby) over Take (go), same size on every row. */
 /* height:1px on the cell lets the box stretch to the full row height (the child resolves height:100% against the row). */
 .live-grid td.live-cue-td{height:1px;padding:5px 6px}
-.live-cue-cell{height:100%;box-sizing:border-box;border: 1px solid transparent;border-left: 3px solid transparent;border-radius:8px;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 15%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 4%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 10%,transparent);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:3px;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease)}
+.live-cue-cell{height:100%;box-sizing:border-box;border: 1px solid transparent;border-left: 3px solid transparent;border-radius:8px;background:linear-gradient(180deg,color-mix(in srgb,var(--cue-clr,var(--s2)) 24%,var(--s2)),color-mix(in srgb,var(--cue-clr,var(--s3)) 7%,var(--s3)));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--cue-clr) 10%,transparent);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:3px;transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .2s var(--ease)}
 .live-grid td.live-cue-td .live-cue-empty{height:100%;display:flex;align-items:center;justify-content:center}
 .live-cue-rdy{font-family:var(--mono);font-size:11.5px;line-height:1.25;color:var(--text2)}
 .live-cue-go{font-family:var(--mono);font-size:13px;font-weight:700;line-height:1.22}
@@ -720,7 +729,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .lf-now-note{margin-top:9px;font-size:14px;color:var(--text2);line-height:1.5}
 /* Cues are the show — big, scannable take/ready rows, colour-coded by department. */
 .lf-cues{display:flex;flex-direction:column;gap:9px;margin-top:16px}
-.lf-cue{display:grid;grid-template-columns:minmax(92px,auto) 1fr;gap:16px;align-items:center;border: 1px solid transparent;border-left:5px solid transparent;border-radius:12px;background:color-mix(in srgb,var(--cue-clr) 11%,var(--s2));padding:13px 18px}
+.lf-cue{display:grid;grid-template-columns:minmax(92px,auto) 1fr;gap:16px;align-items:center;border: 1px solid transparent;border-left:5px solid transparent;border-radius:12px;background:color-mix(in srgb,var(--cue-clr) 18%,var(--s2));padding:13px 18px}
 .lf-cue-dept{display:flex;align-items:center;gap:7px;font-size:13px;font-family:var(--mono);font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--cue-clr)}
 .lf-cue-lines{display:flex;flex-direction:column;gap:4px;min-width:0}
 .lf-cue-take{font-size:25px;font-weight:700;color:var(--text);line-height:1.15;letter-spacing:0;word-break:break-word}
@@ -1200,6 +1209,28 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-src-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;width:64px;flex-shrink:0}
 .admin-src-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1}
 .admin-src-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;font-size:10px;font-family:var(--mono);background:var(--s3);border: 1px solid transparent;color:var(--text2)}
+/* Session roster join chips on the assignments editor */
+.pb-roster-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;font-size:10px;font-family:var(--mono);border:1px solid transparent}
+.pb-roster-assigned{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
+.pb-roster-add{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);cursor:pointer}
+.pb-roster-add:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.pb-roster-noprofile{background:var(--s3);color:var(--text3)}
+/* Paperwork manager toggles (Planda Bear hub) */
+.pb-pw-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:10.5px;font-family:var(--mono);font-weight:700;border:1px solid transparent;cursor:pointer;transition:background .15s}
+.pb-pw-toggle.on{background:color-mix(in srgb,var(--green) 13%,transparent);color:var(--green)}
+.pb-pw-toggle.off{background:var(--s3);color:var(--text3);text-decoration:line-through}
+.pb-pw-toggle:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}
+/* Rundown-control grant picker */
+.ls-grant-current{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:10px 0;border-radius:8px;background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green);font-size:12.5px}
+.ls-grant-current .admin-add-btn{margin-left:auto}
+.ls-grant-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;margin-top:6px;border-radius:8px;border:1px solid var(--border);background:var(--s2);cursor:pointer;text-align:left;transition:background .15s}
+.ls-grant-row:hover{background:color-mix(in srgb,var(--accent) 14%,var(--s2))}
+.ls-grant-name{font-weight:700;color:var(--text);font-size:13px}
+.ls-grant-pos{font-size:10.5px;font-family:var(--mono);color:var(--accent)}
+.ls-grant-user{margin-left:auto;font-size:10.5px;font-family:var(--mono);color:var(--text3)}
+/* Find-in-script row (Script Op Cue section) */
+.pt-live-find{display:flex;gap:6px;margin-top:6px}
+.pt-live-find .pt-find-in{flex:1;min-width:0;font-size:12px;padding:6px 9px}
 .admin-src-chip .rm{cursor:pointer;color:var(--text3);font-size:11px;border:none;background:none;font-family:var(--mono);line-height:1;padding:0}.admin-src-chip .rm:hover{color:var(--red)}
 .admin-src-add{padding:3px 8px;border-radius:5px;font-size:11px;font-family:var(--mono);background:var(--btn-fill);border:1px solid transparent;color:var(--text3);cursor:pointer;transition:all .12s}
 .admin-src-add:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
@@ -1257,7 +1288,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── THEMES ── */
 [data-theme="warm"]{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;--video:#ffc400;--video-bg:rgba(255,196,0,.13);--cue-add:#ffc400;--cue-add-bg:rgba(255,196,0,.07);--cue-add-border:rgba(255,196,0,.42)}
 [data-theme="cool"]{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;--video:#5b8df8;--video-bg:rgba(91,141,248,.13);--cue-add:#5b8df8;--cue-add-bg:rgba(91,141,248,.06);--cue-add-border:rgba(91,141,248,.36)}
-[data-theme="white"]{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;--video:#e50000;--video-bg:rgba(229,0,0,.09);--cue-add:#e50000;--cue-add-bg:rgba(229,0,0,.05);--cue-add-border:rgba(229,0,0,.32)}
+[data-theme="white"]{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;--video:#e50000;--video-bg:rgba(229,0,0,.09);--cue-add:#e50000;--cue-add-bg:rgba(229,0,0,.05);--cue-add-border:rgba(229,0,0,.32);--cue-video:#2361d8;--cue-audio:#0e7a52;--cue-lighting:#7a35c9;--cue-playback:#d63031;--cue-gfx:#a86a00;--cue-script:#0c7f92}
 [data-theme="green"]{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;--video:#6cd234;--video-bg:rgba(108,210,52,.13);--cue-add:#6cd234;--cue-add-bg:rgba(108,210,52,.07);--cue-add-border:rgba(108,210,52,.40)}
 [data-theme="koala"]{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7e7e7e;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;--video:#ffffff;--video-bg:rgba(255,255,255,.08);--cue-add:#ffffff;--cue-add-bg:rgba(255,255,255,.04);--cue-add-border:rgba(255,255,255,.28)}
 [data-theme="panda"]{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;--video:#ffffff;--video-bg:rgba(255,255,255,.06);--cue-add:#a8a8a8;--cue-add-bg:rgba(255,255,255,.03);--cue-add-border:rgba(255,255,255,.22)}
@@ -2561,6 +2592,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s;touch-action:none}
 #pt-stage.mirrored{transform:scaleX(-1)}
+#pt-hold-chip{position:absolute;right:28px;top:calc(50% - 22px);z-index:40;font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;color:var(--pt-accent,#7ec8ff);background:color-mix(in srgb,var(--pt-bg,#0a0a0a) 78%,var(--pt-accent,#7ec8ff));border:2px solid var(--pt-accent,#7ec8ff);border-radius:10px;padding:9px 16px;pointer-events:none;animation:ptHoldPulse 1.6s ease-in-out infinite}
+@keyframes ptHoldPulse{0%,100%{opacity:1}50%{opacity:.55}}
 #promptypus.mirrored::before,#promptypus.mirrored::after{transform:scaleX(-1)}
 #pt-stage::before,#pt-stage::after{content:'';position:absolute;left:0;right:0;height:28vh;pointer-events:none;z-index:10}
 #pt-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
@@ -5344,6 +5377,9 @@ input.pt-range::-moz-range-thumb,
     <div id="pt-track">
       <div id="pt-text"></div>
     </div>
+    <!-- Persistent cue-hold state: inside #pt-stage so beam-splitter
+         mirroring flips it with the copy; visible in element-fullscreen. -->
+    <div id="pt-hold-chip" hidden>HOLDING</div>
   </div>
 
   <!-- Technical-difficulties stand-by cover (operator toggled) -->
@@ -5674,6 +5710,17 @@ input.pt-range::-moz-range-thumb,
 <!-- ══════════════════════════════════════════
      LIVE SCRIPT EDIT OVERLAY
 ══════════════════════════════════════════ -->
+<!-- Rundown-operator grant picker (pre-show fix plan item 1): the admin hands
+     the wheel to any signed-in student and takes it back, mid-show. -->
+<div class="overlay" id="lsGrantOv" onclick="if(event.target===this)hideOverlay('lsGrantOv')">
+  <div class="warn-card u-border-soft" style="max-width:460px">
+    <div class="warn-title u-fs16">Hand rundown control</div>
+    <div class="u-sub-note">The chosen student drives GO, playback calls, and the prompter for everyone, with the same sequential safety rail instructors get. You keep full control alongside them and can take it back any time.</div>
+    <div id="lsGrantBody"></div>
+    <div class="u-mt12" style="text-align:right"><button class="admin-act-btn" onclick="hideOverlay('lsGrantOv')">Close</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="lsScriptEditOv" onclick="if(event.target===this)hideOverlay('lsScriptEditOv')">
   <div class="warn-card u-border-soft" style="max-width:520px">
     <div class="warn-title u-fs16" id="lsScriptEditTitle">Script</div>
@@ -5789,6 +5836,7 @@ input.pt-range::-moz-range-thumb,
       <div class="paperwork-card-by" data-pb-by hidden></div>
     </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
+    <div id="pbPaperworkManager"></div>
     <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
     <div id="plandabearHubActivity"></div>
@@ -6620,6 +6668,7 @@ input.pt-range::-moz-range-thumb,
 .sd-ed-desc { color:var(--text2); font-size:12.5px; line-height:1.45; margin-bottom:10px; }
 .sd-ed-learned { font-size:11px; color:var(--green); border:1px solid transparent; background:color-mix(in srgb,var(--green) 14%,transparent); border-radius:999px; padding:1px 8px; margin-left:6px; }
 .sd-ed-chip { font-size:10px; font-weight:800; letter-spacing:.05em; color:var(--accent); border:1px solid transparent; background:color-mix(in srgb,var(--accent) 14%,transparent); border-radius:999px; padding:1px 7px; margin-left:6px; vertical-align:2px; }
+.sd-ed-chip.sd-ed-local { color:var(--orange); background:color-mix(in srgb,var(--orange) 14%,transparent); }
 .sd-ed-cols { display:grid; grid-template-columns:1fr 380px; gap:var(--sp-5,24px); }
 @media (max-width:820px){ .sd-ed-cols { grid-template-columns:1fr; } }
 .sd-ed-actions { max-height:62vh; overflow:auto; }
@@ -7043,20 +7092,20 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=56fbfa3647"></script>
-<script src="cueola-admin-auth.js?v=799642cdd2"></script>
-<script src="cueola-live-session.js?v=3c5ac415fc"></script>
+<script src="cueola-admin-auth.js?v=5a8797d226"></script>
+<script src="cueola-live-session.js?v=531f7b74bc"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
 <script src="cueola-prompter-session.js?v=1002259f73"></script>
 <script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=475d6c6a7e"></script>
-<script src="outrangutan/outrangutan.js?v=d9d163e098"></script>
+<script src="cueola-app.js?v=7b85188b08"></script>
+<script src="outrangutan/outrangutan.js?v=fb6cbbcdda"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=54805dc823"></script>
+<script src="cueola-streamdeck.js?v=57a816014a"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

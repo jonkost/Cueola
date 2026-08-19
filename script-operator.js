@@ -415,8 +415,17 @@
       return;
     }
     if (button.hasAttribute('data-insert')) { insertAtSelection(button.dataset.insert || ''); return; }
-    if (button.hasAttribute('data-paste')) { pasteIntoEditor(false); return; }
-    if (button.hasAttribute('data-paste-push')) pasteIntoEditor(true);
+    if (button.hasAttribute('data-find')) sendFindInScript();
+  }
+
+  // Jump to line: the host executes seek_text and the talent glides the first
+  // matching line (searching forward from the read position) to the read line.
+  function sendFindInScript() {
+    const input = document.getElementById('findInput');
+    const q = String(input?.value || '').trim();
+    if (!q) { setDraftStatus('Type a few words from the script first', 'error'); return; }
+    if (q.length < 3) { setDraftStatus('Use at least three characters to find', 'error'); return; }
+    sendIntent('control', { action: 'seek_text', q });
   }
 
   function onDelegatedInput(event) {
@@ -543,10 +552,14 @@
   }
 
   function preserveEditorSelection(event) {
-    if (event.target.closest('[data-wrap-before],[data-insert],[data-paste],[data-paste-push]')) event.preventDefault();
+    if (event.target.closest('[data-wrap-before],[data-insert]')) event.preventDefault();
   }
 
   function onControlsKeydown(event) {
+    if (event.target.id === 'findInput') {
+      if (event.key === 'Enter') { event.preventDefault(); sendFindInScript(); }
+      return;
+    }
     if (event.target.id === 'questionLaneInput') {
       // Same grammar as the in-app lane: Enter pushes, Esc clears the card.
       if (event.key === 'Enter') { event.preventDefault(); pushQuestionLane(); }
@@ -681,19 +694,9 @@
     queueDraft();
   }
 
-  async function pasteIntoEditor(pushNow) {
-    let text = '';
-    try { text = await navigator.clipboard.readText(); }
-    catch { setDraftStatus('Allow clipboard access to paste', 'error'); return; }
-    text = cleanText(text);
-    if (!text) { setDraftStatus('Clipboard empty', 'error'); return; }
-    const prefix = editor.value.trim() ? '\n\n' : '';
-    insertAtSelection(`${prefix}[CHAT]\n${text}`);
-    if (pushNow) {
-      window.clearTimeout(draftTimer);
-      sendIntent('push', { text: editor.value });
-    }
-  }
+  // The [CHAT] pasteIntoEditor path is retired (D12.6): it appended clipboard
+  // text into the rolling script and re-pushed the whole thing mid-read.
+  // Audience copy rides the Question lane instead.
 
   function onEditorBlur() {
     if (pendingEditorText !== null && !editorDirty) editor.value = pendingEditorText;

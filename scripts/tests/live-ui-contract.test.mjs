@@ -238,7 +238,16 @@ test('Script Operator pop-out parity: question lane, numeric readouts, in-app ta
   assert.match(scriptOp, /function pushQuestionLane\(\)/);
   assert.match(scriptOp, /sendIntent\('control', \{ action: 'question_on', text \}\)/);
   assert.match(app, /'clock_size_up','clock_size_down','question_on','question_off','overlays_clear'/);
-  assert.match(app, /questionText \? sendPrompterControl\(action, \{ text: questionText \}\) : sendPrompterControl\(action\)/);
+  // The host forwards command payloads: question text and the find query.
+  assert.match(app, /questionText \? sendPrompterControl\(action, \{ text: questionText \}\)/);
+  assert.match(app, /findQuery \? sendPrompterControl\(action, \{ q: findQuery \}\)/);
+  // Find-in-script parity: the pop-out sends seek_text through the same
+  // allowlisted channel, and the host validates the query length.
+  assert.match(scriptOp, /sendIntent\('control', \{ action: 'seek_text', q \}\)/);
+  assert.match(app, /action === 'seek_text' && findQuery\.length < 3/);
+  // The [CHAT] Paste-Push path stays dead in the pop-out too (D12.6).
+  assert.doesNotMatch(scriptOp, /pasteIntoEditor\(/);
+  assert.doesNotMatch(scriptOpHtml, /data-paste/);
   // Prepared question cards reach the pop-out datalist through the snapshot.
   assert.match(app, /questionCards:\(sessionQuestionCards \|\| \[\]\)\.slice\(0, 30\)/);
   assert.match(scriptOp, /function patchQuestionCards\(cards\)/);

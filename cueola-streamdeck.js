@@ -136,7 +136,7 @@
     // Named cue/pad refs are bound from the live show list in the key editor.
     registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', desc: 'Fires one specific SFX pad, picked by name.' });
     registerAction({ id: 'cueRef', kind: 'cueRef', group: 'This show', color: '#234a8a', label: 'CUE', full: 'Cue (by name)', desc: 'Fires one specific cue, picked by name.' });
-    registerAction({ id: 'golive', kind: 'golive', group: 'Cueola', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
+    registerAction({ id: 'golive', kind: 'golive', machineLocal: true, group: 'Cueola', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
     // Ready-track-roll-take: TAKE fires the armed call now, ABORT cancels it.
     // Both ride the control bus and light while a call is armed or counting.
     registerAction({ id: 'rundown.take', kind: 'bus', target: 'rundown', action: 'take', group: 'Cueola', color: '#8a1f1f', label: 'TAKE', full: 'TAKE the armed playout call', desc: 'Fires the armed ready-track-roll call immediately instead of waiting out the countdown. Glows while a call is armed.', lamp: busLamp('rundown', 'take') });
@@ -151,24 +151,24 @@
     // TKB (Talkback, crew comms on outs 1-2) and VofU (Voice of the Universe, the
     // god-mic to the room on outs 3-4), plus one off-air panic. Action ids, kind,
     // and bus letters are the wire contract with the plugin + daemon — never rename.
-    registerAction({ id: 'talk.a', kind: 'talkback', bus: 'A', momentary: true, group: 'Micochondria', color: '#17653a', label: 'TKB', full: 'Talkback (outs 1-2), hold', desc: 'HOLD to talk to the crew on the Talkback bus (outs 1-2). Mic cuts the moment you release.', lamp: function () { return talkbackState.A; } });
-    registerAction({ id: 'talk.b', kind: 'talkback', bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe, the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
-    registerAction({ id: 'talk.off', kind: 'talkbackPanic', group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics (TKB and VofU) instantly. The off-air safety.' });
+    registerAction({ id: 'talk.a', kind: 'talkback', machineLocal: true, bus: 'A', momentary: true, group: 'Micochondria', color: '#17653a', label: 'TKB', full: 'Talkback (outs 1-2), hold', desc: 'HOLD to talk to the crew on the Talkback bus (outs 1-2). Mic cuts the moment you release.', lamp: function () { return talkbackState.A; } });
+    registerAction({ id: 'talk.b', kind: 'talkback', machineLocal: true, bus: 'B', momentary: true, group: 'Micochondria', color: '#1c4a86', label: 'VofU', full: 'Voice of the Universe (outs 3-4), hold', desc: 'HOLD to open the Voice of the Universe, the god-mic to the room (outs 3-4). Mic cuts the moment you release.', lamp: function () { return talkbackState.B; } });
+    registerAction({ id: 'talk.off', kind: 'talkbackPanic', machineLocal: true, group: 'Micochondria', color: '#8a1f1f', label: 'ALL TALK OFF', full: 'Cut both mics (TKB + VofU)', desc: 'Cuts both Micochondria mics (TKB and VofU) instantly. The off-air safety.' });
     // Layouts as pages: a key can jump straight to a saved layout, or cycle them.
     registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next page', desc: 'Cycles to the next saved layout. Turns the deck into pages; the key shows which page you are on.' });
     registerAction({ id: 'layout.prev', kind: 'layoutPrev', group: 'Layouts', color: '#2e3640', label: 'PAGE ←', full: 'Previous page', desc: 'Cycles back to the previous saved layout. The key shows which page you are on.' });
     registerAction({ id: 'layout.home', kind: 'layoutHome', group: 'Layouts', color: '#2e3640', label: 'HOME', full: 'Home page', desc: 'Jumps straight to this deck\'s default layout, from any page.' });
     registerAction({ id: 'layoutRef', kind: 'layoutRef', group: 'Layouts', color: '#2e3640', label: 'PAGE', full: 'Jump to a layout (by name)', desc: 'Switches the whole deck to one specific saved layout.', lamp: function (s, slot) { return !!(slot && slot.ref && mapping().name === slot.ref); } });
     // OBS (obs-websocket). Lamps read live OBS state so keys glow when live.
-    registerAction({ id: 'obs.stream', kind: 'obs', op: 'toggleStream', group: 'OBS', color: '#8a1f1f', label: 'STREAM', full: 'OBS: start / stop streaming', desc: 'Starts or stops the OBS stream. Glows while you are live. Toggle.', toggle: true, lamp: function () { return obsState().streaming; } });
-    registerAction({ id: 'obs.record', kind: 'obs', op: 'toggleRecord', group: 'OBS', color: '#a4741e', label: 'REC', full: 'OBS: start / stop recording', desc: 'Starts or stops the OBS recording. Glows while recording. Toggle.', toggle: true, lamp: function () { return obsState().recording; } });
-    registerAction({ id: 'obs.record.pause', kind: 'obs', op: 'pauseRecord', group: 'OBS', color: '#5a4a12', label: 'REC ❚❚', full: 'OBS: pause / resume recording', desc: 'Pauses the recording without stopping it. Toggle.', toggle: true, lamp: function () { return obsState().recordPaused; } });
-    registerAction({ id: 'obs.vcam', kind: 'obs', op: 'toggleVirtualCam', group: 'OBS', color: '#243a66', label: 'V-CAM', full: 'OBS: virtual camera', desc: 'Toggles the OBS virtual camera output.', toggle: true, lamp: function () { return obsState().virtualCam; } });
-    registerAction({ id: 'obs.replay', kind: 'obs', op: 'saveReplay', group: 'OBS', color: '#2e3640', label: 'CLIP', full: 'OBS: save replay buffer', desc: 'Saves the replay buffer: the instant highlight-clip button.' });
-    registerAction({ id: 'obs.transition', kind: 'obs', op: 'studioTransition', group: 'OBS', color: '#2e3640', label: 'OBS TAKE', full: 'OBS: studio-mode transition', desc: 'Takes preview to program in OBS studio mode.' });
-    for (var sc = 1; sc <= 6; sc++) registerAction({ id: 'obs.scene:' + sc, kind: 'obsScene', slot: sc, group: 'OBS scenes (by slot)', color: '#0f4c81', label: 'SCN ' + sc, full: 'OBS scene slot ' + sc, desc: 'Switches OBS to scene ' + sc + ' in the scene list. Glows when on air.', lamp: obsSceneSlotLamp(sc) });
-    registerAction({ id: 'obs.sceneRef', kind: 'obsSceneRef', group: 'This OBS', color: '#0f4c81', label: 'SCENE', full: 'OBS scene (by name)', desc: 'Switches OBS to one specific scene, picked by name. Glows when on air.', lamp: function (s, slot) { return !!(slot && slot.ref && obsState().currentScene === slot.ref); } });
-    registerAction({ id: 'obs.muteRef', kind: 'obsMuteRef', group: 'This OBS', color: '#5a4a12', label: 'MUTE', full: 'OBS mute (by name)', desc: 'Mutes or unmutes one OBS audio input. Glows while muted. Toggle.', toggle: true, lamp: function (s, slot) { return !!(slot && slot.ref && obsState().mutes && obsState().mutes[slot.ref]); } });
+    registerAction({ id: 'obs.stream', kind: 'obs', machineLocal: true, op: 'toggleStream', group: 'OBS', color: '#8a1f1f', label: 'STREAM', full: 'OBS: start / stop streaming', desc: 'Starts or stops the OBS stream. Glows while you are live. Toggle.', toggle: true, lamp: function () { return obsState().streaming; } });
+    registerAction({ id: 'obs.record', kind: 'obs', machineLocal: true, op: 'toggleRecord', group: 'OBS', color: '#a4741e', label: 'REC', full: 'OBS: start / stop recording', desc: 'Starts or stops the OBS recording. Glows while recording. Toggle.', toggle: true, lamp: function () { return obsState().recording; } });
+    registerAction({ id: 'obs.record.pause', kind: 'obs', machineLocal: true, op: 'pauseRecord', group: 'OBS', color: '#5a4a12', label: 'REC ❚❚', full: 'OBS: pause / resume recording', desc: 'Pauses the recording without stopping it. Toggle.', toggle: true, lamp: function () { return obsState().recordPaused; } });
+    registerAction({ id: 'obs.vcam', kind: 'obs', machineLocal: true, op: 'toggleVirtualCam', group: 'OBS', color: '#243a66', label: 'V-CAM', full: 'OBS: virtual camera', desc: 'Toggles the OBS virtual camera output.', toggle: true, lamp: function () { return obsState().virtualCam; } });
+    registerAction({ id: 'obs.replay', kind: 'obs', machineLocal: true, op: 'saveReplay', group: 'OBS', color: '#2e3640', label: 'CLIP', full: 'OBS: save replay buffer', desc: 'Saves the replay buffer: the instant highlight-clip button.' });
+    registerAction({ id: 'obs.transition', kind: 'obs', machineLocal: true, op: 'studioTransition', group: 'OBS', color: '#2e3640', label: 'OBS TAKE', full: 'OBS: studio-mode transition', desc: 'Takes preview to program in OBS studio mode.' });
+    for (var sc = 1; sc <= 6; sc++) registerAction({ id: 'obs.scene:' + sc, kind: 'obsScene', machineLocal: true, slot: sc, group: 'OBS scenes (by slot)', color: '#0f4c81', label: 'SCN ' + sc, full: 'OBS scene slot ' + sc, desc: 'Switches OBS to scene ' + sc + ' in the scene list. Glows when on air.', lamp: obsSceneSlotLamp(sc) });
+    registerAction({ id: 'obs.sceneRef', kind: 'obsSceneRef', machineLocal: true, group: 'This OBS', color: '#0f4c81', label: 'SCENE', full: 'OBS scene (by name)', desc: 'Switches OBS to one specific scene, picked by name. Glows when on air.', lamp: function (s, slot) { return !!(slot && slot.ref && obsState().currentScene === slot.ref); } });
+    registerAction({ id: 'obs.muteRef', kind: 'obsMuteRef', machineLocal: true, group: 'This OBS', color: '#5a4a12', label: 'MUTE', full: 'OBS mute (by name)', desc: 'Mutes or unmutes one OBS audio input. Glows while muted. Toggle.', toggle: true, lamp: function (s, slot) { return !!(slot && slot.ref && obsState().mutes && obsState().mutes[slot.ref]); } });
     // Fun.
     registerAction({ id: 'fx.hype', kind: 'fx', op: 'hype', group: 'Fun', color: '#b06ef8', label: 'HYPE', full: 'Rainbow hype burst', desc: 'A rainbow light show ripples across the whole deck. Pure fun, worth a press.' });
   }
@@ -2502,7 +2502,7 @@
     var mz = Math.round(132 * Math.min(window.devicePixelRatio || 1, 2));
     for (var i = 0; i < profile.keys; i++) {
       var slot = slotAt(i), a = slotAction(slot);
-      var tip = (a.full || a.label || 'blank') + (a.toggle ? ' · toggle' : '') + (a.hold ? ' · hold' : '') + (a.desc ? '. ' + a.desc : '');
+      var tip = (a.full || a.label || 'blank') + (a.toggle ? ' · toggle' : '') + (a.hold ? ' · hold' : '') + (a.machineLocal ? ' · this machine only' : '') + (a.desc ? '. ' + a.desc : '');
       html += '<button class="sd-key' + (i === editingKey ? ' editing' : '') + '" data-key="' + i + '" style="--i:' + i + '" draggable="true" data-tip="' + esc(tip) + '" aria-label="' + esc('Key ' + (i + 1) + ': ' + (a.full || 'blank')) + '"><canvas width="' + mz + '" height="' + mz + '"></canvas></button>';
     }
     html += '</div>';
@@ -2768,7 +2768,7 @@
       .concat(Object.keys(groups).filter(function (g) { return GROUP_ORDER.indexOf(g) < 0; }));
     var curAction = slotAction(slot);
     var body = '<div class="sd-ed-head">Edit key ' + (index + 1) + (fromLearn ? ' <span class="sd-ed-learned">learned</span>' : '')
-      + (curAction.toggle ? ' <span class="sd-ed-chip">TOGGLE</span>' : '') + (curAction.hold ? ' <span class="sd-ed-chip">HOLD</span>' : '') + '</div>';
+      + (curAction.toggle ? ' <span class="sd-ed-chip">TOGGLE</span>' : '') + (curAction.hold ? ' <span class="sd-ed-chip">HOLD</span>' : '') + (curAction.machineLocal ? ' <span class="sd-ed-chip sd-ed-local" data-tip="Acts on this machine only, never over the session: on a multi-machine rig this key does nothing remote.">THIS MACHINE</span>' : '') + '</div>';
     if (curAction.desc) body += '<div class="sd-ed-desc">' + esc(curAction.desc) + '</div>';
     body += '<div class="sd-ed-cols"><div class="sd-ed-actions"><div class="sd-ed-sub">Action</div>';
     orderedGroups.forEach(function (g) { body += '<div class="sd-picker-g">' + esc(g) + '</div>'; groups[g].forEach(function (o) { body += '<button class="sd-picker-opt' + (o.id === slot.a && !slot.ref ? ' cur' : '') + '" data-pick="' + esc(o.id) + '">' + esc(o.label || '(blank)') + '</button>'; }); });

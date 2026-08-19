@@ -84,19 +84,41 @@
 
   // user → admins/{uid} doc → adminSession. Generation-guarded: a sign-out
   // during a slow doc read must never resurrect the stale session afterwards.
+  // One in-flight resolve per uid: interactive signIn() and the
+  // onAuthStateChanged echo of that same sign-in used to EACH run the token
+  // check plus the admins/{uid} read, paying a duplicated sequential network
+  // round trip on the sign-in critical path. The second caller now joins the
+  // first read instead of racing it.
+  var inflightResolve = null;   // { uid, promise } | null
   function resolveSession(user) {
-    var generation = ++resolveGeneration;
-    if (!user) { publish(null); return Promise.resolve(null); }
+    if (!user) {
+      // Invalidate any in-flight authorization read: its late completion must
+      // never resurrect a session that signed out underneath it.
+      ++resolveGeneration;
+      inflightResolve = null;
+      publish(null);
+      return Promise.resolve(null);
+    }
     if (!window._db || !window._doc || !window._getDoc) { publish(null); return Promise.resolve(null); }
+    if (inflightResolve && inflightResolve.uid === user.uid) return inflightResolve.promise;
+    var generation = ++resolveGeneration;
     // A student custom-token session (cueolaStudent claim, minted by the
     // signInWithPin Cloud Function) is never an admin. Resolve it quietly, with
     // no admins/{uid} read and no warning, so student sign-ins do not look like
     // failed admin logins.
-    return Promise.resolve(user.getIdTokenResult ? user.getIdTokenResult().catch(function () { return null; }) : null).then(function (tok) {
+    var base = Promise.resolve(user.getIdTokenResult ? user.getIdTokenResult().catch(function () { return null; }) : null).then(function (tok) {
       if (generation !== resolveGeneration) return current();
       if (tok && tok.claims && tok.claims.cueolaStudent) { publish(null); return null; }
       return resolveAdminDoc(user, generation);
     });
+    var entry = { uid: user.uid, promise: null };
+    var clear = function () { if (inflightResolve === entry) inflightResolve = null; };
+    entry.promise = base.then(
+      function (value) { clear(); return value; },
+      function (err) { clear(); throw err; }
+    );
+    inflightResolve = entry;
+    return entry.promise;
   }
   function resolveAdminDoc(user, generation) {
     return window._getDoc(window._doc(window._db, 'admins', user.uid)).then(function (snap) {
@@ -188,6 +210,7 @@
 
   function signOutAdmin() {
     ++resolveGeneration;
+    inflightResolve = null;
     publish(null);
     if (!auth() || !fns()) return Promise.resolve();
     return fns().signOut(auth()).catch(function (err) { console.warn('signOut failed', err); });

@@ -90,6 +90,7 @@
   let bankRenamingId = null;     // SFX bank being inline-renamed
   let padSearch = '';            // SFX search query
   let selectedId = null;         // standby cue
+  let rundownArmId = null;       // rundown-ordered standby (armFromRundown); wins over internal next-cue staging
   let selectedPadId = null;      // pad in the SFX inspector
   let settings = DEFAULT_SETTINGS();
   let themeObserver = null;
@@ -2347,9 +2348,35 @@
         else toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.');
         break;
       }
+      case 'arm': armFromRundown(cmd.cueId); break;   // rundown standby: select + preload, never fire
       default: return;
     }
+    // A fire can carry the next rundown standby on the same write (single
+    // command slot: a separate arm write could swallow an unconsumed fire).
+    if (cmd.armCueId) armFromRundown(cmd.armCueId);
     renderCueList(); renderInspector(); renderEditArea();
+  }
+
+  // Rundown standby (pre-show fix plan): the rundown advance arms the next
+  // auto-linked clip in RUNDOWN order — selected and preloaded so the next GO
+  // (or TAKE) is instant, even when the running order diverges from this cue
+  // list's own order. An empty cueId CLEARS the standby (the rundown moved on
+  // with nothing auto-linked downstream); the standby is also consumed
+  // one-shot by go(), so a stale arm can never keep hijacking the playout
+  // op's manual GO chain.
+  function armFromRundown(cueId) {
+    if (!cueId) {
+      if (rundownArmId) { rundownArmId = null; slog('cue', 'ARM cleared (rundown standby)'); }
+      return true;
+    }
+    const c = cueById(cueId);
+    if (!c) return false;
+    if (rundownArmId === c.id && selectedId === c.id) return true;   // already standing by
+    rundownArmId = c.id;
+    selectedId = c.id;
+    preloadCue(c);
+    slog('cue', 'ARM · #' + c.num + ' “' + c.name + '” (rundown standby)');
+    return true;
   }
 
   // ── The Break Room demo playout (wiring for break-room-show.js section 4) ──
@@ -2854,9 +2881,12 @@
     let cue = cueById(selectedId);
     if (!cue) { cue = cues.find(c => c.armed !== false); if (cue) selectedId = cue.id; }
     if (!cue) { toast('No cue to fire. Add media first.'); return; }
-    const next = nextArmedAfter(cue.id);
+    // A live rundown standby (arm command) outranks this list's own order,
+    // ONCE: it is consumed here, and the next rundown advance re-stamps it.
+    const next = (rundownArmId && rundownArmId !== cue.id ? rundownArmId : '') || nextArmedAfter(cue.id);
     fireCue(cue);
     selectedId = next || selectedId;
+    rundownArmId = null;
     renderCueList(); renderInspector(); renderEditArea();
   }
   // The green transport button (and its advertised GO/Space key): toggle pause
@@ -2888,6 +2918,7 @@
   }
   function fireCue(cue) {
     clearPre();
+    if (rundownArmId === cue.id) rundownArmId = null;   // the standby fired; the next arm re-stamps it
     slog('cue', 'GO · #' + cue.num + ' “' + cue.name + '”' + (cue.preWait > 0 ? ' (pre-wait ' + cue.preWait + 's)' : ''));
     if (cue.preWait > 0) {
       setStatus('pre');
@@ -3081,7 +3112,12 @@
     preloaded = null;
   }
   async function preloadNext(fromCue) {
-    const next = cueById(nextArmedAfter(fromCue.id));
+    // Cue-ahead staging follows what the next GO will actually fire: the
+    // rundown standby first, else the current standby selection (which a
+    // rundown arm or the op's own click may have moved), else list order.
+    const rundownNext = rundownArmId && rundownArmId !== fromCue.id ? cueById(rundownArmId) : null;
+    const selectedNext = selectedId && selectedId !== fromCue.id ? cueById(selectedId) : null;
+    const next = rundownNext || selectedNext || cueById(nextArmedAfter(fromCue.id));
     if (!next || !next.mediaId || next.broken) { clearPreload(); return; }
     return preloadCue(next);
   }
@@ -5341,6 +5377,8 @@
       session: () => (mode === 'session' ? sessionCode : ''),
       firePad: (id) => { const p = padById(id); if (p && p.mediaId) { firePad(p); return true; } return false; },
       fireCue: (id) => { const c = cueById(id); if (c) { selectedId = c.id; go(); renderCueList(); renderInspector(); renderEditArea(); return true; } return false; },
+      // Rundown standby: select + preload in rundown order, never fire.
+      armCue: (id) => { if (!armFromRundown(id)) return false; renderCueList(); renderInspector(); renderEditArea(); return true; },
       // P5: whole-transport fast path for the live-screen keymap (G/P/S/…)
       transport: (action) => {
         if (action === 'go') { go(); return true; }

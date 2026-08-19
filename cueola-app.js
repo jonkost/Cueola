@@ -83,23 +83,26 @@ function setSymbolButtonLabel(button, symbol, label) {
 // ─────────────────────────────────────────────────────────────
 // CUE TYPE DEFINITIONS
 // ─────────────────────────────────────────────────────────────
+// Department colours ride the SEMANTIC --cue-* tokens (defined once at :root,
+// remapped only by the white theme to darker same-hue variants): a video cue
+// reads as a video cue in every theme, never as the theme's accent.
 const CT = {
-  video:    { label:'VIDEO',    color:'var(--video)',  bg:'var(--video-bg)',                                  symbol:'department.video' },
-  audio:    { label:'AUDIO',    color:'var(--green)',  bg:'color-mix(in srgb,var(--green) 14%,transparent)',  symbol:'department.audio' },
-  lighting: { label:'LIGHTING', color:'var(--purple)', bg:'color-mix(in srgb,var(--purple) 14%,transparent)', symbol:'department.lighting' },
-  playback: { label:'PLAYBACK', color:'var(--red)',    bg:'color-mix(in srgb,var(--red) 14%,transparent)',    symbol:'department.playback' },
-  gfx:      { label:'GFX',      color:'var(--yellow)', bg:'color-mix(in srgb,var(--yellow) 14%,transparent)', symbol:'department.graphics' },
-  script:   { label:'SCRIPT',   color:'var(--cyan)',   bg:'color-mix(in srgb,var(--cyan) 14%,transparent)',   symbol:'department.script' },
+  video:    { label:'VIDEO',    color:'var(--cue-video)',    bg:'color-mix(in srgb,var(--cue-video) 14%,transparent)',    symbol:'department.video' },
+  audio:    { label:'AUDIO',    color:'var(--cue-audio)',    bg:'color-mix(in srgb,var(--cue-audio) 14%,transparent)',    symbol:'department.audio' },
+  lighting: { label:'LIGHTING', color:'var(--cue-lighting)', bg:'color-mix(in srgb,var(--cue-lighting) 14%,transparent)', symbol:'department.lighting' },
+  playback: { label:'PLAYBACK', color:'var(--cue-playback)', bg:'color-mix(in srgb,var(--cue-playback) 14%,transparent)', symbol:'department.playback' },
+  gfx:      { label:'GFX',      color:'var(--cue-gfx)',      bg:'color-mix(in srgb,var(--cue-gfx) 14%,transparent)',      symbol:'department.graphics' },
+  script:   { label:'SCRIPT',   color:'var(--cue-script)',   bg:'color-mix(in srgb,var(--cue-script) 14%,transparent)',   symbol:'department.script' },
 };
 
 // Column ordering — persisted per user in localStorage
 const COL_META = {
-  video:    { label:'Video',    color:'var(--video)',  symbol:'department.video' },
-  audio:    { label:'Audio',    color:'var(--green)',  symbol:'department.audio' },
-  playback: { label:'Playback', color:'var(--red)',    symbol:'department.playback' },
-  gfx:      { label:'GFX',      color:'var(--yellow)', symbol:'department.graphics' },
-  lighting: { label:'Lighting', color:'var(--purple)', symbol:'department.lighting' },
-  script:   { label:'Script',   color:'var(--cyan)',   symbol:'department.script' },
+  video:    { label:'Video',    color:'var(--cue-video)',    symbol:'department.video' },
+  audio:    { label:'Audio',    color:'var(--cue-audio)',    symbol:'department.audio' },
+  playback: { label:'Playback', color:'var(--cue-playback)', symbol:'department.playback' },
+  gfx:      { label:'GFX',      color:'var(--cue-gfx)',      symbol:'department.graphics' },
+  lighting: { label:'Lighting', color:'var(--cue-lighting)', symbol:'department.lighting' },
+  script:   { label:'Script',   color:'var(--cue-script)',   symbol:'department.script' },
 };
 const COL_DEFAULTS = ['video','audio','playback','gfx','lighting','script'];
 let colOrder = (() => {
@@ -336,7 +339,107 @@ function _callerStateInputs() {
     browsingSelf, followTarget,
     isDemo: session.isDemo, isExpert: session.isExpert, code: session.code,
     local: session.local, role: session.role, hasAdminSession: adminSession != null,
+    hasControlGrant: sessionControlGrantHeldByMe(),
   };
+}
+
+// ── Rundown-operator grant (pre-show fix plan, item 1) ──────────────────────
+// The session doc's controlGrant field hands the show caller's wheel to any
+// signed-in student, mid-show, and takes it back: { username, displayName,
+// grantedBy, ts } or null. Identity is the PROFILE USERNAME, never the
+// display name (names are spoofable presence text) and never a role flip
+// (roles carry instructor-wide powers this grant must not). Enforcement is
+// client-honored, the same level as the instructor block it extends.
+let sessionControlGrant = null;
+let _heldControlGrantBefore = false;
+
+function sessionControlGrantHeldByMe() {
+  if (!sessionControlGrant?.username) return false;
+  const me = window.CueolaIdentity?.profile?.()?.username;
+  return !!me && String(me).toLowerCase() === String(sessionControlGrant.username).toLowerCase();
+}
+
+function adoptControlGrant(grant) {
+  const next = grant && grant.username ? grant : null;
+  if (JSON.stringify(next) === JSON.stringify(sessionControlGrant)) return;
+  sessionControlGrant = next;
+  const held = sessionControlGrantHeldByMe();
+  if (held && !_heldControlGrantBefore) {
+    toast('You have rundown control. GO advances the show for everyone.');
+    logShow('cue', `Rundown control granted to ${sessionControlGrant.displayName || sessionControlGrant.username}`);
+  } else if (!held && _heldControlGrantBefore) {
+    // Say where it actually went: a regrant moves it to another student, a
+    // revoke returns it to the instructors.
+    toast(sessionControlGrant
+      ? `Rundown control moved to ${sessionControlGrant.displayName || sessionControlGrant.username}.`
+      : 'Rundown control went back to the instructor.');
+  }
+  _heldControlGrantBefore = held;
+  updateLiveGoControl();
+  renderFollowChips();
+  notifyControlSurfaceState();
+}
+
+function grantRundownControl(username, displayName) {
+  if (!adminSession) { toast('Only a signed-in admin can hand out rundown control.'); return; }
+  if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
+  const grant = {
+    username: String(username || '').toLowerCase(),
+    displayName: String(displayName || username || ''),
+    grantedBy: adminSession.username || adminSession.name || 'admin',
+    ts: Date.now(),
+  };
+  if (!grant.username) return;
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: grant })
+    .then(() => toast(`${grant.displayName} now has rundown control.`))
+    .catch(err => toast(firebaseConnectionLabel(err, 'Handing control failed')));
+  hideOverlay('lsGrantOv');
+}
+
+function revokeRundownControl() {
+  if (!adminSession) return;
+  if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: null })
+    .then(() => toast('Rundown control is back with the instructors.'))
+    .catch(err => toast(firebaseConnectionLabel(err, 'Taking control back failed')));
+  hideOverlay('lsGrantOv');
+}
+
+// The picker: active people with signed-in profiles, roster-position tagged.
+// Anyone assigned a directing position sorts first (positions carry sensible
+// defaults; the instructor always chooses).
+function openControlGrantPicker() {
+  if (!adminSession) return;
+  const body = document.getElementById('lsGrantBody');
+  if (!body) return;
+  const meKey = participantNameKey(session.userName);
+  const roster = getRoleAssignments();
+  const positionFor = name => roster.find(r => sameParticipantName(r.person, name))?.position || '';
+  const suggested = pos => /director|technical director|\btd\b/i.test(pos);
+  const people = activePresenceEntries(currentPresence)
+    .map(([, p]) => p)
+    .filter(p => p.username && participantNameKey(p.name) !== meKey);
+  const seen = new Set();
+  const rows = people.filter(p => {
+    const key = String(p.username).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(p => ({ ...p, position: positionFor(p.name) }))
+    .sort((a, b) => Number(suggested(b.position)) - Number(suggested(a.position)));
+  const holder = sessionControlGrant;
+  body.innerHTML = `
+    ${holder ? `<div class="ls-grant-current">${sfIcon('marker.ready')} <b>${esc(holder.displayName || holder.username)}</b> has control
+      <button class="admin-add-btn" onclick="revokeRundownControl()">Take back</button></div>` : ''}
+    ${rows.length ? rows.map(p => `
+      <button class="ls-grant-row" onclick="grantRundownControl('${esc(String(p.username).toLowerCase())}', ${esc(JSON.stringify(String(p.name || p.username)))})">
+        <span class="ls-grant-name">${esc(p.name || p.username)}</span>
+        ${p.position ? `<span class="ls-grant-pos">${esc(p.position)}${suggested(p.position) ? ' · suggested' : ''}</span>` : ''}
+        <span class="ls-grant-user">@${esc(p.username)}</span>
+      </button>`).join('')
+      : '<div class="u-note">No one with a signed-in profile is active in the session right now.</div>'}
+  `;
+  showOverlay('lsGrantOv');
 }
 
 function isShowCaller() {
@@ -3548,27 +3651,41 @@ function paperworkIdForLabel(label='') {
 }
 
 function plandaBearAssignmentCatalog(data=basePreProData()) {
-  const sheets = getCallSheets(data);
+  // The per-person picker honors the show's paperwork config (D6): items
+  // turned off for this show code are not offered, and Stage Plot is
+  // assignable like any other deliverable. Already-saved selections survive a
+  // later disable through the saved-labels append below.
+  const sheets = paperworkTypeEnabled('call-sheet') ? getCallSheets(data) : [];
   const catalog = sheets.map((sheet, i) => ({
     id: `paperwork_${String(sheet.id || `call_sheet_${i + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160),
     label: `Call Sheet: ${callSheetDisplayName(sheet, i)}`,
   }));
-  catalog.push(
-    { id:'paperwork_production_schedule', label:'Production Schedule' },
-    { id:'paperwork_safety_plan', label:'Safety Plan' },
-    { id:'paperwork_rundown', label:'Rundown' },
+  const fixed = [
+    { id:'paperwork_production_schedule', label:'Production Schedule', typeId:'production-scheduler' },
+    { id:'paperwork_safety_plan', label:'Safety Plan', typeId:'safety-plan' },
+    { id:'paperwork_rundown', label:'Rundown', typeId:'rundown' },
     { id:'paperwork_flowmingo_script', label:'Flowmingo Script' },
-    { id:'paperwork_video_patch', label:'Video Patch Sheet' },
-    { id:'paperwork_audio_comms_patch', label:'Audio & Comms Patch Sheet' },
+    { id:'paperwork_video_patch', label:'Video Patch Sheet', typeId:'video-patch' },
+    { id:'paperwork_audio_comms_patch', label:'Audio & Comms Patch Sheet', typeId:'audio-comms-patch' },
+    { id:'paperwork_stage_plot', label:'Stage Plot', typeId:'stage-plot' },
     { id:'paperwork_tech_checklist', label:'Tech Checklist' },
-  );
+  ];
+  fixed.forEach(item => {
+    if (item.typeId && !paperworkTypeEnabled(item.typeId)) return;
+    catalog.push({ id:item.id, label:item.label });
+  });
   if (Array.isArray(data.roleAssignments)) {
     data.roleAssignments.forEach(row => {
       const saved = row?.paperwork || row?.paperworkItems;
-      if (Array.isArray(saved)) saved.forEach(item => {
+      const savedIds = Array.isArray(row?.paperworkIds) ? row.paperworkIds : [];
+      if (Array.isArray(saved)) saved.forEach((item, i) => {
         const label = String(item || '').trim();
         if (label && !catalog.some(opt => opt.label.toLowerCase() === label.toLowerCase())) {
-          catalog.push({ id:paperworkIdForLabel(label), label });
+          // Carry the row's STORED paired id: regenerating one from the label
+          // hashes differently from the catalog's ids, which unchecked saved
+          // selections whenever their type was toggled off (the append is the
+          // only thing keeping them alive then).
+          catalog.push({ id: savedIds[i] || paperworkIdForLabel(label), label });
         }
       });
     });
@@ -3749,6 +3866,18 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
   return `<div class="admin-assignment-list">
     ${normalizedRows.map((row,i)=>{
       const selectedPaperwork = new Set(row.paperworkIds);
+      const selectedLabels = new Set((row.paperwork || []).map(l => String(l || '').trim().toLowerCase()).filter(Boolean));
+      // An existing selection must never silently change (same rule as the
+      // position dropdown): union the catalog with this row's OWN pairs so a
+      // selection whose type was disabled mid-draft, or whose id predates the
+      // canonical ids, still renders as a checked pill and round-trips.
+      const rowOptions = [...paperworkOptions];
+      (row.paperwork || []).forEach((label, pi) => {
+        const clean = String(label || '').trim();
+        if (!clean) return;
+        if (rowOptions.some(opt => opt.label.toLowerCase() === clean.toLowerCase())) return;
+        rowOptions.push({ id: row.paperworkIds?.[pi] || paperworkIdForLabel(clean), label: clean });
+      });
       const profile = assignmentProfileById(row.profileId);
       const profileMeta = row.profileId
         ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
@@ -3773,7 +3902,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
         <div class="field">
           <label class="admin-add-label">Planda Bear Paperwork</label>
           <div class="admin-paperwork-checks">
-            ${paperworkOptions.map(option => `<label class="admin-paperwork-pill"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) ? 'checked' : ''}>${esc(option.label)}</label>`).join('')}
+            ${rowOptions.map(option => `<label class="admin-paperwork-pill"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''}>${esc(option.label)}</label>`).join('')}
           </div>
         </div>
         <div class="admin-assignment-verify"><span>${esc(updated)}</span><span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? `<span>By ${esc(row.assignedByLabel)}</span>` : ''}</div>
@@ -3815,6 +3944,7 @@ function rerenderRoleAssignments(rows, opts={}) {
   // cursor (an open select would snap shut); the next repaint catches up.
   if (opts.guardFocus && wrap.contains(document.activeElement)) return;
   wrap.innerHTML = renderRoleAssignmentRows(rows.length ? rows : defaultRoleAssignments());
+  refreshPbRosterStrip();
 }
 
 function addRoleAssignmentRow() {
@@ -3822,6 +3952,69 @@ function addRoleAssignmentRow() {
   rows.push({ profileId:'', person:'', positionId:'', position:'', paperworkIds:[], paperwork:[] });
   rerenderRoleAssignments(rows);
   markRoleAssignmentsUnsaved();
+}
+
+// One-tap assign from the session roster: appends a draft row with the
+// person's profile preselected, so the instructor only picks the position.
+function addRoleAssignmentRowForProfile(profileId) {
+  profileId = String(profileId || '');
+  if (!profileId) return;
+  const model = assignmentModel();
+  const profile = assignmentProfiles.find(p => (model?.profileIdFor?.(p) || p.profileId || '') === profileId);
+  const rows = getRoleAssignmentsFromAdminDOM(true);
+  rows.push({
+    profileId,
+    person: profile?.fullName || profile?.username || '',
+    positionId:'', position:'', paperworkIds:[], paperwork:[],
+  });
+  rerenderRoleAssignments(rows);
+  markRoleAssignmentsUnsaved();
+  // Land the cursor on the new row's position picker: the one choice left.
+  const rowEls = document.querySelectorAll('#adminRoleAssignments [data-role-assignment-row]');
+  rowEls[rowEls.length - 1]?.querySelector('[data-role-field="positionId"]')?.focus();
+}
+
+// The join the editor was missing: who is IN this session (participants +
+// live presence) against who has an assignment row. Joined-but-unassigned
+// people with a saved profile get a one-tap assign chip; people without a
+// profile are named so the instructor knows to have them create one (the
+// save validator requires a profile).
+function pbAssignmentRosterStripHTML(draftRows) {
+  const names = Array.isArray(sessionParticipantNames) ? sessionParticipantNames : [];
+  if (!names.length) return '';
+  const model = assignmentModel();
+  const assignedKeys = new Set();
+  (draftRows || getRoleAssignments()).forEach(row => {
+    const key = String(row?.person || '').trim().toLowerCase();
+    if (key) assignedKeys.add(key);
+    const pid = String(row?.profileId || '');
+    if (pid) assignedKeys.add(pid);
+  });
+  const chips = names.map(name => {
+    const key = name.trim().toLowerCase();
+    const matches = assignmentProfiles.filter(p =>
+      String(p.fullName || '').trim().toLowerCase() === key
+      || String(p.username || '').trim().toLowerCase() === key);
+    const profileId = matches.length === 1 ? (model?.profileIdFor?.(matches[0]) || matches[0].profileId || '') : '';
+    const assigned = assignedKeys.has(key) || (profileId && assignedKeys.has(profileId));
+    if (assigned) return `<span class="pb-roster-chip pb-roster-assigned" data-tip="Has an assignment row">${sfIcon('marker.ready')} ${esc(name)}</span>`;
+    if (profileId) return `<button class="pb-roster-chip pb-roster-add" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Add an assignment row for ${esc(name)}">+ ${esc(name)}</button>`;
+    return `<span class="pb-roster-chip pb-roster-noprofile" data-tip="${matches.length > 1 ? 'Several profiles match this name: pick them in a row manually' : 'No saved profile yet: they create one at the front door'}">${esc(name)}</span>`;
+  }).join('');
+  return `<div class="admin-src-row u-mb10" id="pbRosterStrip">
+    <span class="admin-src-label">In this session</span>
+    <div class="admin-src-chips">${chips}</div>
+  </div>`;
+}
+
+// Keep the strip honest as the draft changes: a chip that stayed '+ Name'
+// after its own one-tap add invited a second tap and a duplicate row.
+function refreshPbRosterStrip() {
+  const strip = document.getElementById('pbRosterStrip');
+  if (!strip) return;
+  const html = pbAssignmentRosterStripHTML(getRoleAssignmentsFromAdminDOM(true));
+  if (html) strip.outerHTML = html;
+  else strip.remove();
 }
 
 function removeRoleAssignmentRow(index) {
@@ -5495,6 +5688,13 @@ function setupFirestore() {
         try { mergePreProFromCloud(d.prePro); } catch {}
       }
       pbEnsureGroupSubscription();   // groups config can appear/lock mid-session
+      // Paperwork config toggled elsewhere (dashboard or another instructor's
+      // hub) re-renders an open hub live instead of on the next open.
+      const pwFingerprint = JSON.stringify(d.prePro?.paperworkEnabled || {});
+      if (pwFingerprint !== _lastPaperworkConfigFingerprint) {
+        _lastPaperworkConfigFingerprint = pwFingerprint;
+        pbRefreshPaperworkConfigUI();
+      }
       onAssignmentRevisionSnapshot(d);
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
       // The shared show cue is authoritative independently of this device's
@@ -5516,16 +5716,28 @@ function setupFirestore() {
       }
       // Following: mirror the position of whoever I follow (their broadcast
       // presence.idx). Browsing self keeps my own position. A student who hasn't
-      // chosen mirrors the show caller (first instructor).
+      // chosen mirrors the show caller (first instructor). The grant adopts
+      // FIRST so the very snapshot that moves control also re-routes followers.
+      adoptControlGrant(d.controlGrant);
       {
-        const followedIdx = resolveFollowedIdx(d.presence, { followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName });
-        const targetIdx = followedIdx != null ? followedIdx : (session.role === 'student' && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
+        const followedIdx = resolveFollowedIdx(d.presence, {
+          followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName,
+          myUsername: String(window.CueolaIdentity?.profile?.()?.username || '').toLowerCase(),
+          grantUsername: sessionControlGrant?.username ? String(sessionControlGrant.username).toLowerCase() : '',
+        });
+        const targetIdx = followedIdx != null ? followedIdx
+          : (session.role === 'student' && !sessionControlGrantHeldByMe() && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
         if (targetIdx != null && targetIdx !== lsIdx) {
           setLiveSelectedCue(targetIdx, { reason:'followed-cue' });
           if (document.getElementById('liveshow').classList.contains('on')) renderLive();
         }
       }
       _adoptDocPrompterSession(d);
+      // Remember the doc's control queue so this window's next command write
+      // can carry OTHER writers' recent entries forward instead of evicting
+      // them (two operator surfaces used to clobber each other's commands out
+      // of the queue; a lagging talent then lost the survivor's seek).
+      if (d.prompter && Array.isArray(d.prompter.controlQueue)) _lastDocPrompterControlQueue = d.prompter.controlQueue;
       if (d.prompter && typeof d.prompter.text === 'string') {
         const adopted = adoptPrompterSnapshot(d.prompter);
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
@@ -5537,6 +5749,21 @@ function setupFirestore() {
         }
       }
       if (isFlowmingoTalentActive() && d.prompter) {
+        // Live-row context for the hold-at-next-cue behavior, independent of
+        // whether any seek command reached this talent. Adopt only OBSERVED
+        // CHANGES: every session doc carries activeIdx from creation (0), and
+        // an idle doc must not lock a rehearsal read-through to row 1. This
+        // also stops an unchanged activeIdx from dragging the live row back
+        // below a Cue Next target (which would self-cancel the cue by
+        // auto-holding at the row the talent was just sent to).
+        const liveIdxDoc = Number(d.activeIdx);
+        if (Number.isFinite(liveIdxDoc)) {
+          if (ptDocLiveIdxSeen === null) ptDocLiveIdxSeen = liveIdxDoc;
+          else if (liveIdxDoc !== ptDocLiveIdxSeen) {
+            ptDocLiveIdxSeen = liveIdxDoc;
+            ptNoteLiveRow(liveIdxDoc + 1);
+          }
+        }
         // controlQueue first (every unseen command, in order); legacy single
         // slot when the writer is an old shell.
         const queued = unseenPrompterQueueControls(d.prompter.controlQueue);
@@ -6136,15 +6363,19 @@ window.cueolaSurfaceBridge = {
     return fireOutrangutanCommand(action, '');
   },
   goLive: () => { try { goLive(); } catch (e) {} },
-  showClockToggle: () => { try { toggleShowClock(); } catch (e) {} },
-  // Explicit clock verbs for the deck's Start/Pause/Resume keys. All ride the
-  // existing guarded toggle so the show-caller/broadcast rules stay intact:
-  // a verb that matches the current state is a quiet no-op, never a double-fire.
+  showClockToggle: () => { try { window.cueolaSurfaceBridge.showClock('toggle'); } catch (e) {} },
+  // Explicit clock verbs for the deck's Start/Pause/Resume keys. They ride
+  // the control bus: the local caller surface executes directly (same guarded
+  // toggle as before, quiet no-op when the verb matches the state), and a
+  // non-driving host tab publishes the verb for the claim-holding caller
+  // machine instead of dead-ending with a toast. D11.5, no silent refusals:
+  // when the bus can neither run NOR publish (solo or demo with the Live
+  // screen closed), say so instead of a dead key.
   showClock: (verb) => {
     try {
-      if (verb === 'start' || verb === 'resume') { if (!liveClockRunning) toggleShowClock(); }
-      else if (verb === 'pause') { if (liveClockRunning) toggleShowClock(); }
-      else toggleShowClock();
+      const action = verb === 'start' || verb === 'resume' ? verb : verb === 'pause' ? 'pause' : 'toggle';
+      const ok = window.cueolaControlBus('clock', action, 'deck');
+      if (ok === false) toast('Open the Live screen to drive the show clock.');
     } catch (e) {}
   },
   liveSelect: (index, take) => { try { take ? setOperatorLiveCue(index, 'deck') : setLiveSelectedCue(index, { source: 'deck' }); } catch (e) {} },
@@ -6649,13 +6880,25 @@ function renderRundown() {
     return;
   }
 
-  // Pre-compute child counts per segment
+  // Pre-compute child counts per segment, plus where each block ENDS so the
+  // contextual add-row can sit at the end of every block (pre-show fix plan:
+  // new items land inside their segment, not at the bottom of the rundown).
   const segChildCounts = {};
-  let _csi = null;
-  beats.forEach(b => {
-    if (b.style === 'segment') { _csi = b.id; segChildCounts[b.id] = 0; }
-    else if (_csi !== null) segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
+  const segEndAt = {};   // beat index -> { segId, label } for the block ending at that row
+  let _csi = null, _csLabel = '', _csEnd = -1;
+  beats.forEach((b, i) => {
+    if (b.style === 'segment') {
+      if (_csi !== null) segEndAt[_csEnd] = { segId:_csi, label:_csLabel };
+      else if (i > 0) segEndAt[i - 1] = { segId:null, label:'' };   // leading unsegmented block
+      _csi = b.id; _csLabel = b.info || 'Segment'; _csEnd = i;
+      segChildCounts[b.id] = 0;
+    } else if (_csi !== null) {
+      segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
+      _csEnd = i;
+    }
   });
+  if (_csi !== null) segEndAt[_csEnd] = { segId:_csi, label:_csLabel };
+  const hasSegments = _csi !== null;
 
   let offsetSecs = 0;
   let activeSegCollapsed = false;
@@ -6686,10 +6929,14 @@ function renderRundown() {
           ${editActions}
         </td>
       </tr>`;
+      html += segmentAddRowHTML(i, segEndAt, colOrder);
       return;
     }
 
-    if (activeSegCollapsed) return; // hide child rows; offsetSecs already incremented
+    if (activeSegCollapsed) {
+      html += segmentAddRowHTML(i, segEndAt, colOrder);   // block end keeps its add (expand-then-add)
+      return; // hide child rows; offsetSecs already incremented
+    }
 
     cueNum++;
     const editActions = editMode ? `
@@ -6717,13 +6964,38 @@ function renderRundown() {
       </td>
       ${colOrder.map(type=>`<td class="cd-cue-cell">${getCueCell(b,type)}</td>`).join('')}
     </tr>`;
+    html += segmentAddRowHTML(i, segEndAt, colOrder);
   });
 
   tbody.innerHTML = html;
-  renderAddRowBtn(tbody);
+  // With segments, every block already ends in its own contextual add (the
+  // last block's add doubles as add-at-end, and the wizard's segment card
+  // still creates new segments there). Without segments: the classic single
+  // button at the bottom.
+  if (!hasSegments) renderAddRowBtn(tbody);
   initDrag();
   updateBotBar();
   updateNowNext();
+}
+
+// The contextual add-row at the end of a segment block: inserts INSIDE the
+// block (addRowAt after its last row) instead of appending at the rundown
+// bottom and needing a drag up. A collapsed block keeps its button (expand
+// first, then add) so a fully collapsed rundown never loses every add entry.
+function segmentAddRowHTML(i, segEndAt, colOrder) {
+  const end = segEndAt[i];
+  if (!end) return '';
+  const collapsed = end.segId !== null && collapsedSegments.has(end.segId);
+  const label = end.segId === null ? '+ Add Row' : `+ Add Row · ${esc(end.label)}`;
+  const click = collapsed ? `segAddIntoCollapsed(${end.segId},${i})` : `addRowAt(${i},'after')`;
+  return `<tr class="add-row-tr seg-add-tr"><td colspan="${colOrder.length + 4}"><button class="add-row-btn-el seg-add-btn" onclick="${click}">${label}</button></td></tr>`;
+}
+
+// Adding into a collapsed segment expands it first so the inserted row is
+// visible where it landed, then opens the wizard at the block's end.
+function segAddIntoCollapsed(segId, i) {
+  if (collapsedSegments.has(segId)) toggleSegmentCollapse(segId);
+  addRowAt(i, 'after');
 }
 
 function renderAddRowBtn(tbody) {
@@ -8370,11 +8642,18 @@ function outrangutanCueFields(type, d) {
 // Core writer: push a fire command to the session doc for Outrangutan to consume.
 // P4 fast path: when Outrangutan runs in THIS tab on the same session (the
 // one-operator setup), fire it directly — <30 ms trigger-to-sound, no network.
-function fireOutrangutanCommand(action, targetId) {
+// opts.armCueId piggybacks a next-cue standby on the SAME command write:
+// outrangutan.command is a single slot, so a separate arm write racing the
+// fire could swallow the fire before the playout machine's snapshot saw it.
+function fireOutrangutanCommand(action, targetId, opts={}) {
+  cancelPendingArm();   // a real command owns the slot; a stale arm must not overwrite it
   const local = window.Outrangutan && window.Outrangutan._local;
   if (local && session.code && local.session() === session.code) {
     if (action === 'pad' && local.firePad(targetId)) return true;
-    if (action === 'cue' && local.fireCue(targetId)) return true;
+    if (action === 'cue' && local.fireCue(targetId)) {
+      if (opts.armCueId) local.armCue?.(opts.armCueId);
+      return true;
+    }
   }
   if (!(window._firebaseReady && session.code && !session.isDemo)) { toast('Outrangutan needs a live (non-demo) session.'); return false; }
   _outCmdSeq += 1;
@@ -8383,6 +8662,7 @@ function fireOutrangutanCommand(action, targetId) {
     ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
     action: action || 'cue', cueId: action === 'pad' ? '' : (targetId || ''), padId: action === 'pad' ? (targetId || '') : '',
   };
+  if (opts.armCueId) command.armCueId = String(opts.armCueId);
   logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
@@ -8623,7 +8903,17 @@ function takePlayoutCall(source='take') {
   cancelPlayoutCallTimer();
   const call = _rtrtCall;
   _rtrtCall = null;
-  if (call.cueId) fireOutrangutanCommand('cue', call.cueId);
+  if (call.cueId) {
+    // The next standby rides the fire itself; see maybeArmNextPlayout. The
+    // fire invalidates whatever standby we knew about, so the memo resets
+    // first and is stamped only when the command actually dispatched: a
+    // BACK to re-roll the last clip must be able to re-arm it.
+    const armCueId = nextAutoPlayoutCueIdAfter(call.rowIdx);
+    _lastArmedNextCueId = '';
+    if (fireOutrangutanCommand('cue', call.cueId, armCueId ? { armCueId } : {}) && armCueId) {
+      _lastArmedNextCueId = armCueId;
+    }
+  }
   ['playback', 'audio'].forEach(t => {
     const c = call.beat?.cues?.[t];
     if (c && c.outPadAuto && c.outPadId) fireOutrangutanCommand('pad', c.outPadId);
@@ -8686,6 +8976,19 @@ function runControlBusAction(target, action, source='bus') {
     if (action === 'cue_current') { cuePrompterToLiveRow(); return true; }
     return false;
   }
+  if (target === 'clock') {
+    // Deck clock keys on a non-driving host tab used to dead-end with a toast
+    // and nothing happened anywhere; now the verb rides the bus and the
+    // claim-holding caller surface executes it (same exactly-once protocol as
+    // rundown NEXT/TAKE). A local refusal (no claim) returns false QUIETLY so
+    // cueolaControlBus publishes the verb instead; verbs already satisfied by
+    // the current state report success so no pointless bus write happens.
+    if (!isShowCaller()) return false;
+    if (action === 'start' || action === 'resume') return liveClockRunning ? true : toggleShowClock({ quietRefusal:true });
+    if (action === 'pause') return liveClockRunning ? toggleShowClock({ quietRefusal:true }) : true;
+    if (action === 'toggle') return toggleShowClock({ quietRefusal:true });
+    return false;
+  }
   return false;
 }
 // Cross-machine writer: when this tab cannot execute (Live screen closed here,
@@ -8729,7 +9032,10 @@ function holdsBusExecutorClaim() {
 }
 function _stampBusExecutorClaim() {
   if (_busClaimExempt()) return;
-  const claim = { clientId: CLIENT_ID, ts: Date.now() };
+  // The claim carries whether its holder is a real admin surface: an admin
+  // returning to Live outranks a grant-holder's live claim (see the tick),
+  // keeping the "you keep full control alongside them" promise honest.
+  const claim = { clientId: CLIENT_ID, ts: Date.now(), admin: adminSession != null };
   _busExecutorClaim = claim;   // optimistic; the doc echo confirms or corrects it
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).catch(() => {});
 }
@@ -8737,7 +9043,12 @@ function _busExecutorHeartbeatTick() {
   if (_busClaimExempt()) return;
   if (!document.getElementById('liveshow')?.classList.contains('on')) return;
   if (!isShowCaller()) return;
-  if (_busClaimIsMine() || _busClaimIsStale()) _stampBusExecutorClaim();
+  // Admin surfaces may also outrank a live claim held by a non-admin (a
+  // granted student who claimed while the instructor was off the Live
+  // screen): without this, the returning instructor's own clock buttons
+  // stayed locked behind the student's heartbeat until a revoke.
+  const adminOutranks = adminSession != null && _busExecutorClaim && _busExecutorClaim.admin !== true;
+  if (_busClaimIsMine() || _busClaimIsStale() || adminOutranks) _stampBusExecutorClaim();
 }
 function _ensureBusExecutorHeartbeat() {
   _busExecutorHeartbeatTick();
@@ -8788,6 +9099,75 @@ function fireOutrangutanAutoForBeat(beat) {
     if (c && c.outPadAuto && c.outPadId) fireOutrangutanCommand('pad', c.outPadId);
   });
   return true;
+}
+
+// ── Arm the next playout (pre-show fix plan, item 2) ────────────────────────
+// Advancing the rundown puts the NEXT auto-linked clip on standby in
+// Outrangutan (selected + preloaded, never fired), in RUNDOWN order — the
+// playout's own internal next-cue staging can diverge from the running order.
+// On a TAKE the standby rides the same command write (armCueId, see
+// fireOutrangutanCommand); on advances that fire nothing it goes as its own
+// 'arm' command, delayed so it can never overwrite an unconsumed fire in the
+// single outrangutan.command slot.
+function nextAutoPlayoutCueIdAfter(idx) {
+  for (let i = (Number(idx) || 0) + 1; i < beats.length; i++) {
+    const b = beats[i];
+    if (!b || b.style === 'segment' || liveCueIsDisabled(i)) continue;
+    const d = b.cues?.playback;
+    if (d && d.outAuto && d.outCueId) return d.outCueId;
+  }
+  return '';
+}
+
+let _lastArmedNextCueId = '';    // last standby actually delivered ('' = none / unknown)
+let _pendingArmTimer = null;
+let _pendingArmCueId = null;     // cueId awaiting the delayed doc write (null = no pending arm)
+
+// Any explicit command write supersedes a pending standby: a stale delayed
+// arm must never overwrite an unconsumed fire, stop, or pad in the single
+// outrangutan.command slot. Callers re-arm on the next advance.
+function cancelPendingArm() {
+  clearTimeout(_pendingArmTimer);
+  _pendingArmTimer = null;
+  _pendingArmCueId = null;
+}
+
+function maybeArmNextPlayout(fromIdx) {
+  // '' is meaningful: nothing auto-linked downstream, so CLEAR the standby
+  // (a stale one would keep hijacking the playout op's local GO chain).
+  const cueId = nextAutoPlayoutCueIdAfter(fromIdx);
+  const local = window.Outrangutan && window.Outrangutan._local;
+  if (local && session.code && local.session() === session.code && typeof local.armCue === 'function') {
+    cancelPendingArm();
+    if (cueId !== _lastArmedNextCueId) {
+      local.armCue(cueId);
+      _lastArmedNextCueId = cueId;
+    }
+    return;
+  }
+  if (!(window._firebaseReady && session.code && !session.isDemo)) return;   // quiet: arming is best-effort
+  if (cueId === _lastArmedNextCueId && !_pendingArmTimer) return;            // already standing by
+  cancelPendingArm();
+  _pendingArmCueId = cueId;
+  // Delayed AND re-deferred on every call, so the write always lands 1.2s
+  // after the latest activity; cancelPendingArm() in fireOutrangutanCommand
+  // kills it whenever a real command needs the slot first.
+  _pendingArmTimer = setTimeout(() => {
+    const armId = _pendingArmCueId;
+    _pendingArmTimer = null;
+    _pendingArmCueId = null;
+    if (armId === null) return;
+    _outCmdSeq += 1;
+    const command = {
+      commandId: `out_${CLIENT_ID}_${Date.now().toString(36)}_${_outCmdSeq}`,
+      ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
+      action: 'arm', cueId: armId, padId: '',
+    };
+    try {
+      window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command }).catch(() => {});
+    } catch {}
+    _lastArmedNextCueId = armId;
+  }, 1200);
 }
 
 // Rundown playback-cell badge: linked cue name/dur + live status (auto-populate).
@@ -9325,7 +9705,10 @@ function isAdminShowCaller() {
 }
 
 function isStandardShowCaller() {
-  return isShowCaller() && session.role === 'instructor' && !adminSession;
+  // A granted student is a standard caller too: sequential advances, jumps
+  // only through the confirmed "Cue here" ask - the same safety rail
+  // instructors get, never the admin-anywhere powers.
+  return isShowCaller() && !adminSession && (session.role === 'instructor' || sessionControlGrantHeldByMe());
 }
 
 let liveExitTransaction = null;
@@ -9598,11 +9981,14 @@ function canDriveShowClock() {
   return isFollowingSelf() && holdsBusExecutorClaim();
 }
 
-function toggleShowClock() {
-  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+function toggleShowClock(opts={}) {
+  // Returns true only when the clock actually flipped: the control bus uses
+  // the refusal (quietly) to route the verb to the claim-holding caller
+  // machine instead of dead-ending here with a toast.
+  if (!liveCommandDispatchAllowed({ notify: !opts.quietRefusal })) return false;
   if (!canDriveShowClock()) {
-    toast('The show caller controls the clock for everyone.');
-    return;
+    if (!opts.quietRefusal) toast('The show caller controls the clock for everyone.');
+    return false;
   }
   if (liveClockRunning) {
     stopTimer(false);
@@ -9614,6 +10000,7 @@ function toggleShowClock() {
   updateLiveClockButton();
   updateLiveOverview();
   broadcastShowClock();  // start/pause the clock for everyone in the session
+  return true;
 }
 
 // "Start Show" pressed before the clock has ever run: if the session is parked
@@ -10292,9 +10679,12 @@ function updateLiveGoControl(projectedState=null) {
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
   const studentLocked = !isShowCaller() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
+  const holderName = sessionControlGrant ? (sessionControlGrant.displayName || sessionControlGrant.username) : '';
   button.setAttribute('data-tip', dispatchable ? `GO to ${text}`
     : failed ? `Recover failed row ${nextIndex + 1} before GO`
-    : studentLocked ? 'Joined as a student: only the show caller (instructor or admin) advances the rundown'
+    : studentLocked ? (holderName
+      ? `${holderName} has rundown control. The instructor can move it from the caller badge.`
+      : 'Joined as a student: the show caller advances the rundown. An instructor can grant you control from the caller badge.')
     : nextBeat ? 'Follow the active show caller to use GO'
     : 'No upcoming cue');
   button.removeAttribute('title');
@@ -10636,7 +11026,8 @@ function jumpToLsCue(i, opts = {}) {
     return false;
   }
   renderLive();
-  sendToPrompter(false);   // D11.2: push copy, never move the prompter
+  updatePrompterOnAdvance(null, beats[i]);   // push copy, then glide to the row
+  maybeArmNextPlayout(i);
   syncLiveIdx();
   return liveActiveCueIndex() === i;
 }
@@ -10700,6 +11091,7 @@ function lsNext() {
     setOperatorLiveCue(ni, 'advance-cue');
     updatePrompterOnAdvance(prev, beats[lsIdx]);
     if (fireOutrangutanAutoForBeat(beats[lsIdx]) === false) throw new Error('Automatic playback dispatch was rejected');
+    if (!_rtrtCall) maybeArmNextPlayout(lsIdx);   // an armed call arms on its TAKE instead
     logShow('cue', 'Advance → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
     syncLiveIdx();
@@ -10725,7 +11117,8 @@ function lsPrev() {
     catch (error) { containError('Previous Live cue', error); return false; }
     logShow('cue', 'Back → row ' + (lsIdx + 1) + rowLogLabel(beats[lsIdx]));
     renderLive();
-    sendToPrompter(false);   // D11.2: push copy, never move the prompter
+    updatePrompterOnAdvance(null, beats[lsIdx]);   // push copy, then glide to the row
+    maybeArmNextPlayout(lsIdx);
     syncLiveIdx();
     return true;
   }
@@ -10747,6 +11140,15 @@ function resolveFollowedIdx(presence, opts) {
     if (t && Number.isFinite(t.idx)) return t.idx;
   }
   if (opts.role === 'student') {
+    // With a control grant active, the granted operator IS the show caller:
+    // undecided students mirror them, not the first instructor. The holder
+    // never mirrors THEMSELVES: their own stale presence echo must not yank
+    // their view back mid-navigation.
+    if (opts.grantUsername && opts.grantUsername === opts.myUsername) return null;
+    if (opts.grantUsername) {
+      const holder = people.find(([, p]) => p?.username && String(p.username).toLowerCase() === opts.grantUsername && Number.isFinite(p.idx))?.[1];
+      if (holder) return holder.idx;
+    }
     const caller = people.find(([, p]) => p && p.role === 'instructor' && Number.isFinite(p.idx))?.[1];
     if (caller) return caller.idx;
   }
@@ -10777,6 +11179,11 @@ function effectiveFollowedName(presence) {
   if (followTargetId && presence?.[followTargetId]?.name) return presence[followTargetId].name;
   if (followTarget) return followTarget;
   if (session.role === 'student') {
+    if (sessionControlGrant?.username) {
+      const key = String(sessionControlGrant.username).toLowerCase();
+      const holder = activePresenceEntries(presence).find(([, p]) => p?.username && String(p.username).toLowerCase() === key)?.[1];
+      if (holder) return holder.name;
+    }
     const caller = activePresenceEntries(presence).find(([, p]) => p?.role === 'instructor')?.[1];
     if (caller) return caller.name;
   }
@@ -10792,15 +11199,41 @@ function renderShowCallerBadge() {
   if (isShowCaller()) {
     state = 'caller';
     text = 'CALLER · You';
-    title = `${session.userName || 'This device'} is calling the show${adminSession ? ' (admin)' : ''}`;
+    const how = adminSession ? ' (admin)' : sessionControlGrantHeldByMe() ? ' (granted control)' : '';
+    title = `${session.userName || 'This device'} is calling the show${how}`;
   } else if (followTarget) {
     text = `FOLLOWING · ${followTarget}`;
     title = `Mirroring ${followTarget}'s position`;
+  } else if (sessionControlGrant?.displayName || sessionControlGrant?.username) {
+    // A grant names THE caller for the room: the badge must not keep pointing
+    // at an instructor while a granted student drives. And it must not keep
+    // naming a holder whose device dropped: followers have already rerouted
+    // to the instructor by then, so the badge says so and nudges a take-back.
+    const holderName = sessionControlGrant.displayName || sessionControlGrant.username;
+    const holderKey = String(sessionControlGrant.username || '').toLowerCase();
+    const holderPresent = activePresenceEntries(currentPresence)
+      .some(([, p]) => p?.username && String(p.username).toLowerCase() === holderKey);
+    if (holderPresent) {
+      text = `CALLER · ${holderName}`;
+      title = `${holderName} is calling the show (granted by ${sessionControlGrant.grantedBy || 'an instructor'})`;
+    } else {
+      text = `CALLER · ${holderName} (offline)`;
+      title = `${holderName} holds rundown control but is not connected. Followers mirror the instructor meanwhile. An admin can take control back from this badge.`;
+    }
   } else {
     const instructor = activePresenceEntries(currentPresence)
       .find(([, p]) => p?.role === 'instructor' && !sameParticipantName(p.name, session.userName));
     text = instructor ? `CALLER · ${instructor[1].name}` : 'VIEWER';
     title = instructor ? `${instructor[1].name} is calling the show` : 'Following the show caller';
+  }
+  // Admins can hand the wheel to any signed-in student from the badge itself.
+  if (adminSession && session.code && !session.isDemo && !session.isExpert) {
+    badge.onclick = openControlGrantPicker;
+    badge.style.cursor = 'pointer';
+    title += ' · Tap to hand control to a student';
+  } else {
+    badge.onclick = null;
+    badge.style.cursor = '';
   }
   badge.dataset.state = state;
   badge.textContent = text;
@@ -10971,9 +11404,17 @@ function buildCompletePrompterState() {
   };
 }
 
-function sendPrompterStateSnapshot(outputInstanceId, reason='ready') {
+// Snapshot scope (pre-show fix plan, item 3): a 'seed' snapshot styles and
+// positions a FRESH talent window (READY handshake, explicit init). A 'sync'
+// snapshot only carries script/identity and completes the handshake; the
+// talent keeps its own position, look, and play state. Routine pushes and
+// advances used to send full seeds, so the operator's up-to-2s-stale mirrors
+// yanked the talent's scroll backwards on every GO and silently restyled the
+// display from whatever a reloaded operator window happened to have local.
+function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
   outputInstanceId = String(outputInstanceId || _activePrompterOutputInstanceId || '').trim();
   if (!outputInstanceId) return null;
+  scope = scope || ((reason === 'ready' || reason === 'initial-state' || reason === 'connect') ? 'seed' : 'sync');
   _activePrompterOutputInstanceId = outputInstanceId;
   prompterSessionController.noteOutput(outputInstanceId, 'connected');
   const complete = buildCompletePrompterState();
@@ -10982,9 +11423,27 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready') {
     script:complete.script,
     display:complete.display,
     reason,
+    scope,
   };
+  // The BroadcastChannel copy strips the operator-side mirrors on sync scope
+  // (same-machine talents seed through the READY handshake instead). The DOC
+  // copy below keeps the FULL state on purpose: prompter.stateMessage is the
+  // only thing a cross-device talent that reloads mid-show can restore from,
+  // and its first-boot apply treats any snapshot as a seed; a LIVE talent
+  // still ignores sync-scope mirrors (see applyCompletePrompterState).
+  let wireMessage = message;
+  if (scope === 'sync') {
+    wireMessage = JSON.parse(JSON.stringify(message));
+    delete wireMessage.display;
+    if (wireMessage.state) {
+      delete wireMessage.state.position;
+      delete wireMessage.state.running;
+      delete wireMessage.state.targetSpeed;
+      delete wireMessage.state.effectiveSpeed;
+    }
+  }
   projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Output returned · restoring state' : 'Output connected · applying state');
-  _postPrompterMessage(message);
+  _postPrompterMessage(wireMessage);
   if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
     window._updateDoc(window._doc(window._db, 'sessions', session.code), {
       'prompter.stateMessage':message,
@@ -11041,23 +11500,31 @@ function applyCompletePrompterState(message) {
       else ptSetScriptText(nextText);
     }
   }
-  const display = message.display || {};
-  if (Number.isFinite(Number(display.size))) ptSetSize(Number(display.size));
-  if (['left','center','right'].includes(display.align)) ptSetAlign(display.align);
-  if (display.theme && PT_THEMES[display.theme]) ptSetTheme(display.theme);
-  if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
-  if (Number.isFinite(Number(state.position))) {
-    ptOffset = Math.max(0, Number(state.position));
-    requestAnimationFrame(() => {
-      const track = ptEl('pt-track');
-      if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-      ptUpdateProgress();
-    });
+  // Only seed-scope snapshots may restyle, reposition, or play/pause this
+  // talent; sync snapshots leave the renderer's own live state alone. A
+  // renderer that has never applied ANY snapshot is a fresh boot (mid-show
+  // reload): it adopts the doc slot's full state whatever the scope, which is
+  // how a cross-device talent gets its position and play state back.
+  const seed = message.scope !== 'sync' || !_lastAppliedPrompterSnapshotId;
+  if (seed) {
+    const display = message.display || {};
+    if (Number.isFinite(Number(display.size))) ptSetSize(Number(display.size));
+    if (['left','center','right'].includes(display.align)) ptSetAlign(display.align);
+    if (display.theme && PT_THEMES[display.theme]) ptSetTheme(display.theme);
+    if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
+    if (Number.isFinite(Number(state.position))) {
+      ptOffset = Math.max(0, Number(state.position));
+      requestAnimationFrame(() => {
+        const track = ptEl('pt-track');
+        if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+        ptUpdateProgress();
+      });
+    }
+    ptTargetSpeed = state.targetSpeed;
+    ptLiveSpeed = state.effectiveSpeed;
+    if (state.running && !ptPlaying) ptStartPlay();
+    else if (!state.running && ptPlaying) ptStopPlay();
   }
-  ptTargetSpeed = state.targetSpeed;
-  ptLiveSpeed = state.effectiveSpeed;
-  if (state.running && !ptPlaying) ptStartPlay();
-  else if (!state.running && ptPlaying) ptStopPlay();
   _lastAppliedPrompterSnapshotId = message.snapshotId;
   ptConnState = 'connected';
   ptConnMessage = '';
@@ -11142,6 +11609,10 @@ function _shouldSendInitForTalent(msg={}, wasSilent=false) {
 
 function adoptPrompterTalentState(state={}) {
   if (!state || typeof state !== 'object') return;
+  // The talent reports the row its free-run hold paused at (null otherwise);
+  // adopted first so the status line below can say WHY the talent is waiting.
+  // Guard the null: Number(null) is 0, which would read as "holding at row 0".
+  _talentHeldAtRow = (state.heldAtRow != null && Number(state.heldAtRow) >= 1) ? Number(state.heldAtRow) : null;
   const observedPlaying = typeof state.running === 'boolean' ? state.running : state.playing;
   if (typeof observedPlaying === 'boolean') {
     ptPlaying = observedPlaying;
@@ -11149,7 +11620,8 @@ function adoptPrompterTalentState(state={}) {
     ptSyncPlayIcons(ptPlaying);
     notifyControlSurfaceState();
     if (_prompterHasRecentTalent()) {
-      setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', ptPlaying ? 'Talent scrolling' : 'Talent paused');
+      const pausedLabel = _talentHeldAtRow ? `Holding at row ${_talentHeldAtRow}` : 'Talent paused';
+      setLiveSubsystemStatus('prompter', ptPlaying ? 'active' : 'paused', ptPlaying ? 'Talent scrolling' : pausedLabel);
     }
   }
   const observedSpeed = state.targetSpeed ?? state.speed;
@@ -11231,8 +11703,12 @@ function _handlePrompterControlAck(msg) {
     pending.settle?.({ ok:true, acknowledged:true, state:msg.state || null });
     markPrompterToggleState(pending.action, 'confirmed');
     const label = flowOpControlLabel(pending.action);
-    if (pending.origin === 'flowop') flowOpSetStatus(`${label} applied`);
-    else markLivePrompterStatus(`${label} applied`, 'ok');
+    // A find that matched nothing is an honest miss, never an "applied".
+    const status = pending.action === 'seek_text' && msg.findMiss
+      ? 'No script line matches that text' : `${label} applied`;
+    const tone = pending.action === 'seek_text' && msg.findMiss ? 'error' : 'ok';
+    if (pending.origin === 'flowop') flowOpSetStatus(status, tone === 'error');
+    else markLivePrompterStatus(status, tone);
   }
 }
 
@@ -11329,7 +11805,9 @@ function _handlePrompterOperatorMessage(msg) {
     _activePrompterOutputInstanceId = outputId;
     prompterSessionController.noteOutput(outputId, 'connected');
     _notePrompterTalentSeen(msg);
-    sendPrompterStateSnapshot(outputId, replacing ? 'recovery' : 'ready');
+    // A READY talent is a freshly booted window either way: full seed scope,
+    // so it inherits script, look, and position for read continuity.
+    sendPrompterStateSnapshot(outputId, replacing ? 'recovery' : 'ready', 'seed');
     return;
   }
   if (msg.type === 'PROMPTER_STATE_APPLIED') {
@@ -11446,26 +11924,35 @@ function _setPrompterStatus(connected, unavailable=false) {
   }
   if (connected) {
     const ready = prompterSessionController.isReady(_activePrompterOutputInstanceId);
-    projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', ready ? (ptPlaying ? 'Talent scrolling' : 'Talent paused') : 'Talent connected · applying state');
+    const pausedLabel = _talentHeldAtRow ? `Holding at row ${_talentHeldAtRow}` : 'Talent paused';
+    projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', ready ? (ptPlaying ? 'Talent scrolling' : pausedLabel) : 'Talent connected · applying state');
   } else {
     projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for Flowmingo output');
   }
 }
 
-// D11.2 (owner directive): the prompter is one continuous feed and NEVER
-// moves on a cue advance. Advancing still pushes script updates (so new copy
-// flows to the talent live), but the auto seek_row that used to fire here is
-// gone — the op lines the prompter up deliberately with C (cue current row),
-// T (top), or the Script Op Cue Now / Cue Next buttons.
+// Pre-show fix plan, item 2 (owner directive, supersedes D11.2): the rundown
+// is the source of truth, so advancing it moves the prompter to that item's
+// script. The seek GLIDES on the talent (hard jumps pull the eye off the
+// line), the talent then reads to the NEXT row's header and holds there, and
+// an advance releases the hold. Copy still pushes first so new text lands
+// before the travel. The old one-continuous-feed behavior survives naturally
+// for scripts without [N] headers: the seek resolves false and nothing moves.
 function updatePrompterOnAdvance(prevBeat, newBeat) {
-  if (!prompterText.trim()) buildPromptFromRundown();
+  // Rundown-assembled scripts REBUILD on every advance so the [N] headers the
+  // seek targets always match the current beats: a co-editor inserting or
+  // deleting rows mid-show must not leave every later seek one row off.
+  // Hand-pushed scripts (live-edit and friends) are never overwritten.
+  if (!prompterText.trim() || prompterSource === 'assembled') buildPromptFromRundown();
   sendToPrompter(false);
+  cuePrompterToLiveRow();
 }
 
-// The MANUAL line-up tool (C key, Cue Now button) — never called on advance.
+// The row line-up tool: fired on every advance/back/jump, and still available
+// manually (C key, Cue Now button) for recovering a lost place mid-show.
 function cuePrompterToLiveRow() {
   const rowNum = liveActiveCueIndex() + 1;
-  if (rowNum > 0) setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 120);
+  if (rowNum > 0) setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 150);
 }
 
 // D11.2: the ▶ talent-position rail under the Script Op editor. Position rides
@@ -11474,15 +11961,17 @@ function cuePrompterToLiveRow() {
 // the op is editing or turned Follow off.
 let _lastTalentPosPct = -1;
 let _talentReportedPct = null;   // the talent's own percent, from its heartbeats
+let _talentHeldAtRow = null;     // row the talent's cue hold is waiting at, from heartbeats
 function renderTalentPositionIndicator() {
   const wrap = document.getElementById('lsTalentPos');
   if (!wrap) return;
   const hasTalent = _prompterHasRecentTalent();
   wrap.hidden = !hasTalent;
-  if (!hasTalent) { _lastTalentPosPct = -1; _talentReportedPct = null; return; }
+  if (!hasTalent) { _lastTalentPosPct = -1; _talentReportedPct = null; _talentHeldAtRow = null; return; }
   const pct = Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : ptProgressPct();
-  if (pct === _lastTalentPosPct) return;
-  _lastTalentPosPct = pct;
+  const renderKey = `${pct}:${_talentHeldAtRow ?? ''}`;
+  if (renderKey === _lastTalentPosPct) return;
+  _lastTalentPosPct = renderKey;
   const fill = document.getElementById('lsTalentPosFill');
   const arrow = document.getElementById('lsTalentPosArrow');
   const label = document.getElementById('lsTalentPosLabel');
@@ -11493,12 +11982,15 @@ function renderTalentPositionIndicator() {
   const text = prompterText || '';
   const offset = Math.round(text.length * pct / 100);
   const marker = text.slice(0, offset).match(/\[(\d+)\][^[]*$/);
-  if (label) label.textContent = `Talent · ${marker ? 'row ' + marker[1] + ' · ' : ''}${pct}%`;
+  const holding = Number.isFinite(_talentHeldAtRow) ? ` · holding at row ${_talentHeldAtRow}` : '';
+  if (label) label.textContent = `Talent · ${marker ? 'row ' + marker[1] + ' · ' : ''}${pct}%${holding}`;
   const editor = document.getElementById('lsPrompterText');
   const follow = document.getElementById('lsTalentPosFollow');
   if (editor && follow?.checked && document.activeElement !== editor && !livePrompterDraftDirty) {
     const target = (editor.scrollHeight - editor.clientHeight) * pct / 100;
-    if (Math.abs(editor.scrollTop - target) > 24) editor.scrollTop = target;
+    // Smooth follow: the old instant scrollTop assignment read as the editor
+    // jumping on every 2s heartbeat.
+    if (Math.abs(editor.scrollTop - target) > 24) editor.scrollTo({ top: target, behavior: 'smooth' });
   }
 }
 
@@ -11847,6 +12339,7 @@ function scriptOperatorPublishState(force=false) {
 
 function scriptOperatorControlAllowed(action) {
   action = String(action || '');
+  if (action === 'seek_text') return true;   // find-in-script; query rides data.q, validated at execute
   if (SCRIPT_OPERATOR_CONTROL_ACTIONS.has(action)) return true;
   if (/^theme_(cool|warm|white|green|koala|panda|flamingo|outrangutan|prepbear)$/.test(action)) return true;
   let match = action.match(/^(speed_set|size_set|seek_set|seek_row|clock_duration|wrapup)_(-?\d+(?:\.\d+)?)$/);
@@ -11901,7 +12394,14 @@ async function scriptOperatorExecuteCommand(command) {
     // stays a bare string.
     const questionText = action === 'question_on' && typeof data.text === 'string'
       ? data.text.replace(/\s+/g, ' ').trim().slice(0, 280) : '';
-    const sent = questionText ? sendPrompterControl(action, { text: questionText }) : sendPrompterControl(action);
+    const findQuery = action === 'seek_text' && typeof data.q === 'string'
+      ? data.q.trim().slice(0, 160) : '';
+    if (action === 'seek_text' && findQuery.length < 3) {
+      return { ok:false, error:'Type at least three characters to find' };
+    }
+    const sent = questionText ? sendPrompterControl(action, { text: questionText })
+      : findQuery ? sendPrompterControl(action, { q: findQuery })
+      : sendPrompterControl(action);
     return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : flowOpControlLabel(action) + ' sent' };
   }
   if (kind === 'draft') {
@@ -12259,6 +12759,7 @@ function buildPrompterControl(action, source='script-op', payload=null) {
 // unseen seq in order. The legacy slot keeps stale shells working.
 let _prompterControlSeq = 0;
 let _prompterControlQueue = [];
+let _lastDocPrompterControlQueue = [];   // doc truth, for carrying other writers' entries forward
 
 function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverride='') {
   if (!control?.action) return false;
@@ -12269,9 +12770,18 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
     _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
     const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
     _prompterControlQueue = [..._prompterControlQueue, stamped].slice(-8);
+    // Publish the union of this window's queue and OTHER writers' recent doc
+    // entries (by ts), so two operator surfaces stop evicting each other's
+    // unseen commands. Receivers dedupe per-writer seq + signature, so
+    // re-carrying an already-applied entry is harmless.
+    const foreign = (Array.isArray(_lastDocPrompterControlQueue) ? _lastDocPrompterControlQueue : [])
+      .filter(c => c && c.action && Number.isFinite(Number(c.seq)) && c.senderClient !== CLIENT_ID);
+    const mergedQueue = [...foreign, ..._prompterControlQueue]
+      .sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0))
+      .slice(-8);
     window._updateDoc(window._doc(window._db, 'sessions', code), {
       'prompter.control': stamped,
-      'prompter.controlQueue': _prompterControlQueue,
+      'prompter.controlQueue': mergedQueue,
       'prompter.updatedAt':control.ts,
     }).catch(err => {
       if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
@@ -12486,8 +12996,31 @@ let ptReversing = false;
 let ptMirrored = false;
 let ptPanelVisible = true;
 let ptPanelScale = 1;
-let ptFontSize = 52;
-let ptAlign = 'center';
+// Size and alignment persist like the theme: a talent (or operator) reload
+// must come back with the show's look, not the 52px default.
+let ptFontSize = (() => {
+  try {
+    const v = parseInt(localStorage.getItem('cueola_prompter_size'), 10);
+    return Number.isFinite(v) ? Math.max(24, Math.min(120, v)) : 52;
+  } catch { return 52; }
+})();
+let ptAlign = (() => {
+  try {
+    const v = localStorage.getItem('cueola_prompter_align');
+    return ['left','center','right'].includes(v) ? v : 'center';
+  } catch { return 'center'; }
+})();
+// Live-row context for the hold-at-next-cue behavior: the row the rundown is
+// on (from seeks and observed activeIdx CHANGES) and the row the free-run is
+// holding at, if the hold paused it (null when scrolling or manually paused).
+// ptPendingHoldResume carries an advance's auto-resume across superseding
+// seeks; ptDocLiveIdxSeen baselines doc adoption so a fresh link to an idle
+// session (activeIdx 0 from creation) never locks the free-run to row 1.
+let ptLiveRowNum = null;
+let ptAutoHeldRow = null;
+let ptSeenRowHolds = new Set();
+let ptPendingHoldResume = false;
+let ptDocLiveIdxSeen = null;
 // cueola_* is the storage standard (docs/NAMING.md): read new key, fall back to
 // the legacy promptypus_* key once, write only the new key.
 let ptThemeName = normalizeCueolaTheme(localStorage.getItem('cueola_prompter_theme') || localStorage.getItem('promptypus_theme') || 'cool');
@@ -12699,7 +13232,16 @@ function ptTalentHeartbeat() {
   currentPrompterSessionState();
   // D11.2: the talent reports its own progress percent — the desk's ▶ rail
   // renders THE TALENT's truth, independent of the operator's local layout.
-  const heartbeat = ptPostOperatorMessage({ ...prompterSessionController.buildHeartbeat(), talentProgressPct: ptProgressPct() });
+  // The state also carries the talent's display truth (size/align/theme/
+  // mirror) so operator mirrors converge every beat, not only on control
+  // acks; a reloaded operator window then can never re-impose stale style.
+  const rawHeartbeat = prompterSessionController.buildHeartbeat();
+  rawHeartbeat.state = {
+    ...rawHeartbeat.state,
+    size:ptFontSize, align:ptAlign, theme:ptThemeName, mirrored:ptMirrored,
+    heldAtRow:ptAutoHeldRow,
+  };
+  const heartbeat = ptPostOperatorMessage({ ...rawHeartbeat, talentProgressPct: ptProgressPct() });
   ptPostPing('heartbeat'); // compatibility for older operator tabs
   if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
     try {
@@ -12762,6 +13304,12 @@ function stopPrompterTalentRuntime() {
   ptClockInterval = null;
   _seenPrompterMsgIds = [];
   _lastAppliedPrompterSnapshotId = '';
+  // Hold context is per-link: the next link re-baselines doc adoption.
+  ptLiveRowNum = null;
+  ptDocLiveIdxSeen = null;
+  ptAutoHeldRow = null;
+  ptPendingHoldResume = false;
+  ptSeenRowHolds = new Set();
   prompterSessionController.setStatus('closed');
 }
 
@@ -12812,6 +13360,13 @@ function ptCheckAutoPauseMarkers() {
 
 function ptScrollLoop(ts) {
   if (!ptPlaying) return;
+  if (ptGlide) {
+    // A glide owns the position while it travels; keep the loop alive so the
+    // crawl resumes seamlessly from wherever the glide lands.
+    ptLastTime = ts;
+    ptAnimFrame = requestAnimationFrame(ptScrollLoop);
+    return;
+  }
   if (ptLastTime === null) ptLastTime = ts;
   const delta = ts - ptLastTime;
   ptLastTime = ts;
@@ -12837,8 +13392,44 @@ function ptScrollLoop(ts) {
     if (track) track.style.transform = `translateY(-${ptOffset}px)`;
     ptUpdateProgress();
     if (ptCheckAutoPauseMarkers()) return;
+    if (ptCheckRowHold()) return;
     ptAnimFrame = requestAnimationFrame(ptScrollLoop);
   }
+}
+
+// Hold at the next cue (pre-show fix plan, item 2): the free-run stops when the
+// header of a row BEYOND the live rundown row reaches the read line, and waits
+// for the next advance instead of racing ahead. Needs rundown context (row
+// seeks / prompter.activeIdx) — a hand-pasted script without [N] headers, or a
+// talent that has never heard the live row, free-runs exactly as before.
+function ptCheckRowHold() {
+  if (!ptPlaying || ptReversing) return false;
+  if (!Number.isFinite(ptLiveRowNum)) return false;
+  const text = ptEl('pt-text');
+  if (!text) return false;
+  const readY = window.innerHeight / 2 + 24;
+  const headers = text.querySelectorAll('.scr-header');
+  for (const h of headers) {
+    const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
+    if (!m) continue;
+    const row = parseInt(m[1], 10);
+    if (!Number.isFinite(row) || row <= ptLiveRowNum) continue;
+    if (ptSeenRowHolds.has(row)) continue;
+    const rect = h.getBoundingClientRect();
+    // Trigger once the header's top passes the read line; a fast frame that
+    // overshoots the band still holds (top is far above readY by then).
+    if (rect.top <= readY) {
+      ptSeenRowHolds.add(row);
+      ptStopPlay();               // clears provenance, so set the hold AFTER
+      ptAutoHeldRow = row;
+      ptRenderHoldChip();
+      return true;
+    }
+    // Headers are in document order: the first one still below the read line
+    // means nothing further can have crossed yet.
+    break;
+  }
+  return false;
 }
 
 function ptSyncPlayIcons(isPlaying) {
@@ -12971,8 +13562,42 @@ function opInspRestoreTab(scope) {
   opInspTab(scope, key);
 }
 
+// Rebuild which row-hold boundaries count as already passed, from geometry:
+// every [N] header at or above the read line is behind the reading position.
+// Runs on play start and after every discontinuous reposition (scrub, glide
+// landing). REBUILT, never accumulated: a scrub-ahead never insta-holds, and
+// a scrub-back automatically re-arms the boundaries it moved behind.
+function ptRecalcRowHolds() {
+  const seen = new Set();
+  const text = ptEl('pt-text');
+  if (text && Number.isFinite(ptLiveRowNum)) {
+    const readY = window.innerHeight / 2 + 24;
+    text.querySelectorAll('.scr-header').forEach(h => {
+      const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
+      if (!m) return;
+      const row = parseInt(m[1], 10);
+      if (Number.isFinite(row) && row > ptLiveRowNum && h.getBoundingClientRect().top <= readY) seen.add(row);
+    });
+  }
+  ptSeenRowHolds = seen;
+}
+
+// The persistent HOLD state on the talent output itself: a toast is transient,
+// unmirrored, and invisible in element-fullscreen; the chip lives inside
+// #pt-stage so beam-splitter mirroring flips it with the copy.
+function ptRenderHoldChip() {
+  const chip = ptEl('pt-hold-chip');
+  if (!chip) return;
+  const on = ptAutoHeldRow != null;
+  chip.hidden = !on;
+  if (on) chip.textContent = `HOLDING · ROW ${ptAutoHeldRow}`;
+}
+
 function ptStartPlay() {
   if (ptPlaying && ptAnimFrame) return;
+  ptAutoHeldRow = null;
+  ptRenderHoldChip();
+  ptRecalcRowHolds();
   ptPlaying = true;
   ptLastTime = null;
   prompterSessionController.setTransport({ running:true, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
@@ -12983,6 +13608,13 @@ function ptStartPlay() {
 
 function ptStopPlay() {
   ptPlaying = false;
+  ptCancelGlide();   // pause freezes everything, travel included
+  // An explicit stop (pause command, slate, live-exit) clears hold provenance
+  // so the next advance can never auto-resume over the operator's intent.
+  // The hold path itself re-sets ptAutoHeldRow AFTER calling this.
+  ptAutoHeldRow = null;
+  ptPendingHoldResume = false;
+  ptRenderHoldChip();
   if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
   ptAnimFrame = null;
   prompterSessionController.setTransport({ running:false, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
@@ -13020,6 +13652,7 @@ function ptSetSize(val) {
   document.documentElement.style.setProperty('--pt-size', val + 'px');
   const sl = ptEl('pt-size-slider');
   if (sl) sl.value = val;
+  try { localStorage.setItem('cueola_prompter_size', String(ptFontSize)); } catch {}
   syncPrompterSliderReadouts();
 }
 
@@ -13032,6 +13665,7 @@ function ptSetAlign(a) {
   const screen = ptEl('promptypus');
   if (screen) screen.style.setProperty('--pt-align', a);
   document.documentElement.style.setProperty('--pt-align', a);
+  try { localStorage.setItem('cueola_prompter_align', a); } catch {}
   ['l','c','r'].forEach(x => {
     const btn = ptEl('pt-align-' + x);
     if (btn) btn.classList.toggle('active', x === a[0]);
@@ -13040,8 +13674,11 @@ function ptSetAlign(a) {
 
 function ptResetScroll() {
   ptStopPlay();
+  ptCancelGlide();
   ptOffset = 0;
   ptResetAutoPauseMarkers();
+  ptSeenRowHolds = new Set();
+  ptAutoHeldRow = null;
   const track = ptEl('pt-track');
   if (track) track.style.transform = 'translateY(0)';
   ptUpdateProgress();
@@ -13054,19 +13691,117 @@ function ptProgressPct() {
 }
 
 function ptApplyScrollOffset(offset) {
+  ptCancelGlide();   // an explicit position set overrides any travel in flight
+  // A manual reposition also cancels any pending advance auto-resume: the
+  // interrupted travel's intent must not ghost-start the talent later.
+  ptPendingHoldResume = false;
   const max = ptGetMaxScroll();
   ptOffset = Math.max(0, Math.min(max, Number(offset) || 0));
   const track = ptEl('pt-track');
   if (track) track.style.transform = `translateY(-${ptOffset}px)`;
   ptUpdateProgress();
+  // Repositioning re-baselines the hold boundaries: the scrub dial must never
+  // insta-hold on a boundary it just dragged past, and dragging back re-arms.
+  ptRecalcRowHolds();
+}
+
+// ── Glide travel (pre-show fix plan, item 2) ────────────────────────────────
+// Row cues travel smoothly to the target instead of snapping: a hard jump
+// pulls the talent's eye off the line they are reading. While a glide runs,
+// the free-run scroll loop stays alive but defers to it; the scrub dial and
+// any explicit offset set cancel it.
+let ptGlide = null;   // { from, to, start, dur, raf, onDone }
+function ptCancelGlide() {
+  if (!ptGlide) return;
+  if (ptGlide.raf) cancelAnimationFrame(ptGlide.raf);
+  ptGlide = null;
+}
+function ptGlideToOffset(target, onDone=null) {
+  const max = ptGetMaxScroll();
+  target = Math.max(0, Math.min(max, Number(target) || 0));
+  const dist = Math.abs(target - ptOffset);
+  if (dist < 3) {
+    ptCancelGlide();
+    ptOffset = target;
+    const track = ptEl('pt-track');
+    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+    ptUpdateProgress();
+    onDone?.();
+    return;
+  }
+  ptCancelGlide();
+  // Distance-scaled travel: short hops stay quick, long jumps stay readable.
+  const dur = Math.max(550, Math.min(2200, 450 + dist * 0.8));
+  ptGlide = { from: ptOffset, to: target, start: null, dur, raf: null, onDone };
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const stepFrame = (ts) => {
+    if (!ptGlide) return;
+    if (ptGlide.start === null) ptGlide.start = ts;
+    const t = Math.min(1, (ts - ptGlide.start) / ptGlide.dur);
+    ptOffset = ptGlide.from + (ptGlide.to - ptGlide.from) * ease(t);
+    const track = ptEl('pt-track');
+    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+    ptUpdateProgress();
+    if (t >= 1) {
+      const done = ptGlide.onDone;
+      ptGlide = null;
+      done?.();
+      return;
+    }
+    ptGlide.raf = requestAnimationFrame(stepFrame);
+  };
+  ptGlide.raf = requestAnimationFrame(stepFrame);
 }
 
 // Live "cue" scroll — operators drag the talent prompter to any spot on the fly.
-// Pure repositioning: never pauses, never writes a marker.
+// Pure repositioning: never pauses, never writes a marker, never glides (the
+// dial and slider need the screen to track the hand instantly).
 function ptSeekToProgress(pct) {
   const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
   const max = ptGetMaxScroll();
   ptApplyScrollOffset(max > 0 ? (p / 100) * max : 0);
+}
+
+// The live-row context feeding the hold-at-next-cue behavior. Learned from row
+// seeks and from prompter.activeIdx on the session doc; null until either lands.
+function ptNoteLiveRow(rowNum) {
+  const n = parseInt(rowNum, 10);
+  if (Number.isFinite(n) && n >= 1) ptLiveRowNum = n;
+}
+
+// Jump to line (pre-show fix plan, item 3): glide the first script line
+// containing the text to the read line. Searches FORWARD from the current
+// read position first, wrapping to the top, so repeated finds walk through
+// repeats of a phrase. Pure repositioning: never pauses, never changes the
+// live-row context, re-baselines the hold boundaries at landing like a scrub.
+function ptSeekToText(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return Promise.resolve(false);
+  return new Promise(resolve => requestAnimationFrame(() => {
+    const text = ptEl('pt-text');
+    const track = ptEl('pt-track');
+    if (!text || !track) { resolve(false); return; }
+    const readY = window.innerHeight / 2 + 24;
+    // Every block-level line the sanitizer can emit: DOCX imports render Word
+    // headings as h1-h6 and lists as li, and those are the most natural jump
+    // targets. Containers (elements with block children) are filtered so a
+    // wrapping div cannot swallow the match meant for the line inside it.
+    const lines = Array.from(text.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, div, blockquote'))
+      .filter(el => !el.querySelector('p, h1, h2, h3, h4, h5, h6, li, blockquote'));
+    if (!lines.length) { resolve(false); return; }
+    const firstAhead = lines.findIndex(l => l.getBoundingClientRect().top > readY + 4);
+    const order = firstAhead > 0 ? [...lines.slice(firstAhead), ...lines.slice(0, firstAhead)] : lines;
+    const target = order.find(l => (l.innerText || l.textContent || '').toLowerCase().includes(q));
+    if (!target) { resolve(false); return; }
+    // A find is pure repositioning: it cancels any in-flight advance's
+    // auto-resume rather than stranding the flag (which would either leave
+    // the talent parked with no hold state now, or ghost-start it on a much
+    // later advance).
+    ptPendingHoldResume = false;
+    const delta = target.getBoundingClientRect().top - readY;
+    ptGlideToOffset(ptOffset + delta, () => ptRecalcRowHolds());
+    resolve(true);
+  }));
 }
 
 function ptSeekToRow(rowNum) {
@@ -13084,7 +13819,32 @@ function ptSeekToRow(rowNum) {
     const fontSize = parseFloat(getComputedStyle(target).fontSize) || 22;
     const targetY = readY - Math.max(34, fontSize * 1.8);
     const delta = target.getBoundingClientRect().top - targetY;
-    ptApplyScrollOffset(ptOffset + delta);
+    // Row cues carry rundown context: the target row is the live row, and a
+    // talent that was auto-holding at a cue boundary resumes reading once the
+    // travel lands (a manual pause is respected and stays paused; explicit
+    // pause also clears the pending resume, see ptStopPlay). The resume
+    // intent is a module flag so a rapid second advance that cancels this
+    // glide cannot swallow it: whichever glide lands last honors it.
+    if (ptAutoHeldRow != null && !ptPlaying) ptPendingHoldResume = true;
+    // No hold and no superseded travel in flight: any leftover flag is stale
+    // (e.g. a find or scrub interrupted an earlier resume) and must not fire
+    // on THIS unrelated advance. A live glide keeps the flag: that is the
+    // rapid double-advance carry working as designed.
+    else if (!ptGlide) ptPendingHoldResume = false;
+    ptNoteLiveRow(n);
+    ptAutoHeldRow = null;
+    ptRenderHoldChip();
+    ptGlideToOffset(ptOffset + delta, () => {
+      // Landing re-baselines the hold boundaries from geometry: the landed
+      // header is behind the read line, everything further is re-armed.
+      ptRecalcRowHolds();
+      if (ptPendingHoldResume && !ptPlaying) {
+        ptPendingHoldResume = false;
+        ptStartPlay();
+      } else {
+        ptPendingHoldResume = false;
+      }
+    });
     resolve(true);
   }));
 }
@@ -13256,6 +14016,10 @@ function liveActionsHTML(scope = 'po', disabled = false) {
         <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${Math.max(liveActiveCueIndex(), 0) + 1}')" data-tip="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
         <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx + 1}')" data-tip="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
       </div>
+      <div class="pt-ctrl-group pt-live-find">
+        <input type="text" class="admin-in pt-find-in" id="${scope}-find" placeholder="Find in script…" onkeydown="if(event.key==='Enter'){event.preventDefault();poFindInScript('${scope}')}"${dis}>
+        <button class="pt-btn" onclick="poFindInScript('${scope}')" data-tip="Cue Flowmingo to the next line containing this text (repeat to walk through matches)"${dis}><span>Find</span></button>
+      </div>
     </div>`;
   // Returns bare control groups so they nest inside the existing panel containers
   // (prompt-op-panel / flowop-controls / #lsLiveActions) without overlapping them.
@@ -13278,6 +14042,27 @@ function liveActionsHTML(scope = 'po', disabled = false) {
 	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" data-tip="Punch in from this script position" aria-label="Punch in from this script position"${dis}>${sfIcon('media.play')}</button>
 	      </div>
 	    </div>`;
+}
+
+// Jump to line, operator side: sends the collaborative seek_text control
+// (finding your place mid-show was the biggest time cost; the scrubber and
+// row cues cannot reach a specific sentence).
+function poFindInScript(scope) {
+  const input = document.getElementById(`${scope}-find`);
+  const q = String(input?.value || '').trim();
+  if (!q) { toast('Type a few words from the script first.'); return; }
+  if (q.length < 3) { toast('Use at least three characters so the match is meaningful.'); return; }
+  sendPrompterControl('seek_text', { q });
+  markLivePrompterStatus(`Finding “${q.slice(0, 28)}${q.length > 28 ? '…' : ''}”`, 'busy');
+  // Mirror the jump in the desk editor so the operator's eyes land there too.
+  const editor = livePrompterEditor();
+  if (editor && document.activeElement !== editor && !livePrompterDraftDirty) {
+    const text = editor.value || '';
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx >= 0 && editor.scrollHeight > editor.clientHeight) {
+      editor.scrollTo({ top: (editor.scrollHeight - editor.clientHeight) * (idx / Math.max(1, text.length)), behavior: 'smooth' });
+    }
+  }
 }
 
 function ptToggleMirror() {
@@ -13734,9 +14519,13 @@ function ptUpdateFromCueola(text) {
     if (!track) return;
     const newHeight = track.scrollHeight;
     if (prevHeight > 0 && newHeight > 0 && newHeight !== prevHeight) {
-      ptOffset = (ptOffset / prevHeight) * newHeight;
+      const ratio = newHeight / prevHeight;
+      ptOffset = ptOffset * ratio;
+      // A glide in flight rescales with the content so it still lands on the
+      // same copy after a mid-travel script push.
+      if (ptGlide) { ptGlide.from *= ratio; ptGlide.to *= ratio; }
     }
-    if (!ptPlaying) track.style.transform = `translateY(-${ptOffset}px)`;
+    if (!ptPlaying && !ptGlide) track.style.transform = `translateY(-${ptOffset}px)`;
     ptUpdateProgress();
   });
 }
@@ -13813,6 +14602,7 @@ function ptStateSnapshot() {
     theme: ptThemeName,
     mirrored: ptMirrored,
     panelVisible: ptPanelVisible,
+    heldAtRow: ptAutoHeldRow,
     // Overlay truth rides the ack so operator windows reconcile their mirrors.
     techSlateOn: ptTechSlateOn,
     colorBarsOn: ptColorBarsOn,
@@ -13824,7 +14614,7 @@ function ptStateSnapshot() {
   };
 }
 
-function ptPostControlAck(controlId, action, controlTs, target) {
+function ptPostControlAck(controlId, action, controlTs, target, extra={}) {
   if (!controlId || !target || !isFlowmingoTalentActive()) return;
   const ack = ptPostOperatorMessage({
     type:'control_ack',
@@ -13832,6 +14622,7 @@ function ptPostControlAck(controlId, action, controlTs, target) {
     action,
     controlTs,
     target,
+    ...extra,
     state: ptStateSnapshot()
   });
   if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
@@ -14154,6 +14945,15 @@ function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) 
     });
     return true;
   }
+  if (action === 'seek_text') {
+    ptSeekToText(payload?.q).then(found => {
+      prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
+      // Carry the miss: "applied" on a find that matched nothing sends the
+      // operator handing off to a position the talent never reached.
+      ptPostControlAck(controlId, action, ts, sender, found ? {} : { findMiss:true });
+    });
+    return true;
+  }
   ptHandleRemoteControl(action, payload);
   prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
   ptPostControlAck(controlId, action, ts, sender);
@@ -14165,6 +14965,7 @@ function ptHandleRemoteControl(action, payload=null) {
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
   if (action?.startsWith('seek_row_')) { ptSeekToRow(action.replace('seek_row_', '')); return; }
+  if (action === 'seek_text') { ptSeekToText(payload?.q); return; }
   if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action?.startsWith('clock_until_') || action?.startsWith('clock_duration_') || action?.startsWith('wrapup_')) {
     applyClockActionToState(action, 'talent');
     return;
@@ -14272,6 +15073,7 @@ function flowOpSetTheme(name) {
 }
 
 function flowOpControlLabel(action) {
+  if (action === 'seek_text') return 'Find in script';
   const labels = {
     pause:'Pause', resume:'Play', speed_up:'Faster', speed_down:'Slower',
     size_up:'Bigger text', size_down:'Smaller text', reset:'Reset',
@@ -14711,6 +15513,9 @@ async function flowOpLoadSession(codeOverride='') {
         flowOpCode = code;
         ptLinkedCueolaCode = code;
         flowOpData = snap.data() || {};
+        // Same forward-carry as the main listener: this surface's writes must
+        // not evict other operator windows' queued commands.
+        if (Array.isArray(flowOpData.prompter?.controlQueue)) _lastDocPrompterControlQueue = flowOpData.prompter.controlQueue;
         ensurePrompterProtocolIdentity({ productionCode:code, sessionId:flowOpData.prompter?.sessionId || '' });
         if (flowOpData.prompter?.state) {
           prompterSessionController.update(flowOpData.prompter.state, { preserveVersion:true });
@@ -15010,6 +15815,18 @@ async function ptLoadFromCueolaCode(codeOverride='') {
         ensurePrompterProtocolIdentity({ productionCode:code, sessionId:data.prompter?.sessionId || '' });
         ptConnState = 'connected';
         ptConnMessage = '';
+        // Live-row context for the hold-at-next-cue behavior. Change-gated,
+        // same rationale as the in-app talent path: an idle session's
+        // baseline activeIdx must neither engage holds on a fresh link nor
+        // drag the live row back below a Cue Next target.
+        const liveIdx = Number.isFinite(Number(data.activeIdx)) ? Number(data.activeIdx) : Number(data.prompter?.activeIdx);
+        if (Number.isFinite(liveIdx)) {
+          if (ptDocLiveIdxSeen === null) ptDocLiveIdxSeen = liveIdx;
+          else if (liveIdx !== ptDocLiveIdxSeen) {
+            ptDocLiveIdxSeen = liveIdx;
+            ptNoteLiveRow(liveIdx + 1);
+          }
+        }
         const stateMessage = data.prompter?.stateMessage;
         if (stateMessage?.type === 'PROMPTER_STATE') applyCompletePrompterState(stateMessage);
         const text = ptAssembleCueolaScript(data);
@@ -15586,11 +16403,19 @@ function paperworkConfigKey(itemId) { return String(itemId || '').replace(/-/g, 
 function paperworkEnabledMapLive() {
   // SESSION-LEVEL: the parent session doc wins (grouped clients still read the
   // parent — the groups phase re-verifies this); local prePro is the fallback
-  // for solo/offline workspaces.
-  const parent = sessionSnapshotLatestDoc?.prePro?.paperworkEnabled;
-  if (parent && typeof parent === 'object') return parent;
+  // for solo/offline workspaces. The parent doc counts ONLY while this device
+  // is actually on a shared code: sessionSnapshotLatestDoc survives leaving a
+  // session, and a LOCAL/demo workspace opened afterwards must not inherit
+  // (or, worse, edit) the previous show's config as its own.
+  if (onSharedShowCode()) {
+    const parent = sessionSnapshotLatestDoc?.prePro?.paperworkEnabled;
+    if (parent && typeof parent === 'object') return parent;
+  }
   const local = loadPreProData()?.paperworkEnabled;
   return (local && typeof local === 'object') ? local : {};
+}
+function onSharedShowCode() {
+  return Boolean(session.code) && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert;
 }
 function paperworkTypeEnabled(itemId) {
   if (itemId === 'production-notes') return true;   // exempt from the config (decision 10)
@@ -16805,19 +17630,8 @@ function openPaperworkHub() {
   } else if (paperworkExportAuthority() === 'server' && assignmentSaveState === 'loading') {
     hydrateRoleAssignments();
   }
-  const grid = document.getElementById('paperworkGrid');
-  if (grid) {
-    // Production Notes lives in its own wide bar above the grid, not in the
-    // numbered list. D6: only enabled types render, numbered sequentially.
-    grid.innerHTML = enabledPaperworkItems().filter(item => item.id !== 'production-notes').map((item, i) => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
-      <div class="paperwork-card-num">${i + 1}</div>
-      <div>
-        <div class="paperwork-card-title">${esc(item.title)}</div>
-        <div class="paperwork-card-sub">${esc(item.sub)}</div>
-      </div>
-      <div class="paperwork-card-by" data-pb-by hidden></div>
-    </button>`).join('');
-  }
+  renderPaperworkHubGrid();
+  renderPlandaBearPaperworkManager();
   renderPackageSheetPicker();   // D9.1: honest call-sheet count + picker
   showModal('paperworkHubModal');
   paperworkDirty = false;
@@ -16827,6 +17641,100 @@ function openPaperworkHub() {
   loadPlandaBearNotes().then(() => { annotatePlandaBearNoteCards(); pbUpdatePlandaBearBadge(); });
   renderPlandaBearHubActivity();
   renderPlandaBearAssignmentsCard();
+}
+
+// The hub grid, extracted so remote paperwork-config changes and the in-hub
+// manager can rebuild it live (it used to render only on hub open).
+function renderPaperworkHubGrid() {
+  const grid = document.getElementById('paperworkGrid');
+  if (!grid) return;
+  // Production Notes lives in its own wide bar above the grid, not in the
+  // numbered list. D6: only enabled types render, numbered sequentially.
+  grid.innerHTML = enabledPaperworkItems().filter(item => item.id !== 'production-notes').map((item, i) => `<button class="paperwork-card" data-pb-section="${PB_SECTION_FOR_ITEM[item.id]||''}" onclick="openPaperworkItem('${item.id}')">
+    <div class="paperwork-card-num">${i + 1}</div>
+    <div>
+      <div class="paperwork-card-title">${esc(item.title)}</div>
+      <div class="paperwork-card-sub">${esc(item.sub)}</div>
+    </div>
+    <div class="paperwork-card-by" data-pb-by hidden></div>
+  </button>`).join('');
+}
+
+// ── Paperwork manager (pre-show fix plan): which paperwork this show uses,
+// visible and editable from Planda Bear itself, any time. Session-level like
+// the plot bank: parent doc field, main workspace only, instructor-gated
+// (rules cannot enforce it; same honor system as the dashboard editor).
+function renderPlandaBearPaperworkManager() {
+  const wrap = document.getElementById('pbPaperworkManager');
+  if (!wrap) return;
+  if (!canManageCallSheetStructure() || groupActive()) { wrap.innerHTML = ''; return; }
+  const chips = PAPERWORK_ITEMS.filter(item => item.id !== 'production-notes').map(item => {
+    const on = paperworkTypeEnabled(item.id);
+    return `<button class="pb-pw-toggle ${on ? 'on' : 'off'}" onclick="togglePaperworkItemEnabled('${item.id}')"
+      data-tip="${on ? 'Turn off for this show: the card hides for everyone and the package skips it' : 'Turn back on for this show'}">
+      ${sfIcon(on ? 'marker.ready' : 'action.close')} ${esc(item.title)}
+    </button>`;
+  }).join('');
+  wrap.innerHTML = `<div class="pb-assign-card">
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork for this show</div>
+    <div class="u-note-sm u-mb8">What this show code requires. Off means hidden for the whole crew and skipped in the package export. Saved work is kept and comes back when an item is turned back on. Production Notes is always on.</div>
+    <div class="admin-src-chips">${chips}</div>
+  </div>`;
+}
+
+function togglePaperworkItemEnabled(itemId) {
+  if (!canManageCallSheetStructure() || groupActive()) return;
+  const item = PAPERWORK_ITEMS.find(p => p.id === itemId);
+  if (!item || item.id === 'production-notes') return;
+  const key = paperworkConfigKey(item.id);
+  const map = { ...paperworkEnabledMapLive() };
+  const turningOff = paperworkTypeEnabled(item.id);
+  if (turningOff) map[key] = false;
+  else delete map[key];
+  const now = Date.now();
+  // Direct write, never diff-gated: the new map is derived from CLOUD truth,
+  // and routing it through the local-mirror diff could skip the cloud write
+  // entirely whenever the local mirror had already diverged to the target
+  // value (a prior offline/denied toggle). Local base mirror first, then the
+  // masked parent-doc patch, matching the dashboard editor's idiom.
+  try {
+    const prev = basePreProData();
+    localStorage.setItem(preProBaseKey(), JSON.stringify({
+      ...prev,
+      paperworkEnabled: map,
+      _fieldUpdatedAt: { ...(prev._fieldUpdatedAt || {}), paperworkEnabled: now },
+      updatedAt: now,
+    }));
+  } catch {}
+  if (onSharedShowCode()) {
+    // Optimistic local adoption plus the fingerprint, so the echo of THIS
+    // write repaints nothing, while a differing echo (another client, or a
+    // failed write reverting) always does.
+    if (sessionSnapshotLatestDoc) {
+      sessionSnapshotLatestDoc.prePro = sessionSnapshotLatestDoc.prePro || {};
+      sessionSnapshotLatestDoc.prePro.paperworkEnabled = map;
+    }
+    _lastPaperworkConfigFingerprint = JSON.stringify(map);
+    if (window._firebaseReady && window._updateDoc) {
+      window._updateDoc(window._doc(window._db, 'sessions', session.code), {
+        'prePro.paperworkEnabled': map,
+        'prePro._fieldUpdatedAt.paperworkEnabled': now,
+        'prePro.updatedAt': now,
+      }).catch(err => reportCloudWriteFailure('Paperwork config save', err));
+    }
+  }
+  pbRefreshPaperworkConfigUI();
+  toast(turningOff ? `${item.title} turned off for this show.` : `${item.title} turned back on.`);
+}
+
+// One place to refresh every surface that renders from the paperwork config.
+let _lastPaperworkConfigFingerprint = '';
+function pbRefreshPaperworkConfigUI() {
+  if (!document.getElementById('paperworkHubModal')?.classList.contains('on')) return;
+  renderPaperworkHubGrid();
+  renderPlandaBearPaperworkManager();
+  renderPackageSheetPicker();
+  renderPlandaBearAssignmentsCard();   // the per-person picker honors the config
 }
 
 // The app's assignments editor (the Admin panel's Crew tab retired in its
@@ -16860,6 +17768,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
           <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
         </div>
       </div>
+      ${pbAssignmentRosterStripHTML(draft)}
       <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(draft)}</div>
       <div class="admin-assignment-actions">
         <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
@@ -23449,8 +24358,23 @@ function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
   const tombstones = pruneCallSheetTombstones({ ...callSheetTombstones(data), [sheet.id]: Date.now() });
   const strippedRows = savedRows.map(row => {
     if (!Array.isArray(row?.paperwork)) return row;
-    const kept = row.paperwork.filter(item => String(item || '').trim().toLowerCase() !== sheetLabel);
-    return kept.length === row.paperwork.length ? row : { ...row, paperwork: kept };
+    // Strip ids and labels TOGETHER: they pair positionally, and dropping a
+    // label alone left the deleted sheet's id mis-paired onto the next
+    // surviving label when the row was later re-normalized. Rows that never
+    // carried paperworkIds keep their legacy id-less shape: fabricating ids
+    // here would hash differently from the catalog's and uncheck the row's
+    // surviving deliverables in the editor.
+    const hadIds = Array.isArray(row.paperworkIds);
+    const ids = hadIds ? row.paperworkIds : [];
+    const kept = [];
+    const keptIds = [];
+    row.paperwork.forEach((item, i) => {
+      if (String(item || '').trim().toLowerCase() === sheetLabel) return;
+      kept.push(item);
+      if (hadIds) keptIds.push(ids[i] || null);
+    });
+    if (kept.length === row.paperwork.length) return row;
+    return hadIds ? { ...row, paperwork: kept, paperworkIds: keptIds } : { ...row, paperwork: kept };
   });
   const nextIdx = Math.max(0, Math.min(idx, remaining.length - 1));
   storeActiveCallSheetIndex(nextIdx, remaining);
@@ -25210,27 +26134,55 @@ function addCallSheetPerson() {
   renderCallSheetPeople();
 }
 
-// v2.1 D9.7: one-tap crew fill from the saved role assignments — the app
-// already knows person + position; stop making students retype them.
+// v2.1 D9.7, reworked in the pre-show fix round: one-tap crew fill from the
+// saved role assignments. A person with several positions gets ONE row with
+// the positions joined; a person already on the sheet gets their position
+// UPDATED to the roster's truth (their typed email/phone/call are kept, and a
+// repeat fill never duplicates); people added by hand who are not on the
+// roster are left alone. The fill saves immediately: it used to sit in the
+// draft until the next keystroke, so filling and closing the tab lost it.
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
   if (!roster.length) { toast('No saved role assignments yet. Assign positions on the Planda Bear hub first.'); return; }
-  const have = new Set(callSheetPeople.map(p => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
-  const defaultCall = timeInputValue('pp-call');
-  let added = 0;
+  // Group person -> joined positions, in roster order.
+  const byPerson = new Map();
   roster.forEach(row => {
     const name = String(row.person).trim();
     const key = name.toLowerCase();
-    if (have.has(key)) return;
-    have.add(key);
-    callSheetPeople.push({ name, position: String(row.position || '').trim(), email:'', phone:'', call: defaultCall });
+    const position = String(row.position || '').trim();
+    if (!byPerson.has(key)) byPerson.set(key, { name, positions: [] });
+    if (position && !byPerson.get(key).positions.includes(position)) byPerson.get(key).positions.push(position);
+  });
+  const defaultCall = timeInputValue('pp-call');
+  let added = 0, updated = 0;
+  byPerson.forEach(entry => {
+    const key = entry.name.toLowerCase();
+    const position = entry.positions.join(' / ');
+    const existing = callSheetPeople.find(p => String(p?.name || '').trim().toLowerCase() === key);
+    if (existing) {
+      if (position && String(existing.position || '').trim() !== position) {
+        existing.position = position;
+        updated++;
+      }
+      return;
+    }
+    callSheetPeople.push({ name: entry.name, position, email:'', phone:'', call: defaultCall });
     added++;
   });
-  // Drop placeholder blank rows once real people exist.
-  if (added) callSheetPeople = callSheetPeople.filter(p => Object.values(p).some(v => String(v || '').trim()));
-  renderCallSheetPeople();
-  toast(added ? `Added ${added} ${added === 1 ? 'person' : 'people'} from the roster.` : 'Everyone on the roster is already on this sheet.');
+  if (added || updated) {
+    // Drop placeholder blank rows once real people exist.
+    callSheetPeople = callSheetPeople.filter(p => Object.values(p).some(v => String(v || '').trim()));
+    renderCallSheetPeople();
+    saveCallSheet(false);
+    const parts = [];
+    if (added) parts.push(`Added ${added} ${added === 1 ? 'person' : 'people'}`);
+    if (updated) parts.push(`updated ${updated} position${updated === 1 ? '' : 's'}`);
+    toast(`${parts.join(', ')} from the roster.`);
+  } else {
+    renderCallSheetPeople();
+    toast('The sheet already matches the roster.');
+  }
 }
 
 // v2.1 D9.7: estimated wrap = show start (or call) + the rundown's total

@@ -648,7 +648,13 @@
   function resolveCallerState(input) {
     input = input || {};
     var solo = Boolean(input.isDemo || input.isExpert || !input.code || input.local);
-    var privileged = Boolean(input.hasAdminSession);
+    // Control is a capability, not a job title (pre-show fix plan, item 1):
+    // besides a live admin auth session, a device whose signed-in profile
+    // holds the session's control grant (input.hasControlGrant, matched by
+    // profile username against the session doc's controlGrant field) may
+    // drive. The grant is instructor-issued and instructor-revocable; the
+    // role string stays 'student' and confers nothing on its own.
+    var privileged = Boolean(input.hasAdminSession || input.hasControlGrant);
     var followingSelf = Boolean(input.browsingSelf) ||
       (!input.followTarget && (solo || privileged));
     return Object.freeze({
