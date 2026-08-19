@@ -32,6 +32,7 @@ export const ASSETS = [
   'cueola-keymap.js',
   'cueola-prompter-session.js',
   'cueola-script-operator-protocol.js',
+  'cueola-scriptop-prefs.js',
   // KeyWi Bird (control surface) + OBS bridge. These were hand-versioned and so
   // never got bumped: any edit kept the same ?v=, so the service worker served a
   // stale copy forever. Managed here now, like every other versioned asset.

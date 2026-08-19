@@ -271,6 +271,39 @@ function renderLiveStatusRail(state=liveSessionController?.getState?.()) {
     if (liveRegion) liveRegion.textContent = announcement;
   }
   lastLiveStatusAnnouncement = announcement;
+  updateLiveStatusRailVisibility();
+}
+
+// Damped rail visibility: an attention state must hold for a beat before the
+// rail opens, and a quiet stretch must hold before it closes. Without this,
+// link states flapping at heartbeat rate (cache/server sync metadata ~1.4Hz,
+// playback re-derived at 1Hz, talent promote-on-one-ack sawtooth) strobe a
+// 42px layout jump of the whole rundown (owner 2026-08-19: "freaking out").
+const LS_RAIL_ATTENTION = ['recovering','degraded','error','failed','disconnected','stalled'];
+const LS_RAIL_OPEN_CONFIRM_MS = 1500;
+const LS_RAIL_CLOSE_HOLD_MS = 6000;
+let _railFlipTimer = null;
+function liveRailWantsAttention() {
+  const sel = LS_RAIL_ATTENTION.map(s => `.ls-status-item[data-state="${s}"]`).join(',');
+  return !!document.querySelector(`#liveshow .ls-status-rail :is(${sel})`);
+}
+function updateLiveStatusRailVisibility() {
+  const rail = document.querySelector('#liveshow .ls-status-rail');
+  if (!rail) return;
+  const open = rail.classList.contains('ls-rail-open');
+  const want = liveRailWantsAttention();
+  if (want === open) {
+    if (_railFlipTimer) { clearTimeout(_railFlipTimer); _railFlipTimer = null; }
+    return;
+  }
+  if (_railFlipTimer) return;   // a flip in this direction is already pending
+  _railFlipTimer = setTimeout(() => {
+    _railFlipTimer = null;
+    const railNow = document.querySelector('#liveshow .ls-status-rail');
+    if (!railNow) return;
+    const wantNow = liveRailWantsAttention();
+    if (wantNow !== railNow.classList.contains('ls-rail-open')) railNow.classList.toggle('ls-rail-open', wantNow);
+  }, want ? LS_RAIL_OPEN_CONFIRM_MS : LS_RAIL_CLOSE_HOLD_MS);
 }
 
 async function recoverLiveSubsystem(name) {
@@ -340,6 +373,7 @@ function _callerStateInputs() {
     isDemo: session.isDemo, isExpert: session.isExpert, code: session.code,
     local: session.local, role: session.role, hasAdminSession: adminSession != null,
     hasControlGrant: sessionControlGrantHeldByMe(),
+    grantHeldElsewhere: !!(sessionControlGrant?.username && !sessionControlGrantHeldByMe()),
   };
 }
 
@@ -365,6 +399,11 @@ function adoptControlGrant(grant) {
   sessionControlGrant = next;
   const held = sessionControlGrantHeldByMe();
   if (held && !_heldControlGrantBefore) {
+    // Taking the wheel must not require un-following anyone first: a student
+    // mirroring the instructor would otherwise stay locked (the caller
+    // resolver treats an active follow as "not calling") and the grant looks
+    // dead on their machine until they manually switch to Myself.
+    browsingSelf = false; followTarget = ''; followTargetId = '';
     toast('You have rundown control. GO advances the show for everyone.');
     logShow('cue', `Rundown control granted to ${sessionControlGrant.displayName || sessionControlGrant.username}`);
   } else if (!held && _heldControlGrantBefore) {
@@ -377,6 +416,7 @@ function adoptControlGrant(grant) {
   _heldControlGrantBefore = held;
   updateLiveGoControl();
   renderFollowChips();
+  renderShowCallerBadge();
   notifyControlSurfaceState();
 }
 
@@ -805,6 +845,7 @@ let freeTextMode = false;
 let pnPanelOpen = false;
 let pnTargetBeatId = null;
 let pnFilterTag = 'all';
+const pnExpandedNotes = new Set();   // note ids the builder panel shows in full
 
 const LOCAL_DRAFT_PREFIX = 'cueola_local_draft_';
 let localDraftLastKey = '';
@@ -5878,15 +5919,42 @@ function renderRundownIfChanged(d) {
 // without knowing it. Cached snapshots and offline events show the chip; the
 // next server snapshot clears it (Firestore resyncs full state on reconnect).
 let _lastSnapshotTs = 0;
+// Damping: snapshot metadata flips cache/server at snapshot rate (~1.4x/s
+// during playout), and the chip feeds the status rail's attention state. A
+// cache stretch must persist before the chip shows, and once shown it holds
+// long enough to read, so the rail never strobes on metadata churn.
+const SYNC_RECONN_CONFIRM_MS = 2500;
+const SYNC_RECONN_MIN_SHOW_MS = 4000;
+let _syncSnapFromCache = false, _syncReconnPendingTimer = null, _syncReconnShownAt = 0, _syncReconnClearTimer = null;
 function noteSnapshotArrived(snap) {
   _lastSnapshotTs = Date.now();
-  setSyncReconnecting(!!(snap && snap.metadata && snap.metadata.fromCache && !(snap.metadata.hasPendingWrites)));
+  _syncSnapFromCache = !!(snap && snap.metadata && snap.metadata.fromCache && !(snap.metadata.hasPendingWrites));
+  if (_syncSnapFromCache) {
+    if (!_syncReconnState && !_syncReconnPendingTimer) {
+      _syncReconnPendingTimer = setTimeout(() => {
+        _syncReconnPendingTimer = null;
+        if (_syncSnapFromCache) setSyncReconnecting(true);
+      }, SYNC_RECONN_CONFIRM_MS);
+    }
+    return;
+  }
+  if (_syncReconnPendingTimer) { clearTimeout(_syncReconnPendingTimer); _syncReconnPendingTimer = null; }
+  if (_syncReconnState) {
+    const wait = Math.max(0, SYNC_RECONN_MIN_SHOW_MS - (Date.now() - _syncReconnShownAt));
+    clearTimeout(_syncReconnClearTimer);
+    _syncReconnClearTimer = setTimeout(() => { _syncReconnClearTimer = null; if (_syncReconnState && !_syncSnapFromCache) setSyncReconnecting(false); }, wait);
+  }
 }
 let _syncReconnState = false;
 function setSyncReconnecting(on, restoredDetail='Cloud sync restored') {
   const chip = document.getElementById('ls-stat-sync');
   if (chip) chip.hidden = !on;
   if (on) {
+    _syncReconnShownAt = Date.now();
+    // A NEW outage (write failure, offline event) must invalidate any clear
+    // scheduled during the previous recovery, or a stale timer hides the chip
+    // mid-outage and logs a false "restored".
+    if (_syncReconnClearTimer) { clearTimeout(_syncReconnClearTimer); _syncReconnClearTimer = null; }
     setCloudSyncState('saving', 'Cloud sync reconnecting. Showing last known state…');
     liveLinkState.noteDegraded('cloud', 'Reconnecting. Showing the last confirmed state');
   }
@@ -6603,6 +6671,11 @@ uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeE
 // on the dialog Esc-stack and fight data-esc-hold panels).
 // ─────────────────────────────────────────────────────────────
 const INFO_POPS = {
+  'playback-call': {
+    title: 'The playback call: READY · TRACK · ROLL · TAKE',
+    lesson: 'cueola-live', section: 'steps',
+    body: 'Link this row to an Outrangutan cue and check <b>Run the playback call</b>. In Live, when GO advances onto this row, Cueola calls it like a director: <b>READY</b> (the clip goes on standby), <b>TRACK</b> (audio up), <b>ROLL</b> (about to fire), then <b>TAKE</b> plays the clip. Each step is one second. Press <b>S</b> to abort before it fires; <b>G</b> skips the wait and takes right now. Prefer to pull the trigger yourself? Turn on Manual TAKE in Live and GO only readies the clip. The PREP and OUT guided rows below put the ready and the get-out on paper as real rundown rows.',
+  },
   'export-package': {
     title: 'What’s in the export',
     lesson: 'plandabear', section: 'steps',
@@ -7806,7 +7879,7 @@ function ccGuidedRowsSection(d) {
         <label class="cc-check"><input type="checkbox" id="cc-guided-prep" ${(bothDefault || prepExists) ? 'checked' : ''}> Add a PREP row before this cue (ready the playback, track the audio)</label>
         <label class="cc-check"><input type="checkbox" id="cc-guided-out" ${(bothDefault || outExists) ? 'checked' : ''}> Add an OUT row after this cue (where the show goes next)</label>
       </div>
-      <div class="field-hint">Guided rows are real rundown rows. Students can edit or delete them.</div>
+      <div class="field-hint">PREP readies the clip before the call; OUT is where the show goes after it ends. Guided rows are real rundown rows. Students can edit or delete them.</div>
     </div>`;
 }
 
@@ -8485,11 +8558,20 @@ function renderPlayoutStrip() {
   const strip = document.getElementById('lsPlayoutStrip');
   if (!strip) return;
   const now = playoutNow();
-  if (!now) { if (!strip.hidden) strip.hidden = true; return; }
-  if (strip.hidden) strip.hidden = false;
   const nameEl = document.getElementById('lsPlayoutName');
   const timeEl = document.getElementById('lsPlayoutTime');
   const fill = document.getElementById('lsPlayoutFill');
+  if (strip.hidden) strip.hidden = false;
+  if (!now) {
+    // The strip's 34px slot stays in the flow when idle — a quiet placeholder
+    // instead of display:none, so playback starting or stopping never shoves
+    // the rundown up and down (owner 2026-08-19).
+    if (strip.dataset.status !== 'idle') strip.dataset.status = 'idle';
+    if (nameEl && nameEl.textContent !== 'Nothing playing') nameEl.textContent = 'Nothing playing';
+    if (timeEl && timeEl.textContent !== '') timeEl.textContent = '';
+    if (fill && fill.style.width !== '0%') fill.style.width = '0%';
+    return;
+  }
   const name = now.name || (now.kind === 'pad' ? 'SFX' : 'Playout');
   if (nameEl && nameEl.textContent !== name) nameEl.textContent = name;
   let t = now.loop ? '∞' : (now.remainMs != null ? outrangutanFmtDur(Math.round(now.remainMs / 1000)) : '');
@@ -8604,6 +8686,38 @@ function outrangutanPadOptions(cur, curName) {
 
 // Optional Outrangutan link block — playback cells get cue + SFX links; audio
 // cells get the SFX link (P4: rundown items cue SFX through the same cue flow).
+// Builder demo of the playback call: steps the Live banner's exact stages on
+// the Live cadence, fires nothing, and narrates each beat — so the call can
+// be SEEN while it is being set up, not first discovered on air (the "Fire
+// now" test buttons skip the call entirely, which hid it from builders).
+let _ccCallDemoTimer = null;
+function runCueCallDemo() {
+  const box = document.getElementById('ccCallDemo');
+  const stageEl = document.getElementById('ccCallDemoStage');
+  const noteEl = document.getElementById('ccCallDemoNote');
+  if (!box || !stageEl || !noteEl) return;
+  const steps = [
+    ['ready', 'READY', 'GO landed on this row. The clip goes on standby in Outrangutan.'],
+    ['track', 'TRACK', 'Audio is up next. The crew hears the call coming.'],
+    ['roll', 'ROLL', 'Last second. S aborts the call; G takes right now.'],
+    ['take', 'TAKE', 'The clip fires and plays. That is the whole call.'],
+    ['done', 'DEMO', 'Nothing was fired. In Live, this runs when GO advances onto this row.'],
+  ];
+  clearTimeout(_ccCallDemoTimer);
+  box.hidden = false;
+  let i = 0;
+  const step = () => {
+    const [stage, label, note] = steps[i];
+    box.dataset.stage = stage;
+    stageEl.textContent = label;
+    noteEl.textContent = note;
+    i += 1;
+    if (i < steps.length) _ccCallDemoTimer = setTimeout(step, stage === 'take' ? 1600 : RTRT_STAGE_MS);
+    else _ccCallDemoTimer = setTimeout(() => { box.hidden = true; }, 6000);
+  };
+  step();
+}
+
 function outrangutanCueFields(type, d) {
   if (type !== 'playback' && type !== 'audio') return '';
   d = d || {};
@@ -8617,7 +8731,8 @@ function outrangutanCueFields(type, d) {
           ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Auto-fire when this row advances live</label>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Run the playback call when this row goes live</label>
+      <div class="field-hint cc-call-hint">GO onto this row in Live runs <b>READY · TRACK · ROLL</b>, then <b>TAKE</b> fires the clip. S aborts. Watch it: <b>See the call</b> below.</div>`;
   const sfxPart = `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
@@ -8629,13 +8744,18 @@ function outrangutanCueFields(type, d) {
       <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
   return `
     <div class="field cc-trigger cc-outrangutan">
-      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">(optional)</span></div>
+      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">(optional)</span>${type === 'playback' ? `<button type="button" class="info-btn" aria-label="How the playback call works" onclick="toggleInfoPop(event,'playback-call')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>` : ''}</div>
       ${cuePart}
       ${sfxPart}
       <div class="cc-trigger-actions">
-        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
+        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-call-demo-btn" onclick="runCueCallDemo()" data-tip="A safe on-screen demo of the READY · TRACK · ROLL · TAKE call. Fires nothing.">${sfIcon('media.play')} See the call</button>` : ''}
+        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()" data-tip="Really plays the cue in Outrangutan right now, skipping the call"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
         <button type="button" class="cc-trigger-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
       </div>
+      ${type === 'playback' ? `<div class="cc-call-demo" id="ccCallDemo" hidden data-stage="ready" aria-live="polite">
+        <div class="cc-call-demo-stage" id="ccCallDemoStage">READY</div>
+        <div class="cc-call-demo-note" id="ccCallDemoNote"></div>
+      </div>` : ''}
     </div>`;
 }
 
@@ -9182,7 +9302,10 @@ function outrangutanCellBadge(d, beatId) {
   const status = isLive ? `<span class="cue-out-live cue-out-${live.status}">${label}</span>` : '';
   // D11.4: live time-remaining, ticked locally on every machine.
   const remain = isLive ? `<span class="cue-out-remain" data-outremain="${esc(String(id))}">${outCountdownText(id)}</span>` : '';
-  return `<div class="cue-out-badge"${beatId != null ? ` data-outbadge="${esc(String(beatId))}"` : ''}><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${status}${remain}</div>`;
+  // The builder tell for an armed call: without it, nothing on the row said
+  // it would run READY · TRACK · ROLL · TAKE when GO lands on it.
+  const call = d.outAuto ? `<span class="cue-out-callchip" data-tip="GO onto this row in Live runs the playback call: READY · TRACK · ROLL · TAKE">CALL</span>` : '';
+  return `<div class="cue-out-badge"${beatId != null ? ` data-outbadge="${esc(String(beatId))}"` : ''}><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${call}${status}${remain}</div>`;
 }
 
 
@@ -12051,7 +12174,9 @@ function updateLsPrompter() {
 
 // Inspector tabs (Keynote-style): one control group at a time in the Script Op
 // drawer. The chosen tab is remembered so the panel reopens where you work.
-const LS_INSP_LABELS = { transport: 'Prompter', live: 'Cue & On Air', clock: 'Clocks & Alerts', format: 'Formatting & Markers' };
+// Tab keys and captions mirror the pop-out's TAB_LABELS (script-operator.js):
+// the pop-out is the reference surface the built-in is based on.
+const LS_INSP_LABELS = { transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme' };
 function lsInspTab(key) {
   if (!LS_INSP_LABELS[key]) key = 'transport';
   document.querySelectorAll('#lsOperatorDrawer .insp-tab').forEach(b => {
@@ -12067,10 +12192,11 @@ function lsInspTab(key) {
 function lsInspRestoreTab() {
   let key = 'transport';
   try { key = localStorage.getItem('cueola_insp_tab') || 'transport'; } catch {}
+  if (key === 'format') key = 'display';   // pre-parity stored tab key
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '2';
+const SCRIPT_OP_REGION_VERSION = '3';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -12180,12 +12306,26 @@ function renderLivePrompterControls() {
   const live = document.getElementById('lsLiveActions');
   const clocks = document.getElementById('lsClockActions');
   const remote = document.getElementById('lsPrompterRemote');
+  const displayPane = document.getElementById('lsDisplayControls');
   mountScriptOpRegion(live, 'live', () => liveActionsHTML('lsq'));
   mountScriptOpRegion(clocks, 'clock', () => clockAndAlertControlsHTML('lsq'));
   mountScriptOpRegion(remote, 'prompter', () => promptOpControlsHTML(false));
+  mountScriptOpRegion(displayPane, 'display', () => scriptOpDisplayPaneHTML());
   patchScriptOpLiveActions(live);
   patchScriptOpClockControls(clocks);
   patchScriptOpPrompterControls(remote);
+  patchScriptOpPrompterControls(displayPane);
+  syncLiveTextZoomReadout();
+  // Section arranging + favorites quick row (shared with the pop-out).
+  if (window.CueolaScriptOpPrefs) {
+    const drawer = document.getElementById('lsOperatorDrawer');
+    if (drawer && !drawer.dataset.sopPrefs) {
+      drawer.dataset.sopPrefs = '1';
+      window.CueolaScriptOpPrefs.init({ root: drawer, before: drawer.querySelector('.insp-head') });
+    } else if (drawer) {
+      window.CueolaScriptOpPrefs.sync();
+    }
+  }
   renderPromptOpClockPreview();
   applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
   lsInspRestoreTab();   // keep the remembered inspector tab active across re-renders
@@ -12214,6 +12354,7 @@ let _scriptOpWatchdog = null;
 let _scriptOpActiveOperatorId = '';
 let _scriptOpLastStateFingerprint = '';
 let _scriptOpDisconnectAnnounced = false;
+let _scriptOpLastStatePushAt = 0;   // rate limit for heartbeat-resume STATE pushes
 
 function toggleScriptOpPopout() { openScriptOpPopout(); }
 
@@ -12480,6 +12621,18 @@ function scriptOperatorHandleMessage(message, source=null, origin='') {
     _scriptOpDisconnectAnnounced = false;
     const ready = _scriptOpHost.isReady();
     setLiveSubsystemStatus('scriptOperator', ready && focused ? 'active' : ready ? 'ready' : 'connecting', ready ? (focused ? 'Script Operator active' : 'Script Operator synchronized') : 'Restoring Script Operator state');
+    if (!ready) {
+      // Beats resumed after a timeout, but checkHeartbeat cleared the
+      // acknowledged snapshot: answering with another heartbeat parks the
+      // link in "Restoring" forever (the idle-popout death). Push a full
+      // STATE instead so the operator can re-acknowledge and go ready.
+      if (Date.now() - _scriptOpLastStatePushAt > 3000) {
+        _scriptOpLastStatePushAt = Date.now();
+        _scriptOpLastStateFingerprint = '';
+        scriptOperatorPublishState(true);
+      }
+      return;
+    }
     scriptOperatorSend(_scriptOpHost.buildHeartbeat());
     return;
   }
@@ -12517,7 +12670,10 @@ function startScriptOperatorHost(identity) {
   }
   _scriptOpWindowMessageHandler = event => scriptOperatorHandleMessage(event.data, event.source, event.origin);
   window.addEventListener('message', _scriptOpWindowMessageHandler);
-  _scriptOpWatchdog = setInterval(() => {
+  // The watchdog rides a worker timer: a hidden main window's setInterval
+  // throttles to once a minute after ~5 idle minutes, which both blew the 6s
+  // heartbeat budget and let published snapshots go a minute stale.
+  _scriptOpWatchdog = P.createSteadyInterval(() => {
     if (_scriptOpWin && _scriptOpWin.closed) {
       stopScriptOperatorHost({ reason:'operator-window-closed', closeWindow:false, clearWindow:true, notify:false });
       return;
@@ -12530,12 +12686,12 @@ function startScriptOperatorHost(identity) {
         setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost, resyncing');
         logShow('error', 'Script Operator disconnected · missed three heartbeats · automatic resync attempt');
         console.warn('[Script Operator] Heartbeat lost', status);
-        // D11.8 (Jul 17 pop-out death): the window is open but deaf —
-        // suspects are a dropped BroadcastChannel after long idle or an SW
-        // update mid-show. One automatic full-state republish re-binds an
-        // alive window; a truly dead one stays on the chip with the
-        // one-click reopen (rail: Recover Script Operator).
-        try { scriptOperatorPublishState(true); } catch {}
+        // D11.8 (Jul 17 pop-out death): checkHeartbeat just cleared
+        // `connected`, so publishing here is a guaranteed no-op (the old
+        // "automatic republish" never sent anything). Reset the fingerprint
+        // instead: the moment beats resume, the heartbeat handler's
+        // not-ready branch pushes a full STATE and the link self-heals.
+        _scriptOpLastStateFingerprint = '';
       }
       return;
     }
@@ -12555,7 +12711,7 @@ function stopScriptOperatorHost(options={}) {
   const reason = options.reason || 'Script Operator closed';
   if (_scriptOpHost && options.notify !== false) scriptOperatorSend(_scriptOpHost.close(reason));
   else if (_scriptOpHost) _scriptOpHost.close(reason);
-  clearInterval(_scriptOpWatchdog);
+  if (_scriptOpWatchdog) { try { _scriptOpWatchdog.cancel(); } catch {} }
   _scriptOpWatchdog = null;
   if (_scriptOpWindowMessageHandler) window.removeEventListener('message', _scriptOpWindowMessageHandler);
   _scriptOpWindowMessageHandler = null;
@@ -12698,6 +12854,7 @@ function stepLiveTextZoom(delta) {
   const current = parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1;
   const zoom = applyLiveTextZoom(Math.round((current + Number(delta)) * 20) / 20);
   try { localStorage.setItem('cueola_liveTextZoom', String(zoom)); } catch (e) {}
+  syncLiveTextZoomReadout();
   toast(`Live panel text ${Math.round(zoom * 100)}%`);
 }
 try { const _savedLiveZoom = parseFloat(localStorage.getItem('cueola_liveTextZoom')); if (_savedLiveZoom) applyLiveTextZoom(_savedLiveZoom); } catch (e) {}
@@ -13450,10 +13607,10 @@ function patchPrompterPlayButton(btn, isPlaying) {
   if (playIcon && pauseIcon && label) {
     playIcon.hidden = Boolean(isPlaying);
     pauseIcon.hidden = !isPlaying;
-    label.textContent = isPlaying ? 'PAUSE' : 'PLAY';
+    label.textContent = isPlaying ? 'Pause' : 'Play';   // pop-out label casing
   } else {
     // Talent and older overlay markup do not carry the mount-once hooks.
-    btn.innerHTML = `${isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
+    btn.innerHTML = `${isPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${isPlaying ? 'Pause' : 'Play'}`;
   }
   btn.classList.toggle('active', isPlaying);
   btn.setAttribute('aria-pressed', isPlaying ? 'true' : 'false');
@@ -13462,11 +13619,10 @@ function patchPrompterPlayButton(btn, isPlaying) {
   }
 }
 
-function promptOpControlsHTML(includeLiveActions = true) {
+function poTransportSectionHTML(scope) {
   const playAction = ptPlaying ? 'pause' : 'resume';
-  const playLabel = ptPlaying ? 'PAUSE' : 'PLAY';
-  const scope = includeLiveActions ? 'po' : 'lsq';
-  const transport = `<div class="flow-control-section flow-control-transport">
+  const playLabel = ptPlaying ? 'Pause' : 'Play';
+  return `<div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Transport</div>
       <div class="flow-control-grid one">
         <button class="pt-btn${ptPlaying?' active':''}" id="${scope}-play-btn" data-prompter-play data-prompter-scope="${scope}" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}"><span class="sf-symbol" data-symbol="media.play" data-prompter-play-icon="play" aria-hidden="true"${ptPlaying ? ' hidden' : ''}></span><span class="sf-symbol" data-symbol="media.pause" data-prompter-play-icon="pause" aria-hidden="true"${ptPlaying ? '' : ' hidden'}></span><span data-prompter-play-label>${playLabel}</span></button>
@@ -13478,7 +13634,9 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
       </div>
     </div>`;
-  const display = `<div class="flow-control-section flow-control-display">
+}
+function poDisplaySectionHTML(scope) {
+  return `<div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="${scope}-speed-value" for="${scope}-speed-range" data-prompter-speed-value>${Math.round(ptTargetSpeed)}</output></span>
@@ -13499,13 +13657,17 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn${ptAlign==='right'?' active':''}" data-prompter-align="right" onclick="sendPrompterControl('align_right')" aria-label="Align right" aria-pressed="${ptAlign === 'right' ? 'true' : 'false'}">Right</button>
       </div>
     </div>`;
-  const theme = `<div class="flow-control-section flow-theme-section">
+}
+function poThemeSectionHTML() {
+  return `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
         ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile pt-theme-dot${ptThemeName===name?' on active':''}" data-prompter-theme="${name}" onclick="sendPrompterControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
     </div>`;
-  const screen = `<div class="flow-control-section flow-control-screen">
+}
+function poScreenSectionHTML() {
+  return `<div class="flow-control-section flow-control-screen">
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid four">
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
@@ -13514,8 +13676,15 @@ function promptOpControlsHTML(includeLiveActions = true) {
         <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
       </div>
     </div>`;
-  // Script Op's Prompter pane: flat sections only — the drawer already has its own tabs.
-  if (!includeLiveActions) return `<div class="prompt-op-panel flow-control-panel">${transport}${display}${theme}${screen}</div>`;
+}
+function promptOpControlsHTML(includeLiveActions = true) {
+  const scope = includeLiveActions ? 'po' : 'lsq';
+  const transport = poTransportSectionHTML(scope);
+  const screen = poScreenSectionHTML();
+  // Script Op's Transport pane mirrors the pop-out's Transport tab exactly:
+  // Transport + Screen. Display, Theme, Formatting, and Panel Text live in
+  // the Display & Theme pane (the pop-out is the reference surface).
+  if (!includeLiveActions) return `<div class="prompt-op-panel flow-control-panel">${transport}${screen}</div>`;
   // Operator overlay: the same inspector standard as the Script Op drawer —
   // icon tabs pick ONE flat group, no card grid.
   return `<div class="prompt-op-panel flow-control-panel op-insp" data-insp-scope="po">
@@ -13523,9 +13692,50 @@ function promptOpControlsHTML(includeLiveActions = true) {
     <div class="insp-pane" data-insp-pane="transport">${transport}</div>
     <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${liveActionsHTML('po')}</div></div>
     <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('po')}</div>
-    <div class="insp-pane" data-insp-pane="display">${display}${theme}</div>
+    <div class="insp-pane" data-insp-pane="display">${poDisplaySectionHTML(scope)}${poThemeSectionHTML()}</div>
     <div class="insp-pane" data-insp-pane="screen">${screen}</div>
   </div>`;
+}
+
+// The built-in Display & Theme pane mirrors the pop-out's fourth tab exactly:
+// Display, Theme, Formatting & Markers, Panel Text (owner 2026-08-19: the
+// pop-out is the surface the built-in is based on).
+function scriptOpDisplayPaneHTML() {
+  const zoom = Math.round((parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1) * 100);
+  const formatting = `<div class="flow-control-section flow-control-format">
+      <div class="flow-control-title">Formatting &amp; Markers</div>
+      <div class="ls-format-cascade" aria-label="Formatting and markers">
+        <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" data-tip="Make the selected text bold (Cmd+B)" aria-label="Bold"><strong>B</strong></button>
+        <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" data-tip="Make the selected text italic (Cmd+I)" aria-label="Italic"><em>I</em></button>
+        <span class="fmt-sep"></span>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\\n\\n')" data-tip="Start a new paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
+      </div>
+    </div>`;
+  const panelText = `<div class="flow-control-section flow-control-paneltext">
+      <div class="flow-control-title">Panel Text</div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Zoom <output class="pt-ctrl-val" id="lsq-zoom-value" for="lsq-zoom-range">${zoom}%</output></span>
+        <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)">−</button>
+        <input type="range" class="pt-range" id="lsq-zoom-range" min="85" max="150" step="5" value="${zoom}" oninput="setLiveTextZoomPct(this.value)">
+        <button class="pt-btn" onclick="stepLiveTextZoom(0.05)">+</button>
+      </div>
+    </div>`;
+  return `<div class="prompt-op-panel flow-control-panel">${poDisplaySectionHTML('lsq')}${poThemeSectionHTML()}${formatting}${panelText}</div>`;
+}
+function setLiveTextZoomPct(pct) {
+  const zoom = applyLiveTextZoom((Number(pct) || 100) / 100);
+  try { localStorage.setItem('cueola_liveTextZoom', String(zoom)); } catch (e) {}
+  syncLiveTextZoomReadout();
+}
+function syncLiveTextZoomReadout() {
+  const pct = Math.round((parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1) * 100);
+  const out = document.getElementById('lsq-zoom-value');
+  if (out) out.textContent = pct + '%';
+  const range = document.getElementById('lsq-zoom-range');
+  if (range && document.activeElement !== range) range.value = String(pct);
 }
 
 // ── Operator overlay / Flowmingo Op inspector tabs ─────────────────────────
@@ -16441,13 +16651,14 @@ function disabledPaperworkOptions() {
 // disabled and renumber coherently when something is.
 const PAPERWORK_PACKAGE_SECTION_ORDER = ['call-sheet', 'production-scheduler', 'safety-plan',
   'assignment-register', 'rundown', 'video-patch', 'audio-comms-patch', 'stage-plot',
-  'production-notes', 'operator-card'];
+  'production-notes'];
 function paperworkSectionNumbers(snapshot=null) {
   const disabled = snapshot?.options?.paperwork || null;
   const isOn = id => {
-    // D11.1: the operator cheat card is always in the pack — the keys belong
-    // on paper next to the Stream Deck.
-    if (id === 'assignment-register' || id === 'production-notes' || id === 'operator-card') return true;
+    // The D11.1 operator cheat card left the pack entirely (owner 2026-08-19:
+    // the exported keyboard sheets read as clutter); the on-screen "?"
+    // overlay remains the shortcut reference.
+    if (id === 'assignment-register' || id === 'production-notes') return true;
     return disabled ? disabled[paperworkConfigKey(id)] !== false : paperworkTypeEnabled(id);
   };
   const numbers = new Map();
@@ -21019,10 +21230,17 @@ function renderPnPanel() {
 
 function pnNoteCardHTML(note) {
   const tag     = PB_NOTE_TAGS[note.tag] || PB_NOTE_TAGS.general;
-  const preview = note.text ? note.text.slice(0, 180) + (note.text.length > 180 ? '…' : '') : '';
+  const expanded = pnExpandedNotes.has(note.id);
+  const truncated = Boolean(note.text && note.text.length > 180);
+  const preview = note.text ? (expanded ? note.text : note.text.slice(0, 180) + (truncated ? '…' : '')) : '';
   const hasText = Boolean(note.text);
   const atts    = (note.attachments || []).length;
   const canTarget = Boolean(pnTargetBeatId && beats.find(b => b.id === pnTargetBeatId));
+  // Long notes open in full for reference (owner 2026-08-19); the toggle also
+  // releases the 3-line clamp so nothing is hidden while expanded.
+  const moreBtn = truncated
+    ? `<button type="button" class="pn-card-more" onclick="pnToggleNote('${note.id}')">${expanded ? 'Show less' : 'Show full note'}</button>`
+    : '';
 
   return `<div class="pn-card" data-note-id="${note.id}">
     <div class="pn-card-meta">
@@ -21030,7 +21248,8 @@ function pnNoteCardHTML(note) {
       <span class="pn-card-by">${esc(note.by)}</span>
       <span class="pn-card-time">${esc(pbNoteTime(note.at))}</span>
     </div>
-    ${preview ? `<div class="pn-card-text">${esc(preview)}</div>` : ''}
+    ${preview ? `<div class="pn-card-text${expanded ? ' full' : ''}">${esc(preview)}</div>` : ''}
+    ${moreBtn}
     ${atts ? `<div class="pn-card-atts">${sfIcon('action.attach')} ${atts} file${atts > 1 ? 's' : ''}</div>` : ''}
     <div class="pn-card-acts">
       ${canTarget && hasText ? `
@@ -21046,6 +21265,17 @@ function pnNoteCardHTML(note) {
       </button>
     </div>
   </div>`;
+}
+
+function pnToggleNote(id) {
+  if (pnExpandedNotes.has(id)) pnExpandedNotes.delete(id); else pnExpandedNotes.add(id);
+  // The toggle lives inside the scrolled list; a full re-render must not snap
+  // the list back to the top and lose the card the user is reading.
+  const scroll = document.getElementById('pnScroll');
+  const top = scroll ? scroll.scrollTop : 0;
+  renderPnPanel();
+  const fresh = document.getElementById('pnScroll');
+  if (fresh) fresh.scrollTop = top;
 }
 
 function pnSetTarget(val) {
@@ -25255,51 +25485,12 @@ function preProPackageHTML(forExport=false, snapshot=null) {
   if (includePackageNotes) {
     sections.push(`<section${sectionAttr('production-notes', 'Production Notes')}>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, numbers.get('production-notes'))}</section>`);
   }
-  // D11.1: the operator cheat card — keys on paper next to the deck.
-  sections.push(`<section${sectionAttr('operator-card', 'Operator Cheat Card')}>${operatorCheatCardHTML(numbers.get('operator-card'))}</section>`);
   return `
     ${notesToggle}
     ${sections.join('\n    <div class="paper-page-break"></div>\n    ')}
   `;
 }
 
-// D11.1: printed operator cheat card. The live-screen table is GENERATED from
-// the KEYMAP registry (the same table that drives dispatch and the "?"
-// overlay), so the printed card cannot drift from behavior. The Script
-// Operator window column mirrors that window's registered scope; Outrangutan
-// keys read live from its settings when the module shares this tab.
-function operatorCheatCardHTML(sectionNumber=paperworkSectionNumber('operator-card')) {
-  const keyChips = keys => keys.map(k => `<span class="paper-keycap">${esc(k)}</span>`).join(' ');
-  const liveGroups = {};
-  KEYMAP.filter(a => a.scope === 'live').forEach(a => { (liveGroups[a.group] = liveGroups[a.group] || []).push(a); });
-  const liveCols = Object.keys(liveGroups).map(group => `
-    <div class="paper-keygroup">
-      <h3>${esc(group)}</h3>
-      <table class="paper-keys">${liveGroups[group].map(a =>
-        `<tr><td class="paper-keys-k">${keyChips(keymapBindings(a))}</td><td>${esc(a.label)}</td></tr>`).join('')}
-      </table>
-    </div>`).join('');
-  const og = window.Outrangutan?._state?.();
-  const sc = og?.settings?.shortcuts;
-  const nice = k => String(k) === ' ' ? 'Space' : (String(k).length === 1 ? String(k).toUpperCase() : String(k));
-  const ogRows = sc ? [['GO', sc.go], ['Stop', sc.stop], ['Pause', sc.pause], ['Fade-stop', sc.fadeStop], ['PANIC', sc.panic], ['SFX board', 'Tab']]
-    .map(([l, k]) => `<tr><td class="paper-keys-k">${keyChips([nice(k)])}</td><td>${esc(l)}</td></tr>`).join('') : '';
-  const scriptOpRows = [
-    [['Space', 'K'], 'Play / pause'], [['J'], 'Brake (hold)'], [['L'], 'Boost (hold)'],
-    [['-'], 'Text smaller'], [['='], 'Text bigger'], [['['], 'Speed down'], [[']'], 'Speed up'], [['?'], 'Shortcut reference'],
-  ].map(([keys, label]) => `<tr><td class="paper-keys-k">${keyChips(keys)}</td><td>${esc(label)}</td></tr>`).join('');
-  return `
-    <h1 class="psec-h psec-operator">${paperSectionTitle(sectionNumber, 'Operator Cheat Card')}</h1>
-    <div class="paper-key-rule">Arrows drive the <b>rundown</b> · Space/J/K/L drive the <b>prompter</b> · G/P/S drive <b>playout</b>, from any window.</div>
-    <div class="paper-keycols">
-      ${liveCols}
-      <div class="paper-keygroup">
-        <h3>Script Operator window</h3>
-        <table class="paper-keys">${scriptOpRows}</table>
-      </div>
-      ${ogRows ? `<div class="paper-keygroup"><h3>Outrangutan screen</h3><table class="paper-keys">${ogRows}</table></div>` : ''}
-    </div>`;
-}
 
 function paperExportMeta(opts={}) {
   const supplied = opts.exportMeta || {};

@@ -310,11 +310,11 @@ test('one keycommand system on every surface (D11.1)', async () => {
   assert.match(scriptOp, /operatorKeymapDispatch\(e, 'down'\)/);
   const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
   assert.match(scriptOpHtml, /cueola-keymap\.js/);
-  // The printed operator cheat card rides the show pack, generated from the
-  // same registry as dispatch and the "?" overlay.
-  assert.match(app, /'operator-card'\]/);
-  assert.match(app, /function operatorCheatCardHTML/);
-  assert.match(app, /KEYMAP\.filter\(a => a\.scope === 'live'\)\.forEach\(a => \{ \(liveGroups/);
+  // The printed operator cheat card left the pack entirely (owner 2026-08-19:
+  // the exported keyboard sheets read as clutter). The on-screen "?" overlay
+  // remains the shortcut reference.
+  assert.doesNotMatch(app, /operator-card/);
+  assert.doesNotMatch(app, /operatorCheatCardHTML/);
 });
 
 test('cue advance never moves the prompter; the op lines it up deliberately (D11.2)', () => {
@@ -449,13 +449,25 @@ test('playout live reorder is an order-only write that respects the playing clip
   assert.match(ogCss, /\.og-cue\.og-drop-before/);
 });
 
-test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11.8)', () => {
+test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11.8)', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
   // Connection chips: both pop-outs ride the D12.1 link model permanently.
   assert.match(html, /id="ls-link-talent"/);
   assert.match(html, /id="ls-link-scriptop"/);
-  // Automatic reconnect attempts on loss, one per announcement.
+  // Automatic reconnect attempts on loss, one per announcement. The old
+  // in-branch republish was dead code (checkHeartbeat clears `connected`
+  // first, so the publish guard always bailed); recovery is now split: the
+  // loss branch resets the state fingerprint, and the heartbeat handler's
+  // not-ready branch pushes a full STATE the moment beats resume.
   assert.match(app, /automatic resync attempt/);
-  assert.match(app, /try \{ scriptOperatorPublishState\(true\); \} catch \{\}/);
+  assert.match(app, /_scriptOpLastStateFingerprint = '';\s*\n\s*\}\s*\n\s*return;/);
+  assert.match(app, /if \(!ready\) \{[\s\S]{0,700}?scriptOperatorPublishState\(true\);/);
+  // Both heartbeat loops ride worker timers (background-tab throttling was
+  // the idle-timeout killer), and the popout re-requests state on wake.
+  assert.match(app, /_scriptOpWatchdog = P\.createSteadyInterval\(/);
+  assert.match(scriptOp, /protocolApi\.createSteadyInterval\(heartbeatTick/);
+  assert.match(scriptOp, /sendReady\('operator-resync'\)/);
+  assert.match(scriptOp, /function wakeResync\(\)/);
   assert.match(app, /Automatic reconnect attempt'\);\s*\n\s*try \{ _postPrompterHello\(\); \} catch \{\}/);
   // One-click reopen with full state resync stays wired to the rail.
   assert.match(app, /if \(name === 'scriptOperator'\) return openScriptOpPopout\(\)/);
@@ -681,6 +693,44 @@ test('Phase 2: the authenticated write floor is in place across shared show data
   // A student must not be able to enumerate instructor accounts.
   const adminsBlock = rules.slice(rules.indexOf('match /admins/{docId} {'), rules.indexOf('match /accessCodes/{code} {'));
   assert.match(adminsBlock, /request\.auth\.uid == docId \|\| isAdmin\(\)/);
+});
+
+test('8/19 round: strip keeps its slot, rail is damped, Script Op surfaces mirror and share prefs', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
+  const prefs = await readFile(new URL('../../cueola-scriptop-prefs.js', import.meta.url), 'utf8');
+  // Playout strip: the 34px slot never leaves the flow; idle is a quiet
+  // placeholder, so playback starting or stopping cannot shove the rundown.
+  const stripFn = app.slice(app.indexOf('function renderPlayoutStrip'), app.indexOf('function outCountdownText'));
+  assert.match(stripFn, /strip\.dataset\.status !== 'idle'/);
+  assert.doesNotMatch(stripFn, /strip\.hidden = true/);
+  assert.match(html, /id="lsPlayoutStrip"[^>]*data-status="idle"/);
+  // Status rail: JS-damped class visibility (confirm before open, hold before
+  // close) replaces the instant :has() toggle, and the sync chip is debounced.
+  assert.match(app, /LS_RAIL_OPEN_CONFIRM_MS = 1500/);
+  assert.match(app, /LS_RAIL_CLOSE_HOLD_MS = 6000/);
+  assert.match(app, /function updateLiveStatusRailVisibility/);
+  assert.match(html, /\.ls-status-rail:not\(\.ls-rail-open\)/);
+  assert.doesNotMatch(html, /\.ls-status-rail:not\(:has\(/);
+  assert.match(app, /SYNC_RECONN_CONFIRM_MS/);
+  assert.match(app, /SYNC_RECONN_MIN_SHOW_MS/);
+  // Built-in Script Op mirrors the pop-out (the reference surface): same tab
+  // keys and captions, and a generated Display & Theme pane.
+  assert.match(app, /LS_INSP_LABELS = \{ transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme' \}/);
+  assert.match(app, /function scriptOpDisplayPaneHTML/);
+  assert.match(html, /data-insp-pane="display"><div id="lsDisplayControls">/);
+  assert.doesNotMatch(html, /data-insp-pane="format"/);
+  // The arrange + favorites engine loads on BOTH surfaces and shares its
+  // storage keys, so an order or a star made in one window applies in both.
+  assert.match(html, /cueola-scriptop-prefs\.js\?v=/);
+  assert.match(scriptOpHtml, /cueola-scriptop-prefs\.js\?v=/);
+  assert.match(prefs, /cueola_scriptop_section_order/);
+  assert.match(prefs, /cueola_scriptop_favs/);
+  assert.match(app, /CueolaScriptOpPrefs\.init\(/);
+  assert.match(scriptOp, /CueolaScriptOpPrefs\.init\(/);
+  // The builder's notes panel can expand any production note to full text.
+  assert.match(app, /function pnToggleNote/);
+  assert.match(app, /Show full note/);
 });
 
 for (const { name, run } of tests) {

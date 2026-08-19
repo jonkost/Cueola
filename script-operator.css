@@ -542,3 +542,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   white-space: nowrap;
   animation: rise .2s ease both;
 }
+
+/* ── Script Op favorites + arranging (shared engine: cueola-scriptop-prefs.js) ── */
+.sop-quick-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.sop-quick-star{color:var(--text3);font-size:11px}
+.sop-quick-hint{color:var(--text3);font-size:10.5px}
+.sop-quick-spacer{flex:1}
+.sop-quick-chip{padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--s3);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sop-quick-chip:disabled{opacity:.45;cursor:default}
+.sop-quick-row.sop-arranging .sop-quick-chip{border-style:dashed}
+.sop-arrange-btn{padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text3);font-size:10.5px;font-weight:800;cursor:pointer}
+.sop-arrange-btn.on{background:var(--s3);color:var(--text)}
+.sop-arrange .flow-control-section,.sop-arrange section.control-section{position:relative;outline:1px dashed var(--bord2,var(--border));outline-offset:2px;border-radius:8px}
+.sop-sec-tools{position:absolute;top:2px;right:2px;display:flex;gap:4px;z-index:5}
+.sop-sec-tools button{width:24px;height:24px;border:1px solid var(--border);border-radius:6px;background:var(--s3);color:var(--text);cursor:pointer;font-size:12px;line-height:1}
+.sop-arrange [data-sop-can-star]{position:relative}
+.sop-arrange [data-sop-can-star]::after{content:'☆';position:absolute;top:-6px;right:-4px;font-size:12px;color:var(--text3);background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:0 3px;line-height:1.3}
+.sop-arrange [data-sop-starred="1"]::after{content:'★';color:var(--yellow,#f5b731)}

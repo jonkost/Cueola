@@ -486,6 +486,20 @@ test('show-caller predicate: solo carve-outs and follow semantics', () => {
   assert.equal(resolve({ code:'X', role:'instructor', browsingSelf:true, hasAdminSession:false }).isShowCaller, false);
 });
 
+test('show-caller predicate: an outstanding grant names THE caller (2026-08-19)', () => {
+  const resolve = LiveSession.resolveCallerState;
+  // The granted student drives.
+  assert.equal(resolve({ code:'X', role:'student', hasControlGrant:true }).isShowCaller, true);
+  // While someone ELSE holds the grant, even an admin device is a follower —
+  // granting must not produce two simultaneous callers fighting over the cue.
+  assert.equal(resolve({ code:'X', hasAdminSession:true, grantHeldElsewhere:true }).isShowCaller, false);
+  assert.equal(resolve({ code:'X', hasAdminSession:true, grantHeldElsewhere:true, browsingSelf:true }).isShowCaller, false);
+  // Take-back (grant cleared) restores the admin instantly.
+  assert.equal(resolve({ code:'X', hasAdminSession:true, grantHeldElsewhere:false }).isShowCaller, true);
+  // Solo surfaces ignore grant bookkeeping entirely.
+  assert.equal(resolve({ code:'X', isExpert:true, role:'student', grantHeldElsewhere:true }).isShowCaller, true);
+});
+
 for (const { name, fn } of tests) {
   await fn();
   console.log('PASS', name);

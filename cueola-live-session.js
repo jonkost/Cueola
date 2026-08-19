@@ -654,7 +654,12 @@
     // profile username against the session doc's controlGrant field) may
     // drive. The grant is instructor-issued and instructor-revocable; the
     // role string stays 'student' and confers nothing on its own.
-    var privileged = Boolean(input.hasAdminSession || input.hasControlGrant);
+    // An OUTSTANDING grant names THE caller for the room (2026-08-19): while
+    // someone else holds it, even an admin device is a follower — otherwise
+    // granting produced two simultaneous callers fighting over the shared
+    // cue until the admin manually followed someone. Take back = one tap on
+    // the caller badge, so an absent holder never strands the show.
+    var privileged = Boolean(input.hasControlGrant || (input.hasAdminSession && !input.grantHeldElsewhere));
     var followingSelf = Boolean(input.browsingSelf) ||
       (!input.followTarget && (solo || privileged));
     return Object.freeze({

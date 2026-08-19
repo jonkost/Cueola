@@ -793,8 +793,32 @@
     };
   }
 
+  // Chrome throttles a hidden page's timers to once a minute after ~5 idle
+  // minutes — fatal to a 2s heartbeat against a 6s budget, and the reason the
+  // popout "timed out when idle". A dedicated worker's timers are exempt from
+  // intensive throttling, so both heartbeat loops ride one; plain setInterval
+  // is the fallback when workers are unavailable.
+  function createSteadyInterval(fn, ms) {
+    var worker = null;
+    try {
+      var src = 'var t=null;onmessage=function(e){if(e.data&&e.data.stop){clearInterval(t);close();return}clearInterval(t);t=setInterval(function(){postMessage(1)},e.data.ms)}';
+      var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      worker = new Worker(url);
+      URL.revokeObjectURL(url);
+      worker.onmessage = function () { fn(); };
+      worker.postMessage({ ms: ms });
+    } catch (e) { worker = null; }
+    if (worker) {
+      var w = worker;
+      return { cancel: function () { try { w.postMessage({ stop: true }); } catch (e) {} try { w.terminate(); } catch (e2) {} } };
+    }
+    var timer = setInterval(fn, ms);
+    return { cancel: function () { clearInterval(timer); } };
+  }
+
   return {
     PROTOCOL_VERSION: PROTOCOL_VERSION,
+    createSteadyInterval: createSteadyInterval,
     HEARTBEAT_INTERVAL_MS: HEARTBEAT_INTERVAL_MS,
     HEARTBEAT_MISSES_ALLOWED: HEARTBEAT_MISSES_ALLOWED,
     HEARTBEAT_TIMEOUT_MS: HEARTBEAT_TIMEOUT_MS,

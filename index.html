@@ -2187,7 +2187,6 @@ h1.psec-rundown{border-left-color:#2f855a !important;background:#eaf6ef !importa
 h1.psec-video{border-left-color:#d97706 !important;background:#fdf3e3 !important;color:#7c4a08}
 h1.psec-audio{border-left-color:#0d9488 !important;background:#e6f7f5 !important;color:#0b4f49}
 h1.psec-notes{border-left-color:#db2777 !important;background:#fdeef5 !important;color:#801747}
-h1.psec-operator{border-left-color:#475569 !important;background:#eef1f5 !important;color:#25313f}
 h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;color:#0b4666}
 /* Stage plot paper sheet: the diagram owns the landscape page, so it escapes
    the generic 3.15in image cap; the title block prints as one thin strip. */
@@ -2200,14 +2199,6 @@ h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;
    moment the trio overruns the 7.7in content column. */
 .paper-plot-figure svg{display:block;width:100%;height:auto;max-height:5.35in}
 .paper-export-page img.paper-plot-img{max-height:5.35in;width:auto;max-width:100%;margin:0 auto}
-/* D11.1: operator cheat card — printable keycaps, multi-column at page width. */
-.paper-key-rule{margin:4pt 0 8pt;padding:4pt 8pt;border-radius:4pt;background:#eef1f5;color:#25313f;font-size:8.5pt}
-.paper-keycols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150pt,1fr));gap:8pt 14pt}
-.paper-keygroup h3{margin:6pt 0 3pt}
-.paper-keys{width:100%;border-collapse:collapse;font-size:8.5pt}
-.paper-keys td{padding:1.5pt 4pt;border-bottom:1px solid #e3e7ed;vertical-align:top}
-.paper-keys-k{width:34%;white-space:nowrap}
-.paper-keycap{display:inline-block;padding:0.5pt 4pt;border:1px solid #9aa4b2;border-bottom-width:2px;border-radius:3pt;background:#fff;color:#25313f;font-family:ui-monospace,Menlo,monospace;font-size:7.5pt;font-weight:700}
 .paper-day-of-days{display:inline-block;margin:0 0 8pt;padding:2pt 8pt;border-radius:10pt;background:#eef0fe;color:#232a66;font-size:8.5pt;font-weight:800;letter-spacing:.04em}
 .paper-export-page h2{margin:14pt 0 6pt;padding-bottom:3pt;border-bottom:1px solid #d9dde4;font-size:11.5pt;line-height:1.2}
 .paper-export-page h3{margin:10pt 0 4pt;font-size:9.5pt;line-height:1.25}
@@ -2406,6 +2397,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-card-by{font-size:11px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pn-card-time{font-size:10px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0}
 .pn-card-text{font-size:12px;color:var(--text2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.pn-card-text.full{display:block;-webkit-line-clamp:unset;overflow:visible;white-space:pre-wrap}
+.pn-card-more{align-self:flex-start;padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text3);font-size:10px;font-weight:800;cursor:pointer}
+.pn-card-more:hover{color:var(--text)}
 .pn-card-atts{font-size:10px;color:var(--text3);display:inline-flex;align-items:center;gap:3px}
 .pn-card-acts{display:flex;gap:4px;flex-wrap:wrap;padding-top:2px}
 .pn-act-btn{font-size:10.5px;font-family:var(--mono);padding:3px 8px;border-radius:var(--r-sm);border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);cursor:pointer;display:inline-flex;align-items:center;gap:3px;letter-spacing:.02em;transition:border-color .12s,color .12s,background .12s;white-space:nowrap}
@@ -2733,6 +2727,20 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-call-abort{background:var(--btn-fill);color:var(--btn-ink);border-color: transparent}
 
 .ls-rtrt-mode{display:inline-flex;align-items:center;gap:6px;margin:0 0 6px;font-family:var(--mono);font-size:9.5px;color:var(--text2);cursor:pointer}
+/* Builder demo of the playback call: the Live banner's stage look, inline in
+   the cue modal, firing nothing (runCueCallDemo). */
+.cc-call-demo{display:flex;align-items:center;gap:12px;margin-top:10px;padding:10px 14px;border-radius:12px;border:1px solid transparent;background:color-mix(in srgb,var(--s1) 94%,transparent)}
+.cc-call-demo[hidden]{display:none}
+.cc-call-demo-stage{font-family:var(--mono);font-size:20px;font-weight:900;letter-spacing:.12em;padding:4px 12px;border-radius:8px;animation:og-pulse 1s ease-in-out infinite;flex-shrink:0}
+.cc-call-demo[data-stage="ready"] .cc-call-demo-stage{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.cc-call-demo[data-stage="track"] .cc-call-demo-stage{background:color-mix(in srgb,var(--yellow) 20%,transparent);color:var(--yellow)}
+.cc-call-demo[data-stage="roll"] .cc-call-demo-stage{background:color-mix(in srgb,var(--red) 22%,transparent);color:var(--red)}
+.cc-call-demo[data-stage="take"] .cc-call-demo-stage{background:var(--red);color:#fff;animation:none}
+.cc-call-demo[data-stage="done"] .cc-call-demo-stage{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text2);animation:none}
+.cc-call-demo-note{font-size:11.5px;color:var(--text2);line-height:1.4;min-width:0}
+.cc-call-hint b{color:var(--text)}
+/* Armed-call tell on the builder's playback badge. */
+.cue-out-callchip{margin-left:2px;padding:1px 6px;border-radius:999px;font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.08em;background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green);flex-shrink:0}
 /* D11.4: live time-remaining chip on a playing row's playout badge. */
 .cue-out-remain{margin-left:5px;font-family:var(--mono);font-weight:800;font-variant-numeric:tabular-nums;color:var(--red)}
 .cue-out-remain[hidden]{display:none}
@@ -2750,6 +2758,9 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
    playout is actually doing something, in grid and Focus modes alike. */
 .ls-playout-strip{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;height:34px;padding:0 12px;min-width:0;flex-shrink:0;background:var(--glass-bg);border-bottom: 1px solid transparent;box-shadow:var(--glass-highlight);backdrop-filter:blur(var(--liquid-blur)) saturate(150%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(150%)}
 .ls-playout-strip[hidden]{display:none}
+.ls-playout-strip[data-status="idle"] .ls-playout-tag{background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text3)}
+.ls-playout-strip[data-status="idle"] .ls-playout-name{color:var(--text3);font-weight:600}
+.ls-playout-strip[data-status="idle"] .ls-playout-time{color:var(--text3)}
 .ls-playout-tag{padding:2px 8px;border-radius:999px;border:1px solid transparent;background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;flex-shrink:0}
 .ls-playout-strip[data-status="pause"] .ls-playout-tag{border-color:transparent;background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--yellow)}
 .ls-playout-strip[data-status="pre"] .ls-playout-tag{border-color: transparent;background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text2)}
@@ -3233,7 +3244,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-live-actions .flow-control-onair{grid-column:auto}
 /* Script Op drawer: one clean full-width column — the 2-up squeeze crammed
    Theme + Screen into ~half the sidebar and made the controls unreadable. */
-.ls-sidebar #lsPrompterRemote .prompt-op-panel.flow-control-panel{
+.ls-sidebar :is(#lsPrompterRemote,#lsDisplayControls) .prompt-op-panel.flow-control-panel{
   display:flex;
   flex-direction:column;
   gap:0;
@@ -3360,7 +3371,7 @@ input.pt-range::-moz-range-thumb,
 }
 @media(max-width:980px){
   .ls-sidebar{width:min(440px,48vw);max-width:52vw}
-  .ls-sidebar #lsPrompterRemote .prompt-op-panel.flow-control-panel{grid-template-columns:1fr}
+  .ls-sidebar :is(#lsPrompterRemote,#lsDisplayControls) .prompt-op-panel.flow-control-panel{grid-template-columns:1fr}
 }
 @media(max-width:760px){
   .ls-sidebar{width:100%;max-width:none}
@@ -4439,11 +4450,13 @@ input.pt-range::-moz-range-thumb,
    mirrors material transitions to the dedicated polite announcement node. */
 .ls-status-rail{position:relative;z-index:35;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:stretch;gap:0;flex:none;min-height:42px;padding:0 12px;background:color-mix(in srgb,var(--s1) 88%,transparent);border-bottom: 1px solid transparent;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent)}
 /* Deference: the rail stays out of the way while every subsystem is healthy —
-   the overview chips already carry the quiet state. It appears the moment any
-   subsystem needs attention or offers a recovery action, and stays until then.
+   the overview chips already carry the quiet state. JS opens it (.ls-rail-open,
+   updateLiveStatusRailVisibility) only after an attention state holds for a
+   beat, and closes it only after a quiet stretch, so link states flapping at
+   heartbeat rate never strobe a 42px layout jump.
    (The zero-height quiet form keeps the section as the transients' anchor.) */
-.ls-status-rail:not(:has(.ls-status-item[data-state="recovering"],.ls-status-item[data-state="degraded"],.ls-status-item[data-state="error"],.ls-status-item[data-state="failed"],.ls-status-item[data-state="disconnected"],.ls-status-item[data-state="stalled"])){min-height:0;padding:0 12px;border-bottom:0;box-shadow:none;background:transparent}
-.ls-status-rail:not(:has(.ls-status-item[data-state="recovering"],.ls-status-item[data-state="degraded"],.ls-status-item[data-state="error"],.ls-status-item[data-state="failed"],.ls-status-item[data-state="disconnected"],.ls-status-item[data-state="stalled"])) :is(.ls-status-rail-title,.ls-status-items){display:none}
+.ls-status-rail:not(.ls-rail-open){min-height:0;padding:0 12px;border-bottom:0;box-shadow:none;background:transparent}
+.ls-status-rail:not(.ls-rail-open) :is(.ls-status-rail-title,.ls-status-items){display:none}
 .ls-status-rail-title{align-self:center;margin:0;padding-right:12px;font-family:var(--mono);font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
 .ls-status-items{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-width:0}
 .ls-status-item{--ls-health:var(--text3);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0;padding:6px 12px;border-left: 1px solid transparent;color:var(--text2)}
@@ -4451,7 +4464,7 @@ input.pt-range::-moz-range-thumb,
 .ls-status-copy{display:flex;align-items:baseline;gap:6px;min-width:0;line-height:1.2}
 .ls-status-copy strong{flex:none;font-size:11px;color:var(--text);font-weight:800}
 .ls-status-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:9.5px;color:var(--text3)}
-.ls-status-item[data-state="ready"],.ls-status-item[data-state="active"],.ls-status-item[data-state="connected"]{--ls-health:var(--green)}
+.ls-status-item[data-state="ready"],.ls-status-item[data-state="active"],.ls-status-item[data-state="connected"],.ls-status-item[data-state="paused"]{--ls-health:var(--green)}
 .ls-status-item[data-state="opening"],.ls-status-item[data-state="connecting"],.ls-status-item[data-state="recovering"],.ls-status-item[data-state="degraded"]{--ls-health:var(--yellow)}
 .ls-status-item[data-state="error"],.ls-status-item[data-state="failed"],.ls-status-item[data-state="disconnected"],.ls-status-item[data-state="stalled"]{--ls-health:var(--red);background:color-mix(in srgb,var(--red) 7%,transparent)}
 .ls-status-actions{display:flex;align-items:center;gap:6px}
@@ -4605,6 +4618,23 @@ input.pt-range::-moz-range-thumb,
   /* Tag chips keep the sanctioned dense-chip exemption; their spacing separates them. */
   .pb-note-act,.pb-like,.pb-attach-add,.pb-post-btn,.pb-mini-btn,.pb-active-clear,.pb-filter-chip{min-height:44px}
 }
+
+/* ── Script Op favorites + arranging (shared engine: cueola-scriptop-prefs.js) ── */
+.sop-quick-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.sop-quick-star{color:var(--text3);font-size:11px}
+.sop-quick-hint{color:var(--text3);font-size:10.5px}
+.sop-quick-spacer{flex:1}
+.sop-quick-chip{padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--s3);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sop-quick-chip:disabled{opacity:.45;cursor:default}
+.sop-quick-row.sop-arranging .sop-quick-chip{border-style:dashed}
+.sop-arrange-btn{padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text3);font-size:10.5px;font-weight:800;cursor:pointer}
+.sop-arrange-btn.on{background:var(--s3);color:var(--text)}
+.sop-arrange .flow-control-section,.sop-arrange section.control-section{position:relative;outline:1px dashed var(--bord2,var(--border));outline-offset:2px;border-radius:8px}
+.sop-sec-tools{position:absolute;top:2px;right:2px;display:flex;gap:4px;z-index:5}
+.sop-sec-tools button{width:24px;height:24px;border:1px solid var(--border);border-radius:6px;background:var(--s3);color:var(--text);cursor:pointer;font-size:12px;line-height:1}
+.sop-arrange [data-sop-can-star]{position:relative}
+.sop-arrange [data-sop-can-star]::after{content:'☆';position:absolute;top:-6px;right:-4px;font-size:12px;color:var(--text3);background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:0 3px;line-height:1.3}
+.sop-arrange [data-sop-starred="1"]::after{content:'★';color:var(--yellow,#f5b731)}
 </style>
 </head>
 <body>
@@ -5217,9 +5247,9 @@ input.pt-range::-moz-range-thumb,
        now on every client, in grid and Focus modes alike, linked to a rundown
        row or not. Lives OUTSIDE #lsBody so renderLive rebuilds never touch it;
        renderOutCountdowns patches text and width in place (P3). -->
-  <div class="ls-playout-strip" id="lsPlayoutStrip" aria-label="Playout now playing" hidden>
+  <div class="ls-playout-strip" id="lsPlayoutStrip" aria-label="Playout now playing" data-status="idle">
     <span class="ls-playout-tag">Playout</span>
-    <span class="ls-playout-name" id="lsPlayoutName"></span>
+    <span class="ls-playout-name" id="lsPlayoutName">Nothing playing</span>
     <span class="ls-playout-time" id="lsPlayoutTime"></span>
     <div class="ls-playout-bar" aria-hidden="true"><div class="ls-playout-fill" id="lsPlayoutFill"></div></div>
   </div>
@@ -5291,29 +5321,20 @@ input.pt-range::-moz-range-thumb,
       <div class="ls-operator-drawer" id="lsOperatorDrawer">
         <div class="insp-head">
           <div class="insp-tabs" role="tablist" aria-label="Script Op control groups">
-            <button type="button" class="insp-tab on" role="tab" aria-selected="true" data-insp="transport" onclick="lsInspTab('transport')" data-tip="Prompter controls"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
+            <button type="button" class="insp-tab on" role="tab" aria-selected="true" data-insp="transport" onclick="lsInspTab('transport')" data-tip="Transport controls"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
             <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="live" onclick="lsInspTab('live')" data-tip="Cue and on-air controls"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span></button>
             <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="clock" onclick="lsInspTab('clock')" data-tip="Clocks and alerts"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></button>
-            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="format" onclick="lsInspTab('format')" data-tip="Formatting and markers"><span class="sf-symbol" data-symbol="action.scissors" aria-hidden="true"></span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="display" onclick="lsInspTab('display')" data-tip="Display and theme"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span></button>
           </div>
-          <div class="insp-caption" id="lsInspCaption">Prompter</div>
+          <div class="insp-caption" id="lsInspCaption">Transport</div>
         </div>
         <div class="insp-pane on" data-insp-pane="transport"><div id="lsPrompterRemote"></div></div>
         <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div></div>
         <div class="insp-pane" data-insp-pane="clock"><div id="lsClockActions"></div></div>
-        <div class="insp-pane" data-insp-pane="format">
-          <div class="ls-format-cascade" aria-label="Formatting and markers">
-            <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" data-tip="Make the selected text bold (Cmd+B)" aria-label="Bold"><strong>B</strong></button>
-            <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" data-tip="Make the selected text italic (Cmd+I)" aria-label="Italic"><em>I</em></button>
-            <span class="fmt-sep"></span>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-            <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\n\n')" data-tip="Start a new paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
-            <!-- D12.6: chat questions ride the questions lane (Clocks & Alerts tab),
-                 pushed as a QUESTION card — the old Paste/Paste-Push script path is gone. -->
-          </div>
-        </div>
+        <!-- Display & Theme mirrors the pop-out's fourth tab; content is
+             generated by scriptOpDisplayPaneHTML (Display, Theme, Formatting
+             & Markers, Panel Text) so the two surfaces cannot drift. -->
+        <div class="insp-pane" data-insp-pane="display"><div id="lsDisplayControls"></div></div>
       </div>
     </div>
   </div>
@@ -7093,14 +7114,15 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=56fbfa3647"></script>
 <script src="cueola-admin-auth.js?v=680d495914"></script>
-<script src="cueola-live-session.js?v=db793fc341"></script>
+<script src="cueola-live-session.js?v=fd0bc73200"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
 <script src="cueola-prompter-session.js?v=1002259f73"></script>
-<script src="cueola-script-operator-protocol.js?v=209555b4d7"></script>
+<script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
+<script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=27207e43a0"></script>
+<script src="cueola-app.js?v=9e1366fbfe"></script>
 <script src="outrangutan/outrangutan.js?v=a5ce27e8cf"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>

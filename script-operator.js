@@ -39,6 +39,7 @@
   let clockTimer = null;
   let draftTimer = null;
   let lastControllerSeenAt = Date.now();
+  let lastReadySentAt = 0;   // rate limit for automatic READY re-requests
   let stateApplied = false;
   let sessionControlsEnabled = false;
   let disconnected = false;
@@ -84,6 +85,12 @@
     restorePanelZoom();
     bindEvents();
     setCommandAvailability(false);
+    // Section arranging + favorites quick row (shared with the built-in
+    // Script Op sidebar via localStorage; this pop-out is the reference UI).
+    const inspector = document.querySelector('section.inspector');
+    if (window.CueolaScriptOpPrefs && inspector) {
+      window.CueolaScriptOpPrefs.init({ root: inspector, before: inspector.querySelector('.inspector-tabs') });
+    }
 
     if (!productionCode || !sessionId || !controllerInstanceId) {
       setDisconnected('This Script Operator link is missing its production, session, or controller identity.');
@@ -104,7 +111,12 @@
     }
 
     sendReady('operator-opened');
-    heartbeatTimer = window.setInterval(heartbeatTick, protocol.heartbeatInterval);
+    // Worker-driven interval: a hidden popup's setInterval throttles to once
+    // a minute after ~5 idle minutes, blowing the 6s heartbeat budget — the
+    // "times out when idle" report. Worker timers are exempt.
+    heartbeatTimer = protocolApi && protocolApi.createSteadyInterval
+      ? protocolApi.createSteadyInterval(heartbeatTick, protocol.heartbeatInterval)
+      : { cancel: window.clearInterval.bind(window, window.setInterval(heartbeatTick, protocol.heartbeatInterval)) };
     clockTimer = window.setInterval(renderClockPreview, 500);
   }
 
@@ -116,8 +128,11 @@
     window.addEventListener('beforeunload', cleanup, { once: true });
     window.addEventListener('blur', releaseAllHolds);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') releaseAllHolds();
+      if (document.visibilityState === 'hidden') { releaseAllHolds(); return; }
+      wakeResync();
     });
+    window.addEventListener('focus', wakeResync);
+    window.addEventListener('pageshow', wakeResync);
     // D11.1: window-level keycommands (J/L brake/boost, Space/K, ?, sizes).
     // releaseAllHolds above covers keyboard holds on blur and hide too.
     document.addEventListener('keydown', e => operatorKeymapDispatch(e, 'down'));
@@ -181,12 +196,20 @@
 
   function sendReady(reason) {
     if (!protocol || closed) return;
+    lastReadySentAt = Date.now();
     lastControllerSeenAt = Date.now();
     stateApplied = false;
     disconnected = false;
     setConnection('connecting', 'Connecting…', reason === 'operator-reconnect' ? 'Requesting fresh state…' : 'Waiting for Cueola Live…');
     setCommandAvailability(false);
     postMessageToController(protocol.ready());
+  }
+
+  // Coming back to the panel after idle re-requests state immediately when
+  // the link went stale, instead of waiting for the next heartbeat cycle.
+  function wakeResync() {
+    if (closed || !protocol) return;
+    if ((disconnected || !stateApplied) && Date.now() - lastReadySentAt > 3000) sendReady('operator-wake');
   }
 
   function heartbeatTick() {
@@ -248,6 +271,12 @@
         disconnected = false;
         setConnection('ready', productionCode ? `Ready · ${productionCode}` : 'Ready', 'Connected');
         setCommandAvailability(sessionControlsEnabled);
+      } else if (Date.now() - lastReadySentAt > 5000) {
+        // The controller is alive but this panel has no acknowledged snapshot
+        // (a timeout cleared it): ask for a fresh one instead of waiting on a
+        // manual Reconnect click. The rate limit keeps the initial handshake
+        // (READY just sent, STATE still in flight) from double-requesting.
+        sendReady('operator-resync');
       }
       return;
     }
@@ -761,6 +790,8 @@
     patchQuestionCards(first(snapshot, ['questionCards']));
     patchCueAvailability(snapshot);
     renderClockPreview();
+    // Favorites chips mirror their source buttons (labels, disabled state).
+    if (window.CueolaScriptOpPrefs) window.CueolaScriptOpPrefs.sync();
   }
 
   // Prepared question cards (seeded test shows) become datalist suggestions
@@ -941,6 +972,10 @@
       const unavailable = element.dataset.unavailable === '1';
       element.disabled = !enabled || unavailable;
     });
+    // Arrange mode force-enables starrable controls so they can be starred
+    // (disabled buttons swallow clicks); every heartbeat and snapshot lands
+    // here and would silently re-disable them, so hand control back.
+    if (window.CueolaScriptOpPrefs && window.CueolaScriptOpPrefs.isArranging()) window.CueolaScriptOpPrefs.sync();
   }
 
   function setDraftStatus(text, state = '') {
@@ -1000,7 +1035,7 @@
     if (closed) return;
     forceReleaseAllHolds();
     closed = true;
-    window.clearInterval(heartbeatTimer);
+    if (heartbeatTimer && typeof heartbeatTimer.cancel === 'function') heartbeatTimer.cancel();
     window.clearInterval(clockTimer);
     window.clearTimeout(draftTimer);
     previewThrottles.forEach((timer) => window.clearTimeout(timer));
