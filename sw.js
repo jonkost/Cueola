@@ -130,17 +130,17 @@ const SHELL_ASSETS = [
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=4c1ba3ddf0',
+  'script-operator.js?v=30bb716601',
   'script-operator.css?v=6cafc1f059',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=ac77d1ead5',
-  'outrangutan/outrangutan.css?v=75dfbd64d2',
-  'outrangutan/outrangutan.js?v=a5ce27e8cf',
+  'cueola-app.js?v=873263f0d2',
+  'outrangutan/outrangutan.css?v=a26ac37a23',
+  'outrangutan/outrangutan.js?v=9e81602e50',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=00178015bf',
+  'cueola-streamdeck.js?v=83094f2ad3',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -236,7 +236,7 @@ const versionSignature = SHELL_ASSETS
 // (index.html markup) and the dashboard's Reset PIN calls a function, both of
 // which the shell caches. A stale shell would keep trying to write a hash onto
 // the profile doc, which the Phase 3 rules refuse.
-const WORKER_SCHEMA = '39';
+const WORKER_SCHEMA = '40';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

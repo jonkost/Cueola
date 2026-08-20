@@ -387,16 +387,41 @@ function _callerStateInputs() {
 let sessionControlGrant = null;
 let _heldControlGrantBefore = false;
 
+// The username this device answers to for grant matching. The picker writes
+// presence's username, which is session.username — so that is the primary
+// source. profile() is an in-memory cache that stays null on resume/deep-link
+// boots (nothing rehydrates it), and identity() needs the PIN unlock marker;
+// either alone leaves a granted student locked out mid-show (8/20 incident).
+function myControlUsername() {
+  const name = session.username
+    || window.CueolaIdentity?.identity?.()?.username
+    || window.CueolaIdentity?.profile?.()?.username
+    || '';
+  return String(name).toLowerCase();
+}
+
 function sessionControlGrantHeldByMe() {
   if (!sessionControlGrant?.username) return false;
-  const me = window.CueolaIdentity?.profile?.()?.username;
-  return !!me && String(me).toLowerCase() === String(sessionControlGrant.username).toLowerCase();
+  const me = myControlUsername();
+  return !!me && me === String(sessionControlGrant.username).toLowerCase();
+}
+
+// Identity can finish loading AFTER the grant snapshot lands (async profile
+// fetch on boot). adoptControlGrant early-returns on an unchanged grant, so
+// this re-runs the held-state transition whenever who-am-I changes.
+function refreshControlGrantHeld() {
+  if (!sessionControlGrant) return;
+  _applyControlGrantHeldTransition();
 }
 
 function adoptControlGrant(grant) {
   const next = grant && grant.username ? grant : null;
   if (JSON.stringify(next) === JSON.stringify(sessionControlGrant)) return;
   sessionControlGrant = next;
+  _applyControlGrantHeldTransition();
+}
+
+function _applyControlGrantHeldTransition() {
   const held = sessionControlGrantHeldByMe();
   if (held && !_heldControlGrantBefore) {
     // Taking the wheel must not require un-following anyone first: a student
@@ -624,14 +649,35 @@ function projectTalentLinkTransition(link, previousStatus) {
   } else if (link.status === 'lost') {
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
     setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost: no heartbeat');
-    // D11.8: a same-device talent window that is OPEN but silent gets one
-    // automatic reconnect nudge (hello → READY → full state resync). A closed
-    // window keeps the chip + one-click reopen (rail: Recover Flowmingo).
+    // D11.8: a same-device talent window that is OPEN but silent gets
+    // automatic reconnect nudges (hello → READY → full state resync), now on
+    // a backoff instead of exactly once: one missed nudge used to strand the
+    // window silent until a manual Recover click. A closed window keeps the
+    // chip + one-click reopen (rail: Recover Flowmingo).
     if (_prompterTalentWin && !_prompterTalentWin.closed) {
       logShow('prompter', 'Talent silent with its window open. Automatic reconnect attempt');
-      try { _postPrompterHello(); } catch {}
+      _beginTalentReconnectNudges();
     }
   }
+}
+
+// Retry ladder for the open-but-silent talent window: hello now, then every
+// 8s while still lost, up to 5 tries. Any recovery (link leaves 'lost') or a
+// closed window stops it.
+let _talentNudgeTimer = null, _talentNudgeCount = 0;
+function _beginTalentReconnectNudges() {
+  clearInterval(_talentNudgeTimer);
+  _talentNudgeCount = 0;
+  const nudge = () => {
+    const link = liveLinkState.getState().find(l => l.key === 'talent');
+    if (!link || link.status !== 'lost' || !_prompterTalentWin || _prompterTalentWin.closed || _talentNudgeCount >= 5) {
+      clearInterval(_talentNudgeTimer); _talentNudgeTimer = null; return;
+    }
+    _talentNudgeCount += 1;
+    try { _postPrompterHello(); } catch {}
+  };
+  nudge();
+  _talentNudgeTimer = setInterval(nudge, 8000);
 }
 
 // One owned ticker evaluates hysteresis and the definitive death signals
@@ -4832,6 +4878,7 @@ function pickAssignedPreProSession(code) {
 // restore-on-boot): re-render whichever join surface is on screen.
 document.addEventListener('cueola-identity-change', () => {
   try {
+    refreshControlGrantHeld();   // a late-loading profile must light up an already-granted GO
     if (document.getElementById('modal-stud')?.classList.contains('on')) populateJoinSessionChoices('stud', 'pickAssignedStudSession');
     if (document.getElementById('modal-prepro-join')?.classList.contains('on')) populateJoinSessionChoices('pp', 'pickAssignedPreProSession');
     if (document.getElementById('flowOp')?.classList.contains('on') && !flowOpCode && !flowOpData) {
@@ -5761,10 +5808,11 @@ function setupFirestore() {
       // chosen mirrors the show caller (first instructor). The grant adopts
       // FIRST so the very snapshot that moves control also re-routes followers.
       adoptControlGrant(d.controlGrant);
+      adoptRtrtManual(d.rtrtManual);   // Manual TAKE is show-wide, not per-device
       {
         const followedIdx = resolveFollowedIdx(d.presence, {
           followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName,
-          myUsername: String(window.CueolaIdentity?.profile?.()?.username || '').toLowerCase(),
+          myUsername: myControlUsername(),
           grantUsername: sessionControlGrant?.username ? String(sessionControlGrant.username).toLowerCase() : '',
         });
         const targetIdx = followedIdx != null ? followedIdx
@@ -5775,6 +5823,7 @@ function setupFirestore() {
         }
       }
       _adoptDocPrompterSession(d);
+      maybeResumeScriptOpHost();   // reload survival: re-host a still-open pop-out
       // Remember the doc's control queue so this window's next command write
       // can carry OTHER writers' recent entries forward instead of evicting
       // them (two operator surfaces used to clobber each other's commands out
@@ -6283,7 +6332,10 @@ const KEYMAP = [
   { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Reset talent screen',           run: () => sendPrompterControl('reset') },
   { id: 'prompter.hideui',     scope: 'live', group: 'Prompter', keys: ['H'],      label: 'Hide talent UI',                run: () => sendPrompterControl('hide_interface') },
   { id: 'prompter.mirror',     scope: 'live', group: 'Prompter', keys: ['M'],      label: 'Mirror talent screen',          run: () => sendPrompterControl('mirror') },
-  { id: 'prompter.editscript', scope: 'live', group: 'Prompter', keys: ['E'],      label: 'Edit current row script',       run: () => openLiveScript(Math.max(lsIdx, 0)) },
+  // Punch-in targets the ON AIR row, matching the pop-out's edit-script path
+  // (it used the SELECTED row, so the deck's EDIT key and the pop-out could
+  // silently edit two different rows: 8/20 "couldn't find my punch-in").
+  { id: 'prompter.editscript', scope: 'live', group: 'Prompter', keys: ['E'],      label: 'Edit current row script',       run: () => openLiveScript(Math.max(liveActiveCueIndex(), 0)) },
   { id: 'prompter.dir.fwd',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowUp'],   label: 'Direction forward',      run: () => sendPrompterControl('direction_forward') },
   { id: 'prompter.dir.rev',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowDown'], label: 'Direction reverse',      run: () => sendPrompterControl('direction_reverse') },
   // Deck-first actions: no default key (bindable via cueola_keymap overrides).
@@ -6448,16 +6500,46 @@ window.cueolaSurfaceBridge = {
     } catch (e) {}
   },
   liveSelect: (index, take) => { try { take ? setOperatorLiveCue(index, 'deck') : setLiveSelectedCue(index, { source: 'deck' }); } catch (e) {} },
-  masterGain: () => { try { return window.Outrangutan && window.Outrangutan.masterGain ? window.Outrangutan.masterGain() : 0; } catch (e) { return 0; } },
-  setMasterGain: (v) => { try { window.Outrangutan && window.Outrangutan.setMasterGain && window.Outrangutan.setMasterGain(v); } catch (e) {} },
+  // Playout volume works cross-machine: local instance when it owns this
+  // session, otherwise the published gain (with a short optimistic echo so
+  // the dial tracks the hand instead of the ~1-3s publish cadence) and a
+  // dedicated outrangutan.gain doc field on the way out. The dial used to
+  // drive the silent local instance and move nothing on the playout machine.
+  masterGain: () => {
+    try {
+      if (!playoutIsRemote()) return window.Outrangutan?.masterGain ? window.Outrangutan.masterGain() : 0;
+      if (_ogGainEcho && Date.now() - _ogGainEcho.ts < 4000) return _ogGainEcho.v;
+      const g = Number(outrangutanState.live?.gain);
+      return Number.isFinite(g) ? g : 0;
+    } catch (e) { return 0; }
+  },
+  setMasterGain: (v) => {
+    try {
+      if (!playoutIsRemote()) { window.Outrangutan?.setMasterGain?.(v); return; }
+      fireOutrangutanGain(v);
+    } catch (e) {}
+  },
+  // The deck's playout truth is playoutNow(): the same locally-reckoned,
+  // drift-clamped answer behind the Live bar's countdown strip — smooth every
+  // paint tick instead of stepping on the ~1Hz published packet.
+  playoutNow: () => _sdSafe(() => playoutNow(), null),
   state: () => {
     const live = _sdSafe(() => outrangutanState.live, null) || {};
+    const nowPlaying = _sdSafe(() => playoutNow(), null);
     const ai = _sdSafe(() => liveActiveCueIndex(), -1);
     const sel = _sdSafe(() => (typeof liveSessionState === 'function' ? liveSessionState().selectedCueIndex : null), null);
     return {
       session: { code: _sdSafe(() => session.code, ''), isDemo: _sdSafe(() => session.isDemo, false), active: !!_sdSafe(() => session.code, '') },
-      playout: { status: live.status || 'idle', cueId: live.cueId || '', cueName: live.name || '', remaining: (live.remaining != null ? live.remaining : null), dur: (live.dur != null ? live.dur : null), cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {} },
-      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: null, connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
+      playout: {
+        status: nowPlaying ? (nowPlaying.status === 'pause' ? 'pause' : nowPlaying.status) : (live.status === 'idle' || !live.status ? 'idle' : live.status),
+        cueId: live.cueId || '', cueName: nowPlaying?.name || live.name || '',
+        remaining: nowPlaying && nowPlaying.remainMs != null ? nowPlaying.remainMs / 1000 : (live.remaining != null ? live.remaining : null),
+        dur: (live.dur != null ? live.dur : null),
+        frac: nowPlaying && nowPlaying.frac != null ? nowPlaying.frac : null,
+        loop: !!(nowPlaying && nowPlaying.loop),
+        cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {},
+      },
+      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
       live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') },
       // Additive: the deck's next-cue info key reads current and next row here.
@@ -6575,7 +6657,10 @@ function openJogScrub() {
       if (segEl && jogState) { jogState.pos = jogState.segs[+segEl.getAttribute('data-jogseg')].start; renderJogScrub(); }
     });
   }
-  jogState = Object.assign(built, { pos: Math.max(0, Math.min(100, ptProgressPct() || 0)) / 100 * built.total, drag: false });
+  // Open at the talent's REAL position (the local track is hidden in an
+  // operator window, so ptProgressPct() there is always 0).
+  const openPct = Number.isFinite(_talentReportedPct) ? _talentReportedPct : (ptProgressPct() || 0);
+  jogState = Object.assign(built, { pos: Math.max(0, Math.min(100, openPct)) / 100 * built.total, drag: false });
   ov.hidden = false;
   renderJogScrub();
 }
@@ -6609,9 +6694,18 @@ function renderJogScrub() {
 }
 function commitJogScrub() {
   if (!jogState) return;
-  const pct = Math.max(0, Math.min(100, jogState.pos / jogState.total * 100));
-  sendPrompterControl('seek_set_' + pct.toFixed(2));
-  toast('Prompter cued to ' + pct.toFixed(0) + '% of the script.');
+  // Row-accurate commit: the old character-percent math mapped char offsets
+  // onto PIXEL percent, so "cue here" landed somewhere near-but-wrong once
+  // headers, blank lines, and wrapping diverged. Rows are exact anchors.
+  const seg = jogState.segs[jogSegAt(jogState.pos)];
+  if (seg && seg.row >= 1) {
+    sendPrompterControl('seek_row_' + seg.row);
+    toast(`Prompter cued to row ${seg.row}${seg.label && seg.label !== 'Row ' + seg.row ? ` (${seg.label})` : ''}.`);
+  } else {
+    const pct = Math.max(0, Math.min(100, jogState.pos / jogState.total * 100));
+    sendPrompterControl('seek_set_' + pct.toFixed(2));
+    toast('Prompter cued to ' + pct.toFixed(0) + '% of the script.');
+  }
   closeJogScrub();
 }
 function closeJogScrub() {
@@ -7400,8 +7494,9 @@ function buildFreeTextCueFields(type, d) {
   const isScript = type === 'script';
   return `
     <div class="field">
-      <label class="field-lbl">${isScript ? 'Script Cue' : 'Ready (standby)'}</label>
-      <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
+      <label class="field-lbl">${isScript ? 'Script Cue (short label)' : 'Ready (standby)'}</label>
+      <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="${isScript ? 'e.g. Host · Begin (a trigger note, not the script)' : 'Type anything...'}" maxlength="160" autocomplete="off">
+      ${isScript ? '<div class="field-hint">A short trigger note. On the prompter it shows only as dimmed guidance the talent does not read.</div>' : ''}
     </div>
     ${isScript ? '' : `<div class="field">
       <label class="field-lbl">Take (go)</label>
@@ -7412,8 +7507,8 @@ function buildFreeTextCueFields(type, d) {
       <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="e.g. Host, Anchor, Narrator" maxlength="80" autocomplete="off">
     </div>
     <div class="field">
-      <label class="field-lbl">Script Copy</label>
-      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="8" placeholder="Type or paste the script for Flowmingo.">${esc(d.text||'')}</textarea>
+      <label class="field-lbl">Script Copy (what the talent reads)</label>
+      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="8" placeholder="Type or paste the words the talent reads aloud. THIS is what appears big on the prompter.">${esc(d.text||'')}</textarea>
     </div>` : ''}
     <div class="field">
       <label class="field-lbl">Notes</label>
@@ -7834,8 +7929,9 @@ function buildCueConfigFields(type, d) {
       </div>
       <div class="cc-divider"></div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} SCRIPT CUE</label>
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} SCRIPT CUE <span class="lbl-hint">(short label, not the script)</span></label>
         <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host · Begin" maxlength="120" autocomplete="off">
+        <div class="field-hint">A trigger note for the crew. The prompter shows it only as dimmed guidance; the words the talent reads go in Script Copy above.</div>
       </div>`;
 
     offPanel = '';
@@ -8372,10 +8468,37 @@ let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out
 let _ogLiveEndAt = null;
 let _sfxLast = null;   // { padId, name, startedAt, durMs, loop, _localLive }
 
+// True when playout for THIS show lives on another machine: a real cloud
+// session is running and the same-tab Outrangutan instance is not entered
+// into it. outrangutan.js loads into every main-app page, so a standalone
+// local instance always exists — and its outputStatus() always returns a
+// truthy "closed" object, which used to shadow the playout machine's
+// published truth in every probe below (8/20 show: permanent "reconnect"
+// warnings while playback worked fine). The command path already had this
+// guard (fireOutrangutanCommand); the probes get the same one.
+function playoutIsRemote() {
+  if (!(session.code && !session.isDemo && !session.isExpert && !session.local)) return false;
+  try { return (window.Outrangutan?._local?.session?.() || '') !== session.code; } catch { return true; }
+}
+
+// The published live packet is only trustworthy while the playout machine is
+// actually writing it. ~700ms cadence during playback, ~3s idle heartbeat.
+const OG_REMOTE_FRESH_MS = 12000;
+function remotePlayoutFresh(og) {
+  const ts = og?.live?.ts || 0;
+  return !!ts && (Date.now() - ts) < OG_REMOTE_FRESH_MS;
+}
+
 function syncOutrangutanControllerStatus(og=outrangutanState) {
-  const transport = og?.live?.status || '';
+  const remote = playoutIsRemote();
+  const remoteFresh = remote && remotePlayoutFresh(og);
+  // Remote + stale: the playout machine is not reporting — do not let a
+  // stale packet keep an old transport/output verdict alive.
+  const transport = (remote && !remoteFresh) ? '' : (og?.live?.status || '');
   const cueCount = Object.keys(og?.cues || {}).length;
-  const output = window.Outrangutan?.outputStatus?.() || og?.live?.outputs || null;
+  const output = remote
+    ? (remoteFresh ? og?.live?.outputs || null : null)
+    : (window.Outrangutan?.outputStatus?.() || og?.live?.outputs || null);
   const outputStatus = output?.status || '';
   let status = 'closed';
   let detail = 'No playout connected';
@@ -8390,9 +8513,14 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
   else if (transport === 'pause') { status = 'paused'; detail = og.live?.name || 'Media paused'; }
   else if (transport === 'pre') { status = 'ready'; detail = og.live?.name || 'Media in preview'; }
   else if (transport === 'error') { status = 'error'; detail = og.live?.name || 'Playback error'; }
-  else if (outputStatus === 'ready' || cueCount || window.Outrangutan?.isReady?.()) {
+  else if (outputStatus === 'ready' || cueCount || (!remote && window.Outrangutan?.isReady?.())) {
     status = 'ready';
     detail = output?.detail || (cueCount ? `${cueCount} media cues available` : 'Local playout ready');
+  }
+  if (remote && !remoteFresh && cueCount) {
+    // Cues were published at some point but the machine has gone quiet.
+    status = 'closed';
+    detail = 'Playout machine is not reporting. Check Outrangutan on the playback computer';
   }
   // The Live controller deliberately exposes one bounded status vocabulary.
   // A partially available output group is operationally stalled, with the
@@ -8411,8 +8539,14 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
   // D12.4: ARMED truth rides the playout link so "will the first GO fire?" is
   // answerable from the main bar.
   try {
-    const armedReport = window.Outrangutan?.playoutArmed?.();
-    if (armedReport) liveLinkState.noteMeta('playout', { armed: armedReport.armed });
+    if (remote) {
+      // The local instance's armed verdict is meaningless for a remote
+      // playout machine; clear it so the chip never shows a stale NOT ARMED.
+      liveLinkState.noteMeta('playout', { armed: null });
+    } else {
+      const armedReport = window.Outrangutan?.playoutArmed?.();
+      if (armedReport) liveLinkState.noteMeta('playout', { armed: armedReport.armed });
+    }
   } catch {}
 }
 
@@ -8733,6 +8867,7 @@ function outrangutanCueFields(type, d) {
         </div>
       </div>
       <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Run the playback call when this row goes live</label>
+      <div class="field-hint">The call: when GO lands on this row, READY · TRACK · ROLL · TAKE tick one second apart and the clip plays itself. The count IS the abort window (S key or the ABORT button). Unchecked, the clip only fires from its row GO button and the row shows a MANUAL chip.</div>
       <div class="field-hint cc-call-hint">GO onto this row in Live runs <b>READY · TRACK · ROLL</b>, then <b>TAKE</b> fires the clip. S aborts. Watch it: <b>See the call</b> below.</div>`;
   const sfxPart = `
       <div class="cc-trigger-row">
@@ -8789,6 +8924,27 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
   return true;
 }
+// Remote master gain: its own doc field (never the single command slot — a
+// volume turn must not overwrite an unconsumed cue fire), trailing-throttled
+// so a dial spin is a couple of writes, with a short local echo for the dial
+// readout while the playout machine's next publish is in flight.
+let _ogGainEcho = null;      // { v, ts }
+let _ogGainTimer = null, _ogGainNext = null, _ogGainSeq = 0;
+function fireOutrangutanGain(v) {
+  const clamped = Math.max(0, Math.min(1.2, Number(v) || 0));
+  _ogGainEcho = { v: clamped, ts: Date.now() };
+  _ogGainNext = clamped;
+  if (_ogGainTimer) return;
+  _ogGainTimer = setTimeout(() => {
+    _ogGainTimer = null;
+    const send = _ogGainNext; _ogGainNext = null;
+    if (send == null || !(window._firebaseReady && session.code && !session.isDemo)) return;
+    window._updateDoc(window._doc(window._db, 'sessions', session.code), {
+      'outrangutan.gain': { v: send, id: `og_${CLIENT_ID}_${++_ogGainSeq}`, ts: Date.now(), sender: FLOWMINGO_ENDPOINT_ID },
+    }).catch(() => {});
+  }, 200);
+}
+
 // P7: resolve a cue/pad id to its published name for the show log.
 function outrangutanTargetName(action, id) {
   const m = action === 'pad' ? (outrangutanState.pads || {})[id] : (outrangutanState.cues || {})[id];
@@ -8823,7 +8979,11 @@ function fireOutrangutanSfxFromModal() {
 // P5: playout transport from the live-screen keymap — same-tab fast path first,
 // session-doc command otherwise. Actions: go / pause / stop / fadeStop / panic.
 function fireOutrangutanTransport(action) {
-  if (!liveCommandDispatchAllowed({ notify:true })) return false;
+  // PANIC is never gated: the lifecycle guard exists to stop routine commands
+  // while the screen settles, and the one command you need mid-settle is the
+  // kill switch (the deck bridge already bypassed the gate for exactly this
+  // reason; the keyboard and the strip button now match it).
+  if (action !== 'panic' && !liveCommandDispatchAllowed({ notify:true })) return false;
   // D11.3: during an armed call, G is TAKE-now and S is the abort — the
   // countdown owns the transport keys until it resolves.
   if (_rtrtCall) {
@@ -8947,13 +9107,38 @@ const RTRT_STAGES = ['ready', 'track', 'roll'];
 const RTRT_STAGE_MS = 1000;
 let _rtrtCall = null;   // { beat, rowIdx, cueId, stage, timer, manual }
 
+// Manual TAKE is a SHOW setting, not a device setting. It used to live only
+// in localStorage, so a machine swap (or a long-forgotten checkbox) silently
+// turned every call into a parked READY + mandatory TAKE press (8/20 show).
+// In a cloud session the session doc is the authority; localStorage is the
+// fallback for local/demo shows and the seed for the first write.
+let _rtrtManualDoc = null;   // { on, by, ts } adopted from the session doc
 function liveCallManualArm() {
+  if (_rtrtManualDoc && typeof _rtrtManualDoc.on === 'boolean') return _rtrtManualDoc.on;
   try { return localStorage.getItem('cueola_rtrt_manual') === '1'; } catch { return false; }
 }
 function setLiveCallManualArm(on) {
   try { localStorage.setItem('cueola_rtrt_manual', on ? '1' : '0'); } catch {}
+  if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
+    _rtrtManualDoc = { on: !!on, by: CLIENT_ID, ts: Date.now() };
+    try { window._updateDoc(window._doc(window._db, 'sessions', session.code), { rtrtManual: _rtrtManualDoc }).catch(() => {}); } catch {}
+  }
   toast(on ? 'Manual TAKE armed: GO readies the clip, TAKE fires it.' : 'Automatic call: GO runs READY · TRACK · ROLL, then TAKE.');
   renderLivePrompterControls();
+}
+function adoptRtrtManual(value) {
+  const next = value && typeof value.on === 'boolean' ? value : null;
+  if (JSON.stringify(next) === JSON.stringify(_rtrtManualDoc)) return;
+  const before = liveCallManualArm();
+  _rtrtManualDoc = next;
+  if (liveCallManualArm() !== before) {
+    // Announce a mode flip that arrived from another machine — the operator
+    // must never discover it by a call parking unexpectedly at READY.
+    if (next && next.by !== CLIENT_ID) toast(liveCallManualArm()
+      ? 'Manual TAKE was turned ON for this show (from another machine).'
+      : 'Playback calls are back to automatic READY · TRACK · ROLL · TAKE.');
+    renderLivePrompterControls();
+  }
 }
 
 function publishLiveCall(stage, call=_rtrtCall) {
@@ -8978,7 +9163,9 @@ function renderLiveCallBanner(stage, call=_rtrtCall, mine=true) {
   banner.dataset.stage = stage;
   const stageEl = document.getElementById('lsCallStage');
   const nameEl = document.getElementById('lsCallName');
-  if (stageEl) stageEl.textContent = stage === 'take' ? 'TAKE' : stage === 'abort' ? 'ABORTED' : stage.toUpperCase();
+  // A manual call parks at READY forever — say so, or it reads as a hang.
+  if (stageEl) stageEl.textContent = stage === 'take' ? 'TAKE' : stage === 'abort' ? 'ABORTED'
+    : (stage === 'ready' && call?.manual) ? 'READY · MANUAL' : stage.toUpperCase();
   if (nameEl) {
     const rowNum = (call?.rowIdx ?? -1) >= 0 ? `Row ${call.rowIdx + 1}` : '';
     nameEl.textContent = [rowNum, call?.beat?.info || ''].filter(Boolean).join(' · ') || 'Playback call';
@@ -9305,7 +9492,11 @@ function outrangutanCellBadge(d, beatId) {
   const remain = isLive ? `<span class="cue-out-remain" data-outremain="${esc(String(id))}">${outCountdownText(id)}</span>` : '';
   // The builder tell for an armed call: without it, nothing on the row said
   // it would run READY · TRACK · ROLL · TAKE when GO lands on it.
-  const call = d.outAuto ? `<span class="cue-out-callchip" data-tip="GO onto this row in Live runs the playback call: READY · TRACK · ROLL · TAKE">CALL</span>` : '';
+  // Both states now have a tell: the 8/20 show lost time to rows that LOOKED
+  // linked but silently needed the per-row GO because auto was unchecked.
+  const call = d.outAuto
+    ? `<span class="cue-out-callchip" data-tip="GO onto this row in Live runs the playback call: READY · TRACK · ROLL · TAKE">CALL</span>`
+    : `<span class="cue-out-callchip cue-out-manualchip" data-tip="Linked but NOT on the call: this clip only fires from its row GO button. Tick 'Run the playback call' in the row editor to automate it.">MANUAL</span>`;
   return `<div class="cue-out-badge"${beatId != null ? ` data-outbadge="${esc(String(beatId))}"` : ''}><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${call}${status}${remain}</div>`;
 }
 
@@ -9423,14 +9614,17 @@ function deleteCue() {
 // Pre-Live Check — derives a snapshot of show readiness so the Go Live
 // confirmation can tell the user exactly what's set and what isn't.
 function preLiveCheck() {
-  const cuesWithScript = beats.filter(b => scriptCueText(b?.cues?.script)).length;
-  const totalRows = beats.length;
+  const playableRows = beats.filter(b => b && b.style !== 'segment' && !(b.disabled === true || b.executionState === 'disabled'));
+  const cuesWithScript = playableRows.filter(b => scriptCueText(b?.cues?.script)).length;
+  const totalRows = playableRows.length;
   const scriptOk = totalRows > 0 && cuesWithScript > 0;
   const scriptLabel = !totalRows
     ? 'No rows in the rundown'
     : !cuesWithScript
-      ? `${totalRows} row${totalRows===1?'':'s'} but no script cues yet`
-      : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script`;
+      ? `${totalRows} row${totalRows===1?'':'s'} but no script copy yet (rows show dimmed label guidance)`
+      : cuesWithScript === totalRows
+        ? `All ${totalRows} row${totalRows===1?'':'s'} have script copy`
+        : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script copy · the rest show dimmed label guidance`;
 
   // Local ping OR any remote sighting counts: heartbeats over the session doc
   // land before the operator runtime starts on first Go Live.
@@ -9548,12 +9742,17 @@ function runPreflight(reviewOnly) {
   if (links.cues.length || links.pads.length) addPreflightRow({ key: 'Playout links', state: 'pend', detail: 'Checking ' + (links.cues.length + links.pads.length) + ' linked cue/pad reference' + (links.cues.length + links.pads.length === 1 ? '' : 's') + '…' });
   addPreflightRow({ key: 'Playout media', state: 'pend', detail: 'Checking the Outrangutan library…' });
   addPreflightRow({ key: 'SFX banks', state: 'pend', detail: 'Checking pads…' });
-  if (window.Outrangutan?.outputHealth) addPreflightRow({ key: 'Playout outputs', state: 'pend', detail: 'Checking output windows…' });
+  // Cross-machine playout: every local probe below would read the empty
+  // same-tab instance and report a false "no output window" (8/20 show).
+  // The playout machine's published heartbeat is the truth instead.
+  const playoutRemote = playoutIsRemote();
+  if (playoutRemote) addPreflightRow({ key: 'Playout machine', state: 'pend', detail: 'Listening for the playback computer…' });
+  if (!playoutRemote && window.Outrangutan?.outputHealth) addPreflightRow({ key: 'Playout outputs', state: 'pend', detail: 'Checking output windows…' });
   // D12.4: prove the first GO will fire. armPlayback() runs NOW, inside this
   // click's gesture, so the audio engine resumes and the first cue stages;
   // the async part reports what was actually achieved.
   let firstGoArming = null;
-  if (window.Outrangutan?.armPlayback) {
+  if (!playoutRemote && window.Outrangutan?.armPlayback) {
     addPreflightRow({ key: 'Playout first GO', state: 'pend', detail: 'Arming audio and staging the first cue…' });
     try { firstGoArming = window.Outrangutan.armPlayback(); } catch (err) { firstGoArming = Promise.reject(err); }
   }
@@ -9567,10 +9766,38 @@ function runPreflight(reviewOnly) {
 }
 
 async function runPreflightAsync(run, links, firstGoArming = null) {
-  // 1) Deep-check the Outrangutan library when it shares this tab.
+  const playoutRemote = playoutIsRemote();
+  // 1) Deep-check the Outrangutan library when it shares this tab. When the
+  // playout runs on another machine, the local library is the wrong one
+  // (it would even fall back to this machine's IndexedDB) — skip it.
   let deep = null;
-  try { deep = window.Outrangutan?.preflight ? await window.Outrangutan.preflight() : null; } catch (e) { deep = null; }
+  try { deep = (!playoutRemote && window.Outrangutan?.preflight) ? await window.Outrangutan.preflight() : null; } catch (e) { deep = null; }
   if (run !== _preflightRun) return;
+
+  // Cross-machine playout health: judge the published heartbeat, not local
+  // windows. Wait briefly for a fresh packet so an idle-but-alive machine
+  // (3s heartbeat) gets its all-clear instead of a stale verdict.
+  if (playoutRemote) {
+    let fresh = remotePlayoutFresh(outrangutanState);
+    for (let waited = 0; !fresh && waited < 5000; waited += 500) {
+      await new Promise(r => setTimeout(r, 500));
+      if (run !== _preflightRun) return;
+      fresh = remotePlayoutFresh(outrangutanState);
+    }
+    if (!fresh) {
+      setPreflightRow('Playout machine', { state: 'fail', detail: 'The playback computer is not reporting. Open Outrangutan there and join this session' });
+    } else {
+      const out = outrangutanState.live?.outputs || null;
+      const bits = ['Connected'];
+      if (out) {
+        if (out.status === 'ready' && out.total) bits.push(out.ready + ' of ' + out.total + ' output window' + (out.total === 1 ? '' : 's') + ' ready');
+        else if (out.status === 'closed') bits.push('no output window open there yet');
+        else if (out.status) bits.push('outputs ' + out.status);
+      }
+      setPreflightRow('Playout machine', { state: out && out.status === 'ready' ? 'ok' : 'warn', detail: bits.join(' · ') });
+    }
+    renderPreflightRows();
+  }
 
   // D12.4: the first-GO arming row — what armPlayback() actually achieved.
   if (firstGoArming) {
@@ -9643,7 +9870,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   }
 
   // Playout outputs — the watchdog's live view of every output window.
-  if (window.Outrangutan?.outputHealth) {
+  if (!playoutRemote && window.Outrangutan?.outputHealth) {
     let oh = null;
     try { oh = window.Outrangutan.outputHealth(); } catch (e) { oh = null; }
     if (!oh) {
@@ -9756,18 +9983,20 @@ function goLive() {
 function enterLiveSessionScreen(liveState) {
   captureSessionSnapshot('live', true);
   lsIdx = liveState.selectedCueIndex;
-  try {
-    const playbackAttach = window.Outrangutan?.reattachLiveControl?.();
-    if (playbackAttach && !playbackAttach.ok) {
-      setLiveSubsystemStatus('playback', 'recovering', playbackAttach.error || 'Reattaching playback control');
+  if (!playoutIsRemote()) {
+    try {
+      const playbackAttach = window.Outrangutan?.reattachLiveControl?.();
+      if (playbackAttach && !playbackAttach.ok) {
+        setLiveSubsystemStatus('playback', 'recovering', playbackAttach.error || 'Reattaching playback control');
+      }
+    } catch (error) {
+      containError('Playback Live reattach', error);
+      setLiveSubsystemStatus('playback', 'error', String(error?.message || error));
     }
-  } catch (error) {
-    containError('Playback Live reattach', error);
-    setLiveSubsystemStatus('playback', 'error', String(error?.message || error));
+    // D12.4: entering live is an operator gesture — resume the audio engine and
+    // stage the first armed cue NOW, so the first GO behaves like the tenth.
+    try { window.Outrangutan?.armPlayback?.()?.then?.(() => syncOutrangutanControllerStatus()); } catch (error) { containError('Playback arming', error); }
   }
-  // D12.4: entering live is an operator gesture — resume the audio engine and
-  // stage the first armed cue NOW, so the first GO behaves like the tenth.
-  try { window.Outrangutan?.armPlayback?.()?.then?.(() => syncOutrangutanControllerStatus()); } catch (error) { containError('Playback arming', error); }
   _ensureBusExecutorHeartbeat();
   liveSessionController.registerCleanup('live-clock', () => stopTimer(false));
   liveSessionController.registerCleanup('playout-call', () => { if (_rtrtCall) abortPlayoutCall('left-live'); });
@@ -10298,15 +10527,29 @@ function scriptSpeakerLabel(d) {
   return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').trim();
 }
 
+// EVERY playable row is emitted, script copy or not. Rows without copy carry
+// their labels as dimmed [bracket] guidance instead of vanishing: dropping
+// them (the pre-8/20 behavior) meant most of a lightly-scripted show was
+// blank on the talent screen, cueing those rows silently failed, and students
+// who typed into the "Script Cue" label field got nothing on air. Segment
+// markers and disabled (cut) rows stay out; row numbers always match the
+// rundown because they come from the ORIGINAL index.
 function assemblePrompterScriptFromBeats(list=beats) {
-  const scripts = (Array.isArray(list) ? list : [])
+  const rows = (Array.isArray(list) ? list : [])
     .map((b, rowIdx) => ({ b, rowIdx }))
-    .filter(({ b }) => scriptCueText(b?.cues?.script));
-  return cleanPrompterText(scripts.map(({ b, rowIdx }) => {
-    const d = b.cues.script;
+    .filter(({ b }) => b && b.style !== 'segment'
+      && !(b.disabled === true || b.executionState === 'disabled'));
+  return cleanPrompterText(rows.map(({ b, rowIdx }) => {
+    const d = b.cues?.script;
     const copy = scriptCueText(d);
     const rowNum = rowIdx + 1;
     const header = b.info ? `\n[${rowNum}] ${b.info}\n` : `\n[${rowNum}]\n`;
+    if (!copy) {
+      // Guidance body: the Script Cue label first (that's where students
+      // type), then row notes. Brackets render dimmed, never read on air.
+      const guide = String(getCueOn(d) || b.notes || '').trim().replace(/\s+/g, ' ');
+      return header + (guide ? `[${guide.replace(/[\[\]]/g, '')}]` : '');
+    }
     const speaker = scriptSpeakerLabel(d);
     const dialogue = d.scriptType === 'Dialogue' ? '[DIALOGUE]\n' : '';
     return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
@@ -11114,6 +11357,20 @@ function insertCueScriptMarker(text) {
   ta.setSelectionRange(pos, pos);
 }
 
+// After a punch-in, show the operator WHERE it landed: scroll the desk
+// editor to the edited row's header. (The talent side needs no seek — the
+// anchor-preserving re-layout keeps their read line put, and an edit to the
+// row under the read line simply appears in place.)
+function scrollLiveEditorToRow(rowNum) {
+  const el = livePrompterEditor();
+  if (!el || !('value' in el)) return;
+  const m = new RegExp(`^\\[${rowNum}\\]`, 'm').exec(el.value);
+  if (!m) return;
+  const line = el.value.slice(0, m.index).split('\n').length - 1;
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+  el.scrollTop = Math.max(0, line * lh - el.clientHeight * 0.3);
+}
+
 function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
@@ -11121,11 +11378,14 @@ function saveLiveScript() {
   const edited = cleanPrompterText(document.getElementById('lsScriptEditText').value);
   if (b.cues.script.scriptType === 'Dialogue') b.cues.script.dialogueNote = edited;
   else b.cues.script.text = edited;
+  const editedRowNum = liveScriptEditIdx + 1;
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
   livePrompterDraftDirty = false;
   sendToPrompter();
   hideOverlay('lsScriptEditOv');
-  renderLive(); syncToFirestore(); toast('Script saved & pushed.');
+  renderLive(); syncToFirestore();
+  scrollLiveEditorToRow(editedRowNum);
+  toast(`Script saved & pushed · row ${editedRowNum}${b.info ? ` (${b.info})` : ''}.`);
 }
 
 function jumpToLsCue(i, opts = {}) {
@@ -11542,10 +11802,18 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
   _activePrompterOutputInstanceId = outputInstanceId;
   prompterSessionController.noteOutput(outputInstanceId, 'connected');
   const complete = buildCompletePrompterState();
+  // Percent position beats raw pixels for seeding: the operator's own track
+  // is hidden (scrollHeight 0), so its pixel offset can silently reset to 0
+  // and a recovery seed then snapped the returning talent to the top of the
+  // script (8/20 show). The talent's last self-reported percent is the truth;
+  // the raw pixel position stays as the fallback for old talents.
+  const seedPct = Number.isFinite(_talentReportedPct) ? _talentReportedPct
+    : (ptGetMaxScroll() > 0 ? ptProgressPct() : null);
   const message = {
     ...prompterSessionController.buildSnapshot({ outputInstanceId, state:complete.state }),
     script:complete.script,
     display:complete.display,
+    positionPct:seedPct,
     reason,
     scope,
   };
@@ -11636,7 +11904,19 @@ function applyCompletePrompterState(message) {
     if (['left','center','right'].includes(display.align)) ptSetAlign(display.align);
     if (display.theme && PT_THEMES[display.theme]) ptSetTheme(display.theme);
     if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
-    if (Number.isFinite(Number(state.position))) {
+    const seedPct = Number(message.positionPct);
+    if (Number.isFinite(seedPct) && seedPct >= 0) {
+      // Percent survives re-layout (different window size, font, script
+      // edits); resolve it against THIS talent's geometry after layout.
+      requestAnimationFrame(() => {
+        const max = ptGetMaxScroll();
+        if (max > 0) ptOffset = (Math.min(100, seedPct) / 100) * max;
+        const track = ptEl('pt-track');
+        if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+        ptUpdateProgress();
+        ptRecalcRowHolds();
+      });
+    } else if (Number.isFinite(Number(state.position))) {
       ptOffset = Math.max(0, Number(state.position));
       requestAnimationFrame(() => {
         const track = ptEl('pt-track');
@@ -12108,6 +12388,16 @@ function renderTalentPositionIndicator() {
   const marker = text.slice(0, offset).match(/\[(\d+)\][^[]*$/);
   const holding = Number.isFinite(_talentHeldAtRow) ? ` · holding at row ${_talentHeldAtRow}` : '';
   if (label) label.textContent = `Talent · ${marker ? 'row ' + marker[1] + ' · ' : ''}${pct}%${holding}`;
+  // Flowmingo Op mirror: the overlay's script view tracks the talent's real
+  // position with the read line as the anchor, so "where is the prompter" is
+  // answerable at a glance (it used to render the script frozen at the top).
+  const opTrack = document.querySelector('#lsBody .prompt-op-track');
+  if (opTrack) {
+    const stage = opTrack.parentElement;
+    const stageH = stage ? stage.clientHeight : 0;
+    const max = Math.max(0, opTrack.scrollHeight - stageH);
+    opTrack.style.transform = `translateY(-${(max * pct / 100).toFixed(1)}px)`;
+  }
   const editor = document.getElementById('lsPrompterText');
   const follow = document.getElementById('lsTalentPosFollow');
   if (editor && follow?.checked && document.activeElement !== editor && !livePrompterDraftDirty) {
@@ -12263,8 +12553,9 @@ function patchScriptOpLiveActions(region) {
     nextButton.disabled = nextIndex < 0;
   }
   const seek = region.querySelector('#lsq-seek');
-  if (scriptOpInputCanPatch(seek, 'seekDragging') && ptGetMaxScroll() > 0) {
-    seek.value = String(ptProgressPct());
+  if (scriptOpInputCanPatch(seek, 'seekDragging')) {
+    if (Number.isFinite(_talentReportedPct)) seek.value = String(Math.round(_talentReportedPct));
+    else if (ptGetMaxScroll() > 0) seek.value = String(ptProgressPct());
   }
   const tech = region.querySelector('#lsq-tech-btn');
   if (tech) tech.setAttribute('onclick', 'toggleTechDifficulty()');
@@ -12338,7 +12629,19 @@ function renderLivePrompterControls() {
 // It owns no Firebase listener or prompter protocol identity: one identified
 // host sends complete snapshots and executes allowlisted popup intents through
 // the same sendPrompterControl()/sendToPrompter() paths used by the docked UI.
-const SCRIPT_OPERATOR_CONTROLLER_ID = 'sop_' + FLOWMINGO_ENDPOINT_ID;
+// Persisted across reloads (sessionStorage is per-tab): the BroadcastChannel
+// name and every accepts() filter derive from this id, so a fresh id per load
+// meant a reloaded Live window could NEVER re-reach its pop-out — the
+// operator's carefully placed second-monitor window died on every reload.
+const SCRIPT_OPERATOR_CONTROLLER_ID = (() => {
+  try {
+    const existing = sessionStorage.getItem('cueola_sop_controller');
+    if (existing) return existing;
+    const id = 'sop_' + FLOWMINGO_ENDPOINT_ID;
+    sessionStorage.setItem('cueola_sop_controller', id);
+    return id;
+  } catch { return 'sop_' + FLOWMINGO_ENDPOINT_ID; }
+})();
 const SCRIPT_OPERATOR_CONTROL_ACTIONS = new Set([
   'pause','resume','speed_up','speed_down','size_up','size_down','reset',
   'hide_interface','mirror','fullscreen','direction_reverse','direction_forward',
@@ -12403,7 +12706,10 @@ function scriptOperatorSnapshot() {
     size:Number(ptFontSize),
     fontSize:Number(ptFontSize),
     align:ptAlign,
-    progressPct:ptProgressPct(),
+    // The op window's own track is hidden (max scroll 0), so ptProgressPct()
+    // is always 0 there — prefer the talent's self-reported percent so the
+    // pop-out's seek slider shows the real position instead of snapping to 0.
+    progressPct:Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : ptProgressPct(),
     position:Number(ptOffset),
     reversing:Boolean(ptReversing),
     mirrored:Boolean(ptMirrored),
@@ -12484,13 +12790,14 @@ function scriptOperatorControlAllowed(action) {
   if (action === 'seek_text') return true;   // find-in-script; query rides data.q, validated at execute
   if (SCRIPT_OPERATOR_CONTROL_ACTIONS.has(action)) return true;
   if (/^theme_(cool|warm|white|green|koala|panda|flamingo|outrangutan|prepbear)$/.test(action)) return true;
-  let match = action.match(/^(speed_set|size_set|seek_set|seek_row|clock_duration|wrapup)_(-?\d+(?:\.\d+)?)$/);
+  let match = action.match(/^(speed_set|size_set|seek_set|seek_row|seek_line|clock_duration|wrapup)_(-?\d+(?:\.\d+)?)$/);
   if (match) {
     const value = Number(match[2]);
     if (!Number.isFinite(value)) return false;
     if (match[1] === 'speed_set') return value >= 5 && value <= 200;
     if (match[1] === 'size_set') return value >= 24 && value <= 120;
     if (match[1] === 'seek_set') return value >= 0 && value <= 100;
+    if (match[1] === 'seek_line') return Math.abs(value) <= 200;   // relative scrub, ± lines
     if (match[1] === 'seek_row') return Number.isInteger(value) && value >= 1 && value <= Math.max(1, beats.length);
     return value >= 1 && value <= 999 * 60;
   }
@@ -12710,6 +13017,9 @@ function startScriptOperatorHost(identity) {
 
 function stopScriptOperatorHost(options={}) {
   const reason = options.reason || 'Script Operator closed';
+  // Any deliberate stop clears the resume marker; only the pagehide path
+  // (reload in flight) keeps it so the next load re-hosts the pop-out.
+  if (!options.keepResume) { try { sessionStorage.removeItem('cueola_sop_open'); } catch {} }
   if (_scriptOpHost && options.notify !== false) scriptOperatorSend(_scriptOpHost.close(reason));
   else if (_scriptOpHost) _scriptOpHost.close(reason);
   if (_scriptOpWatchdog) { try { _scriptOpWatchdog.cancel(); } catch {} }
@@ -12791,10 +13101,32 @@ function openScriptOpPopout() {
   }
   const button = document.getElementById('lsPopoutBtn');
   if (button) button.dataset.popupUrl = url.toString();
+  try { sessionStorage.setItem('cueola_sop_open', '1'); } catch {}
   setLiveSubsystemStatus('scriptOperator', 'connecting', 'Waiting for Script Operator ready');
   scriptOperatorSetButton(true, 'Focus Script Operator window');
   toast('Script Op opened in a new window. Drag it to another monitor.');
   return _scriptOpWin;
+}
+
+// After a main-window reload the pop-out is still alive on its monitor,
+// knocking on the (persisted) channel. Re-create the host so it reconnects,
+// without opening any window. Called from the session snapshot handler once
+// the prompter session identity has been adopted from the doc.
+let _sopResumeTried = false;
+function maybeResumeScriptOpHost() {
+  if (_sopResumeTried || _scriptOpHost) return;
+  let wanted = false;
+  try { wanted = sessionStorage.getItem('cueola_sop_open') === '1'; } catch {}
+  if (!wanted) { _sopResumeTried = true; return; }
+  const identity = scriptOperatorIdentity();
+  if (!identity.sessionId || !identity.productionCode) return;   // doc not adopted yet, try next snapshot
+  _sopResumeTried = true;
+  try {
+    startScriptOperatorHost(identity);
+    setLiveSubsystemStatus('scriptOperator', 'connecting', 'Reconnecting Script Operator window');
+    scriptOperatorSetButton(true, 'Focus Script Operator window');
+    logShow('link', 'Script Operator host resumed after reload · waiting for the pop-out to knock');
+  } catch (error) { containError('Script Operator resume', error); }
 }
 
 function dockScriptOpPopout() {
@@ -12802,7 +13134,13 @@ function dockScriptOpPopout() {
 }
 
 window.addEventListener('pagehide', () => {
-  stopScriptOperatorHost({ reason:'Main Cueola window closed', closeWindow:true, clearWindow:true, notify:true });
+  // Reload survival: do NOT close the pop-out and do NOT tell it to give up.
+  // pagehide fires for reloads too, and killing the window here was why every
+  // main-window reload cost the operator their placed second-monitor panel.
+  // The pop-out keeps knocking (READY) and the reloaded host resumes it via
+  // the persisted controller id; if the tab really closed, the pop-out's
+  // opener-closed detection reports it honestly.
+  stopScriptOperatorHost({ reason:'Main Cueola window unloading', closeWindow:false, clearWindow:true, notify:false, keepResume:true });
 });
 
 // Drag the divider under the script to grow/shrink the "Live Flowmingo script"
@@ -13049,22 +13387,73 @@ function openPrompterApp() {
 // and get dragged by hand. The snapshot is in-memory: detection happens from
 // a button press (the permission prompt needs a gesture the first time).
 let _cueolaScreens = null;
-async function cueolaDetectScreens() {
-  if (!window.CueolaCaps?.windowManagement) { toast('Window placement needs Chrome or Edge. Drag windows to displays by hand for now.'); return null; }
+let _cueolaScreenDetails = null;
+async function cueolaDetectScreens(opts = {}) {
+  if (!window.CueolaCaps?.windowManagement) { if (!opts.quiet) toast('Window placement needs Chrome or Edge. Drag windows to displays by hand for now.'); return null; }
   try {
     const det = await window.getScreenDetails();
-    _cueolaScreens = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
+    _cueolaScreenDetails = det;
+    const snapshot = () => {
+      _cueolaScreens = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
+    };
+    snapshot();
+    // Topology watchdog: unplug/replug/resolution changes refresh the list in
+    // place, so a saved screen identity keeps resolving to the RIGHT display
+    // instead of a stale coordinate (the "goes silent, re-send the screen"
+    // ritual). One listener per page: getScreenDetails returns a live object.
+    if (!det._cueolaWatched) {
+      det._cueolaWatched = true;
+      det.addEventListener('screenschange', () => { snapshot(); try { renderWorkspaceScreens(); } catch {} logShow('link', 'Display setup changed (' + _cueolaScreens.length + ' screens)'); });
+    }
     return _cueolaScreens;
-  } catch (e) { toast('Display access denied. Allow "Window management" for this site.'); return null; }
+  } catch (e) { if (!opts.quiet) toast('Display access denied. Allow "Window management" for this site.'); return null; }
 }
+// Silent re-detect when the site already holds the window-management
+// permission: no gesture needed, so saved placements work on a fresh load
+// without pressing "Detect displays" again.
+async function cueolaDetectScreensIfPermitted() {
+  if (_cueolaScreens || !window.CueolaCaps?.windowManagement || !navigator.permissions?.query) return _cueolaScreens;
+  for (const name of ['window-management', 'window-placement']) {
+    try {
+      const st = await navigator.permissions.query({ name });
+      if (st.state === 'granted') return await cueolaDetectScreens({ quiet: true });
+      return null;   // known permission, not granted: a gesture must ask
+    } catch { /* this browser doesn't know this permission name; try the next */ }
+  }
+  return null;
+}
+// Warm the screen snapshot early on machines that already granted the
+// permission, so recovery-reopen paths place windows correctly on a fresh
+// load without anyone pressing "Detect displays" first.
+window.addEventListener('load', () => { setTimeout(() => { cueolaDetectScreensIfPermitted().catch(() => {}); }, 2500); });
 function cueolaScreenFeatures(screenId) {
   if (screenId == null || screenId === '' || !_cueolaScreens) return '';
   const scr = _cueolaScreens.find(s => s.id === Number(screenId));
   return scr ? `left=${scr.availLeft},top=${scr.availTop},width=${scr.availWidth},height=${scr.availHeight}` : '';
 }
 const TALENT_SCREEN_KEY = 'cueola_talent_screen';
+// The choice is stored as a stable IDENTITY (label + geometry), never a bare
+// index: the index pointed into an in-memory list that is null on every
+// fresh load, and could silently mean a different physical display after an
+// unplug/replug. Legacy numeric values still resolve.
+function savedTalentScreenIdentity() {
+  try {
+    const raw = localStorage.getItem(TALENT_SCREEN_KEY);
+    if (raw === null || raw === '') return null;
+    const v = JSON.parse(raw);
+    if (v && typeof v === 'object') return v;
+    return Number.isFinite(Number(raw)) ? { legacyIndex: Number(raw) } : null;
+  } catch { return null; }
+}
 function savedTalentScreen() {
-  try { const v = localStorage.getItem(TALENT_SCREEN_KEY); return v === null || v === '' ? null : Number(v); } catch { return null; }
+  const want = savedTalentScreenIdentity();
+  if (!want || !_cueolaScreens) return null;
+  if (Number.isFinite(want.legacyIndex)) return _cueolaScreens[want.legacyIndex] ? want.legacyIndex : null;
+  const byLabel = want.label ? _cueolaScreens.find(s => s.label === want.label) : null;
+  if (byLabel) return byLabel.id;
+  const byGeom = _cueolaScreens.find(s => s.availLeft === want.availLeft && s.availTop === want.availTop
+    && s.availWidth === want.availWidth && s.availHeight === want.availHeight);
+  return byGeom ? byGeom.id : null;
 }
 
 function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true }={}) {
@@ -13097,6 +13486,14 @@ function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true
   _prompterTalentWin = feats
     ? window.open(url.toString(), 'cueola-flowmingo-talent', feats)
     : window.open(url.toString(), 'cueola-flowmingo-talent');
+  // A placed talent window goes fullscreen on its display, Outrangutan-style:
+  // the desk screens are tiny and the browser chrome was wasting them.
+  if (feats && _prompterTalentWin) {
+    const win = _prompterTalentWin;
+    setTimeout(() => {
+      try { const d = win.document?.documentElement; if (d?.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch {}
+    }, 1200);
+  }
   if (!_prompterTalentWin) {
     projectPrompterSessionStatus('error', 'Popup blocked');
     toast('Allow pop-ups to open Flowmingo in a new window.');
@@ -13124,7 +13521,12 @@ async function openWorkspaceLauncher() {
   set('ws-talent', p.talent !== false);
   set('ws-scriptop', !!p.scriptop);
   set('ws-plandabear', !!p.plandabear);
+  set('ws-outrangutan', !!p.outrangutan);
+  set('ws-keywi', !!p.keywi);
   renderWorkspaceScreens();
+  // Permission already granted on this machine: refresh the screen list
+  // silently so the saved placement Just Works without another button press.
+  cueolaDetectScreensIfPermitted().then(list => { if (list) renderWorkspaceScreens(); }).catch(() => {});
   const sel = document.getElementById('ws-code');
   if (sel) {
     const last = (localStorage.getItem('cueola_last_code') || '').toUpperCase();
@@ -13171,15 +13573,25 @@ function launchWorkspace() {
   const talent = !!document.getElementById('ws-talent')?.checked;
   const scriptop = !!document.getElementById('ws-scriptop')?.checked;
   const plandabear = !!document.getElementById('ws-plandabear')?.checked;
+  const outrangutan = !!document.getElementById('ws-outrangutan')?.checked;
+  const keywi = !!document.getElementById('ws-keywi')?.checked;
   const screenSel = document.getElementById('ws-talent-screen');
   const screenId = screenSel && !screenSel.disabled && screenSel.value !== '' ? Number(screenSel.value) : null;
-  try { localStorage.setItem(TALENT_SCREEN_KEY, screenId == null ? '' : String(screenId)); } catch {}
-  saveWorkspacePrefs({ talent, scriptop, plandabear });
+  // Persist the CHOICE as a stable identity, not an index (see savedTalentScreen).
+  try {
+    const scr = screenId != null && _cueolaScreens ? _cueolaScreens.find(s => s.id === screenId) : null;
+    localStorage.setItem(TALENT_SCREEN_KEY, scr
+      ? JSON.stringify({ label: scr.label, availLeft: scr.availLeft, availTop: scr.availTop, availWidth: scr.availWidth, availHeight: scr.availHeight })
+      : '');
+  } catch {}
+  saveWorkspacePrefs({ talent, scriptop, plandabear, outrangutan, keywi });
   // Pop-ups open first, inside this click's gesture. With pop-ups allowed for
   // the site they all open; a blocked one toasts and keeps its manual button.
   let blocked = 0;
   if (talent && !openFlowmingoTalentWindow({ code, fallbackInPage: false })) blocked++;
   if (plandabear && !window.open(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code)) blocked++;
+  if (outrangutan && !window.open(`index.html?app=outrangutan&code=${encodeURIComponent(code)}`, 'cueola-outrangutan-' + code)) blocked++;
+  if (keywi && !window.open(`index.html?app=keywibird&code=${encodeURIComponent(code)}`, 'cueola-keywi-' + code)) blocked++;
   _wsPendingScriptop = scriptop;
   if (scriptop) armWorkspaceScriptop();
   hideModal('modal-workspace');
@@ -14025,6 +14437,20 @@ function ptResetScroll() {
   const track = ptEl('pt-track');
   if (track) track.style.transform = 'translateY(0)';
   ptUpdateProgress();
+  // "Top" means the first script line ON the read line, ready to read — not a
+  // screenful of lead-in padding. Offset 0 showed only the 100vh top pad, so
+  // every reset landed the talent on a completely blank screen (8/20 show).
+  // Wait a frame for layout, then pull the first real line up to the marker.
+  requestAnimationFrame(() => {
+    if (ptOffset !== 0 || ptGlide) return;   // something else moved us already
+    const text = ptEl('pt-text');
+    if (!text) return;
+    const first = Array.from(text.children).find(el => (el.textContent || '').trim());
+    if (!first) return;
+    const readY = window.innerHeight / 2 + 24;
+    const delta = first.getBoundingClientRect().top - readY;
+    if (delta > 0) ptApplyScrollOffset(delta);
+  });
 }
 
 // Current scroll position as a 0–100 percentage (for the operator cue scrubber).
@@ -14103,6 +14529,18 @@ function ptSeekToProgress(pct) {
   const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
   const max = ptGetMaxScroll();
   ptApplyScrollOffset(max > 0 ? (p / 100) * max : 0);
+}
+
+// Relative scrub: move by ± N lines from wherever the talent IS. This is what
+// makes a physical knob work — every absolute-percent verb needed the sender
+// to know the current position, which no remote surface reliably does.
+// Same semantics as the dial/slider: pure repositioning, cancels glides,
+// re-baselines holds (via ptApplyScrollOffset), never pauses.
+function ptSeekByLines(lines) {
+  const n = Math.max(-200, Math.min(200, parseFloat(lines) || 0));
+  if (!n) return;
+  const lineHeight = (ptFontSize || 22) * 1.55;
+  ptApplyScrollOffset(ptOffset + n * lineHeight);
 }
 
 // The live-row context feeding the hold-at-next-cue behavior. Learned from row
@@ -14311,12 +14749,12 @@ function recordTechDifficultyMarker() {
 }
 
 // Fine nudge for the Script Op cue scrubber.
+// Nudges are RELATIVE now (seek_line): the old ±3-percent version moved by
+// ~40 seconds of read on a long script and depended on a slider value that
+// could be stale. delta stays in "percent-ish" units for the callers; each
+// point maps to one line of talent copy.
 function poNudgeSeek(delta) {
-  const sl = document.getElementById('po-seek') || document.getElementById('lsq-seek');
-  const cur = sl ? parseFloat(sl.value) || 0 : ptProgressPct();
-  const next = Math.max(0, Math.min(100, cur + delta));
-  ['po-seek', 'lsq-seek'].forEach(id => { const s = document.getElementById(id); if (s) s.value = next; });
-  sendPrompterControl('seek_set_' + next);
+  sendPrompterControl('seek_line_' + Math.max(-200, Math.min(200, Math.round(delta))));
 }
 
 function poPunchInSeek(scope = 'lsq') {
@@ -14848,12 +15286,52 @@ function ptInitScriptFromCueola(text) {
   ptUpdateSyncLabel();
 }
 
+// Anchor capture/restore for live script pushes. The old proportional-ratio
+// rescale shifted everything below an insert by a UNIFORM factor, so a
+// punch-in above the read position slid the talent off the line they were
+// reading (8/20 show). Instead: remember which line sits on the read line
+// (identified by its row block + line index within the block), and after the
+// re-render put THAT line back at the same screen position.
+function ptCaptureLineAnchor(textEl) {
+  const lines = Array.from(textEl.children);
+  if (!lines.length) return null;
+  const readY = window.innerHeight / 2 + 24;
+  let best = null;
+  for (const el of lines) {
+    if (el.getBoundingClientRect().top <= readY + 2) best = el;
+    else break;   // children are in document order
+  }
+  if (!best) best = lines[0];
+  let rowNum = null, lineIdx = 0;
+  for (let cur = best; cur; cur = cur.previousElementSibling) {
+    const h = cur.querySelector?.('.scr-header');
+    if (h) { rowNum = parseInt(String(h.textContent || '').trim().replace(/^\[/, ''), 10); break; }
+    lineIdx++;
+  }
+  return { rowNum, lineIdx, screenY: best.getBoundingClientRect().top };
+}
+function ptAnchorScreenDelta(textEl, anchor) {
+  if (!anchor || !Number.isFinite(anchor.rowNum)) return null;
+  const headers = Array.from(textEl.querySelectorAll('.scr-header'));
+  const span = headers.find(h => String(h.textContent || '').trim().startsWith(`[${anchor.rowNum}]`));
+  if (!span) return null;
+  let el = span.closest('p') || span.parentElement;
+  for (let i = 0; i < anchor.lineIdx && el; i++) {
+    const next = el.nextElementSibling;
+    if (!next || next.querySelector('.scr-header')) break;   // clamp inside the block
+    el = next;
+  }
+  if (!el) return null;
+  return el.getBoundingClientRect().top - anchor.screenY;
+}
+
 // Called by Cueola on live advance — update text without interrupting scroll
 function ptUpdateFromCueola(text) {
   const el = ptEl('pt-text');
   if (!el) return;
   const track = ptEl('pt-track');
   const prevHeight = track ? track.scrollHeight : 0;
+  const anchor = track && prevHeight > 0 ? ptCaptureLineAnchor(el) : null;
   el.innerHTML = ptPlainTextToHTML(text || '');
   if (text && text.trim()) ptScriptIsPlaceholder = false;
   ptResetAutoPauseMarkers();
@@ -14861,11 +15339,23 @@ function ptUpdateFromCueola(text) {
   requestAnimationFrame(() => {
     if (!track) return;
     const newHeight = track.scrollHeight;
-    if (prevHeight > 0 && newHeight > 0 && newHeight !== prevHeight) {
+    // Anchor-preserving first; proportional rescale only as the fallback for
+    // scripts with no recognizable row blocks (free-typed pushes).
+    let restored = false;
+    if (anchor) {
+      const delta = ptAnchorScreenDelta(el, anchor);
+      if (delta != null) {
+        const max = ptGetMaxScroll();
+        ptOffset = Math.max(0, Math.min(max, ptOffset + delta));
+        // A glide in flight shifts with the content so it still lands on the
+        // same copy after a mid-travel script push.
+        if (ptGlide) { ptGlide.from += delta; ptGlide.to = Math.max(0, Math.min(max, ptGlide.to + delta)); }
+        restored = true;
+      }
+    }
+    if (!restored && prevHeight > 0 && newHeight > 0 && newHeight !== prevHeight) {
       const ratio = newHeight / prevHeight;
       ptOffset = ptOffset * ratio;
-      // A glide in flight rescales with the content so it still lands on the
-      // same copy after a mid-travel script push.
       if (ptGlide) { ptGlide.from *= ratio; ptGlide.to *= ratio; }
     }
     if (!ptPlaying && !ptGlide) track.style.transform = `translateY(-${ptOffset}px)`;
@@ -15307,6 +15797,7 @@ function ptHandleRemoteControl(action, payload=null) {
   if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
+  if (action?.startsWith('seek_line_')) { ptSeekByLines(action.replace('seek_line_', '')); return; }
   if (action?.startsWith('seek_row_')) { ptSeekToRow(action.replace('seek_row_', '')); return; }
   if (action === 'seek_text') { ptSeekToText(payload?.q); return; }
   if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action?.startsWith('clock_until_') || action?.startsWith('clock_duration_') || action?.startsWith('wrapup_')) {
@@ -15436,6 +15927,7 @@ function flowOpControlLabel(action) {
   if (action?.startsWith('speed_set_')) return `Speed ${action.replace('speed_set_', '')}`;
   if (action?.startsWith('size_set_')) return `Size ${action.replace('size_set_', '')}`;
   if (action?.startsWith('seek_set_')) return 'Cue';
+  if (action?.startsWith('seek_line_')) return 'Scrub';
   if (action?.startsWith('seek_row_')) return `Cue row ${action.replace('seek_row_', '')}`;
   if (action?.startsWith('clock_until_')) return 'Countdown clock';
   if (action?.startsWith('clock_duration_')) return 'Duration clock';
@@ -15940,11 +16432,8 @@ function flowOpToggleColorBars() {
 
 // Flowmingo Op: fine nudge for the live cue scrubber.
 function flowOpNudgeSeek(delta) {
-  const sl = flowOpEl('flow-seek');
-  const cur = sl ? parseFloat(sl.value) || 0 : 0;
-  const next = Math.max(0, Math.min(100, cur + delta));
-  if (sl) sl.value = next;
-  flowOpSendControl('seek_set_' + next);
+  // Relative, like every other nudge: moves from the talent's real position.
+  flowOpSendControl('seek_line_' + Math.max(-200, Math.min(200, Math.round(delta))));
 }
 
 function flowOpPunchInSeek() {
@@ -16440,6 +16929,10 @@ function renderLivePromptOp() {
   </div>`;
   opInspRestoreTab('po');   // keep the remembered inspector tab active across re-renders
   renderPromptOpClockPreview();
+  // A re-render rebuilt the track at translate 0; re-sync it to the talent's
+  // position now (the dedupe key would otherwise skip the next heartbeat).
+  _lastTalentPosPct = -1;
+  renderTalentPositionIndicator();
   requestAnimationFrame(() => body.querySelector('.prompt-op-stage')?.focus({ preventScroll:true }));
 }
 
@@ -21743,6 +22236,20 @@ async function readServerPaperworkSnapshot(options={}) {
       throw error;
     }
     const before = beforeSnap.data() || {};
+    // Group workspaces keep their paperwork on the group SUBDOC (preProDocRef
+    // is "THE parameterization point") — but this reader used to take prePro
+    // straight off the session doc, so a grouped export printed the whole
+    // class's paperwork under the group's page header (and the package's
+    // group-computed call-sheet ids matched nothing). Server-read the group
+    // doc and let its prePro be the paperwork authority.
+    let paperworkPrePro = before.prePro && typeof before.prePro === 'object' ? before.prePro : {};
+    if (groupActive()) {
+      const groupSnap = await paperworkExportTimeout(
+        window._getDocFromServer(window._doc(window._db, 'sessions', session.code, 'groups', activeGroupId)),
+        PAPER_EXPORT_READ_MS, readTimeoutMsg);
+      const groupData = groupSnap.exists() ? (groupSnap.data() || {}) : {};
+      paperworkPrePro = groupData.prePro && typeof groupData.prePro === 'object' ? groupData.prePro : {};
+    }
     let assignments = [];
     let assignmentsMode = options.includeAssignments === false ? 'excluded' : 'canonical';
     if (options.includeAssignments !== false) {
@@ -21797,7 +22304,7 @@ async function readServerPaperworkSnapshot(options={}) {
       readiness,
       production:{ sessionCode:session.code, name:before.showName || show.name, identity:session.code },
       exportedAt:Date.now(),
-      revisions:{ ...paperworkRevisionFence(before, notes), notesMode, assignmentsMode },
+      revisions:{ ...paperworkRevisionFence({ ...before, prePro:paperworkPrePro }, notes), notesMode, assignmentsMode },
       show:{
         name:before.showName || show.name,
         start:normalizeTimeValue(before.startTime || show.start),
@@ -21805,7 +22312,7 @@ async function readServerPaperworkSnapshot(options={}) {
         outrangutan:before.outrangutan || {},
       },
       beats:Array.isArray(before.beats) ? before.beats : [],
-      prePro:before.prePro && typeof before.prePro === 'object' ? before.prePro : {},
+      prePro:paperworkPrePro,
       canonicalAssignments:assignments,
       notes,
       options:{
@@ -22199,7 +22706,10 @@ async function showCallSheetPreview() {
     lastCallSheetExportSnapshot = snapshot;
     lastCallSheetExportIndex = index;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
-    showPaperPreview('Call Sheet Preview', callSheetPreviewHTML(normalizeCallSheet(sheets[index], index)),
+    // Pass the snapshot's prePro explicitly: the default argument re-reads
+    // LIVE local state, so the day-of-days and hospital rows could change
+    // between this preview and the export of the same frozen snapshot.
+    showPaperPreview('Call Sheet Preview', callSheetPreviewHTML(normalizeCallSheet(sheets[index], index), snapshot.prePro),
       'Export Call Sheet PDF', 'downloadCallSheetPDF()', 'call-sheet', options);
   } catch (error) {
     lastCallSheetExportSnapshot = null;
@@ -24076,14 +24586,19 @@ async function prepareStagePlotRasters(snapshot) {
   const all = getStagePlots(snapshot.prePro || {});
   const targeted = snapshot?.options?.plotId ? all.filter(p => p.id === snapshot.options.plotId) : all;
   const plots = targeted.length ? targeted : all;
+  let failed = 0;
   for (const plot of plots) {
     for (const keys of sets) {
       const key = `${plot.id}|${keys.join('+')}`;
       if (byKey[key]) continue;
-      try { byKey[key] = await rasterizeStagePlotSVG(plot, keys); } catch {}
+      try { byKey[key] = await rasterizeStagePlotSVG(plot, keys); }
+      catch (error) { failed += 1; console.warn('Stage plot raster failed', plot.id, keys, error); }
     }
   }
   _stagePlotRasterCache = { fingerprint: snapshot.fingerprint, byKey };
+  // Silent raster failure used to make the exported figure quietly differ
+  // from the preview (SVG fallback renders differently). Say it happened.
+  if (failed) toast(`${failed} stage plot figure${failed === 1 ? '' : 's'} could not pre-render; the PDF uses the live drawing instead (may differ slightly).`);
 }
 
 let lastStagePlotExportSnapshot = null;
@@ -24978,10 +25493,17 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
   `;
 }
 
-function showSafetyPlanPreview() {
-  const safety = getSafetyPlanData();
+// Snapshot-fed like every other export preview: save the editor first, then
+// render what the EXPORT will actually contain (server-confirmed). The old
+// version rendered the live DOM state, so the preview and the package PDF
+// could disagree whenever the save hadn't landed.
+async function showSafetyPlanPreview() {
   saveSafetyPlan(false);
-  showPaperPreview('Safety Plan Preview', safetyPlanHTML(safety), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
+  let snapshot;
+  try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'safety-plan' }); }
+  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  const prePro = snapshot.prePro || {};
+  showPaperPreview('Safety Plan Preview', safetyPlanHTML(prePro.safety || getSafetyPlanData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
 }
 
 function defaultProductionSchedule() {
@@ -25207,10 +25729,14 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
     <table><thead><tr><th>Ready</th><th>Checklist Item</th><th>Signed Off By</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No checklist rows.</td></tr>'}</tbody></table>`;
 }
 
-function showProductionSchedulePreview() {
-  const schedule = getProductionScheduleData();
+// Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
+async function showProductionSchedulePreview() {
   saveProductionSchedule(false);
-  showPaperPreview('Production Schedule Preview', productionScheduleHTML(schedule), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
+  let snapshot;
+  try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'production-scheduler' }); }
+  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  const prePro = snapshot.prePro || {};
+  showPaperPreview('Production Schedule Preview', productionScheduleHTML(prePro.productionSchedule || getProductionScheduleData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
 }
 
 function defaultPatchRows(kind) {
@@ -25439,21 +25965,26 @@ function patchTableHTML(kind, title, data=null) {
   return `<h2>${title}</h2><table><thead><tr>${isComms ? '<th>Position</th><th>Out</th><th>Gear</th><th>Notes</th>' : '<th>Label</th><th>Destination</th><th>Source</th><th>Cabling</th><th>Notes</th>'}</tr></thead><tbody>${body || `<tr><td colspan="${isComms ? 4 : 5}">No rows saved yet.</td></tr>`}</tbody></table>`;
 }
 
-function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
+// Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
+async function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
   savePatchSheet(false);
+  let snapshot;
+  try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:kind === 'video' ? 'video-patch' : 'audio-comms-patch' }); }
+  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  const prePro = snapshot.prePro || {};
   // Section numbers come from the shared builder (D6) so a single-sheet
   // preview and the full package can never disagree.
   if (kind === 'video') {
     showPaperPreview('Video Patch Sheet Preview', `
       <h1 class="psec-h psec-video">${paperSectionTitle(paperworkSectionNumber('video-patch'), 'Video Patch Sheet')}</h1>
-      ${patchTableHTML('video', 'Video Patch Sheet')}
+      ${patchTableHTML('video', 'Video Patch Sheet', prePro)}
     `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
     return;
   }
   showPaperPreview('Audio and Comms Patch Sheet Preview', `
     <h1 class="psec-h psec-audio">${paperSectionTitle(paperworkSectionNumber('audio-comms-patch'), 'Audio and Comms Patch Sheets')}</h1>
-    ${patchTableHTML('audio', 'Audio Patch Sheet')}
-    ${patchTableHTML('comms', 'Comms Patch Sheet')}
+    ${patchTableHTML('audio', 'Audio Patch Sheet', prePro)}
+    ${patchTableHTML('comms', 'Comms Patch Sheet', prePro)}
   `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
 }
 
@@ -26535,9 +27066,17 @@ function removeCallSheetPerson(idx) {
 
 async function downloadCallSheetPDF() {
   let snapshot;
+  // Snapshot reuse and index reuse must ride the SAME guard: the previewed
+  // snapshot (fingerprint-matched, and actually present — a bare per-item
+  // preview leaves lastCallSheetExportSnapshot null, and undefined===undefined
+  // used to sail through as "open"). A stale preview re-snapshots, and a fresh
+  // snapshot's sheet list may be re-sanitized/reordered, so the remembered
+  // index only applies to the remembered snapshot — otherwise it exported a
+  // different sheet than the one on screen.
+  const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
+    && !!lastCallSheetExportSnapshot
+    && lastPaperPreview?.options?.snapshotFingerprint === lastCallSheetExportSnapshot.fingerprint;
   try {
-    const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
-      && lastPaperPreview?.options?.snapshotFingerprint === lastCallSheetExportSnapshot?.fingerprint;
     snapshot = previewIsOpen ? lastCallSheetExportSnapshot : await preparePaperworkExportSnapshot({
       includeAssignments:false,
       includeNotes:false,
@@ -26548,11 +27087,11 @@ async function downloadCallSheetPDF() {
     return;
   }
   const sheets = getCallSheets(snapshot.prePro);
-  const index = document.getElementById('paperPreviewModal')?.classList.contains('on')
+  const index = previewIsOpen
     ? Math.max(0, Math.min(lastCallSheetExportIndex, sheets.length - 1))
     : resolveActiveCallSheetIndex(sheets);
   const savedCallSheetData = normalizeCallSheet(sheets[index], index);
-  const html = callSheetPreviewHTML(savedCallSheetData);
+  const html = callSheetPreviewHTML(savedCallSheetData, snapshot.prePro);
   const savedCallSheetFileName = `${cleanPdfName(callSheetTitle(savedCallSheetData), 'cueola-call-sheet')}.pdf`;
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
   try {

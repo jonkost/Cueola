@@ -224,6 +224,10 @@
     if (Date.now() - lastControllerSeenAt >= protocol.heartbeatTimeout) {
       protocol.checkHeartbeat();
       setDisconnected('The Cueola Live window missed three heartbeats. Controls are paused.');
+      // Keep knocking: a reloaded Live window re-creates its host on the SAME
+      // channel (persisted controller id) but knows no operator until a READY
+      // arrives — without this both sides waited on each other forever.
+      if (Date.now() - lastReadySentAt > 6000) sendReady('operator-rebind');
     }
   }
 
@@ -400,11 +404,11 @@
     if (button.hasAttribute('data-question-push')) { pushQuestionLane(); return; }
 
     if (button.matches('[data-nudge]')) {
-      const seek = document.getElementById('seekRange');
-      const next = clamp(Number(seek.value) + Number(button.dataset.nudge), 0, 100);
-      seek.value = String(next);
-      document.getElementById('seekValue').textContent = `${Math.round(next)}%`;
-      sendIntent('control', { action: `seek_set_${formatNumber(next)}` });
+      // Relative nudge: seek_line moves from wherever the talent IS, so a
+      // stale slider value can no longer teleport them (each point = one
+      // line of copy). The slider re-syncs from the next state push.
+      const step = clamp(Number(button.dataset.nudge) || 0, -200, 200);
+      if (step) sendIntent('control', { action: `seek_line_${step}` });
       return;
     }
 

@@ -2301,6 +2301,7 @@
   const OG_SENDER = 'outrangutan_' + Math.random().toString(36).slice(2, 9);
   let sessionSub = null;          // onSnapshot unsubscribe
   let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
+  let lastGainId = null;          // dedupe remote gain writes (own field, own guard)
   let pubTimer = null, lastLiveTs = 0;
 
   function fbReady() { return !!(window._firebaseReady && window._db && window._doc && window._updateDoc && window._onSnapshot); }
@@ -2317,11 +2318,40 @@
     }
     try { sessionSub = window._onSnapshot(sessionRef(), snap => { try { onSessionDoc(snap.data() || {}); } catch (e) {} }, () => {}); } catch (e) {}
     publishCues(); publishLive(true);
+    startLiveHeartbeat();
   }
-  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } lastCmdId = null; }
+  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } lastCmdId = null; lastGainId = null; stopLiveHeartbeat(); }
+
+  // Idle heartbeat: publishLive only ticks with the play RAF, so an idle
+  // playout machine used to publish NOTHING — the rundown machine could not
+  // tell "healthy and idle" from "dead" (8/20 show: no preflight all-clear).
+  // A Worker-backed interval survives background-tab timer throttling, the
+  // same trick as the Script Op protocol's createSteadyInterval.
+  let hbWorker = null;
+  function startLiveHeartbeat() {
+    if (hbWorker) return;
+    try {
+      const src = 'let t=null;onmessage=e=>{if(e.data&&e.data.start){clearInterval(t);t=setInterval(()=>postMessage(1),e.data.start)}else{clearInterval(t)}}';
+      hbWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      hbWorker.onmessage = () => { try { publishLive(); } catch (e) {} };
+      hbWorker.postMessage({ start: 3000 });
+    } catch (e) {
+      // No Worker (ancient browser): a plain interval still beats silence.
+      hbWorker = { _timer: setInterval(() => { try { publishLive(); } catch (err) {} }, 3000), terminate() { clearInterval(this._timer); } };
+    }
+  }
+  function stopLiveHeartbeat() { if (hbWorker) { try { hbWorker.terminate(); } catch (e) {} hbWorker = null; } }
 
   function onSessionDoc(d) {
     maybeSeedBreakRoom(d);   // Break Room test session + empty local show → build the authored demo playout
+    // Master gain rides its OWN field: the single command slot must never be
+    // overwritten by a volume turn while a cue fire sits unconsumed in it.
+    const g = d && d.outrangutan && d.outrangutan.gain;
+    if (g && g.id && g.id !== lastGainId && g.sender !== OG_SENDER && (!g.ts || Date.now() - g.ts < 30000)) {
+      lastGainId = g.id;
+      const v = parseFloat(g.v);
+      if (isFinite(v)) setMasterGain(Math.max(0, Math.min(1.2, v)), 'remote');
+    }
     const cmd = d && d.outrangutan && d.outrangutan.command;
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
@@ -2534,6 +2564,9 @@
       live = { status: el.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: active.cue.type, dur: Math.round(active.cue.duration || 0), remaining: Math.round(remaining), offset: Math.round(el.currentTime * 10) / 10, thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
     }
     live.outputs = outputStatus();
+    // Master gain rides every live packet so remote surfaces (the deck's
+    // PLBK vol dial, the rundown machine) can show the real fader position.
+    live.gain = Math.round((settings.masterGain || 0) * 100) / 100;
     live.seq = ++_liveSeq;
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }); } catch (e) {}
   }
@@ -4056,6 +4089,78 @@
   let listeningPadKey = false;
 
   // ── SFX banks bar + search ─────────────────────────────────────────────────
+  // ── Live SFX recording (Sept show update, "really quick, really stupid") ──
+  // One button: press to record the mic, press again to stop; the take lands
+  // on the next free pad in the current bank, ready to fire, trimmable in the
+  // pad editor like any other sound. Raw mic (no echo cancel / noise gate):
+  // this is an SFX capture, not a phone call.
+  let recState = null;   // { rec, stream, chunks, startedAt, timer, slot }
+  function firstFreePadSlot() {
+    const count = bankPadCount();
+    for (let s = 1; s <= count; s++) { const p = padBySlot(s); if (!p || !p.mediaId) return s; }
+    return 0;
+  }
+  async function toggleSfxRecord() {
+    if (recState) { try { if (recState.rec.state !== 'inactive') recState.rec.stop(); } catch (e) {} return; }
+    const slot = firstFreePadSlot();
+    if (!slot) { toast('This bank is full. Clear a pad or add a bank, then record.'); return; }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    } catch (e) { toast('Mic blocked. Allow microphone access for this page to record live SFX.'); return; }
+    if (typeof MediaRecorder === 'undefined') { stream.getTracks().forEach(t => t.stop()); toast('This browser cannot record audio.'); return; }
+    const mime = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    let rec;
+    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+    catch (e) { stream.getTracks().forEach(t => t.stop()); toast('Recording could not start.'); return; }
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const st = recState; recState = null;
+      if (st && st.timer) clearInterval(st.timer);
+      renderSfxRecButton();
+      const type = rec.mimeType || mime || 'audio/webm';
+      const blob = new Blob(chunks, { type });
+      if (blob.size < 2000) { toast('Recording was empty. Nothing added.'); return; }
+      const t = new Date();
+      const two = n => (n < 10 ? '0' : '') + n;
+      const ext = type.indexOf('mp4') >= 0 ? 'm4a' : 'webm';
+      const file = new File([blob], 'Live SFX ' + two(t.getHours()) + '.' + two(t.getMinutes()) + '.' + two(t.getSeconds()) + '.' + ext, { type });
+      await assignPad(st.slot, file);
+      const p = padBySlot(st.slot);
+      if (p && p.mediaId) {
+        if (!p.emoji) p.emoji = '🎙️';
+        selectedPadId = p.id;
+        renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave();
+        slog('sfx', 'Live SFX recorded onto pad ' + st.slot + ' (' + p.name + ')');
+        toast('Live SFX on pad ' + st.slot + '. Tap to fire; trim it in the pad editor.');
+      }
+    };
+    recState = { rec, stream, chunks, startedAt: Date.now(), slot, timer: setInterval(renderSfxRecButton, 500) };
+    try { rec.start(); } catch (e) {
+      stream.getTracks().forEach(t => t.stop());
+      if (recState.timer) clearInterval(recState.timer);
+      recState = null; toast('Recording could not start.'); return;
+    }
+    slog('sfx', 'Live SFX recording started (pad ' + slot + ' on stop)');
+    renderSfxRecButton();
+  }
+  function renderSfxRecButton() {
+    const b = $('og-sfx-rec'); if (!b) return;
+    const on = !!recState;
+    b.classList.toggle('rec', on);
+    if (on) {
+      const secs = Math.floor((Date.now() - recState.startedAt) / 1000);
+      b.textContent = '■ ' + Math.floor(secs / 60) + ':' + ((secs % 60) < 10 ? '0' : '') + (secs % 60);
+      b.setAttribute('data-tip', 'Stop: the take lands on pad ' + recState.slot + ' of this bank');
+    } else {
+      b.textContent = '● REC';
+      b.setAttribute('data-tip', 'Record a sound effect live from the mic, straight onto the next free pad');
+    }
+  }
+
   function renderBanks() {
     const bar = $('og-bank-bar'); if (!bar) return;
     ensureBanks();
@@ -4070,7 +4175,8 @@
         + (on && !editing ? '<span class="og-bank-edit" data-edit="' + b.id + '" data-tip="Rename bank" role="button" aria-label="Rename bank">' + sym('action.edit') + '</span>' : '')
         + (on && banks.length > 1 && !editing ? '<span class="og-bank-x" data-del="' + b.id + '" data-tip="Delete bank" role="button" aria-label="Delete bank">' + sym('action.close') + '</span>' : '')
         + '</button>';
-    }).join('') + '<button class="og-bank-add" id="og-bank-add" data-tip="Add a bank" aria-label="Add a bank">' + sym('action.add') + '</button>';
+    }).join('') + '<button class="og-bank-add" id="og-bank-add" data-tip="Add a bank" aria-label="Add a bank">' + sym('action.add') + '</button>'
+      + '<button class="og-sfx-rec" id="og-sfx-rec" aria-label="Record a live sound effect"></button>';
     Array.prototype.forEach.call(bar.querySelectorAll('.og-bank-tab'), t => {
       const id = t.getAttribute('data-bank');
       const input = t.querySelector('.og-bank-rename');
@@ -4087,6 +4193,8 @@
       t.ondblclick = (e) => { e.preventDefault(); startRename(); };
     });
     const add = $('og-bank-add'); if (add) add.onclick = addBank;
+    const rec = $('og-sfx-rec'); if (rec) rec.onclick = toggleSfxRecord;
+    renderSfxRecButton();
     if (bankRenamingId) { const inp = bar.querySelector('.og-bank-rename'); if (inp) { inp.focus(); inp.select(); } }
   }
   function renderPadSearch() {

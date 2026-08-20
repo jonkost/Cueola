@@ -1136,3 +1136,11 @@
   /* hover-only edit affordance: always visible on touch, comfortable hit size */
   .og-pad-edit { opacity: .85; min-width: 32px; min-height: 32px; display: inline-grid; place-items: center; padding: 0; }
 }
+
+/* Live SFX record: sits at the end of the bank bar. Idle = quiet outline;
+   recording = solid red with the running take length. */
+.og-sfx-rec { height: 28px; padding: 0 12px; border-radius: 14px; margin-left: auto; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--red) 55%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .06em; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.og-sfx-rec:hover { background: color-mix(in srgb, var(--red) 22%, transparent); }
+.og-sfx-rec.rec { background: var(--red); color: #fff; animation: og-rec-pulse 1.2s ease-in-out infinite; }
+@keyframes og-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
+@media (pointer: coarse) { .og-sfx-rec { height: 44px; border-radius: 22px; } }

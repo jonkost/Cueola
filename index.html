@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=75dfbd64d2">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=a26ac37a23">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -705,6 +705,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-sidebar{width:360px;flex-shrink:0;background:var(--glass-bg-strong);border-left: 1px solid transparent;display:none;flex-direction:column;overflow:hidden;position:relative;box-shadow:var(--glass-highlight);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
 /* Live reading surfaces honor the operator's text-size setting (A− / A+ in the Script Op head). */
 .ls-sidebar,.lv-cur-card,.lv-next-card,.lf-cue,.prompt-op-panel{zoom:var(--live-zoom,1)}
+/* Inside the sidebar the panel inherits the sidebar's zoom already; without
+   this reset the two multiply and Transport/Display render at zoom squared. */
+.ls-sidebar .prompt-op-panel{zoom:1}
 .ls-sidebar.open{display:flex}
 .ls-resizer{width:7px;cursor:col-resize;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--cyan) 22%,transparent),transparent);border-left: 1px solid transparent;display:none;flex-shrink:0}
 .ls-resizer.on{display:block}
@@ -1385,7 +1388,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prompt-op-stage::before,.prompt-op-stage::after{content:'';position:absolute;left:0;right:0;height:28%;pointer-events:none;z-index:3}
 .prompt-op-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#08090f),transparent)}
 .prompt-op-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#08090f),transparent)}
-.prompt-op-track{width:min(900px,88vw);padding:18vh 0 42vh}
+.prompt-op-track{width:min(900px,88vw);padding:18vh 0 42vh;transition:transform .9s var(--ease,ease)}
 .prompt-op-text{font-family:var(--display);font-size:clamp(34px,5vw,72px);font-weight:600;line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#d6e8f0);white-space:pre-wrap;word-break:break-word;letter-spacing:0}
 .prompt-op-read-line{position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#7eb8c8) 18%,var(--pt-accent,#7eb8c8) 82%,transparent 100%);opacity:.75;z-index:4;pointer-events:none}
 .prompt-op-read-line::before,.prompt-op-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0}
@@ -2744,6 +2747,8 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .cc-call-hint b{color:var(--text)}
 /* Armed-call tell on the builder's playback badge. */
 .cue-out-callchip{margin-left:2px;padding:1px 6px;border-radius:999px;font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.08em;background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green);flex-shrink:0}
+/* Linked but not on the call: dimmed amber so a manual-fire row can't hide. */
+.cue-out-manualchip{background:color-mix(in srgb,var(--yellow) 14%,transparent);color:color-mix(in srgb,var(--yellow) 78%,var(--text2))}
 /* D11.4: live time-remaining chip on a playing row's playout badge. */
 .cue-out-remain{margin-left:5px;font-family:var(--mono);font-weight:800;font-variant-numeric:tabular-nums;color:var(--red)}
 .cue-out-remain[hidden]{display:none}
@@ -2760,6 +2765,12 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* R2: the always-on playout strip. Slim liquid glass, visible only while
    playout is actually doing something, in grid and Focus modes alike. */
 .ls-playout-strip{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;height:34px;padding:0 12px;min-width:0;flex-shrink:0;background:var(--glass-bg);border-bottom: 1px solid transparent;box-shadow:var(--glass-highlight);backdrop-filter:blur(var(--liquid-blur)) saturate(150%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(150%)}
+/* PANIC lives ON the strip: the kill switch belongs next to the thing it
+   kills, reachable from the top without hunting a keyboard chord. */
+.ls-playout-panic{position:absolute;right:8px;top:50%;transform:translateY(-50%);height:24px;padding:0 10px;border-radius:12px;border:1px solid color-mix(in srgb,var(--red) 55%,transparent);background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red);font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.ls-playout-panic:hover{background:var(--red);color:#fff}
+.ls-playout-panic:active{transform:translateY(-50%) scale(.96)}
+@media(pointer:coarse){.ls-playout-panic{height:30px}}
 .ls-playout-strip[hidden]{display:none}
 .ls-playout-strip[data-status="idle"] .ls-playout-tag{background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text3)}
 .ls-playout-strip[data-status="idle"] .ls-playout-name{color:var(--text3);font-weight:600}
@@ -4510,7 +4521,10 @@ input.pt-range::-moz-range-thumb,
    pointer. Row GO stays compact on desktop (its coarse-pointer inflation
    lives in the D10.4 block below): the deflated rows make the tall ON AIR
    row read as the dominant row. */
-#liveshow .ls-critical-action,#liveshow .ls-return-btn,#liveshow .ls-push-primary,#liveshow .ls-popout-btn{min-height:44px;height:44px}
+#liveshow .ls-critical-action,#liveshow .ls-return-btn,#liveshow .ls-push-primary{min-height:44px;height:44px}
+/* The sidebar-head circles stay 34x34 (44px would squash them into ovals);
+   touch gets the full hit area via width+height together. */
+@media(pointer:coarse){#liveshow .ls-popout-btn{width:44px;height:44px}}
 .ls-nav{gap:10px}
 .ls-nav .ls-btn{min-height:44px;min-width:116px;justify-content:center}
 /* D11.5 fixed geometry: the GO control NEVER resizes, so the click target
@@ -5255,6 +5269,7 @@ input.pt-range::-moz-range-thumb,
     <span class="ls-playout-name" id="lsPlayoutName">Nothing playing</span>
     <span class="ls-playout-time" id="lsPlayoutTime"></span>
     <div class="ls-playout-bar" aria-hidden="true"><div class="ls-playout-fill" id="lsPlayoutFill"></div></div>
+    <button type="button" class="ls-playout-panic" onclick="fireOutrangutanTransport('panic')" data-tip="PANIC: kill all playout audio and video instantly. Shortcut: Shift+Esc">PANIC</button>
   </div>
   <!-- D11.3: the playback call — READY · TRACK · ROLL · TAKE, big and
        unmissable, abortable until it resolves (decision 18). -->
@@ -6431,6 +6446,8 @@ input.pt-range::-moz-range-thumb,
         <label class="cc-check"><input type="checkbox" id="ws-talent"> Talent display (Flowmingo) window</label>
         <label class="cc-check"><input type="checkbox" id="ws-scriptop"> Script Operator pop-out, opens itself when Live starts</label>
         <label class="cc-check"><input type="checkbox" id="ws-plandabear"> Planda Bear paperwork, its own tab</label>
+        <label class="cc-check"><input type="checkbox" id="ws-outrangutan"> Playout (Outrangutan), its own tab</label>
+        <label class="cc-check"><input type="checkbox" id="ws-keywi"> KeyWi Bird deck setup, its own tab</label>
       </div>
     </div>
     <div class="field"><label class="field-lbl">Talent display screen</label>
@@ -7153,12 +7170,12 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=ac77d1ead5"></script>
-<script src="outrangutan/outrangutan.js?v=a5ce27e8cf"></script>
+<script src="cueola-app.js?v=873263f0d2"></script>
+<script src="outrangutan/outrangutan.js?v=9e81602e50"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=00178015bf"></script>
+<script src="cueola-streamdeck.js?v=83094f2ad3"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

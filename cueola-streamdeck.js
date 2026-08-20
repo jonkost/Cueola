@@ -147,6 +147,9 @@
     registerAction({ id: 'clock.start', kind: 'clock', verb: 'start', group: 'Cueola · show clock', color: '#1c7a3e', label: 'CLOCK GO', full: 'Show clock: start', desc: 'Starts the shared show clock. Quiet no-op if already running.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
     registerAction({ id: 'clock.pause', kind: 'clock', verb: 'pause', group: 'Cueola · show clock', color: '#5a4a12', label: 'CLOCK ❚❚', full: 'Show clock: pause', desc: 'Pauses the shared show clock. Quiet no-op if already paused.', lamp: function (s) { return !!(s.clock && !s.clock.running && s.clock.elapsed > 0); } });
     registerAction({ id: 'clock.resume', kind: 'clock', verb: 'resume', group: 'Cueola · show clock', color: '#0f4c81', label: 'CLOCK ▶', full: 'Show clock: resume', desc: 'Resumes a paused show clock from where it stopped.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
+    // Live rundown truth on a keycap (8/20 ask): row number, row name, show
+    // clock — a glanceable nugget with no press action to misfire mid-show.
+    registerAction({ id: 'info.rundown', kind: 'infoRundown', group: 'Cueola', color: '#243a66', label: 'ROW', full: 'Rundown row + show time (display)', desc: 'A live display key: current row number and name, plus the running show clock. Display only, pressing does nothing.', flash: false });
     // Micochondria — the powerhouse for the talkbacks. Two hold-to-talk mics:
     // TKB (Talkback, crew comms on outs 1-2) and VofU (Voice of the Universe, the
     // god-mic to the room on outs 3-4), plus one off-air panic. Action ids, kind,
@@ -205,7 +208,8 @@
       tick: function (d) { surfacePrompter(d > 0 ? 'size_up' : 'size_down'); }, press: function () { surfacePrompter('reset'); } },
     prompterScrub: { label: 'Prompter scrub', hue: '#22d3d3', turnLabel: 'Scrub the script', pressLabel: 'Cue to live row',
       desc: 'Turn: glide the prompter anywhere in the script, like a scrub wheel on a video editor. Press: snap it to the current live row.',
-      readout: function () { return pct(jogAccum); }, bar: function () { return jogAccum; },
+      readout: function (s) { var live = jogLivePct(s); return live != null ? Math.round(live) + '%' : '-'; },
+      bar: function (s) { var live = jogLivePct(s); return live != null ? live / 100 : 0; },
       tick: jogTick, press: function () { surfaceRun('prompter.cue.current'); } },
     rundownSelect: { label: 'Rundown row', hue: '#5b8df8', turnLabel: 'Pick a row', pressLabel: 'Take that row',
       desc: 'Turn: move the selection up and down the rundown. Press: make the selected row the live row.',
@@ -242,8 +246,17 @@
     // card for audio cues.
     ogProgram: { label: 'Playback view', hue: '#f97316', turnLabel: 'Playback volume', pressLabel: 'Pause / resume', ogFrame: true,
       desc: 'A live monitor of what Outrangutan is playing: video frames for clips, name and countdown for audio. Turn: the playback master volume. Press: pause or resume.',
-      readout: function (s) { var po = s.playout || {}; return (po.status === 'play' || po.status === 'paused') && po.remaining != null ? fmtClock(po.remaining) : 'idle'; },
-      bar: function (s) { var po = s.playout || {}; return (po.status === 'play' || po.status === 'paused') && po.dur ? Math.max(0, Math.min(1, 1 - (po.remaining || 0) / po.dur)) : null; },
+      readout: function (s) {
+        var po = s.playout || {};
+        if (po.status === 'pre') return po.remaining != null ? 'PRE ' + fmtClock(po.remaining) : 'PRE';
+        if (po.loop) return '∞';
+        return (po.status === 'play' || po.status === 'pause') && po.remaining != null ? fmtClock(po.remaining) : 'idle';
+      },
+      bar: function (s) {
+        var po = s.playout || {};
+        if (po.frac != null) return po.frac;
+        return (po.status === 'play' || po.status === 'pause') && po.dur && po.remaining != null ? Math.max(0, Math.min(1, 1 - po.remaining / po.dur)) : null;
+      },
       live: function (s) { return (s.playout || {}).status === 'play'; },
       tick: function (d) { setMaster(masterGain() + d * 0.03); }, press: function () { surfaceRun('playout.pause'); } },
     // Micochondria on the strip: one zone, split in half. TKB on the left,
@@ -266,6 +279,14 @@
     if (prof.strip && out.indexOf('ptProgram') < 0) {
       var i = out.indexOf('prompterSpeed');
       if (i >= 0) out[i] = 'ptProgram';
+    }
+    // Strip decks also get the playback monitor out of the box (8/20 ask:
+    // "see the actual playout screen on the little strip"). It replaces the
+    // plain master dial: ogProgram's turn IS playback volume, so nothing is
+    // lost. Saved layouts keep whatever dials they saved.
+    if (prof.strip && out.indexOf('ogProgram') < 0) {
+      var m = out.indexOf('master');
+      if (m >= 0) out[m] = 'ogProgram';
     }
     return out;
   }
@@ -335,7 +356,7 @@
 
   var keyState = [], dialPress = [], lastPainted = [], lastStripSig = '';
   var pressFlashUntil = [];           // per-key deadline for the 150ms input flash
-  var brightness = 80, paintTimer = null, jogAccum = 0, muteMemory = null;
+  var brightness = 80, paintTimer = null, muteMemory = null;
   var learnArmed = false, editingKey = -1;
   var previewMode = false;            // on-screen deck with no hardware, for playing with layouts + themes
   var diagInfo = null;                // last hardware diagnostics capture (read-only report)
@@ -403,7 +424,28 @@
   }
   function setMaster(v) { var b = bridge(); try { b && b.setMasterGain && b.setMasterGain(Math.max(0, Math.min(1.2, v))); } catch (e) {} }
   function toggleMasterMute() { var g = masterGain(); if (g > 0.001) { muteMemory = g; setMaster(0); } else { setMaster(muteMemory != null ? muteMemory : 0.8); muteMemory = null; } }
-  function jogTick(d) { jogAccum = Math.max(0, Math.min(1, jogAccum + d * 0.02)); surfacePrompter('seek_set_' + jogAccum.toFixed(2)); }
+  // True relative scrub: each detent sends "move ± N lines" (seek_line_*),
+  // so the knob works from wherever the prompter actually is — no absolute
+  // percent, no seeding, no fighting a laggy position report. (The old
+  // absolute version was also unit-broken: 0..1 into a 0..100 API, so the
+  // knob's whole travel covered 1% of the script — 8/20 show.) Ticks
+  // coalesce for ~120ms so a fast spin is one command, not a write storm
+  // over the session doc.
+  function jogLivePct(s) {
+    var p = s && s.prompter ? s.prompter.positionPct : null;
+    return (p != null && isFinite(p)) ? Math.max(0, Math.min(100, p)) : null;
+  }
+  var jogPend = 0, jogFlushTimer = null;
+  var JOG_LINES_PER_DETENT = 2;
+  function jogTick(d) {
+    jogPend += d;
+    if (jogFlushTimer) return;
+    jogFlushTimer = setTimeout(function () {
+      jogFlushTimer = null;
+      var n = jogPend * JOG_LINES_PER_DETENT; jogPend = 0;
+      if (n) surfacePrompter('seek_line_' + Math.max(-200, Math.min(200, n)));
+    }, 120);
+  }
   function rundownTick(d) { var b = bridge(); if (!b) return; var s = surfaceState(); if (!s.live) return; var next = Math.max(0, Math.min((s.live.rowCount || 1) - 1, (s.live.selectedIndex || 0) + (d > 0 ? 1 : -1))); try { b.liveSelect(next, false); } catch (e) {} }
   function rundownTake() { var b = bridge(); var s = surfaceState(); if (b && s.live) { try { b.liveSelect(s.live.selectedIndex || 0, true); } catch (e) {} } }
 
@@ -411,7 +453,7 @@
   function fireSlot(slot, phase, fromDeck) {
     if (typeof slot === 'string') slot = { a: slot };
     var a = catalog[slot.a];
-    if (!a || a.kind === 'none') return;
+    if (!a || a.kind === 'none' || a.kind === 'infoRundown') return;   // display-only keys never dispatch
     if (mode === 'cloud' && dispatchCloud(a, slot, phase)) return;
     switch (a.kind) {
       case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') surfaceRun(a.keymapId); break;
@@ -1430,6 +1472,7 @@
     spec.ki = i; spec.cols = profile ? profile.cols : 8;
     if (deckTheme === 'rgbflow') spec.rgbPhase = Math.floor(performance.now() / rgbStepMs()) % 720;
     if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
+    if (a.kind === 'infoRundown') applyRundownInfoSpec(spec, s);
     if (slot.reactive !== false) {   // a key can opt out of animation entirely
       applyPlayoutProgress(spec, a, slot, s);
       if (slot.style && spec.progress != null) spec.progressStyle = slot.style;   // wipe | ring | bar
@@ -1458,6 +1501,7 @@
     spec.ki = i; spec.cols = deck.profile ? deck.profile.cols : 8;
     if (deckTheme === 'rgbflow') spec.rgbPhase = Math.floor(performance.now() / rgbStepMs()) % 720;
     if (a.id === 'clock') { spec.widget = 'clock'; spec.clockText = fmtClockBig(s.clock && s.clock.elapsed); spec.clockRunning = !!(s.clock && s.clock.running); }
+    if (a.kind === 'infoRundown') applyRundownInfoSpec(spec, s);
     if (slot.reactive !== false) {
       applyPlayoutProgress(spec, a, slot, s);
       if (slot.style && spec.progress != null) spec.progressStyle = slot.style;
@@ -1474,7 +1518,18 @@
   // deck slows to 900ms and multiple decks to 1500ms so a full wave of key
   // writes always drains the HID queue before the next wave queues.
   function rgbStepMs() { return decks.length > 1 ? 1500 : decks.length ? 900 : 500; }
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, deckTheme].join('|'); }
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, deckTheme].join('|'); }
+
+  // Rundown info key: row number, row name, running show clock. Pure display.
+  function applyRundownInfoSpec(spec, s) {
+    spec.widget = 'rowinfo';
+    var li = s.liveRowInfo || {}, cur = li.current, lv = s.live || {};
+    spec.infoTop = cur ? ('ROW ' + (cur.index + 1) + (lv.rowCount ? '/' + lv.rowCount : '')) : 'RUNDOWN';
+    spec.label = cur ? String(cur.title || '').slice(0, 40) : 'No show';
+    spec.infoSub = li.next && li.next.title ? ('NEXT ' + String(li.next.title).slice(0, 30)) : '';
+    spec.clockText = fmtClockBig(s.clock && s.clock.elapsed);
+    spec.clockRunning = !!(s.clock && s.clock.running);
+  }
 
   // Cache of decoded key images. Sources are validated at set time (data URLs
   // or repo-relative assets only), so the canvas can never be tainted and the
@@ -1603,8 +1658,27 @@
     if (spec.widget === 'clock') {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.13), 700); ctx.fillText(spec.clockRunning ? 'ON AIR' : 'CLOCK', z / 2, z * 0.24);
-      ctx.fillStyle = ink; ctx.font = t.font(Math.round(z * 0.24), 800); ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.52);
+      // Monospace digits: themed display faces have proportional numerals, so
+      // a ticking clock jittered horizontally every second.
+      ctx.fillStyle = ink; ctx.font = '800 ' + Math.round(z * 0.24) + 'px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.52);
       if (spec.clockRunning) { var ph = (spec.pulsePhase || 0); var al = 0.45 + 0.45 * Math.sin(ph * 0.5); ctx.fillStyle = rgba('#ff3b3b', al); ctx.beginPath(); ctx.arc(z / 2, z * 0.76, z * 0.06, 0, 7); ctx.fill(); }
+    } else if (spec.widget === 'rowinfo') {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.12), 700); ctx.fillText(spec.infoTop || 'RUNDOWN', z / 2, z * 0.16);
+      var nm = String(spec.label || '');
+      ctx.fillStyle = ink; ctx.font = t.font(Math.round(z * 0.15), 800);
+      while (nm.length > 1 && ctx.measureText(nm).width > z * 0.9) nm = nm.slice(0, -2);
+      ctx.fillText(nm === (spec.label || '') ? nm : nm + '…', z / 2, z * 0.4);
+      ctx.fillStyle = ink; ctx.font = '800 ' + Math.round(z * 0.2) + 'px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.64);
+      if (spec.infoSub) {
+        var nx = String(spec.infoSub);
+        ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.1), 600);
+        while (nx.length > 1 && ctx.measureText(nx).width > z * 0.92) nx = nx.slice(0, -2);
+        ctx.fillText(nx === spec.infoSub ? nx : nx + '…', z / 2, z * 0.85);
+      }
+      if (spec.clockRunning) { var ph2 = (spec.pulsePhase || 0); var al2 = 0.45 + 0.45 * Math.sin(ph2 * 0.5); ctx.fillStyle = rgba('#ff3b3b', al2); ctx.beginPath(); ctx.arc(z * 0.88, z * 0.14, z * 0.05, 0, 7); ctx.fill(); }
     } else {
       // Duration wipe: the default for playing SFX/playback keys. A translucent
       // accent fill sweeps left to right BEHIND the icon and label, with a
@@ -1695,8 +1769,25 @@
   function flushDeviceWrites() { while (hidWriteQueue.length) hidWriteQueue.shift().resolve(false); }
 
   // ── Painting ──────────────────────────────────────────────────────────────
-  function startPaintLoop() { stopPaintLoop(); paintTimer = setInterval(paintTick, Math.round(1000 / PAINT_HZ)); }
-  function stopPaintLoop() { if (paintTimer) clearInterval(paintTimer); paintTimer = null; }
+  // Worker-backed intervals: page setIntervals throttle to ~1/min once the
+  // Cueola tab has been hidden a while (the operator lives in OBS during a
+  // show), which froze the hardware clock key while presses still worked
+  // (8/20 show). Worker timers are exempt from intensive throttling — the
+  // same trick as the Script Op protocol's createSteadyInterval.
+  function steadyInterval(fn, ms) {
+    try {
+      var src = 'let t=null;onmessage=e=>{if(e.data&&e.data.ms){clearInterval(t);t=setInterval(()=>postMessage(1),e.data.ms)}else clearInterval(t)}';
+      var w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      w.onmessage = function () { try { fn(); } catch (e) {} };
+      w.postMessage({ ms: ms });
+      return { stop: function () { try { w.terminate(); } catch (e) {} } };
+    } catch (e) {
+      var t = setInterval(fn, ms);
+      return { stop: function () { clearInterval(t); } };
+    }
+  }
+  function startPaintLoop() { stopPaintLoop(); paintTimer = steadyInterval(paintTick, Math.round(1000 / PAINT_HZ)); }
+  function stopPaintLoop() { if (paintTimer) paintTimer.stop(); paintTimer = null; }
   var paintScheduled = false;
   function schedulePaint() { paintScheduled = true; }
   function paintTick() {
@@ -1763,8 +1854,13 @@
     for (var i = 0; i < cur.keys; i++) {
       var spec = keyArtSpec(i, s); var sig = specSig(spec, i);
       if (sig === lastPainted[i]) continue; lastPainted[i] = sig;
-      var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width);
-      if (device) await paintKeyDevice(i, spec);
+      // Per-key containment: one key whose art throws (bad custom image, GIF
+      // frame) must not abort the pass — that froze every higher-indexed key
+      // on the deck, clock included (8/20 show).
+      try {
+        var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width);
+        if (device) await paintKeyDevice(i, spec);
+      } catch (e) {}
     }
     // Secondary decks repaint from their own layouts (no on-screen mirror; the
     // editor shows one deck at a time).
@@ -1774,10 +1870,10 @@
       for (var k = 0; k < dk.profile.keys; k++) {
         var sp2 = keyArtSpecFor(dk, k, s); var sig2 = specSig(sp2, k);
         if (sig2 === dk.lastPainted[k]) continue; dk.lastPainted[k] = sig2;
-        await paintKeyDeviceFor(dk, k, sp2);
+        try { await paintKeyDeviceFor(dk, k, sp2); } catch (e) {}
       }
     }
-    if (device || previewMode) await paintStrip(false);
+    try { if (device || previewMode) await paintStrip(false); } catch (e) {}
   }
   function paintKeyDeviceFor(deck, i, spec) {
     if (!deck || !deck.hid || !deck.profile) return Promise.resolve(false);
@@ -1800,10 +1896,10 @@
   // Animation loop: clock ticks, pulse lamps, playout wipes and pre-rolls, and
   // press flashes all animate. Only animated keys repaint, on-screen every
   // ~7.7fps; device writes ride the serialized queue, throttled to ~4fps.
-  function startAnim() { stopAnim(); animTimer = setInterval(animateKeys, 130); }
-  function stopAnim() { if (animTimer) clearInterval(animTimer); animTimer = null; }
+  function startAnim() { stopAnim(); animTimer = steadyInterval(animateKeys, 130); }
+  function stopAnim() { if (animTimer) animTimer.stop(); animTimer = null; }
   function isSurfaceVisible() { var scr = document.getElementById('streamdeck'); return !!(scr && scr.classList.contains('on')); }
-  function specAnimated(spec) { return (spec.widget === 'clock' && spec.clockRunning) || !!spec.pulse || spec.progress != null || spec.preroll != null || !!spec.phase || !!spec.looping || !!spec.flash; }
+  function specAnimated(spec) { return ((spec.widget === 'clock' || spec.widget === 'rowinfo') && spec.clockRunning) || !!spec.pulse || spec.progress != null || spec.preroll != null || !!spec.phase || !!spec.looping || !!spec.flash; }
   function animateKeys() {
     // The hardware animates whenever a deck is attached, card open or not (the
     // deck drives the show app-wide); the on-screen mirror only draws while
@@ -2190,11 +2286,17 @@
       if (ir > zr) { sh = ih; sw = ih * zr; sx = (iw - sw) / 2; sy = 0; } else { sw = iw; sh = iw / zr; sx = 0; sy = (ih - sh) / 2; }
       try { ctx.drawImage(el, sx, sy, sw, sh, x0 + 2, 2, zw - 4, ch - 4); } catch (e) {}
     } else {
-      ctx.fillStyle = 'rgba(249,115,22,0.08)'; ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
-      if (cell.ogStatus === 'play' || cell.ogStatus === 'paused') {
+      ctx.fillStyle = cell.ogStatus === 'pre' ? 'rgba(245,166,35,0.14)' : 'rgba(249,115,22,0.08)';
+      ctx.fillRect(x0 + 2, 2, zw - 4, ch - 4);
+      if (cell.ogStatus === 'play' || cell.ogStatus === 'pause' || cell.ogStatus === 'paused' || cell.ogStatus === 'pre') {
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffffff'; ctx.font = '700 34px ui-monospace, "SF Mono", Menlo, monospace';
+        ctx.fillStyle = cell.ogStatus === 'pre' ? '#f5c89e' : '#ffffff';
+        ctx.font = '700 34px ui-monospace, "SF Mono", Menlo, monospace';
         ctx.fillText(cell.value, x0 + zw / 2, ch / 2 + 10);
+        if (cell.ogStatus === 'pause') {
+          ctx.fillStyle = '#f5c89e'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
+          ctx.fillText('PAUSED', x0 + zw / 2, ch - 12);
+        }
       } else {
         ctx.textAlign = 'center'; ctx.fillStyle = '#6b7690'; ctx.font = '600 14px -apple-system, "Segoe UI", sans-serif';
         ctx.fillText('Playback idle', x0 + zw / 2, ch / 2 + 5);
@@ -2205,7 +2307,7 @@
     if (el) ctx.fillRect(x0 + 2, 2, zw - 4, 22);
     ctx.fillStyle = '#f5c89e'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
     ctx.fillText('PLAYBACK', x0 + 10, 18);
-    if (cell.ogName && (cell.ogStatus === 'play' || cell.ogStatus === 'paused')) {
+    if (cell.ogName && (cell.ogStatus === 'play' || cell.ogStatus === 'pause' || cell.ogStatus === 'paused' || cell.ogStatus === 'pre')) {
       ctx.fillStyle = '#ffffff'; ctx.font = '600 13px -apple-system, "Segoe UI", sans-serif';
       var name = cell.ogName, maxW = zw - 96;
       while (name.length > 1 && ctx.measureText(name).width > maxW) name = name.slice(0, -2);
@@ -3678,6 +3780,11 @@
   }
   if (window._firebaseReady) bootDeckService();
   else window.addEventListener('firebaseReady', bootDeckService, { once: true });
+  // App-state push: the main app fires cueola-surface-state on clock start/
+  // pause, call stages, cue moves, grants — repaint straight from the event
+  // instead of waiting out the 200ms poll (which a throttled background tab
+  // stretches to minutes). paintChanged() no-ops when no deck is active.
+  window.addEventListener('cueola-surface-state', paintNow);
   function open() {
     if (!keyWiSignInGate()) return false;
     showScreen();

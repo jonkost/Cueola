@@ -473,7 +473,12 @@ test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11
   assert.match(scriptOp, /protocolApi\.createSteadyInterval\(heartbeatTick/);
   assert.match(scriptOp, /sendReady\('operator-resync'\)/);
   assert.match(scriptOp, /function wakeResync\(\)/);
-  assert.match(app, /Automatic reconnect attempt'\);\s*\n\s*try \{ _postPrompterHello\(\); \} catch \{\}/);
+  // Sept-show update: the single hello grew into a backoff ladder — an
+  // open-but-silent talent window gets nudged repeatedly (hello every 8s,
+  // capped) until the link recovers or the window closes.
+  assert.match(app, /Automatic reconnect attempt'\);\s*\n\s*_beginTalentReconnectNudges\(\);/);
+  assert.match(app, /function _beginTalentReconnectNudges\(\)/);
+  assert.match(app, /try \{ _postPrompterHello\(\); \} catch \{\}/);
   // One-click reopen with full state resync stays wired to the rail.
   assert.match(app, /if \(name === 'scriptOperator'\) return openScriptOpPopout\(\)/);
   assert.match(app, /return openFlowmingoTalentWindow\(\{ replace:true \}\)/);
@@ -763,7 +768,11 @@ test('8/19 round: per-app addresses, workspace launcher, talent display placemen
   assert.match(identityJs, /openWorkspaceLauncher\(\)/);
   // Talent display placement mirrors Outrangutan's outputs: detected screens,
   // a remembered choice, features-string placement.
-  assert.match(app, /function cueolaDetectScreens\(\)/);
+  assert.match(app, /function cueolaDetectScreens\(opts = \{\}\)/);
+  // Sept-show update: silent re-detect when permission is already granted,
+  // and a live screenschange watchdog so saved placements survive replugs.
+  assert.match(app, /function cueolaDetectScreensIfPermitted\(\)/);
+  assert.match(app, /screenschange/);
   assert.match(app, /getScreenDetails\(\)/);
   assert.match(app, /TALENT_SCREEN_KEY = 'cueola_talent_screen'/);
 });
