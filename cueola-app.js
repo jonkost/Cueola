@@ -5696,6 +5696,12 @@ function setupFirestore() {
       sessionSnapshotPendingForceReason = '';
       _cloudSnapshotCache = { code: '', rows: null };   // D3: cloud trail is per-session
       _rundownBaselineSeen = false;   // D10.3: queued launch imports wait for the first snapshot
+      // Control-bus state is per-session: a claim or command id carried over
+      // from the previous show must never pass dedupe or claim checks here.
+      _lastControlBusId = '';
+      _lastBusSnapshotAt = 0;
+      _busExecutorClaim = null;
+      _busClaimSeenAt = 0;
     }
     if (firestoreUnsub) firestoreUnsub();
     pbStartNotesListener();   // per-note live push (resets itself on session change)
@@ -5874,12 +5880,22 @@ function setupFirestore() {
         // clock to ours (skewed Macs read every claim as stale, or never
         // stale). Stamp only when the claim actually CHANGED — every other
         // doc write re-fires this snapshot with the same claim object, and
-        // refreshing on those would keep a dead holder alive forever.
-        if (!_busExecutorClaim || _busExecutorClaim.clientId !== d.busExecutor.clientId || _busExecutorClaim.ts !== d.busExecutor.ts) _busClaimSeenAt = Date.now();
+        // refreshing on those would keep a dead holder alive forever. One
+        // exception at FIRST sight: a claim whose own stamp is ancient (over
+        // 10 minutes off our clock, beyond any realistic skew) is a holder
+        // that died before we joined — leave it stale so the live caller
+        // takes over immediately instead of honoring a ghost for 15s.
+        if (!_busExecutorClaim || _busExecutorClaim.clientId !== d.busExecutor.clientId || _busExecutorClaim.ts !== d.busExecutor.ts) {
+          const deadOnArrival = !_busExecutorClaim && Number.isFinite(d.busExecutor.ts) && Math.abs(Date.now() - d.busExecutor.ts) > 600000;
+          _busClaimSeenAt = deadOnArrival ? 0 : Date.now();
+        }
         _busExecutorClaim = d.busExecutor;
       }
-      if (d.controlBus) applyControlBusCommand(d.controlBus, !_busSnapshotPrimed);  // D11.7: cross-machine deck actions
-      _busSnapshotPrimed = true;
+      // D11.7: cross-machine deck actions. The gap between snapshot ARRIVALS
+      // (this window's clock only) is the freshness evidence — see
+      // applyControlBusCommand. Measured before the stamp updates.
+      if (d.controlBus) applyControlBusCommand(d.controlBus, _lastBusSnapshotAt ? Date.now() - _lastBusSnapshotAt : Infinity);
+      _lastBusSnapshotAt = Date.now();
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
       // Only count a heartbeat we haven't seen before AND that is recent — any
@@ -9372,7 +9388,7 @@ function abortPlayoutCall(source='abort') {
     : source === 'left-live' ? 'the Live screen closed on the calling machine'
     : source === 'stop' || source === 'fadeStop' ? 'STOP during the count'
     : source === 'panic' ? 'PANIC'
-    : source === 'control-bus' || source === 'local-deck' ? 'deck ABORT key'
+    : source === 'control-bus' || source === 'local-deck' || source === 'deck' ? 'deck ABORT key'
     : source === 'button' ? 'the ABORT button'
     : source;
   toast(`Playback call aborted (${why}). Nothing fired.`);
@@ -9465,7 +9481,6 @@ const BUS_EXECUTOR_HEARTBEAT_MS = 5000;
 const BUS_EXECUTOR_STALE_MS = 15000;
 let _busExecutorClaim = null;   // last busExecutor claim seen on the session doc
 let _busClaimSeenAt = 0;        // when THIS window saw the claim change (arrival clock, skew-proof)
-let _busSnapshotPrimed = false; // first session snapshot baselines the controlBus slot
 let _busExecutorTimer = null;
 function _busClaimExempt() { return !session.code || session.isDemo || session.isExpert || !window._firebaseReady; }
 function _busClaimIsMine() { return _busExecutorClaim?.clientId === CLIENT_ID; }
@@ -9505,17 +9520,31 @@ function _ensureBusExecutorHeartbeat() {
   _busExecutorTimer = setInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS);
 }
 
-// Cross-machine consumer: dedupe by command id; the FIRST snapshot after this
-// window subscribes baselines whatever command already sits in the slot (a
-// reconnect must never replay an old GO). The old guard compared the sender's
-// wall clock to OURS (5s window): two Macs with drifted clocks dropped every
-// deck press in total silence, and late claim ping-pong made the survivors
-// land seconds after the press — GO and TAKE that "randomly" did nothing.
+// Cross-machine consumer. Exactly-once across machines whose clocks may
+// disagree, decided from ARRIVAL evidence instead of clock comparison:
+//   1. While snapshots flow continuously (the previous delivery landed under
+//      15s ago by OUR clock), a NEW command id provably appeared just now —
+//      execute it with no clock math at all. This is the show-time path, and
+//      it is immune to skew (the old 5s sender-clock window silently dropped
+//      every deck press between drifted Macs).
+//   2. Across a delivery gap (the first snapshot after subscribing, or a
+//      reconnect after being offline), the slot may hold history from a
+//      missed write. With no arrival evidence, admit it only when its stamp
+//      is within 30s of our clock either way — wide enough for realistic
+//      skew, narrow enough that last class's GO can never fire hours late.
+//      Anything older is consumed WITHOUT executing, with a log line.
 let _lastControlBusId = '';
-function applyControlBusCommand(cmd, isFirstSnapshot=false) {
+let _lastBusSnapshotAt = 0;    // when the previous session snapshot ARRIVED in this window
+const BUS_ARRIVAL_GAP_MS = 15000;
+const BUS_GAP_ADMIT_MS = 30000;
+function applyControlBusCommand(cmd, arrivalGapMs=Infinity) {
   if (!cmd?.id || cmd.id === _lastControlBusId) return;
   _lastControlBusId = cmd.id;
-  if (isFirstSnapshot) return;   // pre-join history, never replayed
+  const continuous = Number.isFinite(arrivalGapMs) && arrivalGapMs < BUS_ARRIVAL_GAP_MS;
+  if (!continuous && !(Number.isFinite(cmd.ts) && Math.abs(Date.now() - cmd.ts) <= BUS_GAP_ADMIT_MS)) {
+    logShow('link', `Control bus: ignored a command from across a sync gap (${cmd.target} ${cmd.action})`);
+    return;
+  }
   if (!holdsBusExecutorClaim()) return;   // a follower never executes bus commands
   if (_busClaimExempt() || _busClaimIsMine()) {
     if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {

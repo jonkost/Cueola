@@ -492,12 +492,12 @@ test('one Stream Deck drives the whole rig over the session control bus (D11.7)'
   assert.match(playbackJs, /controlBus: \{ target: cmd\.target/);
   assert.match(playbackJs, /rundown_go: 'Rundown GO'/);
   // Cueola executes only on the show-calling surface with live open, dedupes
-  // by id, and baselines the first snapshot so a reconnect never replays a GO
-  // (wall-clock staleness is gone: it dropped presses on skewed Macs).
+  // by id, and judges freshness by snapshot arrival gaps (sender-clock
+  // staleness is gone: it dropped presses on skewed Macs).
   assert.match(app, /function runControlBusAction\(target, action/);
   assert.match(app, /if \(!isShowCaller\(\)\) return false/);
   assert.match(app, /cmd\.id === _lastControlBusId/);
-  assert.match(app, /applyControlBusCommand\(d\.controlBus, !_busSnapshotPrimed\)/);
+  assert.match(app, /BUS_ARRIVAL_GAP_MS = 15000/);
 });
 
 test('cloud snapshots: group-aware capture, hashed dedupe, merged history, one restore body (Phase 7/D3)', async () => {
@@ -927,24 +927,34 @@ test('deck strip monitors ride show truth in every window, not just the Live one
 });
 
 test('control bus survives clock skew and non-executing windows never steal the claim', () => {
-  // Baseline, not wall clock: the first snapshot marks pre-join history; every
-  // later command id executes regardless of the sender's clock. The old 5s
-  // ts window dropped every cross-machine deck press when two Macs drifted.
+  // Arrival evidence, not clock comparison: a new command id during a
+  // continuous snapshot stream executes with no clock math (the old 5s
+  // sender-clock window dropped every press between drifted Macs); across a
+  // delivery gap (first snapshot, reconnect) a bounded 30s admission applies,
+  // so last class's GO can never fire hours late and a swallowed press logs.
   const bus = app.slice(app.indexOf('function applyControlBusCommand'), app.indexOf('// Auto-fire linked Outrangutan'));
-  assert.match(bus, /if \(isFirstSnapshot\) return/);
+  assert.match(bus, /arrivalGapMs < BUS_ARRIVAL_GAP_MS/);
+  assert.match(bus, /Math\.abs\(Date\.now\(\) - cmd\.ts\) <= BUS_GAP_ADMIT_MS/);
+  assert.match(bus, /ignored a command from across a sync gap/);
   assert.doesNotMatch(bus, /cmd\.ts > 5000/);
-  assert.match(app, /applyControlBusCommand\(d\.controlBus, !_busSnapshotPrimed\)/);
+  assert.match(app, /applyControlBusCommand\(d\.controlBus, _lastBusSnapshotAt \? Date\.now\(\) - _lastBusSnapshotAt : Infinity\)/);
+  // Bus state is per-session: ids and claims never carry across a rejoin.
+  assert.match(app, /_lastControlBusId = '';\n      _lastBusSnapshotAt = 0;\n      _busExecutorClaim = null;\n      _busClaimSeenAt = 0;/);
   // Claim theft is gated on being able to execute: the KeyWi window and any
   // rundown-parked window used to grab the claim, run nothing, and black-hole
   // deck commands for 15s at a stretch.
   assert.match(bus, /classList\.contains\('on'\) \|\| !isShowCaller\(\)\) return;/);
-  // Foreign claim liveness is judged by heartbeat ARRIVAL, and the arrival
-  // stamp refreshes only when the claim actually changed.
+  // Foreign claim liveness is judged by heartbeat ARRIVAL; the stamp refreshes
+  // only when the claim changed, and a claim already ancient at first sight
+  // (dead holder) is left stale so the live caller takes over immediately.
   const stale = app.slice(app.indexOf('function _busClaimIsStale'), app.indexOf('function holdsBusExecutorClaim'));
   assert.match(stale, /_busClaimSeenAt/);
-  assert.match(app, /_busExecutorClaim\.ts !== d\.busExecutor\.ts\) _busClaimSeenAt = Date\.now\(\)/);
-  // A ghost abort is a diagnosis now: the toast names the source.
-  assert.match(app.slice(app.indexOf('function abortPlayoutCall'), app.indexOf('function applyRemoteLiveCall')), /aborted \(\$\{why\}\)/);
+  assert.match(app, /deadOnArrival \? 0 : Date\.now\(\)/);
+  // A ghost abort is a diagnosis now: the toast names the source, including
+  // the same-machine deck path's 'deck' token.
+  const abortFn = app.slice(app.indexOf('function abortPlayoutCall'), app.indexOf('function applyRemoteLiveCall'));
+  assert.match(abortFn, /aborted \(\$\{why\}\)/);
+  assert.match(abortFn, /source === 'deck' \? 'deck ABORT key'/);
 });
 
 for (const { name, run } of tests) {

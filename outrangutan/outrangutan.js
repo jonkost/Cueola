@@ -1709,8 +1709,10 @@
   // playout actions run locally; rundown/prompter actions go same-tab direct
   // (the one-operator setup) or over a Firestore command doc (the deck plugged
   // into the Mac Pro drives Outrangutan on the MacBook Air, and vice versa).
-  // Command docs carry ids + timestamps; consumers discard stale commands so a
-  // reconnect can never replay an old GO.
+  // Command docs carry ids + timestamps; the consumer (cueola-app.js
+  // applyControlBusCommand) judges freshness by snapshot ARRIVAL gaps, with
+  // the timestamp as a bounded fallback across gaps, so a reconnect can never
+  // replay an old GO and drifted clocks between machines never drop a press.
   const CONTROL_BUS_ACTIONS = {
     rundown_go: { target: 'rundown', action: 'go' },
     rundown_back: { target: 'rundown', action: 'back' },
