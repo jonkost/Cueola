@@ -10,11 +10,11 @@
   <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
   <meta name="theme-color" content="#080b12">
   <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-  <link rel="stylesheet" href="script-operator.css?v=6cafc1f059">
+  <link rel="stylesheet" href="script-operator.css?v=b1917c496b">
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=414e116aee" defer></script>
   <script src="cueola-scriptop-prefs.js?v=dfcf350611" defer></script>
-  <script src="script-operator.js?v=59596116d0" defer></script>
+  <script src="script-operator.js?v=843d6c6e3b" defer></script>
 </head>
 <body>
   <main class="script-operator" id="scriptOperatorRoot">
@@ -208,8 +208,13 @@
             <div class="question-lane">
               <input id="questionLaneInput" type="text" maxlength="280" placeholder="Paste a chat question · Enter pushes · Esc clears" aria-label="Question for the talent" list="questionLaneCards" data-requires-state>
               <datalist id="questionLaneCards"></datalist>
+            </div>
+            <div class="question-lane question-lane-actions">
               <button class="control-button question-lane-push" id="questionLanePush" type="button" data-question-push data-tip="Push this question to the talent as a QUESTION card" data-requires-state>
-                <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push</span>
+                <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push card</span>
+              </button>
+              <button class="control-button question-lane-push" id="questionLaneInsert" type="button" data-question-insert data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow" data-requires-state>
+                <span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Into script</span>
               </button>
             </div>
             <div class="stepper-row">

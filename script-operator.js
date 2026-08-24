@@ -402,6 +402,7 @@
     }
 
     if (button.hasAttribute('data-question-push')) { pushQuestionLane(); return; }
+    if (button.hasAttribute('data-question-insert')) { insertQuestionLane(); return; }
 
     if (button.matches('[data-nudge]')) {
       // Relative nudge: seek_line moves from wherever the talent IS, so a
@@ -646,6 +647,15 @@
     const text = cleanText(input?.value || '').replace(/\s+/g, ' ').slice(0, 280);
     if (!text) { sendIntent('control', { action: 'question_off' }); return; }
     sendIntent('control', { action: 'question_on', text });
+  }
+  // "Into script": the host inserts the question into the script copy of the
+  // row the talent is on (anchor-preserving push, so their read line holds).
+  function insertQuestionLane() {
+    const input = document.getElementById('questionLaneInput');
+    const text = cleanText(input?.value || '').replace(/\s+/g, ' ').slice(0, 280);
+    if (!text) { setDraftStatus('Type or paste the question first', 'error'); return; }
+    sendIntent('control', { action: 'question_insert', text });
+    if (input) input.value = '';
   }
 
   // ── D11.1: window-level keycommand dispatch ───────────────────────────────

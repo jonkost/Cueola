@@ -1041,6 +1041,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ws-screen-row{display:flex;gap:8px;align-items:center}
 .ws-screen-row select{flex:1;min-width:0}
 .ws-screen-row .btn-secondary{flex-shrink:0;width:auto;padding:8px 12px}
+.ws-win-row{display:flex;gap:8px;align-items:center}
+.ws-win-row .cc-check{flex:1;min-width:0}
+.ws-mini-screen{flex:0 1 165px;min-width:0;font-size:12px;padding:6px 8px}
 .modal-err.on{display:block}
 /* ── Phase 9 (D10.4): ⓘ info buttons + anchored popover ──
    HIG list-item info pattern: a 22px circle that reveals a short plain-language
@@ -2798,10 +2801,12 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-talent-pos-follow{flex:none;display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;color:var(--text3);cursor:pointer}
 
 /* D12.6: questions lane — paste box + push, sits under the Question toggle. */
-.pt-question-lane{display:flex;gap:6px;align-items:center;margin-top:6px}
-.pt-question-lane-input{flex:1;min-width:0;height:34px;padding:0 10px;border-radius:9px;border: 1px solid transparent;background:var(--s2);color:var(--text);font:500 12px var(--sans)}
+.pt-question-lane{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.pt-question-lane-input{flex:1 1 100%;min-width:0;height:38px;padding:0 10px;border-radius:9px;border: 1px solid transparent;background:var(--s2);color:var(--text);font:500 12px var(--sans)}
 .pt-question-lane-input::placeholder{color:var(--text3)}
-.pt-question-lane-push{flex:none}
+/* 2026-08-24: the push chip was too small to hit mid-show. The input takes the
+   full first row; the two actions split a second row as 40px targets. */
+.pt-question-lane-push{flex:1 1 0;min-height:40px;justify-content:center;font-size:12px}
 
 /* D12.5: acknowledged toggles — a sent control shows pending until the talent
    acks it, and failed (no ack in 5s) reads as a real problem, not a mystery. */
@@ -5158,6 +5163,7 @@ input.pt-range::-moz-range-thumb,
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" data-tip="Show production notes next to the rundown"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
 	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()"><span>Plan<span class="brand-hi">da Bear</span></span></button>
+	      <button class="tbtn tbtn-ghost" id="showSetupBtn" onclick="openWorkspaceLauncher()" data-tip="One click opens this machine's show windows on their displays"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Show setup</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <!-- File actions (Export PDF / Save / Open) live in the Settings menu — operator request 2026-07-04 -->
 	      <input type="file" id="rundownFileInput" accept=".cueola,.json,application/json" hidden onchange="importRundownFile(this.files[0]); this.value='';">
@@ -6446,19 +6452,18 @@ input.pt-range::-moz-range-thumb,
     <div class="field"><label class="field-lbl">Windows</label>
       <div class="cc-checks cc-checks-stack">
         <label class="cc-check"><input type="checkbox" checked disabled> Rundown, in this tab</label>
-        <label class="cc-check"><input type="checkbox" id="ws-talent"> Talent display (Flowmingo) window</label>
+        <div class="ws-win-row"><label class="cc-check"><input type="checkbox" id="ws-talent"> Talent display (Flowmingo) window</label><select class="field-in ws-mini-screen" id="ws-screen-talent" data-ws-screen="talent"></select></div>
         <label class="cc-check"><input type="checkbox" id="ws-scriptop"> Script Operator pop-out, opens itself when Live starts</label>
-        <label class="cc-check"><input type="checkbox" id="ws-plandabear"> Planda Bear paperwork, its own tab</label>
-        <label class="cc-check"><input type="checkbox" id="ws-outrangutan"> Playout (Outrangutan), its own tab</label>
-        <label class="cc-check"><input type="checkbox" id="ws-keywi"> KeyWi Bird deck setup, its own tab</label>
+        <div class="ws-win-row"><label class="cc-check"><input type="checkbox" id="ws-plandabear"> Planda Bear paperwork, its own window</label><select class="field-in ws-mini-screen" id="ws-screen-plandabear" data-ws-screen="plandabear"></select></div>
+        <div class="ws-win-row"><label class="cc-check"><input type="checkbox" id="ws-outrangutan"> Playout (Outrangutan), its own window</label><select class="field-in ws-mini-screen" id="ws-screen-outrangutan" data-ws-screen="outrangutan"></select></div>
+        <div class="ws-win-row"><label class="cc-check"><input type="checkbox" id="ws-keywi"> KeyWi Bird deck setup, its own window</label><select class="field-in ws-mini-screen" id="ws-screen-keywi" data-ws-screen="keywi"></select></div>
       </div>
     </div>
-    <div class="field"><label class="field-lbl">Talent display screen</label>
+    <div class="field">
       <div class="ws-screen-row">
-        <select class="field-in" id="ws-talent-screen"></select>
         <button class="btn-secondary" type="button" onclick="wsDetectScreens()">Detect displays</button>
       </div>
-      <div class="field-hint">Pick which physical display the talent window opens on (Chrome or Edge).</div>
+      <div class="field-hint">Each window can open on a chosen physical display (Chrome or Edge). The talent display also goes fullscreen there.</div>
     </div>
     <div class="modal-err" id="ws-err">Pick or type a session code.</div>
     <button class="btn-primary" onclick="launchWorkspace()">Open my show</button>
@@ -6815,6 +6820,15 @@ input.pt-range::-moz-range-thumb,
 .sd-key.dragging { opacity:.45; }
 .sd-key.drop-target canvas { box-shadow:0 0 0 2px var(--accent); }
 .sd-keys { gap:10px; }
+/* Action tray: draggable assignment chips, rimmed in their app color. */
+.sd-acttray { margin-top:10px; }
+.sd-acttray summary { cursor:pointer; font-size:13px; font-weight:700; color:var(--text2); padding:6px 2px; }
+.sd-acttray-body { display:flex; flex-direction:column; gap:10px; padding:8px 2px 4px; }
+.sd-acttray-gt { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); margin-bottom:4px; }
+.sd-acttray-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.sd-actchip { display:inline-flex; align-items:center; padding:5px 10px; font-size:12px; font-weight:600; color:var(--text); background:var(--s1); border:1.5px solid var(--chip-rim, transparent); border-radius:999px; cursor:grab; user-select:none; }
+.sd-actchip:hover { background:color-mix(in srgb, var(--chip-rim, var(--accent)) 14%, var(--s1)); }
+.sd-actchip.dragging { opacity:.5; }
 #sd-theme { background:var(--s1); color:var(--text); border: 1px solid transparent; border-radius:var(--ui-radius-control,12px); padding:7px 10px; font-size:14px; font-weight:600; }
 .sd-preview-banner { display:flex; gap:12px; align-items:center; margin-top:16px; padding:12px 16px; background:color-mix(in srgb,var(--accent) 9%,var(--s1)); border:1px solid transparent; border-radius:var(--ui-radius-group,16px); font-size:13px; color:var(--text2); line-height:1.5; }
 .sd-preview-banner .btn-secondary { margin-left:auto; flex:0 0 auto; width:auto; white-space:nowrap; }
@@ -7174,12 +7188,12 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=0f4f377cae"></script>
-<script src="outrangutan/outrangutan.js?v=eb1d0b4918"></script>
+<script src="cueola-app.js?v=91f128902f"></script>
+<script src="outrangutan/outrangutan.js?v=e38571c5a9"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=5e04c813d2"></script>
+<script src="cueola-streamdeck.js?v=b94b41dd66"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

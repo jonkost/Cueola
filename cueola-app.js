@@ -5012,6 +5012,9 @@ async function joinSession() {
       hideModal('modal-stud');
       enterRundown();
       window.CueolaIdentity?.noteJoin(code, name);
+      // A ?prepro=1 launch that fell into this modal used to DROP the flag:
+      // the operator joined and Planda Bear never opened (launcher fix, 8/24).
+      if (window._openPreProAfterJoin) { window._openPreProAfterJoin = false; setTimeout(openPaperworkHub, 700); }
   } catch (joinErr) {
     errEl.textContent = `${firebaseConnectionLabel(joinErr, 'Could not load session')}. Check the connection and try again.`;
     errEl.classList.add('on');
@@ -6409,6 +6412,11 @@ function releaseLiveCommandHolds() {
 }
 
 function keymapDispatch(e, phase) {
+  // IME/dead-key composition (external keyboards, international layouts) must
+  // never drive show commands: a composing keystroke reaching the live scope's
+  // single-letter hotkeys reset the prompter (R) or stopped playout (S) while
+  // the operator was just typing (8/24 "keyboard glitched" report).
+  if (e.isComposing || e.keyCode === 229) return false;
   const scope = keymapScopeNow();
   if (!scope) return false;
   if (scope === 'build' && phase === 'down' && !e.repeat && !isTextEditingTarget(e.target) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
@@ -6527,6 +6535,16 @@ window.cueolaSurfaceBridge = {
   holdStop:  (id) => { const a = KEYMAP.find(x => x.id === id); if (a && a.hold) sendPrompterControl(a.hold[1]); },
   prompter: (action) => sendPrompterControl(action),
   controlBus: (target, action) => { try { return window.cueolaControlBus(target, action, 'deck'); } catch (e) { return false; } },
+  // Honest-key availability for bus/clock verbs: 'exec' = this window runs it,
+  // 'publish' = it rides the session doc to the caller machine, '' = a press
+  // would be silently refused (the deck dims the key instead of lying).
+  busAvailable: () => {
+    try {
+      if (document.getElementById('liveshow')?.classList.contains('on') && isShowCaller()) return 'exec';
+      if (window._firebaseReady && session.code && !session.isDemo) return 'publish';
+      return '';
+    } catch (e) { return 'exec'; }
+  },
   // KeyWi strip prompter monitor: the script text plus the shared position
   // (the talent heartbeat's reported spot wins over this tab's own scroll).
   // Before anyone adopts a prompter text, fall back to assembling from the
@@ -6553,7 +6571,7 @@ window.cueolaSurfaceBridge = {
   // whose lifecycle gate belongs to the live-screen keyboard path.
   playoutTransport: (action) => {
     const local = window.Outrangutan && window.Outrangutan._local;
-    if (local && local.transport && session.code && local.session() === session.code && local.transport(action)) return true;
+    if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && local.transport(action)) return true;
     return fireOutrangutanCommand(action, '');
   },
   goLive: () => { try { goLive(); } catch (e) {} },
@@ -6580,7 +6598,7 @@ window.cueolaSurfaceBridge = {
   // drive the silent local instance and move nothing on the playout machine.
   masterGain: () => {
     try {
-      if (!playoutIsRemote()) return window.Outrangutan?.masterGain ? window.Outrangutan.masterGain() : 0;
+      if (!playoutIsRemote() && !remoteAirDriving()) return window.Outrangutan?.masterGain ? window.Outrangutan.masterGain() : 0;
       if (_ogGainEcho && Date.now() - _ogGainEcho.ts < 4000) return _ogGainEcho.v;
       const g = Number(outrangutanState.live?.gain);
       return Number.isFinite(g) ? g : 0;
@@ -6588,7 +6606,7 @@ window.cueolaSurfaceBridge = {
   },
   setMasterGain: (v) => {
     try {
-      if (!playoutIsRemote()) { window.Outrangutan?.setMasterGain?.(v); return; }
+      if (!playoutIsRemote() && !remoteAirDriving()) { window.Outrangutan?.setMasterGain?.(v); return; }
       fireOutrangutanGain(v);
     } catch (e) {}
   },
@@ -6618,6 +6636,14 @@ window.cueolaSurfaceBridge = {
         // Arrival clock, never the sender's ts: clock skew between Macs must
         // not make a healthy playout read as absent.
         fresh: !!nowPlaying || !!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < 12000),
+        // Availability truth for honest keys: local = the same-tab fast path
+        // will take this fire; sendable = a doc command CAN be written at all.
+        // A key whose fire would be refused must LOOK unavailable, never lit.
+        local: _sdSafe(() => {
+          const l = window.Outrangutan && window.Outrangutan._local;
+          return !!(l && session.code && l.session() === session.code && !remoteAirDriving());
+        }, false),
+        sendable: _sdSafe(() => !!(window._firebaseReady && session.code && !session.isDemo), false),
       },
       prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
@@ -8559,15 +8585,38 @@ let _sfxLast = null;   // { padId, name, startedAt, durMs, loop, _localLive }
 // guard (fireOutrangutanCommand); the probes get the same one.
 function playoutIsRemote() {
   if (!(session.code && !session.isDemo && !session.isExpert && !session.local)) return false;
+  // A different Outrangutan instance freshly publishing into this show IS the
+  // playout machine, even when this tab's own instance also claims the code
+  // (the vestigial-local case): probes and commands must follow the real one.
+  if (remoteAirDriving()) return true;
   try { return (window.Outrangutan?._local?.session?.() || '') !== session.code; } catch { return true; }
 }
 
 // The published live packet is only trustworthy while the playout machine is
 // actually writing it. ~700ms cadence during playback, ~3s idle heartbeat.
+// Freshness is judged by when packets ARRIVE in this window (_ogLiveSeenAt),
+// never by the sender's wall clock: drifted Macs made a healthy Air read as
+// "not reporting" (and vice versa) while triggering worked fine.
 const OG_REMOTE_FRESH_MS = 12000;
 function remotePlayoutFresh(og) {
-  const ts = og?.live?.ts || 0;
+  if (_ogLiveSeenAt) return (Date.now() - _ogLiveSeenAt) < OG_REMOTE_FRESH_MS;
+  const ts = og?.live?.ts || 0;   // pre-arrival fallback (nothing seen since this load)
   return !!ts && (Date.now() - ts) < OG_REMOTE_FRESH_MS;
+}
+
+// The show-killer variant of local shadowing: this tab's Outrangutan once
+// joined the session (mode sticks after leaving the screen), so the same-tab
+// fast path swallowed every fire into a hidden, output-less local instance —
+// and the playout Mac never heard a thing. When a DIFFERENT Outrangutan
+// instance is freshly publishing into this show, IT is the playout surface:
+// commands must go over the wire, never into the local one.
+function remoteAirDriving() {
+  if (!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < OG_REMOTE_FRESH_MS)) return false;
+  const sender = outrangutanState?.live?.sender || '';
+  if (!sender) return false;   // pre-sender packets: keep the old behavior
+  let mine = '';
+  try { mine = window.Outrangutan?._sender?.() || ''; } catch {}
+  return sender !== mine;
 }
 
 function syncOutrangutanControllerStatus(og=outrangutanState) {
@@ -8637,6 +8686,7 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
 // this is what kept the "Questions" segment flashing at playout-publish rate.)
 function applyOutrangutanState(og) {
   if (!og) return;
+  if (og.cmdAck) applyOutrangutanCmdAck(og.cmdAck);   // confirmed delivery: stop retrying acked commands
   let structural = false;
   // stableStringify: Firestore snapshot map-key order differs between local-echo
   // and server emissions — a plain JSON compare re-renders on identical data.
@@ -8990,10 +9040,11 @@ let _ogNoListenerToastAt = 0;
 function fireOutrangutanCommand(action, targetId, opts={}) {
   cancelPendingArm();   // a real command owns the slot; a stale arm must not overwrite it
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && session.code && local.session() === session.code) {
+  if (local && session.code && local.session() === session.code && !remoteAirDriving()) {
     if (action === 'pad' && local.firePad(targetId)) return true;
     if (action === 'cue' && local.fireCue(targetId)) {
       if (opts.armCueId) local.armCue?.(opts.armCueId);
+      if (Array.isArray(opts.pads)) opts.pads.forEach(id => local.firePad(id));
       return true;
     }
   }
@@ -9004,10 +9055,13 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
     ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
     action: action || 'cue', cueId: action === 'pad' ? '' : (targetId || ''), padId: action === 'pad' ? (targetId || '') : '',
   };
+  command.origId = command.commandId;   // stable across retries; the Air dedupes on it
   if (opts.armCueId) command.armCueId = String(opts.armCueId);
+  if (Array.isArray(opts.pads) && opts.pads.length) command.pads = opts.pads.map(String);
   logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
+  _trackOutCommand(command);
   // The write landing does NOT mean anyone is listening: a playout Mac in
   // local mode, on another code, or refused by the rules consumes nothing,
   // and the command just sits in the slot. Say so (throttled) instead of
@@ -9018,6 +9072,62 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   }
   return true;
 }
+// ── Confirmed delivery for the single command slot ──────────────────────────
+// A fire is a fire-and-forget write into ONE field: it can be overwritten by
+// the next write before the Air's snapshot lands, and the Air's post-subscribe
+// baseline deliberately eats whatever the slot holds (so a reconnect that
+// coincides with a GO used to swallow that GO in total silence — the 8/24
+// show). Against a proto>=2 Air, every command now expects an
+// outrangutan.cmdAck echo; unconfirmed commands are re-written (same origId,
+// new commandId — the Air executes an origId at most once) on a worker-backed
+// timer, and after the retries run dry the operator is TOLD instead of
+// discovering it by dead air.
+const OG_CMD_RETRY_MS = 2500, OG_CMD_MAX_RETRIES = 2;
+let _ogPendingCmds = [];   // { command, sentAt, retries }
+let _ogCmdRetryTimer = null;
+function _ogAckSupported() { return Number(outrangutanState?.live?.proto) >= 2; }
+function _trackOutCommand(command) {
+  if (!_ogAckSupported()) return;               // old Air: no acks, no retries
+  if (command.action === 'arm') return;         // best-effort standby, superseded on every advance
+  // A newer non-pad command supersedes older pending ones: retrying a stale
+  // cue after the operator hit STOP must never restart the media.
+  if (command.action !== 'pad') _ogPendingCmds = _ogPendingCmds.filter(p => p.command.action === 'pad');
+  _ogPendingCmds.push({ command, sentAt: Date.now(), retries: 0 });
+  if (_ogPendingCmds.length > 6) _ogPendingCmds.shift();
+  _ensureOgCmdRetryLoop();
+}
+function _ogCmdRetryTick() {
+  const now = Date.now();
+  _ogPendingCmds = _ogPendingCmds.filter(p => {
+    if (now - p.sentAt < OG_CMD_RETRY_MS) return true;
+    if (p.retries >= OG_CMD_MAX_RETRIES) {
+      logShow('error', `Playout never confirmed ${p.command.action}${p.command.cueId ? ' · ' + outrangutanTargetName(p.command.action, p.command.cueId) : ''}`);
+      toast('Playout did NOT confirm the last command. Check Outrangutan on the playback Mac.');
+      return false;
+    }
+    if (!(window._firebaseReady && session.code && !session.isDemo)) return false;
+    p.retries += 1; p.sentAt = now;
+    _outCmdSeq += 1;
+    p.command = { ...p.command, commandId: `out_${CLIENT_ID}_${now.toString(36)}_${_outCmdSeq}`, ts: now };
+    logShow('link', `Playout command unconfirmed — resending ${p.command.action} (try ${p.retries + 1})`);
+    try { window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': p.command }).catch(() => {}); } catch {}
+    return true;
+  });
+  if (!_ogPendingCmds.length && _ogCmdRetryTimer) { _ogCmdRetryTimer.cancel(); _ogCmdRetryTimer = null; }
+}
+function _ensureOgCmdRetryLoop() {
+  if (_ogCmdRetryTimer || !_ogPendingCmds.length) return;
+  const P = window.CueolaScriptOperatorProtocol;
+  _ogCmdRetryTimer = P?.createSteadyInterval
+    ? P.createSteadyInterval(_ogCmdRetryTick, 700)
+    : { cancel: clearInterval.bind(null, setInterval(_ogCmdRetryTick, 700)) };
+}
+function applyOutrangutanCmdAck(ack) {
+  if (!ack || !ack.origId || !_ogPendingCmds.length) return;
+  _ogPendingCmds = _ogPendingCmds.filter(p => (p.command.origId || p.command.commandId) !== ack.origId);
+  if (!_ogPendingCmds.length && _ogCmdRetryTimer) { _ogCmdRetryTimer.cancel(); _ogCmdRetryTimer = null; }
+}
+
 // Remote master gain: its own doc field (never the single command slot — a
 // volume turn must not overwrite an unconsumed cue fire), trailing-throttled
 // so a dial spin is a couple of writes, with a short local echo for the dial
@@ -9086,7 +9196,7 @@ function fireOutrangutanTransport(action) {
     if (action === 'stop' || action === 'fadeStop' || action === 'panic') abortPlayoutCall(action);
   }
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && local.transport && session.code && local.session() === session.code && local.transport(action)) {
+  if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && local.transport(action)) {
     toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
     return true;
   }
@@ -9201,6 +9311,29 @@ const RTRT_STAGES = ['ready', 'track', 'roll'];
 const RTRT_STAGE_MS = 1000;
 let _rtrtCall = null;   // { beat, rowIdx, cueId, stage, timer, manual }
 
+// Chrome clamps a hidden tab's setTimeout to once a MINUTE after ~5 idle
+// minutes, and during a show this tab IS hidden (the operator lives in OBS).
+// A raw setTimeout here parked the READY count and fired the TAKE up to a
+// minute late, or never (the 8/24 show). Every show-critical one-shot rides a
+// worker timer instead: worker timers are exempt from intensive throttling.
+// Returns { cancel } like createSteadyInterval; falls back to setTimeout when
+// workers are unavailable so nothing new can break.
+function steadyTimeout(fn, ms) {
+  const P = window.CueolaScriptOperatorProtocol;
+  if (P?.createSteadyInterval) {
+    let fired = false;
+    const h = P.createSteadyInterval(() => {
+      if (fired) return;
+      fired = true;
+      h.cancel();
+      fn();
+    }, ms);
+    return h;
+  }
+  const t = setTimeout(fn, ms);
+  return { cancel: () => clearTimeout(t) };
+}
+
 // Manual TAKE is a SHOW setting, not a device setting. It used to live only
 // in localStorage, so a machine swap (or a long-forgotten checkbox) silently
 // turned every call into a parked READY + mandatory TAKE press (8/20 show).
@@ -9260,7 +9393,7 @@ function resumeParkedPlayoutCall(source) {
   publishLiveCall('ready');
   renderLiveCallBanner('ready');
   notifyControlSurfaceState();
-  _rtrtCall.timer = setTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+  _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
   return true;
 }
 // The banner's AUTO button: one click fixes the SHOW setting (so the next GO
@@ -9331,7 +9464,7 @@ function beginPlayoutCall(beat, rowIdx) {
   publishLiveCall('ready');
   renderLiveCallBanner('ready');
   notifyControlSurfaceState();
-  if (!manual) _rtrtCall.timer = setTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+  if (!manual) _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
   return true;
 }
 
@@ -9342,11 +9475,11 @@ function stepPlayoutCall() {
   _rtrtCall.stage = RTRT_STAGES[nextIdx];
   publishLiveCall(_rtrtCall.stage);
   renderLiveCallBanner(_rtrtCall.stage);
-  _rtrtCall.timer = setTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+  _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
 }
 
 function cancelPlayoutCallTimer() {
-  if (_rtrtCall?.timer) clearTimeout(_rtrtCall.timer);
+  if (_rtrtCall?.timer) { _rtrtCall.timer.cancel(); _rtrtCall.timer = null; }
 }
 
 function takePlayoutCall(source='take') {
@@ -9354,6 +9487,12 @@ function takePlayoutCall(source='take') {
   cancelPlayoutCallTimer();
   const call = _rtrtCall;
   _rtrtCall = null;
+  // TAKE-linked SFX ride the SAME write as the fire: three racing writes to
+  // one slot let a pad overwrite the cue before the Air's snapshot landed.
+  const takePads = ['playback', 'audio']
+    .map(t => call.beat?.cues?.[t])
+    .filter(c => c && c.outPadAuto && c.outPadId)
+    .map(c => c.outPadId);
   if (call.cueId) {
     // The next standby rides the fire itself; see maybeArmNextPlayout. The
     // fire invalidates whatever standby we knew about, so the memo resets
@@ -9361,14 +9500,15 @@ function takePlayoutCall(source='take') {
     // BACK to re-roll the last clip must be able to re-arm it.
     const armCueId = nextAutoPlayoutCueIdAfter(call.rowIdx);
     _lastArmedNextCueId = '';
-    if (fireOutrangutanCommand('cue', call.cueId, armCueId ? { armCueId } : {}) && armCueId) {
+    const opts = {};
+    if (armCueId) opts.armCueId = armCueId;
+    if (takePads.length) opts.pads = takePads;
+    if (fireOutrangutanCommand('cue', call.cueId, opts) && armCueId) {
       _lastArmedNextCueId = armCueId;
     }
+  } else {
+    takePads.forEach(padId => fireOutrangutanCommand('pad', padId));
   }
-  ['playback', 'audio'].forEach(t => {
-    const c = call.beat?.cues?.[t];
-    if (c && c.outPadAuto && c.outPadId) fireOutrangutanCommand('pad', c.outPadId);
-  });
   logShow('media', `TAKE · row ${call.rowIdx + 1} (${source})`);
   publishLiveCall('take', call);
   renderLiveCallBanner('take', call);
@@ -9517,7 +9657,11 @@ function _busExecutorHeartbeatTick() {
 function _ensureBusExecutorHeartbeat() {
   _busExecutorHeartbeatTick();
   if (_busExecutorTimer) return;
-  _busExecutorTimer = setInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS);
+  // Worker-backed: a throttled heartbeat in a backgrounded caller tab let the
+  // claim go stale (>15s) mid-show, and deck TAKE/GO got re-elected elsewhere.
+  _busExecutorTimer = window.CueolaScriptOperatorProtocol?.createSteadyInterval
+    ? window.CueolaScriptOperatorProtocol.createSteadyInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS)
+    : { cancel: clearInterval.bind(null, setInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS)) };
 }
 
 // Cross-machine consumer. Exactly-once across machines whose clocks may
@@ -9579,6 +9723,13 @@ function fireOutrangutanAutoForBeat(beat) {
     // D11.3: linked playout gets the armed call, never an instant fire.
     return beginPlayoutCall(beat, rowIdx);
   }
+  // A name-authored link that never resolved to a cue id used to fail in
+  // TOTAL silence here (no call, no banner, no log): the row looked linked,
+  // GO looked accepted, and nothing ever played. Scream instead.
+  if (d && d.outAuto && !d.outCueId && d.outCueName) {
+    logShow('error', `Row ${rowIdx + 1}: playback cue “${d.outCueName}” is not in the loaded Outrangutan show — nothing fired`);
+    toast(`Playback cue “${d.outCueName}” isn’t in the loaded Outrangutan show, so nothing fired for this row. Load the right show on the playout Mac or re-link the row.`);
+  }
   // P4: SFX auto-fire (playback + audio cells; Decisions #6). Pad-only rows
   // stay instant — stingers are timing-critical and carry no abort window.
   ['playback', 'audio'].forEach(t => {
@@ -9614,7 +9765,7 @@ let _pendingArmCueId = null;     // cueId awaiting the delayed doc write (null =
 // arm must never overwrite an unconsumed fire, stop, or pad in the single
 // outrangutan.command slot. Callers re-arm on the next advance.
 function cancelPendingArm() {
-  clearTimeout(_pendingArmTimer);
+  if (_pendingArmTimer) _pendingArmTimer.cancel();
   _pendingArmTimer = null;
   _pendingArmCueId = null;
 }
@@ -9624,7 +9775,7 @@ function maybeArmNextPlayout(fromIdx) {
   // (a stale one would keep hijacking the playout op's local GO chain).
   const cueId = nextAutoPlayoutCueIdAfter(fromIdx);
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && session.code && local.session() === session.code && typeof local.armCue === 'function') {
+  if (local && session.code && local.session() === session.code && !remoteAirDriving() && typeof local.armCue === 'function') {
     cancelPendingArm();
     if (cueId !== _lastArmedNextCueId) {
       local.armCue(cueId);
@@ -9639,7 +9790,7 @@ function maybeArmNextPlayout(fromIdx) {
   // Delayed AND re-deferred on every call, so the write always lands 1.2s
   // after the latest activity; cancelPendingArm() in fireOutrangutanCommand
   // kills it whenever a real command needs the slot first.
-  _pendingArmTimer = setTimeout(() => {
+  _pendingArmTimer = steadyTimeout(() => {
     const armId = _pendingArmCueId;
     _pendingArmTimer = null;
     _pendingArmCueId = null;
@@ -12556,7 +12707,9 @@ function updatePrompterOnAdvance(prevBeat, newBeat) {
 // manually (C key, Cue Now button) for recovering a lost place mid-show.
 function cuePrompterToLiveRow() {
   const rowNum = liveActiveCueIndex() + 1;
-  if (rowNum > 0) setTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 150);
+  // steadyTimeout, not setTimeout: a throttled hidden tab delayed this seek by
+  // up to a minute, which read as "the prompter ignored the rundown".
+  if (rowNum > 0) steadyTimeout(() => sendPrompterControl(`seek_row_${rowNum}`), 150);
 }
 
 // D11.2: the ▶ talent-position rail under the Script Op editor. Position rides
@@ -13027,6 +13180,13 @@ async function scriptOperatorExecuteCommand(command) {
   }
   if (kind === 'control' || kind === 'preview') {
     const action = String(data.action || '');
+    // Pop-out question lane's "into the script" path: an APP edit (row script
+    // copy + push), not a prompter verb, so it never enters the control grammar.
+    if (kind === 'control' && action === 'question_insert') {
+      return insertQuestionAtPrompterText(typeof data.text === 'string' ? data.text : '')
+        ? { ok:true, detail:'Question added to the script at the prompter position' }
+        : { ok:false, error:'Type the question first (or the prompter row could not be found)' };
+    }
     if (!scriptOperatorControlAllowed(action)) throw new Error('Rejected Script Operator action: ' + action);
     if (kind === 'preview') {
       const applied = scriptOperatorApplyPreview(action);
@@ -13508,7 +13668,14 @@ function flushPrompterCommandQueue(outputId) {
 }
 
 function isQuietPrompterControl(action) {
-  return !action || action.endsWith('_stop') || action.includes('_set_');
+  // seek_line_ (the scrub) and the speed/size steppers arrive in bursts: the
+  // loud path armed a wait timer + a 5s fail timer and flapped the status line
+  // PER COMMAND — 20 live timers and constant DOM churn during the exact
+  // gesture that needs the main thread quiet. Liveness is the heartbeat's job.
+  return !action || action.endsWith('_stop') || action.includes('_set_')
+    || action.startsWith('seek_line_')
+    || action === 'speed_up' || action === 'speed_down'
+    || action === 'size_up' || action === 'size_down';
 }
 
 // "Collaborative" controls set discrete talent state (clock, wrap-up, question,
@@ -13643,21 +13810,29 @@ function cueolaScreenFeatures(screenId) {
   return scr ? `left=${scr.availLeft},top=${scr.availTop},width=${scr.availWidth},height=${scr.availHeight}` : '';
 }
 const TALENT_SCREEN_KEY = 'cueola_talent_screen';
-// The choice is stored as a stable IDENTITY (label + geometry), never a bare
+// Per-window screen choices (owner 2026-08-24): only the talent window used to
+// be placeable; every launcher window now remembers its own display. Each
+// choice is stored as a stable IDENTITY (label + geometry), never a bare
 // index: the index pointed into an in-memory list that is null on every
 // fresh load, and could silently mean a different physical display after an
 // unplug/replug. Legacy numeric values still resolve.
-function savedTalentScreenIdentity() {
+const WS_SCREEN_KEYS = {
+  talent: TALENT_SCREEN_KEY,
+  plandabear: 'cueola_ws_screen_plandabear',
+  outrangutan: 'cueola_ws_screen_outrangutan',
+  keywi: 'cueola_ws_screen_keywi',
+};
+function savedScreenIdentityFor(win) {
   try {
-    const raw = localStorage.getItem(TALENT_SCREEN_KEY);
+    const raw = localStorage.getItem(WS_SCREEN_KEYS[win] || '');
     if (raw === null || raw === '') return null;
     const v = JSON.parse(raw);
     if (v && typeof v === 'object') return v;
     return Number.isFinite(Number(raw)) ? { legacyIndex: Number(raw) } : null;
   } catch { return null; }
 }
-function savedTalentScreen() {
-  const want = savedTalentScreenIdentity();
+function savedScreenFor(win) {
+  const want = savedScreenIdentityFor(win);
   if (!want || !_cueolaScreens) return null;
   if (Number.isFinite(want.legacyIndex)) return _cueolaScreens[want.legacyIndex] ? want.legacyIndex : null;
   const byLabel = want.label ? _cueolaScreens.find(s => s.label === want.label) : null;
@@ -13666,6 +13841,16 @@ function savedTalentScreen() {
     && s.availWidth === want.availWidth && s.availHeight === want.availHeight);
   return byGeom ? byGeom.id : null;
 }
+function saveScreenChoiceFor(win, screenId) {
+  try {
+    const scr = screenId != null && _cueolaScreens ? _cueolaScreens.find(s => s.id === Number(screenId)) : null;
+    localStorage.setItem(WS_SCREEN_KEYS[win], scr
+      ? JSON.stringify({ label: scr.label, availLeft: scr.availLeft, availTop: scr.availTop, availWidth: scr.availWidth, availHeight: scr.availHeight })
+      : '');
+  } catch {}
+}
+function savedTalentScreenIdentity() { return savedScreenIdentityFor('talent'); }
+function savedTalentScreen() { return savedScreenFor('talent'); }
 
 function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true }={}) {
   if (replace) {
@@ -13760,16 +13945,17 @@ function wsCodeChanged() {
   if (manual) manual.hidden = !(sel && sel.value === '__other');
 }
 function renderWorkspaceScreens() {
-  const sel = document.getElementById('ws-talent-screen');
-  if (!sel) return;
-  const saved = savedTalentScreen();
-  if (_cueolaScreens) {
-    sel.innerHTML = `<option value="">Browser decides</option>` + _cueolaScreens.map(s => `<option value="${s.id}"${saved === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
-    sel.disabled = false;
-  } else {
-    sel.innerHTML = `<option value="">Detect displays to pick a screen</option>`;
-    sel.disabled = true;
-  }
+  document.querySelectorAll('[data-ws-screen]').forEach(sel => {
+    const win = sel.getAttribute('data-ws-screen');
+    const saved = savedScreenFor(win);
+    if (_cueolaScreens) {
+      sel.innerHTML = `<option value="">Browser decides</option>` + _cueolaScreens.map(s => `<option value="${s.id}"${saved === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+      sel.disabled = false;
+    } else {
+      sel.innerHTML = `<option value="">Detect displays…</option>`;
+      sel.disabled = true;
+    }
+  });
 }
 async function wsDetectScreens() { await cueolaDetectScreens(); renderWorkspaceScreens(); }
 
@@ -13786,23 +13972,25 @@ function launchWorkspace() {
   const plandabear = !!document.getElementById('ws-plandabear')?.checked;
   const outrangutan = !!document.getElementById('ws-outrangutan')?.checked;
   const keywi = !!document.getElementById('ws-keywi')?.checked;
-  const screenSel = document.getElementById('ws-talent-screen');
-  const screenId = screenSel && !screenSel.disabled && screenSel.value !== '' ? Number(screenSel.value) : null;
-  // Persist the CHOICE as a stable identity, not an index (see savedTalentScreen).
-  try {
-    const scr = screenId != null && _cueolaScreens ? _cueolaScreens.find(s => s.id === screenId) : null;
-    localStorage.setItem(TALENT_SCREEN_KEY, scr
-      ? JSON.stringify({ label: scr.label, availLeft: scr.availLeft, availTop: scr.availTop, availWidth: scr.availWidth, availHeight: scr.availHeight })
-      : '');
-  } catch {}
+  // Persist every window's screen CHOICE as a stable identity, not an index
+  // (see savedScreenFor). Each launcher window then opens placed on its display.
+  document.querySelectorAll('[data-ws-screen]').forEach(sel => {
+    if (sel.disabled) return;
+    saveScreenChoiceFor(sel.getAttribute('data-ws-screen'), sel.value !== '' ? Number(sel.value) : null);
+  });
   saveWorkspacePrefs({ talent, scriptop, plandabear, outrangutan, keywi });
   // Pop-ups open first, inside this click's gesture. With pop-ups allowed for
   // the site they all open; a blocked one toasts and keeps its manual button.
+  const featsFor = win => cueolaScreenFeatures(savedScreenFor(win));
+  const openPlaced = (url, name, win) => {
+    const feats = featsFor(win);
+    return feats ? window.open(url, name, feats) : window.open(url, name);
+  };
   let blocked = 0;
   if (talent && !openFlowmingoTalentWindow({ code, fallbackInPage: false })) blocked++;
-  if (plandabear && !window.open(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code)) blocked++;
-  if (outrangutan && !window.open(`index.html?app=outrangutan&code=${encodeURIComponent(code)}`, 'cueola-outrangutan-' + code)) blocked++;
-  if (keywi && !window.open(`index.html?app=keywibird&code=${encodeURIComponent(code)}`, 'cueola-keywi-' + code)) blocked++;
+  if (plandabear && !openPlaced(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code, 'plandabear')) blocked++;
+  if (outrangutan && !openPlaced(`index.html?app=outrangutan&code=${encodeURIComponent(code)}`, 'cueola-outrangutan-' + code, 'outrangutan')) blocked++;
+  if (keywi && !openPlaced(`index.html?app=keywibird&code=${encodeURIComponent(code)}`, 'cueola-keywi-' + code, 'keywi')) blocked++;
   _wsPendingScriptop = scriptop;
   if (scriptop) armWorkspaceScriptop();
   hideModal('modal-workspace');
@@ -13828,11 +14016,25 @@ function armWorkspaceScriptop() {
   }, 2000);
 }
 
+// Leading + trailing 100ms throttle per control family: the in-app sliders
+// used to dispatch on EVERY input event (a Firestore write plus two sync
+// localStorage writes per pointermove). The pop-out already throttled its
+// previews; the in-app sliders now match it.
+const _ptPreviewThrottle = {};   // family -> { timer, latest }
 function sendPrompterPreviewControl(action) {
   _ensurePrompterOperatorBridge();
-  const control = buildPrompterControl(action, 'script-op-preview');
   if (!prompterSessionController.isReady(_activePrompterOutputInstanceId)) return false;
-  return dispatchPrompterCommand(control, 'live', true);
+  const fam = String(action).replace(/[\d.]+$/, '');   // speed_set_ / size_set_ / seek_set_
+  const th = _ptPreviewThrottle[fam] || (_ptPreviewThrottle[fam] = { timer: null, latest: null });
+  if (th.timer) { th.latest = action; return true; }
+  const send = a => dispatchPrompterCommand(buildPrompterControl(a, 'script-op-preview'), 'live', true);
+  const ok = send(action);
+  th.timer = steadyTimeout(() => {
+    th.timer = null;
+    if (th.latest != null && th.latest !== action) { const a = th.latest; th.latest = null; sendPrompterPreviewControl(a); }
+    else th.latest = null;
+  }, 100);
+  return ok;
 }
 
 // Operator windows drop their own control echo as self-sent, and the talent ack
@@ -14193,12 +14395,20 @@ function ptInitReceiver() {
   };
   window.addEventListener('storage', ptReceiverStorageHandler);
   ptPingBurst();
-  if (!ptHeartbeatInterval) ptHeartbeatInterval = setInterval(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS);
+  // Worker-backed: the talent window is the one most often occluded (fullscreen
+  // on a display the OS considers hidden), and a throttled 2s heartbeat made a
+  // healthy, scrolling talent read as LOST on every operator surface.
+  if (!ptHeartbeatInterval) {
+    const P = window.CueolaScriptOperatorProtocol;
+    ptHeartbeatInterval = P?.createSteadyInterval
+      ? P.createSteadyInterval(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS)
+      : { cancel: clearInterval.bind(null, setInterval(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS)) };
+  }
 }
 
 function stopPrompterTalentRuntime() {
   ptStopPlay();
-  clearInterval(ptHeartbeatInterval);
+  if (ptHeartbeatInterval) ptHeartbeatInterval.cancel();
   ptHeartbeatInterval = null;
   ptPingBurstTimers.forEach(clearTimeout);
   ptPingBurstTimers = [];
@@ -14247,22 +14457,46 @@ function ptUpdateProgress() {
 
 function ptResetAutoPauseMarkers() {
   ptSeenPauseMarkers = new Set();
+  _ptLoopCache = null;   // the script DOM changed: re-scan markers/headers on next use
+}
+
+// 2026-08-24 smoothness round: the scroll loop used to run innerText (a forced
+// style+layout pass) over EVERY <p> and query every header EVERY FRAME —
+// O(script length) reflows per frame, the single largest cause of lumpy talent
+// scroll on long shows. The candidate lists are scanned ONCE per script render
+// (textContent, no layout) and cached; per-frame work is one or two
+// getBoundingClientRect calls on actual candidates.
+let _ptLoopCache = null;
+function ptLoopCache() {
+  if (_ptLoopCache) return _ptLoopCache;
+  const text = ptEl('pt-text');
+  if (!text) return null;
+  const pauseLines = [];
+  text.querySelectorAll('p').forEach((p, i) => {
+    const t = p.textContent || '';
+    if (FLOWMINGO_AUTO_PAUSE_RE.test(t)) pauseLines.push({ el: p, key: `${i}:${t}` });
+  });
+  const headers = [];
+  text.querySelectorAll('.scr-header').forEach(h => {
+    const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
+    if (!m) return;
+    const row = parseInt(m[1], 10);
+    if (Number.isFinite(row)) headers.push({ el: h, row });
+  });
+  _ptLoopCache = { pauseLines, headers };
+  return _ptLoopCache;
 }
 
 function ptCheckAutoPauseMarkers() {
   if (!ptPlaying) return false;
-  const text = ptEl('pt-text');
-  if (!text) return false;
+  const cache = ptLoopCache();
+  if (!cache || !cache.pauseLines.length) return false;
   const readY = window.innerHeight / 2 + 24;
-  const lines = Array.from(text.querySelectorAll('p'));
-  for (let i = 0; i < lines.length; i++) {
-    const lineText = lines[i].innerText || lines[i].textContent || '';
-    if (!FLOWMINGO_AUTO_PAUSE_RE.test(lineText)) continue;
-    const key = `${i}:${lineText}`;
-    if (ptSeenPauseMarkers.has(key)) continue;
-    const rect = lines[i].getBoundingClientRect();
+  for (const cand of cache.pauseLines) {
+    if (ptSeenPauseMarkers.has(cand.key)) continue;
+    const rect = cand.el.getBoundingClientRect();
     if (rect.top <= readY && rect.bottom >= readY) {
-      ptSeenPauseMarkers.add(key);
+      ptSeenPauseMarkers.add(cand.key);
       ptStopPlay();
       toast('Flowmingo auto-paused at break.');
       return true;
@@ -14271,6 +14505,7 @@ function ptCheckAutoPauseMarkers() {
   return false;
 }
 
+let _ptProgPaintAt = 0;
 function ptScrollLoop(ts) {
   if (!ptPlaying) return;
   if (ptGlide || ptJog) {
@@ -14289,7 +14524,11 @@ function ptScrollLoop(ts) {
   } else if (ptBoosting) {
     ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300);
   } else {
-    ptLiveSpeed += (ptTargetSpeed - ptLiveSpeed) * 0.06;
+    // dt-normalized ease (~270ms time constant, matching the old 0.06/frame at
+    // 60Hz): a per-frame constant ramped twice as fast on 120Hz displays and
+    // stalled through frame drops — the ramp is what the operator FEELS on
+    // every speed change.
+    ptLiveSpeed += (ptTargetSpeed - ptLiveSpeed) * (1 - Math.exp(-Math.min(delta, 100) / 270));
     if (Math.abs(ptLiveSpeed - ptTargetSpeed) < 0.5) ptLiveSpeed = ptTargetSpeed;
   }
 
@@ -14303,7 +14542,9 @@ function ptScrollLoop(ts) {
     if (ptOffset < 0) ptOffset = 0;
     const track = ptEl('pt-track');
     if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
+    // Progress/scrubber sync at ~10Hz, not per frame: it reads scrollHeight and
+    // touches three elements — needless per-frame work for a thin bar.
+    if (ts - _ptProgPaintAt > 100) { _ptProgPaintAt = ts; ptUpdateProgress(); }
     if (ptCheckAutoPauseMarkers()) return;
     if (ptCheckRowHold()) return;
     ptAnimFrame = requestAnimationFrame(ptScrollLoop);
@@ -14318,15 +14559,11 @@ function ptScrollLoop(ts) {
 function ptCheckRowHold() {
   if (!ptPlaying || ptReversing) return false;
   if (!Number.isFinite(ptLiveRowNum)) return false;
-  const text = ptEl('pt-text');
-  if (!text) return false;
+  const cache = ptLoopCache();
+  if (!cache) return false;
   const readY = window.innerHeight / 2 + 24;
-  const headers = text.querySelectorAll('.scr-header');
-  for (const h of headers) {
-    const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
-    if (!m) continue;
-    const row = parseInt(m[1], 10);
-    if (!Number.isFinite(row) || row <= ptLiveRowNum) continue;
+  for (const { el: h, row } of cache.headers) {
+    if (row <= ptLiveRowNum) continue;
     if (ptSeenRowHolds.has(row)) continue;
     const rect = h.getBoundingClientRect();
     // Trigger once the header's top passes the read line; a fast frame that
@@ -14697,7 +14934,25 @@ let ptGlide = null;   // { from, to, start, dur, raf, onDone }
 function ptCancelGlide() {
   if (!ptGlide) return;
   if (ptGlide.raf) cancelAnimationFrame(ptGlide.raf);
+  clearTimeout(ptGlide.watchdog);
   ptGlide = null;
+}
+// Same visibility-gated fallback the jog has: a hidden/occluded talent window
+// gets NO animation frames, so a row cue or find issued there used to stall
+// mid-travel forever (and the seek's auto-resume never fired).
+function ptGlideWatchdog() {
+  if (!ptGlide) return;
+  if (document.visibilityState === 'hidden') {
+    const g = ptGlide;
+    ptGlide = null;
+    ptOffset = g.to;
+    const track = ptEl('pt-track');
+    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+    ptUpdateProgress();
+    g.onDone?.();
+    return;
+  }
+  ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
 }
 function ptGlideToOffset(target, onDone=null) {
   ptCancelJog();   // an explicit destination (row cue, find) outranks a scrub
@@ -14716,10 +14971,11 @@ function ptGlideToOffset(target, onDone=null) {
   ptCancelGlide();
   // Distance-scaled travel: short hops stay quick, long jumps stay readable.
   const dur = Math.max(550, Math.min(2200, 450 + dist * 0.8));
-  ptGlide = { from: ptOffset, to: target, start: null, dur, raf: null, onDone };
+  ptGlide = { from: ptOffset, to: target, start: null, dur, raf: null, onDone, watchdog: null };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const stepFrame = (ts) => {
     if (!ptGlide) return;
+    clearTimeout(ptGlide.watchdog);
     if (ptGlide.start === null) ptGlide.start = ts;
     const t = Math.min(1, (ts - ptGlide.start) / ptGlide.dur);
     ptOffset = ptGlide.from + (ptGlide.to - ptGlide.from) * ease(t);
@@ -14732,9 +14988,11 @@ function ptGlideToOffset(target, onDone=null) {
       done?.();
       return;
     }
+    ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
     ptGlide.raf = requestAnimationFrame(stepFrame);
   };
   ptGlide.raf = requestAnimationFrame(stepFrame);
+  ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
 }
 
 // Live "cue" scroll — operators drag the talent prompter to any spot on the fly.
@@ -15749,16 +16007,30 @@ function ptPostControlAck(controlId, action, controlTs, target, extra={}) {
     ...extra,
     state: ptStateSnapshot()
   });
-  if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
-    try {
-      window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
-        'prompter.controlAck': ack,
-        'prompter.talentState': ack.state,
-        'prompter.updatedAt': Date.now()
-      }).catch(() => {});
-    } catch {}
+  // Trailing-throttled doc write: acks go over BroadcastChannel immediately
+  // (same device), but a dial scrub used to add ~10 Firestore writes/s HERE on
+  // top of the ~10 command writes/s against the same document — past the ~1
+  // write/s/doc guidance, and the contention read as lumpy scroll. The last
+  // ack in a 300ms burst carries the settled state; nothing is lost.
+  _ptAckPending = ack;
+  if (!_ptAckTimer) {
+    _ptAckTimer = steadyTimeout(() => {
+      _ptAckTimer = null;
+      const a = _ptAckPending; _ptAckPending = null;
+      if (!a) return;
+      if (window._firebaseReady && ptLinkedCueolaCode && window._updateDoc && window._doc && window._db) {
+        try {
+          window._updateDoc(window._doc(window._db, 'sessions', ptLinkedCueolaCode), {
+            'prompter.controlAck': a,
+            'prompter.talentState': a.state,
+            'prompter.updatedAt': Date.now()
+          }).catch(() => {});
+        } catch {}
+      }
+    }, 300);
   }
 }
+let _ptAckPending = null, _ptAckTimer = null;
 
 function encodePrompterActionText(text) {
   try { return encodeURIComponent(String(text || '')).replace(/_/g, '%5F'); }
@@ -15958,6 +16230,46 @@ function pushChatQuestion(scope) {
 function clearChatQuestion(scope) {
   if (scope === 'flow') flowOpSendControl('question_off');
   else sendPrompterControl('question_off');
+}
+
+// Owner 2026-08-24: the overlay card is one way to hand talent a question;
+// pasting it INTO the script at the prompter's current position is the other,
+// and the one the owner drives with. The question lands in the script copy of
+// the row the talent is on right now, so it scrolls up in the natural reading
+// flow. Safe since the R2 prompter rebuild: pushes are anchor-preserving, so
+// the talent's read line does not move when the script re-renders.
+function talentCurrentRowNum() {
+  if (Number.isFinite(_talentHeldAtRow) && _talentHeldAtRow >= 1) return _talentHeldAtRow;
+  const pct = Number.isFinite(_talentReportedPct) ? _talentReportedPct : ptProgressPct();
+  const text = prompterText || '';
+  const offset = Math.round(text.length * (Number(pct) || 0) / 100);
+  const marker = text.slice(0, offset).match(/\[(\d+)\][^[]*$/);
+  if (marker) return parseInt(marker[1], 10);
+  return liveActiveCueIndex() + 1;   // no position report yet: use the live row
+}
+function insertQuestionAtPrompterText(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+  if (!t) return false;
+  const rowNum = talentCurrentRowNum();
+  const b = beats[rowNum - 1];
+  if (!b) return false;
+  if (!b.cues) b.cues = {};
+  if (!b.cues.script) b.cues.script = { ready:'', take:'' };
+  const s = b.cues.script;
+  const line = 'QUESTION: ' + t;
+  if (s.scriptType === 'Dialogue') s.dialogueNote = cleanPrompterText(((s.dialogueNote || s.text || '').trim() + '\n\n' + line).trim());
+  else s.text = cleanPrompterText(((s.text || '').trim() + '\n\n' + line).trim());
+  adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
+  sendToPrompter();
+  renderLive(); syncToFirestore();
+  toast(`Question added to the script · row ${rowNum}${b.info ? ` (${b.info})` : ''}.`);
+  return true;
+}
+function insertQuestionAtPrompter(scope) {
+  const input = document.getElementById(`${scope}-question-input`);
+  const ok = insertQuestionAtPrompterText(input?.value);
+  if (!ok) { toast(input?.value?.trim() ? 'Could not find the prompter’s current row.' : 'Type or paste the question first.'); return; }
+  if (input) input.value = '';
 }
 
 // D11.8 deck key: push the clipboard as the QUESTION card. Same channel and
@@ -16398,7 +16710,8 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
           placeholder="Paste a chat question · Enter pushes · Esc clears"
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
-        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push</span></button>
+        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
+        <button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>
       </div>
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
@@ -27669,46 +27982,57 @@ function cueolaAppPath() {
     // Same deferral pattern as the side doors: let the identity module boot
     // first; each opener runs its own sign-in / profile gate.
     sessionStorage.setItem('cueola_screen', 'entry');
+    // The launcher hands every per-app window the show code (?code=). Each app
+    // must JOIN with it: /keywibird got this on 8/24 (dead strip monitors),
+    // and /plandabear and /outrangutan were still throwing the code away and
+    // asking the operator to type it again (owner debrief, 8/24).
+    // Cold boot reality: profile() is restored ASYNCHRONOUSLY (firebase ready
+    // + a Firestore fetch), so gate on the synchronous identity() marker and
+    // WAIT for the profile before joining; a profile() check at setTimeout(0)
+    // is null on every real launch and skipped the join.
+    const bootCode = (params.get('code') || '').trim().toUpperCase();
+    const joinHandedSession = async (surfaceLabel) => {
+      if (!bootCode || !window.CueolaIdentity?.identity?.()) return false;
+      try {
+        await waitForFirebaseReady();
+        for (let waited = 0; waited < 10000 && !window.CueolaIdentity.profile?.(); waited += 250) {
+          await new Promise(r => setTimeout(r, 250));
+        }
+        const prof = window.CueolaIdentity.profile?.();
+        if (prof && await cueolaEntryGateAllows(bootCode, surfaceLabel)) {
+          window.openJoinSession();
+          const codeEl = document.getElementById('stud-code');
+          const nameEl = document.getElementById('stud-name');
+          if (codeEl) codeEl.value = bootCode;
+          if (nameEl && !nameEl.value) nameEl.value = prof.fullName || '';
+          await joinSession();   // lands on the rundown with the doc feed live
+        }
+        if (!session.code) {
+          // A failed join must not strand its modal over the app screen (one
+          // Esc would then dismiss both layers). Say why in a toast.
+          const why = document.getElementById('stud-err')?.textContent || '';
+          hideModal('modal-stud');
+          toast(surfaceLabel + ' opened without the show.' + (why ? ' ' + why : ' Sign in on this machine, then reopen it from Show setup.'));
+          return false;
+        }
+        return true;
+      } catch { return false; }
+    };
     setTimeout(() => {
-      if (appPath === 'plandabear') openPlandaBearJoin();
-      else if (appPath === 'outrangutan') window.Outrangutan?.enter?.('session');
-      else {
-        // The launcher hands this window the show code (?code=). Join the
-        // session FIRST: the deck's strip monitors, rundown dial, playout
-        // state, and TAKE all ride the session doc, and a code-less KeyWi
-        // window left them permanently idle. (Scrubbing still worked over
-        // BroadcastChannel to a same-machine talent, which made the dead
-        // monitors read as a strip bug rather than a missing session.)
-        // Cold boot reality: profile() is restored ASYNCHRONOUSLY (firebase
-        // ready + a Firestore fetch), so gate on the synchronous identity()
-        // marker and WAIT for the profile before joining; a profile() check
-        // at setTimeout(0) is null on every real launch and skipped the join.
-        const kwCode = (params.get('code') || '').trim().toUpperCase();
+      if (appPath === 'plandabear') {
         (async () => {
-          if (kwCode && window.CueolaIdentity?.identity?.()) {
-            try {
-              await waitForFirebaseReady();
-              for (let waited = 0; waited < 10000 && !window.CueolaIdentity.profile?.(); waited += 250) {
-                await new Promise(r => setTimeout(r, 250));
-              }
-              const prof = window.CueolaIdentity.profile?.();
-              if (prof && await cueolaEntryGateAllows(kwCode, 'KeyWi Bird')) {
-                window.openJoinSession();
-                const codeEl = document.getElementById('stud-code');
-                const nameEl = document.getElementById('stud-name');
-                if (codeEl) codeEl.value = kwCode;
-                if (nameEl && !nameEl.value) nameEl.value = prof.fullName || '';
-                await joinSession();   // lands on the rundown with the doc feed live
-              }
-              if (!session.code) {
-                // A failed join must not strand its modal over the deck (one
-                // Esc would then dismiss both layers). Say why in a toast.
-                const why = document.getElementById('stud-err')?.textContent || '';
-                hideModal('modal-stud');
-                toast('KeyWi opened without the show.' + (why ? ' ' + why : ' Sign in on this machine, then reopen it from Show setup.'));
-              }
-            } catch {}
-          }
+          if (await joinHandedSession('Planda Bear')) openPaperworkHub();
+          else openPlandaBearJoin();
+        })();
+      } else if (appPath === 'outrangutan') {
+        // Outrangutan runs its own join sheet (name + code, local IndexedDB
+        // show per code): seed the handed code so the sheet opens pre-filled
+        // instead of asking the operator to re-type what the launcher knew.
+        if (bootCode) { try { localStorage.setItem('cueola_outrangutan_code', bootCode); localStorage.setItem('cueola_last_code', bootCode); } catch {} }
+        window.Outrangutan?.enter?.('session');
+      } else {
+        (async () => {
+          await joinHandedSession('KeyWi Bird');
           openControlSurface();   // the KeyWi screen goes on top either way
         })();
       }
@@ -27773,6 +28097,7 @@ function cueolaAppPath() {
       if (inp) inp.value = code;
       prefillJoinFields('stud-code', 'stud-name');
       window.CueolaIdentity?.decorateJoin('stud');
+      window._openPreProAfterJoin = shouldOpenPrePro;   // survive the modal detour
       showModal('modal-stud');
     }
   };

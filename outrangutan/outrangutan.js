@@ -2346,10 +2346,12 @@
             : 'Session sync lost (' + ((err && err.code) || 'network') + '). Retrying.');
         }
         sessionSub = null;
+        setModeBadge();   // the red NOT LISTENING state — a deaf machine must look deaf
         clearTimeout(subRetryTimer);
         subRetryTimer = setTimeout(() => { if (mode === 'session' && sessionCode && !sessionSub) subscribeSession(); }, denied ? 30000 : 10000);
       });
     } catch (e) {}
+    setModeBadge();
     publishCues(); publishLive(true);
     startLiveHeartbeat();
   }
@@ -2404,7 +2406,28 @@
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
     lastCmdId = cmd.commandId;
+    // Delivery is confirmed, never assumed: the sender retries an unconfirmed
+    // command (same origId, new commandId) because the single slot can be
+    // overwritten, and the post-subscribe baseline eats whatever it holds. A
+    // retry whose ORIGINAL already ran here is acked (stops the retrying) but
+    // never executed twice.
+    if (cmdOrigSeen(cmd.origId)) { ackRemoteCommand(cmd); return; }
+    noteCmdOrig(cmd.origId || cmd.commandId);
     applyRemoteCommand(cmd);
+    ackRemoteCommand(cmd);
+  }
+  // Executed-origin memory for the retry protocol (bounded; a show fires far
+  // fewer than 24 commands between any two retries).
+  const _cmdOrigSeen = [];
+  function cmdOrigSeen(id) { return !!id && _cmdOrigSeen.indexOf(id) >= 0; }
+  function noteCmdOrig(id) { if (!id) return; _cmdOrigSeen.push(id); if (_cmdOrigSeen.length > 24) _cmdOrigSeen.shift(); }
+  function ackRemoteCommand(cmd) {
+    if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    try {
+      window._updateDoc(sessionRef(), { 'outrangutan.cmdAck': {
+        commandId: cmd.commandId || '', origId: cmd.origId || cmd.commandId || '', ts: Date.now(), sender: OG_SENDER,
+      } }).catch(notePublishError);
+    } catch (e) {}
   }
   function applyRemoteCommand(cmd) {
     switch (cmd.action) {
@@ -2431,6 +2454,13 @@
     // A fire can carry the next rundown standby on the same write (single
     // command slot: a separate arm write could swallow an unconsumed fire).
     if (cmd.armCueId) armFromRundown(cmd.armCueId);
+    // TAKE-linked SFX ride the same write too: three racing writes to one slot
+    // used to let a pad overwrite the cue fire before this snapshot landed.
+    if (Array.isArray(cmd.pads)) cmd.pads.forEach(id => {
+      const p = padById(id);
+      if (p && p.mediaId) firePad(p);
+      else toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.');
+    });
     renderCueList(); renderInspector(); renderEditArea();
   }
 
@@ -2615,6 +2645,7 @@
     // PLBK vol dial, the rundown machine) can show the real fader position.
     live.gain = Math.round((settings.masterGain || 0) * 100) / 100;
     live.seq = ++_liveSeq;
+    live.proto = 2;   // this build acks commands (outrangutan.cmdAck); senders only retry against proto >= 2
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }).catch(notePublishError); } catch (e) {}
   }
 
@@ -5112,7 +5143,17 @@
 
   // ── screen nav ───────────────────────────────────────────────────────────
   function isOpen() { const el = $('outrangutan'); return el && el.classList.contains('on'); }
-  function setModeBadge() { const b = $('og-mode-badge'); if (b) b.textContent = (mode === 'session' && sessionCode) ? ('Session · ' + sessionCode) : 'Standalone'; }
+  function setModeBadge() {
+    const b = $('og-mode-badge'); if (!b) return;
+    // "Session · CODE" while the listener is actually DEAD (signed out, auth
+    // expired, network) is a lie that cost a show: the badge tells the truth.
+    const deaf = mode === 'session' && sessionCode && !sessionSub;
+    b.textContent = (mode === 'session' && sessionCode)
+      ? (deaf ? ('NOT LISTENING · ' + sessionCode) : ('Session · ' + sessionCode))
+      : 'Standalone';
+    b.style.background = deaf ? '#c62828' : '';
+    b.style.color = deaf ? '#fff' : '';
+  }
   function showScreen() {
     ['entry', 'rundown', 'liveshow', 'promptypus', 'flowOp'].forEach(s => { const el = $(s); if (el) el.classList.remove('on'); });
     $('outrangutan').classList.add('on');

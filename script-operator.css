@@ -420,7 +420,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   background: var(--s3);
   font-family: var(--mono);
 }
-.question-lane-push { flex: none; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; }
+/* 2026-08-24: was a ~70px, 11px-type chip the owner could not hit mid-show.
+   The two question actions now sit on their own full-width row, each a real
+   44px target that splits the row evenly. (.question-lane is also the Find
+   row's class; only .question-lane-actions grows.) */
+.question-lane-push { flex: none; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; }
+.question-lane-actions { margin-top: 7px; }
+.question-lane-actions .question-lane-push { flex: 1; min-height: 44px; font-size: 13px; padding: 10px 12px; }
 
 .stepper { display: grid; grid-template-columns: 36px 46px 36px; }
 .stepper button { height: 34px; border-radius: 0; }

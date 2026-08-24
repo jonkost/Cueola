@@ -832,7 +832,10 @@ test('a parked manual playback call resumes when Manual TAKE turns off, from the
   const resume = app.slice(app.indexOf('function resumeParkedPlayoutCall'), app.indexOf('function resumePlayoutCallAuto'));
   assert.match(resume, /_rtrtCall\.stage !== 'ready' \|\| _rtrtCall\.timer\) return false/);
   assert.match(resume, /_rtrtCall\.manual = false/);
-  assert.match(resume, /setTimeout\(\(\) => stepPlayoutCall\(\), RTRT_STAGE_MS\)/);
+  // steadyTimeout, never setTimeout: a hidden tab's raw timers are throttled
+  // to once a minute, which parked calls and fired TAKEs late (8/24 show).
+  assert.match(resume, /steadyTimeout\(\(\) => stepPlayoutCall\(\), RTRT_STAGE_MS\)/);
+  assert.doesNotMatch(resume, /[^y] setTimeout\(/);
   // Both manual-off paths land there: the local checkbox/AUTO button, and a
   // flip adopted from another machine. The REMOTE flip is gated: only a fresh
   // park on the current live row auto-fires; a stale or moved-past park stays
@@ -852,7 +855,7 @@ test('a parked manual playback call resumes when Manual TAKE turns off, from the
   assert.match(banner, /stageEl\.setAttribute\('data-tip'/);
 });
 
-test('the KeyWi window joins the show session the launcher hands it (?code=)', () => {
+test('every per-app window joins the show session the launcher hands it (?code=)', () => {
   const boot = app.slice(app.indexOf("if (appPath === 'plandabear' || appPath === 'outrangutan' || appPath === 'keywibird')"), app.indexOf("if (appPath === 'flowmingo'"));
   // Cold-boot reality: profile() restores asynchronously, so the gate is the
   // SYNCHRONOUS identity() marker plus an awaited firebase-ready + profile
@@ -860,13 +863,49 @@ test('the KeyWi window joins the show session the launcher hands it (?code=)', (
   assert.match(boot, /window\.CueolaIdentity\?\.identity\?\.\(\)/);
   assert.match(boot, /await waitForFirebaseReady\(\)/);
   assert.match(boot, /!window\.CueolaIdentity\.profile\?\.\(\); waited \+= 250/);
-  assert.match(boot, /cueolaEntryGateAllows\(kwCode, 'KeyWi Bird'\)/);
+  // 2026-08-24: /keywibird was the only per-app door that consumed ?code=.
+  // Now all three do: KeyWi and Planda Bear join through the shared helper,
+  // Outrangutan seeds its own join sheet with the handed code.
+  assert.match(boot, /cueolaEntryGateAllows\(bootCode, surfaceLabel\)/);
+  assert.match(boot, /joinHandedSession\('KeyWi Bird'\)/);
+  assert.match(boot, /joinHandedSession\('Planda Bear'\)/);
+  assert.match(boot, /openPaperworkHub\(\)/);
+  assert.match(boot, /localStorage\.setItem\('cueola_outrangutan_code', bootCode\)/);
   assert.match(boot, /await joinSession\(\)/);
-  // A failed join must not strand its modal over the deck.
+  // A failed join must not strand its modal over the app screen.
   assert.match(boot, /hideModal\('modal-stud'\)/);
   // The surface opens either way: a signed-out or code-less window still gets
   // the KeyWi screen (and its own sign-in gate).
   assert.match(boot, /openControlSurface\(\);   \/\/ the KeyWi screen goes on top either way/);
+});
+
+test('playout commands are confirmed, retried, and never swallowed silently (8/24 rebuild)', () => {
+  // Sender: origId rides every command; unconfirmed commands retry on a
+  // worker-backed timer; exhausted retries TELL the operator instead of
+  // letting them discover it by dead air.
+  assert.match(app, /command\.origId = command\.commandId/);
+  assert.match(app, /_trackOutCommand\(command\)/);
+  assert.match(app, /Playout did NOT confirm the last command/);
+  assert.match(app, /applyOutrangutanCmdAck\(og\.cmdAck\)/);
+  // TAKE-linked pads ride the SAME write as the cue fire (single-slot races).
+  assert.match(app, /if \(takePads\.length\) opts\.pads = takePads/);
+  // The vestigial local Outrangutan can never swallow fires while a REAL
+  // playout machine is publishing: remoteAirDriving guards every fast path.
+  assert.match(app, /local\.session\(\) === session\.code && !remoteAirDriving\(\)/);
+  assert.match(app, /function remoteAirDriving\(\)/);
+  // The show-critical one-shots ride worker timers, immune to hidden-tab
+  // throttling: RTRT stages, the delayed arm, the rundown-to-prompter seek.
+  assert.match(app, /function steadyTimeout\(fn, ms\)/);
+  assert.match(app, /_pendingArmTimer = steadyTimeout\(/);
+  assert.match(app, /steadyTimeout\(\(\) => sendPrompterControl\(`seek_row_\$\{rowNum\}`\), 150\)/);
+  // Air side: acks every command, dedupes retries by origId, fires pads that
+  // ride a cue write, and stamps the ack-capable protocol version.
+  assert.match(playbackJs, /ackRemoteCommand\(cmd\)/);
+  assert.match(playbackJs, /cmdOrigSeen\(cmd\.origId\)/);
+  assert.match(playbackJs, /live\.proto = 2/);
+  assert.match(playbackJs, /Array\.isArray\(cmd\.pads\)/);
+  // A deaf Air LOOKS deaf: the mode badge flips to NOT LISTENING.
+  assert.match(playbackJs, /NOT LISTENING/);
 });
 
 test('the bridge overlay verbs toggle against the operator mirrors and reuse the Live senders', () => {

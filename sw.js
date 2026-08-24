@@ -130,17 +130,17 @@ const SHELL_ASSETS = [
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=59596116d0',
-  'script-operator.css?v=6cafc1f059',
+  'script-operator.js?v=843d6c6e3b',
+  'script-operator.css?v=b1917c496b',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=0f4f377cae',
+  'cueola-app.js?v=91f128902f',
   'outrangutan/outrangutan.css?v=98c3501a8e',
-  'outrangutan/outrangutan.js?v=eb1d0b4918',
+  'outrangutan/outrangutan.js?v=e38571c5a9',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=5e04c813d2',
+  'cueola-streamdeck.js?v=b94b41dd66',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -244,7 +244,7 @@ const versionSignature = SHELL_ASSETS
 // 41->42: a parked READY · MANUAL call grew an AUTO button in the call banner
 // (index.html markup + CSS), the KeyWi window now joins the session the
 // launcher hands it, and the deck strip monitors ride show truth.
-const WORKER_SCHEMA = '42';
+const WORKER_SCHEMA = '43';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

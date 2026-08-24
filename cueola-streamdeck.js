@@ -370,6 +370,7 @@
 
   var keyState = [], dialPress = [], lastPainted = [], lastStripSig = '';
   var pressFlashUntil = [];           // per-key deadline for the 150ms input flash
+  var refusedFlashUntil = [];         // per-key deadline for the red REFUSED flash (a press that dispatched nowhere)
   var brightness = 80, paintTimer = null, muteMemory = null;
   var learnArmed = false, editingKey = -1;
   var previewMode = false;            // on-screen deck with no hardware, for playing with layouts + themes
@@ -396,9 +397,18 @@
     try {
       var p = new URLSearchParams(location.search);
       var seg = (location.pathname.replace(/\/+$/, '').split('/').pop() || '').toLowerCase();
+      var app = (p.get('app') || '').toLowerCase();
       return p.get('prompter') === '1' || p.has('flowmingo') || p.has('promptypus')
         || location.hash === '#flowmingo' || location.hash === '#promptypus'
-        || seg === 'flowmingo' || (p.get('app') || '').toLowerCase() === 'flowmingo';
+        || seg === 'flowmingo' || app === 'flowmingo'
+        // Launcher-opened app windows (Outrangutan tab, Planda Bear tab) must
+        // never race the Live/KeyWi window for the HID deck: only /keywibird
+        // and plain Cueola windows run the deck service. (The Web Locks
+        // election would keep them from double-driving, but a Planda Bear tab
+        // silently WINNING the deck strands the hardware in the wrong window.)
+        || seg === 'outrangutan' || app === 'outrangutan'
+        || seg === 'plandabear' || app === 'plandabear'
+        || p.get('prepro') === '1';
     } catch (e) { return false; }
   })();
 
@@ -498,15 +508,18 @@
     var a = catalog[slot.a];
     if (!a || a.kind === 'none' || a.kind === 'infoRundown') return;   // display-only keys never dispatch
     if (mode === 'cloud' && dispatchCloud(a, slot, phase)) return;
+    // Returns false when the press provably dispatched NOWHERE (a gate refused
+    // it): callers paint the red REFUSED flash so a dead press is never silent.
+    var refused = false;
     switch (a.kind) {
       case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') surfaceRun(a.keymapId); break;
-      case 'transport': if (phase === 'down') { var bt = bridge(); try { bt && bt.playoutTransport && bt.playoutTransport(a.op); } catch (e) {} } break;
-      case 'pad': if (phase === 'down') firePlayoutSlot('pad', a.slot); break;
-      case 'cue': if (phase === 'down') firePlayoutSlot('cue', a.slot); break;
-      case 'padRef': if (phase === 'down' && slot.ref) firePlayoutRef('pad', slot.ref); break;
-      case 'cueRef': if (phase === 'down' && slot.ref) firePlayoutRef('cue', slot.ref); break;
+      case 'transport': if (phase === 'down') { var bt = bridge(); try { refused = !!bt && !!bt.playoutTransport && bt.playoutTransport(a.op) === false; } catch (e) {} } break;
+      case 'pad': if (phase === 'down') refused = firePlayoutSlot('pad', a.slot) === false; break;
+      case 'cue': if (phase === 'down') refused = firePlayoutSlot('cue', a.slot) === false; break;
+      case 'padRef': if (phase === 'down' && slot.ref) refused = firePlayoutRef('pad', slot.ref) === false; break;
+      case 'cueRef': if (phase === 'down' && slot.ref) refused = firePlayoutRef('cue', slot.ref) === false; break;
       case 'golive': if (phase === 'down') { var bb = bridge(); try { bb && bb.goLive && bb.goLive(); } catch (e) {} } break;
-      case 'bus': if (phase === 'down') { var bs = bridge(); try { bs && bs.controlBus && bs.controlBus(a.target, a.action); } catch (e) {} } break;
+      case 'bus': if (phase === 'down') { var bs = bridge(); try { refused = !!bs && !!bs.controlBus && bs.controlBus(a.target, a.action) === false; } catch (e) {} } break;
       case 'clock': if (phase === 'down') { var bc = bridge(); try { if (bc && bc.showClock) bc.showClock(a.verb || 'toggle'); else if (bc && bc.showClockToggle) bc.showClockToggle(); } catch (e) {} } break;
       case 'layoutNext': if (phase === 'down') cycleLayoutFor(fromDeck, 1); break;
       case 'layoutPrev': if (phase === 'down') cycleLayoutFor(fromDeck, -1); break;
@@ -514,24 +527,25 @@
       case 'layoutRef': if (phase === 'down' && slot.ref) switchLayoutByNameFor(fromDeck, slot.ref); break;
       case 'talkback': talkbackSet(a.bus, phase === 'down'); break;
       case 'talkbackPanic': if (phase === 'down') releaseTalkback(true); break;
-      case 'obs': if (phase === 'down') obsDo(a.op); break;
-      case 'obsScene': if (phase === 'down') obsSceneSlot(a.slot); break;
-      case 'obsSceneRef': if (phase === 'down' && slot.ref) obsDo2('setScene', slot.ref); break;
-      case 'obsMuteRef': if (phase === 'down' && slot.ref) obsDo2('toggleMute', slot.ref); break;
+      case 'obs': if (phase === 'down') refused = obsDo(a.op) === false; break;
+      case 'obsScene': if (phase === 'down') refused = obsSceneSlot(a.slot) === false; break;
+      case 'obsSceneRef': if (phase === 'down' && slot.ref) refused = obsDo2('setScene', slot.ref) === false; break;
+      case 'obsMuteRef': if (phase === 'down' && slot.ref) refused = obsDo2('toggleMute', slot.ref) === false; break;
       case 'fx': if (phase === 'down' && a.op === 'hype') hypeShow(); break;
       case 'ptOverlay': if (phase === 'down') { var bp = bridge(); try { bp && bp.prompterOverlay && bp.prompterOverlay(a.op); } catch (e) {} } break;
     }
+    if (refused) return false;
   }
   function dispatchCloud() { return false; }
-  function firePlayoutSlot(kind, slot) { var s = surfaceState(); var map = (kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {}; var id = Object.keys(map)[slot - 1]; if (!id) { toast('No ' + (kind === 'pad' ? 'SFX pad' : 'cue') + ' in slot ' + slot + ' yet.'); return; } firePlayoutRef(kind, id); }
-  function firePlayoutRef(kind, id) { var b = bridge(); if (!b) return; try { kind === 'pad' ? b.playoutPad(id) : b.playoutCue(id); } catch (e) {} }
+  function firePlayoutSlot(kind, slot) { var s = surfaceState(); var map = (kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {}; var id = Object.keys(map)[slot - 1]; if (!id) { toast('No ' + (kind === 'pad' ? 'SFX pad' : 'cue') + ' in slot ' + slot + ' yet.'); return false; } return firePlayoutRef(kind, id); }
+  function firePlayoutRef(kind, id) { var b = bridge(); if (!b) return false; try { return (kind === 'pad' ? b.playoutPad(id) : b.playoutCue(id)) === false ? false : true; } catch (e) { return false; } }
 
   // ── OBS bridge accessors ────────────────────────────────────────────────────
   function OBSc() { return window.CueolaOBS; }
   function obsState() { var o = OBSc(); try { return (o && o.state()) || {}; } catch (e) { return {}; } }
-  function obsDo(op) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (bottom of the setup panel).'); return; } try { o[op] && o[op](); } catch (e) {} }
-  function obsDo2(op, arg) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first.'); return; } try { o[op] && o[op](arg); } catch (e) {} }
-  function obsSceneSlot(slot) { var st = obsState(), name = (st.scenes || [])[slot - 1]; if (name) obsDo2('setScene', name); else toast('No OBS scene in slot ' + slot + '.'); }
+  function obsDo(op) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (bottom of the setup panel).'); return false; } try { o[op] && o[op](); } catch (e) {} }
+  function obsDo2(op, arg) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first.'); return false; } try { o[op] && o[op](arg); } catch (e) {} }
+  function obsSceneSlot(slot) { var st = obsState(), name = (st.scenes || [])[slot - 1]; if (name) return obsDo2('setScene', name); toast('No OBS scene in slot ' + slot + '.'); return false; }
   // Stream-output volume: obs-websocket has no master fader, so KeyWi rides ONE
   // chosen audio input (the "stream audio" — usually Desktop Audio). The pick is
   // remembered per browser; auto-guess prefers a desktop/stream-sounding name.
@@ -726,6 +740,69 @@
     if (had) { toast('Another Cueola window took over the Stream Deck.'); render(); }
     else if (isSurfaceVisible()) render();
   }
+  // ── Frozen-owner watchdog ───────────────────────────────────────────────────
+  // Nothing releases the Web Lock when the owning tab is FROZEN or discarded
+  // (laptop lid, Chrome tab freeze): the standby window stayed parked and the
+  // deck sat fully lit and fully dead until the owner thawed (8/24 show). The
+  // owner stamps a localStorage beat from a worker timer (worker timers run
+  // while backgrounded but stop cold when the tab is frozen — exactly the
+  // tell). A standby window that sees the beat go stale steals the deck, with
+  // a random re-check delay so two standbys can't ping-pong the steal.
+  var DECK_BEAT_KEY = 'cueola_keywi_owner_beat';
+  var DECK_BEAT_MS = 2500, DECK_BEAT_STALE_MS = 8000;
+  var deckBeatLoop = null, deckStealArmed = false;
+  function stampDeckBeat() {
+    try { localStorage.setItem(DECK_BEAT_KEY, JSON.stringify({ ts: Date.now(), decks: decks.length })); } catch (e) {}
+  }
+  function deckBeatStale() {
+    try {
+      var b = JSON.parse(localStorage.getItem(DECK_BEAT_KEY) || 'null');
+      // No beat at all = pre-watchdog owner or a cleared store: do not steal
+      // on missing evidence, only on a beat that provably stopped.
+      if (!b || !b.ts || !b.decks) return false;
+      return (Date.now() - b.ts) > DECK_BEAT_STALE_MS;
+    } catch (e) { return false; }
+  }
+  function deckBeatTick() {
+    if (deckOwner) { if (decks.length) stampDeckBeat(); return; }
+    if (!deckHeldElsewhere || deckStealArmed) return;
+    if (!deckBeatStale()) return;
+    // Re-check after a jittered delay: if another standby already stole and is
+    // stamping again, stand down.
+    deckStealArmed = true;
+    setTimeout(function () {
+      deckStealArmed = false;
+      if (deckOwner || !deckHeldElsewhere || !deckBeatStale()) return;
+      try { console.info('[KeyWi] deck owner stopped responding; taking the deck over.'); } catch (e) {}
+      ensureDeckOwnership().then(function (r) {
+        if (r && r.ok) return reattachGrantedDecks().then(function () {
+          if (decks.length) { stampDeckBeat(); toast('Took over the Stream Deck (the owning window stopped responding).'); }
+          else {
+            // Empty-handed: consume the stale beat (no deck to inherit) so the
+            // standbys don't churn steal attempts until a deck reappears.
+            try { localStorage.removeItem(DECK_BEAT_KEY); } catch (e) {}
+            releaseDeckOwnership(); standbyForDeck();
+          }
+          if (isSurfaceVisible()) render();
+        });
+      }).catch(function () {});
+    }, 400 + Math.floor(Math.random() * 1600));
+  }
+  function startDeckBeatLoop() { if (!deckBeatLoop) deckBeatLoop = steadyInterval(deckBeatTick, DECK_BEAT_MS); }
+  // A tab that is genuinely leaving hands the deck over IMMEDIATELY: close the
+  // handles and release the lock so the standby window inherits without a gap.
+  // (The browser would release the lock at teardown anyway; doing it in
+  // pagehide makes the handover instant and closes the HID handles cleanly.)
+  function releaseDeckOnLeave() {
+    if (!deckOwner) return;
+    var handles = decks.slice();
+    flushDeviceWrites();
+    device = null; decks = [];
+    handles.forEach(function (d) { try { d.hid.oninputreport = null; } catch (e) {} try { d.hid.close(); } catch (e) {} });
+    releaseDeckOwnership();
+    try { localStorage.removeItem(DECK_BEAT_KEY); } catch (e) {}
+  }
+
   // The silent multi-deck re-attach; the election, the standby failover, and
   // the HID connect event all share it. Resolves with how many decks opened.
   function reattachGrantedDecks() {
@@ -1122,7 +1199,7 @@
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(keyState, evt.states);
       keyState = evt.states;
-      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else { fireSlot(mapping().keys[i], 'down'); } });
+      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else if (fireSlot(mapping().keys[i], 'down') === false) { refusedFlashUntil[i] = performance.now() + 900; } });
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
@@ -1161,7 +1238,7 @@
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(deck.keyState || [], evt.states);
       deck.keyState = evt.states;
-      edges.downs.forEach(function (i) { deck.pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'down', deck); });
+      edges.downs.forEach(function (i) { deck.pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'down', deck) === false) { (deck.refusedFlashUntil = deck.refusedFlashUntil || [])[i] = performance.now() + 900; } });
       edges.ups.forEach(function (i) { fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'up', deck); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
@@ -1220,6 +1297,33 @@
     return a.label;
   }
   function slotActive(slot, s) { var a = slotAction(slot); return !!(a.lamp && a.lamp(s, slot)); }
+  // Honest keys: a key whose press would be silently refused RIGHT NOW renders
+  // dimmed ('off'), and a playout key whose command would be sent into a show
+  // no playout machine has checked in on renders with a doubt marker ('doubt').
+  // The 8/24 show was driven blind: keys stayed fully lit while every press
+  // died in a gate. PANIC is never dimmed — the kill switch must always look
+  // available (its dispatch path is ungated too).
+  function slotAvailability(a, s) {
+    var k = a.kind;
+    if (k === 'bus' || k === 'clock') {
+      var b = bridge(), av = 'exec';
+      try { av = b && b.busAvailable ? b.busAvailable() : 'exec'; } catch (e) {}
+      return av ? '' : 'off';
+    }
+    if (k === 'transport' || k === 'pad' || k === 'cue' || k === 'padRef' || k === 'cueRef') {
+      if (k === 'transport' && a.op === 'panic') return '';
+      var p = (s && s.playout) || {};
+      if (p.local) return '';
+      if (!p.sendable) return 'off';
+      return p.fresh ? '' : 'doubt';
+    }
+    if (k === 'obs' || k === 'obsScene' || k === 'obsSceneRef' || k === 'obsMuteRef') {
+      var o = OBSc();
+      try { return (o && o.isReady && o.isReady()) ? '' : 'off'; } catch (e) { return 'off'; }
+    }
+    if (k === 'talkback' || k === 'talkbackPanic') return (tbSocket && tbSocket.readyState === 1) ? '' : 'off';
+    return '';
+  }
 
   // ── Rich key art: every key is a little illustrated keycap ──────────────────
   // The SAME canvas art drives the physical deck (JPEG over HID) and the on-screen
@@ -1564,6 +1668,10 @@
     var active = slotActive(slot, s) || keyState[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
     if (appRimsOn()) spec.rim = appRimColor(a);
+    var avail = slotAvailability(a, s);
+    if (avail === 'off') spec.unavail = true;
+    else if (avail === 'doubt') spec.doubt = true;
+    spec.refused = (refusedFlashUntil[i] || 0) > performance.now();
     spec.flash = (pressFlashUntil[i] || 0) > performance.now();
     if (slot.flash === false) { spec.flash = false; spec.pressed = false; }   // press flash opted out
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
@@ -1596,6 +1704,10 @@
     var active = slotActive(slot, s) || ks[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: ks[i], toggle: !!a.toggle, editing: false };
     if (appRimsOn((deck.cfg || {}).overrides)) spec.rim = appRimColor(a);
+    var avail = slotAvailability(a, s);
+    if (avail === 'off') spec.unavail = true;
+    else if (avail === 'doubt') spec.doubt = true;
+    spec.refused = ((deck.refusedFlashUntil || [])[i] || 0) > performance.now();
     spec.flash = (pf[i] || 0) > performance.now();
     if (slot.flash === false) { spec.flash = false; spec.pressed = false; }
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
@@ -1626,7 +1738,7 @@
   // deck slows to 900ms and multiple decks to 1500ms so a full wave of key
   // writes always drains the HID queue before the next wave queues.
   function rgbStepMs() { return decks.length > 1 ? 1500 : decks.length ? 900 : 500; }
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, spec.rim || '', deckTheme].join('|'); }
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, spec.rim || '', spec.unavail ? 'U' : '', spec.doubt ? 'D' : '', spec.refused ? 'X' : '', deckTheme].join('|'); }
 
   // Rundown info key: row number, row name, running show clock. Pure display.
   function applyRundownInfoSpec(spec, s) {
@@ -1839,17 +1951,30 @@
     // over the theme's hairline, under the pulse ring and press flash. Custom
     // images that opted out of overlays keep their clean face.
     if (spec.rim && !spec.noOverlay) {
-      var rlw2 = Math.max(1.5, z * 0.022);
-      ctx.strokeStyle = rgba(spec.rim, spec.active ? 0.95 : 0.6);
+      // 2026-08-24: was max(1.5, z*0.022) at 0.6 idle alpha — ~2.5px at 60%
+      // on a 112px key face, invisible on the physical deck (the on-screen
+      // mirror drew the SAME relative width at up to 264px, so it lied).
+      // Now a real edge: ~5px on the + XL, near-opaque idle, full-on active.
+      var rlw2 = Math.max(3, z * (spec.active ? 0.06 : 0.045));
+      ctx.strokeStyle = rgba(spec.rim, spec.active ? 1 : 0.88);
       ctx.lineWidth = rlw2;
       rr(ctx, rlw2 / 2, rlw2 / 2, z - rlw2, z - rlw2, z * 0.15); ctx.stroke();
     }
     if (spec.toggle && !spec.noOverlay) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
     if (spec.pulse && !spec.noOverlay) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03, z * 0.03, z * 0.94, z * 0.94, z * 0.14); ctx.stroke(); }
+    // Honest keys (2026-08-24): a key whose press would be refused right now
+    // is DIMMED — a lit key that does nothing is how an operator loses trust
+    // in the whole surface. A doubt marker (amber dot) means "will send, but
+    // no playout machine has checked in".
+    if (spec.unavail) { ctx.fillStyle = 'rgba(0,0,0,0.62)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
+    else if (spec.doubt && !spec.noOverlay) { ctx.fillStyle = '#f5b731'; ctx.beginPath(); ctx.arc(z * 0.14, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
     // Press flash: a brief white overlay on key input (SD_PRESS_FLASH_MS), and
     // the same overlay while the key is physically held. It composes with the
     // active ring and the progress wipe; it never replaces them.
     if (spec.pressed || spec.flash) { ctx.fillStyle = 'rgba(255,255,255,0.3)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
+    // REFUSED flash: the press reached the app and a gate said no — red, so a
+    // dead press can never masquerade as a taken one.
+    if (spec.refused) { ctx.fillStyle = 'rgba(224,49,49,0.55)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
   }
 
   // ── Serialized HID write queue ─────────────────────────────────────────────
@@ -2978,7 +3103,7 @@
     var s = surfaceState();
     // The deck sits in a hardware-style shell: keys, then the live touch strip
     // (the SAME pixels the hardware shows), inside one dark housing. WYSIWYG.
-    var html = '<div class="sd-sect-t">Deck <span class="sd-sect-hint">click a key to change what it does and how it looks · drag one key onto another to swap them</span></div>';
+    var html = '<div class="sd-sect-t">Deck <span class="sd-sect-hint">click a key to change what it does and how it looks · drag one key onto another to swap them · drag an action from the tray below onto a key to assign it</span></div>';
     // Pages live INSIDE the Deck section (owner 2026-08-04): the tabs sit
     // between the section title and the hardware shell they switch.
     html += pagesBar();
@@ -2995,6 +3120,7 @@
     html += '</div>';
     if (profile.strip) html += '<canvas class="sd-strip-mirror" id="sd-strip-mirror" width="' + profile.strip.w + '" height="' + profile.strip.h + '" data-tip="The touch strip, live. Tap a zone on the hardware = press its dial; flick = a big turn."></canvas>';
     html += '</div>';
+    html += actionTray();
     if (profile.dials) {
       html += '<div class="sd-sect-t">Dials <span class="sd-sect-hint">each shows what turning and pressing does · click to reassign</span></div>';
       html += '<div class="sd-dials">';
@@ -3010,6 +3136,32 @@
       html += '</div>';
     }
     html += legendCard();
+    return html;
+  }
+  // Action tray: every assignable action as a draggable chip, grouped by app
+  // family and rimmed in its app color. Drag a chip onto any key to assign it
+  // (owner 2026-08-24: layout building needed real drag and drop, not only
+  // the click-key-then-pick editor). Ref-configured actions (specific cue /
+  // scene / layout picks) still go through the key editor, which is where
+  // their pickers live.
+  function actionTray() {
+    var groups = {};
+    Object.keys(catalog).forEach(function (id) {
+      var a = catalog[id];
+      if (a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef' || a.kind === 'layoutRef') return;
+      if (micoParked() && a.group === 'Micochondria') return;
+      (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.label || a.full || id, full: a.full || a.label || id });
+    });
+    var html = '<details class="sd-acttray"><summary>Action tray <span class="sd-sect-hint">drag an action onto a key</span></summary><div class="sd-acttray-body">';
+    Object.keys(groups).forEach(function (g) {
+      html += '<div class="sd-acttray-group"><div class="sd-acttray-gt">' + esc(g) + '</div><div class="sd-acttray-chips">';
+      groups[g].forEach(function (it) {
+        var rim = appRimColor(catalog[it.id]) || 'var(--line, #3a4356)';
+        html += '<span class="sd-actchip" draggable="true" data-act="' + esc(it.id) + '" data-tip="' + esc(it.full) + '" style="--chip-rim:' + rim + '">' + esc(it.label) + '</span>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div></details>';
     return html;
   }
   // "How KeyWi Bird works": flat inspector-style rows, hairline-separated (no boxes
@@ -3644,7 +3796,7 @@
     r.querySelectorAll('.sd-dial').forEach(function (el) { el.onclick = function () { openDialEditor(+el.getAttribute('data-dial')); }; });
   }
   // Drag one key onto another to swap what they do (and how they look).
-  var dragKeyIdx = null;
+  var dragKeyIdx = null, dragActId = null;
   function wireKeyDrag(r) {
     r.querySelectorAll('.sd-key').forEach(function (btn) {
       btn.ondragstart = function (e) {
@@ -3652,16 +3804,33 @@
         btn.classList.add('dragging');
         try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(dragKeyIdx)); } catch (e2) {}
       };
-      btn.ondragover = function (e) { if (dragKeyIdx == null) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; btn.classList.add('drop-target'); };
+      btn.ondragover = function (e) { if (dragKeyIdx == null && dragActId == null) return; e.preventDefault(); e.dataTransfer.dropEffect = dragActId != null ? 'copy' : 'move'; btn.classList.add('drop-target'); };
       btn.ondragleave = function () { btn.classList.remove('drop-target'); };
       btn.ondrop = function (e) {
         e.preventDefault();
         var to = +btn.getAttribute('data-key');
-        swapKeys(dragKeyIdx, to);
-        dragKeyIdx = null;
+        if (dragActId != null) assignKeyAction(to, dragActId);
+        else swapKeys(dragKeyIdx, to);
+        dragKeyIdx = null; dragActId = null;
       };
       btn.ondragend = function () { dragKeyIdx = null; r.querySelectorAll('.sd-key').forEach(function (b) { b.classList.remove('dragging', 'drop-target'); }); };
     });
+    // Action-tray chips: drag onto any key to assign that action to it.
+    r.querySelectorAll('.sd-actchip').forEach(function (chip) {
+      chip.ondragstart = function (e) {
+        dragActId = chip.getAttribute('data-act');
+        chip.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', 'act:' + dragActId); } catch (e2) {}
+      };
+      chip.ondragend = function () { dragActId = null; chip.classList.remove('dragging'); r.querySelectorAll('.sd-key').forEach(function (b) { b.classList.remove('drop-target'); }); };
+    });
+  }
+  function assignKeyAction(to, actId) {
+    if (to == null || !actId || !catalog[actId]) return;
+    mapping().keys[to] = { a: actId };
+    persist();
+    render(); paintAll();
+    toast('Key ' + (to + 1) + ' → ' + (catalog[actId].full || catalog[actId].label || actId) + '.');
   }
   function swapKeys(from, to) {
     if (from == null || to == null || from === to) return;
@@ -3919,6 +4088,12 @@
     if (navigator.hid) {
       electDeckOwner();
       try { navigator.hid.addEventListener('connect', onHidConnect); } catch (e) {}
+      // Frozen-owner watchdog (every window: owners stamp, standbys watch),
+      // instant handover on real navigation, re-election on thaw.
+      startDeckBeatLoop();
+      window.addEventListener('pagehide', releaseDeckOnLeave);
+      document.addEventListener('freeze', releaseDeckOnLeave);
+      document.addEventListener('resume', function () { if (!deckOwner) electDeckOwner(); });
     }
   }
   // Boot: start the service once sign-in truth exists, mirroring
@@ -3958,13 +4133,24 @@
     if (layoutDirty && (device || previewMode)) { openSaveSheet(true); return; }
     hideScreen();
   }
-  function showScreen() { var scr = document.getElementById('streamdeck'); if (!scr) return; document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); }); scr.classList.add('on'); try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {} }
+  var keyWiReturnScreen = 'entry';
+  function showScreen() {
+    var scr = document.getElementById('streamdeck'); if (!scr) return;
+    // Remember where the operator came from: Esc out of KeyWi mid-show used to
+    // dump them on the front page with the session still joined underneath.
+    var cur = document.querySelector('.screen.on');
+    if (cur && cur.id && cur.id !== 'streamdeck') keyWiReturnScreen = cur.id;
+    document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); });
+    scr.classList.add('on');
+    try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {}
+  }
   function hideScreen() {
     // Leaving KeyWi ends any diagnostics capture: an open report swallows
     // dial rotations, and off-screen that read as dead hardware.
     if (diagInfo) { diagInfo = null; clearTimeout(diagDialRenderTimer); diagDialRenderTimer = null; }
     var scr = document.getElementById('streamdeck'); if (scr) scr.classList.remove('on');
-    var entry = document.getElementById('entry'); if (entry) entry.classList.add('on');
+    var back = document.getElementById(keyWiReturnScreen) || document.getElementById('entry');
+    if (back) back.classList.add('on');
   }
 
   window.addEventListener('blur', function () {
