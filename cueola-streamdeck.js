@@ -147,6 +147,20 @@
     registerAction({ id: 'clock.start', kind: 'clock', verb: 'start', group: 'Cueola · show clock', color: '#1c7a3e', label: 'CLOCK GO', full: 'Show clock: start', desc: 'Starts the shared show clock. Quiet no-op if already running.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
     registerAction({ id: 'clock.pause', kind: 'clock', verb: 'pause', group: 'Cueola · show clock', color: '#5a4a12', label: 'CLOCK ❚❚', full: 'Show clock: pause', desc: 'Pauses the shared show clock. Quiet no-op if already paused.', lamp: function (s) { return !!(s.clock && !s.clock.running && s.clock.elapsed > 0); } });
     registerAction({ id: 'clock.resume', kind: 'clock', verb: 'resume', group: 'Cueola · show clock', color: '#0f4c81', label: 'CLOCK ▶', full: 'Show clock: resume', desc: 'Resumes a paused show clock from where it stopped.', lamp: function (s) { return !!(s.clock && s.clock.running); } });
+
+    // Flowmingo talent overlays (owner 8/24): the talent-screen toggles that
+    // used to need the Live clock panel, one key each. Toggle semantics and
+    // the operator mirrors live app-side (bridge.prompterOverlay); the lamps
+    // read the mirrored overlay state so a key glows while its overlay is up.
+    function ptClockLamp(m) { return function (s) { return !!(s.prompter && s.prompter.clockMode === m); }; }
+    registerAction({ id: 'pt.clock', kind: 'ptOverlay', op: 'clock', group: 'Flowmingo · talent overlays', color: '#3d2b52', label: 'TIME', full: 'Talent clock: time of day', desc: 'Puts the time-of-day clock on the talent screen. Press again to hide it. Toggle.', toggle: true, symbol: 'objectsandtools/clock.svg', lamp: ptClockLamp('timeofday') });
+    registerAction({ id: 'pt.duration', kind: 'ptOverlay', op: 'duration', group: 'Flowmingo · talent overlays', color: '#3d2b52', label: 'DUR', full: 'Talent clock: duration countdown', desc: 'Starts the duration countdown on the talent screen (the minutes set in the Live clock panel, 5 by default). Press again to hide it. Toggle.', toggle: true, symbol: 'time/timer.svg', lamp: ptClockLamp('duration') });
+    registerAction({ id: 'pt.totime', kind: 'ptOverlay', op: 'until', group: 'Flowmingo · talent overlays', color: '#3d2b52', label: 'TO TIME', full: 'Talent clock: count down to a time', desc: 'Counts down to the target time set in the Live clock panel. Press again to hide it. Toggle.', toggle: true, symbol: 'time/calendar.svg', lamp: ptClockLamp('countdown') });
+    registerAction({ id: 'pt.wrap5', kind: 'ptOverlay', op: 'wrap5', group: 'Flowmingo · talent overlays', color: '#a4741e', label: 'WRAP 5', full: 'Talent wrap-up: 5 minutes', desc: 'Puts a 5 minute wrap-up countdown on the talent screen. Press again to clear it; WRAP 10 switches the length. Toggle.', toggle: true, symbol: 'time/timer.svg', lamp: ptClockLamp('wrap') });
+    registerAction({ id: 'pt.wrap10', kind: 'ptOverlay', op: 'wrap10', group: 'Flowmingo · talent overlays', color: '#a4741e', label: 'WRAP 10', full: 'Talent wrap-up: 10 minutes', desc: 'Puts a 10 minute wrap-up countdown on the talent screen. Press again to clear it; WRAP 5 switches the length. Toggle.', toggle: true, symbol: 'time/timer.svg', lamp: ptClockLamp('wrap') });
+    registerAction({ id: 'pt.question', kind: 'ptOverlay', op: 'question', group: 'Flowmingo · talent overlays', color: '#1c4a86', label: 'QUESTION', full: 'Talent QUESTION card', desc: 'Shows the QUESTION card on the talent screen (the chat question typed in the Live panel, or the generic card). Press again to clear it. Toggle.', toggle: true, symbol: 'communication/questionmark.circle.fill.svg', lamp: function (s) { return !!(s.prompter && s.prompter.questionOn); } });
+    registerAction({ id: 'pt.overlays.clear', kind: 'ptOverlay', op: 'clear', group: 'Flowmingo · talent overlays', color: '#5a4a12', label: 'CLEAR', full: 'Clear every talent overlay', desc: 'One press drops every overlay on the talent screen: clocks, wrap-up, question, slates. Glows while any overlay is up.', symbol: 'objectsandtools/xmark.svg', lamp: function (s) { return !!(s.prompter && s.prompter.overlaysOn); } });
+    registerAction({ id: 'pt.push', kind: 'ptOverlay', op: 'push', group: 'Flowmingo · talent overlays', color: '#17653a', label: 'PUSH', full: 'Push the script to Flowmingo', desc: 'Sends the current script to the talent screen, scroll preserving. Same as Push to Flowmingo on the desk.', symbol: 'arrows/square.and.arrow.up.svg' });
     // Live rundown truth on a keycap (8/20 ask): row number, row name, show
     // clock — a glanceable nugget with no press action to misfire mid-show.
     registerAction({ id: 'info.rundown', kind: 'infoRundown', group: 'Cueola', color: '#243a66', label: 'ROW', full: 'Rundown row + show time (display)', desc: 'A live display key: current row number and name, plus the running show clock. Display only, pressing does nothing.', flash: false });
@@ -428,23 +442,52 @@
   // so the knob works from wherever the prompter actually is — no absolute
   // percent, no seeding, no fighting a laggy position report. (The old
   // absolute version was also unit-broken: 0..1 into a 0..100 API, so the
-  // knob's whole travel covered 1% of the script — 8/20 show.) Ticks
-  // coalesce for ~120ms so a fast spin is one command, not a write storm
-  // over the session doc.
+  // knob's whole travel covered 1% of the script — 8/20 show.)
+  //
+  // Feel (owner 8/24: "scrub cleanly"): clockwise = forward into the script,
+  // counter-clockwise = back. The FIRST detent from rest sends immediately —
+  // the screen answers the hand with no wind-up — and only mid-scrub ticks
+  // batch (one command per ~100ms, so a spin is a steady stream, not a write
+  // storm over the session doc). Detents are velocity-scaled like a video
+  // editor's jog: a careful click is a 2-line nudge, a fast spin covers real
+  // script distance instead of crawling.
   function jogLivePct(s) {
     var p = s && s.prompter ? s.prompter.positionPct : null;
     return (p != null && isFinite(p)) ? Math.max(0, Math.min(100, p)) : null;
   }
-  var jogPend = 0, jogFlushTimer = null;
+  var jogPend = 0, jogFlushTimer = null, jogLastFlushAt = 0, jogRecent = [], jogRecentDir = 0;
   var JOG_LINES_PER_DETENT = 2;
+  var JOG_FLUSH_MS = 100;
+  function jogLinesPerDetent() {
+    var now = performance.now();
+    while (jogRecent.length && now - jogRecent[0] > 400) jogRecent.shift();
+    if (jogRecent.length >= 10) return 8;   // hard spin: fly
+    if (jogRecent.length >= 5) return 4;    // brisk turn: cruise
+    return JOG_LINES_PER_DETENT;            // single detents: fine control
+  }
   function jogTick(d) {
-    jogPend += d;
+    d = Number(d) || 0;
+    if (!d) return;
+    var now = performance.now();
+    // A reversal starts a NEW gesture at fine control: the corrective click
+    // right after an overshooting spin must be a 2-line nudge, not inherit
+    // the spin's velocity and overshoot the other way.
+    var dir = d > 0 ? 1 : -1;
+    if (dir !== jogRecentDir) { jogRecent.length = 0; jogRecentDir = dir; }
+    // A fast physical turn coalesces detents inside one HID report (±2, ±3):
+    // count each detent so the velocity window sees the real turn rate.
+    for (var k = Math.min(Math.abs(d), 6); k > 0; k--) jogRecent.push(now);
+    jogPend += d * jogLinesPerDetent();
     if (jogFlushTimer) return;
-    jogFlushTimer = setTimeout(function () {
-      jogFlushTimer = null;
-      var n = jogPend * JOG_LINES_PER_DETENT; jogPend = 0;
-      if (n) surfacePrompter('seek_line_' + Math.max(-200, Math.min(200, n)));
-    }, 120);
+    var since = now - jogLastFlushAt;
+    if (since >= JOG_FLUSH_MS) { jogFlush(); return; }        // from rest: move NOW
+    jogFlushTimer = setTimeout(function () { jogFlushTimer = null; jogFlush(); }, JOG_FLUSH_MS - since);
+  }
+  function jogFlush() {
+    jogLastFlushAt = performance.now();
+    var n = Math.max(-200, Math.min(200, Math.round(jogPend)));
+    jogPend = 0;
+    if (n) surfacePrompter('seek_line_' + n);
   }
   function rundownTick(d) { var b = bridge(); if (!b) return; var s = surfaceState(); if (!s.live) return; var next = Math.max(0, Math.min((s.live.rowCount || 1) - 1, (s.live.selectedIndex || 0) + (d > 0 ? 1 : -1))); try { b.liveSelect(next, false); } catch (e) {} }
   function rundownTake() { var b = bridge(); var s = surfaceState(); if (b && s.live) { try { b.liveSelect(s.live.selectedIndex || 0, true); } catch (e) {} } }
@@ -476,6 +519,7 @@
       case 'obsSceneRef': if (phase === 'down' && slot.ref) obsDo2('setScene', slot.ref); break;
       case 'obsMuteRef': if (phase === 'down' && slot.ref) obsDo2('toggleMute', slot.ref); break;
       case 'fx': if (phase === 'down' && a.op === 'hype') hypeShow(); break;
+      case 'ptOverlay': if (phase === 'down') { var bp = bridge(); try { bp && bp.prompterOverlay && bp.prompterOverlay(a.op); } catch (e) {} } break;
     }
   }
   function dispatchCloud() { return false; }
@@ -929,6 +973,10 @@
       productId: '0x' + dev.productId.toString(16),
       productName: dev.productName || '(no product name string)',
       knownModel: known ? known.name : 'NOT in the model table — the adaptive + XL fallback would apply',
+      // Dial turns are only observable through KeyWi's own connection: a
+      // capture on an unconnected deck must say so instead of inviting turns
+      // that can never appear.
+      liveDials: !!device,
       descriptor: [],
       features: []
     };
@@ -980,7 +1028,35 @@
         if (f.parsed) lines.push('    parsed as Unit Information: ' + f.parsed);
       });
     }
+    lines.push('');
+    lines.push('Dial check (turn each dial while this report is open; test turns are captured here and NOT sent to the apps):');
+    if (d.dialEvents && d.dialEvents.length) d.dialEvents.forEach(function (row) { lines.push('  ' + row); });
+    else if (!d.liveDials) lines.push('  this capture ran without a connected deck, so dial turns cannot be seen here. Close this report, press Connect deck, then open Diagnostics again from the Deck details row.');
+    else lines.push('  no dial turns seen yet. Turn the scrub dial clockwise: the newest row should say "forward". If it says "back": select that deck\'s tab above the keys, open Deck settings, and set Dials to Reversed (the flip is saved per deck).');
     return lines.join('\n');
+  }
+  // Live dial check: while the diagnostics report is open, every dial turn is
+  // logged with the sign this driver read and what that sign does in the apps.
+  // Turn the scrub dial clockwise; the newest row must say "forward". If it
+  // says "back", the deck's encoders report reversed: flip them in Deck
+  // settings, under Dials.
+  var diagDialRenderTimer = null;
+  function noteDiagDials(evt, deck) {
+    if (!diagInfo || !evt || evt.kind !== 'rotate') return;
+    var dk = deck || device;
+    var m = deckMapping(dk), dir = dialDirFor(dk);
+    var deckName = (dk && dk.profile && dk.profile.name) || (profile && profile.name) || 'deck';
+    diagInfo.dialEvents = diagInfo.dialEvents || [];
+    evt.ticks.forEach(function (t, i) {
+      if (!t) return;
+      var eff = t * dir;
+      diagInfo.dialEvents.push(deckName + ' dial ' + (i + 1) + ' (' + ((m.dials || [])[i] || 'unset') + '): raw ' + (t > 0 ? '+' : '') + t
+        + ' = ' + (eff > 0 ? 'forward / up / more' : 'back / down / less')
+        + (dir < 0 ? ' (direction reversed in Deck settings)' : ''));
+    });
+    diagInfo.dialEvents = diagInfo.dialEvents.slice(-10);
+    if (diagDialRenderTimer) return;
+    diagDialRenderTimer = setTimeout(function () { diagDialRenderTimer = null; if (diagInfo && isSurfaceVisible()) render(); }, 150);
   }
   function diagPanel() {
     if (!diagInfo) return '';
@@ -1050,10 +1126,25 @@
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
-      if (evt.kind === 'rotate') evt.ticks.forEach(function (t, i) { if (t) { if (learnArmed) { openDialEditor(i, true); } else dialTick(i, t); } });
+      // A VISIBLE diagnostics report captures rotations WITHOUT dispatching
+      // them (like learn mode): its own text invites test turns, and a test
+      // turn must never scrub the live talent prompter or ride the show
+      // volume. A report left open off-screen must NOT keep eating dials:
+      // that read as a dead deck mid-show.
+      if (evt.kind === 'rotate') { if (diagCaptureActive()) noteDiagDials(evt, device); else evt.ticks.forEach(function (t, i) { if (t) { if (learnArmed) { openDialEditor(i, true); } else dialTick(i, t * dialDirFor(device)); } }); }
       else evt.press.forEach(function (down, i) { if (down !== dialPress[i]) { dialPress[i] = down; if (down && !learnArmed) dialPressFire(i); } });
       paintNow();
     } else if (evt.type === 'touch') { touchFire(evt); paintNow(); }
+  }
+  function diagCaptureActive() { return !!diagInfo && isSurfaceVisible(); }
+  // The dial-direction contract: clockwise = forward / up / more, always. The
+  // sign convention is the DECK's (firmware), so the flip is stored per device
+  // (overrides.dialFlip, Deck settings → Dials) and applied right here, where
+  // encoder ticks enter — every controller downstream stays convention-blind.
+  // Touch-strip flicks are a screen gesture, not an encoder read: never flipped.
+  function dialDirFor(deck) {
+    var ov = (!deck || deck === device) ? overrides : ((deck.cfg || {}).overrides || {});
+    return ov && ov.dialFlip ? -1 : 1;
   }
   // Input feedback must not wait for the 5Hz tick: a backgrounded window's
   // timers throttle to 1Hz (the operator is often focused on the script-op
@@ -1075,7 +1166,7 @@
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
       deck.dialPress = deck.dialPress || [];
-      if (evt.kind === 'rotate') evt.ticks.forEach(function (t, i) { if (t) { var c = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c) { try { c.tick(t); } catch (e2) {} } } });
+      if (evt.kind === 'rotate') { if (diagCaptureActive()) noteDiagDials(evt, deck); else evt.ticks.forEach(function (t, i) { if (t) { var c = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c) { try { c.tick(t * dialDirFor(deck)); } catch (e2) {} } } }); }
       else evt.press.forEach(function (down, i) { if (down !== deck.dialPress[i]) { deck.dialPress[i] = down; if (down) { var c2 = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c2) { try { c2.press(); } catch (e2) {} } } } });
       paintNow();
     } else if (evt.type === 'touch' && evt.zone != null) {
@@ -1092,6 +1183,20 @@
   function touchFire(evt) { if (evt.zone == null) return; var z = (mapping().touch[evt.zone]) || { dial: evt.zone }; var c = DIAL_CONTROLLERS[mapping().dials[z.dial]]; if (c && evt.gesture !== 'flick') { try { c.press(); } catch (e) {} } else if (c && evt.gesture === 'flick') { try { c.tick(evt.x2 > evt.x ? 3 : -3); } catch (e) {} } }
 
   // ── Slot rendering helpers ────────────────────────────────────────────────
+  // App-family key rims (owner 8/24): every key wears a thin rim in its app's
+  // color — grey Cueola, pink Flowmingo, orange Outrangutan, blue OBS — so a
+  // glance sorts the deck by app. On by default; Deck settings turns it off
+  // per deck (overrides.appRims === false, stored like the dial flip).
+  var APP_RIM_COLORS = { cueola: '#8a93a6', flowmingo: '#f06eb4', outrangutan: '#f97316', obs: '#5b8df8' };
+  function appRimsOn(ov) { var o = ov || overrides; return !o || o.appRims !== false; }
+  function appRimColor(a) {
+    var g = String((a && a.group) || '');
+    if (/^(OBS|This OBS)/.test(g)) return APP_RIM_COLORS.obs;
+    if (/^Flowmingo/.test(g)) return APP_RIM_COLORS.flowmingo;
+    if (/^(Outrangutan|This show)/.test(g)) return APP_RIM_COLORS.outrangutan;
+    if (/^Cueola/.test(g)) return APP_RIM_COLORS.cueola;
+    return null;
+  }
   function slotAt(i) { var s = mapping().keys[i]; return (typeof s === 'string') ? { a: s } : (s || { a: 'none' }); }
   function slotAction(slot) { return catalog[slot.a] || catalog.none; }
   function slotColor(slot) { return slot.color || slotAction(slot).color || '#1a1f27'; }
@@ -1356,6 +1461,7 @@
   function symbolFor(a) {
     var id = a.keymapId || '';
     if (SYMBOL_KM[id]) return SYMBOL_KM[id];
+    if (a.symbol) return a.symbol;   // actions that carry their own symbol path (talent overlays)
     switch (a.kind) {
       case 'talkback': return 'editing/microphone.svg';
       case 'talkbackPanic': return 'media/speaker.slash.svg';
@@ -1457,6 +1563,7 @@
     var slot = slotAt(i), a = slotAction(slot);
     var active = slotActive(slot, s) || keyState[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
+    if (appRimsOn()) spec.rim = appRimColor(a);
     spec.flash = (pressFlashUntil[i] || 0) > performance.now();
     if (slot.flash === false) { spec.flash = false; spec.pressed = false; }   // press flash opted out
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
@@ -1488,6 +1595,7 @@
     var ks = deck.keyState || [], pf = deck.pressFlashUntil || [];
     var active = slotActive(slot, s) || ks[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: ks[i], toggle: !!a.toggle, editing: false };
+    if (appRimsOn((deck.cfg || {}).overrides)) spec.rim = appRimColor(a);
     spec.flash = (pf[i] || 0) > performance.now();
     if (slot.flash === false) { spec.flash = false; spec.pressed = false; }
     spec.emoji = (slot.icon != null ? slot.icon : (a.icon || '')) || '';
@@ -1518,7 +1626,7 @@
   // deck slows to 900ms and multiple decks to 1500ms so a full wave of key
   // writes always drains the HID queue before the next wave queues.
   function rgbStepMs() { return decks.length > 1 ? 1500 : decks.length ? 900 : 500; }
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, deckTheme].join('|'); }
+  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, spec.rim || '', deckTheme].join('|'); }
 
   // Rundown info key: row number, row name, running show clock. Pure display.
   function applyRundownInfoSpec(spec, s) {
@@ -1726,6 +1834,15 @@
         ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(pbx, pby, pbw, pbh);
         ctx.fillStyle = t.ring; ctx.fillRect(pbx, pby, Math.round(pbw * spec.preroll), pbh);
       }
+    }
+    // App-family rim: a crisp outermost stroke in the key's app color. Drawn
+    // over the theme's hairline, under the pulse ring and press flash. Custom
+    // images that opted out of overlays keep their clean face.
+    if (spec.rim && !spec.noOverlay) {
+      var rlw2 = Math.max(1.5, z * 0.022);
+      ctx.strokeStyle = rgba(spec.rim, spec.active ? 0.95 : 0.6);
+      ctx.lineWidth = rlw2;
+      rr(ctx, rlw2 / 2, rlw2 / 2, z - rlw2, z - rlw2, z * 0.15); ctx.stroke();
     }
     if (spec.toggle && !spec.noOverlay) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
     if (spec.pulse && !spec.noOverlay) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03, z * 0.03, z * 0.94, z * 0.94, z * 0.14); ctx.stroke(); }
@@ -1995,6 +2112,7 @@
         cell.vt = ov ? Math.round(ov.currentTime * 4) : -1;
         cell.ogName = String((s.playout || {}).cueName || '').slice(0, 60);
         cell.ogStatus = (s.playout || {}).status || 'idle';
+        cell.ogFresh = !!(s.playout || {}).fresh;
       }
       if (c && c.micoSplit) {
         // Quantized levels keep the paint signature calm: at most ~5 strip
@@ -2297,9 +2415,17 @@
           ctx.fillStyle = '#f5c89e'; ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
           ctx.fillText('PAUSED', x0 + zw / 2, ch - 12);
         }
-      } else {
+      } else if (cell.ogFresh) {
         ctx.textAlign = 'center'; ctx.fillStyle = '#6b7690'; ctx.font = '600 14px -apple-system, "Segoe UI", sans-serif';
         ctx.fillText('Playback idle', x0 + zw / 2, ch / 2 + 5);
+      } else {
+        // No live packet from any Outrangutan: a different truth than idle.
+        // Without this, a playout running unlinked (local mode, or another
+        // show code) reads as a dead strip instead of a fixable setup gap.
+        ctx.textAlign = 'center'; ctx.fillStyle = '#6b7690'; ctx.font = '600 14px -apple-system, "Segoe UI", sans-serif';
+        ctx.fillText('Playback not linked', x0 + zw / 2, ch / 2 - 2);
+        ctx.font = '500 11px -apple-system, "Segoe UI", sans-serif';
+        ctx.fillText('Open Outrangutan and join this show', x0 + zw / 2, ch / 2 + 16);
       }
     }
     ctx.textAlign = 'left';
@@ -2782,11 +2908,38 @@
   // ── Deck settings sheet: theme, OBS, Micochondria (when un-parked) ─────────
   var settingsOpen = false;
   function openDeckSettings() { settingsOpen = true; renderDeckSettings(); }
+  function setAppRims(on) {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    if (on) delete overrides.appRims;
+    else overrides.appRims = false;
+    persist(true);   // a look preference, not a layout edit: no save nag
+    renderDeckSettings();
+    paintAll();
+    toast(on ? 'Key rims on: app keys wear their app\'s color.' : 'Key rims off.');
+  }
+  // Flip is a fact about the connected deck's encoders, so it lives in this
+  // deck's overrides (per product id) and follows the hardware, not the layout.
+  function setDialFlip(on) {
+    // The deck can vanish (USB bump) while the settings sheet is still open:
+    // persist() would silently no-op and the success toast would lie.
+    if (!profile) { toast('Deck disconnected. Reconnect it, then flip the dials.'); return; }
+    overrides.dialFlip = !!on;
+    if (!on) delete overrides.dialFlip;
+    persist(true);   // a hardware calibration, not a layout edit: no save nag
+    renderDeckSettings();
+    toast(on ? 'Dials reversed: this deck reports turns backwards, KeyWi now flips them.' : 'Dials back to normal: clockwise turns forward.');
+  }
   function renderDeckSettings() {
     if (!settingsOpen) return;
     var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-set-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
     var body = '<div class="sd-ed-head">Deck settings</div>'
       + '<div class="sd-set-sec">Theme</div><div class="sd-theme-chips">' + chips + '</div>'
+      + '<div class="sd-set-sec">Key rims</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">Keys wear a thin rim in their app\'s color: grey Cueola, pink Flowmingo, orange Outrangutan, blue OBS. System keys (pages, mics, fun) stay bare.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini' + (appRimsOn() ? ' cur' : '') + '" id="sd-rims-on">On</button><button class="sd-mini' + (appRimsOn() ? '' : ' cur') + '" id="sd-rims-off">Off</button></div>'
+      + (profile && profile.dials ? '<div class="sd-set-sec">Dials</div>'
+        + '<div class="sd-set-status"><span class="sd-obs-off">Clockwise turns forward: the prompter scrubs ahead, volume and speed go up. If this deck\'s dials run the opposite way, flip them here.</span></div>'
+        + '<div class="sd-obs"><button class="sd-mini' + (overrides.dialFlip ? '' : ' cur') + '" id="sd-dialdir-n">Normal</button><button class="sd-mini' + (overrides.dialFlip ? ' cur' : '') + '" id="sd-dialdir-r">Reversed</button></div>' : '')
       + '<div class="sd-set-sec">OBS Studio</div>' + obsSection()
       + (micoParked() ? '' : '<div class="sd-set-sec">Micochondria</div>' + micoBar())
       + '<div class="sd-set-sec">Layout files</div>'
@@ -2799,6 +2952,10 @@
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-set-done', closeOverlay);
+    bind('sd-rims-on', function () { setAppRims(true); });
+    bind('sd-rims-off', function () { setAppRims(false); });
+    bind('sd-dialdir-n', function () { setDialFlip(false); });
+    bind('sd-dialdir-r', function () { setDialFlip(true); });
     o.querySelectorAll('[data-set-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-set-theme')); }; });
     bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
     bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
@@ -3093,7 +3250,7 @@
     // so their generic entries would be dead weight here.
     Object.keys(catalog).forEach(function (id) { var a = catalog[id]; if (a.kind === 'padRef' || a.kind === 'cueRef' || a.kind === 'obsSceneRef' || a.kind === 'obsMuteRef' || a.kind === 'layoutRef') return; if (micoParked() && a.group === 'Micochondria') return; (groups[a.group] = groups[a.group] || []).push({ id: id, label: a.full || a.label || id }); });
     // App-by-app order, sub-groups right under their app.
-    var GROUP_ORDER = ['Outrangutan', 'Outrangutan · SFX pads', 'Outrangutan · cues', 'Cueola', 'Cueola · show clock', 'Flowmingo', 'Micochondria', 'OBS', 'OBS scenes (by slot)', 'Layouts', 'Fun', 'Blank'];
+    var GROUP_ORDER = ['Outrangutan', 'Outrangutan · SFX pads', 'Outrangutan · cues', 'Cueola', 'Cueola · show clock', 'Flowmingo', 'Flowmingo · talent overlays', 'Micochondria', 'OBS', 'OBS scenes (by slot)', 'Layouts', 'Fun', 'Blank'];
     var orderedGroups = GROUP_ORDER.filter(function (g) { return groups[g]; })
       .concat(Object.keys(groups).filter(function (g) { return GROUP_ORDER.indexOf(g) < 0; }));
     var curAction = slotAction(slot);
@@ -3445,8 +3602,8 @@
     bind('sd-diag-close', function () { diagInfo = null; render(); });
     bind('sd-diag-copy', function () {
       var text = diagText(); if (!text) return;
-      try { navigator.clipboard.writeText(text).then(function () { toast('Diagnostics copied.'); }, function () { toast('Copy failed — select the text and copy by hand.'); }); }
-      catch (e) { toast('Copy failed — select the text and copy by hand.'); }
+      try { navigator.clipboard.writeText(text).then(function () { toast('Diagnostics copied.'); }, function () { toast('Copy failed: select the text and copy by hand.'); }); }
+      catch (e) { toast('Copy failed: select the text and copy by hand.'); }
     });
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
@@ -3802,7 +3959,13 @@
     hideScreen();
   }
   function showScreen() { var scr = document.getElementById('streamdeck'); if (!scr) return; document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); }); scr.classList.add('on'); try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {} }
-  function hideScreen() { var scr = document.getElementById('streamdeck'); if (scr) scr.classList.remove('on'); var entry = document.getElementById('entry'); if (entry) entry.classList.add('on'); }
+  function hideScreen() {
+    // Leaving KeyWi ends any diagnostics capture: an open report swallows
+    // dial rotations, and off-screen that read as dead hardware.
+    if (diagInfo) { diagInfo = null; clearTimeout(diagDialRenderTimer); diagDialRenderTimer = null; }
+    var scr = document.getElementById('streamdeck'); if (scr) scr.classList.remove('on');
+    var entry = document.getElementById('entry'); if (entry) entry.classList.add('on');
+  }
 
   window.addEventListener('blur', function () {
     // Focus moving to the Micochondria pop-out is not walking away: a hold

@@ -777,6 +777,147 @@ test('8/19 round: per-app addresses, workspace launcher, talent display placemen
   assert.match(app, /TALENT_SCREEN_KEY = 'cueola_talent_screen'/);
 });
 
+test('prompter scrub eases toward an accumulating target instead of teleporting', () => {
+  // seek_line rides the jog smoother: each command moves the target, one rAF
+  // loop eases the screen toward it, and the text never jumps under the
+  // talent's eye. A command arriving mid-travel extends the SAME travel.
+  const seek = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('function ptNoteLiveRow'));
+  assert.match(seek, /ptJogBy\(n \* lineHeight\)/);
+  assert.doesNotMatch(seek.slice(0, seek.indexOf('function ptJogBy')), /ptApplyScrollOffset/);
+  assert.match(seek, /const base = ptJog \? ptJog\.target : ptOffset/);
+  assert.match(seek, /if \(ptJog\) \{ ptJog\.target = target; return; \}/);
+  assert.match(seek, /Math\.exp\(-dt \/ 80\)/);
+  // Hidden/occluded windows get no animation frames: a watchdog lands the
+  // move instantly there, and ONLY there. A visible window's stall (script
+  // push re-layout, heavy shared-thread work) re-arms instead of teleporting.
+  assert.match(seek, /ptJog\.watchdog = setTimeout\(ptJogWatchdog, 350\)/);
+  assert.match(seek, /function ptJogLand\(\)/);
+  const watchdog = seek.slice(seek.indexOf('function ptJogWatchdog'), seek.indexOf('function ptJogBy'));
+  assert.match(watchdog, /visibilityState === 'hidden'\) \{ ptJogLand\(\); return; \}/);
+  assert.match(watchdog, /setTimeout\(ptJogWatchdog, 350\)/);
+  // Settling publishes the landed position, and mid-ease reporting carries the
+  // jog TARGET (acks and heartbeats must not park the operator rail short).
+  assert.match(seek, /function ptReportedOffset\(\) \{ return ptJog \? ptJog\.target : ptOffset; \}/);
+  assert.match(app.slice(app.indexOf('function ptJogLand'), app.indexOf('function ptReportedOffset')), /setTransport\(/);
+  assert.match(app, /position:ptReportedOffset\(\), targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId/);
+  assert.match(app, /offset: Math\.round\(ptReportedOffset\(\)\)/);
+  // Pause freezes a mid-ease scrub where the screen is; a boot prime never
+  // replays a stale RELATIVE scrub; a seeded position outranks in-flight travel.
+  assert.match(app.slice(app.indexOf('function ptStopPlay()'), app.indexOf('function ptTogglePlay')), /ptCancelJog\(\)/);
+  assert.match(app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce')), /startsWith\('seek_line_'\)\) fresh\.push\(newest\)/);
+  const seedBlock = app.slice(app.indexOf('const seedPct = Number(message.positionPct)'), app.indexOf('ptTargetSpeed = state.targetSpeed'));
+  assert.ok((seedBlock.match(/ptCancelJog\(\)/g) || []).length >= 2);
+  // The scrub write queue holds 24 commands: at the dial's 10 writes/s, an
+  // 8-deep queue lost relative moves after any 0.8s listener gap.
+  assert.match(app, /_prompterControlQueue = \[\..._prompterControlQueue, stamped\]\.slice\(-24\)/);
+  // Scrub keeps the established repositioning contract: it overrides travel
+  // in flight, drops a superseded advance's auto-resume, and re-baselines the
+  // row holds once, on landing.
+  assert.match(seek, /ptCancelGlide\(\)/);
+  assert.match(seek, /ptPendingHoldResume = false/);
+  assert.match(seek, /ptRecalcRowHolds\(\)/);
+  // Mutual exclusion mirrors ptGlide everywhere position is owned or reset.
+  assert.match(app, /if \(ptGlide \|\| ptJog\) \{/);                        // free-run defers
+  assert.match(app, /ptCancelGlide\(\);   \/\/ an explicit position set overrides any travel in flight\n  ptCancelJog\(\);/);
+  assert.match(app, /ptCancelJog\(\);   \/\/ an explicit destination \(row cue, find\) outranks a scrub/);
+  assert.match(app.slice(app.indexOf('function ptResetScroll()'), app.indexOf('function ptProgressPct')), /ptCancelJog\(\)/);
+  // A mid-scrub script push shifts the jog target with the content, both in
+  // the anchor-preserving path and the proportional fallback.
+  assert.match(app, /if \(ptJog\) ptJog\.target = Math\.max\(0, Math\.min\(max, ptJog\.target \+ delta\)\)/);
+  assert.match(app, /if \(ptJog\) ptJog\.target \*= ratio/);
+});
+
+test('a parked manual playback call resumes when Manual TAKE turns off, from the banner or any machine', () => {
+  // The resume: same call, same abort window, countdown starts now.
+  const resume = app.slice(app.indexOf('function resumeParkedPlayoutCall'), app.indexOf('function resumePlayoutCallAuto'));
+  assert.match(resume, /_rtrtCall\.stage !== 'ready' \|\| _rtrtCall\.timer\) return false/);
+  assert.match(resume, /_rtrtCall\.manual = false/);
+  assert.match(resume, /setTimeout\(\(\) => stepPlayoutCall\(\), RTRT_STAGE_MS\)/);
+  // Both manual-off paths land there: the local checkbox/AUTO button, and a
+  // flip adopted from another machine. The REMOTE flip is gated: only a fresh
+  // park on the current live row auto-fires; a stale or moved-past park stays
+  // parked (the flipping operator may not even see this machine's banner).
+  assert.match(app.slice(app.indexOf('function setLiveCallManualArm'), app.indexOf('function adoptRtrtManual')), /resumeParkedPlayoutCall\('manual-off'\)/);
+  const remoteFlip = app.slice(app.indexOf('function adoptRtrtManual'), app.indexOf('function resumeParkedPlayoutCall'));
+  assert.match(remoteFlip, /Date\.now\(\) - \(_rtrtCall\.parkAt \|\| 0\) <= 15000/);
+  assert.match(remoteFlip, /_rtrtCall\.rowIdx === liveActiveCueIndex\(\)/);
+  assert.match(remoteFlip, /resumeParkedPlayoutCall\('manual-off-remote'\)/);
+  assert.match(app, /stage: 'ready', timer: null, manual, parkAt: Date\.now\(\)/);
+  // The banner explains the park and offers AUTO right where the op is stuck.
+  assert.match(html, /id="lsCallAuto" onclick="resumePlayoutCallAuto\(\)"/);
+  assert.match(html, /\.ls-call-auto\{background:color-mix/);
+  const banner = app.slice(app.indexOf('function renderLiveCallBanner'), app.indexOf('function beginPlayoutCall'));
+  assert.match(banner, /const parkedManual = stage === 'ready' && !!call\?\.manual/);
+  assert.match(banner, /autoBtn\.hidden = autoBtn\.hidden \|\| !parkedManual/);
+  assert.match(banner, /stageEl\.setAttribute\('data-tip'/);
+});
+
+test('the KeyWi window joins the show session the launcher hands it (?code=)', () => {
+  const boot = app.slice(app.indexOf("if (appPath === 'plandabear' || appPath === 'outrangutan' || appPath === 'keywibird')"), app.indexOf("if (appPath === 'flowmingo'"));
+  // Cold-boot reality: profile() restores asynchronously, so the gate is the
+  // SYNCHRONOUS identity() marker plus an awaited firebase-ready + profile
+  // wait; a profile() check at setTimeout(0) is null on every real launch.
+  assert.match(boot, /window\.CueolaIdentity\?\.identity\?\.\(\)/);
+  assert.match(boot, /await waitForFirebaseReady\(\)/);
+  assert.match(boot, /!window\.CueolaIdentity\.profile\?\.\(\); waited \+= 250/);
+  assert.match(boot, /cueolaEntryGateAllows\(kwCode, 'KeyWi Bird'\)/);
+  assert.match(boot, /await joinSession\(\)/);
+  // A failed join must not strand its modal over the deck.
+  assert.match(boot, /hideModal\('modal-stud'\)/);
+  // The surface opens either way: a signed-out or code-less window still gets
+  // the KeyWi screen (and its own sign-in gate).
+  assert.match(boot, /openControlSurface\(\);   \/\/ the KeyWi screen goes on top either way/);
+});
+
+test('the bridge overlay verbs toggle against the operator mirrors and reuse the Live senders', () => {
+  const ov = app.slice(app.indexOf('function _sdPrompterOverlay'), app.indexOf('window.cueolaSurfaceBridge = {'));
+  assert.match(ov, /mode === 'timeofday' \? 'clock_off' : 'clock_timeofday'/);
+  assert.match(ov, /sendDurationClock\('po'\)/);
+  assert.match(ov, /buildCountdownActionFromInput\('po'\)/);
+  assert.match(ov, /sendWrapUp\('po', mins\)/);
+  assert.match(ov, /toggleQuestionIndicator\('po'\)/);
+  assert.match(ov, /'overlays_clear'/);
+  // PUSH carries the desk's sync-scope semantics: a seed snapshot would
+  // teleport and could STOP a rolling talent.
+  assert.match(ov, /pushToPrompter\(\)/);
+  assert.doesNotMatch(ov, /sendToPrompter\(true\)/);
+  // The same wrap key toggles off; the other switches. The length is read
+  // from the MIRRORED state (wrapSec), never a window-local memo, so it is
+  // truthful across machines and reloads.
+  assert.match(ov, /mode === 'wrap' && Number\(ptClockState\?\.wrapSec\) === mins \* 60/);
+  assert.match(app, /targetTs:Date\.now\(\) \+ sec \* 1000, size:2, wrapSec:sec/);
+  // Acks converge the talent-state mirrors in EVERY operator window: the
+  // adoption runs before the pending-control target check.
+  const ack = app.slice(app.indexOf('function _handlePrompterControlAck'), app.indexOf('// Split-brain recovery'));
+  assert.ok(ack.indexOf('adoptPrompterTalentState(msg.state)') < ack.indexOf("msg.target && msg.target !== FLOWMINGO_ENDPOINT_ID"));
+  // The bridge exposes the mirrored overlay state for the deck's lamps.
+  assert.match(app, /prompterOverlay: \(op\) => \{ try \{ _sdPrompterOverlay\(op\); \} catch \(e\) \{\} \}/);
+  assert.match(app, /clockMode: _sdSafe\(\(\) => \(ptClockState && ptClockState\.mode\) \|\| 'off', 'off'\)/);
+  assert.match(app, /questionOn: _sdSafe\(\(\) => !!ptQuestionOn, false\)/);
+});
+
+test('deck strip monitors ride show truth in every window, not just the Live one', () => {
+  // Talent position and transport adopt BEFORE the operator-runtime gate.
+  const seen = app.slice(app.indexOf('function _notePrompterTalentSeen'), app.indexOf('function _shouldSendInitForTalent'));
+  const pctAt = seen.indexOf('_talentReportedPct = Math.max');
+  const playAt = seen.indexOf('_talentReportedPlaying = msg.state.running');
+  const gateAt = seen.indexOf('if (!_prompterOperatorRuntimeActive) return false');
+  assert.ok(pctAt >= 0 && playAt >= 0 && gateAt >= 0 && pctAt < gateAt && playAt < gateAt);
+  // The bridge reports the talent's transport while a talent is alive, local
+  // ptPlaying otherwise (the talent window itself, or a solo op). Freshness
+  // keys off ADOPTED mirrors, never the raw sighting map (which the doc path
+  // bumps before the protocol accepts() runs), and the indicator's clear
+  // branch honors the same recency so gated windows keep their mirrors.
+  assert.match(app, /function _sdPrompterPlayingTruth\(\)/);
+  assert.match(app, /_talentMirrorSeenAt && \(Date\.now\(\) - _talentMirrorSeenAt\)/);
+  assert.doesNotMatch(app.slice(app.indexOf('function _sdPrompterPlayingTruth'), app.indexOf('window.cueolaSurfaceBridge')), /_latestTalentSightingTs/);
+  assert.match(app.slice(app.indexOf('function renderTalentPositionIndicator'), app.indexOf('const pct = Number.isFinite(_talentReportedPct)')), /_talentMirrorSeenAt/);
+  assert.ok((app.match(/_sdSafe\(\(\) => _sdPrompterPlayingTruth\(\), false\)/g) || []).length >= 2);
+  // Playout feed health rides the bridge so the strip can tell "linked and
+  // idle" from "no playout linked to this session".
+  assert.match(app, /fresh: !!nowPlaying \|\| !!\(Number\(live\.ts\) && Date\.now\(\) - Number\(live\.ts\) < 12000\)/);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log('PASS', name);

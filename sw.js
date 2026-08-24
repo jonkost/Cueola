@@ -130,17 +130,17 @@ const SHELL_ASSETS = [
   'cueola-prompter-session.js?v=1002259f73',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=30bb716601',
+  'script-operator.js?v=59596116d0',
   'script-operator.css?v=6cafc1f059',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=873263f0d2',
-  'outrangutan/outrangutan.css?v=a26ac37a23',
-  'outrangutan/outrangutan.js?v=9e81602e50',
+  'cueola-app.js?v=ef66c582e3',
+  'outrangutan/outrangutan.css?v=98c3501a8e',
+  'outrangutan/outrangutan.js?v=aa97ed1b33',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=83094f2ad3',
+  'cueola-streamdeck.js?v=5e04c813d2',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -236,7 +236,15 @@ const versionSignature = SHELL_ASSETS
 // (index.html markup) and the dashboard's Reset PIN calls a function, both of
 // which the shell caches. A stale shell would keep trying to write a hash onto
 // the profile doc, which the Phase 3 rules refuse.
-const WORKER_SCHEMA = '40';
+// 40->41: prompter scrub feel. The scrub dial answers the first detent
+// immediately and the talent screen eases toward the target instead of
+// jumping (cueola-app.js + cueola-streamdeck.js), and Deck settings grew a
+// per-deck dial direction flip whose chip styling (.sd-mini.cur) lives in the
+// cached index.html shell.
+// 41->42: a parked READY · MANUAL call grew an AUTO button in the call banner
+// (index.html markup + CSS), the KeyWi window now joins the session the
+// launcher hands it, and the deck strip monitors ride show truth.
+const WORKER_SCHEMA = '42';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

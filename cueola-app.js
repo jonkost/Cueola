@@ -6447,7 +6447,55 @@ window.addEventListener('blur', releaseLiveCommandHolds);
 // for a controlBus write behind this same interface.
 function _sdBeatName(b) { return b ? (b.title || b.name || b.label || b.segment || '') : ''; }
 function _sdSafe(fn, d) { try { var v = fn(); return v == null ? d : v; } catch (e) { return d; } }
+// The deck reports SHOW truth: while a talent screen is alive its reported
+// transport wins over this window's local flag (which is false in every
+// operator/deck window even while the talent visibly rolls). Sightings are
+// recorded before any runtime gate, so this works in windows that never ran
+// the Live prompter panel. Local ptPlaying remains the answer for the talent
+// window itself and for a solo op with no talent connected.
+function _sdPrompterPlayingTruth() {
+  // Keyed to _talentMirrorSeenAt (adopted-message truth), NOT the raw sighting
+  // map: the doc path records sightings BEFORE the protocol accepts() runs, so
+  // a re-seeded talent's rejected heartbeats could otherwise keep a stale PLAY
+  // lamp alive forever while the mirror value never updates.
+  const fresh = _talentMirrorSeenAt && (Date.now() - _talentMirrorSeenAt) < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000);
+  if (fresh && typeof _talentReportedPlaying === 'boolean') return _talentReportedPlaying;
+  return !!ptPlaying;
+}
+// KeyWi's talent-overlay keys (owner 8/24): one verb per key. Toggle
+// semantics resolve HERE against the operator mirrors (ptClockState,
+// ptQuestionOn), which converge from this window's own sends AND from every
+// ack's state snapshot, so the deck stays convention-blind and the lamps
+// stay truthful wherever an overlay was armed.
+function _sdPrompterOverlay(op) {
+  const mode = (ptClockState && ptClockState.mode) || 'off';
+  if (op === 'clock') { sendPrompterControl(mode === 'timeofday' ? 'clock_off' : 'clock_timeofday'); return; }
+  if (op === 'duration') { mode === 'duration' ? sendPrompterControl('clock_off') : sendDurationClock('po'); return; }
+  if (op === 'until') {
+    if (mode === 'countdown') { sendPrompterControl('clock_off'); return; }
+    const action = buildCountdownActionFromInput('po');
+    if (!action) { toast('Set the target time first: Live screen, clock panel, count down to a time.'); return; }
+    sendPrompterControl(action);
+    return;
+  }
+  if (op === 'wrap5' || op === 'wrap10') {
+    const mins = op === 'wrap5' ? 5 : 10;
+    // The wrap length lives in the mirrored state (wrapSec), so the same key
+    // clears its own wrap and the other key switches the length, no matter
+    // which surface or window started the wrap.
+    if (mode === 'wrap' && Number(ptClockState?.wrapSec) === mins * 60) { sendPrompterControl('clock_off'); return; }
+    sendWrapUp('po', mins);
+    return;
+  }
+  if (op === 'question') { toggleQuestionIndicator('po'); return; }
+  if (op === 'clear') { sendPrompterControl('overlays_clear'); return; }
+  // The desk's push semantics, not a seed: a sync-scope snapshot preserves the
+  // talent's position and transport (a seed would teleport and could STOP a
+  // rolling talent), and the toast reflects the actual result.
+  if (op === 'push') { pushToPrompter(); }
+}
 window.cueolaSurfaceBridge = {
+  prompterOverlay: (op) => { try { _sdPrompterOverlay(op); } catch (e) {} },
   keymap: () => KEYMAP.map(a => ({ id: a.id, label: a.label, group: a.group, scope: a.scope, hold: !!a.hold })),
   runAction: (id) => { const a = KEYMAP.find(x => x.id === id); if (a && typeof a.run === 'function') a.run(); },
   holdStart: (id) => { const a = KEYMAP.find(x => x.id === id); if (a && a.hold) sendPrompterControl(a.hold[0]); },
@@ -6470,7 +6518,7 @@ window.cueolaSurfaceBridge = {
     return {
       text,
       pct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : ptProgressPct()), 0) || 0,
-      playing: _sdSafe(() => !!ptPlaying, false),
+      playing: _sdSafe(() => _sdPrompterPlayingTruth(), false),
     };
   },
   playoutCue: (id) => fireOutrangutanCommand('cue', id),
@@ -6538,8 +6586,13 @@ window.cueolaSurfaceBridge = {
         frac: nowPlaying && nowPlaying.frac != null ? nowPlaying.frac : null,
         loop: !!(nowPlaying && nowPlaying.loop),
         cues: _sdSafe(() => outrangutanState.cues, {}) || {}, pads: _sdSafe(() => outrangutanState.pads, {}) || {},
+        // Feed health for the deck's Playback monitor: a session-mode
+        // Outrangutan publishes at least every ~3s (idle heartbeat), so a
+        // stale/absent packet means NO playout is linked to this window's
+        // session, which is a different truth than "linked and idle".
+        fresh: !!nowPlaying || !!(Number(live.ts) && Date.now() - Number(live.ts) < 12000),
       },
-      prompter: { playing: _sdSafe(() => !!ptPlaying, false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
+      prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
       live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), '') },
       // Additive: the deck's next-cue info key reads current and next row here.
@@ -9125,6 +9178,10 @@ function setLiveCallManualArm(on) {
   }
   toast(on ? 'Manual TAKE armed: GO readies the clip, TAKE fires it.' : 'Automatic call: GO runs READY · TRACK · ROLL, then TAKE.');
   renderLivePrompterControls();
+  // Turning manual OFF must un-park a call that is already sitting at READY:
+  // the operator who flips the switch mid-park expects THIS call to run, not
+  // only the next one (the parked call never fired at all before this).
+  if (!on) resumeParkedPlayoutCall('manual-off');
 }
 function adoptRtrtManual(value) {
   const next = value && typeof value.on === 'boolean' ? value : null;
@@ -9138,7 +9195,37 @@ function adoptRtrtManual(value) {
       ? 'Manual TAKE was turned ON for this show (from another machine).'
       : 'Playback calls are back to automatic READY · TRACK · ROLL · TAKE.');
     renderLivePrompterControls();
+    // Only the machine that ran the GO holds _rtrtCall. A REMOTE flip to
+    // automatic resumes it only when the park is fresh and still matches the
+    // live row: the flipping operator may not even see this park (banners go
+    // stale-hidden after 15s), and firing a minutes-old clip for a row the
+    // show has left, with nobody local touching anything, is how a wrong
+    // clip goes to air. A stale park stays parked; the banner's AUTO button
+    // (or TAKE) remains the local, deliberate way to run it.
+    if (!liveCallManualArm() && _rtrtCall) {
+      const fresh = Date.now() - (_rtrtCall.parkAt || 0) <= 15000;
+      if (fresh && _rtrtCall.rowIdx === liveActiveCueIndex()) resumeParkedPlayoutCall('manual-off-remote');
+      else renderLiveCallBanner(_rtrtCall.stage);
+    }
   }
+}
+// A manual call parked at READY converts to the automatic count: same call,
+// same abort window, the countdown just starts now. The banner's AUTO button
+// and both manual-off paths land here.
+function resumeParkedPlayoutCall(source) {
+  if (!_rtrtCall || !_rtrtCall.manual || _rtrtCall.stage !== 'ready' || _rtrtCall.timer) return false;
+  _rtrtCall.manual = false;
+  logShow('media', `Playback call switched to automatic · row ${_rtrtCall.rowIdx + 1} (${source})`);
+  publishLiveCall('ready');
+  renderLiveCallBanner('ready');
+  notifyControlSurfaceState();
+  _rtrtCall.timer = setTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+  return true;
+}
+// The banner's AUTO button: one click fixes the SHOW setting (so the next GO
+// runs automatically too) and resumes the call that is parked right now.
+function resumePlayoutCallAuto() {
+  setLiveCallManualArm(false);
 }
 
 function publishLiveCall(stage, call=_rtrtCall) {
@@ -9164,13 +9251,28 @@ function renderLiveCallBanner(stage, call=_rtrtCall, mine=true) {
   const stageEl = document.getElementById('lsCallStage');
   const nameEl = document.getElementById('lsCallName');
   // A manual call parks at READY forever — say so, or it reads as a hang.
-  if (stageEl) stageEl.textContent = stage === 'take' ? 'TAKE' : stage === 'abort' ? 'ABORTED'
-    : (stage === 'ready' && call?.manual) ? 'READY · MANUAL' : stage.toUpperCase();
+  const parkedManual = stage === 'ready' && !!call?.manual;
+  if (stageEl) {
+    stageEl.textContent = stage === 'take' ? 'TAKE' : stage === 'abort' ? 'ABORTED'
+      : parkedManual ? 'READY · MANUAL' : stage.toUpperCase();
+    // The chip itself explains the park: without this, a stuck READY · MANUAL
+    // reads as a hang and the fix (a show-level setting) is undiscoverable.
+    // Followers never get the AUTO button, so their copy points at the
+    // control that DOES work from any machine: the Manual TAKE checkbox.
+    if (parkedManual) stageEl.setAttribute('data-tip', mine
+      ? 'Manual TAKE is on for this show, so this call waits for TAKE. Press AUTO to switch the show back to the automatic READY · TRACK · ROLL · TAKE count.'
+      : 'Manual TAKE is on for this show, so this call waits for the caller\'s TAKE. Turning off Manual TAKE (armed call) in the On Air controls switches the show back to the automatic count.');
+    else stageEl.removeAttribute('data-tip');
+  }
   if (nameEl) {
     const rowNum = (call?.rowIdx ?? -1) >= 0 ? `Row ${call.rowIdx + 1}` : '';
     nameEl.textContent = [rowNum, call?.beat?.info || ''].filter(Boolean).join(' · ') || 'Playback call';
   }
   banner.querySelectorAll('button').forEach(b => { b.hidden = !mine || !active; });
+  // AUTO shows only to the call's owner, only while parked in manual: it flips
+  // the show to automatic and this call starts counting immediately.
+  const autoBtn = document.getElementById('lsCallAuto');
+  if (autoBtn) autoBtn.hidden = autoBtn.hidden || !parkedManual;
   if (stage === 'take' || stage === 'abort') {
     setTimeout(() => { if (banner.dataset.stage === stage) banner.hidden = true; }, stage === 'take' ? 900 : 1400);
   }
@@ -9183,7 +9285,7 @@ function beginPlayoutCall(beat, rowIdx) {
   cancelPlayoutCallTimer();
   const cueId = beat?.cues?.playback?.outCueId || '';
   const manual = liveCallManualArm();
-  _rtrtCall = { beat, rowIdx, cueId, stage: 'ready', timer: null, manual };
+  _rtrtCall = { beat, rowIdx, cueId, stage: 'ready', timer: null, manual, parkAt: Date.now() };
   logShow('media', `Playback call READY · row ${rowIdx + 1}${manual ? ' (manual TAKE)' : ''}`);
   publishLiveCall('ready');
   renderLiveCallBanner('ready');
@@ -11909,6 +12011,10 @@ function applyCompletePrompterState(message) {
       // Percent survives re-layout (different window size, font, script
       // edits); resolve it against THIS talent's geometry after layout.
       requestAnimationFrame(() => {
+        // The seeded position is truth: any travel still in flight (a glide,
+        // or a jog replayed from a stale queue) must not drag us off it.
+        ptCancelGlide();
+        ptCancelJog();
         const max = ptGetMaxScroll();
         if (max > 0) ptOffset = (Math.min(100, seedPct) / 100) * max;
         const track = ptEl('pt-track');
@@ -11917,6 +12023,8 @@ function applyCompletePrompterState(message) {
         ptRecalcRowHolds();
       });
     } else if (Number.isFinite(Number(state.position))) {
+      ptCancelGlide();
+      ptCancelJog();
       ptOffset = Math.max(0, Number(state.position));
       requestAnimationFrame(() => {
         const track = ptEl('pt-track');
@@ -11977,12 +12085,24 @@ function _latestTalentSightingTs() {
 function _notePrompterTalentSeen(msg={}) {
   if (isPrompterSelfSender(msg.sender)) return false;
   _recordTalentSighting(msg.sender);
+  // The talent's reported position and transport are pure DISPLAY TRUTH and
+  // adopt in EVERY window that hears a heartbeat: the KeyWi strip's prompter
+  // monitor lives in windows that never ran the Live prompter runtime (the
+  // dedicated deck window, a window parked on the rundown), and the old
+  // gate below froze it at 0% / HOLD while the talent was visibly rolling.
+  // _talentMirrorSeenAt stamps only ACTUAL adoptions (this function runs
+  // after the protocol accepts() and output-id gates), so mirror freshness
+  // can never be kept alive by rejected messages from a re-seeded session.
+  if (Number.isFinite(Number(msg.talentProgressPct))) {
+    _talentReportedPct = Math.max(0, Math.min(100, Number(msg.talentProgressPct)));
+    _talentMirrorSeenAt = Date.now();
+  }
+  if (typeof msg.state?.running === 'boolean') { _talentReportedPlaying = msg.state.running; _talentMirrorSeenAt = Date.now(); }
   if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
   lastTalentPingTs = Date.now();
   // D11.2: the talent's own progress percent drives the desk's ▶ rail.
   if (Number.isFinite(Number(msg.talentProgressPct))) {
-    _talentReportedPct = Math.max(0, Math.min(100, Number(msg.talentProgressPct)));
     renderTalentPositionIndicator();
   }
   const outputId = String(msg.outputInstanceId || msg.senderInstanceId || msg.sender || '').trim();
@@ -12091,14 +12211,17 @@ function adoptPrompterTalentState(state={}) {
 function _handlePrompterControlAck(msg) {
   if (!msg || msg.type !== 'control_ack') return;
   if (isPrompterSelfSender(msg.sender)) return;
+  // The acked STATE is talent truth for every operator window, not only the
+  // commanding one: without this, a wrap or clock armed on machine A left
+  // machine B's mirrors (and its deck's overlay lamps and toggle direction)
+  // stale until B happened to send a control of its own. The target check
+  // below still scopes the pending-control bookkeeping to the addressee.
+  if (msg.state) adoptPrompterTalentState(msg.state);
   if (msg.target && msg.target !== FLOWMINGO_ENDPOINT_ID) return;
   const ackId = msg.controlId || msg.mid || `${msg.sender || ''}:${msg.controlTs || msg.ts || ''}:${msg.action || ''}`;
   if (!ackId || ackId === _lastPrompterAckId) return;
   _lastPrompterAckId = ackId;
   _notePrompterTalentSeen(msg);
-  // Lifecycle (running/paused) is adopted from the acked state below;
-  // connection status renders from the link model, not from this event.
-  if (msg.state) adoptPrompterTalentState(msg.state);
   const pending = _pendingPrompterControls[msg.controlId];
   if (pending) {
     clearTimeout(pending.waitTimer);
@@ -12365,13 +12488,20 @@ function cuePrompterToLiveRow() {
 // the op is editing or turned Follow off.
 let _lastTalentPosPct = -1;
 let _talentReportedPct = null;   // the talent's own percent, from its heartbeats
+let _talentReportedPlaying = null;   // the talent's transport truth (heartbeat state.running); null until observed
+let _talentMirrorSeenAt = 0;     // last ACCEPTED mirror adoption (never bumped by rejected messages)
 let _talentHeldAtRow = null;     // row the talent's cue hold is waiting at, from heartbeats
 function renderTalentPositionIndicator() {
   const wrap = document.getElementById('lsTalentPos');
   if (!wrap) return;
-  const hasTalent = _prompterHasRecentTalent();
+  // The runtime-scoped ping (lastTalentPingTs) never ticks in a window that
+  // has not gone Live, but this function still runs there on every control
+  // ack; clearing the mirrors on that false negative collapsed the deck
+  // strip's position to 0 mid-scrub. Fold in the adopted-mirror recency.
+  const hasTalent = _prompterHasRecentTalent()
+    || (_talentMirrorSeenAt && (Date.now() - _talentMirrorSeenAt) < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000));
   wrap.hidden = !hasTalent;
-  if (!hasTalent) { _lastTalentPosPct = -1; _talentReportedPct = null; _talentHeldAtRow = null; return; }
+  if (!hasTalent) { _lastTalentPosPct = -1; _talentReportedPct = null; _talentReportedPlaying = null; _talentHeldAtRow = null; return; }
   const pct = Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : ptProgressPct();
   const renderKey = `${pct}:${_talentHeldAtRow ?? ''}`;
   if (renderKey === _lastTalentPosPct) return;
@@ -13250,7 +13380,7 @@ function buildPrompterControl(action, source='script-op', payload=null) {
 
 // Rapid commands (a punch-in sends seek then resume back-to-back) coalesce in
 // the single prompter.control slot and a remote talent can lose the seek. Each
-// write also publishes prompter.controlQueue, the last 8 commands with a seq
+// write also publishes prompter.controlQueue, the last 24 commands with a seq
 // that stays monotonic for this writer across reloads; receivers replay every
 // unseen seq in order. The legacy slot keeps stale shells working.
 let _prompterControlSeq = 0;
@@ -13265,7 +13395,11 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
   if (window._firebaseReady && code) {
     _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
     const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
-    _prompterControlQueue = [..._prompterControlQueue, stamped].slice(-8);
+    // 24 deep (was 8): the dial scrub writes up to 10 relative seek_lines a
+    // second, and a remote talent whose listener naps longer than the queue's
+    // history silently loses the evicted moves with no absolute truth to
+    // recover from. 24 covers a 2.4s gap at full scrub rate.
+    _prompterControlQueue = [..._prompterControlQueue, stamped].slice(-24);
     // Publish the union of this window's queue and OTHER writers' recent doc
     // entries (by ts), so two operator surfaces stop evicting each other's
     // unseen commands. Receivers dedupe per-writer seq + signature, so
@@ -13274,7 +13408,7 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
       .filter(c => c && c.action && Number.isFinite(Number(c.seq)) && c.senderClient !== CLIENT_ID);
     const mergedQueue = [...foreign, ..._prompterControlQueue]
       .sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0))
-      .slice(-8);
+      .slice(-24);
     window._updateDoc(window._doc(window._db, 'sessions', code), {
       'prompter.control': stamped,
       'prompter.controlQueue': mergedQueue,
@@ -14062,9 +14196,9 @@ function ptCheckAutoPauseMarkers() {
 
 function ptScrollLoop(ts) {
   if (!ptPlaying) return;
-  if (ptGlide) {
-    // A glide owns the position while it travels; keep the loop alive so the
-    // crawl resumes seamlessly from wherever the glide lands.
+  if (ptGlide || ptJog) {
+    // A glide (or an in-flight jog scrub) owns the position while it travels;
+    // keep the loop alive so the crawl resumes seamlessly from where it lands.
     ptLastTime = ts;
     ptAnimFrame = requestAnimationFrame(ptScrollLoop);
     return;
@@ -14364,6 +14498,7 @@ function ptStartPlay() {
 function ptStopPlay() {
   ptPlaying = false;
   ptCancelGlide();   // pause freezes everything, travel included
+  ptCancelJog();     // ...a mid-ease scrub freezes where the screen IS
   // An explicit stop (pause command, slate, live-exit) clears hold provenance
   // so the next advance can never auto-resume over the operator's intent.
   // The hold path itself re-sets ptAutoHeldRow AFTER calling this.
@@ -14430,6 +14565,7 @@ function ptSetAlign(a) {
 function ptResetScroll() {
   ptStopPlay();
   ptCancelGlide();
+  ptCancelJog();
   ptOffset = 0;
   ptResetAutoPauseMarkers();
   ptSeenRowHolds = new Set();
@@ -14442,7 +14578,7 @@ function ptResetScroll() {
   // every reset landed the talent on a completely blank screen (8/20 show).
   // Wait a frame for layout, then pull the first real line up to the marker.
   requestAnimationFrame(() => {
-    if (ptOffset !== 0 || ptGlide) return;   // something else moved us already
+    if (ptOffset !== 0 || ptGlide || ptJog) return;   // something else moved us already
     const text = ptEl('pt-text');
     if (!text) return;
     const first = Array.from(text.children).find(el => (el.textContent || '').trim());
@@ -14461,6 +14597,7 @@ function ptProgressPct() {
 
 function ptApplyScrollOffset(offset) {
   ptCancelGlide();   // an explicit position set overrides any travel in flight
+  ptCancelJog();     // ...including a scrub still easing toward its target
   // A manual reposition also cancels any pending advance auto-resume: the
   // interrupted travel's intent must not ghost-start the talent later.
   ptPendingHoldResume = false;
@@ -14486,6 +14623,7 @@ function ptCancelGlide() {
   ptGlide = null;
 }
 function ptGlideToOffset(target, onDone=null) {
+  ptCancelJog();   // an explicit destination (row cue, find) outranks a scrub
   const max = ptGetMaxScroll();
   target = Math.max(0, Math.min(max, Number(target) || 0));
   const dist = Math.abs(target - ptOffset);
@@ -14534,13 +14672,87 @@ function ptSeekToProgress(pct) {
 // Relative scrub: move by ± N lines from wherever the talent IS. This is what
 // makes a physical knob work — every absolute-percent verb needed the sender
 // to know the current position, which no remote surface reliably does.
-// Same semantics as the dial/slider: pure repositioning, cancels glides,
-// re-baselines holds (via ptApplyScrollOffset), never pauses.
+// Same semantics as the dial/slider: pure repositioning, never pauses.
 function ptSeekByLines(lines) {
   const n = Math.max(-200, Math.min(200, parseFloat(lines) || 0));
   if (!n) return;
   const lineHeight = (ptFontSize || 22) * 1.55;
-  ptApplyScrollOffset(ptOffset + n * lineHeight);
+  ptJogBy(n * lineHeight);
+}
+
+// ── Jog smoother ────────────────────────────────────────────────────────────
+// Scrub commands land as a fast glide toward an ACCUMULATING target instead of
+// a hard teleport: each seek_line moves the target, one rAF loop eases the
+// screen toward it (exponential approach, ~80ms time constant), and the text
+// never jumps under the talent's eye. Commands arriving mid-travel just move
+// the target, so a held dial turn reads as one continuous scroll, not a
+// slideshow of 2-line snaps. Bookkeeping that must not run per frame (hold
+// re-baselining) runs once, when the travel settles.
+let ptJog = null;   // { target, raf, lastTs, watchdog }
+function ptCancelJog() {
+  if (!ptJog) return;
+  if (ptJog.raf) cancelAnimationFrame(ptJog.raf);
+  if (ptJog.watchdog) clearTimeout(ptJog.watchdog);
+  ptJog = null;
+}
+function ptJogLand() {
+  if (!ptJog) return;
+  const target = ptJog.target;
+  ptCancelJog();
+  ptOffset = target;
+  const track = ptEl('pt-track');
+  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+  ptUpdateProgress();
+  // Same landing contract as an explicit offset set: the scrub must never
+  // insta-hold on a boundary it just dragged past, and dragging back re-arms.
+  ptRecalcRowHolds();
+  // Publish the SETTLED position: during the ease every ack reported where the
+  // screen was, not where the scrub ends, and the operator rail adopted it.
+  prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:ptPlaying ? 'running' : 'paused' });
+}
+// While a jog eases, the honest position to REPORT is its target (where the
+// talent is provably headed), not the mid-ease pixel the screen happens to be
+// on: acks and heartbeats stamped with the latter lag the scrub by a batch and
+// park the operator's readout short of the truth.
+function ptReportedOffset() { return ptJog ? ptJog.target : ptOffset; }
+function ptJogWatchdog() {
+  if (!ptJog) return;
+  // Land instantly ONLY when the window truly receives no frames (hidden or
+  // fully occluded: Chrome throttles rAF to zero there, and nobody is watching
+  // that screen). A VISIBLE window can also miss frames past the deadline (a
+  // script-push re-layout, heavy work on the shared main thread) — its queued
+  // rAF fires the moment the stall clears, so keep waiting instead of
+  // teleporting the remaining travel under the talent's eye.
+  if (document.visibilityState === 'hidden') { ptJogLand(); return; }
+  ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
+}
+function ptJogBy(deltaPx) {
+  const max = ptGetMaxScroll();
+  const base = ptJog ? ptJog.target : ptOffset;
+  const target = Math.max(0, Math.min(max, base + (Number(deltaPx) || 0)));
+  ptCancelGlide();               // the hand on the wheel overrides any travel in flight
+  ptPendingHoldResume = false;   // and cancels a superseded advance's auto-resume
+  if (ptJog) { ptJog.target = target; return; }
+  ptJog = { target, raf: null, lastTs: null, watchdog: null };
+  const frame = (ts) => {
+    if (!ptJog) return;
+    clearTimeout(ptJog.watchdog);
+    const dt = ptJog.lastTs === null ? 16.7 : Math.min(100, ts - ptJog.lastTs);
+    ptJog.lastTs = ts;
+    const remaining = ptJog.target - ptOffset;
+    if (Math.abs(remaining) <= 0.75) { ptJogLand(); return; }
+    ptOffset += remaining * (1 - Math.exp(-dt / 80));
+    const track = ptEl('pt-track');
+    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
+    ptUpdateProgress();
+    ptJog.raf = requestAnimationFrame(frame);
+    // A hidden or occluded window gets NO animation frames (Chrome throttles
+    // rAF to zero): without a fallback the scrub would silently stall until
+    // the window surfaced. The watchdog lands it there, and ONLY there.
+    ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
+  };
+  ptJog.raf = requestAnimationFrame(frame);
+  ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
 }
 
 // The live-row context feeding the hold-at-next-cue behavior. Learned from row
@@ -15347,9 +15559,10 @@ function ptUpdateFromCueola(text) {
       if (delta != null) {
         const max = ptGetMaxScroll();
         ptOffset = Math.max(0, Math.min(max, ptOffset + delta));
-        // A glide in flight shifts with the content so it still lands on the
-        // same copy after a mid-travel script push.
+        // A glide (or jog scrub) in flight shifts with the content so it still
+        // lands on the same copy after a mid-travel script push.
         if (ptGlide) { ptGlide.from += delta; ptGlide.to = Math.max(0, Math.min(max, ptGlide.to + delta)); }
+        if (ptJog) ptJog.target = Math.max(0, Math.min(max, ptJog.target + delta));
         restored = true;
       }
     }
@@ -15357,6 +15570,7 @@ function ptUpdateFromCueola(text) {
       const ratio = newHeight / prevHeight;
       ptOffset = ptOffset * ratio;
       if (ptGlide) { ptGlide.from *= ratio; ptGlide.to *= ratio; }
+      if (ptJog) ptJog.target *= ratio;
     }
     if (!ptPlaying && !ptGlide) track.style.transform = `translateY(-${ptOffset}px)`;
     ptUpdateProgress();
@@ -15442,7 +15656,7 @@ function ptStateSnapshot() {
     questionOn: ptQuestionOn,
     questionText: ptQuestionText,
     clockState: { ...ptClockState },
-    offset: Math.round(ptOffset),
+    offset: Math.round(ptReportedOffset()),   // mid-ease, the jog target IS the position
     ts: Date.now()
   };
 }
@@ -15628,7 +15842,10 @@ function applyClockActionToState(action, target='talent') {
     update({ mode:'duration', label:'Duration', targetTs:Date.now() + sec * 1000, size:current.size || 1 });
   } else if (action.startsWith('wrapup_')) {
     const sec = Math.max(1, parseInt(action.replace('wrapup_', ''), 10) || 300);
-    update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, size:2 });
+    // wrapSec rides the state (and every ack snapshot) so any surface can
+    // tell WHICH wrap is up: the deck's WRAP keys clear on a length match
+    // and switch on a mismatch, wherever the wrap was started.
+    update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, size:2, wrapSec:sec });
   } else if (action === 'clock_size_up') update({ size:Math.min(4, (current.size || 1) + 1) });
   else if (action === 'clock_size_down') update({ size:Math.max(0, (current.size || 1) - 1) });
   if (isFlow) flowOpRenderClockPreview();
@@ -15760,7 +15977,13 @@ function unseenPrompterQueueControls(queue) {
       if (!prime) fresh.push(c);
     }
   });
-  if (prime) fresh.push(entries[entries.length - 1]);
+  if (prime) {
+    const newest = entries[entries.length - 1];
+    // Never replay a RELATIVE scrub on boot: the position seed already says
+    // where this talent belongs, and re-running a stale seek_line on top of it
+    // teleports the prompter by up to 200 lines on a mid-show window reload.
+    if (newest && !String(newest.action || '').startsWith('seek_line_')) fresh.push(newest);
+  }
   return fresh;
 }
 
@@ -15788,7 +16011,10 @@ function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) 
     return true;
   }
   ptHandleRemoteControl(action, payload);
-  prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
+  // A seek_line only moved the jog TARGET; the screen eases there over the
+  // next frames. Report the target so this ack (and the operator rail that
+  // adopts it) lands on the scrub's destination, not a mid-ease pixel.
+  prompterSessionController.setTransport({ running:ptPlaying, position:ptReportedOffset(), targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId, status:ptPlaying ? 'running' : 'paused' });
   ptPostControlAck(controlId, action, ts, sender);
   return true;
 }
@@ -27369,7 +27595,46 @@ function cueolaAppPath() {
     setTimeout(() => {
       if (appPath === 'plandabear') openPlandaBearJoin();
       else if (appPath === 'outrangutan') window.Outrangutan?.enter?.('session');
-      else openControlSurface();
+      else {
+        // The launcher hands this window the show code (?code=). Join the
+        // session FIRST: the deck's strip monitors, rundown dial, playout
+        // state, and TAKE all ride the session doc, and a code-less KeyWi
+        // window left them permanently idle. (Scrubbing still worked over
+        // BroadcastChannel to a same-machine talent, which made the dead
+        // monitors read as a strip bug rather than a missing session.)
+        // Cold boot reality: profile() is restored ASYNCHRONOUSLY (firebase
+        // ready + a Firestore fetch), so gate on the synchronous identity()
+        // marker and WAIT for the profile before joining; a profile() check
+        // at setTimeout(0) is null on every real launch and skipped the join.
+        const kwCode = (params.get('code') || '').trim().toUpperCase();
+        (async () => {
+          if (kwCode && window.CueolaIdentity?.identity?.()) {
+            try {
+              await waitForFirebaseReady();
+              for (let waited = 0; waited < 10000 && !window.CueolaIdentity.profile?.(); waited += 250) {
+                await new Promise(r => setTimeout(r, 250));
+              }
+              const prof = window.CueolaIdentity.profile?.();
+              if (prof && await cueolaEntryGateAllows(kwCode, 'KeyWi Bird')) {
+                window.openJoinSession();
+                const codeEl = document.getElementById('stud-code');
+                const nameEl = document.getElementById('stud-name');
+                if (codeEl) codeEl.value = kwCode;
+                if (nameEl && !nameEl.value) nameEl.value = prof.fullName || '';
+                await joinSession();   // lands on the rundown with the doc feed live
+              }
+              if (!session.code) {
+                // A failed join must not strand its modal over the deck (one
+                // Esc would then dismiss both layers). Say why in a toast.
+                const why = document.getElementById('stud-err')?.textContent || '';
+                hideModal('modal-stud');
+                toast('KeyWi opened without the show.' + (why ? ' ' + why : ' Sign in on this machine, then reopen it from Show setup.'));
+              }
+            } catch {}
+          }
+          openControlSurface();   // the KeyWi screen goes on top either way
+        })();
+      }
     }, 0);
     return;
   }

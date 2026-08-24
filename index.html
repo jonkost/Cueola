@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=a26ac37a23">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=98c3501a8e">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -2728,9 +2728,11 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-call-banner[data-stage="take"] .ls-call-stage{background:var(--red);color:#fff;animation:none}
 .ls-call-banner[data-stage="abort"] .ls-call-stage{background:color-mix(in srgb,var(--text) 14%,transparent);color:var(--text2);animation:none}
 .ls-call-name{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sans);font-size:14px;font-weight:800}
-.ls-call-take,.ls-call-abort{height:40px;padding:0 16px;border-radius:10px;font:800 13px var(--mono);cursor:pointer;border:1px solid transparent}
+.ls-call-take,.ls-call-abort,.ls-call-auto{height:40px;padding:0 16px;border-radius:10px;font:800 13px var(--mono);cursor:pointer;border:1px solid transparent}
 .ls-call-take{background:var(--red);color:#fff}
 .ls-call-abort{background:var(--btn-fill);color:var(--btn-ink);border-color: transparent}
+.ls-call-auto{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
+.ls-call-auto[hidden]{display:none}
 
 .ls-rtrt-mode{display:inline-flex;align-items:center;gap:6px;margin:0 0 6px;font-family:var(--mono);font-size:9.5px;color:var(--text2);cursor:pointer}
 /* Builder demo of the playback call: the Live banner's stage look, inline in
@@ -5276,6 +5278,7 @@ input.pt-range::-moz-range-thumb,
   <div class="ls-call-banner" id="lsCallBanner" data-stage="ready" role="alert" hidden>
     <span class="ls-call-stage" id="lsCallStage">READY</span>
     <span class="ls-call-name" id="lsCallName">—</span>
+    <button type="button" class="ls-call-auto" id="lsCallAuto" onclick="resumePlayoutCallAuto()" data-tip="Manual TAKE is on for this show, which parks every call at READY. Switch the show to automatic: this call runs READY · TRACK · ROLL and fires itself." hidden>AUTO</button>
     <button type="button" class="ls-call-take" onclick="takePlayoutCall('button')" data-tip="Play the clip now. Shortcut: G">TAKE · G</button>
     <button type="button" class="ls-call-abort" onclick="abortPlayoutCall('button')" data-tip="Cancel the call so nothing plays. Shortcut: S">ABORT · S</button>
   </div>
@@ -6623,6 +6626,7 @@ input.pt-range::-moz-range-thumb,
 #sd-profile { background:var(--s1); color:var(--text); border: 1px solid transparent; border-radius:var(--ui-radius-control,12px); padding:7px 10px; font-size:14px; font-weight:600; }
 .sd-mini { background:var(--s1); color:var(--text2); border: 1px solid transparent; border-radius:var(--ui-radius-control,12px); padding:7px 11px; font-size:12.5px; cursor:pointer; transition:border-color var(--dur-fast,.12s) var(--ease,ease), color var(--dur-fast,.12s) var(--ease,ease); }
 .sd-mini:hover { border-color:transparent; color:var(--text); }
+.sd-mini.cur { border-color:var(--accent); color:var(--text); box-shadow:0 0 0 1px var(--accent); }
 .sd-mini.danger:hover { border-color:transparent; color:var(--red); }
 .sd-pf-sp { flex:1; }
 .sd-armed { box-shadow:0 0 0 2px var(--accent); animation:sdpulse 1.1s ease-in-out infinite; }
@@ -7170,12 +7174,12 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=873263f0d2"></script>
-<script src="outrangutan/outrangutan.js?v=9e81602e50"></script>
+<script src="cueola-app.js?v=ef66c582e3"></script>
+<script src="outrangutan/outrangutan.js?v=aa97ed1b33"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=83094f2ad3"></script>
+<script src="cueola-streamdeck.js?v=5e04c813d2"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

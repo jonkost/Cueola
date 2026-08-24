@@ -454,6 +454,109 @@ test('KeyWi: one window drives the hardware (Web Locks election; talent windows 
   assert.match(deckSlice('async function paintChanged()', 'async function paintChangedPass()'), /paintPassAgain = true/);
 });
 
+test('KeyWi: the scrub dial answers the hand instantly, batches mid-scrub, and scales with spin speed', () => {
+  const jog = deckSlice('var jogPend = 0', 'function rundownTick');
+  // Leading edge: a first detent from rest flushes NOW; only mid-scrub ticks
+  // wait for the batch window (one seek_line per ~100ms over the session doc).
+  assert.match(jog, /if \(since >= JOG_FLUSH_MS\) \{ jogFlush\(\); return; \}/);
+  assert.match(jog, /JOG_FLUSH_MS - since/);
+  assert.match(jog, /JOG_FLUSH_MS = 100/);
+  // Velocity scaling: single detents stay a fine 2-line nudge, spins escalate.
+  assert.match(jog, /JOG_LINES_PER_DETENT = 2/);
+  assert.match(jog, /jogRecent\.length >= 10\) return 8/);
+  assert.match(jog, /jogRecent\.length >= 5\) return 4/);
+  assert.match(jog, /d \* jogLinesPerDetent\(\)/);
+  // A reversal starts a new gesture at fine control: the corrective click
+  // after an overshooting spin must not inherit the spin's velocity.
+  assert.match(jog, /if \(dir !== jogRecentDir\) \{ jogRecent\.length = 0; jogRecentDir = dir; \}/);
+  // The protocol clamp survives the rework.
+  assert.match(jog, /Math\.max\(-200, Math\.min\(200, Math\.round\(jogPend\)\)\)/);
+  assert.match(jog, /seek_line_/);
+});
+
+test('KeyWi: dial direction is a per-deck contract applied where encoder ticks enter', () => {
+  // Both rotate entry points (active deck and secondary decks) flip through
+  // dialDirFor; touch-strip flicks are a screen gesture and never flip.
+  const primary = deckSlice('function onInputReport(e)', 'function onSecondaryInput');
+  assert.match(primary, /dialTick\(i, t \* dialDirFor\(device\)\)/);
+  const secondary = deckSlice('function onSecondaryInput(deck, e)', 'function controllerForDial');
+  assert.match(secondary, /c\.tick\(t \* dialDirFor\(deck\)\)/);
+  assert.doesNotMatch(secondary, /dialDirFor\(deck\).*x2 > evt\.x|x2 > evt\.x.*dialDirFor/);
+  const dirFn = deckSlice('function dialDirFor(deck)', 'function paintNow()');
+  assert.match(dirFn, /ov\.dialFlip \? -1 : 1/);
+  // The setting lives in Deck settings, persists per device, and re-renders.
+  const flip = deckSlice('function setDialFlip(on)', 'function renderDeckSettings');
+  assert.match(flip, /overrides\.dialFlip = !!on/);
+  assert.match(flip, /persist\(true\)/);
+  const settings = deckSlice('function renderDeckSettings()', 'function surfaceGrid');
+  assert.match(settings, /sd-dialdir-n/);
+  assert.match(settings, /sd-dialdir-r/);
+  // Diagnostics: dial turns are logged live so direction is verifiable on
+  // real hardware, and the copyable report carries them.
+  assert.match(deckSlice('function noteDiagDials(evt, deck)', 'function diagPanel'), /forward \/ up \/ more/);
+  assert.match(deckSlice('function diagText()', 'function diagPanel'), /Dial check/);
+  assert.match(primary, /noteDiagDials\(evt, device\)/);
+  assert.match(secondary, /noteDiagDials\(evt, deck\)/);
+  // A VISIBLE report captures test turns WITHOUT dispatching them (a test
+  // turn must never scrub the live prompter), but a report left open
+  // off-screen never eats dials (that read as dead hardware mid-show), and
+  // leaving the KeyWi screen ends the capture entirely.
+  assert.match(primary, /if \(diagCaptureActive\(\)\) noteDiagDials\(evt, device\); else evt\.ticks\.forEach/);
+  assert.match(secondary, /if \(diagCaptureActive\(\)\) noteDiagDials\(evt, deck\); else evt\.ticks\.forEach/);
+  assert.match(deck, /function diagCaptureActive\(\) \{ return !!diagInfo && isSurfaceVisible\(\); \}/);
+  assert.match(deckSlice('function hideScreen()', 'window.addEventListener(\'blur\''), /diagInfo = null; clearTimeout\(diagDialRenderTimer\)/);
+  assert.match(deckSlice('function noteDiagDials(evt, deck)', 'function diagPanel'), /deckName \+ ' dial '/);
+  assert.match(deckSlice('async function runDiagnostics()', 'function diagText()'), /liveDials: !!device/);
+  assert.match(deckSlice('function diagText()', 'function diagPanel'), /else if \(!d\.liveDials\)/);
+  // Flipping dials on a deck that vanished mid-session refuses honestly
+  // instead of toasting success over a write persist() silently dropped.
+  assert.match(deckSlice('function setDialFlip(on)', 'function renderDeckSettings'), /if \(!profile\) \{ toast\('Deck disconnected/);
+});
+
+test('KeyWi: talent overlay keys cover the owner list, dispatch through the bridge, and lamp from mirrored state', () => {
+  // One key per owner-requested control (8/24): time-of-day clock, duration,
+  // count-to-time, wrap 5, wrap 10, question card, clear all, push script.
+  for (const id of ['pt.clock', 'pt.duration', 'pt.totime', 'pt.wrap5', 'pt.wrap10', 'pt.question', 'pt.overlays.clear', 'pt.push']) {
+    assert.match(deck, new RegExp("id: '" + id.replace(/\./g, '\\.') + "', kind: 'ptOverlay'"));
+  }
+  // Dispatch rides the bridge so toggle semantics stay app-side.
+  assert.match(deck, /case 'ptOverlay': if \(phase === 'down'\)[\s\S]{0,120}prompterOverlay\(a\.op\)/);
+  // Lamps read the mirrored overlay state from the surface bridge.
+  assert.match(deck, /function ptClockLamp\(m\) \{ return function \(s\) \{ return !!\(s\.prompter && s\.prompter\.clockMode === m\); \}; \}/);
+  assert.match(deck, /s\.prompter\.questionOn/);
+  // Actions may carry their own symbol path, and the picker files the new
+  // group under Flowmingo instead of dumping it below Fun and Blank.
+  assert.match(deckSlice('function symbolFor(a)', 'function keyArtSpec(i, s)'), /if \(a\.symbol\) return a\.symbol/);
+  assert.match(deck, /'Flowmingo', 'Flowmingo · talent overlays', 'Micochondria'/);
+  // App-side: the bridge resolves each op against the operator mirrors.
+  const appSrc = deck; // deck file only; the app side is asserted in live-ui-contract
+});
+
+test('KeyWi: app-family key rims paint by default and switch off per deck', () => {
+  assert.match(deck, /APP_RIM_COLORS = \{ cueola: '#8a93a6', flowmingo: '#f06eb4', outrangutan: '#f97316', obs: '#5b8df8' \}/);
+  assert.match(deck, /function appRimsOn\(ov\) \{ var o = ov \|\| overrides; return !o \|\| o\.appRims !== false; \}/);
+  // Both spec builders stamp the rim (active deck and secondary decks, each
+  // against its own overrides), and the paint signature carries it.
+  assert.match(deckSlice('function keyArtSpec(i, s)', 'function keyArtSpecFor'), /if \(appRimsOn\(\)\) spec\.rim = appRimColor\(a\)/);
+  assert.match(deckSlice('function keyArtSpecFor(deck, i, s)', 'function specSig'), /appRimsOn\(\(deck\.cfg \|\| \{\}\)\.overrides\)/);
+  assert.match(deckSlice('function specSig(spec, i)', 'function drawKeyInto'), /spec\.rim \|\| ''/);
+  // The painter strokes it, honoring the no-overlay image opt-out.
+  assert.match(deckSlice('function drawKeyInto(canvas, spec, z)', '// ── Serialized HID write queue'), /if \(spec\.rim && !spec\.noOverlay\)/);
+  // Deck settings expose the switch, on by default.
+  assert.match(deckSlice('function renderDeckSettings()', 'function surfaceGrid'), /sd-rims-on/);
+  assert.match(deckSlice('function setAppRims(on)', 'function setDialFlip'), /delete overrides\.appRims/);
+});
+
+test('KeyWi: the Playback monitor distinguishes idle from not-linked', () => {
+  // Feed health folds into the paint signature so the card flips live.
+  assert.match(deckSlice('async function paintStrip(force)', 'function drawStripMirrorCanvas'), /cell\.ogFresh = !!\(s\.playout \|\| \{\}\)\.fresh/);
+  const og = deckSlice('function drawStripOgProgram(ctx, cell, x0, zw, ch)', 'async function stripBytesFromContent');
+  assert.match(og, /else if \(cell\.ogFresh\)/);
+  assert.match(og, /Playback idle/);
+  assert.match(og, /Playback not linked/);
+  assert.match(og, /Open Outrangutan and join this show/);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log('PASS', name);
