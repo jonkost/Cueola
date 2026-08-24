@@ -547,6 +547,27 @@ test('KeyWi: app-family key rims paint by default and switch off per deck', () =
   assert.match(deckSlice('function setAppRims(on)', 'function setDialFlip'), /delete overrides\.appRims/);
 });
 
+test('Outrangutan cross-machine: baseline consumption, loud sync failures, no wall-clock drops', () => {
+  // Commands and gain baseline on the FIRST snapshot after subscribe, then
+  // apply every new id: the old sender-clock-vs-our-clock 30s window dropped
+  // every cross-machine fire in silence when two Macs' clocks drifted.
+  const doc = app.slice(app.indexOf('function onSessionDoc(d)'), app.indexOf('function applyRemoteCommand'));
+  assert.match(doc, /if \(!sessionDocPrimed\) \{/);
+  assert.match(doc, /lastCmdId = cmd\.commandId;\n        slog\('session'/);
+  assert.doesNotMatch(doc, /Date\.now\(\) - cmd\.ts > 30000/);
+  assert.doesNotMatch(doc, /Date\.now\(\) - g\.ts < 30000/);
+  // A refused or dead session listener surfaces itself and retries: the rules
+  // require sign-in even to READ, and a signed-out playout Mac used to look
+  // joined while hearing nothing.
+  const sub = app.slice(app.indexOf('function subscribeSession()'), app.indexOf('function unsubscribeSession()'));
+  assert.match(sub, /not signed in\. Sign in on this Mac/);
+  assert.match(sub, /subRetryTimer = setTimeout/);
+  // Publish rejections surface once per subscribe instead of vanishing.
+  assert.match(app, /function notePublishError\(err\)/);
+  assert.match(app, /'outrangutan\.live': live \}\)\.catch\(notePublishError\)/);
+  assert.match(app, /'outrangutan\.sender': OG_SENDER \}\)\.catch\(notePublishError\)/);
+});
+
 test('KeyWi: the Playback monitor distinguishes idle from not-linked', () => {
   // Feed health folds into the paint signature so the card flips live.
   assert.match(deckSlice('async function paintStrip(force)', 'function drawStripMirrorCanvas'), /cell\.ogFresh = !!\(s\.playout \|\| \{\}\)\.fresh/);

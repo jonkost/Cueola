@@ -914,8 +914,16 @@ test('deck strip monitors ride show truth in every window, not just the Live one
   assert.match(app.slice(app.indexOf('function renderTalentPositionIndicator'), app.indexOf('const pct = Number.isFinite(_talentReportedPct)')), /_talentMirrorSeenAt/);
   assert.ok((app.match(/_sdSafe\(\(\) => _sdPrompterPlayingTruth\(\), false\)/g) || []).length >= 2);
   // Playout feed health rides the bridge so the strip can tell "linked and
-  // idle" from "no playout linked to this session".
-  assert.match(app, /fresh: !!nowPlaying \|\| !!\(Number\(live\.ts\) && Date\.now\(\) - Number\(live\.ts\) < 12000\)/);
+  // idle" from "no playout linked to this session". Liveness uses the
+  // ARRIVAL clock (this window's), never the sender's ts: clock skew between
+  // Macs must not make a healthy playout read as absent.
+  assert.match(app, /fresh: !!nowPlaying \|\| !!\(_ogLiveSeenAt && Date\.now\(\) - _ogLiveSeenAt < 12000\)/);
+  assert.match(app.slice(app.indexOf('function applyOutrangutanState'), app.indexOf('function playoutNow')), /_ogLiveSeenAt = Date\.now\(\)/);
+  // Firing into a show with no playout listening warns the operator
+  // (throttled) instead of leaving them to discover it by dead air.
+  const fire = app.slice(app.indexOf('function fireOutrangutanCommand'), app.indexOf('function fireOutrangutanGain'));
+  assert.match(fire, /no Outrangutan has checked in on this show/);
+  assert.match(fire, /_ogNoListenerToastAt > 20000/);
 });
 
 for (const { name, run } of tests) {

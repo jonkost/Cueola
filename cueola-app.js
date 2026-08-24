@@ -6590,7 +6590,9 @@ window.cueolaSurfaceBridge = {
         // Outrangutan publishes at least every ~3s (idle heartbeat), so a
         // stale/absent packet means NO playout is linked to this window's
         // session, which is a different truth than "linked and idle".
-        fresh: !!nowPlaying || !!(Number(live.ts) && Date.now() - Number(live.ts) < 12000),
+        // Arrival clock, never the sender's ts: clock skew between Macs must
+        // not make a healthy playout read as absent.
+        fresh: !!nowPlaying || !!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < 12000),
       },
       prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => !!prompterTalentConnected, false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
@@ -8515,6 +8517,7 @@ let outrangutanState = { cues: {}, pads: {}, live: null };
 let _outNameLinksPresent = false;
 let _outCmdSeq = 0;
 let _ogLiveStamp = 0;   // last applied live seq/ts — receivers drop stale out-of-order packets (P3)
+let _ogLiveSeenAt = 0;  // when THIS window last received any og.live packet (arrival clock, skew-proof)
 // R2: anchors for playoutNow(). _ogLiveEndAt re-anchors the wall clock to the
 // published remaining on every snapshot; _sfxLast remembers the newest pad
 // fire's timing so followers can count it down without extra writes.
@@ -8616,6 +8619,10 @@ function applyOutrangutanState(og) {
   if (og.pads && stableStringify(og.pads) !== stableStringify(outrangutanState.pads || {})) { outrangutanState.pads = og.pads; }   // P4: pad summary (feeds the cue modal only — no re-render)
   if (og.sfxFire) applySfxFireEvent(og.sfxFire);   // P4: transient follower chip
   if (og.live) {
+    // Arrival clock, OUR clock: liveness answers ("is a playout machine
+    // publishing?") must never compare the sender's wall clock to ours —
+    // two Macs with drifted clocks made a healthy playout read as absent.
+    _ogLiveSeenAt = Date.now();
     // ts is the version stamp (monotonic per sender, survives publisher reloads);
     // seq breaks ties for writes landing in the same millisecond.
     const stamp = ((og.live.ts || 0) * 1000) + ((og.live.seq || 0) % 1000);
@@ -8954,6 +8961,7 @@ function outrangutanCueFields(type, d) {
 // opts.armCueId piggybacks a next-cue standby on the SAME command write:
 // outrangutan.command is a single slot, so a separate arm write racing the
 // fire could swallow the fire before the playout machine's snapshot saw it.
+let _ogNoListenerToastAt = 0;
 function fireOutrangutanCommand(action, targetId, opts={}) {
   cancelPendingArm();   // a real command owns the slot; a stale arm must not overwrite it
   const local = window.Outrangutan && window.Outrangutan._local;
@@ -8975,6 +8983,14 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
+  // The write landing does NOT mean anyone is listening: a playout Mac in
+  // local mode, on another code, or refused by the rules consumes nothing,
+  // and the command just sits in the slot. Say so (throttled) instead of
+  // letting the operator discover it by dead air.
+  if (!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
+    _ogNoListenerToastAt = Date.now();
+    toast('Sent, but no Outrangutan has checked in on this show. On the playout Mac: open Outrangutan, sign in, and Join Session with code ' + session.code + '.');
+  }
   return true;
 }
 // Remote master gain: its own doc field (never the single command slot — a

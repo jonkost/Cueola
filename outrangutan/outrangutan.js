@@ -2303,10 +2303,22 @@
   let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
   let lastGainId = null;          // dedupe remote gain writes (own field, own guard)
   let pubTimer = null, lastLiveTs = 0;
+  let pubErrToasted = false;      // publish rejections surface once per subscribe, not once per heartbeat
+  function notePublishError(err) {
+    const code = String(err && err.code || 'network');
+    if (pubErrToasted) return;
+    pubErrToasted = true;
+    slog('error', 'Cloud publish refused (' + code + ')');
+    toast(code.includes('permission')
+      ? 'Cloud writes refused: the rundown machine cannot see this playout. Sign in on this Mac, then rejoin the session.'
+      : 'Cloud publish failed (' + code + '). The rundown machine may show this playout as offline.');
+  }
 
   function fbReady() { return !!(window._firebaseReady && window._db && window._doc && window._updateDoc && window._onSnapshot); }
   function sessionRef() { return window._doc(window._db, 'sessions', sessionCode); }
 
+  let sessionDocPrimed = false;   // first snapshot after subscribe baselines the command/gain slots
+  let subErrToasted = false, subRetryTimer = null;
   function subscribeSession() {
     unsubscribeSession();
     if (mode !== 'session' || !sessionCode) return;
@@ -2316,11 +2328,30 @@
       window.addEventListener('firebaseReady', () => { if (mode === 'session' && sessionCode && !sessionSub) subscribeSession(); }, { once: true });
       return;
     }
-    try { sessionSub = window._onSnapshot(sessionRef(), snap => { try { onSessionDoc(snap.data() || {}); } catch (e) {} }, () => {}); } catch (e) {}
+    sessionDocPrimed = false;
+    try {
+      sessionSub = window._onSnapshot(sessionRef(), snap => { try { onSessionDoc(snap.data() || {}); } catch (e) {} }, err => {
+        // A dead listener here is a DEAF playout machine: the rules require a
+        // signed-in principal even to READ the session, so a signed-out (or
+        // auth-expired) Mac fails right here and used to fail in total
+        // silence — joined-looking, hearing nothing, saying nothing.
+        const denied = String(err && err.code || '').includes('permission');
+        slog('error', 'Session sync lost (' + ((err && err.code) || 'network') + ')');
+        if (!subErrToasted) {
+          subErrToasted = true;
+          toast(denied
+            ? 'Cloud sync refused for ' + sessionCode + ': this Mac is not signed in. Sign in on this Mac (front page), then rejoin the session.'
+            : 'Session sync lost (' + ((err && err.code) || 'network') + '). Retrying.');
+        }
+        sessionSub = null;
+        clearTimeout(subRetryTimer);
+        subRetryTimer = setTimeout(() => { if (mode === 'session' && sessionCode && !sessionSub) subscribeSession(); }, denied ? 30000 : 10000);
+      });
+    } catch (e) {}
     publishCues(); publishLive(true);
     startLiveHeartbeat();
   }
-  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } lastCmdId = null; lastGainId = null; stopLiveHeartbeat(); }
+  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } clearTimeout(subRetryTimer); subRetryTimer = null; lastCmdId = null; lastGainId = null; sessionDocPrimed = false; subErrToasted = false; pubErrToasted = false; stopLiveHeartbeat(); }
 
   // Idle heartbeat: publishLive only ticks with the play RAF, so an idle
   // playout machine used to publish NOTHING — the rundown machine could not
@@ -2344,18 +2375,32 @@
 
   function onSessionDoc(d) {
     maybeSeedBreakRoom(d);   // Break Room test session + empty local show → build the authored demo playout
+    const g = d && d.outrangutan && d.outrangutan.gain;
+    const cmd = d && d.outrangutan && d.outrangutan.command;
+    // Baseline, not wall clock: the FIRST snapshot after subscribing marks
+    // whatever already sits in the command/gain slots as consumed without
+    // applying it (we must not fire a command from before we joined). After
+    // that, every NEW id applies unconditionally. The old guard compared the
+    // sender's clock to OURS (ts within 30s) — two Macs with drifted clocks
+    // dropped every cross-machine fire in total silence.
+    if (!sessionDocPrimed) {
+      sessionDocPrimed = true;
+      if (g && g.id) lastGainId = g.id;
+      if (cmd && cmd.commandId) {
+        lastCmdId = cmd.commandId;
+        slog('session', 'Synced to ' + sessionCode + ' (an older queued command was skipped, live from now on)');
+      }
+      return;
+    }
     // Master gain rides its OWN field: the single command slot must never be
     // overwritten by a volume turn while a cue fire sits unconsumed in it.
-    const g = d && d.outrangutan && d.outrangutan.gain;
-    if (g && g.id && g.id !== lastGainId && g.sender !== OG_SENDER && (!g.ts || Date.now() - g.ts < 30000)) {
+    if (g && g.id && g.id !== lastGainId && g.sender !== OG_SENDER) {
       lastGainId = g.id;
       const v = parseFloat(g.v);
       if (isFinite(v)) setMasterGain(Math.max(0, Math.min(1.2, v)), 'remote');
     }
-    const cmd = d && d.outrangutan && d.outrangutan.command;
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
-    if (cmd.ts && Date.now() - cmd.ts > 30000) return;          // ignore stale commands
     lastCmdId = cmd.commandId;
     applyRemoteCommand(cmd);
   }
@@ -2521,7 +2566,7 @@
         if (p.dur > 0) entry.dur = Math.round(p.dur);   // seconds, mirrors the cue summary; omitted when unknown
         padMap[p.id] = entry;
       });
-      try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.pads': padMap, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }); } catch (e) {}
+      try { window._updateDoc(sessionRef(), { 'outrangutan.cues': map, 'outrangutan.pads': padMap, 'outrangutan.cuesTs': Date.now(), 'outrangutan.sender': OG_SENDER }).catch(notePublishError); } catch (e) {}
     }, 400);
   }
   // P4: broadcast each SFX fire as a discrete event (followers show a transient
@@ -2568,7 +2613,7 @@
     // PLBK vol dial, the rundown machine) can show the real fader position.
     live.gain = Math.round((settings.masterGain || 0) * 100) / 100;
     live.seq = ++_liveSeq;
-    try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }); } catch (e) {}
+    try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }).catch(notePublishError); } catch (e) {}
   }
 
   // ── Phase 5: scopes (waveform monitor + vectorscope) ─────────────────────
