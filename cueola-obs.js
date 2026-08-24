@@ -70,18 +70,23 @@
     });
   }
 
-  function connect() {
+  // `quiet` marks the automatic retry: it keeps the standing failure reason on
+  // screen. A hand-driven connect (the operator pasted the password and clicked
+  // again) clears it first, so the attempt visibly resets instead of leaving the
+  // stale reason sitting there; a fresh failure below sets it again within a beat.
+  function connect(quiet) {
     wantOpen = true;
     loadConfig();
     if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
     if (!/^wss?:\/\//.test(config.url)) { lastError = 'OBS address must start with ws://'; emitChange(); return; }
-    try { ws = new WebSocket(config.url); } catch (e) { lastError = 'Could not open ' + config.url; scheduleReconnect(); return; }
+    if (!quiet && lastError) { lastError = ''; emitChange(); }
+    try { ws = new WebSocket(config.url); } catch (e) { lastError = 'Could not open ' + config.url; emitChange(); scheduleReconnect(); return; }
     ws.onmessage = onMessage;
     ws.onclose = function () { ready = false; lastError = lastError || 'OBS connection closed'; emitChange(); scheduleReconnect(); };
     ws.onerror = function () { lastError = 'OBS not reachable at ' + config.url + ' (is obs-websocket enabled?)'; };
   }
   function disconnect() { wantOpen = false; clearTimeout(reconnectTimer); ready = false; if (ws) { try { ws.close(); } catch (e) {} } ws = null; state.currentScene = ''; emitChange(); }
-  function scheduleReconnect() { if (!wantOpen) return; clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 3000); }
+  function scheduleReconnect() { if (!wantOpen) return; clearTimeout(reconnectTimer); reconnectTimer = setTimeout(function () { connect(true); }, 3000); }
 
   async function onMessage(evt) {
     var msg; try { msg = JSON.parse(evt.data); } catch (e) { return; }

@@ -139,8 +139,8 @@ const SHELL_ASSETS = [
   'outrangutan/outrangutan.css?v=98c3501a8e',
   'outrangutan/outrangutan.js?v=eb1d0b4918',
   'cueola-streamdeck-device.js?v=48990ed663',
-  'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=5e04c813d2',
+  'cueola-obs.js?v=d3def0e6e9',
+  'cueola-streamdeck.js?v=575e2a058d',
 ];
 
 const versionSignature = SHELL_ASSETS

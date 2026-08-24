@@ -553,11 +553,46 @@
     try { o.setVolume(n, obsVolume() + d * 0.04); } catch (e) {}
     schedulePaint();
   }
-  var obsWasReady = false;
+  var obsWasReady = false, obsShownErr = '';
+  function obsErrText() { var o = OBSc(); try { return (o && o.lastError && o.lastError()) || ''; } catch (e) { return ''; } }
   function onObsChange() {
     var now = !!(OBSc() && OBSc().isReady());
-    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
+    if (now !== obsWasReady) { obsWasReady = now; obsShownErr = obsErrText(); if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
     else if (now) { updateObsScene(); updateLiveBadge(); schedulePaint(); }
+    // Still not connected, so the ready flag did not move and neither branch
+    // above fired — but WHY it failed just changed, and that is the one thing
+    // the operator needs. Patch the reason in place rather than re-rendering:
+    // the client retries every few seconds, and a rebuild would wipe a
+    // half-typed address or password out from under them.
+    else updateObsError();
+  }
+  // Keep the failure line in step with the client's reason without disturbing
+  // the rest of the panel. textContent, not innerHTML — the reason embeds the
+  // operator's own typed address.
+  function updateObsError() {
+    var err = obsErrText();
+    if (err === obsShownErr) return;
+    obsShownErr = err;
+    // .sd-obs is a generic settings-row container here, so anchor on the Connect
+    // button: it is unique, and it exists only in the not-connected state, which
+    // is exactly when this runs.
+    var btn = document.getElementById('sd-obs-con'), row = btn && btn.parentNode;
+    if (row) {
+      var el = row.querySelector('.sd-obs-err');
+      if (!err) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+      else {
+        if (!el) { el = document.createElement('span'); el.className = 'sd-obs-err'; row.appendChild(el); }
+        el.textContent = err;
+      }
+    }
+    // The first-run wizard's OBS step shows the same reason as its status line,
+    // and carries its own address/password fields — so patch it, don't re-render.
+    var wz = document.querySelector('.sd-wz-status');
+    if (wz && document.getElementById('sd-wz-obs-con')) {
+      var dot = wz.querySelector('.sd-obs-dot');
+      wz.textContent = err || 'Not connected. Fine to skip.';
+      if (dot) wz.insertBefore(dot, wz.firstChild);
+    }
   }
   function updateObsScene() { var el = document.querySelector('.sd-obs-scene'); if (el) el.textContent = obsState().currentScene || '(no scene)'; }
   function updateLiveBadge() { var el = document.getElementById('sd-livebadge'); if (!el) return; var o = obsState(), parts = []; if (o.streaming) parts.push('<span class="sd-lb sd-lb-live">LIVE</span>'); if (o.recording) parts.push('<span class="sd-lb sd-lb-rec">REC' + (o.recordPaused ? ' ❚❚' : '') + '</span>'); el.innerHTML = parts.join(''); }
@@ -2887,7 +2922,8 @@
   // gets the settings-menu treatment; the page keeps working controls only).
   // A status line leads the section; the controls follow.
   function obsSection() {
-    var o = OBSc(), ready = !!(o && o.isReady && o.isReady()), cfg = (o && o.config && o.config()) || { url: 'ws://localhost:4455', password: '' }, st = obsState(), err = (o && o.lastError && o.lastError()) || '';
+    var o = OBSc(), ready = !!(o && o.isReady && o.isReady()), cfg = (o && o.config && o.config()) || { url: 'ws://localhost:4455', password: '' }, st = obsState(), err = obsErrText();
+    obsShownErr = err;   // a full render just drew this reason; keep the in-place patcher in step
     var status = '<div class="sd-set-status"><span class="sd-obs-dot' + (ready ? ' on' : '') + '"></span>'
       + (ready
         ? '<span class="sd-obs-scene" data-tip="Current program scene">' + esc(st.currentScene || '(no scene)') + '</span>'
