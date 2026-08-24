@@ -492,12 +492,12 @@ test('one Stream Deck drives the whole rig over the session control bus (D11.7)'
   assert.match(playbackJs, /controlBus: \{ target: cmd\.target/);
   assert.match(playbackJs, /rundown_go: 'Rundown GO'/);
   // Cueola executes only on the show-calling surface with live open, dedupes
-  // by id, and discards stale commands so a reconnect never replays a GO.
+  // by id, and baselines the first snapshot so a reconnect never replays a GO
+  // (wall-clock staleness is gone: it dropped presses on skewed Macs).
   assert.match(app, /function runControlBusAction\(target, action/);
   assert.match(app, /if \(!isShowCaller\(\)\) return false/);
   assert.match(app, /cmd\.id === _lastControlBusId/);
-  assert.match(app, /Date\.now\(\) - cmd\.ts > 5000/);
-  assert.match(app, /applyControlBusCommand\(d\.controlBus\)/);
+  assert.match(app, /applyControlBusCommand\(d\.controlBus, !_busSnapshotPrimed\)/);
 });
 
 test('cloud snapshots: group-aware capture, hashed dedupe, merged history, one restore body (Phase 7/D3)', async () => {
@@ -924,6 +924,27 @@ test('deck strip monitors ride show truth in every window, not just the Live one
   const fire = app.slice(app.indexOf('function fireOutrangutanCommand'), app.indexOf('function fireOutrangutanGain'));
   assert.match(fire, /no Outrangutan has checked in on this show/);
   assert.match(fire, /_ogNoListenerToastAt > 20000/);
+});
+
+test('control bus survives clock skew and non-executing windows never steal the claim', () => {
+  // Baseline, not wall clock: the first snapshot marks pre-join history; every
+  // later command id executes regardless of the sender's clock. The old 5s
+  // ts window dropped every cross-machine deck press when two Macs drifted.
+  const bus = app.slice(app.indexOf('function applyControlBusCommand'), app.indexOf('// Auto-fire linked Outrangutan'));
+  assert.match(bus, /if \(isFirstSnapshot\) return/);
+  assert.doesNotMatch(bus, /cmd\.ts > 5000/);
+  assert.match(app, /applyControlBusCommand\(d\.controlBus, !_busSnapshotPrimed\)/);
+  // Claim theft is gated on being able to execute: the KeyWi window and any
+  // rundown-parked window used to grab the claim, run nothing, and black-hole
+  // deck commands for 15s at a stretch.
+  assert.match(bus, /classList\.contains\('on'\) \|\| !isShowCaller\(\)\) return;/);
+  // Foreign claim liveness is judged by heartbeat ARRIVAL, and the arrival
+  // stamp refreshes only when the claim actually changed.
+  const stale = app.slice(app.indexOf('function _busClaimIsStale'), app.indexOf('function holdsBusExecutorClaim'));
+  assert.match(stale, /_busClaimSeenAt/);
+  assert.match(app, /_busExecutorClaim\.ts !== d\.busExecutor\.ts\) _busClaimSeenAt = Date\.now\(\)/);
+  // A ghost abort is a diagnosis now: the toast names the source.
+  assert.match(app.slice(app.indexOf('function abortPlayoutCall'), app.indexOf('function applyRemoteLiveCall')), /aborted \(\$\{why\}\)/);
 });
 
 for (const { name, run } of tests) {

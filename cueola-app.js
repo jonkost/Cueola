@@ -5869,8 +5869,17 @@ function setupFirestore() {
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       if (d.showClock) applyRemoteShowClock(d.showClock);  // shared start/pause clock
       if (d.liveCall) applyRemoteLiveCall(d.liveCall);     // D11.3: READY·TRACK·ROLL·TAKE for every viewer
-      if (d.busExecutor) _busExecutorClaim = d.busExecutor;    // exclusivity claim, adopt before executing
-      if (d.controlBus) applyControlBusCommand(d.controlBus);  // D11.7: cross-machine deck actions
+      if (d.busExecutor) {   // exclusivity claim, adopt before executing
+        // Arrival clock: claim liveness must never compare the holder's wall
+        // clock to ours (skewed Macs read every claim as stale, or never
+        // stale). Stamp only when the claim actually CHANGED — every other
+        // doc write re-fires this snapshot with the same claim object, and
+        // refreshing on those would keep a dead holder alive forever.
+        if (!_busExecutorClaim || _busExecutorClaim.clientId !== d.busExecutor.clientId || _busExecutorClaim.ts !== d.busExecutor.ts) _busClaimSeenAt = Date.now();
+        _busExecutorClaim = d.busExecutor;
+      }
+      if (d.controlBus) applyControlBusCommand(d.controlBus, !_busSnapshotPrimed);  // D11.7: cross-machine deck actions
+      _busSnapshotPrimed = true;
       // Cross-device talent heartbeat — proves a talent screen is alive even when
       // it's on a different machine (BroadcastChannel can't cross devices).
       // Only count a heartbeat we haven't seen before AND that is recent — any
@@ -9357,7 +9366,16 @@ function abortPlayoutCall(source='abort') {
   const call = _rtrtCall;
   _rtrtCall = null;
   logShow('media', `Playback call ABORTED · row ${call.rowIdx + 1} (${source})`);
-  toast('Playback call aborted. Nothing fired.');
+  // Say WHY: an unexplained "aborted" toast reads as the system acting on its
+  // own, and turns a diagnosable cause into a ghost story mid-show.
+  const why = source === 'superseded' ? 'a newer GO took over'
+    : source === 'left-live' ? 'the Live screen closed on the calling machine'
+    : source === 'stop' || source === 'fadeStop' ? 'STOP during the count'
+    : source === 'panic' ? 'PANIC'
+    : source === 'control-bus' || source === 'local-deck' ? 'deck ABORT key'
+    : source === 'button' ? 'the ABORT button'
+    : source;
+  toast(`Playback call aborted (${why}). Nothing fired.`);
   publishLiveCall('abort', call);
   renderLiveCallBanner('abort', call);
   notifyControlSurfaceState();
@@ -9446,12 +9464,17 @@ window.cueolaControlBus = (target, action, source) => {
 const BUS_EXECUTOR_HEARTBEAT_MS = 5000;
 const BUS_EXECUTOR_STALE_MS = 15000;
 let _busExecutorClaim = null;   // last busExecutor claim seen on the session doc
+let _busClaimSeenAt = 0;        // when THIS window saw the claim change (arrival clock, skew-proof)
+let _busSnapshotPrimed = false; // first session snapshot baselines the controlBus slot
 let _busExecutorTimer = null;
 function _busClaimExempt() { return !session.code || session.isDemo || session.isExpert || !window._firebaseReady; }
 function _busClaimIsMine() { return _busExecutorClaim?.clientId === CLIENT_ID; }
 function _busClaimIsStale() {
-  return !_busExecutorClaim || !Number.isFinite(_busExecutorClaim.ts)
-    || (Date.now() - _busExecutorClaim.ts) > BUS_EXECUTOR_STALE_MS;
+  if (!_busExecutorClaim) return true;
+  // My own claim carries MY clock; a foreign claim's liveness is judged by
+  // when its heartbeats ARRIVE here, never by the holder's wall clock.
+  if (_busClaimIsMine()) return !Number.isFinite(_busExecutorClaim.ts) || (Date.now() - _busExecutorClaim.ts) > BUS_EXECUTOR_STALE_MS;
+  return !_busClaimSeenAt || (Date.now() - _busClaimSeenAt) > BUS_EXECUTOR_STALE_MS;
 }
 function holdsBusExecutorClaim() {
   return _busClaimExempt() || _busClaimIsMine() || _busClaimIsStale();
@@ -9482,13 +9505,17 @@ function _ensureBusExecutorHeartbeat() {
   _busExecutorTimer = setInterval(_busExecutorHeartbeatTick, BUS_EXECUTOR_HEARTBEAT_MS);
 }
 
-// Cross-machine consumer: dedupe by command id, discard stale commands (a
-// reconnect must never replay an old GO — D11.7's staleness window).
+// Cross-machine consumer: dedupe by command id; the FIRST snapshot after this
+// window subscribes baselines whatever command already sits in the slot (a
+// reconnect must never replay an old GO). The old guard compared the sender's
+// wall clock to OURS (5s window): two Macs with drifted clocks dropped every
+// deck press in total silence, and late claim ping-pong made the survivors
+// land seconds after the press — GO and TAKE that "randomly" did nothing.
 let _lastControlBusId = '';
-function applyControlBusCommand(cmd) {
+function applyControlBusCommand(cmd, isFirstSnapshot=false) {
   if (!cmd?.id || cmd.id === _lastControlBusId) return;
   _lastControlBusId = cmd.id;
-  if (!Number.isFinite(cmd.ts) || Date.now() - cmd.ts > 5000) return;
+  if (isFirstSnapshot) return;   // pre-join history, never replayed
   if (!holdsBusExecutorClaim()) return;   // a follower never executes bus commands
   if (_busClaimExempt() || _busClaimIsMine()) {
     if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {
@@ -9496,8 +9523,13 @@ function applyControlBusCommand(cmd) {
     }
     return;
   }
-  // Stale claim: take it, and execute only after the stamp lands so two
-  // surfaces racing on the same stale claim cannot both advance.
+  // Stale claim: only a surface that could actually EXECUTE may take it. The
+  // dedicated KeyWi window (and any window parked on the rundown) used to
+  // grab the claim, run nothing (no Live screen), and black-hole every deck
+  // command for 15 seconds at a stretch.
+  if (!document.getElementById('liveshow')?.classList.contains('on') || !isShowCaller()) return;
+  // Take it, and execute only after the stamp lands so two surfaces racing
+  // on the same stale claim cannot both advance.
   const claim = { clientId: CLIENT_ID, ts: Date.now() };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).then(() => {
     if (_busExecutorClaim && _busExecutorClaim.clientId !== CLIENT_ID) return;  // someone else re-stamped first
