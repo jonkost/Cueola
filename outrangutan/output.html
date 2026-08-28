@@ -1007,7 +1007,22 @@
   };
   document.addEventListener('visibilitychange', resetRendererGrace);
   frameRAF = requestAnimationFrame(frameStamp);
-  heartbeatTimer = setInterval(() => sendHeartbeat(), 2000);
+  // Heartbeats must survive background-tab timer throttling: a hidden page
+  // (kiosk display asleep, popup buried) slows setInterval to once a minute
+  // and the controller watchdog reads the silence as death. Same blob-Worker
+  // pattern as the controller's idle heartbeat.
+  function startHeartbeat() {
+    try {
+      const src = 'setInterval(function () { postMessage(1); }, 2000);';
+      const worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      worker.onmessage = () => sendHeartbeat();
+      return { stop: () => { try { worker.terminate(); } catch (e) {} } };
+    } catch (e) {
+      const timer = setInterval(() => sendHeartbeat(), 2000);
+      return { stop: () => clearInterval(timer) };
+    }
+  }
+  heartbeatTimer = startHeartbeat();
 
   publishDomState(outputProtocol.getState());
   send(outputProtocol.buildReady());
@@ -1026,7 +1041,7 @@
 
   window.addEventListener('beforeunload', () => {
     shuttingDown = true;
-    clearInterval(heartbeatTimer);
+    if (heartbeatTimer) heartbeatTimer.stop();
     cancelAnimationFrame(frameRAF);
     commandQueue.close('output window closed');
     cancelRendererEffects();
