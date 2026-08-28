@@ -17,6 +17,7 @@
  */
 
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -31,6 +32,39 @@ export const PORT_WALK = 5; // 17845..17849
 const ORIGIN_ALLOW = /^https:\/\/cueola\.live$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const MEDIA_ID = /^[A-Za-z0-9_-]{1,120}$/; // path-traversal guard; storeFile ids are m_<random>
 export const DEFAULT_CACHE_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'CueolaKiosk', 'media');
+export const DEFAULT_PROFILE_BASE = path.join(os.homedir(), 'Library', 'Application Support', 'CueolaKiosk');
+
+const CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  path.join(os.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome'),
+  '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium'
+];
+
+export function findChrome(override) {
+  const candidates = [override, process.env.CUEOLA_CHROME, ...CHROME_CANDIDATES].filter(Boolean);
+  for (const candidate of candidates) {
+    try { fs.accessSync(candidate, fs.constants.X_OK); return candidate; } catch (e) {}
+  }
+  return null;
+}
+
+export function kioskChromeArgs({ profileDir, x, y, width, height, url }) {
+  return [
+    '--user-data-dir=' + profileDir,
+    '--kiosk',
+    '--window-position=' + Math.round(x) + ',' + Math.round(y),
+    '--window-size=' + Math.round(width) + ',' + Math.round(height),
+    '--autoplay-policy=no-user-gesture-required',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-session-crashed-bubble',
+    '--hide-crash-restore-bubble',
+    '--noerrdialogs',
+    url
+  ];
+}
 const SEND_BODY_LIMIT = 1024 * 1024; // envelopes are JSON scalars + payload; 1 MB is generous
 const KEEPALIVE_MS = 15000;
 
@@ -80,6 +114,9 @@ export function createHelper(options = {}) {
   const helperInstanceId = 'kh_' + randomUUID();
   const clients = new Set(); // { res, session, instance, role, output }
   const cacheDir = options.cacheDir || DEFAULT_CACHE_DIR;
+  const profileBase = options.profileBase || DEFAULT_PROFILE_BASE;
+  const chromeOverride = options.chrome;
+  const kids = new Map(); // outputId -> { child, pid, startedAt, url, closing }
   let boundPort = null;
 
   const state = {
@@ -90,14 +127,109 @@ export function createHelper(options = {}) {
 
   function helloInfo() {
     const stats = mediaStatsSync();
+    const chromePath = findChrome(chromeOverride);
     return {
       helperVersion: HELPER_VERSION,
       helperInstanceId,
-      chrome: { found: false, path: null },
+      chrome: { found: !!chromePath, path: chromePath },
       cacheDir,
       cacheBytes: stats.bytes,
-      mediaCount: stats.count
+      mediaCount: stats.count,
+      outputs: outputsInfo()
     };
+  }
+
+  // ── Chrome kiosk process control ─────────────────────────────────────────
+  function outputsInfo() {
+    return Array.from(kids.entries()).map(([outputId, rec]) => ({
+      outputId,
+      pid: rec.pid,
+      running: rec.child.exitCode === null && rec.child.signalCode === null,
+      startedAt: rec.startedAt
+    }));
+  }
+
+  function broadcastKiosk(outputId, running, pid, exitCode) {
+    for (const client of clients) sseWrite(client, 'kiosk', { outputId, running, pid, exitCode: exitCode == null ? null : exitCode });
+  }
+
+  function terminateChild(rec) {
+    return new Promise((resolve) => {
+      if (!rec || rec.child.exitCode !== null) { resolve(); return; }
+      rec.closing = true;
+      const hardKill = setTimeout(() => { try { rec.child.kill('SIGKILL'); } catch (e) {} }, 3000);
+      hardKill.unref();
+      rec.child.once('exit', () => { clearTimeout(hardKill); resolve(); });
+      try { rec.child.kill('SIGTERM'); } catch (e) { clearTimeout(hardKill); resolve(); }
+    });
+  }
+
+  function spawnKiosk(outputId, launch, isRetry) {
+    const chromePath = findChrome(chromeOverride);
+    if (!chromePath) return { ok: false, error: 'chrome-not-found' };
+    const profileDir = path.join(profileBase, 'out' + outputId);
+    fs.mkdirSync(profileDir, { recursive: true });
+    const args = kioskChromeArgs(Object.assign({ profileDir }, launch));
+    // detached + unref: a dead helper must never take the show's Chrome with it
+    const child = spawn(chromePath, args, { stdio: 'ignore', detached: true });
+    child.unref();
+    const rec = { child, pid: child.pid, startedAt: Date.now(), url: launch.url, closing: false };
+    kids.set(outputId, rec);
+    child.once('exit', (code) => {
+      if (kids.get(outputId) !== rec) return; // already replaced
+      kids.delete(outputId);
+      const lifetime = Date.now() - rec.startedAt;
+      // A hard-crashed previous Chrome can leave a stale SingletonLock that
+      // makes the fresh spawn exit immediately; clear it and retry once.
+      if (!rec.closing && !isRetry && lifetime < 2000) {
+        try { fs.rmSync(path.join(profileDir, 'SingletonLock'), { force: true }); } catch (e) {}
+        const retried = spawnKiosk(outputId, launch, true);
+        if (retried.ok) return;
+      }
+      broadcastKiosk(outputId, false, rec.pid, code);
+    });
+    broadcastKiosk(outputId, true, rec.pid, null);
+    return { ok: true, pid: rec.pid };
+  }
+
+  async function handleKioskLaunch(req, res) {
+    let parsed;
+    try { parsed = JSON.parse((await readBody(req, SEND_BODY_LIMIT)).toString('utf8')); } catch (e) {
+      sendJson(res, 400, { ok: false, error: 'bad-json' }, corsHeaders(req));
+      return;
+    }
+    const outputId = cleanToken(parsed && parsed.outputId, 20);
+    const url = String(parsed && parsed.url || '');
+    let origin = '';
+    try { origin = new URL(url).origin; } catch (e) {}
+    if (!outputId || !origin || !ORIGIN_ALLOW.test(origin)) {
+      // an injected page must never make the helper open arbitrary URLs in kiosk mode
+      sendJson(res, 400, { ok: false, error: 'bad-launch-request' }, corsHeaders(req));
+      return;
+    }
+    const launch = {
+      url,
+      x: Number(parsed.x) || 0,
+      y: Number(parsed.y) || 0,
+      width: Number(parsed.width) || 1280,
+      height: Number(parsed.height) || 720
+    };
+    await terminateChild(kids.get(outputId));
+    const result = spawnKiosk(outputId, launch, false);
+    sendJson(res, result.ok ? 200 : 500, result, corsHeaders(req));
+  }
+
+  async function handleKioskClose(req, res) {
+    let parsed;
+    try { parsed = JSON.parse((await readBody(req, SEND_BODY_LIMIT)).toString('utf8')); } catch (e) {
+      sendJson(res, 400, { ok: false, error: 'bad-json' }, corsHeaders(req));
+      return;
+    }
+    const outputId = cleanToken(parsed && parsed.outputId, 20);
+    const rec = kids.get(outputId);
+    await terminateChild(rec);
+    kids.delete(outputId);
+    sendJson(res, 200, { ok: true, closed: !!rec }, corsHeaders(req));
   }
 
   // ── media cache ──────────────────────────────────────────────────────────
@@ -323,6 +455,8 @@ export function createHelper(options = {}) {
     if (req.method === 'GET' && url.pathname === '/health') { handleHealth(req, res); return; }
     if (req.method === 'GET' && url.pathname === '/events') { handleEvents(req, res, url); return; }
     if (req.method === 'POST' && url.pathname === '/send') { handleSend(req, res); return; }
+    if (url.pathname === '/kiosk/launch' && req.method === 'POST') { handleKioskLaunch(req, res); return; }
+    if (url.pathname === '/kiosk/close' && req.method === 'POST') { handleKioskClose(req, res); return; }
     if (url.pathname === '/media' && req.method === 'GET') { handleMediaList(req, res); return; }
     if (url.pathname === '/media/prune' && req.method === 'POST') { handleMediaPrune(req, res); return; }
     if (url.pathname.startsWith('/media/')) {

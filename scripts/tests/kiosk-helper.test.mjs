@@ -284,6 +284,124 @@ await test('health and hello report media cache stats', async () => {
   assert.equal(res.body.cacheBytes, 10);
 });
 
+// ── Chrome launcher (stubbed) ────────────────────────────────────────────
+const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kiosk-stub-'));
+const stubLog = path.join(stubDir, 'launches.log');
+process.env.KIOSK_STUB_LOG = stubLog;
+const stubChrome = path.join(stubDir, 'chrome-stub.sh');
+fs.writeFileSync(stubChrome, '#!/bin/sh\necho "$@" >> "$KIOSK_STUB_LOG"\nsleep 30\n');
+fs.chmodSync(stubChrome, 0o755);
+const fastExitStub = path.join(stubDir, 'chrome-fast-exit.sh');
+fs.writeFileSync(fastExitStub, '#!/bin/sh\necho "$@" >> "$KIOSK_STUB_LOG"\nexit 7\n');
+fs.chmodSync(fastExitStub, 0o755);
+
+const launcher = createHelper({ cacheDir, chrome: stubChrome, profileBase: path.join(stubDir, 'profiles') });
+const launcherPort = await launcher.listen(0);
+const launcherBase = `http://127.0.0.1:${launcherPort}`;
+const launchBody = (over = {}) => JSON.stringify(Object.assign({
+  outputId: '1',
+  url: 'https://cueola.live/outrangutan/output.html?launch=t1#out=1&session=s&controller=c',
+  x: 10, y: 20, width: 800, height: 600
+}, over));
+
+await test('kiosk launch spawns chrome with kiosk args', async () => {
+  const res = await jsonFetch(launcherBase, '/kiosk/launch', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: launchBody()
+  });
+  assert.equal(res.status, 200);
+  assert.ok(res.body.ok);
+  assert.ok(res.body.pid > 0);
+  const deadline = Date.now() + 3000;
+  while (!fs.existsSync(stubLog) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  const logged = fs.readFileSync(stubLog, 'utf8').trim();
+  assert.ok(logged.includes('--kiosk'));
+  assert.ok(logged.includes('--window-position=10,20'));
+  assert.ok(logged.includes('--window-size=800,600'));
+  assert.ok(logged.includes('--autoplay-policy=no-user-gesture-required'));
+  assert.ok(logged.includes(path.join(stubDir, 'profiles', 'out1')));
+  assert.ok(logged.includes('https://cueola.live/outrangutan/output.html'));
+});
+
+await test('kiosk launch refuses URLs outside the origin allowlist', async () => {
+  const res = await jsonFetch(launcherBase, '/kiosk/launch', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: launchBody({ url: 'https://evil.example/pwn.html' })
+  });
+  assert.equal(res.status, 400);
+});
+
+await test('relaunch replaces the running instance, never doubles', async () => {
+  const health1 = await jsonFetch(launcherBase, '/health');
+  const firstPid = health1.body.outputs.find((o) => o.outputId === '1').pid;
+  const res = await jsonFetch(launcherBase, '/kiosk/launch', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: launchBody()
+  });
+  assert.equal(res.status, 200);
+  assert.notEqual(res.body.pid, firstPid);
+  const health2 = await jsonFetch(launcherBase, '/health');
+  const entries = health2.body.outputs.filter((o) => o.outputId === '1');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].pid, res.body.pid);
+  assert.equal(entries[0].running, true);
+});
+
+await test('external chrome death emits a kiosk SSE event', async () => {
+  const watcher = sseClient(launcherBase, { role: 'controller', session: 'session_watch', instance: 'ctrl-w' });
+  await watcher.ready;
+  await watcher.waitFor((e) => e.event === 'hello');
+  // outlive the 2s crash-retry window so the death is reported, not retried
+  await new Promise((r) => setTimeout(r, 2100));
+  const health = await jsonFetch(launcherBase, '/health');
+  const pid = health.body.outputs.find((o) => o.outputId === '1').pid;
+  process.kill(pid, 'SIGKILL');
+  const event = await watcher.waitFor((e) => e.event === 'kiosk' && e.data.running === false, 3000);
+  assert.equal(event.data.outputId, '1');
+  watcher.close();
+});
+
+await test('instant-exit chrome is retried once then reported dead', async () => {
+  fs.rmSync(stubLog, { force: true });
+  const watcher = sseClient(launcherBase, { role: 'controller', session: 'session_watch2', instance: 'ctrl-w2' });
+  await watcher.ready;
+  await watcher.waitFor((e) => e.event === 'hello');
+  const fast = createHelper({ cacheDir, chrome: fastExitStub, profileBase: path.join(stubDir, 'profiles') });
+  const fastPort = await fast.listen(0);
+  const fastBase = `http://127.0.0.1:${fastPort}`;
+  const fastWatcher = sseClient(fastBase, { role: 'controller', session: 'session_fast', instance: 'ctrl-f' });
+  await fastWatcher.ready;
+  await fastWatcher.waitFor((e) => e.event === 'hello');
+  const res = await jsonFetch(fastBase, '/kiosk/launch', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: launchBody({ outputId: '9' })
+  });
+  assert.equal(res.status, 200);
+  const dead = await fastWatcher.waitFor((e) => e.event === 'kiosk' && e.data.running === false, 3000);
+  assert.equal(dead.data.outputId, '9');
+  assert.equal(dead.data.exitCode, 7);
+  await new Promise((r) => setTimeout(r, 100));
+  const attempts = fs.readFileSync(stubLog, 'utf8').trim().split('\n').length;
+  assert.equal(attempts, 2);
+  fastWatcher.close();
+  watcher.close();
+  await fast.close();
+});
+
+await test('kiosk close terminates the instance', async () => {
+  // the external-death test above already reaped output 1; bring it back first
+  const relaunch = await jsonFetch(launcherBase, '/kiosk/launch', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: launchBody()
+  });
+  assert.equal(relaunch.status, 200);
+  const res = await jsonFetch(launcherBase, '/kiosk/close', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ outputId: '1' })
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.closed, true);
+  const health = await jsonFetch(launcherBase, '/health');
+  assert.equal(health.body.outputs.filter((o) => o.outputId === '1').length, 0);
+});
+
+await launcher.close();
 await helper.close();
 fs.rmSync(cacheDir, { recursive: true, force: true });
+fs.rmSync(stubDir, { recursive: true, force: true });
 console.log(`PASS ${passCount} kiosk helper tests`);
