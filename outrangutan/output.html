@@ -66,6 +66,11 @@
   const OUTPUT_ID = String(outputNumber);
   const PRODUCTION_SESSION_ID = String(hash.get('session') || '').trim();
   const CONTROLLER_INSTANCE_ID = String(hash.get('controller') || '').trim();
+  // Kiosk mode: launched by the local kiosk helper in a separate Chrome
+  // profile, where BroadcastChannel/opener never reach the controller and the
+  // media IndexedDB starts empty. helperBase() admits loopback hosts only.
+  const KioskTransport = window.CueolaKioskTransport || null;
+  const HELPER_BASE = KioskTransport ? KioskTransport.helperBase(hash.get('helper')) : '';
 
   document.title = 'Outrangutan Output ' + OUTPUT_ID;
   if (!Protocol || !CommandQueue) {
@@ -118,6 +123,16 @@
     if (bc) bc.postMessage(wire);
     if (window.opener) {
       try { window.opener.postMessage(wire, location.origin); } catch (e) {}
+    }
+    if (HELPER_BASE) {
+      try {
+        fetch(HELPER_BASE + '/send', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'content-type': 'application/json' },
+          body: KioskTransport.sendBody(PRODUCTION_SESSION_ID, outputProtocol.outputInstanceId, wire)
+        }).catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -233,13 +248,53 @@
     });
     return dbPromise;
   }
-  async function getBlob(id) {
+  async function getLocalBlob(id) {
     const db = await openDB();
     return new Promise((resolve) => {
       const request = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
       request.onsuccess = () => resolve(request.result && request.result.blob ? request.result.blob : null);
       request.onerror = () => resolve(null);
     });
+  }
+  async function putBlob(id, record) {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(record, id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    });
+  }
+  // Kiosk profiles start with an empty media library; a miss falls back to the
+  // helper's cache and the fetched blob is persisted so the fallback runs once.
+  async function fetchHelperMedia(id) {
+    if (!HELPER_BASE || !id) return null;
+    try {
+      const encoded = encodeURIComponent(String(id));
+      const [body, meta] = await Promise.all([
+        fetch(HELPER_BASE + '/media/' + encoded).then((r) => (r.ok ? r.blob() : null)),
+        fetch(HELPER_BASE + '/media/' + encoded + '/meta').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      ]);
+      if (!body) return null;
+      const record = {
+        blob: body,
+        name: (meta && meta.name) || '',
+        mime: (meta && meta.mime) || body.type || 'application/octet-stream',
+        kind: (meta && meta.kind) || '',
+        duration: (meta && meta.duration) || 0,
+        thumb: '',
+        width: (meta && meta.width) || 0,
+        height: (meta && meta.height) || 0
+      };
+      await putBlob(String(id), record);
+      return record.blob;
+    } catch (e) { return null; }
+  }
+  async function getBlob(id) {
+    const local = await getLocalBlob(id);
+    if (local) return local;
+    return fetchHelperMedia(id);
   }
   function rendererError(message, mediaId, recoverability) {
     runtime.mediaLoadStatus = 'error';
@@ -717,6 +772,22 @@
       case 'key':
         applyKey(m, context);
         return { ok: true };
+      case 'preloadmedia': {
+        // Prefetch + honest media probe in one idempotent command: already
+        // cached ids are no-ops, so the ack's `missing` list is the truth a
+        // preflight can trust. Non-destructive; a GO supersedes it instantly.
+        const ids = Array.isArray(m.mediaIds) ? m.mediaIds.map(String).filter(Boolean) : [];
+        const missing = [];
+        let cached = 0;
+        for (const id of ids) {
+          if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Preload superseded' };
+          const local = await getLocalBlob(id);
+          if (local) { cached++; continue; }
+          const fetched = await fetchHelperMedia(id);
+          if (fetched) cached++; else missing.push(id);
+        }
+        return { ok: missing.length === 0, cached, missing, checked: ids.length };
+      }
       default:
         return { ok: false, error: 'Unsupported output command: ' + command.commandType };
     }
@@ -899,6 +970,22 @@
     receive(event.data);
   };
   window.addEventListener('message', receiveWindowMessage);
+  let helperEvents = null;
+  if (HELPER_BASE) {
+    helperEvents = new EventSource(KioskTransport.eventsUrl(HELPER_BASE, {
+      role: 'output',
+      session: PRODUCTION_SESSION_ID,
+      output: OUTPUT_ID,
+      instance: outputProtocol.outputInstanceId
+    }));
+    helperEvents.addEventListener('envelope', (event) => {
+      try { receive(JSON.parse(event.data)); } catch (e) {}
+    });
+    // Every (re)connect re-announces READY: a restarted helper or a refreshed
+    // controller re-adopts this renderer without operator action. The
+    // controller's lastReadyMessageAt guard makes the repeat harmless.
+    helperEvents.onopen = () => send(outputProtocol.buildReady());
+  }
 
   function mediaEnded(d) {
     if (front !== d) return;
