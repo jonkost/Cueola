@@ -1145,6 +1145,9 @@
       outputWins.forEach((rec, id) => {
         const windowClosed = rec.win && rec.win.closed;
         const heartbeatLost = rec.lastBeat && now - rec.lastBeat > WATCHDOG_DEAD_MS;
+        // A kiosk Chrome cold-starts slower than a popup; give the launch a
+        // grace window before the missing first heartbeat reads as death.
+        if (rec.status === 'opening' && rec.launchGraceUntil && now < rec.launchGraceUntil) return;
         if (!windowClosed && !heartbeatLost) return;
         if (['closed', 'disconnected'].includes(rec.status)) return;
         const controller = outputControllers.get(id);
@@ -1167,6 +1170,7 @@
     reattachLiveControl();
     ensureChannel();
     const o = outputById(id) || outputs[0]; if (!o) return null;
+    if (o.kiosk) return openKioskOutput(o);
     let feats = 'width=1280,height=720';
     const scr = (o.screenId != null && screensCache) ? screensCache.find(s => s.id === o.screenId) : null;
     if (scr) feats = 'left=' + scr.availLeft + ',top=' + scr.availTop + ',width=' + scr.availWidth + ',height=' + scr.availHeight;
@@ -1191,7 +1195,91 @@
     return win;
   }
   function tryFullscreen(win) { try { const d = win.document.documentElement; if (d && d.requestFullscreen) d.requestFullscreen().catch(() => {}); } catch (e) {} }
-  function focusOrOpenOutput(id) { const r = outputRecord(id, false); if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id); }
+  // Kiosk mode: the helper spawns a separate --kiosk Chrome on the assigned
+  // display. No WindowProxy, no requestFullscreen (so no "press Esc" bubble),
+  // and no silent fallback to a popup — that would reintroduce the bubble
+  // unannounced mid-show.
+  async function refreshScreensQuiet() {
+    if (!window.CueolaCaps?.windowManagement) return;
+    try {
+      const det = await window.getScreenDetails();
+      screensCache = det.screens.map((s, i) => ({ id: i, label: (s.label || ('Display ' + (i + 1))) + (s.isPrimary ? ' · primary' : ''), availLeft: s.availLeft, availTop: s.availTop, availWidth: s.availWidth, availHeight: s.availHeight }));
+    } catch (e) {}
+  }
+  function openKioskOutput(o) {
+    const rec = outputRecord(o.id, true);
+    if (!KioskTransport) return null;
+    if (!helper.es) helperSync(outputChannelSessionId);
+    if (!helperConnected()) {
+      rec.status = 'error'; rec.error = 'Kiosk helper not running';
+      rec.detail = 'Start it on this Mac: node scripts/kiosk-helper.mjs — or turn off Kiosk to open a popup';
+      toast('Kiosk helper is not running. Start it, or turn off Kiosk for ' + (o.label || ('Output ' + o.id)) + '.');
+      updateOutputUI();
+      return null;
+    }
+    const scr = (o.screenId != null && screensCache) ? screensCache.find(s => s.id === o.screenId) : null;
+    if (!scr) {
+      rec.status = 'error'; rec.error = 'No display assigned'; rec.detail = 'Detect displays, then pick one for this output';
+      toast('Assign a display to ' + (o.label || ('Output ' + o.id)) + ' before launching kiosk.');
+      updateOutputUI();
+      return null;
+    }
+    const launchToken = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    clearAckTimers(rec);
+    const controller = controllerFor(o.id);
+    if (controller) controller.markDisconnected(String(o.id), 'Opening a replacement renderer');
+    rec.win = null; rec.kiosk = true; rec.status = 'opening'; rec.outputInstanceId = ''; rec.lastBeat = Date.now();
+    rec.launchGraceUntil = Date.now() + 15000;
+    rec.painting = true; rec.error = ''; rec.detail = 'Launching kiosk Chrome'; rec.announcedStatus = '';
+    ensureWatchdog();
+    // Screens can be rearranged between assignment and launch; re-read the
+    // rects, then hand the helper fresh coordinates for --window-position.
+    refreshScreensQuiet().then(() => {
+      const fresh = screensCache.find(s => s.id === o.screenId) || scr;
+      const url = KioskTransport.buildKioskLaunchUrl(
+        location.origin, outputUrl(o.id),
+        settings.kioskHelperHost || KioskTransport.DEFAULT_HELPER_HOST, launchToken
+      );
+      return fetch(helper.base + '/kiosk/launch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          outputId: String(o.id), url,
+          x: fresh.availLeft, y: fresh.availTop, width: fresh.availWidth, height: fresh.availHeight
+        })
+      }).then(r => r.json());
+    }).then(result => {
+      if (result && result.ok) return;
+      rec.status = 'error';
+      rec.error = result && result.error === 'chrome-not-found' ? 'Google Chrome is not installed on this Mac' : 'Kiosk launch failed';
+      rec.detail = rec.error;
+      toast(rec.error + '.');
+      updateOutputUI();
+    }).catch(() => {
+      rec.status = 'error'; rec.error = 'Kiosk helper unreachable'; rec.detail = 'Restart the helper, then Launch again';
+      updateOutputUI();
+    });
+    toast('Launching ' + (o.label || ('Output ' + o.id)) + ' in kiosk mode on ' + scr.label + '.');
+    updateOutputUI();
+    return null;
+  }
+  function helperCloseKiosk(id) {
+    if (!helper.base) return;
+    try {
+      fetch(helper.base + '/kiosk/close', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ outputId: String(id) })
+      }).catch(() => {});
+    } catch (e) {}
+  }
+  function focusOrOpenOutput(id) {
+    const o = outputById(id);
+    if (o && o.kiosk) { if (!isOutputAlive(id)) openOutput(id); return; }
+    const r = outputRecord(id, false);
+    if (r && r.win && !r.win.closed) r.win.focus(); else openOutput(id);
+  }
   function popOutProgram() { const o = outputs[0] || { id: 1 }; focusOrOpenOutput(o.id); }
   function recoverOutput(id, resume) {
     const rec = outputRecord(id, true);
@@ -1209,9 +1297,10 @@
   }
   function cleanupOutputRuntime(closeWindows) {
     if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
-    outputWins.forEach(rec => {
+    outputWins.forEach((rec, id) => {
       clearAckTimers(rec);
       if (closeWindows && rec.win && !rec.win.closed) try { rec.win.close(); } catch (e) {}
+      if (closeWindows && rec.kiosk) helperCloseKiosk(id);
     });
     if (bc) { try { bc.close(); } catch (e) {} bc = null; }
     helperDisconnect();
@@ -1243,6 +1332,7 @@
   function removeOutput(id) {
     if (outputs.length <= 1) { toast('Keep at least one output.'); return; }
     const r = outputWins.get(id); if (r && r.win && !r.win.closed) try { r.win.close(); } catch (e) {}
+    if (r && r.kiosk) helperCloseKiosk(id);
     clearAckTimers(r);
     outputWins.delete(id);
     outputControllers.delete(id);
