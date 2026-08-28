@@ -1127,6 +1127,66 @@
       }).catch(() => {});
     } catch (e) {}
   }
+  // Pushes the show's cue media into the helper's disk cache so kiosk
+  // profiles (whose IndexedDB starts empty) can pull it. Diffs by id+size —
+  // media ids are write-once, so a matching size means an identical file.
+  const kioskSync = { running: false, done: 0, total: 0, error: '' };
+  function renderKioskSyncProgress() {
+    const el = $('og-kiosk-sync-note');
+    if (el) el.textContent = kioskSync.running
+      ? ('Syncing media ' + kioskSync.done + ' of ' + kioskSync.total + '…')
+      : (kioskSync.error || '');
+  }
+  async function syncMediaToHelper() {
+    if (!helperConnected() || kioskSync.running || !KioskTransport) return;
+    const ids = KioskTransport.neededIds(cues);
+    kioskSync.running = true; kioskSync.done = 0; kioskSync.total = ids.length; kioskSync.error = '';
+    renderOutputs();
+    try {
+      const listed = await fetch(helper.base + '/media').then(r => r.json());
+      const have = new Map((Array.isArray(listed) ? listed : []).map(m => [m.id, m.size]));
+      for (const id of ids) {
+        const record = await idbGet(MEDIA_STORE, id);
+        // A cue whose media is missing from the library is preflight's find,
+        // not the sync's — skip it here.
+        if (!record || !record.blob) { kioskSync.done++; renderKioskSyncProgress(); continue; }
+        if (have.get(id) !== record.blob.size) {
+          const params = new URLSearchParams({
+            name: record.name || '', mime: record.mime || record.blob.type || '',
+            kind: record.kind || '', duration: String(record.duration || 0),
+            width: String(record.width || 0), height: String(record.height || 0)
+          });
+          const res = await fetch(helper.base + '/media/' + encodeURIComponent(id) + '?' + params, { method: 'PUT', body: record.blob });
+          if (!res.ok) throw new Error('upload-failed');
+        }
+        kioskSync.done++; renderKioskSyncProgress();
+      }
+      toast('Kiosk media synced: ' + kioskSync.total + ' file' + (kioskSync.total === 1 ? '' : 's') + '.');
+    } catch (e) {
+      kioskSync.error = 'Media sync failed — is the helper still running?';
+      toast(kioskSync.error);
+    }
+    kioskSync.running = false;
+    renderOutputs();
+  }
+  async function pruneHelperMedia() {
+    if (!helperConnected() || !KioskTransport) return;
+    try {
+      const result = await fetch(helper.base + '/media/prune', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ keep: KioskTransport.neededIds(cues) })
+      }).then(r => r.json());
+      toast('Removed ' + ((result && result.removed) || 0) + ' unused cached file' + (result && result.removed === 1 ? '' : 's') + '.');
+      helperRefreshInfo();
+    } catch (e) { toast('Could not prune the helper cache.'); }
+  }
+  function helperRefreshInfo() {
+    if (!helper.base) return;
+    fetch(helper.base + '/health').then(r => r.json()).then(info => {
+      if (info && info.app === KioskTransport.HELPER_APP) { helper.info = info; renderOutputs(); }
+    }).catch(() => {});
+  }
   function isOutputAlive(id) {
     const rec = outputRecord(id, false);
     if (!rec) return false;
@@ -2117,6 +2177,29 @@
   async function openOutputsPanel() { $('og-outputs').classList.add('on'); renderOutputs(); audioDevs = await listAudioOutputs(); renderOutputs(); }
   function closeOutputsPanel() { $('og-outputs').classList.remove('on'); }
   function devOptions(cur) { return '<option value="">Default device</option>' + audioDevs.map(d => '<option value="' + d.id + '"' + (cur === d.id ? ' selected' : '') + '>' + esc(d.label) + '</option>').join(''); }
+  function kioskHelperCard() {
+    if (!KioskTransport) return '';
+    const wanted = kioskWanted();
+    const connected = helperConnected();
+    const info = helper.info;
+    let statusNote;
+    if (!wanted) statusNote = 'True-fullscreen Chrome outputs with no “press Esc” bubble. Needs the local helper: <code>node scripts/kiosk-helper.mjs</code>';
+    else if (connected) {
+      statusNote = 'Helper v' + esc((info && info.helperVersion) || '?')
+        + (info && info.chrome && info.chrome.found ? '' : ' · <strong>Google Chrome not found on this Mac</strong>')
+        + (info ? ' · ' + (info.mediaCount || 0) + ' cached file' + (info.mediaCount === 1 ? '' : 's') + ' (' + fmtPbSfxSize(info.cacheBytes || 0) + ')' : '');
+    } else statusNote = 'Helper not reachable. Start it on this Mac: <code>node scripts/kiosk-helper.mjs</code>';
+    return '<div class="og-out-row og-kiosk-card">'
+      + '<div class="og-out-main"><span class="og-out-dot' + (connected ? ' live' : wanted ? ' dead' : '') + '"></span>'
+        + '<span class="og-out-kiosk-title">Kiosk helper</span>'
+        + '<label class="og-check og-check-inline"><input type="checkbox" id="og-kiosk-enable"' + (wanted ? ' checked' : '') + (outputs.some(o => o && o.kiosk) ? ' disabled data-tip="In use by a kiosk output"' : '') + '> Use kiosk helper</label>'
+        + (connected ? '<button class="og-bar-btn og-capsule" id="og-kiosk-sync"' + (kioskSync.running ? ' disabled' : '') + '>Sync media</button>' : '')
+        + (connected ? '<button class="og-bar-btn og-capsule" id="og-kiosk-prune">Clear unused</button>' : '')
+      + '</div>'
+      + '<div class="og-out-note" role="status">' + statusNote + '</div>'
+      + '<div class="og-out-note" id="og-kiosk-sync-note">' + esc(kioskSync.running ? ('Syncing media ' + kioskSync.done + ' of ' + kioskSync.total + '…') : (kioskSync.error || '')) + '</div>'
+      + '</div>';
+  }
   function renderOutputs() {
     const body = $('og-outputs-body'); if (!body) return;
     body.innerHTML =
@@ -2124,6 +2207,7 @@
         + '<button class="og-bar-btn og-capsule" id="og-out-detect">' + sym('content.display') + ' Detect displays</button>'
         + '<div class="og-field og-out-mastersink"><label>Master audio output (control)</label><select id="og-master-sink">' + devOptions(settings.masterSinkId) + '</select></div>'
         + '<div class="og-field og-out-standby"><label>Standby text (empty = black)</label><input id="og-standby-text" value="' + esc(settings.standbyText || '') + '"></div></div>'
+      + kioskHelperCard()
       + outputs.map(o => {
         const open = isOutputAlive(o.id);
         const live = isOutputHealthy(o.id);
@@ -2141,7 +2225,7 @@
         return '<div class="og-out-row">'
           + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' data-tip="Not responding: the window may be frozen"' : '') + '></span>'
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
-            + '<button class="og-bar-btn og-capsule og-out-open" data-o="' + o.id + '">' + (open ? 'Focus' : 'Open') + '</button>'
+            + '<button class="og-bar-btn og-capsule og-out-open" data-o="' + o.id + '">' + (o.kiosk ? (open ? 'Relaunch kiosk' : 'Launch kiosk') : (open ? 'Focus' : 'Open')) + '</button>'
             + '<button class="og-bar-btn og-capsule og-out-id" data-o="' + o.id + '">Identify</button>'
             + (needsRecovery ? '<button class="og-bar-btn og-capsule og-out-recover" data-o="' + o.id + '" data-resume="' + (rec.recoverability === 'operator' ? '1' : '0') + '">' + recoveryLabel + '</button>' : '')
             + (outputs.length > 1 ? '<button class="og-bar-btn og-capsule danger og-out-del" data-o="' + o.id + '">' + sym('action.delete') + '</button>' : '')
@@ -2149,14 +2233,28 @@
           + '<div class="og-out-note" role="status">' + esc(statusDetail) + '</div>'
           + '<div class="og-out-cfg">'
             + '<div class="og-field"><label>Display</label>' + screenSel + '</div>'
+            + (KioskTransport ? '<label class="og-check og-check-inline og-out-kioskchk"' + (helperConnected() || o.kiosk ? '' : ' data-tip="Start the kiosk helper to enable"') + '><input type="checkbox" class="og-out-kiosk" data-o="' + o.id + '"' + (o.kiosk ? ' checked' : '') + (helperConnected() || o.kiosk ? '' : ' disabled') + '> Kiosk (true fullscreen, no Esc)</label>' : '')
             + '<label class="og-check og-check-inline og-out-audiochk"><input type="checkbox" class="og-out-audio" data-o="' + o.id + '"' + (o.audioOn ? ' checked' : '') + '> Audio on this output</label>'
-            + '<div class="og-field"><label>Device</label><select class="og-out-sink" data-o="' + o.id + '">' + devOptions(o.sinkId) + '</select></div>'
+            + (o.kiosk
+              ? '<div class="og-field"><label>Device</label><span class="og-out-note">Kiosk audio plays on that display\'s default device</span></div>'
+              : '<div class="og-field"><label>Device</label><select class="og-out-sink" data-o="' + o.id + '">' + devOptions(o.sinkId) + '</select></div>')
           + '</div></div>';
       }).join('')
       + '<p class="og-sheet-note">Outputs are where video appears. Add an output, choose its display and audio device, then Open it. Set each cue\'s output in the Inspector.</p>';
 
     $('og-out-add').onclick = addOutput;
     $('og-out-detect').onclick = detectScreens;
+    const kioskEnable = $('og-kiosk-enable');
+    if (kioskEnable) kioskEnable.onchange = () => {
+      settings.kioskHelper = kioskEnable.checked;
+      scheduleSave();
+      if (settings.kioskHelper) helperSync(ensureChannel()); else helperSync(outputChannelSessionId);
+      renderOutputs();
+    };
+    const kioskSyncBtn = $('og-kiosk-sync');
+    if (kioskSyncBtn) kioskSyncBtn.onclick = syncMediaToHelper;
+    const kioskPruneBtn = $('og-kiosk-prune');
+    if (kioskPruneBtn) kioskPruneBtn.onclick = pruneHelperMedia;
     $('og-master-sink').onchange = e => { settings.masterSinkId = e.target.value || null; applyMasterSink(); scheduleSave(); };
     $('og-standby-text').onchange = e => { settings.standbyText = e.target.value; scheduleSave(); sendOut({ t: 'standby', text: settings.standbyText }); };
     const each = (sel, fn) => Array.prototype.forEach.call(body.querySelectorAll(sel), fn);
@@ -2166,6 +2264,15 @@
     each('.og-out-recover', el => { el.onclick = () => recoverOutput(+el.getAttribute('data-o'), el.getAttribute('data-resume') === '1'); });
     each('.og-out-del', el => { el.onclick = () => removeOutput(+el.getAttribute('data-o')); });
     each('.og-out-screen', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.screenId = el.value === '' ? null : +el.value; scheduleSave(); } }; });
+    each('.og-out-kiosk', el => { el.onchange = () => {
+      const o = outputById(+el.getAttribute('data-o'));
+      if (!o) return;
+      o.kiosk = el.checked;
+      // Turning kiosk off while its Chrome runs closes that instance —
+      // otherwise a headless kiosk window would linger with no controls.
+      if (!o.kiosk) helperCloseKiosk(o.id);
+      scheduleSave(); renderOutputs();
+    }; });
     each('.og-out-audio', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.audioOn = el.checked; applyOutputSink(o.id); scheduleSave(); } }; });
     each('.og-out-sink', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.sinkId = el.value || null; applyOutputSink(o.id); scheduleSave(); } }; });
   }

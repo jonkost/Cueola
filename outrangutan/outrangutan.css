@@ -892,6 +892,8 @@
 .og-out-standby input { font-size: 13px; }
 .og-out-row { border: 1px solid var(--og-edge); border-radius: var(--og-r); padding: 12px; margin-bottom: 12px; background: color-mix(in srgb, var(--s2) 70%, transparent); }
 .og-out-main { display: flex; align-items: center; gap: 8px; }
+.og-kiosk-card .og-out-kiosk-title { font-weight: 600; }
+.og-kiosk-card code { font-size: 0.85em; opacity: 0.85; }
 .og-out-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); flex: 0 0 auto; }
 .og-out-dot.live { background: var(--green); }
 .og-out-dot.dead { background: var(--red); animation: og-dot-pulse 1s ease-in-out infinite; }
