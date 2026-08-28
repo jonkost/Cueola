@@ -43,6 +43,7 @@ export const ASSETS = [
   'script-operator.css',
   'outrangutan/output-protocol.js',
   'outrangutan/output-command-queue.js',
+  'outrangutan/kiosk-transport.js',
   'outrangutan/stream-deck-label.js',
   'cueola-app.js',
   'outrangutan/outrangutan.js',

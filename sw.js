@@ -134,6 +134,7 @@ const SHELL_ASSETS = [
   'script-operator.css?v=b1917c496b',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
+  'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
   'cueola-app.js?v=91f128902f',
   'outrangutan/outrangutan.css?v=98c3501a8e',
@@ -244,7 +245,10 @@ const versionSignature = SHELL_ASSETS
 // 41->42: a parked READY · MANUAL call grew an AUTO button in the call banner
 // (index.html markup + CSS), the KeyWi window now joins the session the
 // launcher hands it, and the deck strip monitors ride show truth.
-const WORKER_SCHEMA = '43';
+// 43->44: kiosk outputs — new outrangutan/kiosk-transport.js module precached
+// and script-tagged in index.html + output.html (page-HTML changes the shell
+// caches), for output windows relayed through the local kiosk helper daemon.
+const WORKER_SCHEMA = '44';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
