@@ -996,6 +996,10 @@
       applyControllerState(rec, controller.getState(String(id)));
       rec.announcedStatus = '';
       flushOutputIntents(id);
+      // A kiosk renderer's profile may not hold the show's media yet; the
+      // preload is both prefetch and the honest availability probe preflight
+      // reads. Idempotent, non-destructive — a GO supersedes it instantly.
+      if (outputById(id)?.kiosk) dispatchKioskPreload(id);
       if (rec.status === 'error') announceOutput(rec, 'sync-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'the synchronized program could not be rendered.'));
       else announceOutput(rec, 'ready', (outputById(id)?.label || ('Output ' + id)) + (rec.recoverability === 'operator' ? ' recovered paused. Resume when ready.' : ' is ready.'));
       updateOutputUI();
@@ -1021,6 +1025,17 @@
       clearTimeout(pending.timer); rec.ackPending.delete(normalized.commandId);
       const result = controller.noteAck(message);
       applyControllerState(rec, controller.getState(String(id)));
+      if (ackForType === 'PRELOAD_MEDIA') {
+        // Missing media is a preflight finding, not a renderer fault — do not
+        // let the generic rejected-command branch flag the output as errored.
+        rec.mediaMissing = result && Array.isArray(result.missing) ? result.missing : [];
+        rec.mediaCheckedAt = Date.now();
+        if (rec.mediaMissing.length) {
+          announceOutput(rec, 'media-missing-' + rec.mediaMissing.length, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.mediaMissing.length + ' media file' + (rec.mediaMissing.length === 1 ? '' : 's') + ' not cached — run Sync media.');
+        }
+        updateOutputUI();
+        return;
+      }
       if (result && result.ok === false) {
         rec.status = 'error'; rec.error = result.error || 'Renderer rejected a command'; rec.detail = rec.error;
         announceOutput(rec, 'command-' + normalized.commandId, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.error);
@@ -1162,6 +1177,9 @@
         kioskSync.done++; renderKioskSyncProgress();
       }
       toast('Kiosk media synced: ' + kioskSync.total + ' file' + (kioskSync.total === 1 ? '' : 's') + '.');
+      // Freshly cached files change the availability answer — re-probe every
+      // connected kiosk renderer so preflight reflects the new truth.
+      outputs.filter(o => o && o.kiosk).forEach(o => dispatchKioskPreload(o.id));
     } catch (e) {
       kioskSync.error = 'Media sync failed — is the helper still running?';
       toast(kioskSync.error);
@@ -1186,6 +1204,10 @@
     fetch(helper.base + '/health').then(r => r.json()).then(info => {
       if (info && info.app === KioskTransport.HELPER_APP) { helper.info = info; renderOutputs(); }
     }).catch(() => {});
+  }
+  function dispatchKioskPreload(id) {
+    if (!KioskTransport) return;
+    dispatchOutputIntent(id, { t: 'preloadMedia', mediaIds: KioskTransport.neededIds(cues) });
   }
   function isOutputAlive(id) {
     const rec = outputRecord(id, false);
@@ -1453,7 +1475,9 @@
         lastAck: state ? state.lastAck : null,
         recoverability: rec ? rec.recoverability : 'none',
         pendingAcks: rec && rec.ackPending ? rec.ackPending.size : 0,
-        error: rec ? rec.error : ''
+        error: rec ? rec.error : '',
+        mode: o.kiosk ? 'kiosk' : 'popup',
+        mediaMissing: rec && Array.isArray(rec.mediaMissing) ? rec.mediaMissing.length : 0
       };
     });
     const priority = ['error', 'stalled', 'disconnected', 'recovering', 'connecting', 'opening'];
@@ -1465,14 +1489,29 @@
     const open = items.filter(item => item.status !== 'closed').length;
     if (ready > 0 && open < items.length && !items.some(item => priority.includes(item.status))) status = 'degraded';
     const problem = items.find(item => item.status === status) || (status === 'degraded' ? items.find(item => item.status === 'closed') : null);
-    const detail = status === 'degraded'
+    let detail = status === 'degraded'
       ? (ready + ' of ' + items.length + ' outputs ready · ' + items.filter(item => item.status === 'closed').map(item => item.label + ' closed').join(', '))
       : (problem ? (problem.label + ' · ' + problem.detail) : (ready ? (ready + ' of ' + items.length + ' outputs ready') : 'No output window open'));
-    return { status, detail, open, ready, total: items.length, items };
+    // Kiosk truths the controller-local checks cannot see: a ready renderer
+    // whose profile still lacks media files, and a dead helper link.
+    const missing = items.filter(item => item.mode === 'kiosk' && item.mediaMissing > 0);
+    if (missing.length) detail += ' · ' + missing.map(item => item.label + ': ' + item.mediaMissing + ' media file' + (item.mediaMissing === 1 ? '' : 's') + ' not cached — Sync media').join(' · ');
+    const helperDown = kioskWanted() && !helperConnected();
+    if (helperDown) detail += ' · Kiosk helper offline — kiosk outputs autonomous until it restarts';
+    return {
+      status, detail, open, ready, total: items.length, items,
+      kioskMediaMissing: missing.reduce((n, item) => n + item.mediaMissing, 0),
+      helper: {
+        wanted: kioskWanted(),
+        connected: helperConnected(),
+        version: helper.info ? helper.info.helperVersion : '',
+        chromeFound: !!(helper.info && helper.info.chrome && helper.info.chrome.found)
+      }
+    };
   }
   function projectOutputStatus(force) {
     const summary = outputStatus();
-    const signature = JSON.stringify({ status: summary.status, detail: summary.detail, items: summary.items.map(item => [item.id, item.status, item.recoverability, item.pendingAcks, item.error]) });
+    const signature = JSON.stringify({ status: summary.status, detail: summary.detail, items: summary.items.map(item => [item.id, item.status, item.recoverability, item.pendingAcks, item.error, item.mediaMissing]) });
     if (!force && signature === lastOutputProjection) return summary;
     lastOutputProjection = signature;
     try { if (typeof window.syncOutrangutanControllerStatus === 'function') window.syncOutrangutanControllerStatus(); } catch (e) {}
@@ -1485,10 +1524,14 @@
     const summary = outputStatus();
     return {
       open: summary.open,
-      healthy: summary.ready,
+      // A kiosk output with uncached media must not count as healthy —
+      // preflight's all-clear has to mean its cues will actually render.
+      healthy: summary.ready - summary.items.filter(item => item.status === 'ready' && item.mode === 'kiosk' && item.mediaMissing > 0).length,
       dead: summary.items.filter(item => item.status !== 'ready' && item.status !== 'closed').map(item => item.label),
       status: summary.status,
-      detail: summary.detail
+      detail: summary.detail,
+      kioskMediaMissing: summary.kioskMediaMissing,
+      helper: summary.helper
     };
   }
 
