@@ -5,6 +5,58 @@ Newest phase on top.
 
 ---
 
+## Kiosk outputs (2026-08-28) — true-fullscreen Chrome, no "press Esc" bubble
+
+Why: during a show, Chrome's "press Esc to exit full screen" bubble appeared on
+a projector (JS `requestFullscreen` shows it on every fullscreen entry, and a
+watchdog recovery re-enters fullscreen mid-show). Kiosk mode (`--kiosk`) never
+shows it and Esc can't exit — but it's a Chrome *launch* flag, so kiosk outputs
+run as separate Chrome instances driven by a local daemon.
+
+**Pieces**
+- `scripts/kiosk-helper.mjs` — zero-dep loopback daemon on `127.0.0.1:17845`
+  (walks to :17849 if busy). Three dumb jobs, no protocol logic: relays v2
+  envelopes verbatim (SSE + POST — BroadcastChannel can't cross Chrome
+  profiles), serves a disk cache of media blobs (`~/Library/Application
+  Support/CueolaKiosk/media/`) pushed by "Sync media", and spawns/kills one
+  `--kiosk` Chrome per output (`--user-data-dir` per output under
+  `CueolaKiosk/`, `--window-position` from the assigned display,
+  `--autoplay-policy=no-user-gesture-required` because a scripted launch has
+  no user gesture). Origin allowlist per talkbackd.
+- Outputs sheet: "Kiosk helper" card (status, Sync media, Clear unused) and a
+  per-output "Kiosk (true fullscreen, no Esc)" checkbox. Open becomes
+  "Launch kiosk". Popup mode is untouched — no helper, no new code paths.
+- Renderer (`output.html`): with a `helper=` hash param it also listens on the
+  helper's SSE, re-announces READY on every reconnect, and falls back to
+  `GET /media/:id` when its own IndexedDB misses (persisting the blob so the
+  fallback runs once). New non-destructive `PRELOAD_MEDIA` command = prefetch
+  + honest availability probe; its ack feeds preflight (`mediaMissing`).
+
+**Show-day runbook**
+1. Start the helper on the playout Mac: `node scripts/kiosk-helper.mjs`.
+2. Outputs sheet → enable "Use kiosk helper" → Sync media (after any media
+   import). First time, Chrome asks a one-time local-network permission for
+   cueola.live — allow it.
+3. Detect displays, assign each kiosk output a display, Launch kiosk.
+4. Run preflight: the outputs row now also proves each kiosk renderer's media
+   coverage and the helper link.
+5. **After a deploy**: relaunch each kiosk output (kiosk profiles have no
+   service worker; a fresh launch picks up the new `?v=` assets). Same rule as
+   reloading every window, extended to kiosks.
+
+**Known limits (accepted)**
+- Kiosk audio plays on the display's default device: `setSinkId` deviceIds are
+  per-profile-salted and won't resolve in a kiosk profile. Outputs are muted
+  by default anyway (program audio rides the control bus).
+- A crashed/killed helper deliberately leaves kiosk Chrome running — the
+  renderer keeps playing from its own IndexedDB; the controller shows the
+  relay offline instead of per-output death, and reconnect re-adopts via the
+  renderers' READY-on-reconnect.
+- Kiosk launch needs the venue network up (no SW in kiosk profiles); the
+  `?launch=` token busts HTML caching per launch.
+
+---
+
 ## Corrections (2026-08-03) — read before trusting older entries below
 
 - **Panel resizing is GONE.** Owner decision 2026-07-14: the draggable
