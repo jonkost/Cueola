@@ -62,6 +62,7 @@
     clockMode: 'remaining', wallClockMode: '24', multiTrigger: true, showLock: false, tab: 'play',
     fadeCurve: 'linear', masterGain: 1, masterSinkId: null, sdMap: {}, midiMap: {}, transcode: false, standbyText: '',
     layout: { wCuelist: 280, wInspector: 280, hEdit: 150 }, shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
+    kioskHelper: false, kioskHelperHost: null,
   });
   const defaultOutputs = () => ([{ id: 1, label: 'Output 1', screenId: null, sinkId: null, audioOn: false }]);
   const THEME_ORDER = ['cool','warm','white','green','koala','panda','flamingo','outrangutan','prepbear'];
@@ -886,6 +887,7 @@
     const message = Object.assign({ _og: true, _from: 'control' }, envelope);
     if (bc) try { bc.postMessage(message); } catch (e) {}
     if (rec.win && !rec.win.closed) try { rec.win.postMessage(message, location.origin); } catch (e) {}
+    helperPost(message); // third leg: kiosk renderers (receivers dedup by commandId)
     if (trackAck) {
       const timer = setTimeout(() => {
         if (!rec.ackPending.has(envelope.commandId)) return;
@@ -1043,7 +1045,87 @@
       bc = new BroadcastChannel(OUTPUT_CHANNEL_PREFIX + outputChannelSessionId);
       bc.onmessage = e => handleOutputMessage(e.data, null);
     }
+    helperSync(outputChannelSessionId);
     return outputChannelSessionId;
+  }
+
+  // ── kiosk helper client (local daemon relay for kiosk-mode outputs) ──────
+  // Kiosk Chrome instances run in their own profiles where BroadcastChannel
+  // and WindowProxy handles do not exist; envelopes ride the helper's
+  // loopback SSE + POST relay instead. The relay is a third transport leg —
+  // popup outputs keep working when the helper is absent.
+  const KioskTransport = window.CueolaKioskTransport || null;
+  const helper = { base: '', session: '', status: 'off', es: null, info: null };
+  function kioskWanted() {
+    return settings.kioskHelper === true || outputs.some(o => o && o.kiosk);
+  }
+  function helperBaseUrl() {
+    if (!KioskTransport) return '';
+    return KioskTransport.helperBase(settings.kioskHelperHost || KioskTransport.DEFAULT_HELPER_HOST);
+  }
+  function helperConnected() { return helper.status === 'connected' && !!helper.es; }
+  function helperDisconnect() {
+    if (helper.es) { try { helper.es.close(); } catch (e) {} }
+    helper.es = null; helper.session = ''; helper.status = kioskWanted() ? 'unreachable' : 'off';
+  }
+  function helperSync(session) {
+    if (!KioskTransport || !('EventSource' in window)) return;
+    if (!kioskWanted()) { if (helper.es) { helperDisconnect(); updateOutputUI(); } return; }
+    const base = helperBaseUrl();
+    if (!base) return;
+    if (helper.es && helper.session === session && helper.base === base) return;
+    if (helper.es) { try { helper.es.close(); } catch (e) {} helper.es = null; }
+    helper.base = base; helper.session = session; helper.status = 'connecting'; helper.info = null;
+    const es = new EventSource(KioskTransport.eventsUrl(base, {
+      role: 'controller', session, instance: OUTPUT_CONTROLLER_ID
+    }));
+    helper.es = es;
+    es.onopen = () => { if (helper.es !== es) return; helper.status = 'connected'; updateOutputUI(); };
+    // EventSource retries on its own; report the link state, never per-output death.
+    es.onerror = () => { if (helper.es !== es) return; helper.status = 'connecting'; updateOutputUI(); };
+    es.addEventListener('hello', (event) => {
+      if (helper.es !== es) return;
+      try { helper.info = JSON.parse(event.data); } catch (e) {}
+      helper.status = 'connected';
+      updateOutputUI();
+    });
+    es.addEventListener('envelope', (event) => {
+      if (helper.es !== es) return;
+      try {
+        const message = JSON.parse(event.data);
+        if (message && message._og) handleOutputMessage(message, null);
+      } catch (e) {}
+    });
+    es.addEventListener('kiosk', (event) => {
+      if (helper.es !== es) return;
+      try { handleKioskProcessEvent(JSON.parse(event.data)); } catch (e) {}
+    });
+  }
+  function handleKioskProcessEvent(info) {
+    if (!info || info.running !== false) { updateOutputUI(); return; }
+    // The helper watched this output's Chrome die: flag it now, not at the
+    // 5-second heartbeat watchdog.
+    const id = Number(info.outputId);
+    const rec = outputRecord(id, false);
+    if (!rec || ['closed', 'disconnected'].includes(rec.status)) return;
+    const controller = outputControllers.get(id);
+    if (controller) controller.markDisconnected(String(id), 'Kiosk Chrome process exited');
+    rec.status = 'closed'; rec.recoverability = 'reload';
+    rec.error = 'Kiosk Chrome process exited'; rec.detail = rec.error;
+    clearAckTimers(rec);
+    announceOutput(rec, 'closed', (outputById(id)?.label || ('Output ' + id)) + ' kiosk window exited.');
+    updateOutputUI();
+  }
+  function helperPost(wire) {
+    if (!helper.base || !helper.es) return;
+    try {
+      fetch(helper.base + '/send', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'content-type': 'application/json' },
+        body: KioskTransport.sendBody(outputChannelSessionId, OUTPUT_CONTROLLER_ID, wire)
+      }).catch(() => {});
+    } catch (e) {}
   }
   function isOutputAlive(id) {
     const rec = outputRecord(id, false);
@@ -1132,6 +1214,7 @@
       if (closeWindows && rec.win && !rec.win.closed) try { rec.win.close(); } catch (e) {}
     });
     if (bc) { try { bc.close(); } catch (e) {} bc = null; }
+    helperDisconnect();
     if (outputWindowListenerReady && outputWindowMessageHandler) window.removeEventListener('message', outputWindowMessageHandler);
     outputWindowListenerReady = false; outputWindowMessageHandler = null;
     outputChannelSessionId = ''; outputMessageIds.clear(); outputControllers.clear(); outputWins.clear();
