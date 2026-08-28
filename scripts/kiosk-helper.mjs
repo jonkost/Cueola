@@ -116,7 +116,8 @@ export function createHelper(options = {}) {
   const cacheDir = options.cacheDir || DEFAULT_CACHE_DIR;
   const profileBase = options.profileBase || DEFAULT_PROFILE_BASE;
   const chromeOverride = options.chrome;
-  const kids = new Map(); // outputId -> { child, pid, startedAt, url, closing }
+  const kids = new Map(); // outputId -> { child, pid, startedAt, url, closing, session }
+  const kidOps = new Map(); // outputId -> tail of the launch/close promise chain
   let boundPort = null;
 
   const state = {
@@ -149,8 +150,25 @@ export function createHelper(options = {}) {
     }));
   }
 
-  function broadcastKiosk(outputId, running, pid, exitCode) {
-    for (const client of clients) sseWrite(client, 'kiosk', { outputId, running, pid, exitCode: exitCode == null ? null : exitCode });
+  function broadcastKiosk(outputId, running, pid, exitCode, session) {
+    for (const client of clients) {
+      // Scope process events to the launching session so a second session's
+      // same-numbered output is never marked dead by this one's Chrome exit.
+      if (session && client.session && client.session !== session) continue;
+      sseWrite(client, 'kiosk', { outputId, running, pid, exitCode: exitCode == null ? null : exitCode });
+    }
+  }
+
+  // Launch and close for one outputId must never interleave: two concurrent
+  // launches would double-spawn into one profile, and a close racing a launch
+  // could orphan the replacement Chrome.
+  function serializeKidOp(outputId, fn) {
+    const prev = kidOps.get(outputId) || Promise.resolve();
+    const next = prev.then(fn, fn);
+    const tail = next.catch(() => {});
+    kidOps.set(outputId, tail);
+    tail.finally(() => { if (kidOps.get(outputId) === tail) kidOps.delete(outputId); });
+    return next;
   }
 
   function terminateChild(rec) {
@@ -173,7 +191,7 @@ export function createHelper(options = {}) {
     // detached + unref: a dead helper must never take the show's Chrome with it
     const child = spawn(chromePath, args, { stdio: 'ignore', detached: true });
     child.unref();
-    const rec = { child, pid: child.pid, startedAt: Date.now(), url: launch.url, closing: false };
+    const rec = { child, pid: child.pid, startedAt: Date.now(), url: launch.url, closing: false, session: launch.session || '' };
     kids.set(outputId, rec);
     child.once('exit', (code) => {
       if (kids.get(outputId) !== rec) return; // already replaced
@@ -186,9 +204,9 @@ export function createHelper(options = {}) {
         const retried = spawnKiosk(outputId, launch, true);
         if (retried.ok) return;
       }
-      broadcastKiosk(outputId, false, rec.pid, code);
+      broadcastKiosk(outputId, false, rec.pid, code, rec.session);
     });
-    broadcastKiosk(outputId, true, rec.pid, null);
+    broadcastKiosk(outputId, true, rec.pid, null, rec.session);
     return { ok: true, pid: rec.pid };
   }
 
@@ -209,13 +227,16 @@ export function createHelper(options = {}) {
     }
     const launch = {
       url,
+      session: cleanToken(parsed.session),
       x: Number(parsed.x) || 0,
       y: Number(parsed.y) || 0,
       width: Number(parsed.width) || 1280,
       height: Number(parsed.height) || 720
     };
-    await terminateChild(kids.get(outputId));
-    const result = spawnKiosk(outputId, launch, false);
+    const result = await serializeKidOp(outputId, async () => {
+      await terminateChild(kids.get(outputId));
+      return spawnKiosk(outputId, launch, false);
+    });
     sendJson(res, result.ok ? 200 : 500, result, corsHeaders(req));
   }
 
@@ -226,10 +247,13 @@ export function createHelper(options = {}) {
       return;
     }
     const outputId = cleanToken(parsed && parsed.outputId, 20);
-    const rec = kids.get(outputId);
-    await terminateChild(rec);
-    kids.delete(outputId);
-    sendJson(res, 200, { ok: true, closed: !!rec }, corsHeaders(req));
+    const closed = await serializeKidOp(outputId, async () => {
+      const rec = kids.get(outputId);
+      await terminateChild(rec);
+      if (kids.get(outputId) === rec) kids.delete(outputId);
+      return !!rec;
+    });
+    sendJson(res, 200, { ok: true, closed }, corsHeaders(req));
   }
 
   // ── media cache ──────────────────────────────────────────────────────────
@@ -254,7 +278,8 @@ export function createHelper(options = {}) {
   }
 
   function mediaIdFrom(url) {
-    const id = decodeURIComponent(url.pathname.split('/')[2] || '');
+    let id = '';
+    try { id = decodeURIComponent(url.pathname.split('/')[2] || ''); } catch (e) { return null; }
     return MEDIA_ID.test(id) ? id : null;
   }
 
@@ -451,7 +476,14 @@ export function createHelper(options = {}) {
       res.end();
       return;
     }
-    const url = new URL(req.url, 'http://127.0.0.1');
+    // A malformed request target (absolute-form URL, bad percent-encoding)
+    // must answer 400, never throw — an uncaught error here kills the relay
+    // mid-show for anything that pokes the port.
+    let url;
+    try { url = new URL(req.url, 'http://127.0.0.1'); } catch (e) {
+      sendJson(res, 400, { ok: false, error: 'bad-request' }, corsHeaders(req));
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/health') { handleHealth(req, res); return; }
     if (req.method === 'GET' && url.pathname === '/events') { handleEvents(req, res, url); return; }
     if (req.method === 'POST' && url.pathname === '/send') { handleSend(req, res); return; }

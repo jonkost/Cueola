@@ -265,6 +265,27 @@ await test('media ids are validated (path traversal refused)', async () => {
   assert.equal(evilGet.status, 400);
 });
 
+await test('malformed request targets answer 400 without killing the daemon', async () => {
+  // Bad percent-encoding in the media id and an absolute-form request target
+  // both used to throw uncaught and take the whole relay down.
+  const badEncoding = await fetch(base + '/media/%E0%A4%A');
+  assert.equal(badEncoding.status, 400);
+  const net = await import('node:net');
+  const raw = await new Promise((resolve, reject) => {
+    const sock = net.connect(port, '127.0.0.1', () => {
+      sock.write('GET http://[ HTTP/1.1\r\nHost: x\r\n\r\n');
+    });
+    let data = '';
+    sock.on('data', (chunk) => { data += chunk; });
+    sock.on('end', () => resolve(data));
+    sock.on('error', reject);
+    setTimeout(() => { sock.destroy(); resolve(data); }, 1500);
+  });
+  assert.ok(/HTTP\/1\.1 400/.test(raw), 'absolute-form target should answer 400, got: ' + raw.slice(0, 60));
+  const alive = await jsonFetch(base, '/health');
+  assert.equal(alive.status, 200);
+});
+
 await test('media prune removes everything not kept', async () => {
   await jsonFetch(base, '/media/m_keepme?mime=image/png', { method: 'PUT', body: new Uint8Array(10) });
   const prune = await jsonFetch(base, '/media/prune', {
