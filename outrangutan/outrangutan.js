@@ -889,16 +889,24 @@
     if (rec.win && !rec.win.closed) try { rec.win.postMessage(message, location.origin); } catch (e) {}
     helperPost(message); // third leg: kiosk renderers (receivers dedup by commandId)
     if (trackAck) {
+      // PRELOAD_MEDIA legitimately runs for minutes on a cold kiosk profile
+      // (it transfers the whole show's media). Flipping the output to
+      // "recovering" at 5s would trigger a resync that cancels the preload
+      // and restarts it — a churn loop. Give it a long leash and let its
+      // timeout expire silently.
+      const isPreload = envelope.commandType === 'PRELOAD_MEDIA';
+      const ackMs = isPreload ? 600000 : OUTPUT_ACK_MS;
       const timer = setTimeout(() => {
         if (!rec.ackPending.has(envelope.commandId)) return;
         rec.ackPending.delete(envelope.commandId);
+        if (isPreload) return;
         const controller = outputControllers.get(rec.id);
         if (controller) controller.updateOutput(String(rec.id), { communicationStatus: 'recovering', recoverability: 'operator', error: 'No acknowledgement for ' + envelope.commandType });
         rec.status = 'recovering'; rec.recoverability = 'operator'; rec.error = 'No acknowledgement for ' + envelope.commandType;
         rec.detail = rec.error + ' within ' + (OUTPUT_ACK_MS / 1000) + ' seconds';
         announceOutput(rec, 'ack-' + envelope.commandId, (outputById(rec.id)?.label || ('Output ' + rec.id)) + ' did not acknowledge ' + envelope.commandType + '.');
         updateOutputUI();
-      }, OUTPUT_ACK_MS);
+      }, ackMs);
       rec.ackPending.set(envelope.commandId, { command: envelope, timer });
     }
     return true;
@@ -1028,6 +1036,9 @@
       if (ackForType === 'PRELOAD_MEDIA') {
         // Missing media is a preflight finding, not a renderer fault — do not
         // let the generic rejected-command branch flag the output as errored.
+        // A superseded preload (a GO cancelled it) carries no missing list —
+        // keep the last honest probe instead of faking an all-clear.
+        if (result && (result.cancelled || result.superseded)) { updateOutputUI(); return; }
         rec.mediaMissing = result && Array.isArray(result.missing) ? result.missing : [];
         rec.mediaCheckedAt = Date.now();
         if (rec.mediaMissing.length) {
@@ -1123,6 +1134,9 @@
     const id = Number(info.outputId);
     const rec = outputRecord(id, false);
     if (!rec || ['closed', 'disconnected'].includes(rec.status)) return;
+    // A relaunch terminates the old Chrome first — its exit event lands while
+    // the replacement is 'opening' and must not read as a dead output.
+    if (rec.status === 'opening') { updateOutputUI(); return; }
     const controller = outputControllers.get(id);
     if (controller) controller.markDisconnected(String(id), 'Kiosk Chrome process exited');
     rec.status = 'closed'; rec.recoverability = 'reload';
@@ -1326,19 +1340,20 @@
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          outputId: String(o.id), url,
+          outputId: String(o.id), url, session: outputChannelSessionId,
           x: fresh.availLeft, y: fresh.availTop, width: fresh.availWidth, height: fresh.availHeight
         })
       }).then(r => r.json());
     }).then(result => {
       if (result && result.ok) return;
-      rec.status = 'error';
+      rec.status = 'error'; rec.lastBeat = 0; // no renderer is coming; keep the error off the watchdog's plate
       rec.error = result && result.error === 'chrome-not-found' ? 'Google Chrome is not installed on this Mac' : 'Kiosk launch failed';
       rec.detail = rec.error;
       toast(rec.error + '.');
       updateOutputUI();
     }).catch(() => {
-      rec.status = 'error'; rec.error = 'Kiosk helper unreachable'; rec.detail = 'Restart the helper, then Launch again';
+      rec.status = 'error'; rec.lastBeat = 0;
+      rec.error = 'Kiosk helper unreachable'; rec.detail = 'Restart the helper, then Launch again';
       updateOutputUI();
     });
     toast('Launching ' + (o.label || ('Output ' + o.id)) + ' in kiosk mode on ' + scr.label + '.');
@@ -2302,7 +2317,14 @@
     $('og-standby-text').onchange = e => { settings.standbyText = e.target.value; scheduleSave(); sendOut({ t: 'standby', text: settings.standbyText }); };
     const each = (sel, fn) => Array.prototype.forEach.call(body.querySelectorAll(sel), fn);
     each('.og-out-label', el => { el.onchange = () => { const o = outputById(+el.getAttribute('data-o')); if (o) { o.label = el.value; scheduleSave(); renderInspector(); } }; });
-    each('.og-out-open', el => { el.onclick = () => focusOrOpenOutput(+el.getAttribute('data-o')); });
+    each('.og-out-open', el => { el.onclick = () => {
+      const id = +el.getAttribute('data-o');
+      const o = outputById(id);
+      // The sheet button promises "Relaunch kiosk" — honor it even while the
+      // kiosk is alive (focusOrOpenOutput would no-op; it stays the gentle
+      // path for the program pop-out button).
+      if (o && o.kiosk) openOutput(id); else focusOrOpenOutput(id);
+    }; });
     each('.og-out-id', el => { el.onclick = () => { const id = +el.getAttribute('data-o'); const rec = outputWins.get(id); identifyOutput(id, !(rec && rec.identify)); }; });
     each('.og-out-recover', el => { el.onclick = () => recoverOutput(+el.getAttribute('data-o'), el.getAttribute('data-resume') === '1'); });
     each('.og-out-del', el => { el.onclick = () => removeOutput(+el.getAttribute('data-o')); });
