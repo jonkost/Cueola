@@ -17,6 +17,10 @@
  */
 
 import http from 'node:http';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 export const HELPER_VERSION = '1.0.0';
@@ -25,6 +29,8 @@ export const DEFAULT_PORT = 17845;
 export const PORT_WALK = 5; // 17845..17849
 
 const ORIGIN_ALLOW = /^https:\/\/cueola\.live$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const MEDIA_ID = /^[A-Za-z0-9_-]{1,120}$/; // path-traversal guard; storeFile ids are m_<random>
+export const DEFAULT_CACHE_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'CueolaKiosk', 'media');
 const SEND_BODY_LIMIT = 1024 * 1024; // envelopes are JSON scalars + payload; 1 MB is generous
 const KEEPALIVE_MS = 15000;
 
@@ -73,6 +79,7 @@ function readBody(req, limit) {
 export function createHelper(options = {}) {
   const helperInstanceId = 'kh_' + randomUUID();
   const clients = new Set(); // { res, session, instance, role, output }
+  const cacheDir = options.cacheDir || DEFAULT_CACHE_DIR;
   let boundPort = null;
 
   const state = {
@@ -82,13 +89,151 @@ export function createHelper(options = {}) {
   };
 
   function helloInfo() {
+    const stats = mediaStatsSync();
     return {
       helperVersion: HELPER_VERSION,
       helperInstanceId,
       chrome: { found: false, path: null },
-      cacheBytes: 0,
-      mediaCount: 0
+      cacheDir,
+      cacheBytes: stats.bytes,
+      mediaCount: stats.count
     };
+  }
+
+  // ── media cache ──────────────────────────────────────────────────────────
+  const binPath = (id) => path.join(cacheDir, id + '.bin');
+  const metaPath = (id) => path.join(cacheDir, id + '.json');
+
+  function ensureCacheDir() { fs.mkdirSync(cacheDir, { recursive: true }); }
+
+  function mediaStatsSync() {
+    try {
+      const names = fs.readdirSync(cacheDir).filter((n) => n.endsWith('.bin'));
+      let bytes = 0;
+      for (const name of names) {
+        try { bytes += fs.statSync(path.join(cacheDir, name)).size; } catch (e) {}
+      }
+      return { count: names.length, bytes };
+    } catch (e) { return { count: 0, bytes: 0 }; }
+  }
+
+  function readMeta(id) {
+    try { return JSON.parse(fs.readFileSync(metaPath(id), 'utf8')); } catch (e) { return null; }
+  }
+
+  function mediaIdFrom(url) {
+    const id = decodeURIComponent(url.pathname.split('/')[2] || '');
+    return MEDIA_ID.test(id) ? id : null;
+  }
+
+  function handleMediaPut(req, res, url, id) {
+    ensureCacheDir();
+    const tmp = binPath(id) + '.tmp';
+    const out = fs.createWriteStream(tmp);
+    let failed = false;
+    const fail = (status, error) => {
+      if (failed) return; failed = true;
+      out.destroy();
+      fsp.rm(tmp, { force: true }).catch(() => {});
+      sendJson(res, status, { ok: false, error }, corsHeaders(req));
+    };
+    req.on('error', () => fail(500, 'upload-aborted'));
+    out.on('error', () => fail(500, 'disk-write-failed'));
+    out.on('finish', async () => {
+      if (failed) return;
+      try {
+        const size = (await fsp.stat(tmp)).size;
+        const meta = {
+          id,
+          name: String(url.searchParams.get('name') || ''),
+          mime: String(url.searchParams.get('mime') || 'application/octet-stream'),
+          kind: String(url.searchParams.get('kind') || ''),
+          duration: Number(url.searchParams.get('duration')) || 0,
+          width: Number(url.searchParams.get('width')) || 0,
+          height: Number(url.searchParams.get('height')) || 0,
+          size,
+          storedAt: Date.now()
+        };
+        await fsp.rename(tmp, binPath(id));
+        await fsp.writeFile(metaPath(id), JSON.stringify(meta));
+        sendJson(res, 200, { ok: true, bytes: size }, corsHeaders(req));
+      } catch (e) { fail(500, 'store-failed'); }
+    });
+    req.pipe(out);
+  }
+
+  function handleMediaGet(req, res, id, headOnly) {
+    let stat;
+    try { stat = fs.statSync(binPath(id)); } catch (e) {
+      sendJson(res, 404, { ok: false, error: 'media-not-found' }, corsHeaders(req));
+      return;
+    }
+    const meta = readMeta(id) || {};
+    const baseHeaders = Object.assign({
+      'Content-Type': meta.mime || 'application/octet-stream',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store'
+    }, corsHeaders(req));
+    const range = req.headers.range;
+    if (headOnly) {
+      res.writeHead(200, Object.assign({ 'Content-Length': stat.size }, baseHeaders));
+      res.end();
+      return;
+    }
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      let start = match && match[1] !== '' ? parseInt(match[1], 10) : null;
+      let end = match && match[2] !== '' ? parseInt(match[2], 10) : null;
+      if (start === null && end !== null) { start = Math.max(0, stat.size - end); end = stat.size - 1; } // suffix range
+      if (end === null && start !== null) end = stat.size - 1;
+      if (!match || start === null || start >= stat.size || end < start) {
+        res.writeHead(416, Object.assign({ 'Content-Range': 'bytes */' + stat.size }, baseHeaders));
+        res.end();
+        return;
+      }
+      end = Math.min(end, stat.size - 1);
+      res.writeHead(206, Object.assign({
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Content-Length': end - start + 1
+      }, baseHeaders));
+      fs.createReadStream(binPath(id), { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, Object.assign({ 'Content-Length': stat.size }, baseHeaders));
+    fs.createReadStream(binPath(id)).pipe(res);
+  }
+
+  function handleMediaList(req, res) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(cacheDir)
+        .filter((n) => n.endsWith('.json'))
+        .map((n) => readMeta(n.slice(0, -5)))
+        .filter(Boolean)
+        .map((m) => ({ id: m.id, size: m.size, mime: m.mime, kind: m.kind, name: m.name, storedAt: m.storedAt }));
+    } catch (e) {}
+    sendJson(res, 200, entries, corsHeaders(req));
+  }
+
+  async function handleMediaPrune(req, res) {
+    let parsed;
+    try { parsed = JSON.parse((await readBody(req, SEND_BODY_LIMIT)).toString('utf8')); } catch (e) {
+      sendJson(res, 400, { ok: false, error: 'bad-json' }, corsHeaders(req));
+      return;
+    }
+    const keep = new Set(Array.isArray(parsed && parsed.keep) ? parsed.keep.map(String) : []);
+    let removed = 0;
+    try {
+      for (const name of fs.readdirSync(cacheDir)) {
+        if (!name.endsWith('.bin')) continue;
+        const id = name.slice(0, -4);
+        if (keep.has(id)) continue;
+        await fsp.rm(binPath(id), { force: true });
+        await fsp.rm(metaPath(id), { force: true });
+        removed++;
+      }
+    } catch (e) {}
+    sendJson(res, 200, { ok: true, removed }, corsHeaders(req));
   }
 
   function sseWrite(client, event, data) {
@@ -178,6 +323,21 @@ export function createHelper(options = {}) {
     if (req.method === 'GET' && url.pathname === '/health') { handleHealth(req, res); return; }
     if (req.method === 'GET' && url.pathname === '/events') { handleEvents(req, res, url); return; }
     if (req.method === 'POST' && url.pathname === '/send') { handleSend(req, res); return; }
+    if (url.pathname === '/media' && req.method === 'GET') { handleMediaList(req, res); return; }
+    if (url.pathname === '/media/prune' && req.method === 'POST') { handleMediaPrune(req, res); return; }
+    if (url.pathname.startsWith('/media/')) {
+      const id = mediaIdFrom(url);
+      if (!id) { sendJson(res, 400, { ok: false, error: 'bad-media-id' }, corsHeaders(req)); return; }
+      const isMeta = url.pathname === '/media/' + id + '/meta';
+      if (req.method === 'PUT' && !isMeta) { handleMediaPut(req, res, url, id); return; }
+      if (req.method === 'GET' && isMeta) {
+        const meta = readMeta(id);
+        if (meta) sendJson(res, 200, meta, corsHeaders(req));
+        else sendJson(res, 404, { ok: false, error: 'media-not-found' }, corsHeaders(req));
+        return;
+      }
+      if ((req.method === 'GET' || req.method === 'HEAD') && !isMeta) { handleMediaGet(req, res, id, req.method === 'HEAD'); return; }
+    }
     sendJson(res, 404, { ok: false, error: 'not-found' }, corsHeaders(req));
   });
 
