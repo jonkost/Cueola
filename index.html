@@ -872,6 +872,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sync-dot.error{background:var(--red);animation:none;box-shadow:0 0 0 1px color-mix(in srgb,var(--red) 55%,transparent)}
 .sync-dot.off,.sync-dot.local{background:var(--text3);animation:none}
 
+/* Systems chip: OBS / talkback / deck at a glance from the rundown. Quiet
+   chrome: items appear only once their system has been seen on this machine,
+   sit dim while healthy, and go amber on a sustained drop. */
+.cc-sys-chip{display:flex;align-items:center;gap:9px;padding:6px 12px;background:var(--s3);border:1px solid transparent;border-radius:20px;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.05em;cursor:pointer;flex-shrink:0}
+.cc-sys-item{display:inline-flex;align-items:center;gap:5px}
+.cc-sys-item[data-state="ok"]{color:var(--text2)}
+.cc-sys-item[data-state="warn"]{color:var(--yellow)}
+.cc-sys-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);display:inline-block}
+.cc-sys-item[data-state="ok"] .cc-sys-dot{background:var(--green)}
+.cc-sys-item[data-state="warn"] .cc-sys-dot{background:var(--yellow)}
+
 /* ── OVERLAYS ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(8,11,18,.88);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);z-index:200;align-items:flex-end;justify-content:center}
 .overlay.on{display:flex}
@@ -4615,6 +4626,7 @@ input.pt-range::-moz-range-thumb,
 @media(pointer:coarse){
   :root{--ui-control-height:44px;--ui-control-height-compact:44px}
   .tbtn{min-height:44px}
+  .cc-sys-chip{min-height:44px}
   .tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:44px;height:44px}
   .ec-mini-btn{min-height:44px}
   .guide-mini-btn{min-height:44px}
@@ -5159,6 +5171,11 @@ input.pt-range::-moz-range-thumb,
         <div class="presence-avatars" id="presenceAvatars"></div>
         <div class="p-tooltip" id="presenceTooltip"></div>
       </div>
+      <button class="cc-sys-chip" id="sysChip" style="display:none" onclick="openPreflightPanel()" data-tip="Open the show preflight" aria-label="Systems status, opens the show preflight">
+        <span class="cc-sys-item" id="sysChipObs" style="display:none"><span class="cc-sys-dot"></span>OBS</span>
+        <span class="cc-sys-item" id="sysChipTalk" style="display:none"><span class="cc-sys-dot"></span>TALK</span>
+        <span class="cc-sys-item" id="sysChipDeck" style="display:none"><span class="cc-sys-dot"></span>DECK</span>
+      </button>
 	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">Admin</button>
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" data-tip="Show production notes next to the rundown"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
@@ -7189,12 +7206,12 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=91f128902f"></script>
-<script src="outrangutan/outrangutan.js?v=cfad9254f9"></script>
+<script src="cueola-app.js?v=3b1a91f559"></script>
+<script src="outrangutan/outrangutan.js?v=e6fdead605"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=b94b41dd66"></script>
+<script src="cueola-streamdeck.js?v=08ecf7be57"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

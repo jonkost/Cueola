@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [app, html, liveController, playbackJs, playbackCss] = await Promise.all([
+const [app, html, liveController, playbackJs, playbackCss, streamdeckJs] = await Promise.all([
   readFile(new URL('../../cueola-app.js', import.meta.url), 'utf8'),
   readFile(new URL('../../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../../cueola-live-session.js', import.meta.url), 'utf8'),
   readFile(new URL('../../outrangutan/outrangutan.js', import.meta.url), 'utf8'),
   readFile(new URL('../../outrangutan/outrangutan.css', import.meta.url), 'utf8'),
+  readFile(new URL('../../cueola-streamdeck.js', import.meta.url), 'utf8'),
 ]);
 
 const tests = [];
@@ -902,10 +903,71 @@ test('playout commands are confirmed, retried, and never swallowed silently (8/2
   // ride a cue write, and stamps the ack-capable protocol version.
   assert.match(playbackJs, /ackRemoteCommand\(cmd\)/);
   assert.match(playbackJs, /cmdOrigSeen\(cmd\.origId\)/);
-  assert.match(playbackJs, /live\.proto = 2/);
+  assert.match(playbackJs, /live\.proto = 3/);
   assert.match(playbackJs, /Array\.isArray\(cmd\.pads\)/);
   // A deaf Air LOOKS deaf: the mode badge flips to NOT LISTENING.
   assert.match(playbackJs, /NOT LISTENING/);
+});
+
+test('PANIC rides its own overwrite-proof lane (proto 3, C.5)', () => {
+  // Sender: the panic write carries the dedicated field alongside the legacy
+  // slot, a panic purges every in-flight redelivery (a surviving pad retry
+  // could restart audio after the kill), and a pending panic is never
+  // superseded by a later command.
+  assert.match(app, /payload\['outrangutan\.panic'\] = \{ id: command\.commandId, origId: command\.origId, ts: command\.ts, by: command\.by, sender: command\.sender \}/);
+  assert.match(app, /if \(command\.action === 'panic'\) _ogPendingCmds = \[\];/);
+  assert.match(app, /p\.command\.action === 'pad' \|\| p\.command\.action === 'panic'/);
+  // A panic retry rewrites the field with a FRESH lane id (a resubscribed Air
+  // baselined the previous id without executing).
+  assert.match(app, /if \(p\.command\.action === 'panic'\) payload\['outrangutan\.panic'\] = \{ id: p\.command\.commandId, origId: p\.command\.origId/);
+  // The pending cap must never evict the panic (it always sits at index 0,
+  // where a plain shift() would silently drop it).
+  assert.match(app, /findIndex\(p => p\.command\.action !== 'panic'\)/);
+  // Every window observes panics: another window's pending GO retry would
+  // rewrite the slot after the kill and restart audio (C.5 across surfaces).
+  assert.match(app, /og\.panic\.sender !== FLOWMINGO_ENDPOINT_ID && _ogPendingCmds\.length/);
+  // Air: own dedupe id, primed baseline on subscribe (a reconnect must never
+  // replay a stale panic), reset on unsubscribe, shared origId memory with
+  // the slot copy, and an ack so the sender's retry loop stands down.
+  assert.match(playbackJs, /let lastPanicId = null;/);
+  assert.match(playbackJs, /if \(pn && pn\.id\) lastPanicId = pn\.id;/);
+  assert.match(playbackJs, /lastCmdId = null; lastGainId = null; lastPanicId = null;/);
+  assert.match(playbackJs, /if \(!cmdOrigSeen\(orig\)\) \{ noteCmdOrig\(orig\); panic\(\); \}/);
+  assert.match(playbackJs, /ackRemoteCommand\(\{ commandId: pn\.id, origId: orig \}\)/);
+  // The lane must run BEFORE the command-slot early returns: a panic sharing
+  // a snapshot with a stale or already-consumed command must still fire.
+  const pnLane = playbackJs.indexOf("if (pn && pn.id && pn.id !== lastPanicId && pn.sender !== OG_SENDER)");
+  const slotDedupe = playbackJs.indexOf("if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;");
+  assert.ok(pnLane >= 0 && slotDedupe >= 0 && pnLane < slotDedupe, 'panic lane must be handled before the command-slot dedupe returns');
+});
+
+test('preflight reports this machine\'s control links honestly (plan item 6)', () => {
+  // Rows only exist for systems with evidence on this machine: OBS needs a
+  // saved config, talkback needs a daemon ever seen, and the deck row is
+  // removed outright when no deck evidence exists.
+  assert.match(app, /function obsSystemStatus\(\)/);
+  assert.match(app, /if \(!configured\) return null;/);
+  assert.match(app, /if \(!tb \|\| !tb\.seen\) return null;/);
+  assert.match(app, /removePreflightRow\('Stream Deck'\);/);
+  assert.match(app, /if \(granted === 0\) _sysChipNoteDeckGone\(\);/);
+  // The deck verdict is the honest cross-window read: this window's device,
+  // OR a fresh ownership beat from another window (vetoed by a probe that
+  // proved zero decks plugged), OR a granted-but-idle deck as a warning.
+  // Never the per-window flag alone.
+  assert.match(app, /if \(st\.connectedHere\) setPreflightRow\('Stream Deck'/);
+  assert.match(app, /else if \(st\.drivenElsewhere && granted !== 0\) setPreflightRow\('Stream Deck'/);
+  assert.match(app, /else if \(granted > 0\) setPreflightRow\('Stream Deck'/);
+  // KeyWi exports the snapshot getters, and the beat read follows the
+  // watchdog's rule: a missing beat is unknown, never dead.
+  assert.match(streamdeckJs, /talkbackStatus: function \(\)/);
+  assert.match(streamdeckJs, /deckStatus: function \(\)/);
+  assert.match(streamdeckJs, /grantedDecks: function \(\)/);
+  assert.match(streamdeckJs, /drivenElsewhere: !device && beatFresh/);
+  // The topbar chip: quiet by doctrine, damped by two-tick agreement, and a
+  // click opens the full preflight.
+  assert.match(html, /id="sysChip"[^>]*onclick="openPreflightPanel\(\)"/);
+  assert.match(app, /raw\[k\] === _sysChip\.prev\[k\] && raw\[k\] !== _sysChip\.applied\[k\]/);
+  assert.match(html, /\.cc-sys-item\[data-state="warn"\]/);
 });
 
 test('the bridge overlay verbs toggle against the operator mirrors and reuse the Live senders', () => {

@@ -2649,6 +2649,7 @@
   let sessionSub = null;          // onSnapshot unsubscribe
   let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
   let lastGainId = null;          // dedupe remote gain writes (own field, own guard)
+  let lastPanicId = null;         // dedupe the panic lane (own field, proto 3)
   let pubTimer = null, lastLiveTs = 0;
   let pubErrToasted = false;      // publish rejections surface once per subscribe, not once per heartbeat
   function notePublishError(err) {
@@ -2700,7 +2701,7 @@
     publishCues(); publishLive(true);
     startLiveHeartbeat();
   }
-  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } clearTimeout(subRetryTimer); subRetryTimer = null; lastCmdId = null; lastGainId = null; sessionDocPrimed = false; subErrToasted = false; pubErrToasted = false; stopLiveHeartbeat(); }
+  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } clearTimeout(subRetryTimer); subRetryTimer = null; lastCmdId = null; lastGainId = null; lastPanicId = null; sessionDocPrimed = false; subErrToasted = false; pubErrToasted = false; stopLiveHeartbeat(); }
 
   // Idle heartbeat: publishLive only ticks with the play RAF, so an idle
   // playout machine used to publish NOTHING — the rundown machine could not
@@ -2726,6 +2727,7 @@
     maybeSeedBreakRoom(d);   // Break Room test session + empty local show → build the authored demo playout
     const g = d && d.outrangutan && d.outrangutan.gain;
     const cmd = d && d.outrangutan && d.outrangutan.command;
+    const pn = d && d.outrangutan && d.outrangutan.panic;
     // Baseline, not wall clock: the FIRST snapshot after subscribing marks
     // whatever already sits in the command/gain slots as consumed without
     // applying it (we must not fire a command from before we joined). After
@@ -2735,6 +2737,7 @@
     if (!sessionDocPrimed) {
       sessionDocPrimed = true;
       if (g && g.id) lastGainId = g.id;
+      if (pn && pn.id) lastPanicId = pn.id;
       if (cmd && cmd.commandId) {
         lastCmdId = cmd.commandId;
         slog('session', 'Synced to ' + sessionCode + ' (an older queued command was skipped, live from now on)');
@@ -2747,6 +2750,18 @@
       lastGainId = g.id;
       const v = parseFloat(g.v);
       if (isFinite(v)) setMasterGain(Math.max(0, Math.min(1.2, v)), 'remote');
+    }
+    // PANIC lane (proto 3): its own field, so a pad retry or rival GO can
+    // never overwrite it before this snapshot lands. Runs BEFORE the command
+    // slot so a panic and a newer command in the same snapshot apply in the
+    // order they were meant: kill first, then the operator's next move. The
+    // shared origId memory keeps the slot copy of the same panic from
+    // executing twice, and the ack stands the sender's retry loop down.
+    if (pn && pn.id && pn.id !== lastPanicId && pn.sender !== OG_SENDER) {
+      lastPanicId = pn.id;
+      const orig = pn.origId || pn.id;
+      if (!cmdOrigSeen(orig)) { noteCmdOrig(orig); panic(); }
+      ackRemoteCommand({ commandId: pn.id, origId: orig });
     }
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
@@ -2990,7 +3005,7 @@
     // PLBK vol dial, the rundown machine) can show the real fader position.
     live.gain = Math.round((settings.masterGain || 0) * 100) / 100;
     live.seq = ++_liveSeq;
-    live.proto = 2;   // this build acks commands (outrangutan.cmdAck); senders only retry against proto >= 2
+    live.proto = 3;   // 2 = acks commands (outrangutan.cmdAck), senders only retry against proto >= 2; 3 = also consumes the outrangutan.panic lane
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }).catch(notePublishError); } catch (e) {}
   }
 

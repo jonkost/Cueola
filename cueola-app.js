@@ -8687,6 +8687,18 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
 function applyOutrangutanState(og) {
   if (!og) return;
   if (og.cmdAck) applyOutrangutanCmdAck(og.cmdAck);   // confirmed delivery: stop retrying acked commands
+  // Another window's panic invalidates THIS window's in-flight redeliveries
+  // too: a pending GO here would rewrite the slot after the kill and restart
+  // the audio (C.5 across control surfaces). A pending panic of our own must
+  // still land, so it survives the purge. The first snapshot after joining
+  // may carry a stale panic id; the queue is empty then, so this is a no-op.
+  if (og.panic && og.panic.id && og.panic.id !== _ogSeenPanicId) {
+    _ogSeenPanicId = og.panic.id;
+    if (og.panic.sender !== FLOWMINGO_ENDPOINT_ID && _ogPendingCmds.length) {
+      _ogPendingCmds = _ogPendingCmds.filter(p => p.command.action === 'panic');
+      if (!_ogPendingCmds.length && _ogCmdRetryTimer) { _ogCmdRetryTimer.cancel(); _ogCmdRetryTimer = null; }
+    }
+  }
   let structural = false;
   // stableStringify: Firestore snapshot map-key order differs between local-echo
   // and server emissions — a plain JSON compare re-renders on identical data.
@@ -9059,7 +9071,17 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   if (opts.armCueId) command.armCueId = String(opts.armCueId);
   if (Array.isArray(opts.pads) && opts.pads.length) command.pads = opts.pads.map(String);
   logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
-  window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command })
+  // PANIC rides its OWN field too (proto 3): the single slot can be rewritten
+  // by a pending pad retry or a rival GO before the Air's snapshot lands, and
+  // a lost panic is the one loss a show cannot absorb. Nothing else ever
+  // writes outrangutan.panic; the one consumer that can still pre-eat it is
+  // the Air's own post-subscribe baseline, which is why the lane id is fresh
+  // per write (retries stay visible to a resubscribed Air) while origId keys
+  // the execute-once dedupe. Old Airs ignore the extra field and still get
+  // the slot write (plus retries on proto 2).
+  const payload = { 'outrangutan.command': command };
+  if (command.action === 'panic') payload['outrangutan.panic'] = { id: command.commandId, origId: command.origId, ts: command.ts, by: command.by, sender: command.sender };
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), payload)
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
   _trackOutCommand(command);
   // The write landing does NOT mean anyone is listening: a playout Mac in
@@ -9085,15 +9107,26 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
 const OG_CMD_RETRY_MS = 2500, OG_CMD_MAX_RETRIES = 2;
 let _ogPendingCmds = [];   // { command, sentAt, retries }
 let _ogCmdRetryTimer = null;
+let _ogSeenPanicId = null; // last observed cross-window panic (observer purge)
 function _ogAckSupported() { return Number(outrangutanState?.live?.proto) >= 2; }
 function _trackOutCommand(command) {
+  // A panic invalidates every in-flight redelivery: pad retries survive the
+  // supersede filter below, so one could rewrite the slot after the panic
+  // and restart the audio the panic just killed (C.5).
+  if (command.action === 'panic') _ogPendingCmds = [];
   if (!_ogAckSupported()) return;               // old Air: no acks, no retries
   if (command.action === 'arm') return;         // best-effort standby, superseded on every advance
   // A newer non-pad command supersedes older pending ones: retrying a stale
-  // cue after the operator hit STOP must never restart the media.
-  if (command.action !== 'pad') _ogPendingCmds = _ogPendingCmds.filter(p => p.command.action === 'pad');
+  // cue after the operator hit STOP must never restart the media. A pending
+  // panic is the one exception: it must land even when a GO follows it.
+  if (command.action !== 'pad') _ogPendingCmds = _ogPendingCmds.filter(p => p.command.action === 'pad' || p.command.action === 'panic');
   _ogPendingCmds.push({ command, sentAt: Date.now(), retries: 0 });
-  if (_ogPendingCmds.length > 6) _ogPendingCmds.shift();
+  // The cap evicts the oldest NON-panic entry: the purge above parks a
+  // pending panic at index 0, where a plain shift() would silently drop it.
+  if (_ogPendingCmds.length > 6) {
+    const i = _ogPendingCmds.findIndex(p => p.command.action !== 'panic');
+    _ogPendingCmds.splice(i >= 0 ? i : 0, 1);
+  }
   _ensureOgCmdRetryLoop();
 }
 function _ogCmdRetryTick() {
@@ -9109,8 +9142,13 @@ function _ogCmdRetryTick() {
     p.retries += 1; p.sentAt = now;
     _outCmdSeq += 1;
     p.command = { ...p.command, commandId: `out_${CLIENT_ID}_${now.toString(36)}_${_outCmdSeq}`, ts: now };
-    logShow('link', `Playout command unconfirmed — resending ${p.command.action} (try ${p.retries + 1})`);
-    try { window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': p.command }).catch(() => {}); } catch {}
+    logShow('link', `Playout command unconfirmed, resending ${p.command.action} (try ${p.retries + 1})`);
+    // A panic retry rewrites its own field with the FRESH lane id: an Air
+    // that resubscribed mid-retry baselined the previous id without
+    // executing, and would stay deaf to a reused one.
+    const payload = { 'outrangutan.command': p.command };
+    if (p.command.action === 'panic') payload['outrangutan.panic'] = { id: p.command.commandId, origId: p.command.origId, ts: now, by: p.command.by, sender: p.command.sender };
+    try { window._updateDoc(window._doc(window._db, 'sessions', session.code), payload).catch(() => {}); } catch {}
     return true;
   });
   if (!_ogPendingCmds.length && _ogCmdRetryTimer) { _ogCmdRetryTimer.cancel(); _ogCmdRetryTimer = null; }
@@ -10086,6 +10124,11 @@ function runPreflight(reviewOnly) {
     addPreflightRow({ key: 'Playout first GO', state: 'pend', detail: 'Arming audio and staging the first cue…' });
     try { firstGoArming = window.Outrangutan.armPlayback(); } catch (err) { firstGoArming = Promise.reject(err); }
   }
+  // This machine's control links (OBS, talkback, Stream Deck). All three are
+  // machine-local, so the rows answer for THIS Mac only, and each row only
+  // appears once its system has ever been seen here: a rig that runs without
+  // OBS or a deck is not failing anything.
+  addSystemsPreflightRows();
   if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
     addPreflightRow({ key: 'Cloud round-trip', state: 'pend', detail: 'Writing a ping and waiting for the server echo…' });
   }
@@ -10216,6 +10259,12 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   }
   renderPreflightRows();
 
+  // The Stream Deck verdict needs the async HID probe (granted decks are
+  // readable from any window without disturbing the owner election).
+  await resolveDeckPreflightRow(run);
+  if (run !== _preflightRun) return;
+  renderPreflightRows();
+
   // 2) Cloud round-trip — a real write acknowledged by the server, timed.
   if (_preflightRows.some(r => r.key === 'Cloud round-trip')) {
     const rtt = await preflightCloudRoundTrip();
@@ -10232,6 +10281,123 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   const { fails, warns } = renderPreflightRows();
   logShow('preflight', 'Preflight finished: ' + fails + ' fail · ' + warns + ' warn · ' + _preflightRows.filter(r => r.state === 'ok').length + ' ok');
 }
+
+// ── This machine's control links: OBS, talkback, Stream Deck ────────────────
+// Preflight rows and the topbar systems chip read the same snapshots. The
+// honesty rules are the 8/24 honest-keys rules: never claim ok without
+// evidence, never trust the per-window deck flag alone (another window
+// usually owns the deck), and a system never seen on this machine gets no
+// verdict at all.
+function obsSystemStatus() {
+  const obs = window.CueolaOBS;
+  if (!obs || !obs.isReady) return null;
+  // Evidence = a SAVED config (config() itself always returns defaults) or a
+  // live connection; same gate the auto-connect uses.
+  let configured = false;
+  try { configured = !!localStorage.getItem('cueola_obs_config'); } catch {}
+  if (obs.isReady()) configured = true;
+  if (!configured) return null;
+  if (obs.isReady()) {
+    const scene = obs.state()?.currentScene || '';
+    return { state: 'ok', detail: 'Connected' + (scene ? ' · scene “' + scene + '”' : '') };
+  }
+  return { state: 'warn', detail: 'OBS is set up but not connected. Start OBS on this Mac, or connect from KeyWi Bird' };
+}
+function talkbackSystemStatus() {
+  const tb = window.CueolaStreamDeck?.talkbackStatus?.();
+  if (!tb || !tb.seen) return null;
+  return tb.connected
+    ? { state: 'ok', detail: 'Talkback daemon linked on this Mac' }
+    : { state: 'warn', detail: 'talkbackd is not running. Start the talkback daemon on this Mac if mics are in the show today' };
+}
+function addSystemsPreflightRows() {
+  const obs = obsSystemStatus();
+  if (obs) addPreflightRow({ key: 'OBS', state: obs.state, detail: obs.detail });
+  const tb = talkbackSystemStatus();
+  if (tb) addPreflightRow({ key: 'Talkback', state: tb.state, detail: tb.detail });
+  if (window.CueolaStreamDeck?.deckStatus) addPreflightRow({ key: 'Stream Deck', state: 'pend', detail: 'Checking for a connected deck…' });
+}
+async function resolveDeckPreflightRow(run) {
+  const sd = window.CueolaStreamDeck;
+  if (!sd?.deckStatus) return;
+  const st = sd.deckStatus();
+  let granted = -1;
+  try { granted = await sd.grantedDecks(); } catch {}
+  if (run !== _preflightRun) return;
+  if (st.connectedHere) setPreflightRow('Stream Deck', { state: 'ok', detail: (st.decksHere > 1 ? st.decksHere + ' decks' : 'Deck') + ' connected in this window' });
+  // The positive HID probe vetoes the ownership beat: for up to 8s after an
+  // unplug the beat still reads fresh while zero decks are plugged in.
+  else if (st.drivenElsewhere && granted !== 0) setPreflightRow('Stream Deck', { state: 'ok', detail: 'Driven by another Cueola window on this machine' + (st.elsewhereDecks > 1 ? ' (' + st.elsewhereDecks + ' decks)' : '') });
+  else if (granted > 0) setPreflightRow('Stream Deck', { state: 'warn', detail: 'A deck is plugged in but no window is driving it. Quit the Elgato Stream Deck app if it is running (it grabs the device), then open KeyWi Bird and press Connect' });
+  else {
+    if (granted === 0) _sysChipNoteDeckGone();   // a probe that PROVED zero decks retires the chip's latch too
+    removePreflightRow('Stream Deck');   // no deck evidence on this rig: the check does not apply
+  }
+}
+
+// ── Systems chip (rundown topbar) ───────────────────────────────────────────
+// Quiet chrome doctrine (owner 2026-07-14): items appear only for systems
+// with evidence on this machine, sit dim while healthy, and flip only after
+// the new state survives two consecutive reads, so a reconnect blip never
+// flaps the bar. Clicking the chip opens the full preflight.
+const _sysChip = {
+  prev: {}, applied: {}, talkSeen: false,
+  // The deck latch persists (a driven deck that vanished must still alarm
+  // after a reload); a preflight probe that finds zero plugged decks retires
+  // it, so a rig that genuinely dropped its deck goes quiet again.
+  deckSeen: (() => { try { return localStorage.getItem('cueola_deck_seen') === '1'; } catch { return false; } })(),
+};
+function _sysChipNoteDeckGone() {
+  _sysChip.deckSeen = false;
+  try { localStorage.removeItem('cueola_deck_seen'); } catch {}
+}
+function _sysChipRaw() {
+  const out = { obs: null, talk: null, deck: null };
+  const obs = obsSystemStatus();
+  if (obs) out.obs = obs.state;
+  // Chip talkback evidence is session-scoped, unlike the preflight row's
+  // ever-seen gate: a daemon deliberately left off today must not sit amber
+  // all show; one that dropped mid-session must.
+  const tb = window.CueolaStreamDeck?.talkbackStatus?.();
+  if (tb?.connected) { out.talk = 'ok'; _sysChip.talkSeen = true; }
+  else if (_sysChip.talkSeen) out.talk = 'warn';
+  const st = window.CueolaStreamDeck?.deckStatus?.();
+  if (st && (st.connectedHere || st.drivenElsewhere)) {
+    out.deck = 'ok';
+    if (!_sysChip.deckSeen) { _sysChip.deckSeen = true; try { localStorage.setItem('cueola_deck_seen', '1'); } catch {} }
+  } else if (_sysChip.deckSeen) out.deck = 'warn';   // a deck that was driven and vanished is worth amber; one never seen is not
+  return out;
+}
+function _sysChipTick() {
+  const chip = document.getElementById('sysChip');
+  if (!chip) return;
+  const raw = _sysChipRaw();
+  let any = false;
+  for (const k of ['obs', 'talk', 'deck']) {
+    if (raw[k] === _sysChip.prev[k] && raw[k] !== _sysChip.applied[k]) {
+      _sysChip.applied[k] = raw[k];
+      const el = document.getElementById(k === 'obs' ? 'sysChipObs' : k === 'talk' ? 'sysChipTalk' : 'sysChipDeck');
+      if (el) {
+        el.style.display = raw[k] ? '' : 'none';
+        if (raw[k]) el.dataset.state = raw[k]; else delete el.dataset.state;
+      }
+    }
+    _sysChip.prev[k] = raw[k];
+    if (_sysChip.applied[k]) any = true;
+  }
+  chip.style.display = any ? '' : 'none';
+  // The states are color-only dots visually; the accessible name carries them
+  // in words (a static aria-label would override the item text entirely).
+  if (any) {
+    const names = { obs: 'OBS', talk: 'Talkback', deck: 'Stream Deck' };
+    const parts = ['obs', 'talk', 'deck'].filter(k => _sysChip.applied[k])
+      .map(k => names[k] + ' ' + (_sysChip.applied[k] === 'ok' ? 'ok' : 'needs attention'));
+    chip.setAttribute('aria-label', 'Systems: ' + parts.join(', ') + '. Opens the show preflight');
+  }
+}
+// Plain interval on purpose: hidden-tab throttling only delays a chip nobody
+// is looking at, and the preflight rows are the on-demand truth.
+setInterval(_sysChipTick, 3000);
 
 function preflightCloudRoundTrip() {
   return new Promise(resolve => {

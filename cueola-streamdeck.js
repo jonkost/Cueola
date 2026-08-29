@@ -4179,6 +4179,29 @@
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },
     talkbackConnected: function () { return talkbackState.connected; },
+    // Snapshot getters for the preflight rows and the topbar systems chip.
+    // talkbackStatus.seen mirrors micoParked: a rig whose daemon has never
+    // checked in gets no talkback verdict at all.
+    talkbackStatus: function () { return { seen: micoEverSeen() || talkbackState.connected, connected: talkbackState.connected }; },
+    // deckStatus is the HONEST cross-window read: isConnected() alone lies
+    // whenever another window (usually /keywibird) owns the deck, and a
+    // missing ownership beat is unknown, never dead (same rule as the
+    // frozen-owner watchdog).
+    deckStatus: function () {
+      var beat = null;
+      try { beat = JSON.parse(localStorage.getItem(DECK_BEAT_KEY) || 'null'); } catch (e) {}
+      var beatFresh = !!(beat && beat.ts && beat.decks && (Date.now() - beat.ts) <= DECK_BEAT_STALE_MS);
+      return { connectedHere: !!device, decksHere: decks.length, drivenElsewhere: !device && beatFresh, elsewhereDecks: beatFresh ? beat.decks : 0 };
+    },
+    // Granted-and-plugged decks, readable from any window without opening the
+    // device or disturbing the owner election. Resolves -1 when WebHID is
+    // unavailable (no evidence, not a failure).
+    grantedDecks: function () {
+      if (!(navigator.hid && navigator.hid.getDevices)) return Promise.resolve(-1);
+      return navigator.hid.getDevices().then(function (list) {
+        return (list || []).filter(supportedFilter).length;
+      }).catch(function () { return -1; });
+    },
     openMicoPopout: openMicoPopout,
     _catalog: function () { buildCatalog(); return catalog; },
     _fire: fireSlot,
