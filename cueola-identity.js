@@ -320,6 +320,53 @@
    * the gate the first time this ships (they have no marker yet). */
   var pendingGate = null;   // { username, profile, stage } while a gate is open
 
+  // One factor check at a time: the signInWithPin callable can take seconds on
+  // a cold start, and every extra click or Enter press during the wait counts
+  // as a separate server-side attempt toward the 15 minute lockout. The busy
+  // flag swallows repeats, and the button shows progress so nobody keeps
+  // pressing. The button reference is captured up front because a successful
+  // sign-in re-renders the card; restoring a detached node is harmless.
+  var gateBusy = false;
+  var gateAttempt = 0;
+  async function gateGuarded(btnSelector, run) {
+    if (gateBusy) return;
+    gateBusy = true;
+    var attempt = ++gateAttempt;
+    var btn = null;
+    try { btn = document.querySelector(btnSelector); } catch (e) {}
+    var label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+    // The attempt token keeps a late-settling stale run() from clobbering a
+    // newer attempt's state.
+    var release = function () {
+      if (attempt !== gateAttempt) return;
+      gateBusy = false;
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    };
+    // A Firestore write in the offline legacy path can pend forever, and a
+    // stuck shared flag would silently swallow every later gate submit on the
+    // page. Bound the wait and fail honestly instead.
+    var timedOut = { gate: 'timeout' };
+    var timer = null;
+    var timeout = new Promise(function (resolve) {
+      timer = setTimeout(function () { resolve(timedOut); }, 25000);
+    });
+    try {
+      var result = await Promise.race([Promise.resolve().then(run), timeout]);
+      if (result === timedOut) {
+        release();
+        var msg = 'Still trying to reach the cloud. Check the connection and try again.';
+        try { gateErr(msg); } catch (e) {}
+        try { modalGateErr(msg); } catch (e) {}
+        return;
+      }
+      return result;
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+      release();
+    }
+  }
+
   // Call a Cloud Function, or return null when the functions SDK is not wired
   // up (so callers can fall back while Phase 1 rolls out).
   async function callFn(name, payload) {
@@ -371,6 +418,24 @@
     markUnlocked(username);
     pendingGate = null;
     cachedProfile = p;
+    // The getSignInStage callable returns only {username, fullName, avatar,
+    // theme}: no sessions, profileId, or codeUsed. Cache that stub as the
+    // profile and every post-sign-in surface (front door session list, join
+    // pickers, entrySatisfied) reads an empty profile until reload. Refetch
+    // the real doc in the background; the double guard keeps a fresher
+    // profile loaded meanwhile (e.g. by the portal) from being clobbered.
+    if (!Array.isArray(p.sessions)) {
+      fetchProfile(username).then(function (full) {
+        var id = identity();
+        if (full && id && id.username === username
+            && cachedProfile && cachedProfile.username === username
+            && !Array.isArray(cachedProfile.sessions)) {
+          cachedProfile = full;
+          announceIdentityChange();
+          renderFrontDoor();
+        }
+      }).catch(function () {});
+    }
     announceIdentityChange();
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
@@ -640,8 +705,12 @@
   async function attachSessions(codes) {
     var id = identity(); var w = fb();
     if (!id || !w || !w._updateDoc) return { ok: false };
-    var p = cachedProfile || await fetchProfile(id.username);
-    if (!p) return { ok: false };
+    // Fresh read, mirroring detachSessions: cachedProfile may be stale, or the
+    // minimal getSignInStage stub with NO sessions field, and a full-array
+    // write from either wipes sessions an instructor assigned meanwhile.
+    var p;
+    try { p = await fetchProfile(id.username); } catch (e) { p = null; }
+    if (!p) return { ok: false, msg: 'Could not load your profile. Check the connection and try again.' };
     var merged = (p.sessions || []).slice();
     var added = [];
     (codes || []).forEach(function (raw) {
@@ -650,7 +719,13 @@
     });
     if (!added.length) return { ok: true, added: [] };
     try {
-      await w._updateDoc(w._doc(w._db, 'profiles', id.username), { sessions: merged, lastSeen: Date.now() });
+      if (w._arrayUnion) {
+        await w._updateDoc(w._doc(w._db, 'profiles', id.username), {
+          sessions: w._arrayUnion.apply(null, added), lastSeen: Date.now(),
+        });
+      } else {
+        await w._updateDoc(w._doc(w._db, 'profiles', id.username), { sessions: merged, lastSeen: Date.now() });
+      }
       p.sessions = merged; cachedProfile = p;
       renderFrontDoor();
       return { ok: true, added: added };
@@ -737,7 +812,10 @@
     if (!sessionDoc || sessionDoc.requireLoginCode !== true) return { pass: true };
     var id = identity();
     if (id) {
-      var p = cachedProfile || await fetchProfile(id.username).catch(function () { return null; });
+      // A cachedProfile without a sessions array is the minimal sign-in stub
+      // (no codeUsed either): refetch rather than wrongly re-demanding a code.
+      var cp = (cachedProfile && Array.isArray(cachedProfile.sessions)) ? cachedProfile : null;
+      var p = cp || await fetchProfile(id.username).catch(function () { return null; });
       if (p && p.codeUsed) {
         var own = await fetchCode(p.codeUsed).catch(function () { return null; });
         if (own && own.active === true) return { pass: true };
@@ -969,26 +1047,32 @@
     renderPortal();
   }
   async function submitModalPin() {
-    var g = pendingGate; if (!g) return renderSignIn();
-    var el = document.getElementById('id-gate-pin');
-    var res = await enterWithPin(g.username, g.profile, el && el.value);
-    if (!res.ok) return modalGateErr(res.msg);
-    afterModalSignIn(res.profile);
+    return gateGuarded('#identityBody .btn-primary', async function () {
+      var g = pendingGate; if (!g) return renderSignIn();
+      var el = document.getElementById('id-gate-pin');
+      var res = await enterWithPin(g.username, g.profile, el && el.value);
+      if (!res.ok) return modalGateErr(res.msg);
+      afterModalSignIn(res.profile);
+    });
   }
   async function submitModalNewPin() {
-    var g = pendingGate; if (!g) return renderSignIn();
-    var a = document.getElementById('id-gate-pin'), b = document.getElementById('id-gate-pin2');
-    var codeEl = document.getElementById('id-gate-code');
-    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
-    if (!res.ok) return modalGateErr(res.msg);
-    afterModalSignIn(res.profile);
+    return gateGuarded('#identityBody .btn-primary', async function () {
+      var g = pendingGate; if (!g) return renderSignIn();
+      var a = document.getElementById('id-gate-pin'), b = document.getElementById('id-gate-pin2');
+      var codeEl = document.getElementById('id-gate-code');
+      var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
+      if (!res.ok) return modalGateErr(res.msg);
+      afterModalSignIn(res.profile);
+    });
   }
   async function submitModalPassword() {
-    var g = pendingGate; if (!g) return renderSignIn();
-    var el = document.getElementById('id-gate-pw');
-    var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
-    if (!res.ok) return modalGateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
-    afterModalSignIn(res.profile);
+    return gateGuarded('#identityBody .btn-primary', async function () {
+      var g = pendingGate; if (!g) return renderSignIn();
+      var el = document.getElementById('id-gate-pw');
+      var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
+      if (!res.ok) return modalGateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
+      afterModalSignIn(res.profile);
+    });
   }
 
   /* ── create-profile wizard ── */
@@ -1819,23 +1903,29 @@
     if (err) { err.innerHTML = esc(msg); err.classList.add('on'); }
   }
   async function frontDoorSubmitPin() {
-    var g = pendingGate; if (!g) return renderFrontDoor();
-    var el = document.getElementById('fd-pin');
-    var res = await enterWithPin(g.username, g.profile, el && el.value);
-    if (!res.ok) gateErr(res.msg);
+    return gateGuarded('.fd-go', async function () {
+      var g = pendingGate; if (!g) return renderFrontDoor();
+      var el = document.getElementById('fd-pin');
+      var res = await enterWithPin(g.username, g.profile, el && el.value);
+      if (!res.ok) gateErr(res.msg);
+    });
   }
   async function frontDoorSubmitNewPin() {
-    var g = pendingGate; if (!g) return renderFrontDoor();
-    var a = document.getElementById('fd-pin'), b = document.getElementById('fd-pin2');
-    var codeEl = document.getElementById('fd-code');
-    var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
-    if (!res.ok) gateErr(res.msg);
+    return gateGuarded('.fd-go', async function () {
+      var g = pendingGate; if (!g) return renderFrontDoor();
+      var a = document.getElementById('fd-pin'), b = document.getElementById('fd-pin2');
+      var codeEl = document.getElementById('fd-code');
+      var res = await enterWithNewPin(g.username, g.profile, a && a.value, b && b.value, codeEl && codeEl.value);
+      if (!res.ok) gateErr(res.msg);
+    });
   }
   async function frontDoorSubmitPassword() {
-    var g = pendingGate; if (!g) return renderFrontDoor();
-    var el = document.getElementById('fd-pw');
-    var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
-    if (!res.ok) gateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
+    return gateGuarded('.fd-go', async function () {
+      var g = pendingGate; if (!g) return renderFrontDoor();
+      var el = document.getElementById('fd-pw');
+      var res = await enterAsAdmin(g.username, g.profile, (el && el.value) || '');
+      if (!res.ok) gateErr(res.msg === 'needs-password' ? 'Enter your password.' : res.msg);
+    });
   }
   function frontDoorNotMe() { signOut(); }
   // The card follows identity wherever it changes; a zero-delay timer lets

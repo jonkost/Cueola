@@ -3221,7 +3221,12 @@ function openAdminLogin() {
   setTimeout(()=>document.getElementById('adminUserIn').focus(),100);
 }
 
+let _adminLoginInFlight = false;
 async function submitAdminLogin() {
+  // The username/password inputs submit on Enter, which bypasses the disabled
+  // button: without this flag a slow sign-in could be fired repeatedly,
+  // double-counting toward Firebase's too-many-requests throttle.
+  if (_adminLoginInFlight) return;
   const username = document.getElementById('adminUserIn').value.trim();
   const password = document.getElementById('adminPassIn').value;
   const err = document.getElementById('adminLoginErr');
@@ -3232,6 +3237,7 @@ async function submitAdminLogin() {
     return;
   }
   err.classList.remove('on');
+  _adminLoginInFlight = true;
   if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
   try {
     const result = await CueolaAdminAuth.signIn(username, password);
@@ -3247,6 +3253,7 @@ async function submitAdminLogin() {
     document.getElementById('adminPassIn').value = '';
     document.getElementById('adminPassIn').focus();
   } finally {
+    _adminLoginInFlight = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
   }
 }
@@ -3323,6 +3330,8 @@ function renderAdminBody() {
 
   html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Sign out of admin</button>`;
   body.innerHTML = html;
+  // Keep the presence-refresh gate honest after any explicit render.
+  _adminBodyPresenceFp = adminBodyPresenceFingerprint();
 }
 
 function renderAdminPaneSession() {
@@ -3789,7 +3798,7 @@ function plandaBearAssignmentOptions(data=basePreProData()) {
   return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
-function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOptions()) {
+function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOptions(), fuzzy=true) {
   const out = [];
   const add = label => {
     if (!label) return;
@@ -3803,24 +3812,37 @@ function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOpt
     if (!text) return;
     const exact = options.find(opt => opt.toLowerCase() === text.toLowerCase());
     if (exact) { add(exact); return; }
-    const lower = text.toLowerCase();
     let matched = false;
-    if (lower.includes('call sheet')) { add(firstCallSheet); matched = true; }
-    if (lower.includes('production schedule') || lower.includes('production scheduler')) { add('Production Schedule'); matched = true; }
-    if (lower.includes('safety')) { add('Safety Plan'); matched = true; }
-    if (lower.includes('rundown')) { add('Rundown'); matched = true; }
-    if (lower.includes('flowmingo') || lower.includes('script')) { add('Flowmingo Script'); matched = true; }
-    if (lower.includes('video') || lower.includes('patch sheet') || lower.includes('patch sheets')) { add('Video Patch Sheet'); matched = true; }
-    if (lower.includes('audio') || lower.includes('comms') || lower.includes('patch sheet') || lower.includes('patch sheets')) { add('Audio & Comms Patch Sheet'); matched = true; }
-    if (lower.includes('tech')) { add('Tech Checklist'); matched = true; }
+    // The keyword remap exists to migrate true legacy rows (free-typed labels,
+    // no paperworkIds). For rows that carry canonical ids it is DANGEROUS: a
+    // temporarily-unlisted "Call Sheet: Day 2" would silently become whichever
+    // call sheet is first in the catalog. Those rows keep unmatched labels
+    // verbatim instead (fuzzy=false).
+    if (fuzzy) {
+      const lower = text.toLowerCase();
+      if (lower.includes('call sheet')) { add(firstCallSheet); matched = true; }
+      if (lower.includes('production schedule') || lower.includes('production scheduler')) { add('Production Schedule'); matched = true; }
+      if (lower.includes('safety')) { add('Safety Plan'); matched = true; }
+      if (lower.includes('rundown')) { add('Rundown'); matched = true; }
+      if (lower.includes('flowmingo') || lower.includes('script')) { add('Flowmingo Script'); matched = true; }
+      if (lower.includes('video') || lower.includes('patch sheet') || lower.includes('patch sheets')) { add('Video Patch Sheet'); matched = true; }
+      if (lower.includes('audio') || lower.includes('comms') || lower.includes('patch sheet') || lower.includes('patch sheets')) { add('Audio & Comms Patch Sheet'); matched = true; }
+      if (lower.includes('tech')) { add('Tech Checklist'); matched = true; }
+    }
     if (!matched) add(text);
   };
   scan(value);
   return out;
 }
 
-function normalizeRoleAssignment(row={}, options=plandaBearAssignmentOptions()) {
+function normalizeRoleAssignment(row={}, options=null, catalog=null) {
   const model = assignmentModel();
+  // One catalog build feeds both the label options and the id lookup: callers
+  // that normalize many rows (getRoleAssignments, renderRoleAssignmentRows)
+  // pass a shared catalog so the per-row localStorage parse + call-sheet
+  // normalization does not run dozens of times per presence snapshot.
+  const cat = catalog || plandaBearAssignmentCatalog();
+  const opts = options || cat.map(option => option.label);
   const person = String(row.person || row.displayName || row.name || '').trim();
   let profileId = String(row.profileId || row.studentProfileId || '').trim();
   if (!profileId && person) {
@@ -3830,11 +3852,12 @@ function normalizeRoleAssignment(row={}, options=plandaBearAssignmentOptions()) 
   const profile = assignmentProfileById(profileId);
   const position = String(row.position || row.positionLabel || row.role || '').trim();
   const positionId = String(row.positionId || (position ? model?.positionIdFor?.(position) : '') || '').trim();
-  const paperwork = normalizePaperworkSelections(row.paperworkLabels || row.paperwork || row.paperworkItems || row.file, options);
-  const catalog = plandaBearAssignmentCatalog();
   const rowIds = Array.isArray(row.paperworkIds) ? row.paperworkIds.map(String) : [];
+  // Rows carrying canonical ids skip the fuzzy keyword remap (see
+  // normalizePaperworkSelections): only true legacy rows get migrated.
+  const paperwork = normalizePaperworkSelections(row.paperworkLabels || row.paperwork || row.paperworkItems || row.file, opts, !rowIds.length);
   const paperworkIds = paperwork.map((label, index) => rowIds[index]
-    || catalog.find(option => option.label.toLowerCase() === label.toLowerCase())?.id
+    || cat.find(option => option.label.toLowerCase() === label.toLowerCase())?.id
     || paperworkIdForLabel(label));
   return {
     assignmentId: String(row.assignmentId || (profileId && positionId ? model?.assignmentIdFor?.(profileId, positionId) : '') || ''),
@@ -3856,11 +3879,14 @@ function normalizeRoleAssignment(row={}, options=plandaBearAssignmentOptions()) 
 
 function getRoleAssignments() {
   if (canonicalRoleAssignments.length) {
-    return canonicalRoleAssignments.map(record => normalizeRoleAssignment(record));
+    const cat = plandaBearAssignmentCatalog();
+    const opts = cat.map(option => option.label);
+    return canonicalRoleAssignments.map(record => normalizeRoleAssignment(record, opts, cat));
   }
   const data = basePreProData();
-  const options = plandaBearAssignmentOptions(data);
-  const saved = Array.isArray(data.roleAssignments) ? data.roleAssignments.map(row => normalizeRoleAssignment(row, options)) : [];
+  const cat = plandaBearAssignmentCatalog(data);
+  const options = cat.map(option => option.label);
+  const saved = Array.isArray(data.roleAssignments) ? data.roleAssignments.map(row => normalizeRoleAssignment(row, options, cat)) : [];
   const rows = saved.filter(row => row.person || row.position || row.paperwork.length);
   return rows.length ? rows : defaultRoleAssignments();
 }
@@ -3936,6 +3962,35 @@ function persistWholeClassPreProPatch(patch, section) {
     .catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
 }
 
+// The inbound half of persistWholeClassPreProPatch: whole-class keys ride the
+// PARENT session doc even while a group workspace owns the paperwork, but the
+// grouped snapshot guard skips parent prePro merges entirely. Without this, a
+// co-instructor's position-list edit stayed invisible on every grouped device
+// until a full reload. Stamp-checked per key, base mirror only.
+const PB_WHOLE_CLASS_KEYS = ['positionsCustom', 'positionsRemoved'];
+function mergeWholeClassPreProFromParent(server) {
+  if (!server || typeof server !== 'object') return;
+  const previous = basePreProData();
+  const localTimes = previous._fieldUpdatedAt || {};
+  const serverTimes = server._fieldUpdatedAt || {};
+  let changed = false;
+  const next = { ...previous, _fieldUpdatedAt: { ...localTimes } };
+  PB_WHOLE_CLASS_KEYS.forEach(key => {
+    if (!Object.prototype.hasOwnProperty.call(server, key)) return;
+    const localAt = Number(localTimes[key] ?? previous.updatedAt) || 0;
+    const serverAt = Number(serverTimes[key] ?? server.updatedAt) || 0;
+    if (Object.prototype.hasOwnProperty.call(previous, key) && serverAt < localAt) return;
+    try { if (JSON.stringify(previous[key]) === JSON.stringify(server[key])) return; } catch {}
+    next[key] = server[key];
+    next._fieldUpdatedAt[key] = serverAt || Date.now();
+    changed = true;
+  });
+  if (!changed) return;
+  next.updatedAt = Math.max(Number(previous.updatedAt) || 0, Number(server.updatedAt) || 0);
+  try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
+  if (pbOpenPageId() === 'hub') renderPlandaBearAssignmentsCard();
+}
+
 function rolePositionOptionsHTML(selected='', selectedId='') {
   const chosen = String(selected || '').trim();
   // Keep the chosen value selectable even if it was removed from this
@@ -3949,8 +4004,9 @@ function rolePositionOptionsHTML(selected='', selectedId='') {
 }
 
 function renderRoleAssignmentRows(rows=getRoleAssignments()) {
-  const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row));
   const paperworkOptions = plandaBearAssignmentCatalog();
+  const paperworkOptionLabels = paperworkOptions.map(option => option.label);
+  const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row, paperworkOptionLabels, paperworkOptions));
   return `<div class="admin-assignment-list">
     ${normalizedRows.map((row,i)=>{
       const selectedPaperwork = new Set(row.paperworkIds);
@@ -5045,8 +5101,11 @@ async function joinPreProSession() {
     show = { name:d.showName || 'Untitled Show', start:normalizeTimeValue(d.startTime) };
     if (Array.isArray(d.beats)) beats = d.beats.map(migrateBeat);
     // Merge shared work and recover any newer draft still on this device without
-    // replacing unrelated cloud sections.
-    mergePreProFromCloud(d.prePro && typeof d.prePro === 'object' ? d.prePro : {}, true);
+    // replacing unrelated cloud sections. The session's creation time bounds
+    // which server-missing local fields count as recoverable drafts.
+    const sessionCreatedMs = (d.createdAt && typeof d.createdAt.toMillis === 'function') ? d.createdAt.toMillis()
+      : (d.createdAt && d.createdAt.seconds ? d.createdAt.seconds * 1000 : Number(d.createdAt) || 0);
+    mergePreProFromCloud(d.prePro && typeof d.prePro === 'object' ? d.prePro : {}, true, sessionCreatedMs);
     maybeStageTestShowDeckLayouts(d);
     rememberLastSession(code, name);
     hideModal('modal-prepro-join');
@@ -5734,7 +5793,12 @@ function setupFirestore() {
       if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Cloud sync saving changes...');
       else if (!snapMeta.fromCache) setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
       try {
-        sessionSnapshotLatestDoc = JSON.parse(JSON.stringify(d));
+        // snap.data() returns a fresh object per call and nothing in this
+        // handler mutates it, so adopt the reference: captureSessionSnapshot
+        // clones behind its own 120s gate, which keeps a full JSON round-trip
+        // of the ~1MB doc off the ~1.4Hz snapshot hot path. The two writers
+        // that adjust this doc later clone-on-write instead of mutating.
+        sessionSnapshotLatestDoc = d;
         captureSessionSnapshot(sessionSnapshotLastAt ? 'interval' : 'joined');
       } catch (err) {
         console.warn('Session history could not read this snapshot', err);
@@ -5756,9 +5820,17 @@ function setupFirestore() {
         const remoteBatch = buildRundownBatch(rundownCloudBeats, d.beats.map(migrateBeat), rundownShadowShow, rundownShadowShow);
         invalidateConflictingRundownHistory(remoteBatch);
       }
+      const prevSeenBatchId = rundownLastSeenBatchId;
       if (incomingBatchId) rundownLastSeenBatchId = incomingBatchId;
       rundownAliases = d.rundownAliases && typeof d.rundownAliases === 'object' ? d.rundownAliases : {};
-      if (d.beats && Array.isArray(d.beats)) {
+      // Every rundown edit (beats AND show patches) bumps rundownBatchId, so
+      // an unchanged id means the beats are byte-identical to what this window
+      // already projected: skip the per-beat migrate + full projection + clone
+      // that otherwise run on every presence/playout snapshot (~1.4Hz). Docs
+      // without a batch id (bootstrap/legacy) always take the full path, and
+      // pending local batches always re-project.
+      const rundownDocChanged = !incomingBatchId || incomingBatchId !== prevSeenBatchId || rundownPendingBatches.length > 0;
+      if (rundownDocChanged && d.beats && Array.isArray(d.beats)) {
         rundownCloudBeats = d.beats.map(migrateBeat);
         beats = projectPendingRundownBatches(rundownCloudBeats);
         if (!rundownPendingBatches.length) rundownShadowBeats = cloneRundownValue(beats);
@@ -5779,11 +5851,23 @@ function setupFirestore() {
         rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
       }
       if (d.customSources) sessionCustomSources = d.customSources;
-      saveLocalDraft();
+      // The draft's JSON.stringify fingerprint walks the whole rundown; only
+      // pay for it when the rundown doc actually changed this snapshot.
+      // customSources rides a plain updateDoc that never bumps the batch id,
+      // so it gets its own tiny change check or the offline restore copy
+      // would go stale on source-only edits.
+      const customSourcesFp = d.customSources ? JSON.stringify(d.customSources) : '';
+      const customSourcesChanged = customSourcesFp !== _lastCustomSourcesDraftFp;
+      if (customSourcesChanged) _lastCustomSourcesDraftFp = customSourcesFp;
+      if (rundownDocChanged || customSourcesChanged) saveLocalDraft();
       if (d.prePro && typeof d.prePro === 'object' && !groupActive()) {
         // D2: while a group is active, the parent-doc prePro is the frozen
         // master copy — the group subdoc listener owns paperwork merges.
         try { mergePreProFromCloud(d.prePro); } catch {}
+      } else if (d.prePro && typeof d.prePro === 'object') {
+        // Groups own the paperwork, but whole-class keys (the position list)
+        // still ride the parent doc: merge just those into the base mirror.
+        try { mergeWholeClassPreProFromParent(d.prePro); } catch {}
       }
       pbEnsureGroupSubscription();   // groups config can appear/lock mid-session
       // Paperwork config toggled elsewhere (dashboard or another instructor's
@@ -5969,10 +6053,24 @@ function stableStringify(v) {
   if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
   return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
 }
+let _rundownBeatsFpCache = { batchId: '', str: '' };
+let _lastCustomSourcesDraftFp = '';
 function renderRundownIfChanged(d) {
   let fp;
   try {
-    fp = stableStringify(d.beats || []) + '|' + (d.showName || '') + '|' + (d.startTime || '')
+    // The recursive beats stringify is the expensive term at ~1.4Hz. Every
+    // rundown edit bumps rundownBatchId, so an unchanged id can reuse the
+    // cached string; aliases/cues/scalars are small and stay unmemoized
+    // because the batch id does not version them.
+    let beatsStr;
+    const batchId = typeof d.rundownBatchId === 'string' ? d.rundownBatchId : '';
+    if (batchId && batchId === _rundownBeatsFpCache.batchId) {
+      beatsStr = _rundownBeatsFpCache.str;
+    } else {
+      beatsStr = stableStringify(d.beats || []);
+      if (batchId) _rundownBeatsFpCache = { batchId, str: beatsStr };
+    }
+    fp = beatsStr + '|' + (d.showName || '') + '|' + (d.startTime || '')
       + '|' + (d.freeMode ? 1 : 0) + '|' + stableStringify(d.rundownAliases || {})
       + '|' + stableStringify(d.outrangutan?.cues || {});
   } catch (e) { fp = 'x' + Date.now(); }
@@ -6161,23 +6259,60 @@ function getActivePresencePeople() {
     });
 }
 
+// Presence-driven refresh gate: snapshots land ~1.4x/s during playout, and an
+// open admin panel used to be torn down and rebuilt via innerHTML on every one
+// (destroying hover states and eating in-flight clicks). The fingerprint
+// covers exactly what the panel renders from presence/participants; explicit
+// renders (open, tab switch, hydration) stay ungated and re-store it below.
+let _adminBodyPresenceFp = '';
+function adminBodyPresenceFingerprint() {
+  try {
+    return stableStringify([
+      getActivePresencePeople().map(p => [p.name, p.role, pbNormalizeAvatar(p.avatar), pbPositionFor(p.name)]),
+      sessionParticipantRecords,
+      // The panel renders all three panes; the Sources pane draws from
+      // sessionCustomSources, which arrives via snapshots with no render path
+      // of its own, so it must perturb the fingerprint or a co-instructor's
+      // source edit never appears while the panel is open.
+      sessionCustomSources,
+      currentAdminTab(),
+    ]);
+  } catch (e) { return 'x' + Date.now(); }
+}
 function refreshAdminBodyForSessionPeople() {
   const panel = document.getElementById('adminPanel');
   if (!panel?.classList.contains('on')) return;
   if (document.activeElement?.closest?.('#adminBody')) return;
+  if (adminBodyPresenceFingerprint() === _adminBodyPresenceFp) return;
   renderAdminBody();
 }
 
+let _presenceRenderFp = '';
 function renderPresence(map) {
   currentPresence = map || {};
   const active = getActivePresencePeople();
   const wrap = document.getElementById('presenceWrap');
   if (!active.length||!session.code||session.isDemo||session.isExpert){
     wrap.style.display='none';
+    _presenceRenderFp = '';
     refreshAdminBodyForSessionPeople();
     return;
   }
   wrap.style.display='flex';
+  // Same damping story as the admin panel: skip the avatar/tooltip innerHTML
+  // rebuild when the shown people have not changed since the last paint.
+  let presenceFp;
+  try {
+    presenceFp = stableStringify([
+      active.map(p => [p.name, p.role, pbNormalizeAvatar(p.avatar), pbPositionFor(p.name)]),
+      Boolean(adminSession),
+    ]);
+  } catch (e) { presenceFp = 'x' + Date.now(); }
+  if (presenceFp === _presenceRenderFp) {
+    refreshAdminBodyForSessionPeople();
+    return;
+  }
+  _presenceRenderFp = presenceFp;
   const shown = active.slice(0,4), extra = active.length-4;
   const initials = n => {
     const parts = String(n||'?').trim().split(/\s+/).filter(Boolean);
@@ -6228,9 +6363,14 @@ async function openPersonInfo(name) {
   }
   const following = newest?.following && !sameParticipantName(newest.following, name) ? newest.following : '';
 
-  const assignment = (Array.isArray(basePreProData().roleAssignments) ? basePreProData().roleAssignments : [])
-    .map(r => normalizeRoleAssignment(r))
-    .find(r => sameParticipantName(r.person, name));
+  // Same truth as the hub card: canonical register first (getRoleAssignments),
+  // never the base mirror directly, so the two admin surfaces cannot disagree.
+  // A person can hold several positions; show them all.
+  const personRows = getRoleAssignments().filter(r => sameParticipantName(r.person, name));
+  const assignment = personRows.length ? {
+    position: personRows.map(r => r.position).filter(Boolean).join(' / '),
+    paperwork: cleanUniqueStrings(personRows.flatMap(r => r.paperwork || [])),
+  } : null;
 
   const piAv = pbNormalizeAvatar(newest?.avatar);
   const piHasArt = piAv && piAv.type !== 'initials';
@@ -6858,6 +6998,15 @@ document.addEventListener('keydown', e => {
     // Esc on a Planda Bear preview returns to the workspace, not the front page.
     e.preventDefault();
     dismissPaperPreview();
+    return;
+  }
+  if (['preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal'].includes(top.id)) {
+    // Esc on a paperwork editor must SAVE first (returnToPaperworkHub runs
+    // saveOpenPaperworkSection while the modal is still 'on'), matching the
+    // editors' back-button UX. A bare closeDialog dropped the last sub-650ms
+    // of typing and every click-only edit since the previous autosave.
+    e.preventDefault();
+    returnToPaperworkHub();
     return;
   }
   e.preventDefault();
@@ -10342,13 +10491,17 @@ async function resolveDeckPreflightRow(run) {
 // flaps the bar. Clicking the chip opens the full preflight.
 const _sysChip = {
   prev: {}, applied: {}, talkSeen: false,
-  // The deck latch persists (a driven deck that vanished must still alarm
-  // after a reload); a preflight probe that finds zero plugged decks retires
-  // it, so a rig that genuinely dropped its deck goes quiet again.
-  deckSeen: (() => { try { return localStorage.getItem('cueola_deck_seen') === '1'; } catch { return false; } })(),
 };
+// The deck latch persists (a driven deck that vanished must still alarm
+// after a reload); a preflight probe that finds zero plugged decks retires
+// it, so a rig that genuinely dropped its deck goes quiet again. Read from
+// localStorage on every consult, not cached at boot: the retire and the set
+// must reach every open window (the /keywibird window, a second rundown
+// window), not just the one that ran the preflight.
+function _sysChipDeckSeen() {
+  try { return localStorage.getItem('cueola_deck_seen') === '1'; } catch { return false; }
+}
 function _sysChipNoteDeckGone() {
-  _sysChip.deckSeen = false;
   try { localStorage.removeItem('cueola_deck_seen'); } catch {}
 }
 function _sysChipRaw() {
@@ -10364,8 +10517,8 @@ function _sysChipRaw() {
   const st = window.CueolaStreamDeck?.deckStatus?.();
   if (st && (st.connectedHere || st.drivenElsewhere)) {
     out.deck = 'ok';
-    if (!_sysChip.deckSeen) { _sysChip.deckSeen = true; try { localStorage.setItem('cueola_deck_seen', '1'); } catch {} }
-  } else if (_sysChip.deckSeen) out.deck = 'warn';   // a deck that was driven and vanished is worth amber; one never seen is not
+    if (!_sysChipDeckSeen()) { try { localStorage.setItem('cueola_deck_seen', '1'); } catch {} }
+  } else if (_sysChipDeckSeen()) out.deck = 'warn';   // a deck that was driven and vanished is worth amber; one never seen is not
   return out;
 }
 function _sysChipTick() {
@@ -17817,18 +17970,31 @@ function startTimer(anchorMs) {
   // started from; locally we derive it from the elapsed time so far.
   const start = (typeof anchorMs === 'number' && anchorMs > 0) ? anchorMs : (Date.now() - elapsedSecs * 1000);
   liveTimerStartMs = start;
+  // The interval ticks at frame rate (~30Hz) so the frame counters stay live,
+  // but most of what it used to call is whole-second data: repainting the
+  // overview, bot bar, and wall clock 30 times a second forced continuous
+  // layout work in the show window for the entire show. Frame-granular
+  // readouts (ls-timer, ls-remain, ls-stat-remain) keep the full rate; the
+  // rest updates once per second.
+  let lastTickSec = -1;
   timerInterval = setInterval(()=>{
     const elapsedMs = Date.now() - start;
     elapsedSecs = Math.floor(elapsedMs / 1000);
     const el = document.getElementById('ls-timer');
+    const total = totalSecs();
     if (el) {
       el.textContent = fmtProductionClock(elapsedMs);
-      const total = totalSecs();
       el.classList.toggle('warn', total>0 && elapsedSecs>total*0.9);
     }
-    updateBotBar();
-    updateLiveOverview();
-    updateWallClock();
+    updateLiveRemain();
+    const remainEl = document.getElementById('ls-stat-remain');
+    if (remainEl) remainEl.textContent = liveRemainingSecs() ? fmtProductionClock(liveRemainingMs()) : '—';
+    if (elapsedSecs !== lastTickSec) {
+      lastTickSec = elapsedSecs;
+      updateBotBar();
+      updateLiveOverview();
+      updateWallClock();
+    }
   },1000 / Math.min(frameRate, 30));
   updateLiveClockButton();
   notifyControlSurfaceState();
@@ -18338,6 +18504,17 @@ function resolveActiveCallSheetIndex(sheets=getCallSheets()) {
   return idx;
 }
 
+// The persisted per-device sheet selection is normally hydrated by openPrePro.
+// Direct export entries (the hub's Export Call Sheet Only, the preview) can
+// run before the editor was ever opened this load; without this, a reloaded
+// window exported Day 1 for a student working on Day 2. The !activeCallSheetId
+// guard keeps an in-session selection authoritative over stale storage.
+function hydrateCallSheetSelectionIfCold(sheets) {
+  if (!activeCallSheetId && sheets.length) {
+    storeActiveCallSheetIndex(Math.max(0, Math.min(loadActiveCallSheetIndex(sheets), sheets.length - 1)), sheets);
+  }
+}
+
 function loadPreProData() {
   try { return JSON.parse(localStorage.getItem(preProKey()) || '{}') || {}; } catch { return {}; }
 }
@@ -18538,7 +18715,7 @@ function persistPreProDataLegacy(previous, patch, section, now) {
 }
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
-function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
+function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps=null) {
   // 'LOCAL' is the no-session sentinel (openLocalPlandaBear/openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
@@ -18551,8 +18728,10 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
     for (const key of changedKeys) {
       // All current Planda Bear top-level keys are Firestore-safe identifiers.
       // Field-path writes prevent one stale section from replacing the package.
+      // Recovery pushes pass per-key stamps so resurrected fields keep their
+      // ORIGINAL edit time instead of masquerading as this-instant edits.
       updates[`prePro.${key}`] = changed[key];
-      updates[`prePro._fieldUpdatedAt.${key}`] = updatedAt;
+      updates[`prePro._fieldUpdatedAt.${key}`] = (stamps && Number(stamps[key])) || updatedAt;
     }
     pbBeginCloudSave(changedKeys);
     _pbLastCloudSaveError = null;
@@ -18563,7 +18742,7 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now()) {
       const seed = { prePro: { updatedAt: updatedAt, _fieldUpdatedAt: {} }, updatedAt: updatedAt };
       changedKeys.forEach(key => {
         seed.prePro[key] = changed[key];
-        seed.prePro._fieldUpdatedAt[key] = updatedAt;
+        seed.prePro._fieldUpdatedAt[key] = (stamps && Number(stamps[key])) || updatedAt;
       });
       return window._setDoc(ref, seed, { merge: true });
     };
@@ -18631,7 +18810,7 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
   }
 }
 
-function mergePreProFromCloud(server, recoverNewerLocal=false) {
+function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=0) {
   if (!server || typeof server !== 'object') return loadPreProData();
   const Sync = preProSyncEngine();
   // Engine merge reads BOTH wire shapes; it is needed to digest any map-shaped
@@ -18639,7 +18818,7 @@ function mergePreProFromCloud(server, recoverNewerLocal=false) {
   // while CUEOLA_PB_LEAF_SYNC is dark — mergePreProFromCloudLegacy handles that.
   if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) {
     const digestible = Sync ? pbCollectionsToArrays(Sync.normalizeDoc(server).doc) : server;
-    return mergePreProFromCloudLegacy(digestible, recoverNewerLocal);
+    return mergePreProFromCloudLegacy(digestible, recoverNewerLocal, sessionCreatedAt);
   }
   const local = loadPreProData();
   const { merged, recovery } = Sync.mergeDocs(local, server, { pendingPaths:_pbPendingCloudKeys, recoverNewerLocal });
@@ -18682,7 +18861,7 @@ function mergePreProFromCloud(server, recoverNewerLocal=false) {
   return toStore;
 }
 
-function mergePreProFromCloudLegacy(server, recoverNewerLocal=false) {
+function mergePreProFromCloudLegacy(server, recoverNewerLocal=false, sessionCreatedAt=0) {
   const local = loadPreProData();
   const localTimes = local._fieldUpdatedAt || {};
   const serverTimes = server._fieldUpdatedAt || {};
@@ -18692,10 +18871,28 @@ function mergePreProFromCloudLegacy(server, recoverNewerLocal=false) {
   keys.delete('updatedAt');
   keys.delete('_fieldUpdatedAt');
   keys.delete('activeCallSheetIndex');
+  // Recovery of server-missing keys is for genuinely newer offline drafts,
+  // not for resurrecting a whole stale mirror: against an empty or reset
+  // server package (session recreated under a reused code, or a snapshot
+  // restore that predates prePro), recovering everything would silently
+  // repopulate the fresh session with last class's paperwork.
+  const serverDocAt = Number(server.updatedAt) || 0;
+  const serverHasData = Object.keys(server).some(k =>
+    k !== 'updatedAt' && k !== '_fieldUpdatedAt' && k !== 'activeCallSheetIndex');
+  // Staleness boundary for server-missing keys: the session's creation time
+  // when known. Comparing against server.updatedAt blocked legitimate offline
+  // drafts, because EVERY save by anyone advances that doc clock; a mirror
+  // older than the session's recreation stays blocked either way.
+  const recoveryBoundary = sessionCreatedAt > 0 ? sessionCreatedAt : serverDocAt;
+  let skippedRecoveries = 0;
   for (const key of keys) {
     if (_pbPendingCloudKeys.has(key) && Object.prototype.hasOwnProperty.call(local, key)) continue;
     if (!Object.prototype.hasOwnProperty.call(server, key)) {
-      if (recoverNewerLocal && Object.prototype.hasOwnProperty.call(local, key)) recoveryPatch[key] = local[key];
+      if (recoverNewerLocal && Object.prototype.hasOwnProperty.call(local, key)) {
+        const localAt = Number(localTimes[key] ?? local.updatedAt) || 0;
+        if (serverHasData && localAt > recoveryBoundary) recoveryPatch[key] = local[key];
+        else skippedRecoveries++;
+      }
       continue;
     }
     const localAt = Number(localTimes[key] ?? local.updatedAt) || 0;
@@ -18711,8 +18908,14 @@ function mergePreProFromCloudLegacy(server, recoverNewerLocal=false) {
   delete merged.activeCallSheetIndex;
   try { localStorage.setItem(preProKey(), JSON.stringify(merged)); } catch {}
   if (recoverNewerLocal && Object.keys(recoveryPatch).length) {
-    syncPreProToFirestore(recoveryPatch, null, Date.now());
+    // Pass the local stamps so recovered fields keep their real edit times.
+    syncPreProToFirestore(recoveryPatch, null, Date.now(), localTimes);
     logShow('sync', `Recovering ${Object.keys(recoveryPatch).length} newer Planda Bear draft field(s) from this device`);
+  }
+  // A blocked recovery must not be silent on show day: the mirror still shows
+  // the field locally, but the shared package does not have it.
+  if (recoverNewerLocal && skippedRecoveries) {
+    logShow('sync', `${skippedRecoveries} older local Planda Bear field(s) left un-recovered (stale mirror; the shared package is the truth)`);
   }
   return merged;
 }
@@ -18724,7 +18927,13 @@ async function hydratePreProFromFirestore() {
   try {
     // D2: hydrate from the active workspace (group subdoc when grouped). A
     // group doc that doesn't exist yet is a legitimately blank workspace.
+    // The fetch pins the workspace at call time, but the merge writers
+    // re-evaluate preProKey() after the await: if the instructor flips the
+    // group picker while this read is in flight, bailing here keeps group A's
+    // paperwork from merging into group B's mirror.
+    const expectedKey = preProKey();
     const snap = await window._getDoc(preProDocRef());
+    if (preProKey() !== expectedKey) return;
     if (!snap.exists()) return;
     const server = snap.data().prePro;
     if (!server || typeof server !== 'object') return;
@@ -18947,7 +19156,9 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-call', timeTo24(sheet.call));
   pbSetFieldIfIdle('pp-location', sheet.location || '');
   pbSetFieldIfIdle('pp-address', sheet.address || '');
-  pbSetFieldIfIdle('pp-late', sheet.late || '');
+  const remoteLate = splitLateContact(sheet.late, sheet.lateName, sheet.latePhone);
+  pbSetFieldIfIdle('pp-late-name', remoteLate.name);
+  pbSetFieldIfIdle('pp-late-phone', remoteLate.phone);
   pbSetFieldIfIdle('pp-parking', sheet.parking || '');
   pbSetFieldIfIdle('pp-entrance', sheet.entrance || '');
   pbSetFieldIfIdle('pp-stream', sheet.stream || '');
@@ -19017,12 +19228,37 @@ function pbRefreshCallSheetFields() {
 
 // Live-refresh patch grids: update existing cells in place (skip focused); when the
 // user isn't typing in a grid, re-render so row adds/removes from others show up.
+// A collaborator adding or removing a patch row while this user types makes
+// the index-mapped in-place refresh unsafe: DOM row i no longer means mirror
+// row i, and a whole-array save from that DOM would clobber the collaborator's
+// change and bake shifted rows into the exported sheets. While diverged, cell
+// writes and whole-array saves are held, and a re-render is scheduled for the
+// first idle moment.
+let _pbPatchGridDiverged = false;
+let _pbPatchReconcileTimer = null;
+function pbSchedulePatchGridReconcile() {
+  clearTimeout(_pbPatchReconcileTimer);
+  _pbPatchReconcileTimer = setTimeout(() => {
+    _pbPatchReconcileTimer = null;
+    if (!_pbPatchGridDiverged) return;
+    if (!document.getElementById('patchSheetModal')?.classList.contains('on')) { _pbPatchGridDiverged = false; return; }
+    const editing = !!document.activeElement?.closest?.('.patch-table');
+    const anyRecent = [...document.querySelectorAll('[data-patch-kind]')].some(i => pbFieldRecentlyEdited(i.id));
+    if (editing || anyRecent) { pbSchedulePatchGridReconcile(); return; }
+    pbRenderPatchBody();
+    toast('Patch sheet updated by a collaborator.');
+  }, 1500);
+}
 function pbRenderPatchBody() {
   const body = document.getElementById('patchSheetBody');
   if (!body) return;
+  _pbPatchGridDiverged = false;   // a full re-render adopts the mirror's structure
   body.innerHTML = activePatchKind === 'video'
     ? renderPatchTable('video', 'Video Patch Sheet')
     : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
+}
+function pbPatchRowHasContent(row) {
+  return row && typeof row === 'object' && Object.entries(row).some(([k, v]) => k !== 'id' && k !== 'ord' && Boolean(String(v || '').trim()));
 }
 function pbRefreshPatchFields() {
   const data = loadPreProData();
@@ -19036,6 +19272,19 @@ function pbRefreshPatchFields() {
     kinds.forEach(kind => {
       const rows = data[`${kind}PatchRows`];
       if (!Array.isArray(rows)) return;
+      const domRows = collectPatchRows(kind, true);
+      if (domRows.length !== rows.length) {
+        // The counts can differ for a benign local reason: the debounce save
+        // drops blank rows from storage while the DOM keeps them. That case
+        // has equal NON-blank counts and stays saveable; a real remote
+        // add/remove differs in content rows too and freezes saves until the
+        // grid re-renders from the mirror.
+        if (domRows.filter(pbPatchRowHasContent).length !== rows.filter(pbPatchRowHasContent).length) {
+          _pbPatchGridDiverged = true;
+          pbSchedulePatchGridReconcile();
+        }
+        return;   // index mapping is unsafe either way: no in-place writes
+      }
       document.querySelectorAll(`[data-patch-kind="${kind}"]`).forEach(input => {
         if (input === document.activeElement || pbFieldRecentlyEdited(input.id)) return;
         const r = rows[Number(input.dataset.patchRow)];
@@ -19112,28 +19361,44 @@ function pbInitCollabListeners() {
     });
     const queuePaperworkAutosave = e => {
       if (!pbIsAutosaveField(e.target)) return;
-      paperworkDirty = true;
       const guardKey = pbAutosaveGuardKey(e.target);
       if (guardKey) pbNoteLocalEdit(guardKey);
-      clearTimeout(_pbFieldSaveTimer);
-      _pbFieldSaveTimer = setTimeout(() => {
-        _pbFieldSaveTimer = null;
-        // Merge in collaborators' latest values before saving so two people on
-        // the same page editing different fields don't overwrite each other.
-        pbRefreshOpenPaperworkFields();
-        _pbSuppressActivity = true;
-        try {
-          saveOpenPaperworkSection(false);
-          paperworkDirty = false;
-        } finally { _pbSuppressActivity = false; }
-        updatePbSaveStatus();
-      }, 650);
-      updatePbSaveStatus();
+      pbQueuePaperworkAutosave();
     };
     modal.addEventListener('input', queuePaperworkAutosave);
     // Safari commits time pickers and <select>s with only a 'change' event.
     modal.addEventListener('change', queuePaperworkAutosave);
   });
+}
+
+// Shared debounced paperwork save. Input/change events route here, and the
+// click-only editors (venue, meals, N/A toggles) call it directly so a click
+// lands in the stored sheet within ~650ms, well inside the 10s recent-edit
+// hold, instead of depending on a later keystroke or hub navigation.
+function pbQueuePaperworkAutosave() {
+  paperworkDirty = true;
+  clearTimeout(_pbFieldSaveTimer);
+  _pbFieldSaveTimer = setTimeout(() => {
+    _pbFieldSaveTimer = null;
+    // Merge in collaborators' latest values before saving so two people on
+    // the same page editing different fields don't overwrite each other.
+    pbRefreshOpenPaperworkFields();
+    // saveOpenPaperworkSection only saves while an editor modal is 'on': if
+    // the modal closed before the debounce fired (Esc, navigation), nothing
+    // saved, so the dirty flag must survive for the flush-on-export and
+    // beforeunload rescues.
+    const editorOpen = ['preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal']
+      .some(id => document.getElementById(id)?.classList.contains('on'));
+    _pbSuppressActivity = true;
+    try {
+      saveOpenPaperworkSection(false);
+      // A diverged patch grid holds its save (savePatchSheet): the dirty flag
+      // must survive that hold too.
+      if (editorOpen && !_pbPatchGridDiverged) paperworkDirty = false;
+    } finally { _pbSuppressActivity = false; }
+    updatePbSaveStatus();
+  }, 650);
+  updatePbSaveStatus();
 }
 
 function currentPaperworkItemId() {
@@ -19166,7 +19431,7 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
   if (id === 'call-sheet') { saveCallSheet(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'production-scheduler') { saveProductionSchedule(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'safety-plan') { saveSafetyPlan(showToastOnSave); paperworkDirty = false; return; }
-  if (id === 'video-patch' || id === 'audio-comms-patch') { savePatchSheet(showToastOnSave); paperworkDirty = false; return; }
+  if (id === 'video-patch' || id === 'audio-comms-patch') { savePatchSheet(showToastOnSave); if (!_pbPatchGridDiverged) paperworkDirty = false; return; }
   if (id === 'stage-plot') { saveStagePlot(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'production-notes') { saveProductionNoteDraft(); paperworkDirty = false; if (showToastOnSave) toast('Published notes save automatically. Draft kept.'); return; }
   if (showToastOnSave) toast('Rundown is already part of the package.');
@@ -19328,10 +19593,13 @@ function togglePaperworkItemEnabled(itemId) {
   if (onSharedShowCode()) {
     // Optimistic local adoption plus the fingerprint, so the echo of THIS
     // write repaints nothing, while a differing echo (another client, or a
-    // failed write reverting) always does.
+    // failed write reverting) always does. Clone-on-write: the latest doc is
+    // now the snapshot handler's own object, never mutated in place.
     if (sessionSnapshotLatestDoc) {
-      sessionSnapshotLatestDoc.prePro = sessionSnapshotLatestDoc.prePro || {};
-      sessionSnapshotLatestDoc.prePro.paperworkEnabled = map;
+      sessionSnapshotLatestDoc = {
+        ...sessionSnapshotLatestDoc,
+        prePro: { ...(sessionSnapshotLatestDoc.prePro || {}), paperworkEnabled: map },
+      };
     }
     _lastPaperworkConfigFingerprint = JSON.stringify(map);
     if (window._firebaseReady && window._updateDoc) {
@@ -19362,6 +19630,7 @@ function pbRefreshPaperworkConfigUI() {
 // read-only roster. The editor keeps the #adminRoleAssignments and
 // #adminAssignmentSaveState ids plus the [data-role-assignment-row] draft
 // contract, so the hydrate/save/conflict machinery carries over unchanged.
+let _pbAssignCardFp = '';
 function renderPlandaBearAssignmentsCard(opts={}) {
   const wrap = document.getElementById('pbAssignmentsCard');
   if (!wrap) return;
@@ -19376,6 +19645,21 @@ function renderPlandaBearAssignmentsCard(opts={}) {
     const draft = liveRows && draftish ? getRoleAssignmentsFromAdminDOM(true)
       : (assignmentDraftStash?.length && draftish ? assignmentDraftStash : undefined);
     const positionOptions = getRolePositionOptions();
+    // One shared rows computation feeds the roster strip, the editor rows,
+    // and the damping fingerprint below. Presence heartbeats repaint this
+    // card on every session snapshot; when nothing it renders from actually
+    // changed, skip the innerHTML teardown (which ate in-flight clicks).
+    const rows = draft || getRoleAssignments();
+    let cardFp;
+    try {
+      cardFp = stableStringify(['admin', session.code, positionOptions,
+        Array.isArray(sessionParticipantNames) ? sessionParticipantNames : [],
+        assignmentProfiles.map(p => [p.profileId || '', p.username || '', p.fullName || '',
+          Array.isArray(p.sessions) && p.sessions.includes(session.code)]),
+        rows]);
+    } catch (e) { cardFp = 'x' + Date.now(); }
+    if (!opts.force && liveRows && cardFp === _pbAssignCardFp) return;
+    _pbAssignCardFp = cardFp;
     wrap.innerHTML = `<div class="pb-assign-card pb-assign-editor">
       <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
       <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. The saved roster shows here for the whole crew. Changes remain unsaved until Firestore confirms <b>Save assignments</b>.</div>
@@ -19387,8 +19671,8 @@ function renderPlandaBearAssignmentsCard(opts={}) {
           <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
         </div>
       </div>
-      ${pbAssignmentRosterStripHTML(draft)}
-      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(draft)}</div>
+      ${pbAssignmentRosterStripHTML(rows)}
+      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(rows)}</div>
       <div class="admin-assignment-actions">
         <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
         <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save assignments</button>
@@ -19412,6 +19696,12 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   // Prefer the hydrated canonical register (it also heals grouped devices,
   // whose base mirror can lag); fall back to the base mirror projection.
   const rows = getRoleAssignments().filter(row => row.person && (row.position || row.paperwork.length));
+  // Same damping as the editor branch: student hubs get this repaint on every
+  // presence heartbeat too, and it had no guard at all.
+  let roFp;
+  try { roFp = stableStringify(['ro', rows]); } catch (e) { roFp = 'x' + Date.now(); }
+  if (roFp === _pbAssignCardFp && wrap.firstChild) return;
+  _pbAssignCardFp = roFp;
   if (!rows.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = `<div class="pb-assign-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
@@ -22476,7 +22766,7 @@ function productionNoteDocHTML(note, notes=plandaBearNotes, productionName=show.
   `;
 }
 
-function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.name, sectionNumber=8) {
+function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.name, sectionNumber=paperworkSectionNumber('production-notes')) {
   const threads = pbBuildThreads(notes).sort((a,b)=>(a.root.at||0)-(b.root.at||0));
   const attHTML = (n) => (n.attachments || []).map(a => {
     if (a.isImage) {
@@ -22492,7 +22782,7 @@ function productionNotesThreadHTML(notes=plandaBearNotes, productionName=show.na
   </tr>`;
   const rows = threads.flatMap(t => [row(t.root, false), ...t.replies.map(r => row(r, true))]).join('');
   return `
-    <h1 class="psec-h psec-notes">${Number(sectionNumber) || 8}. Production Notes</h1>
+    <h1 class="psec-h psec-notes">${Number(sectionNumber) || paperworkSectionNumber('production-notes')}. Production Notes</h1>
     <div>${esc(productionName || 'Cueola')} · Shared discussion board</div>
     <table><thead><tr><th>Time</th><th>By</th><th>Tag</th><th>Note</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="4">No production notes yet.</td></tr>'}</tbody></table>
@@ -22538,7 +22828,7 @@ async function showProductionNotesPreview() {
     });
     lastProductionNotesExportSnapshot = snapshot;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
-    showPaperPreview('Production Notes Preview', productionNotesThreadHTML(snapshot.notes, snapshot.production.name),
+    showPaperPreview('Production Notes Preview', productionNotesThreadHTML(snapshot.notes, snapshot.production.name, paperworkSectionNumber('production-notes', snapshot)),
       'Export Notes Log PDF', 'exportProductionNotesPDF()', 'production-notes', options);
   } catch (error) {
     lastProductionNotesExportSnapshot = null;
@@ -22558,7 +22848,7 @@ async function exportProductionNotesPDF() {
     });
     toast('Building notes log PDF...');
     const stamp = new Date(snapshot.exportedAt).toISOString().slice(0,10);
-    const html = productionNotesThreadHTML(snapshot.notes, snapshot.production.name);
+    const html = productionNotesThreadHTML(snapshot.notes, snapshot.production.name, paperworkSectionNumber('production-notes', snapshot));
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
@@ -22826,6 +23116,9 @@ function openPaperworkItem(id) {
 
 function returnToPaperworkHub() {
   saveOpenPaperworkSection(false);
+  // The save above already flushed everything; a still-armed debounce timer
+  // would fire after the modal closes and find nothing to save.
+  if (_pbFieldSaveTimer) { clearTimeout(_pbFieldSaveTimer); _pbFieldSaveTimer = null; }
   hidePaperworkEditors();
   openPaperworkHub();
 }
@@ -22884,7 +23177,10 @@ function flushPaperworkDraftForExport() {
     _pbSuppressActivity = true;
     try {
       saveOpenPaperworkSection(false);
-      paperworkDirty = false;
+      // A diverged patch grid holds its save: the dirty flag must survive so
+      // export readiness and beforeunload keep reporting pending edits
+      // instead of printing or discarding the stale mirror as "clean".
+      if (!_pbPatchGridDiverged) paperworkDirty = false;
     } finally { _pbSuppressActivity = false; }
   }
 }
@@ -23484,6 +23780,7 @@ async function showCallSheetPreview() {
   try {
     const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'call-sheet' });
     const sheets = getCallSheets(snapshot.prePro);
+    hydrateCallSheetSelectionIfCold(sheets);
     const index = resolveActiveCallSheetIndex(sheets);
     lastCallSheetExportSnapshot = snapshot;
     lastCallSheetExportIndex = index;
@@ -23515,12 +23812,32 @@ function legacyCallSheetFromData(data={}) {
     parking: data.parking || '',
     entrance: data.entrance || '',
     late: data.late || '',
+    lateName: data.lateName || '',
+    latePhone: data.latePhone || '',
     stream: data.stream || '',
     dress: data.dress || '',
     meals: data.meals || '',
     people: Array.isArray(data.people) ? data.people : [],
     notes: data.notes || '',
   };
+}
+
+// Late / Lost Contact is edited as name + number but STORED with the combined
+// `late` string kept alongside, so the safety plan auto-link, both PDF
+// renderers, and every legacy sheet keep working unchanged. Old sheets that
+// only have the combined string get a best-effort split: a phone-shaped tail
+// becomes the number, anything else lands in the name field.
+function splitLateContact(late, name, phone) {
+  const n = String(name || '').trim(), p = String(phone || '').trim();
+  if (n || p) return { name: n, phone: p };
+  const legacy = String(late || '').trim();
+  if (!legacy) return { name: '', phone: '' };
+  const m = legacy.match(/^(.*?)[\s·,:-]*(\+?\(?\d[\d\s().-]{5,}\d)$/);
+  if (m) return { name: m[1].trim(), phone: m[2].trim() };
+  return { name: legacy, phone: '' };
+}
+function joinLateContact(name, phone) {
+  return [String(name || '').trim(), String(phone || '').trim()].filter(Boolean).join(' · ');
 }
 
 function normalizeCallSheet(sheet={}, i=0, fallback={}) {
@@ -23542,6 +23859,8 @@ function normalizeCallSheet(sheet={}, i=0, fallback={}) {
     parking: sheet.parking || fallback.parking || '',
     entrance: sheet.entrance || fallback.entrance || '',
     late: sheet.late || fallback.late || '',
+    lateName: sheet.lateName || fallback.lateName || '',
+    latePhone: sheet.latePhone || fallback.latePhone || '',
     stream: sheet.stream || fallback.stream || '',
     dress: sheet.dress || fallback.dress || '',
     meals: sheet.meals || fallback.meals || '',
@@ -25514,7 +25833,9 @@ function hydrateCallSheetForm(sheet) {
   renderCallSheetVenue();
   callSheetWeather = normalizeCallSheetWeather(data.weather);
   renderCallSheetWeatherCard();
-  document.getElementById('pp-late').value = data.late || '';
+  const lateContact = splitLateContact(data.late, data.lateName, data.latePhone);
+  document.getElementById('pp-late-name').value = lateContact.name;
+  document.getElementById('pp-late-phone').value = lateContact.phone;
   document.getElementById('pp-parking').value = data.parking || '';
   document.getElementById('pp-entrance').value = data.entrance || '';
   document.getElementById('pp-stream').value = data.stream || '';
@@ -25546,7 +25867,11 @@ function currentCallSheetFromForm() {
     weather: normalizeCallSheetWeather(callSheetWeather),
     parking: document.getElementById('pp-parking')?.value?.trim() || '',
     entrance: document.getElementById('pp-entrance')?.value?.trim() || '',
-    late: document.getElementById('pp-late')?.value?.trim() || '',
+    lateName: document.getElementById('pp-late-name')?.value?.trim() || '',
+    latePhone: document.getElementById('pp-late-phone')?.value?.trim() || '',
+    // Combined string kept in sync for the safety plan auto-link, the PDF
+    // renderers, and anything still reading the legacy key.
+    late: joinLateContact(document.getElementById('pp-late-name')?.value, document.getElementById('pp-late-phone')?.value),
     stream: document.getElementById('pp-stream')?.value?.trim() || '',
     dress: document.getElementById('pp-dress')?.value?.trim() || '',
     meals: document.getElementById('pp-meals')?.value || '',
@@ -25734,7 +26059,7 @@ function setCallSheetVenue(v) {
   callSheetVenue = (callSheetVenue === nv) ? '' : nv; // click active to clear
   renderCallSheetVenue();
   pbNoteLocalEdit('pp-venue-group');   // hold the collab refresh off this click briefly
-  paperworkDirty = true;
+  pbQueuePaperworkAutosave();   // and persist within 650ms, inside the hold
 }
 
 function renderCallSheetVenue() {
@@ -25750,7 +26075,7 @@ function setCallSheetMealsProvided(v) {
   callSheetMealsProvided = (callSheetMealsProvided === nv) ? '' : nv; // click active to clear
   renderCallSheetMealsProvided();
   pbNoteLocalEdit('pp-meals-provided-group');   // hold the collab refresh off this click briefly
-  paperworkDirty = true;
+  pbQueuePaperworkAutosave();   // and persist within 650ms, inside the hold
 }
 
 function renderCallSheetMealsProvided() {
@@ -26045,6 +26370,48 @@ function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
     roleAssignments: strippedRows,
     updatedAt: Date.now(),
   }, 'Call Sheet');
+  // The canonical assignments register (sessions/{code}/assignments) is the
+  // truth whenever it is non-empty, and the strip above only touched the
+  // prePro compat rows. Left alone, the register keeps requiring the deleted
+  // sheet, and worse: its now-unlisted label would fuzzy-remap onto the first
+  // surviving sheet on the next editor render. Strip the RAW records here
+  // (labels and ids spliced together, exactly like the compat rows) and route
+  // the durable write through the existing Save assignments transaction.
+  // Admin only: a session-role instructor without adminSession has no Save
+  // assignments button anywhere, so the 'unsaved' state could never resolve
+  // and would wedge package exports on that device. For them the register
+  // keeps the stale label verbatim (the fuzzy remap is already gated off)
+  // until an admin cleans it up.
+  if (adminSession && canonicalRoleAssignments.length) {
+    const sheetCatalogId = `paperwork_${String(sheet.id || `call_sheet_${idx + 1}`).replace(/[^A-Za-z0-9_.-]/g, '_')}`.slice(0, 160);
+    let canonicalChanged = false;
+    canonicalRoleAssignments = canonicalRoleAssignments.map(record => {
+      const labelKey = Array.isArray(record?.paperworkLabels) ? 'paperworkLabels'
+        : Array.isArray(record?.paperwork) ? 'paperwork' : '';
+      if (!labelKey) return record;
+      const labels = record[labelKey];
+      const hadIds = Array.isArray(record.paperworkIds);
+      const ids = hadIds ? record.paperworkIds : [];
+      const kept = [];
+      const keptIds = [];
+      labels.forEach((item, i) => {
+        const isDeleted = String(item || '').trim().toLowerCase() === sheetLabel
+          || (hadIds && String(ids[i] || '') === sheetCatalogId);
+        if (isDeleted) return;
+        kept.push(item);
+        if (hadIds) keptIds.push(ids[i] || null);
+      });
+      if (kept.length === labels.length) return record;
+      canonicalChanged = true;
+      const next = { ...record, [labelKey]: kept };
+      if (hadIds) next.paperworkIds = keptIds;
+      return next;
+    });
+    if (canonicalChanged) {
+      rerenderRoleAssignments(getRoleAssignments());
+      setAssignmentSaveState('unsaved', 'Call sheet deleted: press Save assignments to confirm the removal for the whole class.');
+    }
+  }
   renderCallSheetSelector(remaining);
   hydrateCallSheetForm(remaining[nextIdx]);
   renderPackageSheetPicker();
@@ -26156,9 +26523,12 @@ function callSheetPreviewHTML(data, prePro=loadPreProData()) {
   const safety = prePro?.safety || {};
   const hospitalBits = [safety.hospital, safety.hospitalAddress, safety.hospitalPhone]
     .map(v => String(v || '').trim()).filter(Boolean);
+  // Print all three editor states: an explicit "Provided" with no time or
+  // text must not export as an empty cell indistinguishable from unanswered.
   const meals = data.mealsProvided === 'not-provided'
     ? 'Not provided'
-    : [data.mealTime ? paperTime(data.mealTime) : '', String(data.meals || '').trim()]
+    : [data.mealsProvided === 'provided' ? 'Provided' : '',
+       data.mealTime ? paperTime(data.mealTime) : '', String(data.meals || '').trim()]
       .filter(Boolean).join(' · ');
   return `
     <h1 class="psec-h psec-callsheet">${esc(title)}</h1>
@@ -26176,7 +26546,7 @@ function callSheetPreviewHTML(data, prePro=loadPreProData()) {
       <tr><th>Weather</th><td>${esc(weatherSummaryLine(data.weather))}</td></tr>
       <tr><th>Parking</th><td>${esc(data.parking || '')}</td></tr>
       <tr><th>Entrance</th><td>${esc(data.entrance || '')}</td></tr>
-      <tr><th>Late / Lost Contact</th><td>${esc(data.late || '')}</td></tr>
+      <tr><th>Late / Lost Contact</th><td>${esc(data.late || joinLateContact(data.lateName, data.latePhone))}</td></tr>
       <tr><th>Stream Information</th><td>${esc(data.stream || '')}</td></tr>
       <tr><th>Dress Code</th><td>${esc(data.dress || '')}</td></tr>
       <tr><th>Meals</th><td>${esc(meals)}</td></tr>
@@ -26268,7 +26638,7 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
       <tr><th>Non-Emergency Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
       <tr><th>Security</th><td>${esc(safetySecurityValue(safety.security) || '')}</td></tr>
-      <tr><th>Late / Lost Contact</th><td>${esc(safety.late || '')}</td></tr>
+      <tr><th>Late / Lost Contact</th><td>${esc(safety.late || data.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
     </tbody></table>
@@ -26635,9 +27005,11 @@ function openPatchSheetEditor(kind) {
   const isVideo = kind === 'video';
   document.getElementById('patchSheetTitle').textContent = isVideo ? 'Video Patch Sheet' : 'Audio and Comms Patch Sheets';
   document.getElementById('patchSheetSub').textContent = 'Add rows manually or upload a CSV/TSV. Imported columns fill left to right.';
-  document.getElementById('patchSheetBody').innerHTML = isVideo
-    ? renderPatchTable('video', 'Video Patch Sheet')
-    : renderPatchTable('audio', 'Audio Patch Sheet') + renderPatchTable('comms', 'Comms Patch Sheet');
+  // One render path: pbRenderPatchBody also clears the divergence hold, so a
+  // stale flag from a previous grid can never wedge this freshly rendered one.
+  clearTimeout(_pbPatchReconcileTimer);
+  _pbPatchReconcileTimer = null;
+  pbRenderPatchBody();
   renderPaperworkNav(activePaperworkItemId);
   renderPlandaBearComments(isVideo ? 'Video Patch' : 'Audio & Comms Patch', 'pbCommentsPatch');
   showModal('patchSheetModal');
@@ -26679,12 +27051,27 @@ function movePatchRow(kind, idx, delta) {
 
 function savePatchSheet(showToastOnSave=true) {
   const editingCell = document.activeElement?.closest?.('.patch-table');
+  if (_pbPatchGridDiverged) {
+    // The DOM's row structure no longer matches the mirror (a collaborator
+    // added or removed a row mid-edit). A whole-array save from this DOM
+    // would clobber their change; hold the save until the grid re-renders.
+    paperworkDirty = true;
+    pbSchedulePatchGridReconcile();
+    return;
+  }
+  // While the caret is in a grid cell the compacting re-render below is
+  // skipped, so a compacting save would drop blank rows from storage while
+  // the DOM keeps them. That drift is what made the divergence detector
+  // misfire on purely local edits (and lose the row typed into the leftover
+  // blank). Keep blanks whenever the DOM will not be re-rendered, so storage
+  // stays index-aligned with the DOM; the next non-editing save compacts.
+  const keepBlanks = !!editingCell;
   if (activePatchKind === 'video') {
-    savePatchRows('video', collectPatchRows('video'));
+    savePatchRows('video', collectPatchRows('video', keepBlanks));
     if (showToastOnSave) toast('Video patch sheet saved.');
   } else {
-    savePatchRows('audio', collectPatchRows('audio'));
-    savePatchRows('comms', collectPatchRows('comms'));
+    savePatchRows('audio', collectPatchRows('audio', keepBlanks));
+    savePatchRows('comms', collectPatchRows('comms', keepBlanks));
     if (showToastOnSave) toast('Audio and comms patch sheets saved.');
   }
   // Saving drops all-blank rows and compacts indices — re-render so the DOM's
@@ -26738,7 +27125,9 @@ function importPatchRows(kind, input) {
 function patchTableHTML(kind, title, data=null) {
   const key = `${kind}PatchRows`;
   const sourceRows = data && Array.isArray(data[key]) ? data[key] : getPatchRows(kind);
-  const rows = sourceRows.filter(row => Object.values(row).some(Boolean));
+  // Same id-aware blankness rule as the save path: the hidden sync id (and
+  // ord) are bookkeeping, not content, or cleared rows print as empty lines.
+  const rows = sourceRows.filter(row => Object.entries(row).some(([k, v]) => k !== 'id' && k !== 'ord' && Boolean(v)));
   const isComms = kind === 'comms';
   const body = rows.map(row => isComms
     ? `<tr><td>${esc(row.position || '')}</td><td>${esc(row.out || '')}</td><td>${esc(row.gear || '')}</td><td>${esc(row.notes || '')}</td></tr>`
@@ -27262,7 +27651,17 @@ async function buildPaperExportDocument(html, opts={}) {
       const orientation = opts.allowMixedOrientation === false ? defaultOrientation : token.orientation;
       currentSectionLabel = token.sectionLabel || '';
       if (token.node.tagName === 'TABLE') {
-        const sourceRows = [...token.node.tBodies].flatMap(body => [...body.rows]);
+        // tfoot rows append after the data rows so they flow through the same
+        // row-fit logic and land on the table's final page. Without this every
+        // paginated table dropped its footer, which silently removed the
+        // rundown's Total runtime row from 100% of exported PDFs. The inline
+        // border marks the divider the tbody placement would otherwise lose
+        // (.paper-rundown-grid tfoot td no longer matches).
+        const footRows = token.node.tFoot ? [...token.node.tFoot.rows].map(row => {
+          [...row.cells].forEach(cell => { if (!cell.style.borderTop) cell.style.borderTop = '2px solid #444'; });
+          return row;
+        }) : [];
+        const sourceRows = [...token.node.tBodies].flatMap(body => [...body.rows]).concat(footRows);
         let target = ensurePage(orientation);
         let tableParts = paperExportTableShell(token.node);
         target.body.appendChild(tableParts.shell);
@@ -27529,6 +27928,11 @@ function setDoorsNotApplicable(isNotApplicable) {
 function toggleDoorsNotApplicable() {
   const btn = document.getElementById('pp-doors-na');
   setDoorsNotApplicable(!(btn?.classList.contains('on')));
+  // Button clicks fire no input/change event: guard the field the collab
+  // refresh checks and queue the shared save, or the next snapshot refresh
+  // reads the stale stored sheet and silently un-toggles the N/A.
+  pbNoteLocalEdit('pp-doors');
+  pbQueuePaperworkAutosave();
 }
 
 function getDoorsOpenValue() {
@@ -27552,6 +27956,8 @@ function setShowNotApplicable(isNA) {
 }
 function toggleShowNotApplicable() {
   setShowNotApplicable(!document.getElementById('pp-show-na')?.classList.contains('on'));
+  pbNoteLocalEdit('pp-show-start');
+  pbQueuePaperworkAutosave();
 }
 function getShowStartValue() {
   if (document.getElementById('pp-show-na')?.classList.contains('on')) return 'N/A';
@@ -27570,6 +27976,8 @@ function setWrapNotApplicable(isNA) {
 }
 function toggleWrapNotApplicable() {
   setWrapNotApplicable(!document.getElementById('pp-wrap-na')?.classList.contains('on'));
+  pbNoteLocalEdit('pp-wrap');
+  pbQueuePaperworkAutosave();
 }
 function getWrapValue() {
   if (document.getElementById('pp-wrap-na')?.classList.contains('on')) return 'N/A';
@@ -27597,7 +28005,7 @@ function setSetupNotApplicable(isNA) {
 function toggleSetupNotApplicable() {
   setSetupNotApplicable(!document.getElementById('ps-setup-na')?.classList.contains('on'));
   pbNoteLocalEdit('ps-setup-na');   // hold the collab refresh off this toggle briefly
-  paperworkDirty = true;
+  pbQueuePaperworkAutosave();   // and persist within 650ms, inside the hold
 }
 window.setSetupNotApplicable = setSetupNotApplicable;
 window.toggleSetupNotApplicable = toggleSetupNotApplicable;
@@ -27665,6 +28073,10 @@ let _callDragFrom = -1;
 // keeps every row, including any the user is mid-typing.
 function readCallPeopleRows() {
   return Array.from(document.querySelectorAll('#pp-crew-grid .call-person-row')).map(row => ({
+    // Carry the stable row id exactly like syncCallSheetPeopleFromDOM does:
+    // without it, one remove or reorder stripped every row's id and broke the
+    // leaf-granular sync's row-identity contract.
+    ...(row.dataset.rowId ? { id: row.dataset.rowId } : {}),
     name: row.querySelector('[data-call-field="name"]')?.value || '',
     position: row.querySelector('[data-call-field="position"]')?.value || '',
     email: row.querySelector('[data-call-field="email"]')?.value || '',
@@ -27680,6 +28092,11 @@ function moveCallSheetPerson(from, to) {
   people.splice(to, 0, moved);
   callSheetPeople = people;
   renderCallSheetPeople();
+  // Pointer drags fire no input/change event: without an immediate save the
+  // next session snapshot resets the grid from the stored sheet and the
+  // reorder snaps back (fillCallSheetCrewFromRoster's proven pattern).
+  pbNoteLocalEdit('pp-crew-grid');
+  saveCallSheet(false);
 }
 
 // Which row index the pointer is currently over (the drop position).
@@ -27769,6 +28186,11 @@ function addCallSheetPerson() {
   // New crew/talent default to the sheet's overall call time (editable per person).
   callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:timeInputValue('pp-call') });
   renderCallSheetPeople();
+  // The Add button sits outside #pp-crew-grid, so the refresh guard cannot
+  // protect the new row: save it now or the next snapshot deletes it before
+  // the user can click into it.
+  pbNoteLocalEdit('pp-crew-grid');
+  saveCallSheet(false);
 }
 
 // v2.1 D9.7, reworked in the pre-show fix round: one-tap crew fill from the
@@ -27844,6 +28266,9 @@ function removeCallSheetPerson(idx) {
   rows.splice(idx, 1);
   callSheetPeople = rows.length ? rows : [{ name:'', position:'', email:'', phone:'', call:'' }];
   renderCallSheetPeople();
+  // Save immediately or the next snapshot resurrects the deleted person.
+  pbNoteLocalEdit('pp-crew-grid');
+  saveCallSheet(false);
 }
 
 async function downloadCallSheetPDF() {
@@ -27869,6 +28294,7 @@ async function downloadCallSheetPDF() {
     return;
   }
   const sheets = getCallSheets(snapshot.prePro);
+  if (!previewIsOpen) hydrateCallSheetSelectionIfCold(sheets);
   const index = previewIsOpen
     ? Math.max(0, Math.min(lastCallSheetExportIndex, sheets.length - 1))
     : resolveActiveCallSheetIndex(sheets);

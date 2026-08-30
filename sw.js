@@ -122,8 +122,8 @@ const SHELL_ASSETS = [
   'cueola-export-model.js?v=75dc3942e7',
   'cueola-prepro-sync.js?v=98291546f4',
   'cueola-pin.js?v=e599f35d21',
-  'cueola-identity.js?v=6e8db95512',
-  'cueola-admin-auth.js?v=680d495914',
+  'cueola-identity.js?v=047f611aaf',
+  'cueola-admin-auth.js?v=82979270bc',
   'cueola-live-session.js?v=fd0bc73200',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
@@ -136,9 +136,9 @@ const SHELL_ASSETS = [
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=3b1a91f559',
+  'cueola-app.js?v=0706fcb8cb',
   'outrangutan/outrangutan.css?v=db06e87104',
-  'outrangutan/outrangutan.js?v=e6fdead605',
+  'outrangutan/outrangutan.js?v=0122e667ce',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=53b3859b7c',
   'cueola-streamdeck.js?v=08ecf7be57',
@@ -248,7 +248,9 @@ const versionSignature = SHELL_ASSETS
 // 43->44: kiosk outputs — new outrangutan/kiosk-transport.js module precached
 // and script-tagged in index.html + output.html (page-HTML changes the shell
 // caches), for output windows relayed through the local kiosk helper daemon.
-const WORKER_SCHEMA = '44';
+// 44->45: Planda Bear icon artwork refresh (assets/Brand/Planda_Bear_icon.svg
+// is precached unversioned; page sprites re-inlined in index.html + dashboard.html).
+const WORKER_SCHEMA = '45';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

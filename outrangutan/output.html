@@ -488,6 +488,10 @@
             if (restoreSound) d.el.muted = false;
             requestPlayback(d, false, context);
           };
+          // Tagged so an explicit audio-off can retire only retries that
+          // would un-mute; a start-only retry is the sole way a blocked
+          // video ever starts, and must survive routing changes.
+          _blockedPlayRetry.restoresSound = restoreSound;
           if (restoreSound) {
             d.el.muted = true;
             _mutedFallbackDeck = d;
@@ -600,8 +604,27 @@
   async function applyAudio(m, context) {
     const on = !!m.on;
     // Routing takes over mute ownership — a tracked fallback mute must not be
-    // "restored" to un-muted later against an explicit audio-off.
+    // "restored" to un-muted later against an explicit audio-off. A retry
+    // that would UN-MUTE retires with it: a leftover closure would restore
+    // sound on the next tap, against the operator. A start-only retry stays
+    // (or replaces it): it never un-mutes, and it is the only way a blocked
+    // video ever starts, so clearing it would strand a dark output.
     _mutedFallbackDeck = null;
+    if (!on && _blockedPlayRetry && _blockedPlayRetry.restoresSound) {
+      _blockedPlayRetry = null;
+      hideUnlock();
+      if (front && front.el && front.el.paused && runtime.playbackStatus === 'playing') {
+        const dk = front;
+        const startOnly = () => {
+          if (!context.isCurrent() || dk !== front) return;
+          const p = dk.el.play();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        };
+        startOnly.restoresSound = false;
+        _blockedPlayRetry = startOnly;
+        showUnlock('Tap or press a key to start playback');
+      }
+    }
     for (const d of [decks.a, decks.b]) {
       if (!context.isCurrent()) return { ok: false, cancelled: true, error: 'Audio routing superseded' };
       d.el.muted = !on;
@@ -645,6 +668,7 @@
           }
         });
       };
+      retrySound.restoresSound = true;
       _blockedPlayRetry = retrySound;
       showUnlock('Tap or press a key for sound');
     }, 120);
@@ -721,8 +745,14 @@
         runtime.error = '';
         runtime.recoverability = 'none';
         clearImage(m.ms, m.curve, context);
-        const v0 = front.el.volume || 1, to = Number(m.to) || 0;
-        runFade('master', (v) => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => {
+        // Ramp from the ACTUAL current levels, not hardcoded 1: this command
+        // is destructive, so a Fade Stop mid fade-in used to freeze the ramp
+        // at (say) opacity 0.35 and then flash the program to full bright and
+        // full volume on the first fade frame. No || 1 on volume either: a
+        // cue playing muted must stay silent through the fade.
+        const op0 = Number.isFinite(parseFloat(front.el.style.opacity)) ? parseFloat(front.el.style.opacity) : 1;
+        const v0 = front.el.volume, to = Number(m.to) || 0;
+        runFade('master', (v) => { front.el.style.opacity = op0 * v; front.el.volume = v0 * v; }, 1, to, m.ms, m.curve, () => {
           if (to === 0) clearProgram();
         }, context);
         return { ok: true };
@@ -731,8 +761,9 @@
         runtime.error = '';
         runtime.recoverability = 'none';
         clearImage(m.ms || 0, m.curve, context);
-        const v0 = front.el.volume || 1;
-        runFade('master', (v) => { front.el.style.opacity = v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => {
+        const op0 = Number.isFinite(parseFloat(front.el.style.opacity)) ? parseFloat(front.el.style.opacity) : 1;
+        const v0 = front.el.volume;
+        runFade('master', (v) => { front.el.style.opacity = op0 * v; front.el.volume = v0 * v; }, 1, 0, m.ms || 0, m.curve, () => {
           stopDeck(decks.a);
           stopDeck(decks.b);
           keyOff();

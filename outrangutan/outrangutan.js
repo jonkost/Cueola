@@ -2260,6 +2260,37 @@
   }
   function renderOutputs() {
     const body = $('og-outputs-body'); if (!body) return;
+    // Heartbeats, acks, and watchdog ticks re-render this sheet as often as
+    // every 2s per open output. Rebuilding innerHTML under a focused control
+    // discards in-progress typing (labels, standby text) and snaps open
+    // dropdowns shut: while the operator is in a field, patch the per-row
+    // status text and dots in place (renderKioskSyncProgress's pattern) and
+    // skip the rebuild. The next heartbeat after blur repaints fully.
+    // Text entry and open dropdowns only: a clicked checkbox holds focus
+    // through its change handler in Chrome, and the two kiosk checkboxes call
+    // renderOutputs() from exactly those handlers to swap the controls they
+    // gate. Checkboxes have no in-progress typing to lose, so they never
+    // suppress the rebuild.
+    const ae = document.activeElement;
+    if (ae && body.contains(ae)
+        && (/^(SELECT|TEXTAREA)$/.test(ae.tagName)
+          || (ae.tagName === 'INPUT' && !/^(checkbox|radio|button)$/.test(ae.type || '')))) {
+      outputs.forEach(o => {
+        const open = isOutputAlive(o.id);
+        const live = isOutputHealthy(o.id);
+        const rec = outputRecord(o.id, false);
+        const state = stateForOutput(o.id);
+        const status = rec ? rec.status : 'closed';
+        const dead = open && !live;
+        const ack = state && state.lastAck ? ('Last ack ' + state.lastAck.commandType + (state.lastAck.ok ? ' ✓' : ' ⚠')) : 'No command ack yet';
+        const statusDetail = status.toUpperCase() + ' · ' + (rec ? rec.detail : 'Output window closed') + ' · ' + ack;
+        const note = $('og-out-status-' + o.id);
+        if (note && note.textContent !== statusDetail) note.textContent = statusDetail;
+        const dot = $('og-out-dot-' + o.id);
+        if (dot) { dot.classList.toggle('live', !!live); dot.classList.toggle('dead', !!(dead)); }
+      });
+      return;
+    }
     body.innerHTML =
       '<div class="og-out-tools"><button class="og-bar-btn og-capsule" id="og-out-add">' + sym('action.add') + ' Add output</button>'
         + '<button class="og-bar-btn og-capsule" id="og-out-detect">' + sym('content.display') + ' Detect displays</button>'
@@ -2281,14 +2312,14 @@
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
           : '<span class="og-out-note">Detect displays to place this on a screen</span>';
         return '<div class="og-out-row">'
-          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '"' + (dead ? ' data-tip="Not responding: the window may be frozen"' : '') + '></span>'
+          + '<div class="og-out-main"><span class="og-out-dot' + (live ? ' live' : dead ? ' dead' : '') + '" id="og-out-dot-' + o.id + '"' + (dead ? ' data-tip="Not responding: the window may be frozen"' : '') + '></span>'
             + '<input class="og-out-label" data-o="' + o.id + '" value="' + esc(o.label) + '">'
             + '<button class="og-bar-btn og-capsule og-out-open" data-o="' + o.id + '">' + (o.kiosk ? (open ? 'Relaunch kiosk' : 'Launch kiosk') : (open ? 'Focus' : 'Open')) + '</button>'
             + '<button class="og-bar-btn og-capsule og-out-id" data-o="' + o.id + '">Identify</button>'
             + (needsRecovery ? '<button class="og-bar-btn og-capsule og-out-recover" data-o="' + o.id + '" data-resume="' + (rec.recoverability === 'operator' ? '1' : '0') + '">' + recoveryLabel + '</button>' : '')
             + (outputs.length > 1 ? '<button class="og-bar-btn og-capsule danger og-out-del" data-o="' + o.id + '">' + sym('action.delete') + '</button>' : '')
           + '</div>'
-          + '<div class="og-out-note" role="status">' + esc(statusDetail) + '</div>'
+          + '<div class="og-out-note" role="status" id="og-out-status-' + o.id + '">' + esc(statusDetail) + '</div>'
           + '<div class="og-out-cfg">'
             + '<div class="og-field"><label>Display</label>' + screenSel + '</div>'
             + (KioskTransport ? '<label class="og-check og-check-inline og-out-kioskchk"' + (helperConnected() || o.kiosk ? '' : ' data-tip="Start the kiosk helper to enable"') + '><input type="checkbox" class="og-out-kiosk" data-o="' + o.id + '"' + (o.kiosk ? ' checked' : '') + (helperConnected() || o.kiosk ? '' : ' disabled') + '> Kiosk (true fullscreen, no Esc)</label>' : '')
@@ -3727,7 +3758,26 @@
     let any = false;
     ['a', 'b', 'audio', 'img'].forEach(k => {
       const d = decks[k];
-      if (d._url && !d.el.paused) { any = true; runFade('out-' + d.id, v => { deckGain(d, v); deckOpacity(d, v); }, 1, 0, ms, curve, () => stopDeck(d)); }
+      if (d._url && !d.el.paused) {
+        any = true;
+        // Retire any in-progress fade-in first (they otherwise fight the out
+        // ramp frame for frame), then ramp each channel down from its ACTUAL
+        // current level: seeding from 1 popped a mid-fade-in cue to full
+        // gain/brightness on the local monitor before fading.
+        cancelFade('in-' + d.id);
+        if (k === 'img') cancelFade('in-img');
+        // The seed must stay finite: a cue with its Level slider at 0 reads
+        // 0/0 here, and one NaN into gain.value throws mid-tick, killing the
+        // fade AND the stopDeck that follows it (the deck keeps playing and
+        // auto_follow can fire the next cue after the operator stopped).
+        // With vol 0 the audible product is 0 whatever g0 is; 1 keeps the
+        // opacity ramp honest. Also covers the img deck's volume-less <img>.
+        const vol = d.vol == null ? 1 : d.vol;
+        const rawG = (audioOK && d.ch ? d.ch.gain.gain.value : d.el.volume) / (vol || 1);
+        const g0 = Number.isFinite(rawG) ? clamp(rawG, 0, 1) : 1;
+        const o0 = (() => { const p = parseFloat(d.el.style ? d.el.style.opacity : ''); return Number.isFinite(p) ? clamp(p, 0, 1) : 1; })();
+        runFade('out-' + d.id, v => { deckGain(d, g0 * v); deckOpacity(d, o0 * v); }, 1, 0, ms, curve, () => stopDeck(d));
+      }
     });
     padRT.forEach((rt, id) => { const p = padById(id); if (p && rt.voices.length) { any = true; runFade('padin-' + id, v => { rt.ch.gain.gain.value = v * (p.gain == null ? 1 : p.gain); }, 1, 0, ms, curve, () => stopPad(p)); } });
     const wasActive = active;   // if a new cue fires during the fade, this reset must not clobber it

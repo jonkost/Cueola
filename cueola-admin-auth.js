@@ -144,6 +144,14 @@
       // release-day rules deploy. Fail closed but keep the app usable.
       console.warn('admins/{uid} read failed (expected before the v2.1 rules deploy):', err && err.code || err);
       publish(null);
+      // A fast connectivity failure is not an authorization verdict. The
+      // sentinel lets interactive signIn() say "check the connection" instead
+      // of "not an authorized admin"; the passive onAuthStateChanged path
+      // ignores the return value, so its quiet fail-closed behavior stands.
+      var code = (err && err.code) || '';
+      if (code.indexOf('unavailable') >= 0 || code.indexOf('deadline-exceeded') >= 0 || code.indexOf('cancelled') >= 0) {
+        return { transient: true };
+      }
       return null;
     });
   }
@@ -180,12 +188,35 @@
   // Interactive sign-in must never strand the button: if the admins/{uid}
   // authorization read hangs, fail with a truthful message after 10s. Should
   // the read answer later anyway, resolveSession's publish() still lands the
-  // session through onChange, so the UI self-heals.
+  // session through onChange, so the UI self-heals. On timeout the cached
+  // in-flight read is dropped: a hung Firestore channel otherwise pins the
+  // stuck promise, and every retry would rejoin it and time out again until
+  // the page reloads. The generation guard already stales the old read, so a
+  // fresh click gets a fresh getDoc while a late answer stays harmless.
   function resolveSessionWithTimeout(user, ms) {
+    var timer = null;
+    var main = resolveSession(user);
+    // Promise.race never cancels the loser: without this, the timer body ran
+    // 10s after every SUCCESSFUL sign-in too, cycling the Firestore network
+    // under the live session and clearing a newer same-uid resolve.
+    var cancel = function () { if (timer !== null) { clearTimeout(timer); timer = null; } };
+    main.then(cancel, cancel);
     return Promise.race([
-      resolveSession(user),
+      main,
       new Promise(function (ignore, reject) {
-        setTimeout(function () {
+        timer = setTimeout(function () {
+          // Drop only the exact read this attempt raced, so a stale timer can
+          // never null a newer in-flight resolve for the same uid.
+          if (inflightResolve && inflightResolve.promise === main) inflightResolve = null;
+          // A read that hangs this long usually means the Firestore stream is
+          // a zombie (sleep/wake, network switch). Cycling the network forces
+          // a fresh channel so the retry actually reaches the server. Pages
+          // that don't expose the handles just skip the kick.
+          if (window._disableNetwork && window._enableNetwork) {
+            Promise.resolve(window._disableNetwork()).catch(function () {})
+              .then(function () { return window._enableNetwork(); })
+              .catch(function () {});
+          }
           reject(new Error('The sign-in service is not responding. Check the connection and try again.'));
         }, ms);
       }),
@@ -199,6 +230,7 @@
     return fns().signInWithEmailAndPassword(auth(), usernameToEmail(clean), String(password || ''))
       .then(function (cred) { return resolveSessionWithTimeout(cred.user, 10000); })
       .then(function (session) {
+        if (session && session.transient) throw new Error('Could not reach the authorization service. Check the connection and try again.');
         if (!session) throw new Error('Signed in, but this account is not an authorized admin.');
         return session;
       })
@@ -262,7 +294,19 @@
           level: level,
           createdAt: Date.now(),
           createdBy: current().id,
-        }).then(function () { return { uid: newUid, username: username, name: name, level: level }; });
+        }).then(function () { return { uid: newUid, username: username, name: name, level: level }; })
+          .catch(function (err) {
+            // The Auth user exists but the directory write failed: without a
+            // rollback the account can never sign in as an admin, and every
+            // retry reports the username as taken. Delete while the fresh
+            // user is still signed in on the mint instance.
+            return cred.user.delete().then(
+              function () { throw err; },
+              function () {
+                throw new Error('The account directory write failed and the sign-in account could not be rolled back. The username needs a cleanup in the Firebase console before it can be reused.');
+              }
+            );
+          });
       })
       .then(function (result) { return cleanup().then(function () { return result; }); })
       .catch(function (err) {
