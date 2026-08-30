@@ -136,7 +136,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=75d9b0524a',
+  'cueola-app.js?v=fb316ac66b',
   'outrangutan/outrangutan.css?v=db06e87104',
   'outrangutan/outrangutan.js?v=0122e667ce',
   'cueola-streamdeck-device.js?v=48990ed663',
@@ -250,7 +250,9 @@ const versionSignature = SHELL_ASSETS
 // caches), for output windows relayed through the local kiosk helper daemon.
 // 44->45: Planda Bear icon artwork refresh (assets/Brand/Planda_Bear_icon.svg
 // is precached unversioned; page sprites re-inlined in index.html + dashboard.html).
-const WORKER_SCHEMA = '45';
+// 45->46: time-entry audit — sunrise/sunset placeholders read as preset times;
+// now "--:--" like every empty time field (index.html markup only).
+const WORKER_SCHEMA = '46';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

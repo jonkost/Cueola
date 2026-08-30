@@ -4007,58 +4007,80 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
   const paperworkOptions = plandaBearAssignmentCatalog();
   const paperworkOptionLabels = paperworkOptions.map(option => option.label);
   const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row, paperworkOptionLabels, paperworkOptions));
-  // Owner 2026-08-30 list view: one compact line per position record, grouped
-  // by student (a student can hold several positions; each is its own record,
-  // which is what the canonical save model already expects). The paperwork
-  // selection lives in a collapsible list so the editor reads as a roster,
-  // not a wall of pills. The DOM contract is unchanged: every record is one
-  // [data-role-assignment-row] carrying the same fields and data attributes.
+  // Owner 2026-08-30: ONE CARD PER STUDENT. The student's name select renders
+  // once at the top of their card; every position they hold stacks inside the
+  // same card as a scaled-down sub-row ("and <position>"). Each position is
+  // still its own record and its own [data-role-assignment-row] element with
+  // the same fields and data attributes, so the save/conflict machinery is
+  // untouched: sub-rows carry the profileId as a hidden input, kept in sync
+  // with the card's visible select by aaSyncGroupProfile.
   const sortKey = row => `${(row.person || '￿').toLowerCase()}|${row.profileId || ''}`;
   const list = [...normalizedRows].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0);
-  return `<div class="admin-assignment-list">
-    ${list.map((row,i)=>{
-      const selectedPaperwork = new Set(row.paperworkIds);
-      const selectedLabels = new Set((row.paperwork || []).map(l => String(l || '').trim().toLowerCase()).filter(Boolean));
-      // An existing selection must never silently change (same rule as the
-      // position dropdown): union the catalog with this row's OWN pairs so a
-      // selection whose type was disabled mid-draft, or whose id predates the
-      // canonical ids, still renders as a checked item and round-trips.
-      const rowOptions = [...paperworkOptions];
-      (row.paperwork || []).forEach((label, pi) => {
-        const clean = String(label || '').trim();
-        if (!clean) return;
-        if (rowOptions.some(opt => opt.label.toLowerCase() === clean.toLowerCase())) return;
-        rowOptions.push({ id: row.paperworkIds?.[pi] || paperworkIdForLabel(clean), label: clean });
-      });
-      const profile = assignmentProfileById(row.profileId);
-      const profileMeta = row.profileId
-        ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
-        : 'Choose a saved profile; display names are not identity.';
-      const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
-      const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
-      const samePerson = i > 0 && sortKey(list[i - 1]) === sortKey(row) && row.person;
-      const chosen = (row.paperwork || []).filter(Boolean);
-      const summary = chosen.length ? `Paperwork (${chosen.length}): ${chosen.join(' · ')}` : 'Choose paperwork';
-      return `<div class="admin-assignment-row aa-compact${samePerson ? ' aa-cont' : ''}" data-role-assignment-row="${i}"
-        data-assignment-id="${esc(row.assignmentId)}" data-person="${esc(row.person)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
-        data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
-        <div class="aa-line">
-          <select class="admin-in aa-student" data-role-field="profileId" aria-label="Student profile">${assignmentProfileOptions(row.profileId, row.person)}</select>
-          <select class="admin-in aa-position" data-role-field="positionId" aria-label="Position">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
-          <button class="aa-add-pos" type="button" onclick="addRoleAssignmentRowForRow(${i})" data-tip="Add another position for this student" aria-label="Add another position for this student">${sfIcon('action.add')}<span>Position</span></button>
-          <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position row" aria-label="Remove this position row">${sfIcon('action.close')}</button>
+  const recordHTML = (row, i, isLead) => {
+    const selectedPaperwork = new Set(row.paperworkIds);
+    const selectedLabels = new Set((row.paperwork || []).map(l => String(l || '').trim().toLowerCase()).filter(Boolean));
+    // An existing selection must never silently change (same rule as the
+    // position dropdown): union the catalog with this row's OWN pairs so a
+    // selection whose type was disabled mid-draft, or whose id predates the
+    // canonical ids, still renders as a checked item and round-trips.
+    const rowOptions = [...paperworkOptions];
+    (row.paperwork || []).forEach((label, pi) => {
+      const clean = String(label || '').trim();
+      if (!clean) return;
+      if (rowOptions.some(opt => opt.label.toLowerCase() === clean.toLowerCase())) return;
+      rowOptions.push({ id: row.paperworkIds?.[pi] || paperworkIdForLabel(clean), label: clean });
+    });
+    const profile = assignmentProfileById(row.profileId);
+    const profileMeta = row.profileId
+      ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
+      : 'Choose a saved profile; display names are not identity.';
+    const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
+    const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
+    const chosen = (row.paperwork || []).filter(Boolean);
+    const summary = chosen.length ? `Paperwork (${chosen.length}): ${chosen.join(' · ')}` : 'Choose paperwork';
+    return `<div class="admin-assignment-row aa-compact${isLead ? '' : ' aa-sub'}" data-role-assignment-row="${i}"
+      data-assignment-id="${esc(row.assignmentId)}" data-person="${esc(row.person)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
+      data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
+      ${isLead ? '' : `<input type="hidden" data-role-field="profileId" value="${esc(row.profileId)}">`}
+      <div class="aa-line${isLead ? '' : ' aa-line-sub'}">
+        ${isLead
+          ? `<select class="admin-in aa-student" data-role-field="profileId" aria-label="Student profile" onchange="aaSyncGroupProfile(this)">${assignmentProfileOptions(row.profileId, row.person)}</select>`
+          : `<span class="aa-sub-marker" aria-hidden="true">and</span>`}
+        <select class="admin-in aa-position" data-role-field="positionId" aria-label="Position">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
+        ${isLead ? `<button class="aa-add-pos" type="button" onclick="addRoleAssignmentRowForRow(${i})" data-tip="Add another position for this student" aria-label="Add another position for this student">${sfIcon('action.add')}<span>Position</span></button>` : ''}
+        <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position row" aria-label="Remove this position row">${sfIcon('action.close')}</button>
+      </div>
+      <details class="aa-paperwork">
+        <summary>${esc(summary)}</summary>
+        <div class="aa-paperwork-list">
+          ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
         </div>
-        <details class="aa-paperwork">
-          <summary>${esc(summary)}</summary>
-          <div class="aa-paperwork-list">
-            ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
-          </div>
-          <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
-        </details>
-      </div>`;
-    }).join('')}
-  </div>`;
+        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
+      </details>
+    </div>`;
+  };
+  const cards = [];
+  let i = 0;
+  while (i < list.length) {
+    let j = i;
+    // Blank drafts (no student yet) never merge into another card.
+    while (j + 1 < list.length && list[i].person && sortKey(list[j + 1]) === sortKey(list[i])) j++;
+    const rowsHTML = [];
+    for (let k = i; k <= j; k++) rowsHTML.push(recordHTML(list[k], k, k === i));
+    cards.push(`<div class="aa-card">${rowsHTML.join('')}</div>`);
+    i = j + 1;
+  }
+  return `<div class="admin-assignment-list">${cards.join('')}</div>`;
 }
+
+// The card's one visible student select drives every position record inside
+// it: sub-rows carry hidden profileId inputs that must follow a change.
+function aaSyncGroupProfile(select) {
+  const card = select.closest('.aa-card');
+  if (!card) return;
+  card.querySelectorAll('input[type="hidden"][data-role-field="profileId"]').forEach(input => { input.value = select.value; });
+}
+window.aaSyncGroupProfile = aaSyncGroupProfile;
 
 // Keep the collapsed paperwork summary honest as boxes get checked.
 function aaUpdatePaperworkSummary(input) {

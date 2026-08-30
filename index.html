@@ -1438,10 +1438,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Date/time rows: narrower columns so four compact fields share one row and
    the inputs fill their columns instead of leaving dead space after each. */
 .prepro-grid-times{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-/* Assignments editor list view (owner 2026-08-30) */
-.aa-compact{padding:10px 12px}
-.aa-compact.aa-cont{margin-top:-6px;border-top-left-radius:4px;border-top-right-radius:4px}
+/* Assignments editor: one card per student (owner 2026-08-30). The card is
+   the box; position records inside it are flat rows, and sub-rows scale down
+   to fit additional positions under the same name. */
+.aa-card{background:var(--s2);border: 1px solid transparent;border-radius:12px;padding:4px 0;display:flex;flex-direction:column}
+.aa-card .admin-assignment-row{background:transparent;border:0;border-radius:0;margin:0}
+.aa-compact{padding:8px 12px;gap:6px}
+.aa-compact.aa-sub{padding-top:2px}
+.aa-sub .admin-in{font-size:12px;padding:7px 10px}
+.aa-sub .aa-paperwork summary{font-size:11px;padding:5px 8px}
+.aa-sub .admin-assignment-remove{width:32px;height:32px;font-size:15px}
+.aa-sub-marker{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);justify-self:end;padding-right:2px}
 .aa-line{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.aa-line-sub{grid-template-columns:minmax(48px,1.2fr) minmax(0,1fr) auto;padding-left:0}
 .aa-line .admin-in{min-width:0}
 .aa-add-pos{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:9px;border: 1px solid transparent;background:var(--s3);color:var(--text2);cursor:pointer;font-size:11.5px;white-space:nowrap}
 .aa-add-pos:hover{background:var(--s4);color:var(--text)}
@@ -6087,8 +6096,8 @@ input.pt-range::-moz-range-thumb,
           <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.temp" aria-hidden="true"></span> Low</span><input id="pp-wx-low" class="field-in" maxlength="8" placeholder="58°" oninput="onCallSheetWeatherInput('low',this.value)"></label>
           <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.precip" aria-hidden="true"></span> Precip</span><input id="pp-wx-precip" class="field-in" maxlength="8" placeholder="20%" oninput="onCallSheetWeatherInput('precip',this.value)"></label>
           <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.wind" aria-hidden="true"></span> Wind</span><input id="pp-wx-wind" class="field-in" maxlength="12" placeholder="8 mph" oninput="onCallSheetWeatherInput('wind',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunrise" aria-hidden="true"></span> Sunrise</span><input id="pp-wx-sunrise" class="field-in" maxlength="10" placeholder="5:42 AM" oninput="onCallSheetWeatherInput('sunrise',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunset" aria-hidden="true"></span> Sunset</span><input id="pp-wx-sunset" class="field-in" maxlength="10" placeholder="8:18 PM" oninput="onCallSheetWeatherInput('sunset',this.value)"></label>
+          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunrise" aria-hidden="true"></span> Sunrise</span><input id="pp-wx-sunrise" class="field-in" maxlength="10" placeholder="--:--" oninput="onCallSheetWeatherInput('sunrise',this.value)"></label>
+          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunset" aria-hidden="true"></span> Sunset</span><input id="pp-wx-sunset" class="field-in" maxlength="10" placeholder="--:--" oninput="onCallSheetWeatherInput('sunset',this.value)"></label>
         </div>
       </div>
     </div>
@@ -7284,7 +7293,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=75d9b0524a"></script>
+<script src="cueola-app.js?v=fb316ac66b"></script>
 <script src="outrangutan/outrangutan.js?v=0122e667ce"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
