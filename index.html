@@ -1435,6 +1435,58 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prepro-section{border: 1px solid transparent;background:rgba(255,255,255,.018);border-radius:10px;padding:14px}
 .prepro-section-title{font-size:11px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .prepro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+/* Date/time rows: narrower columns so four compact fields share one row and
+   the inputs fill their columns instead of leaving dead space after each. */
+.prepro-grid-times{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+/* Assignments editor list view (owner 2026-08-30) */
+.aa-compact{padding:10px 12px}
+.aa-compact.aa-cont{margin-top:-6px;border-top-left-radius:4px;border-top-right-radius:4px}
+.aa-line{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.aa-line .admin-in{min-width:0}
+.aa-add-pos{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:9px;border: 1px solid transparent;background:var(--s3);color:var(--text2);cursor:pointer;font-size:11.5px;white-space:nowrap}
+.aa-add-pos:hover{background:var(--s4);color:var(--text)}
+.aa-paperwork{margin-top:8px}
+.aa-paperwork summary{cursor:pointer;font-size:12px;color:var(--text2);padding:6px 9px;border-radius:8px;background:color-mix(in srgb,var(--s3) 55%,transparent);list-style-position:inside;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aa-paperwork summary:hover{background:var(--s3);color:var(--text)}
+.aa-paperwork[open] summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.aa-paperwork-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px;padding:9px 11px;background:color-mix(in srgb,var(--s3) 35%,transparent);border-radius:0 0 8px 8px}
+.aa-pw-item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2);padding:4px 0;cursor:pointer}
+.aa-pw-item:hover{color:var(--text)}
+.aa-pw-item input{flex:none}
+.aa-meta{padding:8px 11px 4px;font-size:10.5px;font-family:var(--mono);color:var(--text3)}
+@media (max-width:700px){.aa-line{grid-template-columns:1fr auto auto}.aa-line .aa-position{grid-column:1 / -1}}
+/* Crew Assignments read-only list, grouped per student */
+.pb-assign-stack{display:block}
+.pb-assign-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pb-assign-paperlist{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--text3);display:flex;flex-direction:column;gap:2px}
+/* Paperwork-for-this-show list view */
+.pb-pw-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
+.pb-pw-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:10px;border: 1px solid transparent;background:var(--s2);color:var(--text);cursor:pointer;text-align:left;font-size:12.5px}
+.pb-pw-row:hover{background:var(--s3)}
+.pb-pw-row .pb-pw-state{flex:none;display:flex}
+.pb-pw-row.on .pb-pw-state{color:var(--green)}
+.pb-pw-row.off{color:var(--text3)}
+.pb-pw-row.off .pb-pw-state{color:var(--text3)}
+.pb-pw-row.off .pb-pw-name{text-decoration:line-through;text-decoration-thickness:1px}
+.pb-pw-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb-pw-flag{flex:none;font-size:9.5px;font-family:var(--mono);font-weight:800;letter-spacing:.06em;color:var(--text3)}
+.pb-pw-row.on .pb-pw-flag{color:var(--green)}
+/* OSHA PPE list editor */
+.sp-ppe-link{color:var(--accent);text-decoration:underline}
+.sp-ppe-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:8px}
+.sp-ppe-remove{width:30px;height:30px;border-radius:9px;border: 1px solid transparent;background:var(--s3);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sp-ppe-remove:hover{background:var(--red);color:#fff}
+.sp-ppe-status{margin-top:8px;font-size:11.5px;font-family:var(--mono);color:var(--text3)}
+.sp-ppe-status.bad{color:var(--red)}
+.sp-ppe-status.ok{color:var(--green)}
+/* One-time Ready Before Show review at Go Live */
+.ready-prompt-list{margin-top:12px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto}
+.ready-prompt-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:10px;background:var(--s2);color:var(--text2);font-size:13px}
+.ready-prompt-row .sf-symbol{color:var(--text3);flex:none}
+.ready-prompt-row.ok{color:var(--text)}
+.ready-prompt-row.ok .sf-symbol{color:var(--green)}
+.prepro-grid-times .field-in{max-width:none;width:100%}
+.prepro-grid-times .field-with-action .field-in{flex:1 1 auto}
 /* Short inputs (times, dates, phones) stop stretching to their grid cell.
    One shared width, including inside .field-with-action rows, so sibling time
    fields line up instead of flexing to whatever space their buttons leave. */
@@ -1466,7 +1518,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .wx-field>span{font-size:12px;font-family:var(--sans);font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--text2)}
 .wx-field .field-in{padding:8px 10px;font-size:13px}
 @media(max-width:640px){.wx-grid{grid-template-columns:1fr 1fr}}
-.call-sheet-switcher{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.call-sheet-switcher{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:10px;align-items:end}
+@media (max-width:760px){.call-sheet-switcher{grid-template-columns:minmax(0,1fr) auto auto}.call-sheet-switcher .field:nth-child(2){grid-column:1 / -1}}
 /* Wrapped rows (Delete) hug their content instead of filling the 1fr track. */
 .call-sheet-switcher .call-delete-btn{justify-self:start}
 .call-sheet-switcher .field-in{font-size:14px;padding:10px 12px}
@@ -1767,7 +1820,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pb-attach-x:hover{background:var(--red);color:#fff}
 .pb-board-threads{position:relative;flex:1;min-height:0;overflow-y:auto;padding:14px 14px 88px;display:flex;flex-direction:column;gap:12px}
 .pb-thread{position:relative;border: 1px solid transparent;border-radius:13px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:none}
-.pb-thread.pinned{border-color:transparent;background:color-mix(in srgb,var(--yellow) 14%,var(--s2))}
+/* Pinned reads by its edge, not by tinting the whole card: a heavy yellow
+   mix over dark theme surfaces (glacier especially) muddied into a tan that
+   fought the text color. A light 6% wash keeps the card's own contrast in
+   every theme, and the yellow bar + border carry the "pinned" signal. */
+.pb-thread.pinned{border-color:color-mix(in srgb,var(--yellow) 45%,transparent);background:color-mix(in srgb,var(--yellow) 6%,var(--s2));box-shadow:inset 3px 0 0 var(--yellow)}
 /* Collapse toggle (top-right chevron) + collapsed one-line row */
 /* The one collapse affordance per note — visible at rest, no hover needed. */
 .pb-collapse-btn{position:absolute;top:9px;right:9px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border: 1px solid transparent;border-radius:9px;background:color-mix(in srgb,var(--s3) 55%,transparent);color:var(--text2);cursor:pointer;font-size:14px;transition:background .12s,color .12s}
@@ -2107,6 +2164,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 /* v2.1 D9.1 — hub-side call-sheet export picker */
 .pb-pkg-sheet-picker{border: 1px solid transparent;border-radius:var(--ui-radius-control);background:var(--s1);padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:7px}
 .pb-pkg-sheet-picker-title{font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.pb-pkg-sheet-picker-sub{margin-top:8px;font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .pb-pkg-sheet-picker .pb-pkg-optin{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text2);cursor:pointer}
 .pb-pkg-sheet-picker .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
 .pb-pkg-sheet-warning{font-size:12.5px;line-height:1.5;color:var(--yellow);border: 1px solid transparent;border-left:3px solid transparent;border-radius:var(--ui-radius-control);padding:9px 12px;background:color-mix(in srgb,var(--yellow) 11%,var(--s2))}
@@ -5981,10 +6039,10 @@ input.pt-range::-moz-range-thumb,
           <label class="field-lbl">Current Call Sheet</label>
           <select class="field-in" id="pp-call-sheet-select" onchange="switchCallSheet(this.value)"></select>
         </div>
-        <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherCallSheet()">+ Add Call Sheet</button>
+        <div class="field"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="Setup Day, Production Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
+        <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherCallSheet()" data-tip="Add another call sheet, e.g. a second shoot day">+ Add</button>
         <button class="call-add-btn call-delete-btn u-callbtn u-c-red" type="button" onclick="deleteCallSheet()" data-tip="Delete this call sheet. Instructors and admins only.">Delete</button>
       </div>
-      <div class="field u-mt10"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="Setup Day, Production Day, Rehearsal Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Event Info<button type="button" class="info-btn" aria-label="What the event info section is for" onclick="toggleInfoPop(event,'cs-event-info')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
@@ -6039,7 +6097,7 @@ input.pt-range::-moz-range-thumb,
       <div class="prepro-grid">
         <div class="field"><label class="field-lbl">Parking</label><input class="field-in" id="pp-parking" maxlength="160" placeholder="e.g. Lot C after 4 PM · permits not enforced"></div>
         <div class="field"><label class="field-lbl">Entrance</label><input class="field-in" id="pp-entrance" maxlength="160" placeholder="e.g. Loading dock door, knock twice"></div>
-        <div class="field"><label class="field-lbl">Stream Information</label><input class="field-in" id="pp-stream" maxlength="180" placeholder="e.g. YouTube · Stream op: Sam"><div class="field-hint">Say where the show streams and who runs the stream.</div></div>
+        <div class="field"><label class="field-lbl">Stream Information</label><div class="field-with-action"><input class="field-in" id="pp-stream" maxlength="180" placeholder="e.g. YouTube · Stream op: Sam" oninput="setStreamNotApplicable(false)"><button class="field-action-btn" id="pp-stream-na" type="button" onclick="toggleStreamNotApplicable()" aria-pressed="false">N/A</button></div><div class="field-hint">Say where the show streams and who runs the stream, or N/A for a show that does not stream.</div></div>
         <div class="field"><label class="field-lbl">Dress Code</label><input class="field-in" id="pp-dress" maxlength="120" placeholder="e.g. Show blacks · closed-toe shoes"></div>
         <div class="field">
           <label class="field-lbl">Meals Provided</label>
@@ -6109,6 +6167,11 @@ input.pt-range::-moz-range-thumb,
       </div>
     </div>
     <div class="prepro-section">
+      <div class="prepro-section-title"><span>OSHA PPE Requirements</span></div>
+      <div class="field-hint">Personal protective equipment this production requires. Every production lists at least 3 real items, like closed-toe shoes, work gloves, eye protection, hearing protection, or hard hats. "None" and "N/A" are not accepted. Reference: <a class="sp-ppe-link" href="https://www.osha.gov/personal-protective-equipment" target="_blank" rel="noopener">osha.gov/personal-protective-equipment</a></div>
+      <div id="sp-ppe-list"></div>
+    </div>
+    <div class="prepro-section">
       <div class="prepro-section-title"><span>Notes<button type="button" class="info-btn" aria-label="What the safety notes section is for" onclick="toggleInfoPop(event,'sp-notes')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <label class="field-lbl">Safety Notes</label>
       <textarea class="field-in u-textarea-cozy" id="sp-notes" rows="3" placeholder="Anything else the crew should know to stay safe"></textarea>
@@ -6131,21 +6194,25 @@ input.pt-range::-moz-range-thumb,
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Setup Day<button type="button" class="info-btn" aria-label="What the setup day section is for" onclick="toggleInfoPop(event,'ps-setup-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="field-hint">Use this for load-in, build, tech checks, and wrap. Tap N/A if setup happens on show day or a different day.</div>
-      <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Setup Date</label><div class="field-with-action"><input class="field-in field-narrow" id="ps-date" type="date"><button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in field-narrow" id="ps-setup" type="time"></div>
-        <div class="field"><label class="field-lbl">Setup Wrap</label><input class="field-in field-narrow" id="ps-wrap" type="time"></div>
+      <div class="prepro-grid prepro-grid-times">
+        <div class="field"><label class="field-lbl">Setup Date</label><div class="field-with-action"><input class="field-in" id="ps-date" type="date"><button class="field-action-btn" id="ps-setup-na" type="button" onclick="toggleSetupNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Setup Start</label><input class="field-in" id="ps-setup" type="time"></div>
+        <div class="field"><label class="field-lbl">Setup Wrap</label><input class="field-in" id="ps-wrap" type="time"></div>
+      </div>
+      <div class="prepro-grid u-mt10">
         <div class="field u-col-span"><label class="field-lbl">Setup Notes</label><textarea class="field-in u-textarea-cozy" id="ps-setup-notes" rows="2" placeholder="Load-in notes, tech check order, room access, gear reminders"></textarea></div>
       </div>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Show Day<button type="button" class="info-btn" aria-label="What the show day section is for" onclick="toggleInfoPop(event,'ps-show-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
       <div class="field-hint">Crew call and show start never fill in on their own: enter the real times. The linked fields below follow the call sheet until you type a different value here.</div>
-      <div class="prepro-grid">
-        <div class="field"><label class="field-lbl">Show Day</label><input class="field-in field-narrow" id="ps-show-date" type="date"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
-        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in field-narrow" id="ps-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in field-narrow" id="ps-doors" type="time"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
-        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in field-narrow" id="ps-show" type="time"></div>
+      <div class="prepro-grid prepro-grid-times">
+        <div class="field"><label class="field-lbl">Show Day</label><input class="field-in" id="ps-show-date" type="date"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="ps-doors" type="time"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
+      </div>
+      <div class="prepro-grid u-mt10">
         <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="ps-location" maxlength="100"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
         <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="ps-address" maxlength="160"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
         <div class="field u-col-span"><label class="field-lbl">Show Notes</label><textarea class="field-in u-textarea-cozy" id="ps-show-notes" rows="2" placeholder="Arrival details, holding areas, final reminders, day-of timing notes"></textarea></div>
@@ -6196,10 +6263,10 @@ input.pt-range::-moz-range-thumb,
           <label class="field-lbl">Current Plot</label>
           <select class="field-in" id="pp-plot-select" onchange="switchStagePlot(this.value)"></select>
         </div>
-        <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherStagePlot()">+ Add Plot</button>
+        <div class="field"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="Studio A talk show" oninput="updateActiveStagePlotLabel(this.value)"></div>
+        <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherStagePlot()" data-tip="Add another stage plot">+ Add</button>
         <button class="call-add-btn call-delete-btn u-callbtn u-c-red" type="button" onclick="deleteStagePlot()" data-tip="Delete this plot. Instructors and admins only.">Delete</button>
       </div>
-      <div class="field u-mt10"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="Studio A talk show, Black box band night" oninput="updateActiveStagePlotLabel(this.value)"></div>
     </div>
     <div class="plot-layer-bar" id="plotLayerBar"></div>
     <div class="plot-editor">
@@ -7217,7 +7284,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=0706fcb8cb"></script>
+<script src="cueola-app.js?v=75d9b0524a"></script>
 <script src="outrangutan/outrangutan.js?v=0122e667ce"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>

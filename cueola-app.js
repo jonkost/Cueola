@@ -4007,14 +4007,22 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
   const paperworkOptions = plandaBearAssignmentCatalog();
   const paperworkOptionLabels = paperworkOptions.map(option => option.label);
   const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row, paperworkOptionLabels, paperworkOptions));
+  // Owner 2026-08-30 list view: one compact line per position record, grouped
+  // by student (a student can hold several positions; each is its own record,
+  // which is what the canonical save model already expects). The paperwork
+  // selection lives in a collapsible list so the editor reads as a roster,
+  // not a wall of pills. The DOM contract is unchanged: every record is one
+  // [data-role-assignment-row] carrying the same fields and data attributes.
+  const sortKey = row => `${(row.person || '￿').toLowerCase()}|${row.profileId || ''}`;
+  const list = [...normalizedRows].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0);
   return `<div class="admin-assignment-list">
-    ${normalizedRows.map((row,i)=>{
+    ${list.map((row,i)=>{
       const selectedPaperwork = new Set(row.paperworkIds);
       const selectedLabels = new Set((row.paperwork || []).map(l => String(l || '').trim().toLowerCase()).filter(Boolean));
       // An existing selection must never silently change (same rule as the
       // position dropdown): union the catalog with this row's OWN pairs so a
       // selection whose type was disabled mid-draft, or whose id predates the
-      // canonical ids, still renders as a checked pill and round-trips.
+      // canonical ids, still renders as a checked item and round-trips.
       const rowOptions = [...paperworkOptions];
       (row.paperwork || []).forEach((label, pi) => {
         const clean = String(label || '').trim();
@@ -4028,32 +4036,57 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
         : 'Choose a saved profile; display names are not identity.';
       const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
       const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
-      return `<div class="admin-assignment-row" data-role-assignment-row="${i}"
+      const samePerson = i > 0 && sortKey(list[i - 1]) === sortKey(row) && row.person;
+      const chosen = (row.paperwork || []).filter(Boolean);
+      const summary = chosen.length ? `Paperwork (${chosen.length}): ${chosen.join(' · ')}` : 'Choose paperwork';
+      return `<div class="admin-assignment-row aa-compact${samePerson ? ' aa-cont' : ''}" data-role-assignment-row="${i}"
         data-assignment-id="${esc(row.assignmentId)}" data-person="${esc(row.person)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
         data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
-        <div class="admin-assignment-top">
-          <div class="field">
-            <label class="admin-add-label">Student profile</label>
-            <select class="admin-in" data-role-field="profileId">${assignmentProfileOptions(row.profileId, row.person)}</select>
-            <div class="admin-assignment-profile-id">${esc(profileMeta)}</div>
-          </div>
-          <div class="field">
-            <label class="admin-add-label">Position</label>
-            <select class="admin-in" data-role-field="positionId">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
-          </div>
-          <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove assignment" aria-label="Remove assignment">${sfIcon('action.close')}</button>
+        <div class="aa-line">
+          <select class="admin-in aa-student" data-role-field="profileId" aria-label="Student profile">${assignmentProfileOptions(row.profileId, row.person)}</select>
+          <select class="admin-in aa-position" data-role-field="positionId" aria-label="Position">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
+          <button class="aa-add-pos" type="button" onclick="addRoleAssignmentRowForRow(${i})" data-tip="Add another position for this student" aria-label="Add another position for this student">${sfIcon('action.add')}<span>Position</span></button>
+          <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position row" aria-label="Remove this position row">${sfIcon('action.close')}</button>
         </div>
-        <div class="field">
-          <label class="admin-add-label">Planda Bear Paperwork</label>
-          <div class="admin-paperwork-checks">
-            ${rowOptions.map(option => `<label class="admin-paperwork-pill"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''}>${esc(option.label)}</label>`).join('')}
+        <details class="aa-paperwork">
+          <summary>${esc(summary)}</summary>
+          <div class="aa-paperwork-list">
+            ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
           </div>
-        </div>
-        <div class="admin-assignment-verify"><span>${esc(updated)}</span><span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? `<span>By ${esc(row.assignedByLabel)}</span>` : ''}</div>
+          <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
+        </details>
       </div>`;
     }).join('')}
   </div>`;
 }
+
+// Keep the collapsed paperwork summary honest as boxes get checked.
+function aaUpdatePaperworkSummary(input) {
+  const details = input.closest('details.aa-paperwork');
+  if (!details) return;
+  const labels = [...details.querySelectorAll('[data-role-field="paperwork"]:checked')].map(i => i.dataset.paperworkLabel || i.value);
+  const summary = details.querySelector('summary');
+  if (summary) summary.textContent = labels.length ? `Paperwork (${labels.length}): ${labels.join(' · ')}` : 'Choose paperwork';
+}
+window.aaUpdatePaperworkSummary = aaUpdatePaperworkSummary;
+
+// One tap on a row: another position record for the SAME student. The save
+// model already treats each (student, position) pair as its own record.
+function addRoleAssignmentRowForRow(index) {
+  const rows = getRoleAssignmentsFromAdminDOM(true);
+  const src = rows[index];
+  if (!src) return addRoleAssignmentRow();
+  rows.push({ profileId: src.profileId, person: src.person, positionId:'', position:'', paperworkIds:[], paperwork:[] });
+  rerenderRoleAssignments(rows);
+  markRoleAssignmentsUnsaved();
+  setTimeout(() => {
+    const target = [...document.querySelectorAll('#adminRoleAssignments [data-role-assignment-row]')]
+      .find(el => el.querySelector('[data-role-field="profileId"]')?.value === String(src.profileId || '')
+        && !el.querySelector('[data-role-field="positionId"]')?.value);
+    target?.querySelector('[data-role-field="positionId"]')?.focus();
+  }, 0);
+}
+window.addRoleAssignmentRowForRow = addRoleAssignmentRowForRow;
 
 function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
   const rows = Array.from(document.querySelectorAll('[data-role-assignment-row]')).map(rowEl => {
@@ -4141,6 +4174,8 @@ function pbAssignmentRosterStripHTML(draftRows) {
       || String(p.username || '').trim().toLowerCase() === key);
     const profileId = matches.length === 1 ? (model?.profileIdFor?.(matches[0]) || matches[0].profileId || '') : '';
     const assigned = assignedKeys.has(key) || (profileId && assignedKeys.has(profileId));
+    // Assigned people stay tappable: a student can hold several positions.
+    if (assigned && profileId) return `<button class="pb-roster-chip pb-roster-assigned" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Assigned. Tap to add another position for ${esc(name)}">${sfIcon('marker.ready')} ${esc(name)}</button>`;
     if (assigned) return `<span class="pb-roster-chip pb-roster-assigned" data-tip="Has an assignment row">${sfIcon('marker.ready')} ${esc(name)}</span>`;
     if (profileId) return `<button class="pb-roster-chip pb-roster-add" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Add an assignment row for ${esc(name)}">+ ${esc(name)}</button>`;
     return `<span class="pb-roster-chip pb-roster-noprofile" data-tip="${matches.length > 1 ? 'Several profiles match this name: pick them in a row manually' : 'No saved profile yet: they create one at the front door'}">${esc(name)}</span>`;
@@ -10616,8 +10651,52 @@ function preflightJump(beatId) {
 function confirmedGoLive() {
   hideOverlay('goLiveCheckOv');
   if (_preflightReviewOnly) return;
-  goLive();
+  maybeShowReadyBeforeShowPrompt(goLive);
 }
+
+// Owner 2026-08-30: the Ready Before Show list gets ONE review moment at the
+// first Go Live of a session, then stays out of the way for every later
+// re-entry. The exported package prints the list as plain line items (it is
+// submitted before the show); the live sign-off checkboxes stay in the
+// Production Schedule editor, and this prompt is the reminder to use them.
+function readyPromptSeenKey() { return `cueola_ready_prompt_seen_${session.code || 'LOCAL'}`; }
+let _readyPromptProceed = null;
+function maybeShowReadyBeforeShowPrompt(proceed) {
+  let seen = false;
+  try { seen = localStorage.getItem(readyPromptSeenKey()) === '1'; } catch {}
+  const data = loadPreProData();
+  const schedule = productionScheduleWithCallSheet(data.productionSchedule || {}, data);
+  const rows = (schedule.checklist || []).map(r => normalizeProductionChecklistRow(r, -1)).filter(r => r.item);
+  if (seen || !rows.length) { proceed(); return; }
+  const done = rows.filter(r => r.done).length;
+  let ov = document.getElementById('readyBeforeShowOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'readyBeforeShowOv';
+    ov.className = 'modal-wrap';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="modal" style="max-width:540px">
+    <div class="modal-title">Ready Before Show</div>
+    <div class="modal-sub">One last look at your crew's list before the show goes live. ${done} of ${rows.length} signed off in the Production Schedule.</div>
+    <div class="ready-prompt-list">
+      ${rows.map(r => `<div class="ready-prompt-row${r.done ? ' ok' : ''}">${sfIcon(r.done ? 'marker.ready' : 'action.close')}<span>${esc(r.item)}</span></div>`).join('')}
+    </div>
+    <div class="u-note-sm u-mt10">This review shows once per session. Sign items off any time in the Production Schedule.</div>
+    <button class="btn-full btn-primary u-mt10" onclick="dismissReadyBeforeShowPrompt(true)">Go Live</button>
+    <button class="btn-full btn-secondary u-mt10" onclick="dismissReadyBeforeShowPrompt(false)">Back to Rundown</button>
+  </div>`;
+  _readyPromptProceed = proceed;
+  showModal('readyBeforeShowOv');
+}
+function dismissReadyBeforeShowPrompt(go) {
+  try { localStorage.setItem(readyPromptSeenKey(), '1'); } catch {}
+  hideModal('readyBeforeShowOv');
+  const proceed = _readyPromptProceed;
+  _readyPromptProceed = null;
+  if (go && proceed) proceed();
+}
+window.dismissReadyBeforeShowPrompt = dismissReadyBeforeShowPrompt;
 
 function goLive() {
   const current = liveSessionState();
@@ -19098,6 +19177,15 @@ function pbRefreshSafetyFields() {
   pbSetFieldIfIdle('sp-late', safety.late || data.late || '');
   pbSetFieldIfIdle('sp-equipment', safety.equipment || data.equipment || '');
   pbSetFieldIfIdle('sp-notes', safety.notes || '');
+  // PPE list: whole-list refresh only while nobody here is in it.
+  const ppeIdle = !document.activeElement?.closest?.('#sp-ppe-list')
+    && !pbFieldRecentlyEdited('sp-ppe-list')
+    && ![...document.querySelectorAll('[data-sp-ppe]')].some(i => pbFieldRecentlyEdited(i.id));
+  if (ppeIdle && document.getElementById('sp-ppe-list')) {
+    const remote = normalizeSafetyPpe(safety.ppe);
+    const current = collectSafetyPpe();
+    try { if (JSON.stringify(remote) !== JSON.stringify(current)) renderSafetyPpeList(remote); } catch {}
+  }
   renderSafetyPlanWeatherSymbols(data);
 }
 
@@ -19161,7 +19249,11 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-late-phone', remoteLate.phone);
   pbSetFieldIfIdle('pp-parking', sheet.parking || '');
   pbSetFieldIfIdle('pp-entrance', sheet.entrance || '');
-  pbSetFieldIfIdle('pp-stream', sheet.stream || '');
+  if (!pbFieldRecentlyEdited('pp-stream') && document.activeElement?.id !== 'pp-stream') {
+    const remoteStreamNA = sheet.stream === 'N/A';
+    setStreamNotApplicable(remoteStreamNA);
+    if (!remoteStreamNA) pbSetFieldIfIdle('pp-stream', sheet.stream || '');
+  }
   pbSetFieldIfIdle('pp-dress', sheet.dress || '');
   if (!pbFieldRecentlyEdited('pp-meals-provided-group')) {
     const remoteMealsProvided = normalizeCallSheetMealsProvided(sheet.mealsProvided);
@@ -19438,12 +19530,13 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
 }
 
 function renderPaperworkNav(id, slotId='') {
-  // The Notes board keeps its own hub bar: no floating step nav over the feed.
-  // Explicit slots (the preview modal's pbNavPreview) still render for notes.
-  if (id === 'production-notes' && !slotId) return;
+  // Production Notes is its own piece (owner 2026-08-30): no step nav
+  // anywhere for it, including the preview modal's slot.
+  if (id === 'production-notes') { const s = document.getElementById(slotId); if (s) s.hidden = true; return; }
   // D6: navigation runs over the ENABLED items only — steps renumber when a
-  // type is disabled, and Previous/Next skip hidden editors.
-  const items = enabledPaperworkItems();
+  // type is disabled, and Previous/Next skip hidden editors. Production Notes
+  // is its own piece and never counts as a step.
+  const items = enabledPaperworkItems().filter(item => item.id !== 'production-notes');
   const idx = items.findIndex(item => item.id === id);
   const item = items[idx] || items[0];
   const slotMap = {
@@ -19484,7 +19577,9 @@ function renderPaperworkNav(id, slotId='') {
 function openPaperworkRelative(delta) {
   const current = currentPaperworkItemId();
   savePaperworkItem(current, false);
-  const items = enabledPaperworkItems();   // D6: skip disabled editors
+  // D6: skip disabled editors. Production Notes is its own piece (the wide
+  // bar on the hub), never a stop in the Previous/Next flow.
+  const items = enabledPaperworkItems().filter(item => item.id !== 'production-notes');
   const idx = items.findIndex(item => item.id === current);
   const nextIdx = idx + delta;
   if (nextIdx < 0 || nextIdx >= items.length) return returnToPaperworkHub();
@@ -19552,17 +19647,21 @@ function renderPlandaBearPaperworkManager() {
   const wrap = document.getElementById('pbPaperworkManager');
   if (!wrap) return;
   if (!canManageCallSheetStructure() || groupActive()) { wrap.innerHTML = ''; return; }
-  const chips = PAPERWORK_ITEMS.filter(item => item.id !== 'production-notes').map(item => {
+  // Owner 2026-08-30 list view: one row per paperwork type with a clear
+  // ON/OFF state, instead of the chip cloud that read as noise during setup.
+  const rows = PAPERWORK_ITEMS.filter(item => item.id !== 'production-notes').map(item => {
     const on = paperworkTypeEnabled(item.id);
-    return `<button class="pb-pw-toggle ${on ? 'on' : 'off'}" onclick="togglePaperworkItemEnabled('${item.id}')"
+    return `<button type="button" class="pb-pw-row ${on ? 'on' : 'off'}" onclick="togglePaperworkItemEnabled('${item.id}')"
       data-tip="${on ? 'Turn off for this show: the card hides for everyone and the package skips it' : 'Turn back on for this show'}">
-      ${sfIcon(on ? 'marker.ready' : 'action.close')} ${esc(item.title)}
+      <span class="pb-pw-state">${sfIcon(on ? 'marker.ready' : 'action.close')}</span>
+      <span class="pb-pw-name">${esc(item.title)}</span>
+      <span class="pb-pw-flag">${on ? 'ON' : 'OFF'}</span>
     </button>`;
   }).join('');
   wrap.innerHTML = `<div class="pb-assign-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork for this show</div>
     <div class="u-note-sm u-mb8">What this show code requires. Off means hidden for the whole crew and skipped in the package export. Saved work is kept and comes back when an item is turned back on. Production Notes is always on.</div>
-    <div class="admin-src-chips">${chips}</div>
+    <div class="pb-pw-list">${rows}</div>
   </div>`;
 }
 
@@ -19703,12 +19802,22 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   if (roFp === _pbAssignCardFp && wrap.firstChild) return;
   _pbAssignCardFp = roFp;
   if (!rows.length) { wrap.innerHTML = ''; return; }
+  // Owner 2026-08-30: one entry per STUDENT — name, their position(s), then
+  // their paperwork as a readable list (several records collapse into one).
+  const byPerson = new Map();
+  rows.forEach(row => {
+    const key = String(row.person || '').trim().toLowerCase();
+    if (!byPerson.has(key)) byPerson.set(key, { person: row.person, positions: [], paperwork: [] });
+    const g = byPerson.get(key);
+    if (row.position && !g.positions.includes(row.position)) g.positions.push(row.position);
+    (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
+  });
   wrap.innerHTML = `<div class="pb-assign-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
-    ${rows.map(row => `<div class="pb-assign-row">
-      <span class="pb-assign-name">${esc(row.person)}</span>
-      ${row.position ? `<span class="pb-assign-pos">${esc(row.position)}</span>` : ''}
-      ${row.paperwork.length ? `<span class="pb-assign-items">${esc(row.paperwork.join(' · '))}</span>` : ''}
+    ${[...byPerson.values()].map(g => `<div class="pb-assign-row pb-assign-stack">
+      <div class="pb-assign-head"><span class="pb-assign-name">${esc(g.person)}</span>
+      ${g.positions.length ? `<span class="pb-assign-pos">${esc(g.positions.join(' / '))}</span>` : ''}</div>
+      ${g.paperwork.length ? `<ul class="pb-assign-paperlist">${g.paperwork.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
     </div>`).join('')}
   </div>`;
 }
@@ -23651,11 +23760,10 @@ async function showRundownPaperPreview() {
     const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'rundown' });
     lastRundownExportSnapshot = snapshot;
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
-    showPaperPreview('Rundown Planda Bear Preview', `
-      <h1>Full Rendered Rundown</h1>
-      <p>${esc(snapshot.production.name)}</p>
-      ${rundownPreviewTableHTML(snapshot)}
-    `, 'Download Rundown PDF', 'exportPDF()', 'rundown', options);
+    // Owner 2026-08-30: the page header already prints the production name
+    // with "Rundown" under it. No in-body title or show-name line on page 1.
+    showPaperPreview('Rundown Planda Bear Preview', rundownPreviewTableHTML(snapshot),
+      'Download Rundown PDF', 'exportPDF()', 'rundown', options);
   } catch (error) {
     lastRundownExportSnapshot = null;
     toast(`Rundown preview blocked: ${paperworkExportFailureMessage(error)}`);
@@ -23703,14 +23811,17 @@ function rundownFmtTotal(secs) {
 function rundownPreviewTableHTML(snapshot=null) {
   const rundownBeats = Array.isArray(snapshot?.beats) ? snapshot.beats : beats;
   const rundownShow = snapshot?.show || show;
-  const allColumns = rundownExportColumns === 'all';
+  // Owner 2026-08-30: the export matches the rundown builder exactly — every
+  // department column prints, empty or not, and the broadcast combined-column
+  // preset is retired.
+  const allColumns = true;
   const cueParts = (b, type) => {
     const d = b.cues?.[type];
     const on = getCueOn(d), off = getCueOff(d);
-    const scriptText = type === 'script' ? scriptCueText(d) : '';
-    const script = scriptText ? `${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ${scriptLineLabel(scriptText)}` : '';
+    // Written scripts never print here (owner 2026-08-30): the script column
+    // carries only its READY/TAKE cue labels, like every other department.
     // Same operation vocabulary as the editor and Live: on = READY (standby), off = TAKE (go).
-    return [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`, script && `<span class="cue-muted">${esc(script)}</span>`].filter(Boolean);
+    return [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`].filter(Boolean);
   };
   const cellFor = (b, type) => {
     const parts = cueParts(b, type);
@@ -23765,13 +23876,8 @@ function rundownPreviewTableHTML(snapshot=null) {
     ? '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th>'
     : '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th>Cues</th><th class="cue-script">Script</th>';
   const legend = `<div class="paper-rundown-legend"><b>READY</b> = standby the source · <b>TAKE</b> = go · For playback rows: <b>ROLL</b> = start the clip · <b>OUT</b> = the plan for getting out · Total = running show time</div>`;
-  const columnsToggle = `
-    <label class="pb-pkg-optin no-print">
-      <input type="checkbox" ${allColumns ? 'checked' : ''} onchange="setRundownExportColumns(this.checked ? 'all' : 'broadcast')">
-      <span>Show all department columns (broadcast preset is the default)</span>
-    </label>`;
   const totalFooter = `<tfoot><tr><td colspan="4" style="text-align:right;font-weight:800">Total runtime</td><td class="cue-total" style="font-weight:800">${rundownFmtTotal(offsetSecs)}</td><td colspan="${columnCount - 5}"></td></tr></tfoot>`;
-  return `<div class="paper-landscape">${columnsToggle}${legend}<table class="paper-rundown-grid">${colgroup}<thead><tr>${headCells}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}">No rows yet.</td></tr>`}</tbody>${totalFooter}</table></div>`;
+  return `<div class="paper-landscape">${legend}<table class="paper-rundown-grid">${colgroup}<thead><tr>${headCells}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}">No rows yet.</td></tr>`}</tbody>${totalFooter}</table></div>`;
 }
 
 let lastCallSheetExportSnapshot = null;
@@ -25838,7 +25944,9 @@ function hydrateCallSheetForm(sheet) {
   document.getElementById('pp-late-phone').value = lateContact.phone;
   document.getElementById('pp-parking').value = data.parking || '';
   document.getElementById('pp-entrance').value = data.entrance || '';
-  document.getElementById('pp-stream').value = data.stream || '';
+  const streamNA = data.stream === 'N/A';
+  setStreamNotApplicable(streamNA);
+  if (!streamNA) document.getElementById('pp-stream').value = data.stream || '';
   document.getElementById('pp-dress').value = data.dress || '';
   document.getElementById('pp-meals').value = data.meals || '';
   setTimeInputValue('pp-meal-time', data.mealTime || '');
@@ -25872,7 +25980,7 @@ function currentCallSheetFromForm() {
     // Combined string kept in sync for the safety plan auto-link, the PDF
     // renderers, and anything still reading the legacy key.
     late: joinLateContact(document.getElementById('pp-late-name')?.value, document.getElementById('pp-late-phone')?.value),
-    stream: document.getElementById('pp-stream')?.value?.trim() || '',
+    stream: getStreamValue(),
     dress: document.getElementById('pp-dress')?.value?.trim() || '',
     meals: document.getElementById('pp-meals')?.value || '',
     mealTime: timeInputValue('pp-meal-time'),
@@ -26053,6 +26161,84 @@ function safetySecurityValue(value) {
   // '8822' is the legacy demo-session marker; strip it so it never renders as a real security value.
   return v === '8822' ? '' : v;
 }
+
+// ── OSHA PPE requirements (owner 2026-08-30): a REQUIRED list on the safety
+// plan. Every production names at least PPE_MIN_ITEMS real items; refusals
+// like "none" or "N/A" do not count toward the minimum, and the package
+// export is blocked until the list is real. The OSHA reference prints on the
+// exported plan.
+const PPE_MIN_ITEMS = 3;
+const PPE_OSHA_URL = 'https://www.osha.gov/personal-protective-equipment';
+function ppeEntryIsReal(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  return !/^(none|n\/?a|na|n\.a\.?|nothing|no(ne)?( ppe)?( needed| required)?|zero)[.!]?$/i.test(t);
+}
+function normalizeSafetyPpe(list) {
+  return (Array.isArray(list) ? list : []).map(v => String(v || '').trim()).filter(Boolean);
+}
+function validSafetyPpe(list) {
+  return normalizeSafetyPpe(list).filter(ppeEntryIsReal).length >= PPE_MIN_ITEMS;
+}
+function safetyPpeProblem(list) {
+  const entries = normalizeSafetyPpe(list);
+  const real = entries.filter(ppeEntryIsReal);
+  if (real.length >= PPE_MIN_ITEMS) return '';
+  if (entries.length > real.length) return 'Entries like "none" or "N/A" do not count. Name the real equipment.';
+  return `List at least ${PPE_MIN_ITEMS} PPE items for this production.`;
+}
+const PPE_PLACEHOLDERS = [
+  'e.g. Closed-toe shoes for all crew',
+  'e.g. Work gloves for load-in',
+  'e.g. Eye protection at cutting or rigging stations',
+];
+function renderSafetyPpeList(items) {
+  const el = document.getElementById('sp-ppe-list');
+  if (!el) return;
+  const rows = normalizeSafetyPpe(items);
+  const display = rows.length ? rows : ['', '', ''];
+  const problem = safetyPpeProblem(rows);
+  el.innerHTML = `
+    ${display.map((item, i) => `<div class="sp-ppe-row">
+      <input class="field-in" id="sp-ppe-${i}" data-sp-ppe="${i}" maxlength="120" value="${esc(item)}" placeholder="${esc(PPE_PLACEHOLDERS[i] || 'PPE item')}" oninput="updateSafetyPpeStatus()">
+      <button class="sp-ppe-remove" type="button" onclick="removeSafetyPpeRow(${i})" data-tip="Remove item" aria-label="Remove PPE item">${sfIcon('action.close')}</button>
+    </div>`).join('')}
+    <button class="call-add-btn u-mt10" type="button" onclick="addSafetyPpeRow()">${sfIcon('action.add')}<span>Add PPE item</span></button>
+    <div class="sp-ppe-status ${problem ? 'bad' : 'ok'}">${problem ? esc(problem) : `${rows.filter(ppeEntryIsReal).length} PPE item(s) listed.`}</div>
+  `;
+}
+function updateSafetyPpeStatus() {
+  const el = document.querySelector('#sp-ppe-list .sp-ppe-status');
+  if (!el) return;
+  const rows = collectSafetyPpe();
+  const problem = safetyPpeProblem(rows);
+  el.className = `sp-ppe-status ${problem ? 'bad' : 'ok'}`;
+  el.textContent = problem || `${normalizeSafetyPpe(rows).filter(ppeEntryIsReal).length} PPE item(s) listed.`;
+}
+function collectSafetyPpe(keepBlank=false) {
+  const rows = [];
+  document.querySelectorAll('[data-sp-ppe]').forEach(input => { rows[Number(input.dataset.spPpe)] = input.value.trim(); });
+  const list = rows.filter(v => typeof v === 'string');
+  return keepBlank ? list : list.filter(Boolean);
+}
+function addSafetyPpeRow() {
+  const rows = collectSafetyPpe(true);
+  rows.push('');
+  renderSafetyPpeList(rows);
+  pbNoteLocalEdit('sp-ppe-list');
+  pbQueuePaperworkAutosave();
+  setTimeout(() => document.getElementById(`sp-ppe-${rows.length - 1}`)?.focus(), 0);
+}
+function removeSafetyPpeRow(idx) {
+  const rows = collectSafetyPpe(true);
+  rows.splice(idx, 1);
+  renderSafetyPpeList(rows);
+  pbNoteLocalEdit('sp-ppe-list');
+  pbQueuePaperworkAutosave();
+}
+window.addSafetyPpeRow = addSafetyPpeRow;
+window.removeSafetyPpeRow = removeSafetyPpeRow;
+window.updateSafetyPpeStatus = updateSafetyPpeStatus;
 
 function setCallSheetVenue(v) {
   const nv = normalizeCallSheetVenue(v);
@@ -26581,6 +26767,7 @@ function openSafetyPlan() {
   document.getElementById('sp-late').value = safety.late || data.late || '';
   document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
   document.getElementById('sp-notes').value = safety.notes || '';
+  renderSafetyPpeList(normalizeSafetyPpe(safety.ppe));
   renderPaperworkNav('safety-plan');
   renderPlandaBearComments('Safety Plan', 'pbCommentsSafety');
   showModal('safetyPlanModal');
@@ -26618,6 +26805,9 @@ function getSafetyPlanData() {
     late: (lateAuto && lateVal === lateAuto) ? '' : lateVal,
     equipment: document.getElementById('sp-equipment')?.value?.trim() ?? existing.equipment ?? '',
     notes: document.getElementById('sp-notes')?.value ?? existing.notes ?? '',
+    // Only trust the DOM when the list is actually rendered; otherwise keep
+    // the stored entries (a save from another path must not wipe them).
+    ppe: document.querySelector('[data-sp-ppe]') ? collectSafetyPpe() : normalizeSafetyPpe(existing.ppe),
   };
 }
 
@@ -26628,11 +26818,34 @@ function saveSafetyPlan(showToastOnSave=true) {
 
 function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSectionNumber('safety-plan')) {
   const safetyWeather = typeof safety.weather === 'string' ? safety.weather : '';
+  // Weather prints structured (conditions, temperatures, precipitation, wind)
+  // when it rides the call-sheet forecast; a typed override prints verbatim.
+  const weatherCell = (() => {
+    const custom = safetyWeather && safetyWeather !== safetyPlanWeatherAutoText(data) ? safetyWeather : '';
+    if (custom) return esc(custom);
+    const w = safetyPlanWeatherSource(data);
+    if (w && (w.conditions || w.high || w.low || w.precip || w.wind)) {
+      const lines = [];
+      if (w.conditions) lines.push(`<b>${esc(w.conditions)}</b>`);
+      const temps = [w.high ? `High ${esc(w.high)}` : '', w.low ? `Low ${esc(w.low)}` : ''].filter(Boolean).join(' · ');
+      if (temps) lines.push(temps);
+      const extra = [w.precip ? `Precipitation ${esc(w.precip)}` : '', w.wind ? `Wind ${esc(w.wind)}` : ''].filter(Boolean).join(' · ');
+      if (extra) lines.push(extra);
+      if (lines.length) return lines.join('<br>');
+    }
+    return esc(safetyWeather || safetyPlanWeatherAutoText(data));
+  })();
+  const ppeRows = normalizeSafetyPpe(safety.ppe).filter(ppeEntryIsReal);
+  const ppeCell = (ppeRows.length
+    ? ppeRows.map((p, i) => `${i + 1}. ${esc(p)}`).join('<br>')
+    : `<b>REQUIRED:</b> list at least ${PPE_MIN_ITEMS} PPE items before submitting.`)
+    + `<br><span class="cue-muted">Reference: ${esc(PPE_OSHA_URL)}</span>`;
   return `
     <h1 class="psec-h psec-safety">${paperSectionTitle(sectionNumber, 'Safety Plan')}</h1>
     <table><tbody>
       <tr><th>Local Hospital</th><td>${esc([safety.hospital, safety.hospitalAddress, safety.hospitalPhone].map(v => String(v || '').trim()).filter(Boolean).join(' · '))}</td></tr>
-      <tr><th>Weather</th><td>${esc(safetyWeather || safetyPlanWeatherAutoText(data))}</td></tr>
+      <tr><th>Weather</th><td>${weatherCell}</td></tr>
+      <tr><th>OSHA PPE Requirements</th><td>${ppeCell}</td></tr>
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
@@ -26671,7 +26884,11 @@ function defaultProductionSchedule() {
     address:'',
     setupNotes:'',
     showNotes:'',
-    checklist: DEFAULT_PRODUCTION_CHECKS.map(row => ({ area:row.area, item:row.item, hint:row.item, done:false })),
+    // Owner 2026-08-30: the checklist starts EMPTY. Students build their own
+    // ready-before-show list for their production; pre-seeded rows read as
+    // done thinking. DEFAULT_PRODUCTION_CHECKS stays only to repair legacy
+    // saves that referenced it positionally.
+    checklist: [],
   };
 }
 
@@ -26695,7 +26912,7 @@ function normalizeProductionChecklistRow(row, i=0) {
 
 function productionScheduleWithCallSheet(schedule={}, callSheet=loadPreProData()) {
   const base = { ...defaultProductionSchedule(), ...(schedule || {}) };
-  base.checklist = Array.isArray(base.checklist) && base.checklist.length ? base.checklist : defaultProductionSchedule().checklist;
+  base.checklist = Array.isArray(base.checklist) ? base.checklist : [];
   return {
     ...base,
     setup: normalizeTimeValue(base.setup),
@@ -26744,17 +26961,20 @@ function renderProductionChecklist(items) {
   const el = document.getElementById('ps-checklist');
   if (!el) return;
   // -1 = no positional guide fallback: rendering a user-added empty row with
-  // its array index used to stamp a default check's text into it.
-  const rows = (Array.isArray(items) && items.length ? items : defaultProductionSchedule().checklist).map(row => normalizeProductionChecklistRow(row, -1));
+  // its array index used to stamp a default check's text into it. An empty
+  // list stays empty: the crew builds their own checks for their production.
+  const rows = (Array.isArray(items) ? items : []).map(row => normalizeProductionChecklistRow(row, -1));
   const complete = rows.filter(row => row.done).length;
   el.innerHTML = `<div class="readiness-builder">
     <div class="readiness-builder-head">
-      <div class="readiness-copy">Use this as the final walk-through. Check a row only when that item is actually ready.</div>
-      <div class="readiness-progress">${complete} of ${rows.length} ready</div>
+      <div class="readiness-copy">${rows.length
+        ? 'Use this as the final walk-through. Check a row only when that item is actually ready.'
+        : 'Build the list of what must be true before your show can start: record path, mics, cameras, comms, safety. Add one item per check.'}</div>
+      ${rows.length ? `<div class="readiness-progress">${complete} of ${rows.length} ready</div>` : ''}
     </div>
-    <div class="readiness-simple-head" aria-hidden="true">
+    ${rows.length ? `<div class="readiness-simple-head" aria-hidden="true">
       <span>Ready</span><span>Checklist Item</span><span></span>
-    </div>
+    </div>` : ''}
     ${rows.map((row,i)=>`
       <div class="readiness-simple-row${row.done?' signed':''}">
         <label class="readiness-done"><input type="checkbox" data-ps-row="${i}" data-ps-field="done" ${row.done?'checked':''} onchange="onProductionChecklistToggle(this)"> Ready</label>
@@ -26794,6 +27014,11 @@ function addProductionChecklistRow() {
   const rows = collectProductionChecklistRows(true);
   rows.push({ area:'', item:'', hint:'', done:false });
   renderProductionChecklist(rows);
+  // Hold the collab refresh off the new row and land the cursor in it, so
+  // typing starts immediately and the row cannot be reverted mid-thought.
+  pbNoteLocalEdit('ps-checklist');
+  const inputs = document.querySelectorAll('#ps-checklist [data-ps-field="item"]');
+  inputs[inputs.length - 1]?.focus();
 }
 
 // Checking a readiness item records WHO signed it off and WHEN, then syncs to the
@@ -26818,7 +27043,8 @@ function onProductionChecklistToggle(cb) {
 function removeProductionChecklistRow(idx) {
   const rows = collectProductionChecklistRows(true);
   rows.splice(idx, 1);
-  renderProductionChecklist(rows.length ? rows : [{ area:'', item:'', hint:'', done:false }]);
+  renderProductionChecklist(rows.length ? rows : []);
+  pbNoteLocalEdit('ps-checklist');
   saveProductionSchedule(false);   // a deletion is a real edit — persist it like the tick box does
   paperworkDirty = false;
 }
@@ -26854,7 +27080,11 @@ function saveProductionSchedule(showToastOnSave=true) {
 
 function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=paperworkSectionNumber('production-scheduler')) {
   const s = productionScheduleWithCallSheet(schedule || {}, data);
-  const rows = (s.checklist || []).map(normalizeProductionChecklistRow).map(row => `<tr><td>${row.done ? 'Yes' : 'No'}</td><td>${esc(row.item || '')}</td><td>${row.done && row.doneBy ? esc(row.doneBy) + (row.doneAt ? ` (${esc(new Date(row.doneAt).toLocaleString())})` : '') : '—'}</td></tr>`).join('');
+  // Submitted BEFORE the show: the exported package lists the planned checks
+  // as plain line items, never as a filled-in checklist. The live sign-off
+  // states stay in the editor and the go-live review prompt.
+  const checkRows = (s.checklist || []).map(row => normalizeProductionChecklistRow(row, -1)).filter(row => row.item);
+  const rows = checkRows.map((row, i) => `<tr><td style="width:6%">${i + 1}.</td><td>${esc(row.item)}</td></tr>`).join('');
   const setupBody = s.setupNA
     ? `<tr><td>No separate setup day. Setup happens on show day.</td></tr>`
     : `<tr><th>Setup Date</th><td>${esc(paperDate(s.date))}</td></tr>
@@ -26878,7 +27108,7 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
       <tr><th>Show Notes</th><td>${esc(s.showNotes || '')}</td></tr>
     </tbody></table>
     <h2>Ready Before Show</h2>
-    <table><thead><tr><th>Ready</th><th>Checklist Item</th><th>Signed Off By</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No checklist rows.</td></tr>'}</tbody></table>`;
+    <table><tbody>${rows || '<tr><td>No ready-before-show items yet.</td></tr>'}</tbody></table>`;
 }
 
 // Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
@@ -27182,7 +27412,6 @@ function renderPackageSheetPicker() {
   const host = document.getElementById('packageExportOptions');
   if (!host) return;
   const sheets = getCallSheets();
-  if (sheets.length <= 1) { host.innerHTML = ''; host.hidden = true; return; }
   // Prune excludes for sheets that no longer exist (sanitizer collapse, delete).
   const ids = new Set(sheets.map(sheet => sheet.id));
   pbPackageSheetExcludes.forEach(id => { if (!ids.has(id)) pbPackageSheetExcludes.delete(id); });
@@ -27191,19 +27420,33 @@ function renderPackageSheetPicker() {
   const warning = sheets.length > 6
     ? `<div class="pb-pkg-sheet-warning">This package includes ${sheets.length} call sheets. That is unusually many. Uncheck any that should not print.</div>`
     : '';
-  host.hidden = false;
-  host.innerHTML = `
-    <div class="pb-pkg-sheet-picker">
-      <div class="pb-pkg-sheet-picker-title">Call sheets in the package · ${includedCount} of ${sheets.length}<button type="button" class="info-btn" aria-label="What’s in the export package" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+  const noteCount = Array.isArray(plandaBearNotes) ? plandaBearNotes.length : 0;
+  // Owner 2026-08-30: the include-notes choice lives HERE with the export
+  // buttons, not hidden inside the package preview (it stays there too, and
+  // both write the same flag). Which sections print at all is the Paperwork
+  // for this show list above.
+  const sheetRows = sheets.length > 1 ? `
+      <div class="pb-pkg-sheet-picker-sub">Call sheets in the package · ${includedCount} of ${sheets.length}</div>
       ${warning}
       ${sheets.map((sheet, i) => `
         <label class="pb-pkg-optin">
           <input type="checkbox" ${pbPackageSheetExcludes.has(sheet.id) ? '' : 'checked'}
             onchange="pbToggleExportSheet('${esc(sheet.id)}', this.checked)">
           <span>${esc(callSheetDisplayName(sheet, i))}${sheet.date ? ` · ${esc(sheet.date)}` : ''}</span>
-        </label>`).join('')}
+        </label>`).join('')}` : '';
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="pb-pkg-sheet-picker">
+      <div class="pb-pkg-sheet-picker-title">Package export options<button type="button" class="info-btn" aria-label="What’s in the export package" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+      <label class="pb-pkg-optin">
+        <input type="checkbox" ${pbPackageIncludeNotes ? 'checked' : ''} onchange="pbSetPackageNotesFromHub(this.checked)">
+        <span>Include Production Notes in the package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
+      </label>
+      ${sheetRows}
     </div>`;
 }
+function pbSetPackageNotesFromHub(on) { pbPackageIncludeNotes = !!on; }
+window.pbSetPackageNotesFromHub = pbSetPackageNotesFromHub;
 
 async function showPreProPackagePreview() {
   try {
@@ -27290,9 +27533,10 @@ function preProPackageHTML(forExport=false, snapshot=null) {
     ${assignmentRegisterHTML(snapshot || { production:{sessionCode:session.code}, assignmentGroups:[] }, numbers.get('assignment-register'))}
     </section>`);
   if (numbers.has('rundown')) {
-    sections.push(`<section${sectionAttr('rundown', 'Full Rendered Rundown')}><div class="paper-landscape">
-      <h1 class="psec-h psec-rundown">${paperSectionTitle(numbers.get('rundown'), 'Full Rendered Rundown')}</h1>
-      <div>${esc(snapshot?.production?.name || show.name || 'Rundown')}</div>
+    // Owner 2026-08-30: section title is just "Rundown", and no repeated
+    // show-name line (the page header already carries the production name).
+    sections.push(`<section${sectionAttr('rundown', 'Rundown')}><div class="paper-landscape">
+      <h1 class="psec-h psec-rundown">${paperSectionTitle(numbers.get('rundown'), 'Rundown')}</h1>
       ${rundownPreviewTableHTML(snapshot)}
     </div>
     </section>`);
@@ -27989,6 +28233,29 @@ window.toggleShowNotApplicable = toggleShowNotApplicable;
 window.setWrapNotApplicable = setWrapNotApplicable;
 window.toggleWrapNotApplicable = toggleWrapNotApplicable;
 
+// Stream Information "N/A" for shows that do not stream — mirrors the time
+// fields' N/A pattern, including the immediate queued save.
+function setStreamNotApplicable(isNA) {
+  const input = document.getElementById('pp-stream');
+  const btn = document.getElementById('pp-stream-na');
+  if (!input || !btn) return;
+  input.disabled = Boolean(isNA);
+  if (isNA) input.value = '';
+  btn.classList.toggle('on', Boolean(isNA));
+  btn.setAttribute('aria-pressed', isNA ? 'true' : 'false');
+}
+function toggleStreamNotApplicable() {
+  setStreamNotApplicable(!document.getElementById('pp-stream-na')?.classList.contains('on'));
+  pbNoteLocalEdit('pp-stream');
+  pbQueuePaperworkAutosave();
+}
+function getStreamValue() {
+  if (document.getElementById('pp-stream-na')?.classList.contains('on')) return 'N/A';
+  return document.getElementById('pp-stream')?.value?.trim() || '';
+}
+window.setStreamNotApplicable = setStreamNotApplicable;
+window.toggleStreamNotApplicable = toggleStreamNotApplicable;
+
 // Production Schedule — "N/A" for the whole Setup Day (setup happens on show day,
 // or on a different day tracked elsewhere). Disables and clears the setup fields.
 function setSetupNotApplicable(isNA) {
@@ -28318,6 +28585,12 @@ async function downloadCallSheetPDF() {
 }
 
 async function exportPreProPackagePDF() {
+  // OSHA PPE gate: the submitted package must carry a real PPE list. The
+  // preview still renders (with a REQUIRED marker) so the gap is visible.
+  if (paperworkTypeEnabled('safety-plan') && !validSafetyPpe(loadPreProData().safety?.ppe)) {
+    toast(`Export blocked: the Safety Plan needs at least ${PPE_MIN_ITEMS} real OSHA PPE items. "None" and "N/A" do not count.`, 4200);
+    return;
+  }
   let snapshot;
   try {
     const previewIsOpen = document.getElementById('paperPreviewModal')?.classList.contains('on')
@@ -28376,11 +28649,9 @@ async function exportPDF() {
     return;
   }
   const cleanFileName = `${(snapshot.production.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
-  const html = `
-    <h1>Full Rendered Rundown</h1>
-    <p>${esc(snapshot.production.name)}</p>
-    ${rundownPreviewTableHTML(snapshot)}
-  `;
+  // Owner 2026-08-30: the page header already prints the production name with
+  // "Rundown" under it. No in-body title or show-name line on page 1.
+  const html = rundownPreviewTableHTML(snapshot);
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
   try {
     const result = await exportPaperHTMLAsPDF(html, cleanFileName, options);
