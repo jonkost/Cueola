@@ -5140,7 +5140,7 @@ input.pt-range::-moz-range-thumb,
 	      </div>
 	    </div>
 	    <div class="entry-actions">
-	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> New here? Start the guide</button>
+	      <button class="entry-admin-link" onclick="openLearningHub()"><span class="eal-ico sf-symbol" data-symbol="action.guide" aria-hidden="true"></span> <span class="eal-txt"><span class="eal-lead">New here? </span>Start the guide</span></button>
       <div class="notif-center entry-notif" id="notifCenter">
         <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="openProductionNotesShortcut(event)" data-tip="Open production notes" aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
       </div>
@@ -7238,6 +7238,16 @@ input.pt-range::-moz-range-thumb,
 #entry .e-brandrow{margin-bottom:6px}
 #entry .e-sub{margin-bottom:14px}
 #entry .entry-actions{margin-bottom:18px}
+/* Phones (owner 2026-09-03): guide, notes, profile, and settings stay on ONE
+   row. The guide button gives up its "New here?" lead and shrinks first; the
+   three round buttons never shrink. */
+@media (max-width:520px){
+  #entry .entry-actions{flex-wrap:nowrap;gap:8px;width:100%;max-width:100%}
+  #entry .entry-admin-link{flex:1 1 auto;min-width:0;padding:9px 12px;font-size:13px;white-space:nowrap;overflow:hidden}
+  #entry .entry-admin-link .eal-txt{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #entry .entry-admin-link .eal-lead{display:none}
+  #entry .entry-notif,#entry .entry-theme-center{flex:0 0 auto}
+}
 #entry .e-cards{gap:14px}
 /* Every entry card is glass. */
 #entry .e-card{
@@ -7331,7 +7341,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=40b2ef293f"></script>
+<script src="cueola-identity.js?v=e02e00ae43"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=fd0bc73200"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>

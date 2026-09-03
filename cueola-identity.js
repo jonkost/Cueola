@@ -1703,7 +1703,30 @@
    * until then the cloud write is refused and the admin is told the change
    * stayed on this device. */
   var HIDDEN_SESSIONS_KEY = 'cueola_hidden_sessions_';
+  // Set once this device's copy is known to mirror the cloud list. Absent on a
+  // device that hid sessions before the rules deploy (or on the older build
+  // that only ever stored locally): those entries are pushed up on the next
+  // signed-in front-door render (syncHiddenSessionsCatchUp).
+  var HIDDEN_SYNCED_KEY = 'cueola_hidden_synced_';
+  // The full list this device meant to save when a cloud write failed
+  // (offline, or rules not yet deployed). Replayed on the next render.
+  var HIDDEN_PENDING_KEY = 'cueola_hidden_pending_';
   var frontDoorShowHidden = false;
+  var hiddenCatchUpDone = {};   // username -> true once the catch-up ran this page load
+  function hiddenKey(prefix, username) { return prefix + String(username || '').toLowerCase(); }
+  function hiddenFlag(prefix, username) { try { return localStorage.getItem(hiddenKey(prefix, username)); } catch (e) { return null; } }
+  function setHiddenFlag(prefix, username, value) {
+    try {
+      if (value == null) localStorage.removeItem(hiddenKey(prefix, username));
+      else localStorage.setItem(hiddenKey(prefix, username), value);
+    } catch (e) {}
+  }
+  function pendingHiddenList(username) {
+    try {
+      var raw = hiddenFlag(HIDDEN_PENDING_KEY, username);
+      return raw ? normalizeHiddenList(JSON.parse(raw)) : null;
+    } catch (e) { return null; }
+  }
   function normalizeHiddenList(raw) {
     if (!Array.isArray(raw)) return [];
     var out = [];
@@ -1732,12 +1755,52 @@
     if (!p) return [];
     if (typeof p === 'string') return localHiddenSessions(p);
     if (!canHideSessions(p)) return [];
+    // A write this device could not land yet is what the person last meant:
+    // show it until the replay succeeds.
+    var pending = pendingHiddenList(p.username);
+    if (pending) return pending;
     if (Array.isArray(p.hiddenSessions)) {
       var cloud = normalizeHiddenList(p.hiddenSessions);
-      if (!p._hiddenLocalOnly) { p._hiddenSynced = true; saveHiddenSessions(p.username, cloud); }
-      return cloud;
+      var local = localHiddenSessions(p.username);
+      var extra = hiddenFlag(HIDDEN_SYNCED_KEY, p.username) === '1' ? []
+        : local.filter(function (c) { return cloud.indexOf(c) < 0; });
+      if (!extra.length) {
+        saveHiddenSessions(p.username, cloud);
+        setHiddenFlag(HIDDEN_SYNCED_KEY, p.username, '1');
+        return cloud;
+      }
+      // Device-only hides from before the sync existed: show the union now,
+      // the catch-up pushes it to the cloud.
+      return normalizeHiddenList(cloud.concat(local));
     }
     return localHiddenSessions(p.username);
+  }
+  // Once per page load per profile: replay a failed write, or lift a device's
+  // pre-sync hides into the cloud so every other device sees them.
+  async function syncHiddenSessionsCatchUp(p) {
+    if (!canHideSessions(p) || hiddenCatchUpDone[p.username]) return;
+    var id = identity(); if (!id || id.username !== p.username) return;
+    if (!fb()) return;   // try again on a later render once the cloud is up
+    hiddenCatchUpDone[p.username] = true;
+    var pending = pendingHiddenList(p.username);
+    var want = null;
+    if (pending) want = pending;
+    else if (hiddenFlag(HIDDEN_SYNCED_KEY, p.username) !== '1') {
+      var local = localHiddenSessions(p.username);
+      var cloud = Array.isArray(p.hiddenSessions) ? normalizeHiddenList(p.hiddenSessions) : [];
+      var extra = local.filter(function (c) { return cloud.indexOf(c) < 0; });
+      if (!extra.length) {
+        if (Array.isArray(p.hiddenSessions)) setHiddenFlag(HIDDEN_SYNCED_KEY, p.username, '1');
+        return;
+      }
+      want = normalizeHiddenList(cloud.concat(local));
+    }
+    if (!want) return;
+    var res = await writeHiddenSessions(want, null);
+    if (res.ok) {
+      say('Your hidden sessions now follow you to every device.');
+      rerenderHiddenSurfaces();
+    }
   }
   function hiddenSessions() {
     var id = identity(); if (!id) return [];
@@ -1761,23 +1824,32 @@
   async function writeHiddenSessions(list, change) {
     var id = identity(); if (!id) return { ok: false };
     var p = (cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
-    // Until the cloud has accepted a list from this profile once, the first
-    // successful write carries the WHOLE device list (codes hidden before the
-    // rules deploy or while offline would otherwise never reach the cloud).
-    var synced = !!(p && p._hiddenSynced);
-    if (p) { p.hiddenSessions = list.slice(); if (!synced) p._hiddenLocalOnly = true; }
+    // Until the cloud has accepted a list from this device once, a write
+    // carries the WHOLE device list (codes hidden before the rules deploy or
+    // while offline would otherwise never reach the cloud). After that the
+    // incremental arrayUnion/arrayRemove keeps two devices from clobbering
+    // each other.
+    var synced = hiddenFlag(HIDDEN_SYNCED_KEY, id.username) === '1' && !pendingHiddenList(id.username);
+    if (p) p.hiddenSessions = list.slice();
     saveHiddenSessions(id.username, list);
     var w = fb();
-    if (!w || !w._updateDoc) return { ok: false, offline: true };
+    if (!w || !w._updateDoc) {
+      setHiddenFlag(HIDDEN_PENDING_KEY, id.username, JSON.stringify(list));
+      return { ok: false, offline: true };
+    }
     try {
       var patch = { lastSeen: Date.now() };
       if (synced && change && change.add && w._arrayUnion) patch.hiddenSessions = w._arrayUnion(change.add);
       else if (synced && change && change.remove && w._arrayRemove) patch.hiddenSessions = w._arrayRemove(change.remove);
       else patch.hiddenSessions = list.slice();
       await w._updateDoc(w._doc(w._db, 'profiles', id.username), patch);
-      if (p) { p._hiddenSynced = true; delete p._hiddenLocalOnly; }
+      setHiddenFlag(HIDDEN_PENDING_KEY, id.username, null);
+      setHiddenFlag(HIDDEN_SYNCED_KEY, id.username, '1');
       return { ok: true };
-    } catch (e) { return { ok: false, error: e }; }
+    } catch (e) {
+      setHiddenFlag(HIDDEN_PENDING_KEY, id.username, JSON.stringify(list));
+      return { ok: false, error: e };
+    }
   }
   async function setSessionHidden(code, hidden) {
     var id = identity(); if (!id) return;
@@ -2002,6 +2074,7 @@
     // classes away makes room for the ones that matter.
     var canHide = canHideSessions(p);
     var hidden = canHide ? hiddenSessionsFor(p) : [];
+    if (canHide) syncHiddenSessionsCatchUp(p);   // once per load: replay failed or pre-sync hides
     var all = (p.sessions || []).slice();
     var visibleCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) < 0; });
     var hiddenCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) >= 0; }).reverse();
