@@ -359,6 +359,28 @@ allowed(await write('profiles/pin.tester',
   ['pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy']), 'admin resets a student PIN (masked patch)');
 setStudent(STUDENT_ID);
 
+// Hidden sessions (2026-09-03, additive): an instructor tucks old class codes
+// out of their own front page and pickers. Admin profiles only, list, <= 100.
+setAuth('owner');   // Admin SDK stand-in seeds an admin code + profile
+allowed(await write('accessCodes/ADMIN2026', { role: 'admin', label: 'Instructors', active: true, createdBy: 'Owner', createdAt: 1 }), 'seed an admin access code');
+allowed(await write('profiles/instructor.one', {
+  username: 'instructor.one', fullName: 'Instructor One', role: 'admin', avatar: { type: 'initials' },
+  theme: 'cool', sessions: ['OLD2607', 'RULES1'], codeUsed: 'ADMIN2026', createdAt: 1, lastSeen: 1,
+  profileId: 'profile_instructor_one', profileAliases: [],
+}), 'seed an instructor profile');
+setAuth('uid_std_1');
+allowed(await write('profiles/instructor.one', { hiddenSessions: ['OLD2607'], lastSeen: 30 },
+  ['hiddenSessions', 'lastSeen']), 'instructor hides a session on their own profile (masked patch)');
+allowed(await write('profiles/instructor.one', { hiddenSessions: [], lastSeen: 31 },
+  ['hiddenSessions', 'lastSeen']), 'instructor clears the hidden list');
+denied(await write('profiles/instructor.one', { hiddenSessions: 'OLD2607', lastSeen: 32 },
+  ['hiddenSessions', 'lastSeen']), 'hiddenSessions must be a list');
+denied(await write('profiles/instructor.one', { hiddenSessions: Array.from({ length: 101 }, (_, i) => 'S' + i), lastSeen: 33 },
+  ['hiddenSessions', 'lastSeen']), 'hiddenSessions capped at 100');
+denied(await write('profiles/alex.smith', { hiddenSessions: ['RULES1'], lastSeen: 34 },
+  ['hiddenSessions', 'lastSeen']), 'a student profile cannot carry hiddenSessions (admin only)');
+setStudent(STUDENT_ID);
+
 // Phase 6 canonical assignments. These are shape/consistency checks; the
 // authorization floor is isCueolaPrincipal() on the subcollection.
 const assignment = {

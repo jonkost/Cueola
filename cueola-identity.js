@@ -1627,7 +1627,7 @@
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'notes\')">Notes</button>' +
         (hasIssue ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry status</button>' : '') +
         (canHideSessions(p)
-          ? (hiddenSessionsFor(p.username).indexOf(String(entry.code).toUpperCase()) >= 0
+          ? (hiddenSessionsFor(p).indexOf(String(entry.code).toUpperCase()) >= 0
             ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.unhideSession(' + codeArg + ')" data-tip="Put this session back in your front page and pickers" aria-label="Unhide ' + esc(entry.code) + '">Unhide</button>'
             : '<button type="button" class="jis-btn" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your front page and pickers on this device" aria-label="Hide ' + esc(entry.code) + '">Hide</button>')
           : '') +
@@ -1691,20 +1691,32 @@
   var FRONT_DOOR_MAX = 6;
   function frontDoorEl() { return document.getElementById('entryFrontDoor'); }
 
-  /* ── Hidden sessions (owner request 2026-09-03) ──
+  /* ── Hidden sessions (owner request 2026-09-03, instructors only) ──
    * An admin's profile keeps every class session it ever ran, so the front
    * door and every session picker fill up with old classes. Hiding tucks a
-   * code out of those lists on THIS device (localStorage per username): the
-   * profile's sessions array is untouched, the session itself is untouched,
-   * and the code still works typed by hand. Stored per device because the
-   * profile document's allowed keys are fixed by the Firestore rules. */
+   * code out of those lists. The list lives on the profile document
+   * (profiles/{username}.hiddenSessions) so it follows the instructor to every
+   * device; the profile's sessions array is untouched, the session itself is
+   * untouched, and the code still works typed by hand. A per-device copy in
+   * localStorage keeps the lists right offline and covers the window before
+   * the additive rules deploy (docs/rules-additive-2026-09-03-hiddensessions.rules):
+   * until then the cloud write is refused and the admin is told the change
+   * stayed on this device. */
   var HIDDEN_SESSIONS_KEY = 'cueola_hidden_sessions_';
   var frontDoorShowHidden = false;
-  function hiddenSessionsFor(username) {
+  function normalizeHiddenList(raw) {
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    raw.forEach(function (c) {
+      var s = String(c || '').trim().toUpperCase();
+      if (s && out.indexOf(s) < 0) out.push(s);
+    });
+    return out;
+  }
+  function localHiddenSessions(username) {
     if (!username) return [];
     try {
-      var raw = JSON.parse(localStorage.getItem(HIDDEN_SESSIONS_KEY + String(username).toLowerCase()) || '[]');
-      return Array.isArray(raw) ? raw.map(function (c) { return String(c || '').toUpperCase(); }).filter(Boolean) : [];
+      return normalizeHiddenList(JSON.parse(localStorage.getItem(HIDDEN_SESSIONS_KEY + String(username).toLowerCase()) || '[]'));
     } catch (e) { return []; }
   }
   function saveHiddenSessions(username, list) {
@@ -1714,36 +1726,81 @@
       if (list.length) localStorage.setItem(key, JSON.stringify(list)); else localStorage.removeItem(key);
     } catch (e) {}
   }
+  // The effective list for a profile: the cloud field when the profile carries
+  // one (mirrored to this device), else whatever this device remembers.
+  function hiddenSessionsFor(p) {
+    if (!p) return [];
+    if (typeof p === 'string') return localHiddenSessions(p);
+    if (!canHideSessions(p)) return [];
+    if (Array.isArray(p.hiddenSessions)) {
+      var cloud = normalizeHiddenList(p.hiddenSessions);
+      if (!p._hiddenLocalOnly) { p._hiddenSynced = true; saveHiddenSessions(p.username, cloud); }
+      return cloud;
+    }
+    return localHiddenSessions(p.username);
+  }
   function hiddenSessions() {
-    var id = identity();
-    return id ? hiddenSessionsFor(id.username) : [];
+    var id = identity(); if (!id) return [];
+    var p = (cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
+    return p ? hiddenSessionsFor(p) : localHiddenSessions(id.username);
   }
   function isSessionHidden(code) {
     return hiddenSessions().indexOf(String(code || '').toUpperCase()) >= 0;
   }
-  // Only admins get the Hide controls (students' lists are instructor-curated),
-  // but the filter itself is safe for anyone: a student simply has no entries.
+  // Instructors only: the rules accept hiddenSessions on admin profiles alone,
+  // and a student's session list is curated by their instructor anyway.
   function canHideSessions(p) { return !!(p && p.role === 'admin'); }
-  function setSessionHidden(code, hidden) {
-    var id = identity(); if (!id) return;
-    var c = String(code || '').trim().toUpperCase(); if (!c) return;
-    var list = hiddenSessionsFor(id.username).filter(function (x) { return x !== c; });
-    if (hidden) list.push(c);
-    saveHiddenSessions(id.username, list);
-    say(hidden ? 'Hidden ' + c + ' from your lists on this device.' : c + ' is back in your lists.');
+  function rerenderHiddenSurfaces() {
     renderFrontDoor();
     renderEntryAccountRow();
     try { if (document.getElementById('identityModal') && document.getElementById('identityModal').classList.contains('on')) renderPortal(); } catch (e) {}
   }
+  // Optimistic: the profile in memory and this device update first so every
+  // list redraws at once, then the cloud write lands (arrayUnion/arrayRemove,
+  // so two devices hiding different codes never clobber each other).
+  async function writeHiddenSessions(list, change) {
+    var id = identity(); if (!id) return { ok: false };
+    var p = (cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
+    // Until the cloud has accepted a list from this profile once, the first
+    // successful write carries the WHOLE device list (codes hidden before the
+    // rules deploy or while offline would otherwise never reach the cloud).
+    var synced = !!(p && p._hiddenSynced);
+    if (p) { p.hiddenSessions = list.slice(); if (!synced) p._hiddenLocalOnly = true; }
+    saveHiddenSessions(id.username, list);
+    var w = fb();
+    if (!w || !w._updateDoc) return { ok: false, offline: true };
+    try {
+      var patch = { lastSeen: Date.now() };
+      if (synced && change && change.add && w._arrayUnion) patch.hiddenSessions = w._arrayUnion(change.add);
+      else if (synced && change && change.remove && w._arrayRemove) patch.hiddenSessions = w._arrayRemove(change.remove);
+      else patch.hiddenSessions = list.slice();
+      await w._updateDoc(w._doc(w._db, 'profiles', id.username), patch);
+      if (p) { p._hiddenSynced = true; delete p._hiddenLocalOnly; }
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e }; }
+  }
+  async function setSessionHidden(code, hidden) {
+    var id = identity(); if (!id) return;
+    var p = (cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
+    if (!canHideSessions(p)) return;
+    var c = String(code || '').trim().toUpperCase(); if (!c) return;
+    var list = hiddenSessionsFor(p).filter(function (x) { return x !== c; });
+    if (hidden) list.push(c);
+    var res = await writeHiddenSessions(list, hidden ? { add: c } : { remove: c });
+    if (res.ok) say(hidden ? 'Hidden ' + c + ' from your lists on every device.' : c + ' is back in your lists.');
+    else if (res.offline) say((hidden ? 'Hidden ' + c : c + ' is back') + ' on this device. It will not follow you to other devices until the cloud is reachable.');
+    else say((hidden ? 'Hidden ' + c : c + ' is back') + ' on this device only. The cloud did not accept the change (the hidden-sessions rules update may not be deployed yet).');
+    rerenderHiddenSurfaces();
+  }
   function hideSession(code) { setSessionHidden(code, true); }
   function unhideSession(code) { setSessionHidden(code, false); }
-  function unhideAllSessions() {
+  async function unhideAllSessions() {
     var id = identity(); if (!id) return;
-    saveHiddenSessions(id.username, []);
     frontDoorShowHidden = false;
-    say('All sessions are back in your lists.');
-    renderFrontDoor();
-    renderEntryAccountRow();
+    var res = await writeHiddenSessions([], null);
+    if (res.ok) say('All sessions are back in your lists on every device.');
+    else say('All sessions are back on this device. The cloud did not accept the change yet.');
+    rerenderHiddenSurfaces();
   }
   function toggleHiddenSessions() {
     frontDoorShowHidden = !frontDoorShowHidden;
@@ -1865,7 +1922,7 @@
     var hiddenRow = document.getElementById('entryHiddenRow');
     if (hiddenRow) {
       if (canHideSessions(p)) {
-        var n = hiddenSessionsFor(p.username).length;
+        var n = hiddenSessionsFor(p).length;
         hiddenRow.innerHTML = '<span>Hidden sessions: <b>' + n + '</b>'
           + (n ? '' : '<br><span style="color:var(--text3)">Use Hide next to a session on the front page to tuck old classes away.</span>') + '</span>'
           + (n ? '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.unhideAllSessions()') + '">Show all</button>' : '');
@@ -1944,7 +2001,7 @@
     // Hidden sessions drop out BEFORE the newest-six cut, so tucking old
     // classes away makes room for the ones that matter.
     var canHide = canHideSessions(p);
-    var hidden = canHide ? hiddenSessionsFor(p.username) : [];
+    var hidden = canHide ? hiddenSessionsFor(p) : [];
     var all = (p.sessions || []).slice();
     var visibleCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) < 0; });
     var hiddenCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) >= 0; }).reverse();
@@ -2138,7 +2195,7 @@
     }
     // Hidden sessions stay out of every picker too (Show setup, join modals,
     // Flowmingo op, Outrangutan); a typed code still works everywhere.
-    var hiddenNow = canHideSessions(p) ? hiddenSessionsFor(p.username) : [];
+    var hiddenNow = canHideSessions(p) ? hiddenSessionsFor(p) : [];
     var codes = (p.sessions || []).filter(function (c) { return hiddenNow.indexOf(String(c).toUpperCase()) < 0; }).reverse();  // newest membership first, hero order
     if (!codes.length) return [];
     var w = fb();

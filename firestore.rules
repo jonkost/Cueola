@@ -233,7 +233,7 @@ service cloud.firestore {
           'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
           'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto',
           'profileId', 'profileAliases', 'keywiLayouts',
-          'pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy'
+          'pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy', 'hiddenSessions'
         ])
         && data.username.lower() == username
         && shortString(data.username, 40)
@@ -254,6 +254,13 @@ service cloud.firestore {
         // a map of layout objects, capped by the 1 MB document limit; the
         // client refuses image-heavy layouts well below that.
         && (!data.keys().hasAny(['keywiLayouts']) || data.keywiLayouts is map)
+        // Hidden sessions (2026-09-03, additive): codes an instructor hides from
+        // their OWN front page and session pickers. Admin profiles only; a
+        // student's list is instructor-curated and has no hide control.
+        && (!data.keys().hasAny(['hiddenSessions'])
+          || (data.role == 'admin'
+            && data.hiddenSessions is list
+            && data.hiddenSessions.size() <= 100))
         // Student PIN (2026-08-11, additive): salt + lowercase-hex SHA-256,
         // set at profile creation and resettable by the student or a super
         // admin. This is a casual-impersonation deterrent, NOT authentication:

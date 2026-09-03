@@ -2483,6 +2483,9 @@ async function rosterRename(username) {
       theme: p.theme || 'cool', sessions: p.sessions || [], codeUsed: p.codeUsed,
       profileId:dashboardProfileId(p), profileAliases:dashboardProfileAliases(p),
       createdAt: Date.now(), lastSeen: p.lastSeen || Date.now() };
+    // An instructor's hidden-session list (admin profiles only per the rules)
+    // follows the rename too.
+    if (p.role === 'admin' && Array.isArray(p.hiddenSessions) && p.hiddenSessions.length) fresh.hiddenSessions = p.hiddenSessions.slice(0, 100);
     // Carry the student PIN forward, or the renamed student is forced to set a
     // new one. The rules require the salt+hash pair together, so copy both (and
     // the metadata) or neither.
