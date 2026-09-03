@@ -4222,7 +4222,7 @@ window.addEventListener('load', ()=>{
 <script type="module">
   import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, arrayRemove, serverTimestamp }
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection, setDoc, getDoc, getDocFromCache, getDocs, getDocsFromCache, onSnapshot, updateDoc, deleteDoc, runTransaction, arrayUnion, arrayRemove, serverTimestamp, disableNetwork, enableNetwork }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -4272,12 +4272,24 @@ window.addEventListener('load', ()=>{
 
   // Same persistent multi-tab cache as the main app, so a dashboard tab open
   // beside the rundown/output tabs shares one IndexedDB store instead of
-  // fighting over persistence ownership.
+  // fighting over persistence ownership. EXCEPT Safari (owner 2026-08-30):
+  // Safari's IndexedDB stalls for seconds on the multi-tab lease
+  // coordination, and sits wedged after a Clear History until the browser
+  // restarts. On the classroom dashboard that read as hit-and-miss, slow
+  // sign-in. The dashboard is an online admin surface, so Safari runs it on
+  // the in-memory cache (straight-to-server reads); Chrome and the show
+  // surfaces keep the offline shell.
+  const safariNoPersist = /safari/i.test(navigator.userAgent) && !/chrome|crios|android|edg|fxios/i.test(navigator.userAgent);
   let db;
   try {
-    db = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    });
+    if (safariNoPersist) {
+      db = getFirestore(app);
+      console.info('Safari detected: dashboard Firestore runs on the in-memory cache for reliable sign-in.');
+    } else {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    }
   } catch (err) {
     console.warn('Persistent Firestore cache unavailable, falling back to memory cache.', err);
     db = getFirestore(app);
@@ -4303,6 +4315,13 @@ window.addEventListener('load', ()=>{
   window._arrayUnion = arrayUnion;
   window._arrayRemove = arrayRemove;
   window._serverTimestamp = serverTimestamp;
+  // Sign-in resilience: cueola-admin-auth.js cycles the Firestore network
+  // when the admins/{uid} read hangs past its 10s leash (a zombie stream
+  // after sleep/wake or a Wi-Fi switch). index.html always exposed these;
+  // without them the dashboard, the page instructors actually sign in on,
+  // silently skipped the kick and retries kept hitting the dead channel.
+  window._disableNetwork = () => disableNetwork(db);
+  window._enableNetwork = () => enableNetwork(db);
   // v2.1 admin accounts (D1): Auth handles for cueola-admin-auth.js.
   const adminAuth = getAuth(app);
   const useAuthEmulator = ['localhost','127.0.0.1','::1'].includes(location.hostname)

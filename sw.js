@@ -252,7 +252,12 @@ const versionSignature = SHELL_ASSETS
 // is precached unversioned; page sprites re-inlined in index.html + dashboard.html).
 // 45->46: time-entry audit — sunrise/sunset placeholders read as preset times;
 // now "--:--" like every empty time field (index.html markup only).
-const WORKER_SCHEMA = '46';
+// 46->47: dashboard.html Safari sign-in reliability — Safari runs the
+// dashboard on the in-memory Firestore cache (its IndexedDB stalls made
+// sign-in hit-and-miss, worse after a Clear History), and the dashboard now
+// exposes the disable/enableNetwork handles so the sign-in timeout's
+// zombie-channel kick works there too (page-HTML-only change).
+const WORKER_SCHEMA = '47';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
