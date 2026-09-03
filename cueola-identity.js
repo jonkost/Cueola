@@ -1626,6 +1626,11 @@
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')">Open Cueola</button>' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'notes\')">Notes</button>' +
         (hasIssue ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry status</button>' : '') +
+        (canHideSessions(p)
+          ? (hiddenSessionsFor(p.username).indexOf(String(entry.code).toUpperCase()) >= 0
+            ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.unhideSession(' + codeArg + ')" data-tip="Put this session back in your front page and pickers" aria-label="Unhide ' + esc(entry.code) + '">Unhide</button>'
+            : '<button type="button" class="jis-btn" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your front page and pickers on this device" aria-label="Hide ' + esc(entry.code) + '">Hide</button>')
+          : '') +
         '<button type="button" class="jis-btn jis-remove" onclick="CueolaIdentity.portalRemoveCode(' + codeArg + ')" data-tip="Remove this session from your profile" aria-label="Remove ' + esc(entry.code) + ' from your profile">Remove</button>' +
         '</div></div>';
     }).join('');
@@ -1685,14 +1690,78 @@
   var frontDoorGen = 0;
   var FRONT_DOOR_MAX = 6;
   function frontDoorEl() { return document.getElementById('entryFrontDoor'); }
-  function frontDoorLinks(signedIn) {
+
+  /* ── Hidden sessions (owner request 2026-09-03) ──
+   * An admin's profile keeps every class session it ever ran, so the front
+   * door and every session picker fill up with old classes. Hiding tucks a
+   * code out of those lists on THIS device (localStorage per username): the
+   * profile's sessions array is untouched, the session itself is untouched,
+   * and the code still works typed by hand. Stored per device because the
+   * profile document's allowed keys are fixed by the Firestore rules. */
+  var HIDDEN_SESSIONS_KEY = 'cueola_hidden_sessions_';
+  var frontDoorShowHidden = false;
+  function hiddenSessionsFor(username) {
+    if (!username) return [];
+    try {
+      var raw = JSON.parse(localStorage.getItem(HIDDEN_SESSIONS_KEY + String(username).toLowerCase()) || '[]');
+      return Array.isArray(raw) ? raw.map(function (c) { return String(c || '').toUpperCase(); }).filter(Boolean) : [];
+    } catch (e) { return []; }
+  }
+  function saveHiddenSessions(username, list) {
+    if (!username) return;
+    try {
+      var key = HIDDEN_SESSIONS_KEY + String(username).toLowerCase();
+      if (list.length) localStorage.setItem(key, JSON.stringify(list)); else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function hiddenSessions() {
+    var id = identity();
+    return id ? hiddenSessionsFor(id.username) : [];
+  }
+  function isSessionHidden(code) {
+    return hiddenSessions().indexOf(String(code || '').toUpperCase()) >= 0;
+  }
+  // Only admins get the Hide controls (students' lists are instructor-curated),
+  // but the filter itself is safe for anyone: a student simply has no entries.
+  function canHideSessions(p) { return !!(p && p.role === 'admin'); }
+  function setSessionHidden(code, hidden) {
+    var id = identity(); if (!id) return;
+    var c = String(code || '').trim().toUpperCase(); if (!c) return;
+    var list = hiddenSessionsFor(id.username).filter(function (x) { return x !== c; });
+    if (hidden) list.push(c);
+    saveHiddenSessions(id.username, list);
+    say(hidden ? 'Hidden ' + c + ' from your lists on this device.' : c + ' is back in your lists.');
+    renderFrontDoor();
+    renderEntryAccountRow();
+    try { if (document.getElementById('identityModal') && document.getElementById('identityModal').classList.contains('on')) renderPortal(); } catch (e) {}
+  }
+  function hideSession(code) { setSessionHidden(code, true); }
+  function unhideSession(code) { setSessionHidden(code, false); }
+  function unhideAllSessions() {
+    var id = identity(); if (!id) return;
+    saveHiddenSessions(id.username, []);
+    frontDoorShowHidden = false;
+    say('All sessions are back in your lists.');
+    renderFrontDoor();
+    renderEntryAccountRow();
+  }
+  function toggleHiddenSessions() {
+    frontDoorShowHidden = !frontDoorShowHidden;
+    renderFrontDoor();
+  }
+
+  function frontDoorLinks(signedIn, hiddenCount) {
+    var hiddenLink = hiddenCount
+      ? '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.toggleHiddenSessions()">'
+        + hiddenCount + ' hidden &middot; ' + (frontDoorShowHidden ? 'Tuck away' : 'Show') + '</button>'
+      : '';
     return '<div class="fd-links">'
       + (signedIn
         ? '<button type="button" class="fd-link fd-link-setup" onclick="openWorkspaceLauncher()">Show setup</button><span>&middot;</span>'
           + '<button type="button" class="fd-link" onclick="CueolaIdentity.openHub()">All sessions &amp; notes</button><span>&middot;</span>'
         : '<button type="button" class="fd-link" onclick="CueolaIdentity.startCreate()">New here? Create your profile</button><span>&middot;</span>')
       + '<button type="button" class="fd-link" onclick="openJoinSession()">Have a show code?</button>'
-      + (signedIn ? '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.signOut()">Sign out</button>' : '')
+      + (signedIn ? hiddenLink + '<span>&middot;</span><button type="button" class="fd-link" onclick="CueolaIdentity.signOut()">Sign out</button>' : '')
       + '</div>';
   }
   function frontDoorInitials(name) {
@@ -1715,15 +1784,97 @@
   // The toolbar profile button shows YOUR icon once you have one; the generic
   // person symbol is only for the signed-out state (owner decision 2026-08-03).
   function refreshEntryProfileBtn() {
+    renderEntryAccountRow();
     var btn = document.getElementById('entryProfileBtn');
     if (!btn) return;
     var id = identity();
     var p = (id && cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
     if (!p) {
       btn.innerHTML = '<span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span>';
+      var locked = !id && storedIdentity();
+      btn.setAttribute('data-tip', locked ? 'Finish signing in' : 'Sign in');
+      btn.setAttribute('aria-label', locked ? 'Finish signing in' : 'Sign in');
       return;
     }
     btn.innerHTML = avatarChipHTML(p, 'pb-note-avatar pb-av-sm');
+    btn.setAttribute('data-tip', 'Open your profile');
+    btn.setAttribute('aria-label', 'Your profile');
+  }
+  // The toolbar profile button (owner request 2026-09-03): signed out it opens
+  // sign-in straight away instead of the create/sign-in chooser; a locked
+  // device (stored identity, PIN or password still owed) jumps to the gate on
+  // the front door card; signed in it opens the portal as before.
+  function entryProfileTap() {
+    if (identity()) { openHub(); return; }
+    if (storedIdentity()) {
+      var el = frontDoorEl();
+      if (el) {
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        var field = el.querySelector('input');
+        if (field) { try { field.focus({ preventScroll: true }); } catch (e) { field.focus(); } }
+        el.classList.add('fd-attention');
+        setTimeout(function () { el.classList.remove('fd-attention'); }, 900);
+      }
+      return;
+    }
+    openSignIn();
+  }
+  // The account row inside the front-page settings panel: who is signed in,
+  // with sign in / sign out right there, plus the hidden-session count for
+  // admins. Re-rendered on every identity transition through
+  // refreshEntryProfileBtn (which renderFrontDoor always calls).
+  function renderEntryAccountRow() {
+    var row = document.getElementById('entryAccountRow');
+    if (!row) return;
+    var id = identity();
+    var p = (id && cachedProfile && cachedProfile.username === id.username) ? cachedProfile : null;
+    var closeThen = function (fn) { return 'try{closeEntryThemes()}catch(e){};' + fn; };
+    var html;
+    if (p) {
+      html = avatarChipHTML(p, 'fd-ava')
+        + '<div class="entry-account-text"><div class="entry-account-name">' + esc(p.fullName || p.username) + '</div>'
+        + '<div class="entry-account-sub">@' + esc(p.username) + (p.role === 'admin' ? ' &middot; admin' : '') + '</div></div>'
+        + '<div class="entry-account-actions">'
+        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.openHub()') + '">Profile</button>'
+        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.signOut()') + '">Sign out</button>'
+        + '</div>';
+    } else if (id) {
+      html = '<span class="sf-symbol ea-ico" data-symbol="action.profile" aria-hidden="true"></span>'
+        + '<div class="entry-account-text"><div class="entry-account-name">@' + esc(id.username) + '</div>'
+        + '<div class="entry-account-sub">Loading your profile&hellip;</div></div>'
+        + '<div class="entry-account-actions"><button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.signOut()') + '">Sign out</button></div>';
+    } else if (storedIdentity()) {
+      html = '<span class="sf-symbol ea-ico" data-symbol="action.lock" aria-hidden="true"></span>'
+        + '<div class="entry-account-text"><div class="entry-account-name">@' + esc(storedIdentity().username) + '</div>'
+        + '<div class="entry-account-sub">Sign-in not finished on this device</div></div>'
+        + '<div class="entry-account-actions">'
+        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.entryProfileTap()') + '">Finish sign-in</button>'
+        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.frontDoorNotMe()') + '">Not me</button>'
+        + '</div>';
+    } else {
+      html = '<span class="sf-symbol ea-ico" data-symbol="action.profile" aria-hidden="true"></span>'
+        + '<div class="entry-account-text"><div class="entry-account-name">Not signed in</div>'
+        + '<div class="entry-account-sub">Sign in to see your sessions and notes</div></div>'
+        + '<div class="entry-account-actions">'
+        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.openSignIn()') + '">Sign in</button>'
+        + '</div>';
+    }
+    row.innerHTML = html;
+    // Admins only: how many sessions are tucked away on this device, with a
+    // one-tap way back. Its own sibling element so the account row stays simple.
+    var hiddenRow = document.getElementById('entryHiddenRow');
+    if (hiddenRow) {
+      if (canHideSessions(p)) {
+        var n = hiddenSessionsFor(p.username).length;
+        hiddenRow.innerHTML = '<span>Hidden sessions: <b>' + n + '</b>'
+          + (n ? '' : '<br><span style="color:var(--text3)">Use Hide next to a session on the front page to tuck old classes away.</span>') + '</span>'
+          + (n ? '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.unhideAllSessions()') + '">Show all</button>' : '');
+        hiddenRow.hidden = false;
+      } else {
+        hiddenRow.innerHTML = '';
+        hiddenRow.hidden = true;
+      }
+    }
   }
   function frontDoorSignedOut(el, note) {
     el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
@@ -1790,29 +1941,52 @@
       cachedProfile = p;
       announceIdentityChange();  // restore-on-boot: profile is now known
     }
-    var codes = (p.sessions || []).slice(-FRONT_DOOR_MAX).reverse();
+    // Hidden sessions drop out BEFORE the newest-six cut, so tucking old
+    // classes away makes room for the ones that matter.
+    var canHide = canHideSessions(p);
+    var hidden = canHide ? hiddenSessionsFor(p.username) : [];
+    var all = (p.sessions || []).slice();
+    var visibleCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) < 0; });
+    var hiddenCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) >= 0; }).reverse();
+    var codes = visibleCodes.slice(-FRONT_DOOR_MAX).reverse();
+    var showHiddenList = canHide && frontDoorShowHidden && hiddenCodes.length > 0;
+    var emptyMsg = canHide && hiddenCodes.length
+      ? '<div class="ec-desc">Every session on your profile is hidden. Use the hidden link below to bring one back.</div>'
+      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>';
     el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
       + frontDoorHead(p)
       + '<div class="fd-sessions" id="fd-sessions">'
-      + (codes.length ? '<div class="fd-loading">Checking your sessions&hellip;</div>'
-                      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>')
+      + (codes.length || showHiddenList ? '<div class="fd-loading">Checking your sessions&hellip;</div>' : emptyMsg)
       + '</div>'
-      + frontDoorLinks(true);
+      + frontDoorLinks(true, canHide ? hiddenCodes.length : 0);
     refreshEntryProfileBtn();
-    if (!codes.length) return;
+    if (!codes.length && !showHiddenList) return;
     var w = fb(); if (!w) return;
-    var metas = await Promise.all(codes.map(function (code) { return frontDoorSessionMeta(w, code); }));
+    var listed = showHiddenList ? codes.concat(hiddenCodes) : codes;
+    var metas = await Promise.all(listed.map(function (code) { return frontDoorSessionMeta(w, code); }));
     if (gen !== frontDoorGen) return;
     var wrap = document.getElementById('fd-sessions'); if (!wrap) return;
-    var rows = metas.filter(Boolean).map(function (m) {
+    var sessionRow = function (m, isHidden) {
       var codeArg = JSON.stringify(m.code).replace(/"/g, '&quot;');
-      return '<button type="button" class="fd-session" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')" title="Open this session">'
+      var btn = '<button type="button" class="fd-session" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')" title="Open this session">'
         + '<span class="fd-code">' + esc(m.code) + '</span>'
         + '<span class="fd-show">' + esc(m.showName || 'Untitled show') + '</span>'
         + '<span class="fd-open">Open</span></button>';
+      if (!canHide) return btn;
+      var toggle = isHidden
+        ? '<button type="button" class="fd-hide" onclick="CueolaIdentity.unhideSession(' + codeArg + ')" data-tip="Put this session back in your lists" aria-label="Unhide ' + esc(m.code) + '">Unhide</button>'
+        : '<button type="button" class="fd-hide" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your lists on this device" aria-label="Hide ' + esc(m.code) + '">Hide</button>';
+      return '<div class="fd-session-row' + (isHidden ? ' fd-hidden-row' : '') + '">' + btn + toggle + '</div>';
+    };
+    var rows = [];
+    var hiddenHeaderDone = false;
+    metas.forEach(function (m, i) {
+      if (!m) return;
+      var isHidden = i >= codes.length;
+      if (isHidden && !hiddenHeaderDone) { rows.push('<div class="fd-hidden-note">Hidden on this device</div>'); hiddenHeaderDone = true; }
+      rows.push(sessionRow(m, isHidden));
     });
-    wrap.innerHTML = rows.length ? rows.join('')
-      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>';
+    wrap.innerHTML = rows.length ? rows.join('') : emptyMsg;
   }
   async function frontDoorSignIn() {
     var el = document.getElementById('fd-username');
@@ -1962,7 +2136,10 @@
       cachedProfile = p;
       announceIdentityChange();  // same restore-on-boot announce the hero makes
     }
-    var codes = (p.sessions || []).slice().reverse();  // newest membership first, hero order
+    // Hidden sessions stay out of every picker too (Show setup, join modals,
+    // Flowmingo op, Outrangutan); a typed code still works everywhere.
+    var hiddenNow = canHideSessions(p) ? hiddenSessionsFor(p.username) : [];
+    var codes = (p.sessions || []).filter(function (c) { return hiddenNow.indexOf(String(c).toUpperCase()) < 0; }).reverse();  // newest membership first, hero order
     if (!codes.length) return [];
     var w = fb();
     if (!w) return codes.map(function (code) { return { code: code, name: '' }; });
@@ -1996,6 +2173,9 @@
     renderPortal: renderPortal, portalAddCode: portalAddCode, portalRemoveCode: portalRemoveCode, enterSession: enterSession,
     sessionChoices: sessionChoices, renderSessionChoiceRows: renderSessionChoiceRows,
     renderFrontDoor: renderFrontDoor, frontDoorSignIn: frontDoorSignIn,
+    entryProfileTap: entryProfileTap, renderEntryAccountRow: renderEntryAccountRow,
+    hideSession: hideSession, unhideSession: unhideSession, unhideAllSessions: unhideAllSessions,
+    toggleHiddenSessions: toggleHiddenSessions, isSessionHidden: isSessionHidden, hiddenSessions: hiddenSessions,
     // Sign-in gate (student PIN, set-PIN, admin password) handlers, front door + modal.
     frontDoorNotMe: frontDoorNotMe,
     frontDoorSubmitPin: frontDoorSubmitPin, frontDoorSubmitNewPin: frontDoorSubmitNewPin, frontDoorSubmitPassword: frontDoorSubmitPassword,

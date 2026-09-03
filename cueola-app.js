@@ -5538,7 +5538,7 @@ function rundownBeatKey(beat) {
 
 function buildBeatPatch(before, after) {
   const patch = {};
-  ['style','info','notes','min','sec','done','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
+  ['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
     if (!rundownValueEqual(before?.[key], after?.[key])) patch[key] = cloneRundownValue(after?.[key]);
   });
   const cuePatch = {};
@@ -7398,7 +7398,7 @@ function renderRundown() {
           <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
           <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
         </div>` : '';
-      html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
+      html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}${rowTintClass(b)}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
         <td class="seg-td" colspan="${colOrder.length + 4}">
           <div class="seg-row-inner">
             <span class="seg-collapse-icon">${sfIcon(activeSegCollapsed ? 'action.collapse' : 'action.expand')}</span>
@@ -7428,7 +7428,7 @@ function renderRundown() {
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" data-tip="Add row after">+ After</button>
       </div>` : '';
     const helperCls = isHelperBeat(b) ? ` rundown-row-helper helper-${b.helperRole}` : '';
-    html += `<tr class="cue-row${editMode?' edit-mode-row':''}${helperCls}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
+    html += `<tr class="cue-row${editMode?' edit-mode-row':''}${helperCls}${rowTintClass(b)}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
       <td class="cd cd-drag" data-tip="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
       <td class="cd cd-num">${cueNum}</td>
       <td class="cd cd-pad">
@@ -7586,6 +7586,40 @@ function findPlaybackHelperRow(parentId, role) {
 function helperRoleTagHTML(b) {
   if (!isHelperBeat(b)) return '';
   return `<span class="helper-role-tag helper-tag-${b.helperRole}">${b.helperRole === 'prep' ? 'PREP' : 'OUT'}</span>`;
+}
+
+// Row highlights (owner request 2026-09-03): any row or segment can carry a
+// color of the user's choosing. It is a plain per-beat field (`color`), synced
+// like info/notes, drawn as a tint in the rundown and Live tables and as a
+// pale band in the PDF export. Meaning is up to the crew: no fixed legend.
+const ROW_TINTS = [
+  { id:'red',    label:'Red',    color:'#ff453a', print:'#fde3e1' },
+  { id:'orange', label:'Orange', color:'#ff9f0a', print:'#ffe9cc' },
+  { id:'yellow', label:'Yellow', color:'#ffd60a', print:'#fff6c2' },
+  { id:'green',  label:'Green',  color:'#30d158', print:'#dcf5e3' },
+  { id:'teal',   label:'Teal',   color:'#40c8e0', print:'#d9f3f8' },
+  { id:'blue',   label:'Blue',   color:'#0a84ff', print:'#dbe9ff' },
+  { id:'purple', label:'Purple', color:'#bf5af2', print:'#eedcfa' },
+  { id:'pink',   label:'Pink',   color:'#ff375f', print:'#ffdde5' },
+  { id:'gray',   label:'Gray',   color:'#8e8e93', print:'#e8e8ea' },
+];
+function rowTintDef(b) {
+  const id = String(b?.color || '').trim();
+  return id ? (ROW_TINTS.find(t => t.id === id) || null) : null;
+}
+function rowTintClass(b) {
+  const t = rowTintDef(b);
+  return t ? ` row-tint-${t.id}` : '';
+}
+function rowTintPrintStyle(b) {
+  const t = rowTintDef(b);
+  return t ? ` style="background:${t.print}"` : '';
+}
+function rowTintChipsHTML(current) {
+  const none = `<button type="button" class="chip tint-chip${!current ? ' sel' : ''}" onclick="edSetTint('',this)" data-tip="No highlight">None</button>`;
+  return `<div class="field"><label class="field-lbl">Highlight <span style="color:var(--text3)">(optional)</span></label>
+    <div class="chip-grid tint-grid">${none}${ROW_TINTS.map(t => `<button type="button" class="chip tint-chip${current === t.id ? ' sel' : ''}" style="--row-tint:${t.color}" onclick="edSetTint('${t.id}',this)" data-tip="${t.label}" aria-label="${t.label} highlight"><span class="tint-dot"></span></button>`).join('')}</div>
+    <div class="field-hint">Color a row any way your crew reads it. The tint shows in the rundown, Live, and the exported rundown.</div></div>`;
 }
 
 function removeRow(id) {
@@ -10116,12 +10150,14 @@ function openEdit(id) {
   const b = beats.find(x=>x.id===id); if (!b) return;
   editId = id;
   editStyle = b.style||'flex';
+  editColor = rowTintDef(b) ? rowTintDef(b).id : '';
   document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit Segment Marker' : 'Edit Row';
   let h;
   if (b.style === 'segment') {
     h = `
       <div class="field"><label class="field-lbl">Section Label</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
-      <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>`;
+      <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
+      ${rowTintChipsHTML(editColor)}`;
   } else {
     h = `
       <div class="field"><label class="field-lbl">Name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80"></div>
@@ -10136,7 +10172,8 @@ function openEdit(id) {
         <div class="chip-grid">
           <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
           <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
-        </div></div>`;
+        </div></div>
+      ${rowTintChipsHTML(editColor)}`;
   }
   document.getElementById('editFields').innerHTML = h;
   showOverlay('editOv');
@@ -10145,7 +10182,14 @@ function openEdit(id) {
 
 function edSetStyle(s, el) {
   editStyle = s;
-  document.querySelectorAll('#editFields .chip').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('#editFields .chip:not(.tint-chip)').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+let editColor = '';
+function edSetTint(id, el) {
+  editColor = ROW_TINTS.some(t => t.id === id) ? id : '';
+  document.querySelectorAll('#editFields .tint-chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel');
 }
 
@@ -10159,6 +10203,7 @@ function saveEdit() {
   const b = beats.find(x=>x.id===editId); if (!b) return;
   b.info  = document.getElementById('ed-info').value.trim()||b.info;
   b.notes = document.getElementById('ed-notes').value.trim();
+  if (editColor) b.color = editColor; else delete b.color;
   if (b.style !== 'segment') {
     b.min = parseInt(document.getElementById('ed-min')?.value)||0;
     b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
@@ -11929,7 +11974,7 @@ function renderLive() {
 
     if (b.style === 'segment') {
       const colSpan = 4 + showCols.length;
-      html += `<tr class="live-segment-header">
+      html += `<tr class="live-segment-header${rowTintClass(b)}">
         <td colspan="${colSpan}" class="live-seg-cell">
           <span class="live-seg-label">${esc(b.info || 'Segment')}</span>
           ${b.notes ? `<span class="live-seg-note">${esc(b.notes)}</span>` : ''}
@@ -11948,6 +11993,7 @@ function renderLive() {
       isCur ? 'live-row-active live-row-current' : '',
       i === selectedIdx ? 'live-row-selected' : '',
       isHelperBeat(b) ? `live-row-helper helper-${b.helperRole}` : '',
+      rowTintClass(b).trim(),
     ].filter(Boolean).join(' ');
     const goButton = canJump && !isCur && !isDisabled && execution.status !== 'failed'
       ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Activate row ${i + 1}" aria-label="GO row ${i + 1}">GO</button>`
@@ -23877,12 +23923,12 @@ function rundownPreviewTableHTML(snapshot=null) {
       <td>${fmtDur(b)}</td>
       <td class="cue-total">${total}</td>`;
     if (!allColumns) {
-      return `<tr>${lead}
+      return `<tr${rowTintPrintStyle(b)}>${lead}
       <td>${combinedCues(b)}</td>
       <td class="cue-script">${cellFor(b,'script')}</td>
     </tr>`;
     }
-    return `<tr>${lead}
+    return `<tr${rowTintPrintStyle(b)}>${lead}
       <td class="cue-video">${cellFor(b,'video')}</td>
       <td class="cue-audio">${cellFor(b,'audio')}</td>
       <td class="cue-playback">${cellFor(b,'playback')}</td>

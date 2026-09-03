@@ -428,6 +428,22 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cue-row.type-lighting td:first-child{border-left-color:var(--cue-lighting)}
 .cue-row.type-playback td:first-child{border-left-color:var(--cue-playback)}
 .cue-row.type-gfx td:first-child{border-left-color:var(--cue-gfx)}
+/* Row highlights (2026-09-03): a per-row color the crew picks in Edit Row.
+   One custom property per tint; the tint mixes into the theme background so
+   it reads in every theme. Placed after the zebra/hover/type rules so the
+   chosen color wins, and the hover just deepens it. */
+.row-tint-red{--row-tint:#ff453a}.row-tint-orange{--row-tint:#ff9f0a}.row-tint-yellow{--row-tint:#ffd60a}
+.row-tint-green{--row-tint:#30d158}.row-tint-teal{--row-tint:#40c8e0}.row-tint-blue{--row-tint:#0a84ff}
+.row-tint-purple{--row-tint:#bf5af2}.row-tint-pink{--row-tint:#ff375f}.row-tint-gray{--row-tint:#8e8e93}
+.cue-row[class*="row-tint-"] td{background:color-mix(in srgb,var(--row-tint) 16%,var(--bg))}
+.cue-row[class*="row-tint-"] td:first-child{border-left-color:var(--row-tint)}
+.cue-row[class*="row-tint-"]:hover td{background:color-mix(in srgb,var(--row-tint) 24%,var(--bg))}
+.cue-row.segment-row[class*="row-tint-"] td{background:transparent}
+.cue-row.segment-row[class*="row-tint-"] .seg-row-inner{background:linear-gradient(90deg,color-mix(in srgb,var(--row-tint) 26%,var(--s2)),color-mix(in srgb,var(--row-tint) 10%,var(--s2)));border-left-color:var(--row-tint)}
+.tint-grid{align-items:center}
+.tint-chip{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:5px 9px}
+.tint-chip .tint-dot{width:16px;height:16px;border-radius:50%;background:var(--row-tint);box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 22%,transparent) inset}
+.tint-chip.sel{border-color:var(--row-tint,var(--accent));background:color-mix(in srgb,var(--row-tint,var(--accent)) 18%,transparent);color:var(--text)}
 .cue-row.type-script td:first-child{border-left-color:var(--cue-script)}
 
 /* Script text multi-line */
@@ -469,6 +485,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .live-grid th,.live-grid td{border-bottom: 1px solid transparent;vertical-align:middle}
 .live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
 .live-grid td{padding:8px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
+/* Row highlights carry into Live as a quieter tint; the ON AIR and selected
+   rules below still win, so the running row never loses its accent. */
+.live-grid tr[class*="row-tint-"] td{background:color-mix(in srgb,var(--row-tint) 14%,var(--bg))}
+.live-grid tr[class*="row-tint-"] td:first-child{box-shadow:inset 3px 0 var(--row-tint)}
+.live-grid tr.live-segment-header[class*="row-tint-"] .live-seg-cell{background:color-mix(in srgb,var(--row-tint) 18%,var(--bg))}
 /* Owner reversal (Aug 2026): the ON AIR row is deliberately the DOMINANT row.
    It is taller, its name and clock are larger, and its tint and red rail are
    stronger than every other row. Do not flatten it back to uniform height. */
@@ -5124,11 +5145,15 @@ input.pt-range::-moz-range-thumb,
         <button class="tbtn tbtn-ghost icon-only" id="notifBellBtn" onclick="openProductionNotesShortcut(event)" data-tip="Open production notes" aria-label="Production Notes"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span class="tbtn-badge" id="notifUnread" hidden></span></button>
       </div>
       <div class="entry-notif">
-        <button class="tbtn tbtn-ghost icon-only" id="entryProfileBtn" onclick="CueolaIdentity.openHub()" data-tip="Open your profile" aria-label="Your profile"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span></button>
+        <button class="tbtn tbtn-ghost icon-only" id="entryProfileBtn" onclick="CueolaIdentity.entryProfileTap()" data-tip="Sign in" aria-label="Sign in or open your profile"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span></button>
       </div>
       <div class="entry-theme-center">
-        <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" data-tip="Change the theme" aria-label="Theme"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
+        <button class="tbtn tbtn-ghost icon-only" id="entryThemeGear" onclick="toggleEntryThemes()" data-tip="Settings and theme" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
         <div class="entry-theme-panel" id="entryThemePanel" hidden>
+          <!-- Account row: sign in / sign out right from the front-page settings.
+               CueolaIdentity.renderEntryAccountRow() owns the contents. -->
+          <div class="entry-account" id="entryAccountRow"></div>
+          <div class="entry-account-hidden" id="entryHiddenRow" hidden></div>
           <details class="themes-submenu">
             <summary class="themes-row"><span class="tr-ico" aria-hidden="true"></span><span class="tr-lbl">Themes</span><span class="tr-val">Choose<span class="tr-chev" aria-hidden="true">›</span></span></summary>
           <div class="theme-grid">
@@ -7075,6 +7100,30 @@ input.pt-range::-moz-range-thumb,
 #flowOp .fd-open { color:var(--pt-accent); opacity:.7; }
 #flowOp .join-yours-label { color:var(--pt-accent); }
 @media (pointer:coarse) { .fd-link, .fd-session, .jis-btn { min-height:44px; } }
+/* Hidden sessions (2026-09-03): an admin can tuck old class sessions out of
+   the front-door list and every session picker. The row wraps the session
+   button so the Hide control is a sibling, never a button inside a button. */
+.fd-session-row { display:flex; align-items:stretch; gap:6px; width:100%; }
+.fd-session-row .fd-session { flex:1; min-width:0; }
+.fd-session-row.fd-hidden-row .fd-session { opacity:.55; }
+.fd-hide { flex:0 0 auto; background:var(--s2); border:1px solid transparent; border-radius:var(--ui-radius-control,12px); padding:0 11px; color:var(--text3); font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; transition:color var(--dur-fast,.12s) var(--ease,ease), background var(--dur-fast,.12s) var(--ease,ease); }
+.fd-hide:hover { color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--s2)); }
+.fd-hidden-note { width:100%; font-size:11.5px; color:var(--text3); margin-top:6px; }
+/* Profile button tapped while the sign-in gate is still owed: draw the eye to the card. */
+#entry #entryFrontDoor.fd-attention { animation:fdAttention .9s var(--ease,ease) both; }
+@keyframes fdAttention { 0%,100% { box-shadow:0 0 0 0 transparent; } 35% { box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 55%,transparent); } }
+/* Front-page settings: account row (sign in / out) and the hidden-session count. */
+.entry-account { display:flex; align-items:center; gap:10px; padding:6px var(--settings-row-pad-x,8px) 10px; margin-bottom:6px; border-bottom:1px solid color-mix(in srgb,var(--text) 10%,transparent); }
+.entry-account .fd-ava, .entry-account .pb-note-avatar { flex:0 0 auto; }
+.entry-account .ea-ico { font-size:22px; color:var(--text3); }
+.entry-account-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.entry-account-name { font-size:13px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.entry-account-sub { font-size:11.5px; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.entry-account-actions { display:flex; gap:6px; flex:0 0 auto; }
+.entry-account-actions .jis-btn { min-height:30px; padding:4px 10px; font-size:12px; }
+.entry-account-hidden { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px var(--settings-row-pad-x,8px); margin:-2px 0 4px; font-size:12px; color:var(--text2); border-bottom:1px solid color-mix(in srgb,var(--text) 10%,transparent); }
+.entry-account-hidden .jis-btn { min-height:28px; padding:3px 9px; font-size:11.5px; }
+@media (pointer:coarse) { .fd-hide, .entry-account-actions .jis-btn { min-height:44px; } }
 
 /* generated-markup utilities */
 .u-muted{color:var(--text3)}
@@ -7282,7 +7331,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=75dc3942e7"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=047f611aaf"></script>
+<script src="cueola-identity.js?v=ea232a92ee"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=fd0bc73200"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -7293,7 +7342,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=fb316ac66b"></script>
+<script src="cueola-app.js?v=6a264b0438"></script>
 <script src="outrangutan/outrangutan.js?v=0122e667ce"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=53b3859b7c"></script>
