@@ -668,12 +668,32 @@
     });
   }
 
+  // Pre-live grant safety (2026-09-03): a grant only demotes the admin device
+  // while its holder is actually PRESENT. Handing the rundown to a student
+  // from the Build screen before their laptop connects used to strand the
+  // owner (GO dark, nobody calling) until a take-back; the grant now waits
+  // as a designation and becomes the live caller the moment that username
+  // shows up in presence. Inputs are plain values so this runs in tests:
+  //   grantUsername    the session doc's controlGrant.username ('' = none)
+  //   myUsername       this device's profile username
+  //   presentUsernames usernames of ACTIVE presence entries
+  function resolveGrantHeldElsewhere(input) {
+    input = input || {};
+    var grant = String(input.grantUsername || '').trim().toLowerCase();
+    if (!grant) return false;
+    var me = String(input.myUsername || '').trim().toLowerCase();
+    if (me && me === grant) return false;
+    var present = Array.isArray(input.presentUsernames) ? input.presentUsernames : [];
+    return present.some(function (name) { return String(name || '').trim().toLowerCase() === grant; });
+  }
+
   return Object.freeze({
     LIFECYCLE_STATES: LIFECYCLE_STATES,
     SUBSYSTEM_STATUSES: SUBSYSTEM_STATUSES,
     RUN_EXECUTION_STATES: RUN_EXECUTION_STATES,
     firstPlayableCue: firstPlayableCue,
     resolveCallerState: resolveCallerState,
+    resolveGrantHeldElsewhere: resolveGrantHeldElsewhere,
     createController: createController
   });
 });

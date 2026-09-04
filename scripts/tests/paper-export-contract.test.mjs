@@ -46,7 +46,7 @@ assert.match(app, /snapshot \? snapshot\.options\?\.includeNotes === true : pbPa
 // v2.1 D6: section numbers come from the single-source paperworkSectionNumbers
 // builder (disabling a paperwork type renumbers the package), so the contract
 // pins the shared builder call — never a literal "5.".
-assert.match(app, /<section\$\{sectionAttr\('rundown', 'Full Rendered Rundown'\)\}><div class="paper-landscape">\s*\n\s*<h1 class="psec-h psec-rundown">\$\{paperSectionTitle\(numbers\.get\('rundown'\), 'Full Rendered Rundown'\)\}/);
+assert.match(app, /<section\$\{sectionAttr\('rundown', 'Rundown'\)\}><div class="paper-landscape">\s*\n\s*<h1 class="psec-h psec-rundown">\$\{paperSectionTitle\(numbers\.get\('rundown'\), 'Rundown'\)\}/);
 // Every-page section identity rides the same shared builder through sectionAttr.
 assert.match(app, /data-paper-section-label="\$\{esc\(paperSectionTitle\(numbers\.get\(id\), title\)\)\}"/);
 assert.match(app, /source\.querySelectorAll\('\.sf-symbol'\)/);

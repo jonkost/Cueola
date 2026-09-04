@@ -565,3 +565,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .sop-arrange [data-sop-can-star]{position:relative}
 .sop-arrange [data-sop-can-star]::after{content:'☆';position:absolute;top:-6px;right:-4px;font-size:12px;color:var(--text3);background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:0 3px;line-height:1.3}
 .sop-arrange [data-sop-starred="1"]::after{content:'★';color:var(--yellow,#f5b731)}
+
+/* 2026-09-03: the header chip now carries the talent truth line (row, transport, last seen). */
+#connectionStatusText { max-width:min(46vw, 420px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

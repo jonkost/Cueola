@@ -155,7 +155,9 @@ service cloud.firestore {
         // (validSessionDocument has no field allowlist; these are not gates).
         && (!data.keys().hasAny(['groups']) || data.groups is list)
         && (!data.keys().hasAny(['groupsLocked']) || data.groupsLocked is bool)
-        && optionalShortString(data, 'clonedFrom', 160);
+        && optionalShortString(data, 'clonedFrom', 160)
+        // 2026-09-03 preflight fix requests (rundown -> Air / talent display).
+        && (!data.keys().hasAny(['fixRequests']) || data.fixRequests is map);
     }
 
     function validFileDocument(code, fileId, data) {
@@ -577,6 +579,18 @@ service cloud.firestore {
     // Admin SDK. Closed to clients so nobody can clear their own lockout.
     match /pinGuard/{username} {
       allow read, write: if false;
+    }
+
+    // 2026-09-03 KeyWi Bird shared GIPHY key: one class key, read by every
+    // signed-in device (a GIPHY key is a public client-side key by GIPHY
+    // design), written by admins only.
+    match /config/{docId} {
+      allow get: if docId == "giphy" && isSignedIn();
+      allow list, delete: if false;
+      allow create, update: if docId == "giphy" && isAdmin()
+        && request.resource.data.keys().hasOnly(["key", "updatedAt", "updatedBy"])
+        && request.resource.data.key is string
+        && request.resource.data.key.matches("^[A-Za-z0-9]{10,80}$");
     }
 
     match /{document=**} {

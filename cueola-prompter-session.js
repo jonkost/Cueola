@@ -287,8 +287,14 @@
       if (state.productionCode && code && code !== state.productionCode) return false;
       var sessionId = cleanId(message.sessionId || '');
       if (state.sessionId && sessionId && sessionId !== state.sessionId) return false;
+      // ignoreTarget: a control delivered over the session doc is addressed by
+      // production + session only. The operator stamps targetOutputInstanceId
+      // with the output it last pinned, which is stale for a talent that
+      // reloaded on another machine (fresh instance id per page load); the
+      // BroadcastChannel path keeps the target check so several local windows
+      // stay individually addressed.
       var target = cleanId(message.targetOutputInstanceId || '');
-      if (target && target !== instanceId && target !== state.outputInstanceId) return false;
+      if (!options.ignoreTarget && target && target !== instanceId && target !== state.outputInstanceId) return false;
       if (options.outputInstanceId) {
         var output = cleanId(message.outputInstanceId || message.senderInstanceId || '');
         if (output && output !== cleanId(options.outputInstanceId)) return false;

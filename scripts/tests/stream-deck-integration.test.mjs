@@ -182,11 +182,11 @@ test('og close controls use the shared close glyph, not literal characters', () 
 
 test('KeyWi: every device write rides one serialized queue, with per-slot coalescing', () => {
   // The queue exists once and is the only sendReport owner.
-  assert.match(deck, /function queueDeviceWrite\(slotKey, job\)/);
+  assert.match(deck, /function queueDeviceWrite\(slotKey, job, lane\)/);
   assert.match(deck, /async function drainDeviceWrites\(\)/);
-  assert.match(deck, /hidWriteQueue\.splice\(i, 1\)\[0\]\.resolve\(false\)/);   // newer image drops the older
+  assert.match(deck, /var old = hidWriteQueue\.splice\(i, 1\)\[0\]; old\.resolve\(false\);/);   // newer image drops the older
   // Key images (paintChanged AND animateKeys both go through paintKeyDevice).
-  const painter = deckSlice('function paintKeyDevice(i, spec)', 'function mirrorCanvasFor');
+  const painter = deckSlice('function paintKeyDevice(i, spec, lane)', 'function mirrorCanvasFor');
   assert.match(painter, /queueDeviceWrite\('key:' \+ i/);
   assert.match(deckSlice('async function paintChanged()', 'function startAnim'), /paintKeyDevice\(i, spec\)/);
   assert.match(deckSlice('function animateKeys()', 'async function hypeShow'), /paintKeyDevice\(i, spec\)/);
@@ -315,57 +315,184 @@ test('KeyWi: key images animate GIFs through the sig-diffed paint loop with tain
   assert.match(deck, /SLOT_IMG_ASSET_RE/);
   const toSlot = deckSlice('function toSlot(s)', 'function persist');
   assert.match(toSlot, /delete slot\.img/);
-  // GIF frames ride the paint signature (gifFrame), decoded once per source,
-  // with a static-first-frame fallback when WebCodecs is missing.
+  // The GIF frame index is the ONE counter gifTick advances (anim.cur); every
+  // spec builder reads it, and the state signature leaves it out, so the
+  // 5 Hz pass and the 10 Hz GIF loop can never paint different frames.
   assert.match(deck, /spec\.gifFrame = gifFrameIndex\(gifAnim\(slot\.img\)\)/);
-  assert.match(deck, /spec\.gifFrame == null \? '' : spec\.gifFrame/);
+  assert.match(deck, /function gifFrameIndex\(anim\) \{ return anim && anim\.ok \? \(anim\.cur \|\| 0\) : 0; \}/);
+  const face = deckSlice('function faceSig(spec)', '// Rundown info key');
+  assert.doesNotMatch(face, /gifFrame/);
+  assert.match(deck, /function specSig\(spec, i\) \{ return i \+ '\|' \+ faceSig\(spec\); \}/);
   assert.match(deck, /typeof ImageDecoder === 'undefined'/);
+  // While a GIF decodes the face shows a neutral placeholder, never a plain
+  // Image of a remote source (a non-CORS Image would taint the shared
+  // offscreen canvas and kill toBlob for every key); only a failed decode
+  // falls back to the static image, which loads remote sources with CORS.
   const drawImg = deckSlice('// Custom key image: fills the whole face', 'var ink = t.ink');
   assert.match(drawImg, /gifAnim\(spec\.img\)/);
-  assert.match(drawImg, /keyImage\(spec\.img\)/);
+  assert.match(drawImg, /pending = !\(ge && ge\.err\)/);
+  assert.match(drawImg, /if \(!kim && !pending\) kim = keyImage\(spec\.img\)/);
+  assert.match(drawImg, /else if \(pending\)/);
+  assert.match(deckSlice('function keyImage(src)', 'function imgSig'), /img\.crossOrigin = 'anonymous'/);
 });
 
-test('KeyWi: GIPHY rides the operator key, PG-13 only, and picks land as capped data URLs', async () => {
+test('KeyWi: GIF keys run on their own 10 fps cadence, behind state writes, from an encoded-frame cache', () => {
+  // A worker-backed 100 ms loop advances every decoded GIF by elapsed time
+  // (a late tick shows the next frame), paints only the keys whose GIF moved,
+  // stamps lastPainted like animateKeys, and skips the hidden mirror.
+  assert.match(deck, /var GIF_TICK_MS = 100, GIF_BURST_KEYS = 4, GIF_FREEZE_MS = 500;/);
+  assert.match(deck, /gifTimer = steadyInterval\(gifTick, GIF_TICK_MS\)/);
+  const tick = deckSlice('function gifTick()', '// ── Prompter strip smoothing');
+  assert.match(tick, /if \(!profile \|\| hypeRunning \|\| \(!device && !vis\)\) return;/);
+  assert.match(tick, /gifAdvance\(_keyGifs\[src\], dt\)/);
+  assert.match(tick, /if \(canWrite\) \{ lastPainted\[i\] = specSig\(spec, i\); paintKeyDevice\(i, spec, 'gif'\); \}/);
+  assert.match(tick, /dk\.lastPainted\[k\] = specSig\(sp2, k\); paintKeyDeviceFor\(dk, k, sp2, 'gif'\)/);
+  const adv = deckSlice('function gifAdvance(e, dt)', '// Encoded-face cache');
+  assert.match(adv, /e\.acc \+= dt;/);
+  assert.match(adv, /e\.cur = \(e\.cur \+ 1\) % e\.frames\.length/);
+  // Frame drops: no GIF write while a state write runs or waits, during the
+  // strip probe, or for 500 ms after a burst of state repaints; the burst
+  // freeze gates device writes only, so the on-screen mirror keeps moving.
+  const allow = deckSlice('function gifWritesAllowed(now)', 'function gifTick()');
+  assert.match(allow, /hidWriteBusy && hidWriteLane !== 'gif'/);
+  assert.match(allow, /stateJobsQueued\(\) \|\| stripProbeActive/);
+  assert.match(allow, /now >= gifFreezeUntil/);
+  const pass = deckSlice('async function paintChangedPass()', 'function paintKeyDeviceFor');
+  assert.match(pass, /if \(wrote >= GIF_BURST_KEYS\) gifFreezeUntil = performance\.now\(\) \+ GIF_FREEZE_MS;/);
+  // The mirror draws only while the KeyWi screen is visible; showScreen marks
+  // it dirty so the first pass after reopening catches the grid up.
+  assert.match(pass, /if \(vis\) \{ var cv = mirrorCanvasFor\(i\); if \(cv\) drawKeyInto\(cv, spec, cv\.width\); \}/);
+  assert.match(pass, /else mirrorDirty = true;/);
+  assert.match(pass, /if \(vis && mirrorDirty\) paintMirror\(\);/);
+  assert.match(deckSlice('function showScreen()', 'function hideScreen()'), /mirrorDirty = true;/);
+  // Two lanes on one queue: state writes go ahead of waiting GIF frames, a
+  // frame replacing a waiting lamp write inherits its priority.
+  const q = deckSlice('function queueDeviceWrite(slotKey, job, lane)', 'async function drainDeviceWrites');
+  assert.match(q, /if \(old\.lane === 'state'\) lane = 'state';/);
+  assert.match(q, /if \(hidWriteQueue\[g\]\.lane === 'gif'\) \{ at = g; break; \}/);
+  assert.match(deckSlice('async function drainDeviceWrites()', 'function flushDeviceWrites'), /hidWriteLane = next\.lane;/);
+  // Encoded-frame cache: JPEG bytes per (src, frame, key px, rotation, face
+  // signature minus the frame), packetized at send time, byte-budgeted,
+  // bypassed for transient faces, dropped with the frames.
+  assert.match(deck, /GIF_ENC_BUDGET = 8 \* 1024 \* 1024/);
+  // C19: the key carries the decoded source's numeric id, never the (up to
+  // 480k char) data URL, so the byte budget is the whole story again.
+  assert.match(deck, /var _keyGifs = \{\}, _gifSrcSeq = 0;/);
+  assert.match(deckSlice('function gifAnim(src)', 'function dropGifCache'), /dim: dim, id: \+\+_gifSrcSeq \};/);
+  assert.match(deck, /function gifEncKey\(spec, z, deg\) \{ var ge = _keyGifs\[spec\.img\]; return \(\(ge && ge\.id\) \|\| 0\) \+ '\|' \+ \(spec\.gifFrame \|\| 0\) \+ '\|' \+ z \+ '\|' \+ deg \+ '\|' \+ faceSig\(spec\); \}/);
+  assert.doesNotMatch(deck, /return spec\.img \+ '\|' \+ \(spec\.gifFrame/);
+  assert.match(deck, /spec\.rgbPhase == null && !spec\.pulse && !spec\.clockRunning && gifAnim\(spec\.img\)/);
+  const fb = deckSlice('async function faceBytes(spec, z, deg)', 'function drawCover');
+  assert.match(fb, /var hit = _gifEnc\.get\(ck\); if \(hit\) return hit\.bytes;/);
+  assert.match(fb, /if \(ck && bytes\) gifEncStore\(ck, spec\.img, bytes\);/);
+  assert.match(deckSlice('function paintKeyDevice(i, spec, lane)', 'function mirrorCanvasFor'), /await faceBytes\(spec, z, keyDeg\(\)\)/);
+  assert.match(deckSlice('function paintKeyDevice(i, spec, lane)', 'function mirrorCanvasFor'), /Device\.keyImagePackets\(profile, i, bytes\)/);
+  assert.match(deckSlice('function paintKeyDeviceFor(deck, i, spec, lane)', '// ── GIF cadence'), /await faceBytes\(spec, z, deckDeg\(deck\.profile\)\)/);
+  assert.match(deckSlice('function pruneKeyArtCaches()', 'function warmGifSlots'), /_gifEnc\.forEach\(function \(v, k\) \{ if \(!used\[v\.src\]\) gifEncDelete\(k\); \}\);/);
+  // Frames decode at the largest attached key face (at least the mirror's
+  // device-pixel backing size, C21) under a memory budget that scales with
+  // the decode area so the frame count stays constant; a bigger deck
+  // attaching decodes again.
+  assert.match(deck, /GIF_MIRROR_DIM = 132, GIF_MEM_BUDGET = 6 \* 1024 \* 1024, GIF_MAX_FRAMES = 300/);
+  assert.match(deck, /function gifMirrorPx\(\) \{ var dpr = 1; try \{ dpr = Math\.min\(window\.devicePixelRatio \|\| 1, 2\); \} catch \(e\) \{\} return Math\.round\(GIF_MIRROR_DIM \* dpr\); \}/);
+  assert.match(deckSlice('function gifDecodeDim()', 'function gifMemBudget'), /return Math\.min\(GIF_MAX_DIM, Math\.max\(d, gifMirrorPx\(\)\)\);/);
+  assert.match(deck, /function gifMemBudget\(dim\) \{ return Math\.round\(GIF_MEM_BUDGET \* Math\.pow\(Math\.max\(dim, GIF_MIRROR_DIM\) \/ GIF_MIRROR_DIM, 2\)\); \}/);
+  assert.match(deck, /cap = Math\.max\(2, Math\.floor\(gifMemBudget\(dim\) \/ \(bw \* bh \* 4\)\)\)/);
+  // The undersized sweep compares against the same gifDecodeDim().
+  assert.match(deckSlice('function dropUndersizedGifs()', 'function pruneKeyArtCaches'), /var dim = gifDecodeDim\(\);\n\s+Object\.keys\(_keyGifs\)\.forEach\(function \(src\) \{ if \(\(_keyGifs\[src\]\.dim \|\| 0\) < dim\) dropGifCache\(src\); \}\);/);
+  assert.match(deckSlice('async function connect(', 'async function connectLightShow'), /startGifLoop\(\);\n\s+dropUndersizedGifs\(\);/);
+  assert.match(deckSlice('function teardownDevice()', 'function startPreview'), /stopGifLoop\(\)/);
+  assert.match(deckSlice('function startPreview()', 'function stopPreview'), /startGifLoop\(\)/);
+  assert.match(deckSlice('function stopPreview()', 'function onInputReport'), /stopGifLoop\(\)/);
+});
+
+test('KeyWi: GIPHY runs on the class key or the operator key, PG-13 only, and picks land as CDN references', async () => {
   const { readFile: rf } = await import('node:fs/promises');
   const fb = await rf(new URL('../../firebase.json', import.meta.url), 'utf8');
-  // CSP allows the API and media hosts (search + thumbnail + download).
+  // CSP allows the API and media hosts (search + thumbnail + decode).
   assert.match(fb, /https:\/\/api\.giphy\.com/);
   assert.match(fb, /img-src[^;]*https:\/\/\*\.giphy\.com/);
   assert.match(fb, /connect-src[^;]*https:\/\/\*\.giphy\.com/);
-  // The key is the operator's own, from localStorage only: no key literal in
-  // the repo, and removing it is a first-class control.
+  // Lookup order: a key pasted on this device wins, else the class key from
+  // config/giphy (read once after firebaseReady through the same handles
+  // the profile save uses). No key literal in the repo, no search proxy.
   const giphy = deckSlice('var GIPHY_KEY_LS', '// Upload pipeline');
   assert.match(giphy, /localStorage\.getItem\(GIPHY_KEY_LS\)/);
+  assert.match(giphy, /function giphyKey\(\) \{ return giphyLocalKey\(\) \|\| _sharedGiphyKey; \}/);
+  assert.match(giphy, /window\._getDoc\(window\._doc\(window\._db, 'config', 'giphy'\)\)/);
   assert.doesNotMatch(deck, /api_key=[A-Za-z0-9]{10}/);
+  assert.doesNotMatch(deck, /_httpsCallable\([^)]*giphy/i);
+  assert.match(giphy, /https:\/\/api\.giphy\.com\/v1\/gifs\//);
+  // Removing a pasted key only clears the local override; the class key is
+  // written by an instructor with 'Use for the whole class' and a refusal
+  // keeps the key on the device with a plain toast.
   assert.match(deck, /localStorage\.removeItem\(GIPHY_KEY_LS\)/);
-  // Classroom rating cap rides every request, search and trending alike.
+  assert.match(giphy, /window\._setDoc\(window\._doc\(window\._db, 'config', 'giphy'\), \{ key: v, updatedAt: Date\.now\(\), updatedBy: /);
+  assert.match(giphy, /id="sd-giphy-share" checked><span>Use for the whole class<\/span>/);
+  assert.match(giphy, /e\.code === 'permission-denied'/);
+  assert.match(giphy, /if \(!isInstructorHere\(\)\) \{ toast\('Only an instructor can share a class key\.'\); return; \}/);
+  assert.match(giphy, /GIPHY_KEY_RE = \/\^\[A-Za-z0-9\]\{10,80\}\$\//);
+  // Classroom rating cap rides every request, search and trending alike;
+  // results and trending are cached per session and searches are debounced,
+  // and trending is never fetched automatically on the shared class key.
   assert.match(giphy, /&limit=24&rating=pg-13/);
-  // Picks are downloaded and stored through the same caps as uploads: remote
-  // URLs never reach a slot (the canvas-taint rule), oversize renditions are
-  // skipped, and the final data URL obeys SLOT_GIF_MAX_CHARS.
-  assert.match(giphy, /blob\.size > 300 \* 1024/);
-  assert.match(giphy, /SLOT_GIF_MAX_CHARS/);
-  assert.match(giphy, /readAsDataURL\(blob\)/);
+  assert.match(giphy, /var cached = q \? _giphyCache\[q\.toLowerCase\(\)\] : _giphyTrending;/);
+  assert.match(deck, /GIPHY_DEBOUNCE_MS = 400/);
+  assert.match(deckSlice('function wireKeyEditor(index)', 'function funArtEntries'), /else if \(giphyKeyIsOwn\(\)\) giphySearch\(index, ''\);/);
+  assert.match(giphy, /Powered by GIPHY/);
+  // Picks are stored as references: slot.gif = { id, url, w, h } with a
+  // canonical query-free CDN url that toSlot validates against a strict
+  // regex; no bytes in the layout, so a deck of GIFs fits any profile save.
+  assert.match(giphy, /slot\.gif = \{ id: g\.id, url: url, w: g\.w \|\| 0, h: g\.h \|\| 0 \}; slot\.img = url;/);
+  assert.doesNotMatch(giphy, /readAsDataURL/);
+  assert.match(deck, /function giphyCanonicalUrl\(id\) \{ return 'https:\/\/media\.giphy\.com\/media\/' \+ id \+ '\/200w\.gif'; \}/);
+  assert.match(deck, /SLOT_GIF_URL_RE = \/\^https:\\\/\\\/media\\d\*\\\.giphy\\\.com\\\/media\\\/\[A-Za-z0-9\]\+\\\/\(200w\|100w\|giphy\)\\\.gif\$\//);
+  const toSlot = deckSlice('function toSlot(s)', 'function persist');
+  assert.match(toSlot, /SLOT_GIF_URL_RE\.test\(g\.url\)/);
+  assert.match(toSlot, /else \{ delete slot\.gif; if \(typeof slot\.img === 'string' && \/\^https\?:\/i\.test\(slot\.img\)\) delete slot\.img; \}/);
   // Result titles are escaped on the way into the DOM.
   assert.match(giphy, /data-tip="' \+ esc\(g\.title\)/);
+  // Rules text for the shared key (orchestrator-owned): open get, admin write.
+  const add = await rf(new URL('../../docs/rules-additive-2026-09-03-hiddensessions.rules', import.meta.url), 'utf8');
+  assert.match(add, /match \/config\/\{docId\} \{\s*allow get: if docId == "giphy";/);
+});
+
+test('KeyWi: saved layouts come back from the profile as My layouts rows', () => {
+  // Loader: profiles/{username}.keywiLayouts read on open, after a sign-in,
+  // and from the deck service; every key passes toSlot before addProfile.
+  const loader = deckSlice('function loadCloudLayouts()', 'function cloudLayoutRows');
+  assert.match(loader, /window\._getDoc\(window\._doc\(window\._db, 'profiles', id\.username\)\)/);
+  assert.match(loader, /var raw = d && d\.keywiLayouts/);
+  const sheet = deckSlice('function openCloudLayoutsSheet()', '// ── Utilities');
+  assert.match(sheet, /addProfile\(l\.name \|\| 'Layout', l\.keys\.map\(toSlot\)/);
+  assert.match(deckSlice('function pagesBar()', 'function startPageRename'), /id="sd-pf-cloud"/);
+  assert.match(deck, /bind\('sd-pf-cloud', openCloudLayoutsSheet\)/);
+  assert.match(deckSlice('function open()', 'function close()'), /loadSharedGiphyKey\(\);[^\n]*\n\s*loadCloudLayouts\(\);/);
+  assert.match(deckSlice("document.addEventListener('cueola-identity-change'", 'window.addEventListener'), /loadCloudLayouts\(\); loadSharedGiphyKey\(\);/);
+  // A profile save records the new layout locally and tells a full document
+  // from a refused write.
+  const save = deckSlice('function saveLayoutToProfile(leaveAfter)', '// ── Saved layouts');
+  assert.match(save, /_cloudLayouts\[key\] = layout;/);
+  assert.match(save, /code === 'invalid-argument' \|\| \/too large\|exceeds\|maximum size\/i\.test\(msg\)/);
 });
 
 test('KeyWi: GIF decode is bomb-guarded, caches are pruned, and a full store warns instead of silently dropping edits', () => {
   // Decompression-bomb guard: frames land downscaled (longest side capped),
-  // sub-20ms delays get the browser-style ~100ms substitution, and tiny loops
-  // are stretched so the 5Hz tick shows every frame instead of strobing.
+  // sub-20ms delays get the browser-style ~100ms substitution, and the
+  // frame count is bounded by a memory budget.
   assert.match(deck, /GIF_MAX_DIM = 224/);
   assert.match(deck, /resizeQuality: 'medium'/);
   assert.match(deck, /if \(d < 20\) d = 100;/);
-  assert.match(deck, /GIF_MIN_TOTAL_MS = 600/);
+  assert.match(deck, /GIF_MEM_BUDGET = 6 \* 1024 \* 1024/);
   // Import-path parity: .keywi files and hand-edited stores obey the same
   // per-image length caps as the upload pipeline.
   assert.match(deck, /SLOT_IMG_MAX_CHARS = 90000/);
   assert.match(deck, /SLOT_GIF_MAX_CHARS = 480000/);
   // Cache lifecycle: every persist prunes bitmaps no slot references (across
   // all decks), and closes GIF frames on the way out.
-  const prune = deckSlice('function pruneKeyArtCaches()', 'function drawCover');
-  assert.match(prune, /b\.close\(\)/);
+  const prune = deckSlice('function pruneKeyArtCaches()', 'function warmGifSlots');
+  assert.match(prune, /if \(!used\[src\]\) dropGifCache\(src\)/);
+  assert.match(deckSlice('function dropGifCache(src)', 'function dropUndersizedGifs'), /b\.close\(\)/);
   assert.match(deckSlice('function persist(quiet)', 'function newId'), /pruneKeyArtCaches\(\)/);
   // A full localStorage toasts a clear warning instead of failing silently.
   assert.match(deckSlice('function writeStore(s)', 'function loadConfig'), /Layout storage is full/);
@@ -535,16 +662,201 @@ test('KeyWi: talent overlay keys cover the owner list, dispatch through the brid
 test('KeyWi: app-family key rims paint by default and switch off per deck', () => {
   assert.match(deck, /APP_RIM_COLORS = \{ cueola: '#8a93a6', flowmingo: '#f06eb4', outrangutan: '#f97316', obs: '#5b8df8' \}/);
   assert.match(deck, /function appRimsOn\(ov\) \{ var o = ov \|\| overrides; return !o \|\| o\.appRims !== false; \}/);
-  // Both spec builders stamp the rim (active deck and secondary decks, each
-  // against its own overrides), and the paint signature carries it.
-  assert.match(deckSlice('function keyArtSpec(i, s)', 'function keyArtSpecFor'), /if \(appRimsOn\(\)\) spec\.rim = appRimColor\(a\)/);
-  assert.match(deckSlice('function keyArtSpecFor(deck, i, s)', 'function specSig'), /appRimsOn\(\(deck\.cfg \|\| \{\}\)\.overrides\)/);
-  assert.match(deckSlice('function specSig(spec, i)', 'function drawKeyInto'), /spec\.rim \|\| ''/);
-  // The painter strokes it, honoring the no-overlay image opt-out.
-  assert.match(deckSlice('function drawKeyInto(canvas, spec, z)', '// ── Serialized HID write queue'), /if \(spec\.rim && !spec\.noOverlay\)/);
+  // Both spec builders stamp the rim color AND width (active deck and
+  // secondary decks, each against its own overrides), and the paint
+  // signature carries both, so a secondary deck repaints on the next tick.
+  assert.match(deckSlice('function keyArtSpec(i, s)', 'function keyArtSpecFor'), /if \(appRimsOn\(\)\) \{ spec\.rim = appRimColor\(a\); spec\.rimW = rimWidthOf\(\); \}/);
+  const forDeck = deckSlice('function keyArtSpecFor(deck, i, s)', 'function specSig');
+  assert.match(forDeck, /var dov = \(deck\.cfg \|\| \{\}\)\.overrides;/);
+  assert.match(forDeck, /if \(appRimsOn\(dov\)\) \{ spec\.rim = appRimColor\(a, dov\); spec\.rimW = rimWidthOf\(dov\); \}/);
+  const sig = deckSlice('function specSig(spec, i)', '// Rundown info key');
+  assert.match(sig, /spec\.rim \|\| '', spec\.rimW \|\| ''/);
+  // The painter strokes it (rimStrokePx honors the no-overlay image opt-out).
+  const painter = deckSlice('function drawKeyInto(canvas, spec, z)', '// ── Serialized HID write queue');
+  assert.match(painter, /var rimIn = rimStrokePx\(spec, z\), rimX = Math\.max\(0, rimIn - z \* 0\.06\);/);
+  assert.match(painter, /if \(rimIn > 0\) \{/);
+  assert.match(deck, /function rimStrokePx\(spec, z\) \{\n    if \(!spec\.rim \|\| spec\.noOverlay\) return 0;/);
   // Deck settings expose the switch, on by default.
-  assert.match(deckSlice('function renderDeckSettings()', 'function surfaceGrid'), /sd-rims-on/);
+  assert.match(deckSlice('function rimsSection()', 'function wireRims'), /sd-rims-on/);
   assert.match(deckSlice('function setAppRims(on)', 'function setDialFlip'), /delete overrides\.appRims/);
+});
+
+test('KeyWi: rim width and per-app colors are per deck, ride the spec, and keep the default pixel-identical', () => {
+  // Units: px on a 96px reference face, integer 1..12, ABSENT = the 8/24
+  // formula (so an untouched deck paints exactly as before this round).
+  assert.match(deck, /var RIM_REF_PX = 96, RIM_WIDTH_MIN = 1, RIM_WIDTH_MAX = 12;/);
+  assert.match(deck, /var RIM_PRESETS = \{ thin: 2, regular: 0, bold: 7 \};/);
+  const stroke = deckSlice('function rimStrokePx(spec, z)', 'function slotAt(i)');
+  assert.match(stroke, /if \(rw\) return Math\.max\(1, z \* \(rw \/ RIM_REF_PX\) \* \(spec\.active \? 1\.33 : 1\)\);/);
+  assert.match(stroke, /return Math\.max\(3, z \* \(spec\.active \? 0\.06 : 0\.045\)\);/);
+  const painter = deckSlice('function drawKeyInto(canvas, spec, z)', '// ── Serialized HID write queue');
+  assert.doesNotMatch(painter, /Math\.max\(3, z \* \(spec\.active \? 0\.06 : 0\.045\)\)/);
+  // Corner dots, loop marker and pulse ring step inward by the EXCESS rim only.
+  assert.match(painter, /ctx\.arc\(z \* 0\.86 - rimX, z \* 0\.14 \+ rimX, z \* 0\.055, 0, 7\)/);
+  assert.match(painter, /ctx\.arc\(z \* 0\.14 \+ rimX, z \* 0\.14 \+ rimX, z \* 0\.055, 0, 7\)/);
+  assert.match(painter, /ctx\.fillRect\(z - z \* 0\.08 - rimX - mk, z \* 0\.08 \+ rimX, mk, mk\)/);
+  assert.match(painter, /rr\(ctx, z \* 0\.03 \+ rimX, z \* 0\.03 \+ rimX, z \* 0\.94 - 2 \* rimX, z \* 0\.94 - 2 \* rimX, z \* 0\.14\)/);
+  // Colors: validated hex per app, defaults from APP_RIM_COLORS, overrides-aware
+  // (the action tray's chips resolve against the active deck the same way).
+  assert.match(deck, /var RIM_HEX_RE = \/\^#\(\[0-9a-f\]\{3\}\|\[0-9a-f\]\{6\}\)\$\/i;/);
+  assert.match(deck, /function appRimColor\(a, ov\) \{ var key = rimAppKey\(a\); return key \? rimColorFor\(key, ov\) : null; \}/);
+  assert.match(deckSlice('function rimWidthOf(ov)', 'function rimWidthShown'), /Math\.max\(RIM_WIDTH_MIN, Math\.min\(RIM_WIDTH_MAX, v\)\)/);
+  assert.match(deckSlice('function actionTray()', 'function legendCard'), /appRimColor\(catalog\[it\.id\]\)/);
+  // Setters follow setAppRims: profile guard, overrides, persist(true), paintAll.
+  const setters = deckSlice('function setRimWidth(px, opts)', 'function rimEditBusy');
+  assert.match(setters, /if \(px === RIM_WIDTH_REGULAR\) delete overrides\.rimWidth;/);
+  assert.match(setters, /else overrides\.rimWidth = px;/);
+  assert.match(setters, /overrides\.rimColors\[key\] = hex;/);
+  assert.match(setters, /if \(!Object\.keys\(overrides\.rimColors\)\.length\) delete overrides\.rimColors;/);
+  assert.match(setters, /function resetRims\(\)[\s\S]{0,200}delete overrides\.rimWidth; delete overrides\.rimColors; delete overrides\.appRims;/);
+  assert.match(setters, /function recolorTrayChips\(\)/);
+  // The slider updates the sheet IN PLACE: the input path never re-renders
+  // the sheet (that would destroy the slider mid-drag); presets pass rerender.
+  const widthFn = deckSlice('function setRimWidth(px, opts)', 'function setRimColor');
+  assert.match(widthFn, /if \(opts && opts\.rerender\) \{ renderDeckSettings\(\); return; \}/);
+  assert.equal((widthFn.match(/renderDeckSettings\(\)/g) || []).length, 1);
+  const wire = deckSlice('function wireRims(o)', '// Flip is a fact about');
+  assert.match(wire, /rw\.oninput = function \(\) \{ setRimWidth\(\+rw\.value\); \};/);
+  assert.match(wire, /inp\.oninput = function \(\) \{ setRimColor\(/);
+  assert.match(wire, /inp\.onchange = function \(\) \{[^\n]*renderDeckSettings\(\);/);
+  // An OBS state flip re-renders the sheet; while the slider is held or a
+  // color picker is open that re-render is deferred, not applied.
+  assert.match(deckSlice('function renderDeckSettings()', 'function surfaceGrid'), /if \(rimEditBusy\(\)\) \{ settingsRerenderPending = true; return; \}/);
+  // Markup: presets, slider, four color wells, Reset.
+  const section = deckSlice('function rimsSection()', 'function wireRims');
+  for (const id of ['sd-rim-thin', 'sd-rim-reg', 'sd-rim-bold', 'sd-rim-w', 'sd-rim-w-val', 'sd-rims-reset']) assert.match(section, new RegExp('id="' + id + '"'));
+  assert.match(section, /\[\['cueola', 'Cueola'\], \['flowmingo', 'Flowmingo'\], \['outrangutan', 'Outrangutan'\], \['obs', 'OBS'\]\]/);
+  assert.match(section, /data-rim-app="' \+ p\[0\] \+ '"/);
+  assert.match(html, /\.sd-rim-color input\[type=color\]/);
+  // Persistence: the v3 geometry wipe leaves the rim prefs alone.
+  const wipe = deck.match(/\[('[a-zA-Z]+', )+'keyPx'\]\.forEach\(function \(k\) \{ delete overrides\[k\]; \}\);/);
+  assert.ok(wipe, 'geometry wipe list present');
+  assert.doesNotMatch(wipe[0], /rimWidth|rimColors|appRims/);
+  // Copy: no em or en dashes in the new settings copy.
+  assert.doesNotMatch(section, /[–—]/);
+});
+
+test('KeyWi: Director layouts keep playout transport off the student deck', () => {
+  const layouts = deckSlice('var DIRECTOR_LAYOUTS = {', 'var LAYOUT_TEMPLATES');
+  for (const size of [6, 8, 15]) assert.match(layouts, new RegExp('\\n    ' + size + ': +\\['));
+  assert.doesNotMatch(layouts, /playout\.|pad:|cue:|obs\./);
+  for (const id of ["'km:rundown.back'", "'km:rundown.next'", "'rundown.take'", "'rundown.abort'", "'info.rundown'", "'clock'"]) assert.ok(layouts.includes(id), id);
+  assert.match(layouts, /'golive'/);
+  assert.match(layouts, /'pt\.question',\n[^\n]*'pt\.wrap5', 'pt\.wrap10', 'pt\.overlays\.clear', 'layout\.prev', 'layout\.next'/);
+  // Every id in the Director tables is a registered catalog action.
+  for (const id of layouts.match(/'[a-z][a-z0-9.:]*'/g).map(s => s.slice(1, -1))) {
+    const base = id.startsWith('km:') ? id.slice(3) : id;
+    assert.ok(deck.includes("['" + base + "',") || deck.includes("id: '" + base + "'"), 'catalog has ' + id);
+  }
+  // The template picks from the bridge role (student = Director) as a hint,
+  // and the Add-a-page sheet offers both templates for any deck.
+  assert.match(deck, /function defaultTemplate\(\) \{ return sessionRole\(\) === 'student' \? 'director' : 'default'; \}/);
+  assert.match(deckSlice('function defaultKeySlots(keys, template)', 'function defaultTouch'), /LAYOUT_TEMPLATES\[template \|\| defaultTemplate\(\)\] \|\| DEFAULT_LAYOUTS/);
+  const sheet = deckSlice('function openNewPageSheet()', '// ── Import / export');
+  assert.match(sheet, /data-tpl="director"/);
+  assert.match(sheet, /defaultKeySlots\(profile\.keys, tpl\)/);
+  assert.match(deck, /bind\('sd-pf-new', openNewPageSheet\)/);
+  // C22: the auto-seeded page carries its provenance, and an untouched
+  // Starter page becomes Director when the role turns student later (the
+  // deck attached before the show code was typed). Never the reverse, never
+  // an edited page, never a multi-page deck, never in preview or mid-edit.
+  const seed = deckSlice('function ensureProfilesShape()', 'function switchProfile');
+  assert.match(seed, /var tpl = defaultTemplate\(\);/);
+  assert.match(seed, /keys: defaultKeySlots\(profile\.keys, tpl\), dials: defaultDialSet\(profile\), touch: defaultTouch\(profile\.strip \? profile\.strip\.zones : 0\), auto: \{ tpl: tpl, keys: profile\.keys \}/);
+  const rec = deckSlice('function reconcileAutoPageFor(profs, prof)', 'function reconcileAutoPages()');
+  assert.match(rec, /Object\.keys\(profs\)\.length !== 1\) return false;/);
+  assert.match(rec, /if \(tpl !== 'default' \|\| !slotsMatchTemplate\(p\.keys, 'default', prof\.keys\)\) return false;/);
+  assert.match(rec, /p\.keys = defaultKeySlots\(prof\.keys, 'director'\); p\.name = 'Director'; p\.auto = \{ tpl: 'director', keys: prof\.keys \};/);
+  const match = deckSlice('function slotsMatchTemplate(keys, tpl, n)', 'function reconcileAutoPageFor');
+  assert.match(match, /if \(k\.a !== def\[i\]\.a\) return false;/);
+  assert.match(match, /Object\.keys\(k\)\.some\(function \(f\) \{ return f !== 'a' && k\[f\]; \}\)/);
+  const run = deckSlice('function reconcileAutoPages()', 'function switchProfile');
+  assert.match(run, /if \(role === lastAutoRole\) return;\n\s+lastAutoRole = role;\n\s+if \(role !== 'student' \|\| layoutDirty \|\| previewMode \|\| !decks\.length\) return;/);
+  assert.match(run, /stashActiveDeck\(\);/);
+  assert.match(run, /decks\.forEach\(function \(dk\) \{ if \(dk\.cfg && reconcileAutoPageFor\(dk\.cfg\.profiles, dk\.profile\)\) changed\.push\(dk\); \}\);/);
+  assert.match(run, /changed\.forEach\(function \(dk\) \{ persistDeck\(dk\); if \(dk !== device\) repaintDeck\(dk\); \}\);/);
+  assert.match(run, /toast\('Director page loaded for this show\.'\);/);
+  assert.match(deckSlice('function paintTick()', 'function refreshDialReadouts'), /reconcileAutoPages\(\);/);
+  // The Starter page itself is untouched: '' and every non-student role keep it.
+  assert.match(deck, /function defaultTemplate\(\) \{ return sessionRole\(\) === 'student' \? 'director' : 'default'; \}/);
+});
+
+test('KeyWi: secondary decks animate too (pulse rings, RGB flow, clock dots)', () => {
+  const anim = deckSlice('function animateKeys()', 'async function hypeShow');
+  assert.match(anim, /for \(var di = 0; di < decks\.length; di\+\+\) \{\n      var dk = decks\[di\]; if \(dk === device \|\| !dk\.profile\) continue;/);
+  assert.match(anim, /var sp2 = keyArtSpecFor\(dk, k, s\);\n        if \(!specAnimated\(sp2\)\) continue;\n        sp2\.pulsePhase = animPhase;/);
+  assert.match(anim, /dk\.lastPainted\[k\] = specSig\(sp2, k\); paintKeyDeviceFor\(dk, k, sp2\);/);
+});
+
+test('KeyWi OBS keys: late refusals flash and speak, STARTING is a gate and a pulse, the strip loop rides a worker timer', () => {
+  // fireSlot carries the key index and deck so an async rejection can still
+  // stamp the right refusedFlashUntil array.
+  assert.match(deck, /function fireSlot\(slot, phase, fromDeck, keyIdx\)/);
+  assert.match(deck, /fireSlot\(mapping\(\)\.keys\[i\], 'down', null, i\)/);
+  assert.match(deck, /fireSlot\(toSlot\(\(m\.keys \|\| \[\]\)\[i\] \|\| \{ a: 'none' \}\), 'down', deck, i\)/);
+  const fire = deckSlice('function fireSlot(slot, phase, fromDeck, keyIdx)', 'function dispatchCloud');
+  assert.match(fire, /octx = \{ key: keyIdx, deck: fromDeck, label: a\.label \|\| a\.full \|\| a\.id \}/);
+  assert.match(fire, /obsDo\(a\.op, octx\)/);
+  assert.match(fire, /obsSceneSlot\(a\.slot, octx\)/);
+  assert.match(fire, /obsDo2\('setScene', slot\.ref, octx\)/);
+  assert.match(fire, /obsDo2\('toggleMute', slot\.ref, octx\)/);
+  const obs = deckSlice('var OBS_CONNECT_FIRST', 'var OBS_VOL_KEY');
+  assert.match(obs, /p\.then\(null, function \(e\) \{ noteObsRefusal\(ctx, e\); \}\)/);
+  assert.match(obs, /toast\('OBS refused ' \+ \(\(ctx && ctx\.label\) \|\| 'the request'\) \+ ': ' \+ msg\)/);
+  assert.match(obs, /\(ctx\.deck\.refusedFlashUntil = ctx\.deck\.refusedFlashUntil \|\| \[\]\)\[ctx\.key\] = performance\.now\(\) \+ 900/);
+  assert.match(obs, /else refusedFlashUntil\[ctx\.key\] = performance\.now\(\) \+ 900/);
+  // Only STARTING refuses (a second press while STOPPING is OBS's force-stop).
+  assert.match(obs, /if \(obsOutputStarting\(op\)\) \{ toast\('OBS is still starting the /);
+  assert.doesNotMatch(obs, /OBS_WEBSOCKET_OUTPUT_STOPPING/);
+  assert.match(obs, /if \(op === 'toggleStream'\) return st\.streamState === OBS_STARTING;/);
+  assert.match(obs, /if \(op === 'toggleRecord'\) return st\.recordState === OBS_STARTING;/);
+  // STARTING paints as a dimmer pulse in both spec builders.
+  assert.match(deckSlice('function keyArtSpec(i, s)', 'function keyArtSpecFor'), /obsOutputStarting\(a\.op\)\) \{ spec\.pulse = true; spec\.pulseColor = \(a\.op === 'toggleRecord'\) \? '#8c6a20' : '#8c2626'; \}/);
+  assert.match(deckSlice('function keyArtSpecFor(deck, i, s)', 'function specSig'), /obsOutputStarting\(a\.op\)\) \{ spec\.pulse = true;/);
+  assert.match(deckSlice('function specSig(spec, i)', '// Rundown info key'), /spec\.pulseColor \|\| ''/);
+  // The strip zone press shares the gate; its dot breathes while STARTING.
+  const strip = deckSlice("obsProgram: { label: 'OBS program'", "ptProgram: { label: 'Prompter view'");
+  assert.match(strip, /press: function \(\) \{ obsDo\('toggleStream', \{ label: 'STREAM' \}\); \}/);
+  assert.match(strip, /st\.streaming \|\| st\.streamState === OBS_STARTING/);
+  // Volume ticks catch rejections (throttled toast, no unhandledrejection noise).
+  assert.match(deckSlice('function obsVolTick(d)', 'var obsWasReady'), /p\.then\(null, onErr\)/);
+  // One 'Connect OBS first' string, pointing at the place that exists.
+  assert.equal((deck.match(/Connect OBS first/g) || []).length, 1);
+  assert.match(deck, /var OBS_CONNECT_FIRST = 'Connect OBS first: Deck settings \(gear\) > OBS Studio\.';/);
+  // The strip's OBS program monitor loop is a worker interval, not a page setInterval.
+  const loop = deckSlice('function ensureObsFrameLoop()', 'async function pollObsFrame');
+  assert.match(loop, /obsFrameLoop = steadyInterval\(pollObsFrame, 250\)/);
+  assert.doesNotMatch(loop, /= setInterval\(|clearInterval\(/);
+  assert.match(deckSlice('async function pollObsFrame()', '// The strip is a glanceable dashboard'), /obsFrameLoop\.stop\(\)/);
+});
+
+test('KeyWi: honest playback HOLD, keymap refusals flash, rundown keymap keys dim for a non-caller, GO LIVE lamp reads live.on', () => {
+  const og = deckSlice("ogProgram: { label: 'Playback view'", "micoStatus: { label: 'Micochondria'");
+  assert.match(og, /if \(po\.hold\) return 'HOLD';/);
+  assert.match(og, /bar: function \(s\) \{\n        var po = s\.playout \|\| \{\};\n        if \(po\.hold\) return null;/);
+  // C12 deck side: HOLD only on po.hold; a rolling cue with no clock reads
+  // PLAY (pause: nothing, the strip prints PAUSED itself), never 'idle'.
+  assert.match(og, /if \(po\.status === 'play' \|\| po\.status === 'pause'\) return po\.remaining != null \? fmtClock\(po\.remaining\) : \(po\.status === 'play' \? 'PLAY' : ''\);\n\s+return 'idle';/);
+  assert.equal((og.match(/'HOLD'/g) || []).length, 1);
+  // runAction's own result comes back; a strict false is a refused press
+  // for the local rundown keymap ids only (C20): a prompter command returns
+  // false when it was QUEUED for an unlinked talent, and that is not refused.
+  assert.match(deck, /function surfaceRun\(id\) \{ var b = bridge\(\); try \{ return b \? b\.runAction\(id\) : undefined; \}/);
+  const fire = deckSlice('function fireSlot(slot, phase, fromDeck, keyIdx)', 'function dispatchCloud');
+  assert.match(fire, /else if \(phase === 'down'\) \{ var kr = surfaceRun\(a\.keymapId\); refused = kr === false && \/\^rundown\\\.\/\.test\(a\.keymapId \|\| ''\); \} break;/);
+  assert.doesNotMatch(fire, /refused = surfaceRun\(a\.keymapId\) === false/);
+  const avail = deckSlice('function slotAvailability(a, s)', '// ── Rich key art');
+  assert.match(avail, /if \(k === 'keymap' && \/\^rundown\\\.\/\.test\(a\.keymapId \|\| ''\) && s && s\.live && s\.live\.caller === false\) return 'off';/);
+  assert.match(deck, /id: 'golive', kind: 'golive', machineLocal: true[^\n]*lamp: function \(s\) \{ return !!\(s\.live && s\.live\.on\); \}/);
+  // ROW key: a second line for the talent's row when the bridge publishes it.
+  const info = deckSlice('function applyRundownInfoSpec(spec, s)', '// Cache of decoded key images');
+  assert.match(info, /else if \(tl && tl\.ahead\) spec\.infoTalent = 'AHEAD';/);
+  assert.match(info, /spec\.infoTalent = 'TALENT ' \+ tn \+ \(tl\.title \? ' · ' \+ String\(tl\.title\)\.slice\(0, 24\) : ''\)/);
+  assert.match(deckSlice('function specSig(spec, i)', '// Rundown info key'), /spec\.infoTalent \|\| ''/);
+  const row = deckSlice("} else if (spec.widget === 'rowinfo') {", '} else {');
+  assert.match(row, /var tight = !!spec\.infoTalent;/);
+  assert.match(row, /z \* \(tight \? 0\.13 : 0\.16\)/);
+  assert.match(row, /ctx\.fillText\(tt === spec\.infoTalent \? tt : tt \+ '…', z \/ 2, z \* 0\.26\);/);
 });
 
 test('Outrangutan cross-machine: baseline consumption, loud sync failures, no wall-clock drops', () => {

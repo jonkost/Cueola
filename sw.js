@@ -124,24 +124,24 @@ const SHELL_ASSETS = [
   'cueola-pin.js?v=e599f35d21',
   'cueola-identity.js?v=e02e00ae43',
   'cueola-admin-auth.js?v=82979270bc',
-  'cueola-live-session.js?v=fd0bc73200',
+  'cueola-live-session.js?v=c28b5f25d0',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
-  'cueola-prompter-session.js?v=1002259f73',
+  'cueola-prompter-session.js?v=4e90f2af78',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=843d6c6e3b',
-  'script-operator.css?v=b1917c496b',
+  'script-operator.js?v=0649e410fa',
+  'script-operator.css?v=c94dad6df1',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=6a264b0438',
+  'cueola-app.js?v=a7ab00ae31',
   'outrangutan/outrangutan.css?v=db06e87104',
-  'outrangutan/outrangutan.js?v=0122e667ce',
+  'outrangutan/outrangutan.js?v=b9e97723d0',
   'cueola-streamdeck-device.js?v=48990ed663',
-  'cueola-obs.js?v=53b3859b7c',
-  'cueola-streamdeck.js?v=08ecf7be57',
+  'cueola-obs.js?v=7ea9a03cd8',
+  'cueola-streamdeck.js?v=344d426df7',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -257,7 +257,12 @@ const versionSignature = SHELL_ASSETS
 // sign-in hit-and-miss, worse after a Clear History), and the dashboard now
 // exposes the disable/enableNetwork handles so the sign-in timeout's
 // zombie-channel kick works there too (page-HTML-only change).
-const WORKER_SCHEMA = '47';
+// 47->48: 9/4 mock show round (cross-device prompter control, rundown follow,
+// talent door, leave-live sheet, pre-live CALLER chip, preflight groups with
+// push-to-fix, deck rims + Director layouts + GIF cache, OBS keepalive,
+// Outrangutan HOLD + fix receiver, segment-free row numbers): index.html,
+// script-operator.html and every module changed; every window reloads.
+const WORKER_SCHEMA = '48';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

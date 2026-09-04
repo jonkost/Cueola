@@ -573,6 +573,21 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    device has the wheel, neutral = following whoever does. */
 .ls-caller{display:inline-flex;align-items:center;margin-left:2px;padding:3px 9px;border-radius:20px;border: 1px solid transparent;background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text2);font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.07em;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .ls-caller[data-state="caller"]{border-color:transparent;background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
+/* Build toolbar 'Who calls the show' chip: same pill language as .ls-caller,
+   sized to sit beside the .tbtn row. data-state: caller (this device),
+   granted (a student has the wheel), viewer (following). */
+#rdCallerBtn{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border:1px solid transparent;border-radius:20px;background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text2);font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex-shrink:0;transition:background .15s var(--ease),color .15s var(--ease)}
+#rdCallerBtn:hover{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text)}
+#rdCallerBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#rdCallerBtn[data-state="caller"]{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
+#rdCallerBtn[data-state="granted"]{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+#rdCallerBtn .sf-symbol{font-size:13px}
+/* Banner under the toolbar when someone else holds the wheel. */
+.rd-caller-banner{display:flex;align-items:center;gap:10px;margin:0 16px 8px;padding:9px 13px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--accent) 10%,var(--s2));color:var(--text);font-size:12.5px;line-height:1.4}
+.rd-caller-banner[hidden]{display:none}
+.rd-caller-banner>.sf-symbol{flex:none;color:var(--accent);font-size:16px}
+.rd-caller-banner strong{font-weight:800}
+.rd-caller-banner .tbtn{margin-left:auto;min-height:30px;padding:5px 11px;font-size:12px}
 .ls-info{grid-area:tools;min-width:0;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;justify-content:flex-end;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .ls-info::-webkit-scrollbar{display:none}
 .ls-clock{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;margin-right:2px;font-variant-numeric:tabular-nums}
@@ -2412,6 +2427,21 @@ h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;
 .live-exit-recovery-copy{min-width:0;flex:1;color:var(--text2);font-size:11px;line-height:1.45}
 .live-exit-recovery-copy strong{display:block;margin-bottom:2px;color:var(--text);font-size:12px}
 .live-exit-recover-btn{flex:none;width:auto;min-height:38px;padding:8px 12px}
+/* Exit sheet: one consequence per line (show clock, talent screen, playout,
+   Script Op, students), optional toggles, then Stay live / Leave live. */
+.live-exit-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.live-exit-item{display:flex;align-items:flex-start;gap:9px;color:var(--text2);font-size:12.5px;line-height:1.45}
+.live-exit-item>.sf-symbol{flex:none;margin-top:1px;color:var(--accent);font-size:14px}
+.live-exit-item strong{color:var(--text);font-weight:700}
+.live-exit-item[data-state="warn"]>.sf-symbol{color:var(--yellow)}
+.live-exit-item[data-state="off"]>.sf-symbol{color:var(--text3)}
+.live-exit-toggles{display:flex;flex-direction:column;gap:8px}
+.live-exit-toggles:empty,.live-exit-toggles[hidden]{display:none}
+.live-exit-toggle{display:flex;align-items:center;gap:11px;min-height:44px;padding:9px 13px;border:1px solid transparent;border-radius:12px;background:color-mix(in srgb,var(--s2) 82%,transparent);color:var(--text);font-size:13px;font-weight:600;line-height:1.3;cursor:pointer}
+.live-exit-toggle[hidden]{display:none}
+.live-exit-toggle input{flex:none;width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.live-exit-toggle small{display:block;color:var(--text2);font-size:10.5px;font-weight:500;line-height:1.35}
+.live-exit-actions.live-exit-actions-row{grid-template-columns:1fr 1fr}
 @media(max-width:540px){
   #exitLiveOv{padding:12px}
   .live-exit-card{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);padding:20px 16px;gap:15px}
@@ -2421,15 +2451,36 @@ h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;
 .warn-card{background:var(--s1);border:1px solid rgba(240,82,82,.4);border-radius:16px;padding:28px 24px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:16px;animation:rise .2s ease both}
 .warn-title{font-family:var(--syne);font-size:22px;font-weight:700}
 .warn-body{font-size:13px;color:var(--text2);line-height:1.7}
-.precheck-card{max-width:460px;border-color: transparent;gap:14px}
+/* The preflight card is a bounded column: title, note and the action bar
+   stay put and only the row list scrolls, so Cancel and Go Live are always
+   reachable no matter how many checks there are or how short the window is. */
+.precheck-card{max-width:460px;border-color: transparent;gap:14px;max-height:min(820px,calc(100dvh - 48px));overflow:hidden}
+.precheck-card .warn-title,.precheck-card .precheck-note{flex:none}
+#goLiveCheckRows{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable;padding:0 2px 6px 0}
 .precheck-note{font-size:13px;color:var(--text2);line-height:1.5;margin:-4px 0 4px}
+/* Rows grouped by machine: one header line per group (name, worst-state dot,
+   summary, disclosure chevron); a group whose rows are all ok can collapse to
+   that line. */
+.precheck-group{display:flex;align-items:center;gap:9px;width:100%;margin:0;padding:9px 4px 5px;border:1px solid transparent;border-radius:8px;background:none;color:var(--text2);font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;text-align:left;cursor:pointer;user-select:none;-webkit-user-select:none}
+.precheck-group+.precheck-group,.precheck-rows+.precheck-group{margin-top:4px}
+.precheck-group:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.precheck-group-dot{width:8px;height:8px;flex:none;border-radius:50%;background:var(--text3)}
+.precheck-group[data-state="ok"] .precheck-group-dot{background:var(--green)}
+.precheck-group[data-state="warn"] .precheck-group-dot{background:var(--yellow)}
+.precheck-group[data-state="fail"] .precheck-group-dot{background:var(--red)}
+.precheck-group[data-state="pend"] .precheck-group-dot{animation:ptHoldPulse 1.4s ease-in-out infinite}
+.precheck-group-name{flex:none;color:var(--text)}
+.precheck-group-sum{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.precheck-group-chev{margin-left:auto;flex:none;color:var(--text3);transition:transform .2s var(--ease)}
+.precheck-group[aria-expanded="false"] .precheck-group-chev{transform:rotate(-90deg)}
+.precheck-rows[hidden]{display:none}
 .precheck-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;background:var(--s2);border: 1px solid transparent}
 .precheck-row.ok{border-color:transparent;background:color-mix(in srgb,var(--green) 8%,var(--s2))}
 .precheck-row.warn{border-color:transparent;background:color-mix(in srgb,var(--yellow) 15%,var(--s2))}
 .precheck-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none;font-size:13px}
 .precheck-row.ok .precheck-icon{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green);border:1px solid transparent}
 .precheck-row.warn .precheck-icon{background:color-mix(in srgb,var(--yellow) 20%,transparent);color:var(--yellow);border:1px solid transparent}
-.precheck-body{min-width:0}
+.precheck-body{min-width:0;flex:1 1 auto}
 .precheck-label{font-size:13px;color:var(--text);font-weight:600}
 .precheck-detail{font-size:11px;color:var(--text2);font-family:var(--mono);margin-top:2px}
 /* P7: preflight — failing + pending rows, jump-to-row links, row highlight */
@@ -2438,6 +2489,13 @@ h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;
 .precheck-row.pend .precheck-icon{background:var(--s3);color:var(--text3);border: 1px solid transparent}
 .precheck-jump{flex:none;margin-left:auto;font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid transparent;border-radius:8px;padding:4px 9px;cursor:pointer;transition:background .15s var(--ease)}
 .precheck-jump:hover{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,transparent)}
+/* Fix capsule: same recipe as the jump link, one specific verb per row
+   ('Nudge talent', 'Cue to top', 'Connect OBS'). */
+.precheck-fix{flex:none;font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid transparent;border-radius:8px;padding:4px 9px;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),opacity .15s var(--ease)}
+.precheck-fix:hover{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.precheck-fix:disabled,.precheck-row.pend .precheck-fix{opacity:.55;cursor:default}
+.precheck-jump+.precheck-fix,.precheck-fix+.precheck-jump{margin-left:0}
+.precheck-fix-note{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
 tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 @keyframes preflightHit{0%,60%{background:color-mix(in srgb,var(--accent) 16%,transparent)}100%{background:transparent}}
 /* P7: resume-after-crash banner (entry screen, Decisions #14) */
@@ -2467,7 +2525,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .snap-summary{color:var(--text2);font-size:12px;line-height:1.45;margin-top:4px}.snap-actions{display:flex;gap:7px}.snap-actions button{width:auto;padding:7px 11px;font-size:11px}
 .snap-empty{padding:28px 12px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.5}
 @media(max-width:560px){.snap-row{grid-template-columns:1fr}.snap-actions{justify-content:flex-end}}
-.precheck-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+.precheck-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px;flex:none}
 .precheck-actions .btn-primary,.precheck-actions .btn-secondary{width:auto;flex:0 0 auto;padding:11px 18px}
 
 /* ── PRODUCTION NOTES PANEL (build-side quick reference) ── */
@@ -2619,8 +2677,29 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* ─────────────────────────────────────────────────────────────
    PROMPTYPUS — native teleprompter screen
 ───────────────────────────────────────────────────────────── */
-#promptypus{position:relative;background:#0a0a0a;cursor:none;--pt-bar-h:calc(48px + env(safe-area-inset-top))}
+#promptypus{position:relative;background:#0a0a0a;cursor:none;--pt-bar-h:calc(48px + env(safe-area-inset-top));
+  /* Talent overlay tokens (clock, wrap, question, hold/next chips): glass
+     tinted from the prompter theme so every banner reads on every theme.
+     Wrap stays red with white copy and the QUESTION tag stays yellow on
+     dark regardless of these. */
+  --pt-ovl-bg:color-mix(in srgb,var(--pt-bg,#0a0a0a) 66%,transparent);
+  --pt-ovl-fg:var(--pt-text,#fff);
+  --pt-ovl-fg-dim:color-mix(in srgb,var(--pt-text,#fff) 78%,transparent)}
+/* Polar Bear (white) theme: a white glass slab on a white stage has no
+   visible edge, so the glass is a light grey tint instead (no stroke). */
+#promptypus[data-pt-theme="white"]{--pt-ovl-bg:color-mix(in srgb,#000 9%,rgba(255,255,255,.88));--pt-ovl-fg:#000;--pt-ovl-fg-dim:rgba(0,0,0,.72)}
 #promptypus.show-cursor{cursor:default}
+/* Fullscreen talent display: the operator chrome fades out and comes back
+   with the cursor (mouse move adds .show-cursor). Two fullscreen shapes:
+   the launcher fullscreens the document root (so body-sibling modals can
+   still open), the F key fullscreens #promptypus itself; both must match.
+   Standard and -webkit- forms stay in separate rules (a selector list with
+   an unsupported pseudo-class is dropped whole). The reveal skips a bar the
+   operator hid with H (.hidden), which otherwise loses on specificity. */
+:fullscreen #promptypus #pt-bar,#promptypus:fullscreen #pt-bar{opacity:0;pointer-events:none}
+:fullscreen #promptypus.show-cursor #pt-bar:not(.hidden),#promptypus:fullscreen.show-cursor #pt-bar:not(.hidden){opacity:1;pointer-events:auto}
+:-webkit-full-screen #promptypus #pt-bar,#promptypus:-webkit-full-screen #pt-bar{opacity:0;pointer-events:none}
+:-webkit-full-screen #promptypus.show-cursor #pt-bar:not(.hidden),#promptypus:-webkit-full-screen.show-cursor #pt-bar:not(.hidden){opacity:1;pointer-events:auto}
 /* Cueola (koala) prompter theme — sharp, deep, professional. No emoji, no line
    hatching: just a refined dark field, a quiet two-tone corner wordmark, and a
    clean accent read-line. */
@@ -2694,25 +2773,51 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s;touch-action:none}
 #pt-stage.mirrored{transform:scaleX(-1)}
-#pt-hold-chip{position:absolute;right:28px;top:calc(50% - 22px);z-index:40;font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;color:var(--pt-accent,#7ec8ff);background:color-mix(in srgb,var(--pt-bg,#0a0a0a) 78%,var(--pt-accent,#7ec8ff));border:2px solid var(--pt-accent,#7ec8ff);border-radius:10px;padding:9px 16px;pointer-events:none;animation:ptHoldPulse 1.6s ease-in-out infinite}
+/* HOLDING / NEXT chips sit in the gutters beside the read line, inside
+   #pt-stage so a beam splitter flips them with the copy. Shared glass with
+   the clock overlay; the hold chip pulses three times then holds steady. */
+#pt-hold-chip,#pt-next-chip{position:absolute;z-index:40;top:calc(50% + 14px);max-width:clamp(180px,calc((100vw - min(900px,90vw))/2 - 40px),380px);display:flex;flex-direction:column;gap:2px;padding:8px 14px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;pointer-events:none}
+#pt-hold-chip[hidden],#pt-next-chip[hidden]{display:none}
+#pt-next-chip{left:28px;opacity:.62}
+#pt-hold-chip{right:28px;top:calc(50% - 60px);animation:ptHoldPulse 2.4s ease-in-out 3}
+#pt-hold-chip .pt-chip-label{color:var(--pt-accent,#7ec8ff)}
+/* Narrow windows (1000px and under): the gutter beside the copy column is
+   5vw or less, so the 180px floor above would paint the chips over the
+   script. The chips drop into the bottom fade zone as compact one-line
+   pills, lift above the talent panel like the wrap banner does, and yield
+   to a WRAP banner (NEXT and HOLDING never show together, so the two
+   corners never collide). Same id specificity as above: source order wins. */
+@media(max-width:1000px){
+#pt-hold-chip,#pt-next-chip{top:auto;bottom:calc(72px + env(safe-area-inset-bottom));max-width:calc(50vw - 40px);flex-direction:row;align-items:baseline;gap:8px;padding:6px 10px}
+#pt-hold-chip .pt-chip-row,#pt-next-chip .pt-chip-row{font-size:18px}
+#promptypus:has(#pt-panel:not(.hidden)) #pt-hold-chip,#promptypus:has(#pt-panel:not(.hidden)) #pt-next-chip{bottom:calc(140px + env(safe-area-inset-bottom))}
+#promptypus:has(.pt-clock-overlay.wrap.on) #pt-hold-chip,#promptypus:has(.pt-clock-overlay.wrap.on) #pt-next-chip{display:none}
+}
+.pt-chip-label{font-family:var(--mono);font-size:13px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-ovl-fg-dim);line-height:1.15}
+.pt-chip-row{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:0;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 @keyframes ptHoldPulse{0%,100%{opacity:1}50%{opacity:.55}}
-#promptypus.mirrored::before,#promptypus.mirrored::after{transform:scaleX(-1)}
+/* Mirror: #pt-stage flips the copy, the chips, the clock and the question
+   (they live inside the stage); the slate is a #promptypus child, so it
+   flips on its own. */
+#promptypus.mirrored #pt-slate{transform:scaleX(-1)}
 #pt-stage::before,#pt-stage::after{content:'';position:absolute;left:0;right:0;height:28vh;pointer-events:none;z-index:10}
 #pt-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
 #pt-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
 
 #pt-track{width:min(900px,90vw);padding:100vh 0;will-change:transform}
-#pt-text{font-family:var(--display);font-size:var(--pt-size,52px);font-weight:600;line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#f0ead6);white-space:pre-wrap;word-break:break-word;transition:font-size .2s,text-align .2s;letter-spacing:0}
+#pt-text{font-family:var(--display);font-size:var(--pt-size,52px);font-weight:600;line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#f0ead6);white-space:pre-wrap;word-break:break-word;transition:text-align .2s;letter-spacing:0}
 #pt-text p{margin:0;min-height:1.55em;white-space:pre-wrap}
 /* Script formatting shared by the talent screen, operator preview, and Flowmingo preview */
 #pt-text p,.prompt-op-text p{margin:0 0 .14em;min-height:1.62em}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
 .scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
-#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:1000;color:var(--pt-text,#fff);text-shadow:0 0 2px currentColor,0 0 14px color-mix(in srgb,var(--pt-accent,#fff) 28%,transparent);background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
+#pt-text strong,.prompt-op-text strong,.flowop-script strong{font-weight:1000;color:var(--pt-text,#fff);text-shadow:none;background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
 
 /* Reading line */
-#pt-read-line{position:absolute;left:0;right:0;top:calc(var(--pt-bar-h,48px) + 50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
+/* Read line center = stage center (bar-h + half the stage), the same point
+   every JS readY uses; the old bar-h + 50% sat half a bar too low. */
+#pt-read-line{position:absolute;left:0;right:0;top:calc(50% + var(--pt-bar-h,48px) / 2);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
 #pt-read-line::before,#pt-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0;opacity:1}
 #pt-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#c8a97e)}
 #pt-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#c8a97e)}
@@ -2775,14 +2880,17 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-btn.muted{opacity:.55}
 
 /* Technical-difficulties stand-by cover on the talent screen */
-#pt-slate{position:absolute;inset:0;z-index:160;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(130% 120% at 50% 36%,color-mix(in srgb,var(--pt-bg,#0a0a0a) 60%,#000) 0%,var(--pt-bg,#0a0a0a) 64%);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
-#pt-slate.on{display:flex}
+/* The slate fades in and out (opacity + visibility, no display toggle) and is
+   a fixed dark card on every theme (see the #pt-slate override further down),
+   so its copy is pinned light instead of following --pt-text. */
+#pt-slate{position:absolute;inset:0;z-index:160;display:flex;opacity:0;visibility:hidden;transition:opacity var(--dur-slow) var(--ease),visibility 0s linear var(--dur-slow),transform .3s;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(130% 120% at 50% 36%,color-mix(in srgb,var(--pt-bg,#0a0a0a) 60%,#000) 0%,var(--pt-bg,#0a0a0a) 64%);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+#pt-slate.on{opacity:1;visibility:visible;transition-delay:0s}
 #pt-slate.bars{padding:0;background:#050505;backdrop-filter:none;-webkit-backdrop-filter:none}
 .pt-slate-inner{display:flex;flex-direction:column;align-items:center;gap:18px;max-width:min(780px,92vw)}
 #pt-slate.bars .pt-slate-inner{display:none}
-.pt-slate-mark{font-size:54px;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f5b84a;background:transparent;border:2px solid #f5b84a}
-.pt-slate-title{font-family:var(--syne);font-size:clamp(38px,8.5vw,92px);font-weight:900;letter-spacing:0;color:var(--pt-text,#f0ead6);line-height:1.02;text-wrap:balance}
-.pt-slate-sub{font-family:var(--mono);font-size:clamp(16px,3vw,28px);letter-spacing:.14em;text-transform:uppercase;color:var(--pt-text,#f0ead6);opacity:.74}
+.pt-slate-mark{font-size:54px;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f5b84a;background:color-mix(in srgb,#f5b84a 16%,transparent);border:1px solid transparent}
+.pt-slate-title{font-family:var(--syne);font-size:clamp(38px,8.5vw,92px);font-weight:900;letter-spacing:0;color:#f0ead6;line-height:1.02;text-wrap:balance}
+.pt-slate-sub{font-family:var(--mono);font-size:clamp(16px,3vw,28px);letter-spacing:.14em;text-transform:uppercase;color:#f0ead6;opacity:.74}
 .pt-bars-pattern{display:none;position:absolute;inset:0;background:#000;color:#fff;font-family:var(--mono);overflow:hidden}
 #pt-slate.bars .pt-bars-pattern{display:grid;grid-template-rows:67fr 8fr 25fr}
 .pt-bars-top{display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
@@ -2793,32 +2901,51 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-bars-bottom span:nth-child(1){background:#00214c}.pt-bars-bottom span:nth-child(2){background:#fff}.pt-bars-bottom span:nth-child(3){background:#32006b}.pt-bars-bottom span:nth-child(4){background:#111}.pt-bars-bottom span:nth-child(5){background:#090909}.pt-bars-bottom span:nth-child(6){background:#030303}.pt-bars-bottom span:nth-child(7){background:#111}.pt-bars-bottom span:nth-child(8){background:#1d1d1d}.pt-bars-bottom span:nth-child(9){background:#000}
 .pt-bars-label{position:absolute;left:50%;bottom:clamp(18px,4vh,42px);transform:translateX(-50%);display:flex;gap:18px;align-items:center;padding:10px 18px;border: 1px solid transparent;background:rgba(0,0,0,.68);color:#fff;font-size:clamp(11px,1.8vw,20px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
 .pt-bars-label span:last-child{opacity:.62}
-/* D12.5 overlay discipline (decision 16c): every banner fits a bounded band —
-   ~20% of screen height at its largest — so the script stays readable through
-   any overlay. The size stepper (S/M/L) scales WITHIN the band (vh-capped
-   font preferences); the deliberate stand-by slate stays the only
-   full-screen state. */
-.pt-clock-overlay{--pt-ovl-scale:1;position:absolute;left:50%;top:calc(var(--pt-bar-h,48px) + 24px);z-index:155;display:none;width:fit-content;max-width:min(1100px,92vw);max-height:20vh;overflow:hidden;box-sizing:border-box;transform:translateX(-50%);padding:calc(11px*var(--pt-ovl-scale)) calc(24px*var(--pt-ovl-scale));border-radius:18px;text-align:center;background:color-mix(in srgb,black 45%,transparent);backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));color:#fff;border: 1px solid transparent;font-family:var(--mono);pointer-events:none}
-.pt-clock-overlay.on{display:block}
+/* D12.5 overlay discipline (decision 16c): every banner fits a bounded band,
+   20% of screen height through size 3 and 24% at size 4 (MAX), so the script
+   stays readable through any overlay. Type is vh-based with a px FLOOR only
+   (no px ceiling), so a big output gets big digits and the size stepper
+   scales the content, not just the box. The clock and question overlays live
+   INSIDE #pt-stage (the stage already starts at --pt-bar-h, and a beam
+   splitter flips them with the copy), so their top offsets are stage
+   relative. Banners fade in and out (opacity + visibility), no display
+   toggle. The deliberate stand-by slate stays the only full-screen state. */
+.pt-clock-overlay{--pt-ovl-scale:1;position:absolute;left:50%;top:24px;z-index:155;display:block;opacity:0;visibility:hidden;transition:opacity var(--dur-normal) var(--ease),visibility 0s linear var(--dur-normal);width:fit-content;max-width:min(1100px,92vw);max-height:20vh;overflow:hidden;box-sizing:border-box;transform:translateX(-50%);padding:calc(6px + 3px*var(--pt-ovl-scale)) calc(14px + 8px*var(--pt-ovl-scale));border-radius:var(--ui-radius-panel);text-align:center;background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);border: 1px solid transparent;font-family:var(--mono);pointer-events:none}
+.pt-clock-overlay.on{opacity:1;visibility:visible;transition-delay:0s}
 /* One scale var per size step drives font AND padding, so the stepper visibly
    resizes clock, timer, wrap, and question together (the wrap banner used to
    override the size rules entirely and never moved). */
 .pt-clock-overlay.size-0,#pt-question-overlay.size-0{--pt-ovl-scale:.85}
 .pt-clock-overlay.size-2,#pt-question-overlay.size-2{--pt-ovl-scale:1.2}
 .pt-clock-overlay.size-3,#pt-question-overlay.size-3{--pt-ovl-scale:1.45}
-.pt-clock-overlay.size-4,#pt-question-overlay.size-4{--pt-ovl-scale:1.75}
-.pt-clock-label{font-size:calc(clamp(12px,min(1.8vw,2.1vh),19px)*var(--pt-ovl-scale));font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.82);line-height:1.15}
-.pt-clock-value{font-size:calc(clamp(30px,min(7vw,7.5vh),82px)*var(--pt-ovl-scale));font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:#fff}
-.pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:color-mix(in srgb,#b31322 84%,transparent);border-color:#ffccd2;box-shadow:0 0 0 3px rgba(255,255,255,.12) inset}
-.pt-clock-overlay.wrap .pt-clock-label{font-size:calc(clamp(15px,min(3.6vw,3vh),40px)*var(--pt-ovl-scale));color:#fff;letter-spacing:.1em}
-.pt-clock-overlay.wrap .pt-clock-value{font-size:calc(clamp(36px,min(10vw,8vh),128px)*var(--pt-ovl-scale))}
-.pt-clock-overlay.expired:not(.timeofday){background:color-mix(in srgb,#72101a 84%,transparent);border-color:#fff}
-#pt-question-overlay{--pt-ovl-scale:1;position:absolute;right:max(24px,env(safe-area-inset-right));top:calc(var(--pt-bar-h,48px) + 26px);z-index:156;display:none;max-width:min(720px,60vw);max-height:20vh;overflow:hidden;box-sizing:border-box;padding:calc(11px*var(--pt-ovl-scale)) calc(18px*var(--pt-ovl-scale));border-radius:16px;background:color-mix(in srgb,black 45%,transparent);backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));color:#ffd23c;border: 1px solid transparent;font-family:var(--syne);font-size:calc(clamp(16px,min(3.2vw,4vh),36px)*var(--pt-ovl-scale));font-weight:900;line-height:1.1;text-transform:uppercase;letter-spacing:0;pointer-events:none}
-#pt-question-overlay.on{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.pt-clock-overlay.size-4,#pt-question-overlay.size-4{--pt-ovl-scale:1.75;max-height:24vh}
+.pt-clock-label{font-size:calc(max(12px,min(1.8vw,2.1vh))*var(--pt-ovl-scale));font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-ovl-fg-dim);line-height:1.15}
+.pt-clock-value{font-size:calc(max(30px,min(7vw,7.5vh))*var(--pt-ovl-scale));font-weight:900;letter-spacing:0;line-height:.96;font-variant-numeric:tabular-nums;color:var(--pt-ovl-fg)}
+/* Wrap stays red with white copy on every theme; the solid fill is the
+   loud state (no colored stroke, no inset ring). */
+.pt-clock-overlay.wrap{top:auto;bottom:calc(64px + env(safe-area-inset-bottom));background:color-mix(in srgb,#b31322 88%,transparent);color:#fff}
+.pt-clock-overlay.wrap .pt-clock-label{font-size:calc(max(15px,min(3.6vw,2.6vh))*var(--pt-ovl-scale));color:#fff;letter-spacing:.1em}
+.pt-clock-overlay.wrap .pt-clock-value{font-size:calc(max(36px,min(10vw,7vh))*var(--pt-ovl-scale));color:#fff}
+/* The wrap banner lifts above the talent's own panel while the panel is up. */
+#promptypus:has(#pt-panel:not(.hidden)) .pt-clock-overlay.wrap{bottom:calc(132px + env(safe-area-inset-bottom))}
+/* Expired countdown: dark red card, copy pinned white, digits pulse four
+   times then hold. */
+.pt-clock-overlay.expired:not(.timeofday){background:color-mix(in srgb,#72101a 84%,transparent);color:#fff}
+.pt-clock-overlay.expired:not(.timeofday) :is(.pt-clock-label,.pt-clock-value){color:#fff}
+.pt-clock-overlay.expired:not(.timeofday) .pt-clock-value{animation:ptExpiredPulse 1s ease-in-out 4}
+@keyframes ptExpiredPulse{0%,100%{opacity:1}50%{opacity:.45}}
+/* The question card keeps to the right third so it never paints over the
+   centered clock. */
+#pt-question-overlay{--pt-ovl-scale:1;position:absolute;right:max(24px,env(safe-area-inset-right));top:26px;z-index:156;display:flex;flex-direction:column;align-items:flex-start;gap:calc(6px*var(--pt-ovl-scale));opacity:0;visibility:hidden;transition:opacity var(--dur-normal) var(--ease),visibility 0s linear var(--dur-normal);max-width:min(720px,34vw);max-height:20vh;overflow:hidden;box-sizing:border-box;padding:calc(6px + 3px*var(--pt-ovl-scale)) calc(10px + 6px*var(--pt-ovl-scale));border-radius:var(--ui-radius-group);background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);border: 1px solid transparent;font-family:var(--syne);font-size:calc(max(16px,min(3.2vw,3.4vh))*var(--pt-ovl-scale));font-weight:900;line-height:1.1;text-transform:uppercase;letter-spacing:0;pointer-events:none}
+#pt-question-overlay.on{opacity:1;visibility:visible;transition-delay:0s}
 /* D12.6: the QUESTION tag reads as production signage (mono chip, like the
-   wrap/clock labels) so pushed chat text can never be mistaken for script. */
-.pt-question-tag{flex:none;padding:2px 8px;border-radius:12px;background:#ffd23c;color:#121212;font-family:var(--mono);font-size:clamp(10px,1.4vh,14px);font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+   wrap/clock labels) so pushed chat text can never be mistaken for script.
+   It stays yellow on dark on every theme. */
+.pt-question-tag{flex:none;padding:calc(2px*var(--pt-ovl-scale)) calc(8px*var(--pt-ovl-scale));border-radius:999px;background:#ffd23c;color:#121212;font-family:var(--mono);font-size:calc(max(10px,1.4vh)*var(--pt-ovl-scale));font-weight:900;letter-spacing:.14em;line-height:1.15;text-transform:uppercase}
 .pt-question-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+/* At the two largest steps (XL and MAX) two lines is all the band holds:
+   three XL lines plus the tag overrun 20vh on any real display. */
+#pt-question-overlay.size-3 .pt-question-text,#pt-question-overlay.size-4 .pt-question-text{-webkit-line-clamp:2}
 
 /* D11.3: the playback call banner — unmissable, color-stepped, abortable. */
 .ls-call-banner{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:14px;padding:14px 22px;border-radius:16px;border: 1px solid transparent;background:color-mix(in srgb,var(--s1) 94%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation))}
@@ -2963,7 +3090,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-sidebar .flow-clock-fields{grid-template-columns:1fr}
 .ls-sidebar .flow-wrap-grid{grid-template-columns:1fr 1fr}
 .ls-sidebar .flow-alert-grid{grid-template-columns:1fr 1fr 1fr}
-@media(max-width:700px){.flow-clock-grid,.flow-clock-fields,.flow-wrap-grid{grid-template-columns:1fr 1fr}.pt-clock-overlay{top:calc(var(--pt-bar-h,48px) + 14px)}#pt-question-overlay{left:16px;right:16px;text-align:center}}
+@media(max-width:700px){.flow-clock-grid,.flow-clock-fields,.flow-wrap-grid{grid-template-columns:1fr 1fr}.pt-clock-overlay{top:14px}#pt-question-overlay{left:16px;right:16px;max-width:none;text-align:center}}
 
 /* HIG grouped controls for Script Op and Flowmingo Op */
 .ls-sidebar{
@@ -3527,7 +3654,7 @@ input.pt-range::-moz-range-thumb,
 .ls-popout-btn.active{color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--accent) 12%,var(--s2))}
 
 /* Script edit overlay */
-#pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:250;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #pt-edit-overlay.open{display:flex}
 #pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:18px;padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
 #pt-edit-box h2{font-family:var(--mono);font-size:12px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.12em;margin:0}
@@ -3821,6 +3948,7 @@ input.pt-range::-moz-range-thumb,
 #pbNavPreview .primary:hover:not(:disabled){color:var(--text);background:color-mix(in srgb,var(--s2) 86%,transparent)}
 /* Scaled-down window: the overlay takes the whole screen instead. */
 @media (max-width:900px),(max-height:640px){
+  .precheck-card{padding:18px 16px;gap:10px}
   :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
   :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
     max-width:none!important;width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
@@ -5282,6 +5410,7 @@ input.pt-range::-moz-range-thumb,
 	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" data-tip="Show production notes next to the rundown"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
 	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()"><span>Plan<span class="brand-hi">da Bear</span></span></button>
+	      <button id="rdCallerBtn" type="button" style="display:none" data-state="viewer" onclick="openControlGrantPicker()" data-tip="Choose who calls the show" aria-label="Choose who calls the show"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span class="rd-caller-label">CALLER: You</span></button>
 	      <button class="tbtn tbtn-ghost" id="showSetupBtn" onclick="openWorkspaceLauncher()" data-tip="One click opens this machine's show windows on their displays"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Show setup</span></button>
 	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <!-- File actions (Export PDF / Save / Open) live in the Settings menu — operator request 2026-07-04 -->
@@ -5291,6 +5420,12 @@ input.pt-range::-moz-range-thumb,
       <div class="tb-divider"></div>
       <button class="tbtn tbtn-live" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
     </div>
+  </div>
+  <!-- Caller banner: shown to whoever holds rundown control (a granted student). -->
+  <div class="rd-caller-banner" id="rdCallerBanner" role="status" hidden>
+    <span class="sf-symbol" data-symbol="marker.go" aria-hidden="true"></span>
+    <span><strong>You are calling the show.</strong> GO advances the rundown for everyone. <span class="rd-caller-banner-deck" hidden>Your Stream Deck works while you hold control.</span></span>
+    <button class="tbtn tbtn-live rd-caller-banner-cta" type="button" onclick="confirmGoLive()"><span class="live-dot"></span>Go Live</button>
   </div>
   <div class="show-strip">
     <div class="show-identity">
@@ -5369,6 +5504,10 @@ input.pt-range::-moz-range-thumb,
 	      <button class="ls-exit-btn ls-return-btn" id="liveReturnToRundownBtn" onclick="requestExitLive()" data-tip="Leave Live and return to the rundown builder"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span><span>Exit</span></button>
 	    </div>
 	  </div>
+  <div class="rd-caller-banner" id="lsCallerBanner" role="status" hidden>
+    <span class="sf-symbol" data-symbol="marker.go" aria-hidden="true"></span>
+    <span><strong>You are calling the show.</strong> GO advances the rundown for everyone. <span class="rd-caller-banner-deck" hidden>Your Stream Deck works while you hold control.</span></span>
+  </div>
   <div class="follow-bar">
     <div class="follow-lbl">Following:</div>
     <div class="follow-chips" id="followChips">
@@ -5519,7 +5658,7 @@ input.pt-range::-moz-range-thumb,
       <span class="pt-check" id="pt-check-show" data-tip="Connected to your show">Show</span>
       <span class="pt-check" id="pt-check-script" data-tip="A script is loaded">Script</span>
     </div>
-    <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Load Session</button>
+    <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Link a show</button>
     <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptTogglePanel()" data-tip="Show or hide controls" aria-label="Show or hide controls" aria-pressed="true"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
   </div>
 
@@ -5544,9 +5683,12 @@ input.pt-range::-moz-range-thumb,
     <div id="pt-track">
       <div id="pt-text"></div>
     </div>
-    <!-- Persistent cue-hold state: inside #pt-stage so beam-splitter
-         mirroring flips it with the copy; visible in element-fullscreen. -->
-    <div id="pt-hold-chip" hidden>HOLDING</div>
+    <!-- Persistent cue state, inside #pt-stage so beam-splitter mirroring
+         flips it with the copy; visible in element-fullscreen. NEXT names the
+         row coming up (dimmed, left gutter); HOLDING names the row the
+         free-run is waiting at (right gutter) and hides NEXT while it shows. -->
+    <div id="pt-next-chip" hidden><span class="pt-chip-label">Next</span><span class="pt-chip-row"></span></div>
+    <div id="pt-hold-chip" hidden><span class="pt-chip-label">Holding</span><span class="pt-chip-row"></span></div>
   </div>
 
   <!-- Technical-difficulties stand-by cover (operator toggled) -->
@@ -5569,12 +5711,14 @@ input.pt-range::-moz-range-thumb,
     <div class="pt-setup-card">
       <div class="pt-setup-logo"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
       <h2 class="pt-setup-title">Connect Flowmingo to your show</h2>
-      <p class="pt-setup-sub">Enter the show code from your Script Op or Flowmingo Op.</p>
+      <p class="pt-setup-sub">Tap your show, or enter the show code from your Script Op or Flowmingo Op.</p>
+      <div class="pt-setup-yours" id="pt-setup-yours" hidden></div>
       <div class="pt-setup-row">
         <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" onkeydown="if(event.key==='Enter')ptSetupConnect()">
         <button class="pt-setup-btn" onclick="ptSetupConnect()">Connect</button>
       </div>
       <div class="pt-setup-status" id="pt-setup-status"></div>
+      <button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript()">Keep this script (not linked to a show)</button>
       <ol class="pt-setup-steps">
         <li><span class="pt-step-dot" id="pt-step-1"></span>Connect to your show</li>
         <li><span class="pt-step-dot" id="pt-step-2"></span>Script loads automatically from the Script Op</li>
@@ -5630,6 +5774,19 @@ input.pt-range::-moz-range-thumb,
   <input type="file" id="pt-file-input" accept=".pdf,.docx,.pages,.txt,.md" style="display:none">
   <div id="pt-edit-overlay">
     <div id="pt-edit-box">
+      <h2>Link a show</h2>
+      <div class="pt-cueola-yours" id="pt-cueola-yours" hidden></div>
+      <div class="pt-cueola-bar">
+        <span class="pt-cueola-label">Cueola</span>
+        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Show code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
+        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
+        <span class="pt-cueola-status" id="pt-cueola-status"></span>
+      </div>
+      <div class="pt-cueola-help">Link a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
+      <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
+        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
+      </div>
+      <hr class="pt-modal-sep">
       <h2>Edit / Load Script</h2>
       <div class="pt-upload-bar">
         <button class="pt-btn pt-upload-btn" id="pt-upload-file-btn" onclick="ptChooseScriptFile()">
@@ -5637,17 +5794,6 @@ input.pt-range::-moz-range-thumb,
           Upload PDF / DOCX / Pages
         </button>
         <span class="pt-upload-status" id="pt-upload-status"></span>
-      </div>
-      <hr class="pt-modal-sep">
-      <div class="pt-cueola-bar">
-        <span class="pt-cueola-label">Cueola</span>
-        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Show code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
-        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
-        <span class="pt-cueola-status" id="pt-cueola-status"></span>
-      </div>
-      <div class="pt-cueola-help">Load a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
-      <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
-        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
       </div>
       <hr class="pt-modal-sep">
       <h2>Theme</h2>
@@ -6499,39 +6645,35 @@ input.pt-range::-moz-range-thumb,
 <!-- ══════════════════════════════════════════
      RETURN TO RUNDOWN DECISION
 ══════════════════════════════════════════ -->
-<div class="overlay" id="exitLiveOv" role="dialog" aria-modal="true" aria-labelledby="exitLiveTitle" aria-describedby="exitLiveIntro exitLiveOutputSummary">
+<div class="overlay" id="exitLiveOv" role="dialog" aria-modal="true" aria-labelledby="exitLiveTitle" aria-describedby="exitLiveIntro">
   <div class="live-exit-card" id="exitLiveDialog" tabindex="-1">
     <div class="live-exit-head">
       <div class="live-exit-head-icon" aria-hidden="true"><span class="sf-symbol" data-symbol="action.back"></span></div>
       <div>
-        <div class="live-exit-kicker">Live mode</div>
-        <h2 class="live-exit-title" id="exitLiveTitle">Return to Rundown</h2>
+        <div class="live-exit-kicker">Live</div>
+        <h2 class="live-exit-title" id="exitLiveTitle">Leave the live show?</h2>
       </div>
     </div>
-    <p class="live-exit-intro" id="exitLiveIntro">Your rundown, assignments, and paperwork stay saved. Choose what Cueola should do with any connected output windows before returning to the builder.</p>
-    <div class="live-exit-output" id="exitLiveOutputState" role="status" aria-live="polite" aria-atomic="true">
-      <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
-      <div class="live-exit-output-copy">
-        <div class="live-exit-output-summary" id="exitLiveOutputSummary">Checking connected outputs…</div>
-        <div class="live-exit-output-details" id="exitLiveOutputDetails">Flowmingo and Outrangutan status will appear here.</div>
-      </div>
-    </div>
-    <div class="live-exit-actions" aria-label="Return to rundown options">
-      <button class="live-exit-option recommended" id="exitLiveStopBtn" type="button" onclick="commitExitLive('stop')">
-        <span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span>
-        <span class="live-exit-option-copy"><strong>Stop outputs and return</strong><small>Pause or stop active playback; output windows remain open safely idle.</small></span>
-      </button>
-      <button class="live-exit-option" id="exitLiveDetachBtn" type="button" onclick="commitExitLive('detach')">
-        <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
-        <span class="live-exit-option-copy"><strong>Leave outputs open and return</strong><small>Detach this operator while existing output windows remain open in their current safe state.</small></span>
-      </button>
-      <button class="btn-secondary live-exit-cancel" id="exitLiveCancelBtn" type="button" onclick="cancelExitLive()">Cancel</button>
+    <p class="live-exit-intro" id="exitLiveIntro">You can come back any time. The rundown stays where it is.</p>
+    <ul class="live-exit-list" id="exitLiveList" role="status" aria-live="polite" aria-atomic="true"></ul>
+    <div class="live-exit-toggles" id="exitLiveToggles">
+      <label class="live-exit-toggle" id="exitLiveClockRow" hidden><input type="checkbox" id="exitLiveClockToggle" onchange="renderLiveExitDecision()"><span>Pause the show clock<small>Pauses it for everyone. Start Show resumes it.</small></span></label>
+      <label class="live-exit-toggle" id="exitLivePlayoutRow" hidden><input type="checkbox" id="exitLivePlayoutToggle" onchange="renderLiveExitDecision()"><span><span id="exitLivePlayoutLabelText">Stop playout on the Air</span><small>Stops what is playing. Output windows stay open.</small></span></label>
     </div>
     <div class="live-exit-status" id="exitLiveStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div class="live-exit-recovery" id="exitLiveWarning" role="alert" hidden>
+      <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span>
+      <div class="live-exit-recovery-copy"><strong>Something did not confirm</strong><span id="exitLiveWarningText"></span></div>
+      <button class="btn-secondary live-exit-recover-btn" id="exitLiveLeaveAnywayBtn" type="button" onclick="commitExitLive({ force:true })">Leave anyway</button>
+    </div>
+    <div class="live-exit-actions live-exit-actions-row" aria-label="Leave live options">
+      <button class="btn-secondary live-exit-cancel" id="exitLiveStayBtn" type="button" onclick="cancelExitLive()">Stay live</button>
+      <button class="btn-primary" id="exitLiveLeaveBtn" type="button" onclick="commitExitLive()">Leave live</button>
+    </div>
     <div class="live-exit-recovery" id="exitLiveRecovery" role="alert" hidden>
       <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span>
-      <div class="live-exit-recovery-copy"><strong>Normal return needs help</strong>Use safe recovery to preserve the production, clean up Live-only controls, and return to the rundown.</div>
-      <button class="btn-secondary live-exit-recover-btn" id="exitLiveRecoverBtn" type="button" onclick="recoverLiveToBuilder()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Recover to Rundown</span></button>
+      <div class="live-exit-recovery-copy"><strong>Cueola could not finish leaving</strong>Return to the rundown now. Your rundown and paperwork are saved.</div>
+      <button class="btn-secondary live-exit-recover-btn" id="exitLiveRecoverBtn" type="button" onclick="recoverLiveToBuilder()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Return to the rundown</span></button>
     </div>
   </div>
 </div>
@@ -6576,7 +6718,14 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-sub">Pick the session and the windows this machine needs. Cueola remembers the set for next time. If a window gets blocked, allow pop-ups for this site once.</div>
     <div class="field"><label class="field-lbl">Session</label>
       <select class="field-in" id="ws-code" onchange="wsCodeChanged()"></select>
-      <input class="field-in u-code-input-caps" id="ws-code-manual" type="text" placeholder="Show code" maxlength="20" hidden oninput="this.value=this.value.toUpperCase()">
+      <input class="field-in u-code-input-caps" id="ws-code-manual" type="text" placeholder="Show code" maxlength="20" hidden oninput="this.value=this.value.toUpperCase();wsRenderTalentLink()">
+    </div>
+    <div class="field"><label class="field-lbl" for="ws-talent-link">Talent display on another machine</label>
+      <div class="ws-screen-row">
+        <input class="field-in" id="ws-talent-link" type="text" readonly value="https://cueola.live/flowmingo" onfocus="this.select()">
+        <button class="btn-secondary" type="button" onclick="wsCopyTalentLink()">Copy</button>
+      </div>
+      <div class="field-hint">Sign in on that device first. Open the link there and the show loads by itself.</div>
     </div>
     <div class="field"><label class="field-lbl">Windows</label>
       <div class="cc-checks cc-checks-stack">
@@ -6807,6 +6956,13 @@ input.pt-range::-moz-range-thumb,
 .sd-bright-row .btn-secondary { width:auto; flex:0 0 auto; }
 .sd-bright-row label { color:var(--text2); font-size:13px; }
 .sd-bright-row input[type=range] { width:200px; }
+/* Deck settings > Key rims: stroke presets + slider, four per-app color wells, Reset. */
+.sd-rim-row input[type=range] { width:140px; }
+.sd-rim-row #sd-rim-w-val { font-size:12px; color:var(--text2); min-width:38px; font-variant-numeric:tabular-nums; }
+.sd-rim-colors { gap:var(--sp-3,12px); }
+.sd-rim-color { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); cursor:pointer; }
+.sd-rim-color input[type=color] { width:30px; height:30px; padding:0; border:2px solid transparent; border-radius:8px; background:var(--s2); cursor:pointer; }
+@media (pointer:coarse) { .sd-rim-color input[type=color] { width:44px; height:44px; } }
 .sd-sect-t { font-weight:700; font-size:14px; margin:var(--sp-4,16px) 0 var(--sp-2,8px); padding-top:var(--sp-3,12px); border-top: 1px solid transparent; }
 .sd-sect-t:first-of-type { border-top:0; padding-top:0; margin-top:var(--sp-2,8px); }
 .sd-sect-hint { font-weight:500; font-size:12px; color:var(--text3); margin-left:6px; }
@@ -6932,6 +7088,8 @@ input.pt-range::-moz-range-thumb,
 .sd-giphy-note { font-size:10.5px; color:var(--text3); margin-top:6px; }
 .sd-giphy-forget { background:none; border:0; color:var(--text3); font-size:10.5px; text-decoration:underline; cursor:pointer; padding:0; }
 .sd-giphy-forget:hover { color:var(--text); }
+.sd-giphy-share { margin:8px 0 0; }
+.sd-picker-opt .sd-note { font-size:11.5px; }
 .sd-funopt { width:32px; height:32px; border-radius:8px; border: 1px solid transparent; background:var(--s2); cursor:pointer; padding:4px; line-height:0; }
 .sd-funopt img { width:100%; height:100%; object-fit:contain; display:block; }
 .sd-funopt.cur { border-color:var(--green); box-shadow:0 0 0 1px var(--green); }
@@ -7090,14 +7248,22 @@ input.pt-range::-moz-range-thumb,
 #flowOp .flowop-preview:has(.flowop-choices) { overflow-y:auto; }
 #flowOp .flowop-preview:has(.flowop-choices) .flowop-readline { display:none; }
 #flowOp .flowop-choices { padding:0; font-family:var(--sans); font-size:14px; }
-#flowOp .fd-sessions { max-width:420px; margin:10px auto 0; }
-#flowOp .fd-session { background:rgba(0,0,0,.3); border-color: transparent; color:var(--pt-text); }
+:is(#flowOp,#promptypus) .fd-sessions { max-width:420px; margin:10px auto 0; }
+:is(#flowOp,#promptypus) .fd-session { background:rgba(0,0,0,.3); border-color: transparent; color:var(--pt-text); }
+/* Talent door: assigned-show rows on the Connect card and in the Link a show overlay. */
+#pt-setup-yours { margin:0 0 12px; width:100%; }
+#pt-setup-yours .fd-sessions { margin:8px auto 0; }
+#pt-cueola-yours { margin:0 0 10px; }
+#pt-cueola-yours .fd-sessions { margin:6px 0 0; max-width:none; }
+:is(#pt-setup-yours,#pt-cueola-yours) .join-yours-label { font:700 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--pt-text3,var(--text3)); }
+#ws-talent-link { flex:1 1 auto; min-width:0; font-family:var(--mono); font-size:12px; }
+#lsCallerBanner { margin-top:8px; }
 /* #flowOp re-fills .fd-session, which out-specifies the shared hover fill, so
    the Flow Op rows need their own. */
-#flowOp .fd-session:hover { border-color:transparent; background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,rgba(0,0,0,.3)); }
-#flowOp .fd-code { color:var(--pt-accent); }
-#flowOp .fd-show { color:var(--pt-text); }
-#flowOp .fd-open { color:var(--pt-accent); opacity:.7; }
+:is(#flowOp,#promptypus) .fd-session:hover { border-color:transparent; background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,rgba(0,0,0,.3)); }
+:is(#flowOp,#promptypus) .fd-code { color:var(--pt-accent); }
+:is(#flowOp,#promptypus) .fd-show { color:var(--pt-text); }
+:is(#flowOp,#promptypus) .fd-open { color:var(--pt-accent); opacity:.7; }
 #flowOp .join-yours-label { color:var(--pt-accent); }
 @media (pointer:coarse) { .fd-link, .fd-session, .jis-btn { min-height:44px; } }
 /* Hidden sessions (2026-09-03): an admin can tuck old class sessions out of
@@ -7343,21 +7509,21 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=e02e00ae43"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
-<script src="cueola-live-session.js?v=fd0bc73200"></script>
+<script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
-<script src="cueola-prompter-session.js?v=1002259f73"></script>
+<script src="cueola-prompter-session.js?v=4e90f2af78"></script>
 <script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
 <script src="cueola-scriptop-prefs.js?v=dfcf350611"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=6a264b0438"></script>
-<script src="outrangutan/outrangutan.js?v=0122e667ce"></script>
+<script src="cueola-app.js?v=a7ab00ae31"></script>
+<script src="outrangutan/outrangutan.js?v=b9e97723d0"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
-<script src="cueola-obs.js?v=53b3859b7c"></script>
+<script src="cueola-obs.js?v=7ea9a03cd8"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=08ecf7be57"></script>
+<script src="cueola-streamdeck.js?v=344d426df7"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

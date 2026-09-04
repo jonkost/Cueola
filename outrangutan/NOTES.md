@@ -5,6 +5,131 @@ Newest phase on top.
 
 ---
 
+## Stills: hold vs timer vs pre-wait (2026-09-03)
+
+Why: at the 9/3 mock show a still showed a 5 second clock and the operator
+did not expect it. The code never invents a duration for a still (makeCue,
+probeImage, the matte path and the Break Room seed all write 0), so a clock on
+a still is always stored cue data on that Mac: either `cue.duration` (the
+Inspector field "Duration (s), 0 holds") or `cue.preWait` (the field right
+above it). Both use the same 0.5 stepper, so a typed 5 in the wrong field is
+the realistic accident.
+
+**What a still does now**
+- Duration 0 = hold. The big clock reads `HOLD` on a neutral face, the meta
+  slot shows `UP m:ss` (how long it has been up), and that count freezes while
+  paused (`active.pausedAt`; resume shifts `shownAt` past the pause).
+- Duration N = a timer. The clock counts down in red, the show log gets
+  "Still timer armed" and "Still timer ended" lines. When it ends: `Follow`
+  fires the next cue, `Fade` fades to black, anything else parks on the last
+  frame with status IDLE. A still never cuts to black on its own: the
+  Inspector no longer offers Cut for stills (a stored `stop` reads and behaves
+  as Hold), new stills default to `endAction: 'hold'`, and `handleEnded` parks
+  an expired still on manual continue even if old data still says `stop`.
+- Pre-wait N = a countdown before the still shows (status PRE-WAIT, then the
+  still holds). The cue list shows a `PRE 0:05` chip, the show log says so.
+- Inspector badges beside Pre-wait and Duration say `HOLD` / `auto: 5s` /
+  `pre-wait: 5s` / `none`, and the first nonzero value per cue toasts what
+  will happen and how to undo it (set 0).
+
+**Wire**: `outrangutan.live` for a held still carries `remaining: null` and
+`hold: true` (numeric `remaining` only while a timer runs; `dur` stays). The
+rundown strip and the deck should print HOLD for `hold: true` instead of a
+frozen 0:00. `live.armed` is now the full `playoutArmed()` object (armed,
+audio, firstCueStaged, firstCueName, outputsOpen/Ready/Total) so the rundown
+can show first-GO truth for a remote Air; armed reads false until someone taps
+on the Air (AudioContext is suspended without a gesture).
+
+**Owner check on the Air**: open the still cue in the Inspector and read
+Duration and Pre-wait. A 5 in either field is the 5 second clock. Set it to 0
+and Cmd+S.
+
+**Review fixes (9/3, second pass)**
+- Still-to-still GO leaked the outgoing still's timer (both stills live on the
+  img deck, so stopDeck never ran, and the old callback ended whatever still
+  was live at the old deadline: HELD with no clock ever shown, or Follow
+  firing the next cue on air). `clearPrevImageTimer()` now runs at the top of
+  `beginMedia` (before the image dispatch, so still to video to still is
+  covered too) and again in `beginImage` once the media is in hand, and
+  `armImageTimer` captures the active object (`self`) and fires only while
+  `active === self` and not paused. A re-fired same still is a new object, so
+  cue equality is not the guard. Pre-wait is left alone on purpose: clearing
+  A's timer in fireCue would end A early while it is still on air.
+- Editing Duration on a held (timer-done) still no longer re-arms a hidden
+  timer. A held still is finished (status IDLE, `hold:true` on the wire, no
+  clock on the Air, strip or deck), so the Inspector keeps the new value for
+  the next play and toasts "Duration applies the next time this still plays.
+  GO fires the next cue." A running or paused still still re-times as before.
+  Re-timing a parked still (un-hold + re-anchor the follower countdown) was
+  not built; it would need the full resume path (setStatus, startTicker,
+  publishPlayingStart) to keep every surface honest.
+- `cueProgress()` now returns `kind` on every branch (prewait: the cue type,
+  active: `active.kind`, idle: null) so the rundown strip and the deck can
+  print HOLD only for `kind === 'image'` with a null `remainMs`, instead of
+  for a rolling video whose `<video>.duration` is not finite yet. The
+  probeMedia WebM duration workaround (seek far, re-read) was not applied:
+  a failed seek would turn an importable file into an import rejection the
+  night before a show.
+
+## Fix requests from the rundown (2026-09-03)
+
+Why: the Go Live preflight on the rundown machine could only report a problem
+on the Air; it had no way to ask the Air to fix it. The single
+`outrangutan.command` slot is the wrong lane (it is baselined on subscribe and
+overwritten by the next transport verb), so requests ride their own top-level
+map.
+
+**Doc shape**: `sessions/<code>.fixRequests.<id>` =
+`{ id, target:'playout', kind, detail, ts, by, byClient, toEndpoint?, outputId?,
+status:'open'|'ack'|'done'|'failed', ackTs, ackBy, doneTs, result }`.
+Ids must match `^[A-Za-z0-9_]{1,120}$` (Firestore field paths); the receiver
+skips anything else. Every write from this side is a field-path patch
+(`fixRequests.<id>.status`), never a map set.
+
+**Receiver** (`handleFixRequests`, called at the top of `onSessionDoc` BEFORE
+the first-snapshot baseline return, so a request written while the Air was
+offline or signed out still runs once the listener is up):
+- Takes `target:'playout'`, `status:'open'`, an unseen id, `ts` within 10
+  minutes. If `toEndpoint` is set it must equal this instance's `OG_SENDER`
+  (the `sender` on the freshest `outrangutan.live` packet); if unset, only the
+  instance whose Outrangutan screen is on screen answers, so the rundown
+  machine's background instance stays quiet.
+- Acks at once (`status:'ack', ackTs, ackBy`), logs "Director asks: ...", shows
+  an accent card in the og-bar ("The director asks: <verb>. Do it / Dismiss")
+  plus a toast.
+- Auto-run kinds: `rejoin` (resubscribe + republish; the ack is queued before
+  the resubscribe), `republish`, `preflight`, `syncMedia`. Gesture kinds wait
+  for Do it: `openOutput` (window.open) and `armPlayback` (also accepts `arm`;
+  AudioContext). Dismiss writes `failed` with result "dismissed on the Air".
+- Results are explicit: syncMedia writes "Kiosk helper offline on the Air" /
+  "Already syncing" / "synced N files, renderers re-checking" (the missing
+  count only changes after the renderers re-probe, so the rundown row should
+  re-read `live.outputs`, not trust the ack). preflight writes
+  `outrangutan.preflight = { ts, sender, fixId, cues, pads, bad, badPads }`
+  with `bad`/`badPads` capped at 50 entries each (`#num`, name, issue).
+- Then `status: done|failed`, `doneTs`, `result`, and a `publishLive(true)`.
+- Addressed gesture kinds (`openOutput`, `arm`/`armPlayback`) while this
+  instance's Outrangutan screen is not up: ack, then patch `status:'failed'`
+  at once with result "Outrangutan is not on screen on this Mac" and log it,
+  no card. A Do-it card on a screen nobody is looking at (the rundown Mac's
+  background instance, when its sender happened to be the freshest
+  `outrangutan.live` packet) would otherwise sit until the rundown's 60s
+  stall. The rundown-side half of this (never addressing the tab's own
+  instance, and not letting the exited instance heartbeat) lives in
+  cueola-app.js.
+
+**Rules**: the live ruleset's `validSessionDocument` has no top-level
+allowlist and `outrangutan` is a map, so `fixRequests` and
+`outrangutan.preflight` need no rules deploy.
+
+**Exit while detached**: `applyLiveExit('stop')` on a detached instance now
+answers `ok:true, alreadyDetached:true` when the fresh classify shows nothing
+active and nothing open (a rundown machine whose playout lives on the Air). If
+anything is active or open the error stays, because a detached instance cannot
+deliver STOP.
+
+---
+
 ## Kiosk outputs (2026-08-28) — true-fullscreen Chrome, no "press Esc" bubble
 
 Why: during a show, Chrome's "press Esc to exit full screen" bubble appeared on

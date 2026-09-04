@@ -41,6 +41,7 @@
   let lastControllerSeenAt = Date.now();
   let lastReadySentAt = 0;   // rate limit for automatic READY re-requests
   let stateApplied = false;
+  let talentLine = '';   // heartbeat truth from the host: 'Talent connected · row 4 · rolling · seen 1s ago'
   let sessionControlsEnabled = false;
   let disconnected = false;
   let editorDirty = false;
@@ -262,8 +263,7 @@
       stateApplied = true;
       disconnected = false;
       patchSnapshot(currentSnapshot);
-      const readyLabel = productionCode ? `Ready · ${productionCode}` : 'Ready';
-      setConnection('ready', readyLabel, sessionControlsEnabled ? 'State applied' : 'Live controls paused');
+      setConnection('ready', readyStatusLabel(), sessionControlsEnabled ? 'State applied' : 'Live controls paused');
       setCommandAvailability(sessionControlsEnabled);
       if (initialState) setDraftStatus(sessionControlsEnabled ? 'Ready' : 'Live controls paused', sessionControlsEnabled ? 'ok' : 'busy');
       return;
@@ -273,7 +273,7 @@
       protocol.noteHeartbeat(message);
       if (stateApplied) {
         disconnected = false;
-        setConnection('ready', productionCode ? `Ready · ${productionCode}` : 'Ready', 'Connected');
+        setConnection('ready', readyStatusLabel(), 'Connected');
         setCommandAvailability(sessionControlsEnabled);
       } else if (Date.now() - lastReadySentAt > 5000) {
         // The controller is alive but this panel has no acknowledged snapshot
@@ -758,6 +758,10 @@
 
     const playing = Boolean(first(snapshot, ['playing', 'running', 'transport.running', 'prompter.playing', 'prompter.running', 'prompter.transport.running']) ?? false);
     patchPlayButton(playing);
+    // The status chip says what the TALENT is doing, from the host's heartbeat
+    // registry; the host handshake only decides whether controls are enabled.
+    const line = first(snapshot, ['talent.line']);
+    talentLine = typeof line === 'string' ? line.trim() : '';
 
     const speed = finite(first(snapshot, ['speed', 'targetSpeed', 'transport.targetSpeed', 'prompter.speed', 'prompter.targetSpeed']), 50);
     const size = finite(first(snapshot, ['size', 'fontSize', 'prompter.size', 'prompter.fontSize']), 48);
@@ -893,10 +897,23 @@
   }
 
   function patchCueAvailability(snapshot) {
-    const activeIndex = rowIndex(first(snapshot, ['currentRow', 'prompter.currentRow']), first(snapshot, ['activeIdx', 'currentRowIndex', 'prompter.activeIdx']));
-    const nextIndex = rowIndex(first(snapshot, ['nextRow', 'prompter.nextRow']), first(snapshot, ['nextRowIndex', 'prompter.nextRowIndex']));
-    setDynamicAction(document.getElementById('cueNowButton'), activeIndex == null ? '' : `seek_row_${activeIndex + 1}`);
-    setDynamicAction(document.getElementById('cueNextButton'), nextIndex == null ? '' : `seek_row_${nextIndex + 1}`);
+    const currentRow = first(snapshot, ['currentRow', 'prompter.currentRow']);
+    const nextRow = first(snapshot, ['nextRow', 'prompter.nextRow']);
+    const activeIndex = rowIndex(currentRow, first(snapshot, ['activeIdx', 'currentRowIndex', 'prompter.activeIdx']));
+    const nextIndex = rowIndex(nextRow, first(snapshot, ['nextRowIndex', 'prompter.nextRowIndex']));
+    // seek_row_N carries the crew-facing DISPLAY number (segment rows never
+    // count), which the host publishes as row.number; index + 1 is only the
+    // fallback for a host that predates it.
+    const activeNumber = rowNumber(currentRow, activeIndex);
+    const nextNumber = rowNumber(nextRow, nextIndex);
+    setDynamicAction(document.getElementById('cueNowButton'), activeNumber == null ? '' : `seek_row_${activeNumber}`);
+    setDynamicAction(document.getElementById('cueNextButton'), nextNumber == null ? '' : `seek_row_${nextNumber}`);
+  }
+
+  function rowNumber(row, fallbackIndex) {
+    const number = row && typeof row === 'object' ? finite(row.number ?? row.rowNum, NaN) : NaN;
+    if (Number.isFinite(number) && number >= 1) return Math.floor(number);
+    return fallbackIndex == null ? null : fallbackIndex + 1;
   }
 
   function setDynamicAction(button, action) {
@@ -960,6 +977,11 @@
     let key = 'transport';
     try { key = localStorage.getItem('cueola_script_operator_tab') || key; } catch {}
     selectTab(key, false);
+  }
+
+  function readyStatusLabel() {
+    if (talentLine) return talentLine;
+    return productionCode ? `Ready · ${productionCode}` : 'Ready';
   }
 
   function setConnection(state, label, detail) {

@@ -68,7 +68,7 @@ test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted 
   assert.match(app, /function liveCueOperationLine\(operation, text, className='', style='', cueType=''\)/);
   // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
   // silently drops every beat field it does not list.
-  assert.match(app, /\['style','info','notes','min','sec','done','helperFor','helperRole','_createdAt','_createdBy'\]/);
+  assert.match(app, /\['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'\]/);
   // saveCueConfig is the single chokepoint that generates PREP/OUT rows.
   const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
   assert.match(save, /syncPlaybackHelperRows\(b, prevCell, d\)/);
@@ -160,7 +160,10 @@ test('prompter single-authority: talent never mints, doc session is adopted, tak
   // visible takeover, never a silent fork.
   assert.match(app, /_adoptDocPrompterSession\(d\)/);
   const adopt = app.slice(app.indexOf('function _adoptDocPrompterSession('), app.indexOf('let _lastPrompterSessionReclaimTs'));
-  assert.match(adopt, /senderClient === CLIENT_ID/);
+  // Self-echo is the per-window sender only: the same-CLIENT_ID clause made a
+  // sibling window (/keywibird) refuse the Live window's session forever.
+  assert.doesNotMatch(adopt, /senderClient === CLIENT_ID/);
+  assert.match(adopt, /if \(!senderClient \|\| isPrompterSelfSender\(d\.prompter\?\.sender\)\) return;/);
   assert.match(adopt, /toast\('Another operator window took the prompter/);
   // The 46e4fc8 reclaim recovery path keeps its guards: only a show-calling
   // surface with the live screen open, rate-limited against snapshot wars.
@@ -331,7 +334,7 @@ test('cue advance never moves the prompter; the op lines it up deliberately (D11
   // …while the manual line-up tools stay: C (cue current row), T (top),
   // Cue Now / Cue Next, and the seek_row validation.
   assert.match(app, /Cue prompter to current row/);
-  assert.match(app, /function cuePrompterToLiveRow\(\)/);
+  assert.match(app, /function cuePrompterToLiveRow\(opts=\{\}\)/);
   assert.match(app, /data-script-op-cue="now"/);
   assert.match(app, /data-script-op-cue="next"/);
   // The ▶ talent-position rail renders from adopted talent state and the
@@ -651,7 +654,7 @@ test('same-tab control-surface probe, repaint push, and liveRowInfo honor the br
   assert.match(app, /liveRowInfo: \{/);
   assert.match(app, /current: _sdSafe\(\(\) => _sdRowInfo\(ai\), null\)/);
   assert.match(app, /next: _sdSafe\(\(\) => _sdRowInfo\(liveNextPlayableCueIndex\(ai\)\), null\)/);
-  assert.match(app, /return \{ index, title: _sdBeatName\(b\) \|\| b\.info \|\| '' \};/);
+  assert.match(app, /return \{ index, number: rowDisplayNumber\(index\), title: _sdBeatName\(b\) \|\| b\.info \|\| '' \};/);
 });
 
 test('Outrangutan has reachable narrow, medium, and wide modes', () => {
@@ -783,7 +786,7 @@ test('prompter scrub eases toward an accumulating target instead of teleporting'
   // loop eases the screen toward it, and the text never jumps under the
   // talent's eye. A command arriving mid-travel extends the SAME travel.
   const seek = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('function ptNoteLiveRow'));
-  assert.match(seek, /ptJogBy\(n \* lineHeight\)/);
+  assert.match(seek, /ptJogBy\(n \* ptLinePitch\(\)\)/);   // measured pitch, not a 1.55em guess (9/4 A3)
   assert.doesNotMatch(seek.slice(0, seek.indexOf('function ptJogBy')), /ptApplyScrollOffset/);
   assert.match(seek, /const base = ptJog \? ptJog\.target : ptOffset/);
   assert.match(seek, /if \(ptJog\) \{ ptJog\.target = target; return; \}/);
@@ -805,7 +808,7 @@ test('prompter scrub eases toward an accumulating target instead of teleporting'
   // Pause freezes a mid-ease scrub where the screen is; a boot prime never
   // replays a stale RELATIVE scrub; a seeded position outranks in-flight travel.
   assert.match(app.slice(app.indexOf('function ptStopPlay()'), app.indexOf('function ptTogglePlay')), /ptCancelJog\(\)/);
-  assert.match(app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce')), /startsWith\('seek_line_'\)\) fresh\.push\(newest\)/);
+  assert.match(app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce')), /isCollaborativePrompterControl\(action\) && !action\.startsWith\('seek_line_'\) && !action\.startsWith\('seek_set_'\)\) fresh\.push\(newest\)/);
   const seedBlock = app.slice(app.indexOf('const seedPct = Number(message.positionPct)'), app.indexOf('ptTargetSpeed = state.targetSpeed'));
   assert.ok((seedBlock.match(/ptCancelJog\(\)/g) || []).length >= 2);
   // The scrub write queue holds 24 commands: at the dial's 10 writes/s, an
@@ -898,7 +901,7 @@ test('playout commands are confirmed, retried, and never swallowed silently (8/2
   // throttling: RTRT stages, the delayed arm, the rundown-to-prompter seek.
   assert.match(app, /function steadyTimeout\(fn, ms\)/);
   assert.match(app, /_pendingArmTimer = steadyTimeout\(/);
-  assert.match(app, /steadyTimeout\(\(\) => sendPrompterControl\(`seek_row_\$\{rowNum\}`\), 150\)/);
+  assert.match(app, /steadyTimeout\(\(\) => sendPrompterControl\(`seek_row_\$\{rowNum\}`, payload\), 150\)/);
   // Air side: acks every command, dedupes retries by origId, fires pads that
   // ride a cue write, and stamps the ack-capable protocol version.
   assert.match(playbackJs, /ackRemoteCommand\(cmd\)/);
@@ -986,7 +989,7 @@ test('the bridge overlay verbs toggle against the operator mirrors and reuse the
   // from the MIRRORED state (wrapSec), never a window-local memo, so it is
   // truthful across machines and reloads.
   assert.match(ov, /mode === 'wrap' && Number\(ptClockState\?\.wrapSec\) === mins \* 60/);
-  assert.match(app, /targetTs:Date\.now\(\) \+ sec \* 1000, size:2, wrapSec:sec/);
+  assert.match(app, /targetTs:Date\.now\(\) \+ sec \* 1000, wrapSec:sec/);   // size is a display preference the merge carries (9/4 A3)
   // Acks converge the talent-state mirrors in EVERY operator window: the
   // adoption runs before the pending-control target check.
   const ack = app.slice(app.indexOf('function _handlePrompterControlAck'), app.indexOf('// Split-brain recovery'));
@@ -1044,7 +1047,8 @@ test('control bus survives clock skew and non-executing windows never steal the 
   // Claim theft is gated on being able to execute: the KeyWi window and any
   // rundown-parked window used to grab the claim, run nothing, and black-hole
   // deck commands for 15s at a stretch.
-  assert.match(bus, /classList\.contains\('on'\) \|\| !isShowCaller\(\)\) return;/);
+  // (9/4 slice A2: the gate is the Live lifecycle, not the #liveshow class.)
+  assert.match(bus, /if \(!liveRuntimeOn\(\) \|\| !isShowCaller\(\)\) return;/);
   // Foreign claim liveness is judged by heartbeat ARRIVAL; the stamp refreshes
   // only when the claim changed, and a claim already ancient at first sight
   // (dead holder) is left stale so the live caller takes over immediately.
@@ -1056,6 +1060,1004 @@ test('control bus survives clock skew and non-executing windows never steal the 
   const abortFn = app.slice(app.indexOf('function abortPlayoutCall'), app.indexOf('function applyRemoteLiveCall'));
   assert.match(abortFn, /aborted \(\$\{why\}\)/);
   assert.match(abortFn, /source === 'deck' \? 'deck ABORT key'/);
+});
+
+test('talent overlay CSS: theme tokens, stage-relative banners, honest read line, mirror, doctrine (9/4 slice F)', () => {
+  const styleStart = html.indexOf('<style');
+  const styleEnd = html.indexOf('</style>');
+  const css = html.slice(styleStart, styleEnd);
+  const rule = (selector) => {
+    const at = css.indexOf('\n' + selector + '{') + 1;   // rule at a line start (theme overrides repeat selectors mid-line)
+    assert.notEqual(at, 0, `missing rule ${selector}`);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  // Overlay tokens live on #promptypus and follow the prompter theme; the
+  // white theme gets a tinted glass (no stroke) and black copy.
+  const screen = rule('#promptypus');
+  assert.match(screen, /--pt-ovl-bg:color-mix\(in srgb,var\(--pt-bg,#0a0a0a\) 66%,transparent\)/);
+  assert.match(screen, /--pt-ovl-fg:var\(--pt-text,#fff\)/);
+  assert.match(screen, /--pt-ovl-fg-dim:/);
+  const white = rule('#promptypus[data-pt-theme="white"]');
+  assert.match(white, /--pt-ovl-fg:#000/);
+  // Clock, label, value, question and the chips are driven by the tokens.
+  const clock = rule('.pt-clock-overlay');
+  assert.match(clock, /background:var\(--pt-ovl-bg\)/);
+  assert.match(clock, /color:var\(--pt-ovl-fg\)/);
+  assert.match(rule('.pt-clock-label'), /color:var\(--pt-ovl-fg-dim\)/);
+  assert.match(rule('.pt-clock-value'), /color:var\(--pt-ovl-fg\)/);
+  const question = rule('#pt-question-overlay');
+  assert.match(question, /background:var\(--pt-ovl-bg\)/);
+  assert.match(question, /color:var\(--pt-ovl-fg\)/);
+  assert.match(rule('#pt-hold-chip,#pt-next-chip'), /background:var\(--pt-ovl-bg\)/);
+  assert.match(css, /\.pt-chip-label\{/);
+  assert.match(css, /\.pt-chip-row\{/);
+  assert.match(css, /#pt-hold-chip\[hidden\],#pt-next-chip\[hidden\]\{display:none\}/);
+  // Wrap stays red with white copy; expired copy is pinned white; the
+  // QUESTION tag stays yellow on dark.
+  assert.match(rule('.pt-clock-overlay.wrap'), /#b31322[^}]*color:#fff/);
+  assert.match(rule('.pt-clock-overlay.wrap .pt-clock-label'), /color:#fff/);
+  assert.match(css, /\.pt-clock-overlay\.expired:not\(\.timeofday\) :is\(\.pt-clock-label,\.pt-clock-value\)\{color:#fff\}/);
+  assert.match(rule('.pt-question-tag'), /background:#ffd23c;color:#121212/);
+  // Tech slate copy is pinned light on the fixed dark card.
+  assert.match(rule('.pt-slate-title'), /color:#f0ead6/);
+  assert.match(rule('.pt-slate-sub'), /color:#f0ead6/);
+  assert.match(css, /#pt-slate\{background:#07090f/);
+  // The drawn read line is the stage center, the same point JS readY uses.
+  assert.match(rule('#pt-read-line'), /top:calc\(50% \+ var\(--pt-bar-h,48px\) \/ 2\)/);
+  // Clock and question live inside #pt-stage: offsets are stage relative
+  // (no bar-h term) and mirror flips only the slate on its own.
+  assert.match(clock, /top:24px/);
+  assert.doesNotMatch(clock, /--pt-bar-h/);
+  assert.match(question, /top:26px/);
+  assert.doesNotMatch(question, /--pt-bar-h/);
+  assert.match(css, /#promptypus\.mirrored #pt-slate\{transform:scaleX\(-1\)\}/);
+  assert.doesNotMatch(css, /#promptypus\.mirrored::before/);
+  assert.doesNotMatch(css, /#promptypus\.mirrored \.pt-clock-overlay/);
+  // Overlay size: buckets 0..4 stay, no px ceilings on the type, size 4 gets
+  // a 24vh band, the question clamps to two lines at the two largest steps.
+  assert.match(css, /\.pt-clock-overlay\.size-4,#pt-question-overlay\.size-4\{--pt-ovl-scale:1\.75;max-height:24vh\}/);
+  assert.match(rule('.pt-clock-label'), /max\(12px,min\(1\.8vw,2\.1vh\)\)/);
+  assert.match(rule('.pt-clock-value'), /max\(30px,min\(7vw,7\.5vh\)\)/);
+  assert.match(rule('.pt-clock-overlay.wrap .pt-clock-value'), /max\(36px,min\(10vw,7vh\)\)/);
+  assert.doesNotMatch(rule('.pt-clock-label'), /clamp\(/);
+  assert.doesNotMatch(question, /clamp\(/);
+  // Both XL (size-3) and MAX (size-4) clamp to two lines: three XL lines
+  // plus the tag overrun the 20vh band on real displays.
+  assert.match(css, /#pt-question-overlay\.size-3 \.pt-question-text,#pt-question-overlay\.size-4 \.pt-question-text\{-webkit-line-clamp:2\}/);
+  assert.doesNotMatch(css, /\n#pt-question-overlay\.size-4 \.pt-question-text\{-webkit-line-clamp:2\}/, 'size-4-only clamp rule must not come back');
+  assert.match(question, /max-width:min\(720px,34vw\)/);
+  // Doctrine: no colored strokes or rings, no glow on bold script text, hold
+  // chip pulses three times then holds, expired digits pulse four times.
+  assert.doesNotMatch(rule('.pt-clock-overlay.wrap'), /border-color|box-shadow/);
+  assert.doesNotMatch(rule('.pt-clock-overlay.expired:not(.timeofday)'), /border-color/);
+  assert.match(rule('#pt-hold-chip'), /animation:ptHoldPulse 2\.4s ease-in-out 3/);
+  assert.match(css, /\.pt-clock-overlay\.expired:not\(\.timeofday\) \.pt-clock-value\{animation:ptExpiredPulse 1s ease-in-out 4\}/);
+  assert.match(rule('.pt-slate-mark'), /border:1px solid transparent/);
+  assert.match(css, /#pt-text strong,\.prompt-op-text strong,\.flowop-script strong\{[^}]*text-shadow:none/);
+  assert.match(clock, /border-radius:var\(--ui-radius-panel\)/);
+  assert.match(question, /border-radius:var\(--ui-radius-group\)/);
+  assert.match(rule('.pt-question-tag'), /border-radius:999px/);
+  // Motion: banners and the slate fade (opacity + visibility), no display
+  // toggle; chips keep display:none while hidden.
+  for (const r of [clock, question, rule('#pt-slate')]) {
+    assert.match(r, /opacity:0;visibility:hidden;transition:opacity/);
+    assert.doesNotMatch(r, /display:none/);
+  }
+  assert.match(css, /\.pt-clock-overlay\.on\{opacity:1;visibility:visible/);
+  assert.match(css, /#pt-question-overlay\.on\{opacity:1;visibility:visible/);
+  assert.match(css, /#pt-slate\.on\{opacity:1;visibility:visible/);
+  // Wrap lifts over the talent panel; fullscreen fades the bar until the
+  // cursor comes back; the edit overlay sits under the sign-in modal (300).
+  assert.match(css, /#promptypus:has\(#pt-panel:not\(\.hidden\)\) \.pt-clock-overlay\.wrap\{bottom:/);
+  // Both fullscreen shapes fade the bar: the launcher fullscreens the root
+  // (:fullscreen #promptypus), the F key fullscreens #promptypus itself.
+  // Standard and -webkit- forms live in separate rules (an unsupported
+  // pseudo-class drops the whole selector list), and the reveal targets
+  // #pt-bar:not(.hidden) so an H-hidden bar never comes back on mouse move.
+  assert.match(css, /:fullscreen #promptypus #pt-bar,#promptypus:fullscreen #pt-bar\{opacity:0;pointer-events:none\}/);
+  assert.match(css, /:fullscreen #promptypus\.show-cursor #pt-bar:not\(\.hidden\),#promptypus:fullscreen\.show-cursor #pt-bar:not\(\.hidden\)\{opacity:1;pointer-events:auto\}/);
+  assert.match(css, /:-webkit-full-screen #promptypus #pt-bar,#promptypus:-webkit-full-screen #pt-bar\{opacity:0;pointer-events:none\}/);
+  assert.match(css, /:-webkit-full-screen #promptypus\.show-cursor #pt-bar:not\(\.hidden\),#promptypus:-webkit-full-screen\.show-cursor #pt-bar:not\(\.hidden\)\{opacity:1;pointer-events:auto\}/);
+  assert.doesNotMatch(css, /[^-]:fullscreen[^{}]*-webkit-full-screen[^{}]*\{|-webkit-full-screen[^{}]*[^-]:fullscreen[^{}]*\{/, 'fullscreen and -webkit-full-screen must not share one selector list');
+  assert.doesNotMatch(css, /show-cursor #pt-bar\{opacity:1/);
+  // Narrow windows: chips drop into the bottom zone as compact pills, lift
+  // above the talent panel, and yield to a WRAP banner.
+  const narrow = css.match(/@media\(max-width:1000px\)\{\n#pt-hold-chip,#pt-next-chip\{[^}]*\}[\s\S]*?\n\}/);
+  assert.ok(narrow, 'narrow-width chip media block');
+  assert.match(narrow[0], /#pt-hold-chip,#pt-next-chip\{top:auto;bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\);max-width:calc\(50vw - 40px\);flex-direction:row;align-items:baseline;gap:8px;padding:6px 10px\}/);
+  assert.match(narrow[0], /#pt-hold-chip \.pt-chip-row,#pt-next-chip \.pt-chip-row\{font-size:18px\}/);
+  assert.match(narrow[0], /#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-hold-chip,#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-next-chip\{bottom:calc\(140px \+ env\(safe-area-inset-bottom\)\)\}/);
+  assert.match(narrow[0], /#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-hold-chip,#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-next-chip\{display:none\}/);
+  // Source order: the narrow block must follow the base chip rule (same id
+  // specificity, so order decides).
+  assert.ok(css.indexOf('#pt-hold-chip,#pt-next-chip{position:absolute') < css.indexOf('@media(max-width:1000px){\n#pt-hold-chip'));
+  assert.match(rule('#pt-edit-overlay'), /z-index:250/);
+  // Size changes must not animate: the anchor math measures synchronously.
+  assert.doesNotMatch(rule('#pt-text'), /transition:[^;]*font-size/);
+});
+
+test('preflight card always reaches its buttons; exit sheet and caller chip have styles to hang on', () => {
+  const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+  const rule = (selector) => {
+    const at = css.indexOf('\n' + selector + '{') + 1;   // rule at a line start (theme overrides repeat selectors mid-line)
+    assert.notEqual(at, 0, `missing rule ${selector}`);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  const card = rule('.precheck-card');
+  assert.match(card, /max-height:min\(820px,calc\(100dvh - 48px\)\)/);
+  assert.match(card, /overflow:hidden/);
+  const rows = rule('#goLiveCheckRows');
+  assert.match(rows, /flex:1 1 auto;min-height:0;overflow-y:auto/);
+  assert.match(rows, /scrollbar-gutter:stable/);
+  assert.match(rows, /padding:0 2px 6px 0/);
+  assert.match(rule('.precheck-actions'), /flex:none/);
+  assert.doesNotMatch(rule('.precheck-actions'), /sticky/);
+  assert.doesNotMatch(css, /\.overlay\.u-overlay-center\{[^}]*overflow/);
+  assert.match(css, /@media \(max-width:900px\),\(max-height:640px\)\{\s*\.precheck-card\{padding:18px 16px/);
+  // Group header line and the fix capsule (same recipe as the jump link).
+  assert.match(css, /\.precheck-group\{/);
+  assert.match(css, /\.precheck-group\[data-state="fail"\] \.precheck-group-dot\{background:var\(--red\)\}/);
+  assert.match(css, /\.precheck-group\[aria-expanded="false"\] \.precheck-group-chev\{transform:rotate\(-90deg\)\}/);
+  assert.match(rule('.precheck-fix'), /color:var\(--accent\);background:color-mix\(in srgb,var\(--accent\) 12%,transparent\);border:1px solid transparent/);
+  assert.match(rule('.precheck-body'), /flex:1 1 auto/);
+  // Exit sheet list and toggles, Build toolbar caller chip and banner.
+  assert.match(css, /\.live-exit-list\{list-style:none/);
+  assert.match(css, /\.live-exit-item\{/);
+  assert.match(css, /\.live-exit-toggle\{/);
+  assert.match(css, /\.live-exit-toggle input\{[^}]*accent-color:var\(--accent\)/);
+  assert.match(rule('#rdCallerBtn'), /border-radius:20px/);
+  assert.match(css, /#rdCallerBtn\[data-state="caller"\]\{[^}]*color:var\(--green\)\}/);
+  assert.match(css, /#rdCallerBtn\[data-state="granted"\]\{[^}]*color:var\(--accent\)\}/);
+  assert.match(css, /\.rd-caller-banner\{/);
+  assert.match(css, /\.rd-caller-banner\[hidden\]\{display:none\}/);
+});
+
+test('cross-device talent control: doc-path transport, rebind on evidence, doc seeds never play (9/4 slice A1)', async () => {
+  const prompterSession = await readFile(new URL('../../cueola-prompter-session.js', import.meta.url), 'utf8');
+  // Transport never waits on the handshake when the session doc can carry it;
+  // the readiness queue survives only for the no-session-code case.
+  const send = app.slice(app.indexOf('function sendPrompterControl('), app.indexOf('// ─────────────────────────────────────────────────────────────\n// PROMPTYPUS'));
+  assert.match(send, /if \(!prompterControlDocPathAvailable\(control\) && !prompterSessionController\.isReady\(_activePrompterOutputInstanceId\)\)/);
+  assert.match(app, /function prompterControlDocPathAvailable\(control, codeOverride=''\)/);
+  assert.match(app, /return Boolean\(window\._firebaseReady && code\);/);
+  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
+  assert.match(flowSend, /if \(!prompterControlDocPathAvailable\(control, flowOpCode\) && !prompterSessionController\.isReady/);
+  // Rebind on EVIDENCE (pinned talent silent, or the newcomer echoes our
+  // snapshotId), never on a newer heartbeat ts; recovery rides sync scope.
+  const handler = app.slice(app.indexOf('function _handlePrompterOperatorMessage('), app.indexOf('function _ensurePrompterOperatorBridge('));
+  assert.match(handler, /const evidence = _shouldRebindToTalent\(msg\);   \/\/ '' \| 'silent' \| 'echo'\n      if \(!evidence\) return;/);
+  assert.match(handler, /Talent output replaced/);
+  assert.match(handler, /_noteTalentRegistry\(outputId, msg\)/);
+  assert.match(handler, /sendPrompterStateSnapshot\(outputId, 'recovery'\);\n      \}\n      return;/);
+  assert.doesNotMatch(handler, /msg\.ts >/);
+  const rebind = app.slice(app.indexOf('function _shouldRebindToTalent('), app.indexOf('function _dropTalentTransportMirror('));
+  assert.match(rebind, /\['degraded', 'lost'\]\.includes\(link\?\.status\)/);
+  assert.match(rebind, /snapshotId !== String\(prompterSessionController\.getState\(\)\.snapshotId \|\| ''\)\) return '';/);
+  // Doc-delivered seeds never start playback; a live renderer (rolling, or
+  // mid-glide/jog) takes script/display/identity only.
+  const apply = app.slice(app.indexOf('function applyCompletePrompterState('), app.indexOf('function _postPrompterMessage('));
+  assert.match(apply, /const wantRunning = viaDoc \? false : Boolean\(state\.running\);/);
+  assert.match(apply, /if \(wantRunning && !ptPlaying\) ptStartPlay\(\);/);
+  assert.doesNotMatch(apply, /if \(state\.running && !ptPlaying\) ptStartPlay\(\)/);
+  assert.match(apply, /const liveRenderer = ptHasScript\(\) && \(ptPlaying \|\| !!ptGlide \|\| !!ptJog\);/);
+  assert.match(apply, /if \(seed && !liveRenderer\) \{/);
+  assert.match(apply, /ptWriteTalentApplied\(applied\)/);
+  // The talent door retargets the doc seed once (fresh boot) and applies it
+  // as doc-delivered; both talent listeners gate doc controls with
+  // accepts({ allowLegacy, ignoreTarget }).
+  assert.match(app, /stateMessage = \{ \.\.\.stateMessage, targetOutputInstanceId:FLOWMINGO_ENDPOINT_ID \};/);
+  assert.match(app, /applyCompletePrompterState\(stateMessage, \{ viaDoc:true \}\)/);
+  assert.equal((app.match(/accepts\(control, \{ allowLegacy:true, ignoreTarget:true \}\)/g) || []).length, 2);
+  assert.match(prompterSession, /if \(!options\.ignoreTarget && target && target !== instanceId/);
+  // One-hop readiness over the doc, and sync re-sends before 'recovering'.
+  assert.match(app, /'prompter\.talentApplied': \{/);
+  assert.match(app, /_handlePrompterOperatorMessage\(\{ \.\.\._ta, type:'PROMPTER_STATE_APPLIED' \}\)/);
+  assert.match(app, /_prompterHandshakeResends < 3/);
+  assert.match(app, /sendPrompterStateSnapshot\(outputInstanceId, 'resend', 'sync'\)/);
+  // Identity: mint only with the Live runtime on; never blank the doc's id.
+  assert.match(app, /_prompterMayMintPrompterSession\(\) && !IS_PROMPTER_TALENT_BOOT && isShowCaller\(\)/);
+  assert.equal((app.match(/\.\.\.\((?:message|protocolState)\.sessionId \? \{ 'prompter\.sessionId':/g) || []).length, 2);
+  // Stale mirrors drop on degraded/lost; the deck reads mirror freshness and
+  // talent truth; the doc seed is honest when no talent mirror exists.
+  const transition = app.slice(app.indexOf('function projectTalentLinkTransition('), app.indexOf('let _talentNudgeTimer'));
+  assert.match(transition, /_dropTalentTransportMirror\(\)/);
+  assert.match(app, /connected: _sdSafe\(\(\) => _talentMirrorFresh\(\), false\)/);
+  assert.doesNotMatch(app, /prompterTalentConnected/);
+  // KEYMAP playpause + toggle, and the control bus 'toggle' verb (cross-machine deck).
+  assert.equal((app.match(/sendPrompterControl\(_sdPrompterPlayingTruth\(\) \? 'pause' : 'resume'\)/g) || []).length, 3);
+  assert.doesNotMatch(app, /run: \(\) => sendPrompterControl\(ptPlaying \? 'pause' : 'resume'\)/);
+  assert.match(app, /docMessage\.positionPct = null;/);
+  assert.match(app, /docMessage\.state\.running = false;/);
+  // Honest status line, pop-out copy, and the talent's refused-write notice.
+  assert.match(app, /function _talentStatusLine\(\)/);
+  assert.match(app, /talent:\{ line:_talentStatusLine\(\), connected:_talentMirrorFresh\(\) \}/);
+  assert.match(app, /'Sent to the session'/);
+  assert.match(app, /ptSetCueolaStatus\('Cloud write refused: sign in again on this device', true\)/);
+});
+
+test('prompter follows the rundown by one rule per surface (9/4 slice A2)', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  // Follower gate: a non-caller Live window browses (selection only) on
+  // arrows / Previous; nothing rides to the talent, the playout Air or the
+  // show log, the toast is throttled, and the browse is never a refusal.
+  const browse = app.slice(app.indexOf('function lsBrowseAsFollower('), app.indexOf('function lsNext('));
+  assert.match(browse, /const from = liveSelectedCueIndex\(\);/);
+  assert.match(browse, /setLiveSelectedCue\(target, \{ reason:'browse' \}\)/);
+  assert.match(browse, /renderLive\(\);\s+syncLiveIdx\(\);/);
+  assert.match(browse, /Date\.now\(\) - _browseToastAt > 8000/);
+  assert.match(browse, /is calling the show\./);
+  assert.doesNotMatch(browse, /updatePrompterOnAdvance|fireOutrangutanAutoForBeat|maybeArmNextPlayout|logShow/);
+  assert.match(browse, /return true;\n\}/);
+  const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
+  assert.match(next, /if \(!liveCommandDispatchAllowed\(\{ notify:true \}\)\) return false;\n  if \(!isShowCaller\(\)\) return lsBrowseAsFollower\(1\);/);
+  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function resolveFollowedIdx('));
+  assert.match(prev, /if \(!isShowCaller\(\)\) return lsBrowseAsFollower\(-1\);/);
+  // Advance intent: only updatePrompterOnAdvance sends { advance:true }; the
+  // payload reaches ptSeekToRow from both remote-control receivers.
+  const advance = app.slice(app.indexOf('function updatePrompterOnAdvance('), app.indexOf('function cuePrompterToLiveRow('));
+  assert.match(advance, /cuePrompterToLiveRow\(\{ advance: !!\(opts && opts\.advance === true\) \}\);/);
+  assert.equal((app.match(/cuePrompterToLiveRow\(\{ advance:true \}\)/g) || []).length, 0);
+  const cue = app.slice(app.indexOf('function cuePrompterToLiveRow('), app.indexOf('let _lastTalentPosPct'));
+  assert.match(cue, /const payload = opts && opts\.advance === true \? \{ advance:true \} : null;/);
+  assert.match(app, /ptSeekToRow\(action\.replace\('seek_row_', ''\), payload\)\.then/);
+  assert.match(app, /if \(action\?\.startsWith\('seek_row_'\)\) \{ ptSeekToRow\(action\.replace\('seek_row_', ''\), payload\); return; \}/);
+  // ptSeekToRow: an advance never travels backward. Inside the row (header n
+  // at/above its landing spot, header n+1 below the read line) releases the
+  // hold in place; past the row stays put, keeps a boundary hold at n+1, and
+  // flags AHEAD beyond that. Explicit cues keep the unconditional glide.
+  const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
+  assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
+  assert.match(seek, /if \(top <= targetY \+ 8 && afterTop > readY\) \{/);
+  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);/);
+  assert.match(seek, /if \(resume\) ptStartPlay\(\);/);
+  assert.match(seek, /if \(afterTop <= readY\) \{\n        if \(!ptGlide\) ptPendingHoldResume = false;\n        ptNoteLiveRow\(n\);\n        ptAheadOfLive = ptAutoHeldRow !== n \+ 1;/);
+  assert.match(seek, /ptAheadOfLive = false;   \/\/ a seek that moves puts the talent back in step/);
+  assert.match(seek, /ptGlideToOffset\(ptOffset \+ delta, \(\) => \{/);
+  // A seek whose header is not rendered yet parks for ONE retry after the
+  // next script render; the render also rebuilds the hold boundaries.
+  assert.match(seek, /if \(n <= total && !\(payload && payload\.retry\)\) ptPendingSeekRow = \{ row:n, payload:\{ \.\.\.\(payload \|\| \{\}\), retry:true \} \};/);
+  const update = app.slice(app.indexOf('function ptUpdateFromCueola('), app.indexOf('// Connection state for the talent setup/ready indicator.'));
+  assert.match(update, /ptUpdateProgress\(\);\n    [^\n]*\n[^\n]*\n[^\n]*\n    ptRecalcRowHolds\(\);/);
+  assert.match(update, /ptSeekToRow\(pending\.row, pending\.payload\)/);
+  // Hold-release fallback lives in the two doc-adoption callers, never in
+  // ptNoteLiveRow; the baseline adopts the live row when a caller is live.
+  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback (owner 9/3)'));
+  assert.doesNotMatch(note, /ptSeekToRow|ptStartPlay|ptGlideToOffset/);
+  assert.match(note, /ptRenderNextChip\(\);/);
+  const fallback = app.slice(app.indexOf('function ptArmHoldReleaseFallback('), app.indexOf('function ptCallerIsLiveOnDoc('));
+  assert.match(fallback, /ptAutoHeldRow == null \|\| ptPlaying \|\| !\(ptAutoHeldRow <= n\)\) return;/);
+  assert.match(fallback, /steadyTimeout\(\(\) => \{/);
+  assert.match(fallback, /if \(ptAutoHeldRow !== held \|\| ptPlaying\) return;\n    ptSeekToRow\(n, \{ advance:true \}\);\n  \}, 600\);/);
+  assert.match(app, /Math\.abs\(Date\.now\(\) - ts\) < 60000/);
+  assert.equal((app.match(/if \(ptCallerIsLiveOnDoc\((?:d|data)\)\) ptNoteLiveRow\(rowDisplayNumber\(liveIdx(?:Doc)?, listDoc\)\);/g) || []).length, 2);
+  assert.equal((app.match(/ptArmHoldReleaseFallback\(newRow\);/g) || []).length, 2);
+  // ptReadY is the one read-line number: stage center, innerHeight fallback.
+  assert.match(app, /function ptReadY\(\) \{\n  const stage = ptEl\('pt-stage'\);/);
+  assert.match(app, /return r\.top \+ r\.height \/ 2;/);
+  assert.equal((app.match(/window\.innerHeight \/ 2 \+ 24/g) || []).length, 1);
+  assert.ok((app.match(/const readY = ptReadY\(\);/g) || []).length >= 7);
+  // NEXT chip + HOLDING naming: markup inside #pt-stage, renderer hides while
+  // holding or without a live row, names come from the [N] headers.
+  assert.match(html, /<div id="pt-next-chip" hidden><span class="pt-chip-label">Next<\/span><span class="pt-chip-row"><\/span><\/div>/);
+  assert.match(html, /<div id="pt-hold-chip" hidden><span class="pt-chip-label">Holding<\/span><span class="pt-chip-row"><\/span><\/div>/);
+  assert.match(app, /function ptNextHeader\(\)/);
+  assert.match(app, /function ptRowNameFromHeader\(el\)/);
+  const nextChip = app.slice(app.indexOf('function ptRenderNextChip('), app.indexOf('function ptStartPlay('));
+  assert.match(nextChip, /const next = \(Number\.isFinite\(ptLiveRowNum\) && ptAutoHeldRow == null\) \? ptNextHeader\(\) : null;/);
+  assert.match(nextChip, /ptRowNameFromHeader\(next\.el\) \|\| `Row \$\{next\.row\}`/);
+  const holdChip = app.slice(app.indexOf('function ptRenderHoldChip('), app.indexOf('function ptRenderNextChip('));
+  assert.match(holdChip, /name \|\| `Row \$\{ptAutoHeldRow\}`/);
+  assert.match(holdChip, /ptRenderNextChip\(\);/);
+  assert.doesNotMatch(holdChip, /HOLDING · ROW/);
+  const recalc = app.slice(app.indexOf('function ptRecalcRowHolds('), app.indexOf('function ptRenderHoldChip('));
+  assert.match(recalc, /ptSeenRowHolds = seen;\n  ptRenderNextChip\(\);/);
+  assert.match(app, /ptAheadOfLive = false;      \/\/ holding at the boundary IS in step with the rundown/);
+  // Talent truth on the wire: heartbeat + ack carry rowNum/ahead; the
+  // operator adopts them everywhere a heartbeat lands and prefers them.
+  assert.match(app, /rowNum:ptCurrentRowNum\(\), ahead:!!ptAheadOfLive,/);
+  assert.match(app, /rowNum: ptCurrentRowNum\(\),\n    ahead: !!ptAheadOfLive,/);
+  assert.match(app, /function _adoptTalentRowTruth\(state=\{\}\)/);
+  assert.match(app, /_adoptTalentRowTruth\(msg\.state \|\| \{\}\);   \/\/ display truth too/);
+  assert.match(app, /const row = entry\.heldAtRow \|\| entry\.rowNum \|\| _talentRowAtPct\(entry\.pct\);/);
+  assert.match(app, /if \(Number\.isFinite\(_talentRowNum\) && _talentRowNum >= 1\) return _talentRowNum;/);
+  assert.match(app, /talent: _sdSafe\(\(\) => _sdTalentRowInfo\(\), null\)/);
+  assert.match(app, /return \{ number, title: b \? \(_sdBeatName\(b\) \|\| b\.info \|\| ''\) : '', ahead: !!_talentAhead, holding \};/);
+  // Executor gate on lifecycle, not the #liveshow class (KeyWi's screen swap
+  // only toggles classes); publishing into a void is a refusal.
+  assert.match(app, /function liveRuntimeOn\(\) \{\n  try \{ return liveSessionState\(\)\.lifecycle === 'live'; \}/);
+  const bus = app.slice(app.indexOf('function runControlBusAction('), app.indexOf('function fireOutrangutanAutoForBeat('));
+  assert.doesNotMatch(bus, /liveshow'\)\?\.classList\.contains\('on'\)/);
+  assert.match(bus, /function runControlBusAction\(target, action, source='bus'\) \{\n  if \(!liveRuntimeOn\(\)\) return false;/);
+  assert.match(bus, /if \(_busPublishWouldBlackHole\(\)\) return false;\n  _busCmdSeq \+= 1;/);
+  // C8 + G3: an own claim is a void whenever this window cannot execute
+  // (fresh or stale); a grant holder still on Build with no fresh claim
+  // elsewhere is a void too; the follower + stale-claim rule stays.
+  assert.match(bus, /if \(liveRuntimeOn\(\) && isShowCaller\(\)\) return false;\n    if \(_busClaimIsMine\(\)\) return true;\n    if \(isShowCaller\(\)\) return _busClaimIsStale\(\);/);
+  assert.doesNotMatch(bus, /if \(_busClaimIsMine\(\)\) return !liveRuntimeOn\(\) && !_busClaimIsStale\(\);/);
+  assert.match(bus, /return !!_callerStateInputs\(\)\.grantHeldElsewhere && _busClaimIsStale\(\);/);
+  assert.match(bus, /function _releaseOwnBusExecutorClaim\(\) \{\n  try \{\n    if \(_busClaimExempt\(\) \|\| !_busClaimIsMine\(\)\) return;\n    _busExecutorClaim = null;\n[^\n]*\{ busExecutor: null \}/);
+  assert.match(app, /markResumeState\(\);\n  \/\/ Off Live[^\n]*\n[^\n]*\n  _releaseOwnBusExecutorClaim\(\);/);
+  assert.match(app, /_heldControlGrantBefore = held;\n[^\n]*\n[^\n]*\n  try \{ if \(!isShowCaller\(\)\) _releaseOwnBusExecutorClaim\(\); \} catch \{\}/);
+  assert.match(bus, /if \(!liveRuntimeOn\(\)\) return;\n  if \(!isShowCaller\(\)\) return;/);
+  assert.match(bus, /if \(!liveRuntimeOn\(\) \|\| !isShowCaller\(\)\) return;/);
+  const avail = app.slice(app.indexOf('busAvailable: () => {'), app.indexOf('prompterStrip: () => {'));
+  assert.match(avail, /if \(liveRuntimeOn\(\) && isShowCaller\(\)\) return 'exec';/);
+  assert.match(avail, /!_busPublishWouldBlackHole\(\)\) return 'publish';/);
+  // Bridge: session.role, live.on / live.caller, runAction returns the result.
+  assert.match(app, /role: _sdSafe\(\(\) => session\.role \|\| '', ''\)/);
+  assert.match(app, /on: _sdSafe\(\(\) => liveRuntimeOn\(\), false\), caller: _sdSafe\(\(\) => isShowCaller\(\), false\),/);
+  assert.match(app, /if \(a && typeof a\.run === 'function'\) return a\.run\(\); return undefined; \}/);
+  // Script Op popout: seek_row carries the host's display number.
+  assert.match(app, /currentRow:activeBeat \? \{ index:activeIdx, number:rowDisplayNumber\(activeIdx\)/);
+  assert.match(scriptOp, /const activeNumber = rowNumber\(currentRow, activeIndex\);/);
+  assert.match(scriptOp, /`seek_row_\$\{activeNumber\}`/);
+  assert.doesNotMatch(scriptOp, /seek_row_\$\{activeIndex \+ 1\}/);
+  // Copy: no dashes anywhere in the new talent copy.
+  for (const slice of [browse, nextChip, holdChip]) assert.doesNotMatch(slice, /[–—]/);
+});
+
+test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (9/4 slice A3)', () => {
+  // 1. Crawl delta is clamped and the clock restarts on visibility resume.
+  const loop = app.slice(app.indexOf('function ptScrollLoop(ts)'), app.indexOf('function ptElementAtReadLine'));
+  assert.match(loop, /const delta = Math\.min\(ts - ptLastTime, 100\);/);
+  assert.match(loop, /const step = \(ptLiveSpeed \/ 60\) \* \(delta \/ 16\.67\);/);
+  assert.match(loop, /Math\.exp\(-delta \/ 270\)/);
+  assert.match(loop, /document\.addEventListener\('visibilitychange', \(\) => \{\n  if \(document\.visibilityState === 'visible'\) ptLastTime = null;/);
+  assert.doesNotMatch(loop, /\* 0\.06/);
+  // 2. No unrequested transport from a doc seed (pinned by A1's wantRunning).
+  assert.match(app, /const wantRunning = viaDoc \? false : Boolean\(state\.running\);/);
+  // 3. Only the first source in a renderer with no protocol state resets to top;
+  //    live pushes never reset.
+  assert.equal((app.match(/if \(firstApply && !_lastAppliedPrompterSnapshotId\) ptSetScriptText\(text\);/g) || []).length, 1);
+  const liveUpdate = app.slice(app.indexOf('function ptApplyCueolaLiveUpdate('), app.indexOf('const _ptLibraryLoads'));
+  assert.doesNotMatch(liveUpdate, /ptResetScroll/);
+  // 4. Every relayout is anchor-preserving and rebaselines holds: size changes
+  //    hold the element under the read line by reference; script pushes restore
+  //    synchronously and ALWAYS write the transform; viewport changes restore
+  //    from the continuously kept anchor.
+  const setSize = app.slice(app.indexOf('function ptSetSize(val)'), app.indexOf('function ptAdjustSize('));
+  assert.match(setSize, /const anchor = next !== ptFontSize \? ptSizeAnchorCapture\(\) : null;/);
+  assert.match(setSize, /text\.style\.transition = 'none'/);
+  assert.match(setSize, /const delta = ptAnchorDelta\(anchor\);\n    if \(delta != null\) ptShiftScrollBy\(delta\);/);
+  const shift = app.slice(app.indexOf('function ptShiftScrollBy(delta)'), app.indexOf('let ptLastAnchor'));
+  assert.match(shift, /track\.style\.transform = `translateY\(-\$\{ptOffset\}px\)`;\n  ptUpdateProgress\(\);\n  ptRecalcRowHolds\(\);/);
+  assert.match(shift, /if \(ptGlide\) \{ ptGlide\.from \+= delta;/);
+  const update = app.slice(app.indexOf('function ptUpdateFromCueola('), app.indexOf('// Connection state for the talent setup/ready indicator.'));
+  assert.match(update, /const anchor = track && prevHeight > 0 \? ptCaptureLineAnchor\(el\) : null;/);
+  assert.match(update, /const delta = anchor \? ptAnchorScreenDelta\(el, anchor\) : null;/);
+  assert.match(update, /ptShiftScrollBy\(delta\);/);
+  assert.match(update, /    track\.style\.transform = `translateY\(-\$\{ptOffset\}px\)`;\n    ptUpdateProgress\(\);/);
+  assert.doesNotMatch(update, /if \(!ptPlaying && !ptGlide\) track\.style\.transform/);
+  assert.doesNotMatch(update, /requestAnimationFrame/);
+  const viewport = app.slice(app.indexOf('function ptOnViewportChange()'), app.indexOf("window.addEventListener('resize', ptOnViewportChange)"));
+  assert.match(viewport, /const delta = ptAnchorDelta\(anchor\);/);
+  assert.match(viewport, /ptShiftScrollBy\(delta \+ crawl\);/);
+  for (const ev of ["window.addEventListener('resize', ptOnViewportChange)", "window.addEventListener('orientationchange', ptOnViewportChange)", "document.addEventListener('fullscreenchange', ptOnViewportChange)", "document.addEventListener('webkitfullscreenchange', ptOnViewportChange)"]) assert.ok(app.includes(ev), ev);
+  assert.match(app, /function ptUpdateProgress\(\) \{[\s\S]{0,400}ptNoteAnchor\(\);/);
+  // Pause markers re-derive from geometry (never a cleared set) and the
+  // crossing test survives a bounded leap.
+  const recalc = app.slice(app.indexOf('function ptRecalcRowHolds('), app.indexOf('function ptRenderHoldChip('));
+  assert.match(recalc, /ptRecalcPauseMarkers\(\);/);
+  const markers = app.slice(app.indexOf('function ptRecalcPauseMarkers()'), app.indexOf('let _ptProgPaintAt'));
+  assert.match(markers, /if \(cand\.el\.getBoundingClientRect\(\)\.top <= readY \+ 2\) seen\.add\(cand\.key\);/);
+  assert.match(markers, /if \(rect\.top <= readY\) \{/);
+  assert.doesNotMatch(markers, /rect\.bottom >= readY/);
+  // 5. Speed eases while rolling; a paused talent starts at the set speed.
+  const speed = app.slice(app.indexOf('function ptSetSpeed(val)'), app.indexOf('function ptAdjustSpeed('));
+  assert.match(speed, /if \(!ptPlaying\) ptLiveSpeed = ptTargetSpeed;/);
+  assert.doesNotMatch(speed, /\n  ptLiveSpeed = ptTargetSpeed;/);
+  // 6. Per-frame work stays cached; progress paint stays throttled.
+  const frameWork = app.slice(app.indexOf('function ptCheckAutoPauseMarkers()'), app.indexOf('function ptSyncPlayIcons('));
+  assert.ok((frameWork.match(/ptLoopCache\(\)/g) || []).length >= 2);
+  assert.doesNotMatch(frameWork, /innerText|querySelectorAll/);
+  assert.match(frameWork, /ts - _ptProgPaintAt > 100/);
+  // 8. Heartbeat and ack batching ride worker timers, and the heartbeat says
+  //    when the window is hidden instead of reporting a running crawl.
+  assert.match(app, /ptHeartbeatInterval = P\?\.createSteadyInterval\n      \? P\.createSteadyInterval\(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS\)/);
+  assert.match(app, /_ptAckTimer = steadyTimeout\(\(\) => \{[\s\S]{0,700}\}, 300\);/);
+  assert.match(app, /visibility:document\.visibilityState,\n    stalled:!!\(ptPlaying && document\.visibilityState === 'hidden'\),/);
+  // 10. Scrub never pauses or glides.
+  const scrub = app.slice(app.indexOf('function ptSeekToProgress(pct)'), app.indexOf('// ── Jog smoother'));
+  assert.doesNotMatch(scrub, /ptStopPlay|ptGlideToOffset/);
+  const jogBy = app.slice(app.indexOf('function ptJogBy(deltaPx)'), app.indexOf('// The live-row context feeding the hold-at-next-cue behavior'));
+  assert.doesNotMatch(jogBy, /ptStopPlay|ptGlideToOffset/);
+  // 11. Recovery is sync scope; the doc seed is honest without a talent mirror.
+  assert.match(app, /scope = scope \|\| \(\(reason === 'ready' \|\| reason === 'initial-state' \|\| reason === 'connect'\) \? 'seed' : 'sync'\);/);
+  assert.match(app, /docMessage\.positionPct = null;/);
+  // 12. In-app forward is change-gated and only re-renders a live talent.
+  assert.match(app, /if \(adopted && prompterText !== _lastForwardedPrompterText\) \{\n          _lastForwardedPrompterText = prompterText;\n          _postPrompterMessage\(getPrompterPayload\(false\)\);\n          if \(isFlowmingoTalentActive\(\)\) ptUpdateFromCueola\(prompterText\);/);
+  // 13. Talent listener errors never slate: Reconnecting + worker-timed backoff.
+  const link = app.slice(app.indexOf('async function ptLoadFromCueolaCode('), app.indexOf('function ptResetIdle()'));
+  const fail = link.slice(link.indexOf('const fail = err =>'), link.indexOf('const load = () =>'));
+  assert.doesNotMatch(fail, /ptShowTechSlate/);
+  assert.match(fail, /ptSetCueolaStatus\(loadedOnce \? 'Reconnecting' : label, true\);/);
+  assert.match(fail, /const waits = \[2000, 5000, 10000\];/);
+  assert.match(fail, /retryTimer = steadyTimeout\(\(\) => \{/);
+  assert.match(fail, /if \(myLoad !== _ptLoadGen \|\| !isFlowmingoTalentActive\(\)\) return;/);
+  assert.match(link, /\}, fail\);\n    \} catch \(err\) \{\n      fail\(err\);/);
+  assert.equal((link.match(/ptShowTechSlate\(\)/g) || []).length, 1);   // the not-found branch only
+  // 14. Line pitch is measured, not assumed.
+  const lines = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('// ── Jog smoother'));
+  assert.doesNotMatch(lines, /\* 1\.55/);
+  assert.match(lines, /function ptLinePitch\(\)/);
+  assert.match(lines, /if \(cache\) cache\.pitch = pitch;/);
+  assert.match(setSize, /_ptLoopCache\.pitch = 0/);
+  // 15. The same script pushed again is a no-op on both talent feeds.
+  assert.match(link, /if \(text !== ptLastCueolaScript\) \{/);
+  assert.match(app, /if \(prompterText !== ptLastCueolaScript\) \{/);
+  // Skipped from the lane-9 checklist: item 2's queue prime age gate (refuted:
+  // accepts() already drops stale targeted transport), item 9's ptGetMaxScroll
+  // --pt-bar-h read (still the 48 literal; readY itself is one helper, A2).
+});
+
+test('talent door: your shows, signed-out link path, stale script honesty, launcher link (9/4 slice A3)', () => {
+  // Markup: rows above the code row on the Connect card and in the overlay,
+  // the keep-this-script dismiss, Link a show first, the bar button renamed.
+  assert.match(html, /<div class="pt-setup-yours" id="pt-setup-yours" hidden><\/div>\n      <div class="pt-setup-row">/);
+  assert.match(html, /<button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript\(\)">Keep this script/);
+  assert.match(html, /<h2>Link a show<\/h2>\n      <div class="pt-cueola-yours" id="pt-cueola-yours" hidden><\/div>\n      <div class="pt-cueola-bar">/);
+  assert.ok(html.indexOf('<h2>Link a show</h2>') < html.indexOf('<h2>Edit / Load Script</h2>'));
+  assert.ok(html.indexOf('<h2>Edit / Load Script</h2>') < html.indexOf('id="pt-upload-file-btn"'));
+  assert.match(html, /onclick="ptOpenEdit\(\)">Link a show<\/button>/);
+  assert.doesNotMatch(html, />Load Session</);
+  // Rows: sessionChoices + renderSessionChoiceRows, guarded (linked or in
+  // flight, generation counter), resume row from the device's last link,
+  // signed-out line + sign-in button; the pick fills the code and connects.
+  const door = app.slice(app.indexOf('// ── Talent door: your shows (9/4 A3)'), app.indexOf('function ptSetupConnect()'));
+  assert.match(door, /if \(ptDoorLinkBusy\(\)\) \{ paint\(''\); return; \}/);
+  assert.match(door, /if \(gen !== ptOfferGen\) return;/);
+  assert.match(door, /choices = await idApi\.sessionChoices\(\);/);
+  assert.match(door, /idApi\.renderSessionChoiceRows\(choices, 'ptPickAssignedSession'\)/);
+  assert.match(door, /Sign in on this device to see your shows/);
+  assert.match(door, /onclick="ptOpenSignInForLink\(\)">Sign in</);
+  assert.match(door, /localStorage\.getItem\('cueola_flowmingo_last_code'\)/);
+  assert.match(door, /localStorage\.setItem\('cueola_flowmingo_last_code', code\);\n    localStorage\.setItem\('cueola_last_code', code\);/);
+  assert.match(door, /function ptPickAssignedSession\(code\) \{[\s\S]{0,300}ptSetupConnect\(\);/);
+  assert.match(door, /return !!ptLinkedCueolaCode \|\| ptConnState === 'connecting' \|\| ptConnState === 'connected';/);
+  // Identity hooks: both listeners call the door, and a pending code links
+  // the moment an identity appears.
+  assert.match(door, /if \(ptPendingLinkCode && ptDoorSignedIn\(\) && !ptLinkedCueolaCode\) \{/);
+  assert.equal((app.match(/if \(isFlowmingoTalentActive\(\)\) ptOnIdentityMaybeChanged\(\);/g) || []).length, 2);
+  // Signed-out link path: stash, card status, overlay closed and fullscreen
+  // exited BEFORE the sign-in opens (no requireProfileForCloud toast-and-portal).
+  const link = app.slice(app.indexOf('async function ptLoadFromCueolaCode('), app.indexOf('function ptResetIdle()'));
+  assert.match(link, /if \(!ptDoorSignedIn\(\)\) \{\n    ptPendingLinkCode = code;/);
+  assert.match(link, /ss\.textContent = 'Sign in on this device to link ' \+ code \+ '\.';/);
+  assert.match(link, /ptOpenSignInForLink\(\);\n    return;/);
+  assert.doesNotMatch(link, /requireProfileForCloud/);
+  assert.match(door, /function ptOpenSignInForLink\(\) \{\n  ptCloseEdit\(\);\n  ptExitFullscreenForDialog\(\);\n  try \{ window\.CueolaIdentity\?\.openSignIn\?\.\(\{ returnTo:'promptypus' \}\); \} catch \{\}/);
+  assert.match(link, /ss\.textContent = 'Class key needed for ' \+ code \+ '\.';/);
+  // Success: remember the code, tell the card, close the overlay at once.
+  assert.match(link, /ptLinkedCueolaCode = code;\n        ptRememberLinkedCode\(code\);/);
+  assert.match(link, /ss\.textContent = 'Linked to ' \+ code; ss\.className = 'pt-setup-status'; \}/);
+  assert.doesNotMatch(link, /setTimeout\(ptCloseEdit, \d+\)/);
+  assert.equal((link.match(/toast\([^\n]*\);\n            ptCloseEdit\(\);/g) || []).length, 2);
+  // Stale saved script: restored copy is a placeholder (card stays up), the
+  // unlinked-with-script pill warns, Keep this script dismisses.
+  const restore = app.slice(app.indexOf('function ptLoadSavedOrDefault()'), app.indexOf('// Talent heartbeat: a state-bearing ping'));
+  assert.match(restore, /ptSetScriptHTML\(saved\);\n    ptScriptRestored = true;\n    ptScriptIsPlaceholder = true;\n    ptUpdateReady\(\);\n    return;/);
+  assert.match(app, /else if \(hasScript\)                    \{ state = 'warn';       text = 'Local script, not linked'; \}/);
+  assert.doesNotMatch(app, /text = 'Script loaded'/);
+  assert.match(app, /if \(keep\) keep\.hidden = !\(ptScriptIsPlaceholder && ptScriptRestored\);/);
+  assert.match(app, /function ptKeepLocalScript\(\) \{\n  ptScriptIsPlaceholder = false;\n  ptScriptRestored = false;\n  ptUpdateReady\(\);/);
+  // enterPrompter prefills the last code and lists the shows; the overlay
+  // re-lists on open.
+  const enter = app.slice(app.indexOf('function enterPrompter()'), app.indexOf('ptKeydownHandler = (e) =>'));
+  assert.match(enter, /if \(setupCode && !setupCode\.value\) setupCode\.value = ptLastLinkedCode\(\);\n  ptOfferAssignedSessions\(\);/);
+  assert.match(app, /if \(ov\) ov\.classList\.add\('open'\);\n  ptOfferAssignedSessions\(\);/);
+  // Launcher: read-only talent link for another machine, Copy, sign-in note.
+  assert.match(html, /<label class="field-lbl" for="ws-talent-link">Talent display on another machine<\/label>/);
+  assert.match(html, /<input class="field-in" id="ws-talent-link" type="text" readonly value="https:\/\/cueola\.live\/flowmingo"/);
+  assert.match(html, /onclick="wsCopyTalentLink\(\)">Copy<\/button>/);
+  assert.match(html, /Sign in on that device first\./);
+  assert.match(app, /return 'https:\/\/cueola\.live\/flowmingo' \+ \(code \? '\?code=' \+ encodeURIComponent\(code\) : ''\);/);
+  assert.match(app, /await navigator\.clipboard\.writeText\(link\);/);
+  assert.match(app, /if \(manual\) manual\.hidden = !\(sel && sel\.value === '__other'\);\n  wsRenderTalentLink\(\);/);
+  // Copy: no dashes in the new door copy.
+  for (const slice of [door, restore, enter]) assert.doesNotMatch(slice, /[–—]/);
+});
+
+test('talent overlays: honest size buckets, size survives wraps, stage-parented, held stills read HOLD (9/4 slice A3)', () => {
+  // Five '|| 1' -> '?? 1': S (0) renders and steps; countdown/duration/wrap
+  // carry the size forward instead of forcing it.
+  const clockRender = app.slice(app.indexOf('function ptRenderClockOverlay()'), app.indexOf('function renderPromptOpClockPreview()'));
+  assert.match(clockRender, /size-\$\{Math\.max\(0, Math\.min\(4, state\.size \?\? 1\)\)\}/);
+  assert.match(clockRender, /let value = '--:--';/);
+  assert.doesNotMatch(clockRender, /'[^'\n]*[–—][^'\n]*'/);   // no dash in any overlay string literal
+  const reducer = app.slice(app.indexOf('function applyClockActionToState('), app.indexOf('function questionLaneKeydown('));
+  assert.match(reducer, /update\(\{ size:Math\.min\(4, \(current\.size \?\? 1\) \+ 1\) \}\)/);
+  assert.match(reducer, /update\(\{ size:Math\.max\(0, \(current\.size \?\? 1\) - 1\) \}\)/);
+  assert.doesNotMatch(reducer, /size:current\.size \|\| 1/);
+  assert.doesNotMatch(reducer, /size:2,/);
+  assert.doesNotMatch(reducer, /current\.size \|\| 1/);
+  assert.match(reducer, /if \(next\.size !== current\.size && isFlowmingoTalentActive\(\)\) ptPersistOverlaySize\(next\.size\);/);
+  // Overlays are created inside #pt-stage (mirror flips them with the copy).
+  const ensure = app.slice(app.indexOf('function ptEnsureOverlayEls()'), app.indexOf('function ptStoredOverlaySize()'));
+  assert.match(ensure, /const host = ptEl\('pt-stage'\) \|\| screen;/);
+  assert.equal((ensure.match(/host\.appendChild\((clock|question)\)/g) || []).length, 2);
+  assert.doesNotMatch(ensure, /screen\.appendChild/);
+  // Persistence and the seed: localStorage per device, display.overlaySize
+  // in the snapshot, applied in the seed branch.
+  assert.match(app, /localStorage\.getItem\('cueola_prompter_overlay_size'\)/);
+  assert.match(app, /localStorage\.setItem\('cueola_prompter_overlay_size', String\(size\)\)/);
+  assert.match(app, /overlaySize:Math\.max\(0, Math\.min\(4, Number\(ptClockState\?\.size \?\? 1\)\)\),/);
+  assert.match(app, /if \(Number\.isFinite\(Number\(display\.overlaySize\)\)\) ptSetOverlaySize\(Number\(display\.overlaySize\)\);/);
+  assert.match(app, /if \(storedOverlay != null\) ptSetOverlaySize\(storedOverlay, \{ persist:false \}\);/);
+  // The gear hides the bar with the controls (opacity only).
+  const panel = app.slice(app.indexOf('function ptTogglePanel()'), app.indexOf('const PT_FLOAT_CARDS'));
+  assert.match(panel, /if \(bar\) bar\.classList\.toggle\('hidden', !ptPanelVisible\);/);
+  // Playout HOLD consumer side: no countdown anchor without a clock, a held
+  // still returns hold with no remaining (play and pause), the strip prints
+  // HOLD / PAUSED · HOLD, the bridge passes hold. Old (remaining 0) and new
+  // (remaining null + hold) Air packets both land as HOLD.
+  assert.match(app, /_ogLiveEndAt = \(og\.live\.status === 'play' && Number\.isFinite\(og\.live\.remaining\)\n          && \(og\.live\.remaining > 0 \|\| Number\(og\.live\.dur\) > 0\)\)/);
+  const nowCue = app.slice(app.indexOf('function _playoutNowCue()'), app.indexOf('function _playoutNowPad()'));
+  assert.match(nowCue, /const held = live\.hold === true \|\| \(live\.type === 'image' && !\(durMs > 0\) && !loop\);/);
+  assert.match(nowCue, /if \(held && \(live\.status === 'play' \|\| live\.status === 'pause'\)\) \{\n    return \{ kind: 'cue', name, status: live\.status, remainMs: null, hold: true, loop: false, frac: null \};/);
+  assert.match(nowCue, /hold: phase !== 'pre' && !loop && !Number\.isFinite\(cp\.remainMs\)\n          && \(cp\.kind !== undefined \? cp\.kind : outrangutanState\.live\?\.type\) === 'image',/);
+  const strip = app.slice(app.indexOf('function renderPlayoutStrip()'), app.indexOf('function outCountdownText('));
+  assert.match(strip, /if \(now\.hold\) t = 'HOLD';\n  if \(now\.status === 'pause'\) t = t \? 'PAUSED · ' \+ t : 'PAUSED';/);
+  assert.match(app, /hold: !!\(nowPlaying && nowPlaying\.hold\),/);
+});
+
+test('leaving Live is one sheet: consequences, optional toggles, Stay/Leave, outputs before snapshot (9/4 slice A4)', () => {
+  // Sheet markup: ids kept for openDialog focus/inert, two plain verbs, the
+  // generated list, the two optional toggles, an inline warning with Leave
+  // anyway, and the controller-failure block that only recoverLiveToBuilder
+  // answers. No stop/detach pair anywhere.
+  const sheet = html.slice(html.indexOf('<div class="overlay" id="exitLiveOv"'), html.indexOf('PRE-LIVE CHECK'));
+  assert.match(sheet, /id="exitLiveDialog" tabindex="-1"/);
+  assert.match(sheet, /id="exitLiveTitle">Leave the live show\?</);
+  assert.match(sheet, /id="exitLiveIntro">You can come back any time\. The rundown stays where it is\.</);
+  assert.match(sheet, /<ul class="live-exit-list" id="exitLiveList"/);
+  assert.match(sheet, /id="exitLiveClockToggle" onchange="renderLiveExitDecision\(\)"/);
+  assert.match(sheet, /id="exitLivePlayoutToggle" onchange="renderLiveExitDecision\(\)"/);
+  assert.match(sheet, /id="exitLiveStayBtn" type="button" onclick="cancelExitLive\(\)">Stay live</);
+  assert.match(sheet, /id="exitLiveLeaveBtn" type="button" onclick="commitExitLive\(\)">Leave live</);
+  assert.match(sheet, /id="exitLiveLeaveAnywayBtn" type="button" onclick="commitExitLive\(\{ force:true \}\)">Leave anyway</);
+  assert.match(sheet, /id="exitLiveRecoverBtn" type="button" onclick="recoverLiveToBuilder\(\)"/);
+  assert.doesNotMatch(sheet, /commitExitLive\('stop'\)|commitExitLive\('detach'\)|Stop outputs and return|Leave outputs open/);
+  assert.doesNotMatch(sheet, /[–—]/);
+  // Consequence lines cover clock, talent, playout on the Air, Script Op, students.
+  assert.match(app, /label:'Show clock:', text:'keeps running for everyone\.'/);
+  assert.match(app, /label:'Show clock:', text:'is not running\.'/);
+  assert.match(app, /text:`pauses at \$\{fmtProductionClock\(\(clock\.elapsedSecs \|\| 0\) \* 1000\)\} for everyone\.`/);
+  assert.match(app, /label:'Talent screen:', text:'holds on the current line\. The script stays up\.'/);
+  assert.match(app, /label:'Talent screen:', text:'not connected\.'/);
+  assert.match(app, /const where = playback\.remote \? 'Playout on the Air:' : 'Playout on this Mac:';/);
+  assert.match(app, /text:`keeps playing \$\{cue\}\.`/);
+  assert.match(app, /text:'nothing is playing\.'/);
+  assert.match(app, /text:'not reporting\.', state:'warn'/);
+  assert.match(app, /label:'Script Op window:', text:'closes\.'/);
+  assert.match(app, /label:'Students:', text:'keep their Live screen\. Nobody is signed out\.'/);
+  // Toggles only when there is something to decide.
+  assert.match(app, /clockRow\.hidden = !\(outputs\.clock\?\.running && outputs\.clock\?\.canDrive\);/);
+  assert.match(app, /playoutRow\.hidden = !\(outputs\.playback\?\.active && \(outputs\.playback\?\.reporting \|\| !outputs\.playback\?\.remote\)\);/);
+  // commitExitLive: no disposition argument; outputs FIRST, then the
+  // snapshot, then the clock choice (direct broadcast, caller-gated), then
+  // commitLeave. Output warnings stay inline; only a controller throw
+  // reaches the recovery block.
+  const commit = app.slice(app.indexOf('async function commitExitLive(options={})'), app.indexOf('function cancelExitLive()'));
+  const outputsAt = commit.indexOf('await applyLiveExitOutputs(transaction.outputs, choices)');
+  const snapshotAt = commit.indexOf("await captureSessionSnapshot('live-exit', true)");
+  const leaveAt = commit.indexOf('liveSessionController.commitLeave({');
+  assert.ok(outputsAt > 0 && snapshotAt > outputsAt && leaveAt > snapshotAt, 'outputs, then snapshot, then commitLeave');
+  assert.match(commit, /if \(!outputResult\.ok\) \{\n      presentLiveExitWarning\(/);
+  assert.match(commit, /if \(choices\.pauseClock && liveClockRunning && canDriveShowClock\(\)\) \{[\s\S]*broadcastShowClock\(\);/);
+  assert.match(commit, /toast\(liveClockRunning \? 'Left the live show\. Clock still running\.' : 'Left the live show\.', 4200\);/);
+  assert.doesNotMatch(commit, /presentLiveExitRecovery\(failure/);
+  assert.match(app, /function presentLiveExitWarning\(message\)/);
+  assert.doesNotMatch(app, /async function commitExitLive\(disposition/);
+  // Stay live: no toast.
+  const cancel = app.slice(app.indexOf('function cancelExitLive()'), app.indexOf('async function recoverLiveToBuilder()'));
+  assert.doesNotMatch(cancel, /toast\(/);
+  // Talent hold: gated on reachability (connected OR degraded OR recent
+  // heartbeat OR open same-device window), capped wait, warning on no ack.
+  assert.match(app, /return status === 'connected' \|\| status === 'degraded' \|\| _prompterHasRecentTalent\(\) \|\| Boolean\(windowOpen\);/);
+  assert.match(app, /const capMs = before\.windowOpen \? LIVE_EXIT_TALENT_ACK_LOCAL_MS : LIVE_EXIT_TALENT_ACK_REMOTE_MS;/);
+  assert.match(app, /if \(!before\.reachable\) return \{ ok:true, acknowledged:false, before, paused:false, note:'Talent screen not connected\. The hold was sent anyway\.' \};/);
+  // Playout: the Air is never touched unless the toggle asks; the stop rides
+  // the wire path and waits on cmdAck; the local instance is only touched
+  // when playout is local AND something is open or active.
+  const playoutExit = app.slice(app.indexOf('async function applyOutrangutanLiveExit('), app.indexOf('async function applyLiveExitOutputs('));
+  assert.match(playoutExit, /if \(!stopRequested\) return \{ ok:true, before:playback, skipped:'remote-keep' \};/);
+  assert.match(playoutExit, /const sent = fireOutrangutanCommand\('stop', ''\);/);
+  assert.match(playoutExit, /await waitForOutrangutanCmdAck\(origId, LIVE_EXIT_PLAYOUT_ACK_MS\)/);
+  assert.match(playoutExit, /if \(!\(playback\.active \|\| playback\.open \|\| playback\.hasOpenOutputs \|\| playback\.hasActiveOutputs\)\) return \{ ok:true, before:playback, skipped:'local-idle' \};/);
+  // The classify asks the Air's packet when playout is remote.
+  const classify = app.slice(app.indexOf('function classifyOutrangutanLiveExit()'), app.indexOf('function classifyLiveExitOutputs()'));
+  assert.match(classify, /const remote = playoutIsRemote\(\);/);
+  assert.match(classify, /const reporting = remote \? remotePlayoutFresh\(outrangutanState\) : Boolean\(window\.Outrangutan\);/);
+  // Stale talent mirrors are dropped when the same-device window is observed closed.
+  const ticker = app.slice(app.indexOf('function ensureLiveLinkTicker()'), app.indexOf('function stopLiveLinkTicker()'));
+  assert.match(ticker, /if \(ptPlaying && !_prompterHasRecentTalent\(\)\) _dropTalentTransportMirror\(\);/);
+});
+
+test('show clock survives leaving Live; Back on Live is the same sheet; refusals name the Live screen (9/4 slice A4)', () => {
+  // 'live-clock' cleanup clears the local tick only; re-entry restarts from
+  // the preserved anchor before the remote resume check.
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
+  assert.match(enter, /registerCleanup\('live-clock', \(\) => \{\n    clearInterval\(timerInterval\); timerInterval = null;/);
+  assert.doesNotMatch(enter, /registerCleanup\('live-clock', \(\) => stopTimer\(false\)\)/);
+  const restartAt = enter.indexOf('if (liveClockRunning && !timerInterval && liveTimerStartMs) startTimer(liveTimerStartMs);');
+  const resumeAt = enter.indexOf('resumeRemoteClockIfRunning();');
+  assert.ok(restartAt > 0 && resumeAt > restartAt, 'anchor restart runs before resumeRemoteClockIfRunning');
+  // The senderId echo guard stays (a previous session's clock must not resume).
+  assert.match(app, /if \(_remoteClockState\.senderId === presenceId\) return;/);
+  // Leaving the session clears the remote clock mirror and the grant.
+  const leaveSession = app.slice(app.indexOf('function leaveSessionForFrontPage()'), app.indexOf('// UTILS'));
+  assert.match(leaveSession, /_remoteClockState = null;/);
+  assert.match(leaveSession, /sessionControlGrant = null;/);
+  assert.match(leaveSession, /renderCallerBanner\(\)/);
+  // popstate: Live screen -> re-push 'live' then the sheet (only from 'live');
+  // output screens stay; the front-page confirm survives for the builder.
+  const pop = app.slice(app.indexOf("window.addEventListener('popstate', () => {"), app.indexOf('async function cueolaEntryGateAllows('));
+  assert.match(pop, /if \(document\.getElementById\('liveshow'\)\?\.classList\.contains\('on'\)\) \{\n    pushSessionHistoryState\('live'\);\n    if \(liveSessionState\(\)\.lifecycle === 'live'\) requestExitLive\(\);\n    return;\n  \}/);
+  const liveBranch = pop.indexOf("pushSessionHistoryState('live')");
+  const outputBranch = pop.indexOf("document.getElementById('promptypus')?.classList.contains('on')\n    ||");
+  const confirmAt = pop.indexOf("confirm('Leave this session and return to the front page?')");
+  assert.ok(liveBranch > 0 && outputBranch > liveBranch && confirmAt > outputBranch, 'live, then output screens, then the builder confirm');
+  // Refusal copy by lifecycle: builder says what to do.
+  const gate = app.slice(app.indexOf('function liveCommandDispatchAllowed(options={})'), app.indexOf('function releaseLiveCommandHolds()'));
+  assert.match(gate, /else if \(liveSessionState\(\)\.lifecycle === 'builder'\) \{[\s\S]*toast\('Cueola is not on the Live screen\. Press GO LIVE first\.'\);/);
+  assert.match(gate, /toast\('Live commands are paused\. The show screen is still settling\.'\);/);
+  assert.match(app, /throw new Error\(liveSessionState\(\)\.lifecycle === 'builder'\n      \? 'Cueola is not on the Live screen\. Press GO LIVE first\.'\n      : 'Live controls are paused while Cueola changes mode\.'\);/);
+});
+
+test('pre-live grant from the Build screen: chip, banner, union roster, presence-gated demotion (9/4 slice A4)', () => {
+  // One model feeds the Live badge and the Build chip; the chip carries the
+  // badge's picker gate and opens the same picker.
+  assert.match(app, /function showCallerBadgeModel\(\)/);
+  assert.match(app, /canPick: Boolean\(adminSession && session\.code && !session\.isDemo && !session\.isExpert\),/);
+  assert.match(app, /model\.chipText = 'CALLER: You';/);
+  assert.match(app, /model\.chipText = `CALLER: \$\{model\.holderName\}`;/);
+  assert.match(app, /model\.chipText = `CALLER: \$\{model\.holderName\} \(not connected\)`;/);
+  assert.match(app, /const chip = document\.getElementById\('rdCallerBtn'\);/);
+  assert.match(html, /<button id="rdCallerBtn" type="button" style="display:none" data-state="viewer" onclick="openControlGrantPicker\(\)"/);
+  const toolbar = html.slice(html.indexOf('<div class="screen" id="rundown">'), html.indexOf('<div class="show-strip">'));
+  assert.match(toolbar, /id="rdCallerBtn"/);
+  assert.match(toolbar, /id="rdCallerBanner" role="status" hidden/);
+  assert.match(toolbar, /<strong>You are calling the show\.<\/strong> GO advances the rundown for everyone\./);
+  assert.match(toolbar, /class="rd-caller-banner-deck" hidden>Your Stream Deck works while you hold control\./);
+  assert.match(toolbar, /rd-caller-banner-cta" type="button" onclick="confirmGoLive\(\)"/);
+  assert.doesNotMatch(toolbar, /rd-caller-banner-cta"[^>]*onclick="goLive\(\)"/);
+  const live = html.slice(html.indexOf('<div class="screen" id="liveshow">'), html.indexOf('<div class="follow-bar">'));
+  assert.match(live, /id="lsCallerBanner" role="status" hidden/);
+  // Re-render hooks: grant transition, admin UI, presence, enter and leave Live.
+  assert.match(app, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);\n  notifyControlSurfaceState\(\);\n\}/);
+  const adminUi = app.slice(app.indexOf('function updateAdminUI()'), app.indexOf('function openAdminLogin()'));
+  assert.match(adminUi, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);
+  const presence = app.slice(app.indexOf('function renderPresence(map)'), app.indexOf('const active = getActivePresencePeople();'));
+  assert.match(presence, /refreshCallerPresenceState\(\);/);
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
+  assert.match(enter, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);/);
+  const leave = app.slice(app.indexOf('function leaveLiveSessionScreen(liveState, context={})'), app.indexOf('function isFollowingSelf()'));
+  assert.match(leave, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);
+  // Banner: CTA only off Live, deck note from grantedDecks, CALLER role tag restored on revoke.
+  const banner = app.slice(app.indexOf('function renderCallerBanner()'), app.indexOf('function renderFollowChips()'));
+  assert.match(banner, /cta\.style\.display = \(lifecycle === 'live' \|\| id === 'lsCallerBanner'\) \? 'none' : '';/);
+  assert.match(banner, /window\.CueolaStreamDeck\.grantedDecks\(\)/);
+  assert.match(banner, /tag\.textContent = 'CALLER';/);
+  assert.match(banner, /tag\.textContent = session\.role === 'instructor' \? 'INST' : 'STU';/);
+  // Picker roster: presence + participant records + role assignments, deduped
+  // on the lowercased username, Director button by position, grant shape.
+  assert.match(app, /const GRANT_SUGGESTED_POSITION_RE = \/director\|show caller\|technical director\|\\btd\\b\/i;/);
+  const roster = app.slice(app.indexOf('function controlGrantRosterRows()'), app.indexOf('function openControlGrantPicker()'));
+  assert.match(roster, /activePresenceEntries\(currentPresence\)\.forEach/);
+  assert.match(roster, /sessionParticipantRecords : \[\]\)\.forEach/);
+  assert.match(roster, /roster\.forEach\(r => \{\n    if \(r\?\.username\) add\(/);
+  assert.match(roster, /const username = String\(entry\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\);/);
+  assert.match(app, /Give control to the \$\{esc\(director\.position\)\}: \$\{esc\(director\.name\)\}/);
+  assert.match(app, /<span class="ls-grant-pos">not connected<\/span>/);
+  assert.match(app, /grantedFrom: document\.getElementById\('liveshow'\)\?\.classList\.contains\('on'\) \? 'live' : 'build',\n    position: String\(position \|\| ''\),/);
+  // grantHeldElsewhere requires the holder to be PRESENT (pure rule in the controller module).
+  assert.match(app, /grantHeldElsewhere: grantHeldByPresentOther\(\),/);
+  assert.match(app, /return window\.CueolaLiveSession\.resolveGrantHeldElsewhere\(\{/);
+  assert.match(liveController, /function resolveGrantHeldElsewhere\(input\)/);
+  // Tooltip at the locked-GO site names the Build chip.
+  assert.match(app, /from the CALLER chip on the Build screen or the caller badge here/);
+});
+
+test('Go Live preflight: grouped by machine, every failing row carries a fix verb (9/3 lane 14)', () => {
+  // Row model + fixed group order; all-green groups collapse to one header
+  // line, disclosure state is kept per group across reruns.
+  assert.match(app, /const PREFLIGHT_GROUPS = \[\n  \{ id: 'mac',\s+name: 'This Mac' \},\n  \{ id: 'talent',\s+name: 'Talent display' \},\n  \{ id: 'playout',\s+name: 'Playout Air' \},\n  \{ id: 'cloud',\s+name: 'Cloud' \},\n\];/);
+  const render = app.slice(app.indexOf('function renderPreflightRows()'), app.indexOf('function setPreflightRow(key, patch)'));
+  assert.match(render, /container\.innerHTML = PREFLIGHT_GROUPS\.map\(g => \{/);
+  assert.match(render, /<button type="button" class="precheck-group" data-group="\$\{g\.id\}" data-state="\$\{worst\}" aria-expanded="\$\{open \? 'true' : 'false'\}"/);
+  assert.match(render, /<div class="precheck-rows" id="precheckRows-\$\{g\.id\}"\$\{open \? '' : ' hidden'\}>/);
+  assert.match(app, /function preflightGroupIsOpen\(id, worst\) \{\n  if \(typeof _preflightGroupOpen\[id\] === 'boolean'\) return _preflightGroupOpen\[id\];\n  return worst !== 'ok';/);
+  assert.match(app, /return n \+ ' check' \+ \(n === 1 \? '' : 's'\) \+ ' passed';/);
+  // The fix capsule renders next to the jump link and runs inside the click.
+  const rowHtml = app.slice(app.indexOf('function preflightRowHtml(r)'), app.indexOf('function renderPreflightRows()'));
+  assert.match(rowHtml, /<button type="button" class="precheck-fix" onclick="preflightFix\('\$\{esc\(r\.key\)/);
+  assert.match(rowHtml, /\$\{jumpBtn\}\$\{fixBtn\}/);
+  const fix = app.slice(app.indexOf('function preflightFix(key)'), app.indexOf('window.preflightFix = preflightFix;'));
+  assert.match(fix, /if \(fix\.remote\) \{\n    sendFixRequest\(key, fix\.remote\.target, fix\.remote\.kind, fix\.remote\.extra \|\| \{\}\);/);
+  assert.match(fix, /const out = fix\.run\(r, run\);/);
+  // Go button: the run's own pending checks lock it as Checking; a fix in
+  // flight keeps Continue Anyway live.
+  assert.match(render, /const checking = _preflightRows\.some\(r => r\.state === 'pend' && !r\.fixId\);/);
+  assert.match(render, /goBtn\.disabled = !_preflightReviewOnly && checking;/);
+  assert.match(render, /checking \? 'Checking' : \(fails \|\| warns \|\| fixing \? 'Continue Anyway' : 'Go Live'\)/);
+  // Every row seeded with a group; playout rows follow the machine that owns them.
+  const seed = app.slice(app.indexOf('function runPreflight(reviewOnly)'), app.indexOf('async function runPreflightAsync('));
+  assert.match(seed, /const playoutGroup = playoutRemote \? 'playout' : 'mac';/);
+  assert.match(seed, /\{ key: 'Talent prompter', group: 'talent'/);
+  assert.match(seed, /\{ key: 'Cloud sync', group: 'cloud'/);
+  assert.match(seed, /key: 'Playout media', group: playoutGroup/);
+  assert.match(seed, /key: 'Cloud round-trip', group: 'cloud'/);
+  // Prompter position judges the TALENT's reported percent (the operator's own
+  // hidden track always reads 0 on the build screen) and carries Cue to top.
+  assert.match(seed, /const parkedPct = _talentMirrorFresh\(\) && Number\.isFinite\(_talentReportedPct\) \? Math\.round\(_talentReportedPct\) : null;/);
+  assert.match(seed, /fix: \{ label: 'Cue to top', run: _cueTalentToTopFix \}/);
+  assert.doesNotMatch(seed, /Press T \(top\)/);
+  // Verbs by row.
+  for (const verb of ['Re-send script', 'Open talent display', 'Nudge talent', 'Reload talent display', 'Reopen talent display', 'Join a show', 'Reconnect', 'Retry',
+    'Ask the Air to check in', 'Open output on the Air', 'Run the Air media check', 'Republish cue list', 'Sync media on the Air', 'Reopen output', 'Arm again',
+    'Connect deck here', 'Connect OBS', 'Show how']) {
+    assert.match(app, new RegExp("label: '" + verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "'"), 'missing fix verb ' + verb);
+  }
+  // Talent nudge: local hello plus the fixRequests hello, never the snapshot path.
+  const talentFix = app.slice(app.indexOf('function _talentRowFix()'), app.indexOf('function _cloudSyncRowFix()'));
+  assert.match(talentFix, /_postPrompterHello\(\);\n    if \(fixSessionRef\(\)\) \{ sendFixRequest\(r\.key, 'talent', 'hello', _talentFixAddress\(\)\); return; \}/);
+  assert.doesNotMatch(talentFix, /sendToPrompter\(/);
+  // Remote playout rows read the Air's kiosk truth; dashes are scrubbed.
+  const asyncRun = app.slice(app.indexOf('async function runPreflightAsync('), app.indexOf('function obsSystemStatus()'));
+  assert.match(asyncRun, /fix: \{ label: 'Ask the Air to check in', remote: \{ target: 'playout', kind: 'rejoin' \} \}/);
+  assert.match(asyncRun, /if \(Number\(out\?\.kioskMediaMissing \|\| 0\) > 0\) \{\n\s+extra\.push\(\{ key: 'Kiosk media', group: 'playout', state: 'fail'/);
+  assert.match(asyncRun, /if \(out\?\.helper\?\.wanted && !out\.helper\.connected\) \{\n\s+extra\.push\(\{ key: 'Kiosk helper', group: 'playout', state: 'warn'/);
+  assert.match(asyncRun, /fix: \{ label: 'Run the Air media check', remote: \{ target: 'playout', kind: 'preflight', extra: _airFixAddress\(\) \} \}/);
+  assert.match(app, /function preflightCleanDetail\(s\) \{ return String\(s \|\| ''\)\.replace\(\/\\s\*\[—–\]\\s\*\/g, ', '\); \}/);
+  assert.match(app, /if \(og\.preflight && typeof og\.preflight === 'object'\) outrangutanState\.preflight = og\.preflight;/);
+  assert.match(app, /if \(rep && rep\.fixId === id\) \{ _applyRemoteMediaReport\(rep\); return true; \}/);
+  // The Ready Before Show modal stays its own moment (owner decision pending).
+  assert.match(app, /function maybeShowReadyBeforeShowPrompt\(proceed\)/);
+  assert.match(app, /function confirmedGoLive\(\) \{\n  hideOverlay\('goLiveCheckOv'\);\n  if \(_preflightReviewOnly\) return;\n  maybeShowReadyBeforeShowPrompt\(goLive\);/);
+});
+
+test('fixRequests lane: field-path sender, evidence-gated consumer, talent receiver guards (9/3 lane 14)', () => {
+  // Sender: identifier-safe id, one field-path write per request, never a map set.
+  assert.match(app, /function sendFixRequest\(rowKey, target, kind, extra = \{\}\)/);
+  assert.match(app, /return \('fx_' \+ CLIENT_ID \+ '_' \+ Date\.now\(\)\.toString\(36\) \+ '_' \+ _fixSeq\)\.replace\(\/\[\^A-Za-z0-9_\]\/g, '_'\);/);
+  assert.match(app, /const req = \{ id, target, kind, detail: String\(row\?\.detail \|\| ''\)\.slice\(0, 240\), ts: Date\.now\(\), by: session\.userName \|\| '', byClient: CLIENT_ID, status: 'open', \.\.\.extra \};/);
+  assert.match(app, /window\._updateDoc\(ref, \{ \['fixRequests\.' \+ id\]: req \}\)/);
+  assert.doesNotMatch(app, /\{ fixRequests: \{/);
+  assert.match(app, /const FIX_NO_ANSWER_MS = 20000;/);
+  assert.match(app, /const FIX_CLEANUP_MS = 60000;/);
+  assert.match(app, /const FIX_MAX_OPEN = 8;/);
+  assert.match(app, /if \(fixOpenCount\(\) >= FIX_MAX_OPEN\) \{ toast\(/);
+  assert.match(app, /entry\.timer = steadyTimeout\(\(\) => _fixNoAnswer\(id\), FIX_NO_ANSWER_MS\);/);
+  assert.match(app, /r\.detail = 'No answer from ' \+ fixTargetLabel\(f\.target\) \+ '\. It may be closed, signed out, or on another code';/);
+  assert.match(app, /window\._updateDoc\(ref, \{ \['fixRequests\.' \+ id\]: window\._deleteField\(\) \}\)/);
+  // Consumer: ack shows progress, failed shows the result, done rechecks from
+  // evidence; a late answer for a previous run is ignored.
+  const consumer = app.slice(app.indexOf('function applyFixRequestUpdates(map)'), app.indexOf('function recheckPreflightRow(key, f, id)'));
+  assert.match(consumer, /r\.detail = 'Received on the ' \+ fixTargetShort\(f\.target\) \+ ', working';/);
+  assert.match(consumer, /if \(f\.run !== _preflightRun\) return;   \/\/ late answer for a previous run: ignore/);
+  assert.match(consumer, /recheckPreflightRow\(r\.key, f, id\);/);
+  const recheck = app.slice(app.indexOf('function recheckPreflightRow(key, f, id)'), app.indexOf('function _preflightNoteTalentSighting()'));
+  assert.match(recheck, /const seenTs = _latestTalentSightingTs\(\);\n\s+const answered = seenTs > f\.ts;/);
+  assert.match(recheck, /const fresh = remotePlayoutFresh\(outrangutanState\);/);
+  assert.match(recheck, /const missing = Number\(out\?\.kioskMediaMissing \|\| 0\);/);
+  // Wired into the session snapshot next to controlBus, and the heartbeat
+  // sighting settles talent rechecks.
+  assert.match(app, /_lastBusSnapshotAt = Date\.now\(\);\n[\s\S]{0,400}if \(d\.fixRequests && typeof d\.fixRequests === 'object'\) \{\n\s+try \{ applyFixRequestUpdates\(d\.fixRequests\); \}/);
+  assert.match(app, /_recordTalentSighting\(_hb\.sender\);[^\n]*\n\s+_handlePrompterOperatorMessage\(\{ type:'PROMPTER_HEARTBEAT', \.\.\._hb \}\);\n\s+_preflightNoteTalentSighting\(\);/);
+  // Talent addressing: the endpoint seen last, so a second door never answers.
+  assert.match(app, /function _talentFixAddress\(\) \{\n  const sender = _latestTalentSightingSender\(\);\n  return sender \? \{ toEndpoint: sender \} : \{\};/);
+  // Talent receiver inside ptLoadFromCueolaCode's snapshot: toEndpoint guard,
+  // ack before run, reload marks done behind a sessionStorage guard, and the
+  // seen set is seeded from sessionStorage at boot (no reload loop).
+  const talentLoad = app.slice(app.indexOf('async function ptLoadFromCueolaCode('), app.indexOf('let _ptLoadGen = 0;'));
+  assert.match(talentLoad, /ptHandleFixRequests\(code, data\.fixRequests\);/);
+  const receiver = app.slice(app.indexOf('function ptHandleFixRequests(code, map)'), app.indexOf('function ptResetIdle()'));
+  assert.match(receiver, /if \(r\.toEndpoint && r\.toEndpoint !== FLOWMINGO_ENDPOINT_ID\) return;/);
+  assert.match(receiver, /_ptFixSeen\.add\(id\);\n\s+ptFixPatch\(code, id, \{ status:'ack', ackTs:Date\.now\(\), ackBy:FLOWMINGO_ENDPOINT_ID \}\);/);
+  assert.match(receiver, /case 'hello':\n\s+ptPostPing\('ready'\);\n\s+ptUpdateSyncLabel\(\);\n\s+ptTalentHeartbeat\(\);/);
+  assert.match(receiver, /case 'top':\n\s+ptResetScroll\(\);/);
+  assert.match(receiver, /sessionStorage\.setItem\('cueola_fix_done_' \+ r\.id, '1'\)/);
+  assert.match(receiver, /ptFixPatch\(code, id, \{ status:'done', doneTs:Date\.now\(\), result:'reloading' \}\)\.finally\(\(\) => \{ try \{ location\.reload\(\); \} catch \{\} \}\);/);
+  assert.match(app, /if \(k && k\.startsWith\('cueola_fix_done_'\)\) _ptFixSeen\.add\(k\.slice\('cueola_fix_done_'\.length\)\);/);
+  assert.match(app, /p\['fixRequests\.' \+ id \+ '\.' \+ k\] = patch\[k\];/);
+  // KeyWi target: only the /keywibird window answers, via connectGranted when
+  // KeyWi exports it; otherwise it reports that a click is needed there.
+  const keywi = app.slice(app.indexOf('function handleKeywiFixRequests(map)'), app.indexOf('function confirmGoLive()'));
+  assert.match(keywi, /if \(cueolaAppPath\(\) !== 'keywibird'\) return;/);
+  assert.match(keywi, /if \(!sd \|\| typeof sd\.connectGranted !== 'function'\) \{/);
+  // The Air's receiver ships alongside: same kinds, same field.
+  assert.match(playbackJs, /const fx = d && d\.fixRequests; if \(fx && typeof fx === 'object'\) handleFixRequests\(fx\);/);
+  assert.match(playbackJs, /case 'arm': case 'armPlayback':/);
+});
+
+test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent, talent holds, viewport anchor, playout truth', () => {
+  // C1: clause (b) needs the echo AND the pinned entry's senderClient (or no live entry).
+  const rebind = app.slice(app.indexOf('function _shouldRebindToTalent('), app.indexOf('function _dropTalentTransportMirror('));
+  assert.match(rebind, /\['degraded', 'lost'\]\.includes\(link\?\.status\)\) return 'silent';/);
+  assert.match(rebind, /const pinned = _talentRegistryEntry\(_activePrompterOutputInstanceId\);\n  if \(!pinned\) return 'echo';/);
+  assert.match(rebind, /return client && client === pinned\.senderClient \? 'echo' : '';/);
+  // C3: echo = repoint + markStateApplied + (runtime) adopt/flush, zero doc writes;
+  // silent = re-seed only from the Live runtime, 10s rate limit; log runtime-gated.
+  const handler = app.slice(app.indexOf('function _handlePrompterOperatorMessage('), app.indexOf('function _ensurePrompterOperatorBridge('));
+  const foreign = handler.slice(handler.indexOf('const evidence = _shouldRebindToTalent(msg);'), handler.indexOf('if (!_activePrompterOutputInstanceId) {'));
+  assert.match(foreign, /if \(_prompterOperatorRuntimeActive\) logShow\('prompter', \x60Talent output replaced/);
+  assert.match(foreign, /if \(evidence === 'echo'\) \{[\s\S]*?const applied = !!msg\.snapshotId && prompterSessionController\.markStateApplied\(outputId, msg\.snapshotId, msg\.state\);\n        if \(applied && _prompterOperatorRuntimeActive\) \{\n          adoptPrompterTalentState\(msg\.state \|\| \{\}\);\n          flushPrompterCommandQueue\(outputId\);\n        \}\n        return;/);
+  assert.equal((foreign.match(/sendPrompterStateSnapshot\(/g) || []).length, 1);
+  assert.match(foreign, /if \(_prompterOperatorRuntimeActive && Date\.now\(\) - _lastPrompterRebindSnapshotTs >= 10000\) \{\n        _lastPrompterRebindSnapshotTs = Date\.now\(\);\n        sendPrompterStateSnapshot\(outputId, 'recovery'\);/);
+  assert.match(app, /let _lastPrompterRebindSnapshotTs = 0;/);
+  // C2: the boot prime is a positive filter (collaborative, never a scrub).
+  const queue = app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce'));
+  assert.match(queue, /const action = String\(newest\?\.action \|\| ''\);/);
+  assert.doesNotMatch(queue, /Date\.now\(\)/);
+  // C4: change-driven admission with a 60s skew-tolerant first sight; applied
+  // receipts need a change (no clock); the Flowmingo Op reader follows suit;
+  // both dedup stamps reset with the runtime.
+  assert.match(app, /_hb\.ts !== _lastSeenTalentHeartbeatTs\n          && \(_lastSeenTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - _hb\.ts\) < 60000\)\) \{/);
+  assert.match(app, /const firstSight = _lastSeenTalentAppliedTs === 0;\n        _lastSeenTalentAppliedTs = _ta\.ts;\n        if \(!firstSight\) _handlePrompterOperatorMessage\(\{ \.\.\._ta, type:'PROMPTER_STATE_APPLIED' \}\);/);
+  assert.doesNotMatch(app, /\(Date\.now\(\) - _ta\.ts\) < 20000/);
+  assert.doesNotMatch(app, /\(Date\.now\(\) - _hb\.ts\) < 20000/);
+  assert.doesNotMatch(app, /\(Date\.now\(\) - heartbeat\.ts\) < 20000/);
+  assert.match(app, /hbTs !== _flowOpTalentHeartbeatTs\n            && \(_flowOpTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - hbTs\) < 60000\)\) \{/);
+  assert.match(app, /const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && \(Date\.now\(\) - _flowOpTalentSeenAt\) < 20000;/);
+  const stop = app.slice(app.indexOf('function stopPrompterOperatorRuntime()'), app.indexOf('function updatePrompterOnAdvance('));
+  assert.match(stop, /_lastSeenTalentHeartbeatTs = 0;\n  _lastSeenTalentAppliedTs = 0;/);
+  // C5: intent keyed on direction at every caller; no bare { advance:true } literal.
+  const advance = app.slice(app.indexOf('function updatePrompterOnAdvance('), app.indexOf('function cuePrompterToLiveRow('));
+  assert.match(advance, /function updatePrompterOnAdvance\(prevBeat, newBeat, opts=\{\}\)/);
+  const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
+  assert.match(next, /updatePrompterOnAdvance\(prev, beats\[lsIdx\], \{ advance: lsIdx > activeIdx \}\);/);
+  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function resolveFollowedIdx('));
+  assert.match(prev, /const fromIdx = liveActiveCueIndex\(\);\n  const ni = livePreviousPlayableCueIndex\(fromIdx\);/);
+  assert.match(prev, /updatePrompterOnAdvance\(null, beats\[lsIdx\], \{ advance: lsIdx > fromIdx \}\);/);
+  const jump = app.slice(app.indexOf('function jumpToLsCue('), app.indexOf('function lsNext('));
+  assert.match(jump, /const fromIdx = liveActiveCueIndex\(\);[^\n]*\n  try \{ setOperatorLiveCue\(i, 'jump-cue'\); \}/);
+  assert.match(jump, /updatePrompterOnAdvance\(null, beats\[i\], \{ advance: i > fromIdx \}\);/);
+  const cue = app.slice(app.indexOf('function cuePrompterToLiveRow('), app.indexOf('let _lastTalentPosPct'));
+  assert.match(cue, /Previous, a backward 'Cue here' and every explicit cue/);
+  // C5 talent belt: an advance below the noted live row is explicit. C7: the
+  // inside branch honors a superseded glide's pending resume.
+  const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
+  assert.match(seek, /const backward = Number\.isFinite\(ptLiveRowNum\)\n    && \(n < ptLiveRowNum \|\| \(n === ptLiveRowNum && Number\.isFinite\(ptLiveRowPrev\) && n < ptLiveRowPrev\)\);/);
+  assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
+  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);\n        ptCancelGlide\(\);\n        ptPendingHoldResume = false;/);
+  // C6: the seen-holds set rebuilds on every live-row CHANGE, without the
+  // pause-marker re-baseline; ptRecalcRowHolds composes the two.
+  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback (owner 9/3)'));
+  assert.match(note, /if \(Number\.isFinite\(n\) && n >= 1 && n !== ptLiveRowNum\) \{\n    ptLiveRowPrev = ptLiveRowNum;\n    ptLiveRowNum = n;/);
+  assert.match(note, /ptRecalcSeenRowHolds\(\);/);
+  assert.doesNotMatch(note, /ptRecalcPauseMarkers|ptRecalcRowHolds\(\)/);
+  const recalc = app.slice(app.indexOf('function ptRecalcRowHolds('), app.indexOf('function ptRenderHoldChip('));
+  assert.match(recalc, /function ptRecalcRowHolds\(\) \{\n  ptRecalcSeenRowHolds\(\);\n  ptRecalcPauseMarkers\(\);\n\}/);
+  assert.match(recalc, /function ptRecalcSeenRowHolds\(\) \{/);
+  assert.match(app, /let ptLiveRowPrev = null;/);
+  // C11: the restore uses the anchor VALUE snapshotted on the first event of
+  // a burst, nulled on every exit path, with crawl-since-capture kept.
+  const viewport = app.slice(app.indexOf('function ptOnViewportChange()'), app.indexOf("window.addEventListener('resize', ptOnViewportChange)"));
+  assert.match(viewport, /if \(!_ptViewportTimer\) _ptViewportAnchor = ptLastAnchor;\n  clearTimeout\(_ptViewportTimer\);/);
+  assert.match(viewport, /const anchor = _ptViewportAnchor;\n    _ptViewportAnchor = null;\n    if \(!isFlowmingoTalentActive\(\)\) return;/);
+  assert.match(viewport, /const crawl = Number\.isFinite\(anchor\.offset\) \? ptOffset - anchor\.offset : 0;\n    ptShiftScrollBy\(delta \+ crawl\);/);
+  assert.doesNotMatch(viewport, /ptAnchorDelta\(ptLastAnchor\)/);
+  assert.match(app, /return \{ el, rel: el\.getBoundingClientRect\(\)\.top - readY, offset: ptOffset \};/);
+  // C10: the linked code rides the URL (Flowmingo-routed); the reload verb
+  // stashes a one-shot relink key the boot route honors and drops.
+  const link = app.slice(app.indexOf('function ptWriteCodeIntoUrl('), app.indexOf('async function ptOfferAssignedSessions('));
+  assert.match(link, /u\.searchParams\.set\('code', code\);\n    if \(!routed\) u\.searchParams\.set\('prompter', '1'\);/);
+  assert.match(link, /history\.replaceState\(history\.state, '', u\);/);
+  assert.match(app, /ptRememberLinkedCode\(code\);\n        ptWriteCodeIntoUrl\(code\);/);
+  assert.match(app, /case 'reload': \{\n[^\n]*\n[^\n]*\n[^\n]*\n          try \{ sessionStorage\.setItem\('cueola_fix_relink', code\); \} catch \{\}/);
+  assert.match(app, /const relink = String\(sessionStorage\.getItem\('cueola_fix_relink'\) \|\| ''\)\.trim\(\)\.toUpperCase\(\);\n        sessionStorage\.removeItem\('cueola_fix_relink'\);\n        if \(!code && relink\) code = relink;/);
+  // C13: assigned rows come back after not-found and listener errors.
+  const door = app.slice(app.indexOf('function ptLoadFromCueolaCode('), app.indexOf('function ptHandleFixRequests('));
+  assert.match(door, /ptUpdateReady\(\);\n    ptOfferAssignedSessions\(\);   \/\/ the rows come back/);
+  assert.match(door, /ptUpdateReady\(\);\n          ptOfferAssignedSessions\(\);   \/\/ a typo must not hide/);
+  // C24: own-echo packets never refresh remote truth; remote freshness,
+  // remoteAirDriving and fix addressing read the remote tracker; a hidden
+  // local instance is never reattached from the Live screen.
+  assert.match(app, /function _ogAdmitLivePacket\(live\)/);
+  assert.match(app, /if \(og\.live && _ogAdmitLivePacket\(og\.live\)\) \{/);
+  const fresh = app.slice(app.indexOf('function remotePlayoutFresh('), app.indexOf('function _ogRemoteSenderId('));
+  assert.match(fresh, /if \(_ogRemoteLiveSeenAt\) return \(Date\.now\(\) - _ogRemoteLiveSeenAt\) < OG_REMOTE_FRESH_MS;\n  if \(_ogLiveSeenAt\) return false;/);
+  assert.match(fresh, /if \(mine && sender === mine\) return false;/);
+  const driving = app.slice(app.indexOf('function remoteAirDriving()'), app.indexOf('function syncOutrangutanControllerStatus('));
+  assert.match(driving, /_ogRemoteLiveSeenAt && Date\.now\(\) - _ogRemoteLiveSeenAt < OG_REMOTE_FRESH_MS/);
+  assert.match(driving, /const sender = _ogRemoteSender \|\| '';/);
+  assert.doesNotMatch(driving, /outrangutanState\?\.live\?\.sender/);
+  assert.match(app, /const sender = remotePlayoutFresh\(outrangutanState\) \? _ogRemoteSenderId\(\) : '';/);
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen('), app.indexOf('function leaveLiveSessionScreen('));
+  assert.match(enter, /if \(_ogLocalRuntimeReattachable\(\)\) \{\n      try \{\n        const playbackAttach = window\.Outrangutan\?\.reattachLiveControl\?\.\(\);\n        _ogLocalDetachedForReattach = false;/);
+  assert.match(app, /if \(typeof og\?\.isOpen === 'function'\) return !!og\.isOpen\(\);/);
+  assert.match(app, /if \(result && result\.ok !== false && result\.controller\?\.detached\) _ogLocalDetachedForReattach = true;/);
+  assert.match(app, /if \(detached\?\.controller\?\.detached\) _ogLocalDetachedForReattach = true;/);
+  // C31: no em dash in the playback-cue show-log line.
+  assert.match(app, /is not in the loaded Outrangutan show\. Nothing fired\.\x60\)/);
+  assert.doesNotMatch(app, /Outrangutan show — nothing fired/);
+});
+
+test('9/4 fix round slice A2: C9/G5 row numbers, C14 Esc = Stay live, C15/C16/C18 leave-live race guards, C17 fix-request counts, G2 follower exit, G4 remote first GO, G6 OBS reason, G7 admin door line', () => {
+  // C9 + G5: every crew-facing row number is the display number (segments
+  // never count): GO label, refusal toast, Recover chip, show-log lines.
+  assert.match(app, /data-tip="Recover row \$\{rowDisplayNumber\(index\)\}" aria-label="Recover failed row \$\{rowDisplayNumber\(index\)\}"/);
+  assert.match(app, /: failed \? \`Recover failed row \$\{rowDisplayNumber\(nextIndex\)\} before GO\`/);
+  assert.match(app, /toast\(\`Recover failed row \$\{rowDisplayNumber\(ni\)\} before GO\.\`\);/);
+  assert.match(app, /'Went live · row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
+  assert.match(app, /'Advance → row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
+  assert.match(app, /'Back → row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
+  assert.match(app, /Playback call READY · row \$\{rowDisplayNumber\(rowIdx\)\}/);
+  assert.match(app, /TAKE · row \$\{rowDisplayNumber\(call\.rowIdx\)\} \(\$\{source\}\)/);
+  assert.match(app, /Playback call ABORTED · row \$\{rowDisplayNumber\(call\.rowIdx\)\}/);
+  assert.doesNotMatch(app, /Recover (failed )?row \$\{(ni|index|nextIndex) \+ 1\}/);
+  assert.doesNotMatch(app, /(Went live|Advance →|Back →) · row ' \+ \(lsIdx \+ 1\)/);
+  assert.doesNotMatch(app, /(READY|TAKE|ABORTED) · row \$\{(call\.)?rowIdx \+ 1\}/);
+  // C14: Escape on the leave-live sheet is Stay live, never a bare close;
+  // the special case sits AFTER the data-esc-hold gate and the sheet has no
+  // hold attribute, so it always runs.
+  const esc = app.slice(app.indexOf("if (e.key !== 'Escape' || e.defaultPrevented) return;"), app.indexOf('uiDismissRegister(() => document.getElementById(\'entryThemePanel\')'));
+  assert.match(esc, /if \(!top \|\| top\.hasAttribute\('data-esc-hold'\)\) return;\n  if \(top\.id === 'exitLiveOv'\) \{[\s\S]*?e\.preventDefault\(\);\n    if \(liveSessionState\(\)\.lifecycle === 'leaving-live'\) cancelExitLive\(\);\n    return;\n  \}/);
+  assert.doesNotMatch(html, /id="exitLiveOv"[^>]*data-esc-hold/);
+  // C15 + C16: one commit at a time, transaction identity checked at both
+  // await boundaries before the warning branch, toggles locked while busy,
+  // a re-render never re-enables Leave mid-flight, reopen resets the guard.
+  const commit = app.slice(app.indexOf('async function commitExitLive(options={})'), app.indexOf('function cancelExitLive()'));
+  assert.match(commit, /if \(_liveExitCommitting\) return liveSessionState\(\);/);
+  assert.match(commit, /const commitToken = \+\+_liveExitCommitSeq;\n  _liveExitCommitting = commitToken;\n  try \{/);
+  assert.match(commit, /const stale = \(\) => liveExitTransaction !== transaction \|\| liveSessionState\(\)\.lifecycle !== 'leaving-live';/);
+  assert.match(commit, /transaction\.outputResult = outputResult;\n    if \(stale\(\)\) return liveSessionState\(\);[^\n]*\n    if \(!outputResult\.ok\) \{/);
+  assert.match(commit, /await captureSessionSnapshot\('live-exit', true\);\n  if \(stale\(\)\) return liveSessionState\(\);/);
+  assert.match(commit, /finally \{\n    if \(_liveExitCommitting === commitToken\) _liveExitCommitting = 0;\n  \}/);
+  assert.match(app, /\['exitLiveLeaveBtn','exitLiveLeaveAnywayBtn','exitLiveClockToggle','exitLivePlayoutToggle'\]\.forEach\(id => \{\n    const button = document\.getElementById\(id\);\n    if \(button\) button\.disabled = Boolean\(busy\);/);
+  assert.match(app, /function renderLiveExitDecision\(outputs\) \{\n[^\n]*\n[^\n]*\n  if \(_liveExitCommitting\) return;/);
+  const request = app.slice(app.indexOf('function requestExitLive()'), app.indexOf('function waitForPrompterControlAck('));
+  assert.match(request, /releaseLiveCommandHolds\(\);\n  _liveExitCommitting = 0;/);
+  const cancel = app.slice(app.indexOf('function cancelExitLive()'), app.indexOf('async function recoverLiveToBuilder()'));
+  assert.match(cancel, /liveExitTransaction = null;\n  _liveExitCommitting = 0;/);
+  // C18: the playout note comes from the recorded result, not the checkbox.
+  assert.match(commit, /const playoutResult = transaction\.outputResult\?\.values\?\.\[1\];/);
+  assert.match(commit, /\(playoutResult\?\.stopped \|\| playoutResult\?\.acknowledged\) \? ' · playout stopped'/);
+  assert.match(commit, /: playoutResult\?\.ok \? ' · stop sent to the Air'\n    : ' · playout stop NOT confirmed';/);
+  assert.match(commit, /toast\('Left the live show\. The Air did not confirm the stop; check Outrangutan\.', 6000\);/);
+  assert.doesNotMatch(commit, /choices\.stopPlayout \? ' · playout stopped'/);
+  // C17: orphaned fix requests settle regardless of run, only the current
+  // run counts toward FIX_MAX_OPEN, a rerun sweeps prior-run waits, and a
+  // failed send schedules its own cleanup.
+  assert.match(app, /return Object\.values\(_fixRequests\)\.filter\(f => f\.run === _preflightRun && \(f\.status === 'open' \|\| f\.status === 'ack'\)\)\.length;/);
+  const noAnswer = app.slice(app.indexOf('function _fixNoAnswer(id)'), app.indexOf('function _fixScheduleCleanup(id)'));
+  assert.match(noAnswer, /if \(!f\) return;\n[^\n]*\n[^\n]*\n  const current = f\.run === _preflightRun;\n  const r = current \? _fixRow\(id\) : null;/);
+  assert.doesNotMatch(noAnswer, /f\.run !== _preflightRun\) return/);
+  assert.match(noAnswer, /if \(current\) renderPreflightRows\(\);/);
+  assert.match(noAnswer, /function _fixSweepPriorRuns\(\) \{[\s\S]*f\.status = f\.status === 'open' \? 'noanswer' : 'stalled';\n    _fixScheduleCleanup\(id\);/);
+  assert.match(app, /const run = \+\+_preflightRun;\n  _fixSweepPriorRuns\(\);/);
+  const sender = app.slice(app.indexOf('function sendFixRequest(rowKey, target, kind, extra = {})'), app.indexOf('window.sendFixRequest = sendFixRequest;'));
+  assert.equal((sender.match(/_fixScheduleCleanup\(id\);/g) || []).length, 2);
+  // G2: a follower's leave never holds the talent; the sheet names the caller.
+  const classify = app.slice(app.indexOf('function classifyFlowmingoLiveExit()'), app.indexOf('function classifyOutrangutanLiveExit()'));
+  assert.match(classify, /try \{ mine = isShowCaller\(\); \} catch \{ mine = true; \}/);
+  assert.match(classify, /needsDisposition:active && reachable && mine,\n    notMine:!mine,\n    controlledBy,/);
+  assert.match(app, /if \(before\.notMine\) return \{ ok:true, acknowledged:true, before, paused:false, skipped:'not-caller' \};\n  if \(!before\.active\)/);
+  assert.match(app, /text:\`\$\{prompter\.active \? 'keeps running' : 'stays where it is'\}\. \$\{prompter\.controlledBy \|\| 'The show caller'\} controls it\.\`, state:'on'/);
+  // G4: the remote Playout first GO row reads the Air's live.armed, fixes via
+  // armPlayback addressed to the Air, and settles on the next packet.
+  const asyncRun = app.slice(app.indexOf('async function runPreflightAsync('), app.indexOf('function obsSystemStatus()'));
+  assert.match(asyncRun, /addPreflightRow\(\{ key: 'Playout first GO', group: 'playout', \.\.\._remoteFirstGoRow\(outrangutanState\.live\?\.armed\) \}\);/);
+  const firstGo = app.slice(app.indexOf('function _remoteFirstGoRow(armed)'), app.indexOf('function _applyFirstGoArmed(armed)'));
+  assert.match(firstGo, /const fix = \{ label: 'Arm on the Air', remote: \{ target: 'playout', kind: 'armPlayback', extra: _airFixAddress\(\) \} \};/);
+  assert.match(firstGo, /if \(!armed \|\| typeof armed !== 'object'\) return \{ state: 'warn'/);
+  assert.match(firstGo, /if \(armed\.armed && armed\.audio === 'running' && armed\.firstCueStaged !== false\) return \{ state: 'ok'/);
+  assert.match(firstGo, /'Nobody has tapped the Air yet \(audio '/);
+  assert.doesNotMatch(firstGo, /[–—]/);
+  const recheck = app.slice(app.indexOf('function recheckPreflightRow(key, f, id)'), app.indexOf('function _preflightNoteTalentSighting()'));
+  assert.match(recheck, /if \(kind === 'arm' \|\| kind === 'armPlayback'\) \{\n[^\n]*\n[^\n]*\n        const row = _remoteFirstGoRow\(outrangutanState\.live\?\.armed\);\n        if \(row\.state === 'ok'\) \{ Object\.assign\(r, row, \{ fixId: '' \}\); renderPreflightRows\(\); return true; \}\n        if \(!final\) return false;/);
+  const packet = app.slice(app.indexOf('function _preflightNotePlayoutPacket()'), app.indexOf('function _talentFixAddress()'));
+  assert.match(packet, /if \(firstGo && firstGo\.group === 'playout' && !firstGo\.fixId && firstGo\.state !== 'ok'\)/);
+  assert.match(playbackJs, /armed: firstStaged && audio !== 'suspended'/);
+  // G6: the OBS client's stop reason leads the warn row (dashes stripped).
+  const obsStatus = app.slice(app.indexOf('function obsSystemStatus()'), app.indexOf('function talkbackSystemStatus()'));
+  assert.match(obsStatus, /lastError = String\(obs\.lastError\?\.\(\) \|\| ''\)\.replace\(\/\\s\*\[\\u2014\\u2013\]\\s\*\/g, ', '\)\.trim\(\);/);
+  assert.match(obsStatus, /if \(lastError\) return \{ state: 'warn', detail: lastError \};\n  return \{ state: 'warn', detail: 'OBS is set up but not connected/);
+  // G7: an admin-password sign-in with no student identity gets a clear line.
+  const offer = app.slice(app.indexOf('async function ptOfferAssignedSessions()'), app.indexOf('function ptPickAssignedSession(code)'));
+  assert.match(offer, /else if \(adminSession && !idApi\?\.identity\?\.\(\)\) \{[\s\S]*Admin sign-in: type the show code below/);
+  // No dashes in any copy this slice added.
+  for (const slice of [commit, classify, firstGo, offer, noAnswer, esc]) assert.doesNotMatch(slice, /[–—]/);
 });
 
 for (const { name, run } of tests) {

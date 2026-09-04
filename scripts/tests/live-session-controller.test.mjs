@@ -500,6 +500,26 @@ test('show-caller predicate: an outstanding grant names THE caller (2026-08-19)'
   assert.equal(resolve({ code:'X', isExpert:true, role:'student', grantHeldElsewhere:true }).isShowCaller, true);
 });
 
+test('grant held elsewhere only while the holder is PRESENT (pre-live grant, 2026-09-03)', () => {
+  const held = LiveSession.resolveGrantHeldElsewhere;
+  const resolve = LiveSession.resolveCallerState;
+  // No grant: nothing is held.
+  assert.equal(held({ grantUsername:'', myUsername:'owner', presentUsernames:['owner'] }), false);
+  // My own grant is never "elsewhere", whatever presence says.
+  assert.equal(held({ grantUsername:'Dana', myUsername:'dana', presentUsernames:[] }), false);
+  // A pre-grant to a student who has not connected yet leaves the owner calling.
+  assert.equal(held({ grantUsername:'dana', myUsername:'owner', presentUsernames:['owner', 'sam'] }), false);
+  assert.equal(resolve({ code:'X', hasAdminSession:true, grantHeldElsewhere:held({ grantUsername:'dana', myUsername:'owner', presentUsernames:['owner'] }) }).isShowCaller, true);
+  // The moment that username appears in presence (any case), the admin steps back.
+  assert.equal(held({ grantUsername:'dana', myUsername:'owner', presentUsernames:['owner', 'DANA'] }), true);
+  assert.equal(resolve({ code:'X', hasAdminSession:true, grantHeldElsewhere:held({ grantUsername:'dana', myUsername:'owner', presentUsernames:['Dana'] }) }).isShowCaller, false);
+  // A holder whose device drops hands the wheel back without a take-back.
+  assert.equal(held({ grantUsername:'dana', myUsername:'owner', presentUsernames:[] }), false);
+  // Empty or missing presence entries never match.
+  assert.equal(held({ grantUsername:'dana', myUsername:'owner', presentUsernames:['', null, undefined] }), false);
+  assert.equal(held({ grantUsername:'dana' }), false);
+});
+
 for (const { name, fn } of tests) {
   await fn();
   console.log('PASS', name);

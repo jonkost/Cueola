@@ -3,7 +3,9 @@ rules_version = '2';
 // TO DEPLOY 2026-09-03: the 2026-08-11 PIN additive ruleset (the live ruleset
 // as of 2026-08-29) plus ONE more widening: profiles may carry an optional
 // hiddenSessions list (session codes an instructor tucks out of their own
-// front page and session pickers; admin profiles only, up to 100 codes).
+// front page and session pickers; admin profiles only, up to 100 codes),
+// PLUS (same day): a config/giphy doc for the shared KeyWi Bird GIPHY key
+// (open read, admin write) and a fixRequests map type check on session docs.
 // Rollback copy: docs/rules-additive-2026-08-11-pin.rules (the pre-hide
 // deployed ruleset). Repo firestore.rules (Phase 2 auth-required bundle)
 // carries the same widening for the auth train.
@@ -102,7 +104,10 @@ service cloud.firestore {
         && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is int)
         && optionalShortString(data, 'deletedBy', 120)
         // Phase 3 per-session admin toggle: entry also requires a class login code.
-        && (!data.keys().hasAny(['requireLoginCode']) || data.requireLoginCode is bool);
+        && (!data.keys().hasAny(['requireLoginCode']) || data.requireLoginCode is bool)
+        // 2026-09-03 preflight fix requests (rundown -> Air / talent display):
+        // hygiene type check only, the map is extensible like the rest.
+        && (!data.keys().hasAny(['fixRequests']) || data.fixRequests is map);
     }
 
     function validAdminsDocument(data) {
@@ -422,6 +427,18 @@ service cloud.firestore {
                     && immutableProfileIdentity()
                     && immutableProfileId();
       allow delete: if false;
+    }
+
+    // 2026-09-03 KeyWi Bird shared GIPHY key: one class key, read by every
+    // device (a GIPHY key is a public client-side key by GIPHY design and is
+    // already visible in any student network tab), written by admins only.
+    match /config/{docId} {
+      allow get: if docId == "giphy";
+      allow list, delete: if false;
+      allow create, update: if docId == "giphy" && isAdmin()
+        && request.resource.data.keys().hasOnly(["key", "updatedAt", "updatedBy"])
+        && request.resource.data.key is string
+        && request.resource.data.key.matches("^[A-Za-z0-9]{10,80}$");
     }
 
     match /{document=**} {

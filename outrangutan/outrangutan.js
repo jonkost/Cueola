@@ -147,6 +147,7 @@
   // failures, and transport hits land in the same per-session record.
   function slog(cat, msg) { try { window.CueolaShowLog && window.CueolaShowLog.add(cat, '[Outrangutan] ' + msg); } catch (e) {} }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function fmtPre(sec) { sec = Math.max(0, sec || 0); const whole = Math.floor(sec), frac = Math.round((sec - whole) * 10); return fmtClock(whole) + (frac ? '.' + frac : ''); }
   function fmtClock(sec) { sec = Math.max(0, sec || 0); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60); return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0'); }
   // SMPTE timecode HH:MM:SS;FF for the big count clock (30 fps frame base).
   const OG_FPS = 30;
@@ -603,7 +604,7 @@
       // Phase 2 audio + fades + edits
       eq: { low: 0, mid: 0, high: 0 }, comp: false,
       fadeIn: 0, fadeOut: 0, fadeCurve: '', xfade: 0,
-      endAction: 'stop',        // 'stop' | 'hold' | 'black'
+      endAction: o.type === 'image' ? 'hold' : 'stop',   // 'stop' | 'hold' | 'black'. A still parks on its last frame by default so an accidental timer never blacks program.
       fit: 'contain', scale: 1, posX: 0, posY: 0,
       output: 1,                // target output window id (Phase 3 multi-output)
       key: { mode: 'off', color: '#00b140', sim: 0.30, smooth: 0.10, bg: '#000000' }, // Phase 5 keying
@@ -1195,7 +1196,7 @@
       // connected kiosk renderer so preflight reflects the new truth.
       outputs.filter(o => o && o.kiosk).forEach(o => dispatchKioskPreload(o.id));
     } catch (e) {
-      kioskSync.error = 'Media sync failed — is the helper still running?';
+      kioskSync.error = 'Media sync failed. Is the helper still running?';
       toast(kioskSync.error);
     }
     kioskSync.running = false;
@@ -1308,7 +1309,7 @@
     if (!helper.es) helperSync(outputChannelSessionId);
     if (!helperConnected()) {
       rec.status = 'error'; rec.error = 'Kiosk helper not running';
-      rec.detail = 'Start it on this Mac: node scripts/kiosk-helper.mjs — or turn off Kiosk to open a popup';
+      rec.detail = 'Start it on this Mac: node scripts/kiosk-helper.mjs, or turn off Kiosk to open a popup';
       toast('Kiosk helper is not running. Start it, or turn off Kiosk for ' + (o.label || ('Output ' + o.id)) + '.');
       updateOutputUI();
       return null;
@@ -1510,9 +1511,9 @@
     // Kiosk truths the controller-local checks cannot see: a ready renderer
     // whose profile still lacks media files, and a dead helper link.
     const missing = items.filter(item => item.mode === 'kiosk' && item.mediaMissing > 0);
-    if (missing.length) detail += ' · ' + missing.map(item => item.label + ': ' + item.mediaMissing + ' media file' + (item.mediaMissing === 1 ? '' : 's') + ' not cached — Sync media').join(' · ');
+    if (missing.length) detail += ' · ' + missing.map(item => item.label + ': ' + item.mediaMissing + ' media file' + (item.mediaMissing === 1 ? '' : 's') + ' not cached, Sync media').join(' · ');
     const helperDown = kioskWanted() && !helperConnected();
-    if (helperDown) detail += ' · Kiosk helper offline — kiosk outputs autonomous until it restarts';
+    if (helperDown) detail += ' · Kiosk helper offline, kiosk outputs run on their own until it restarts';
     return {
       status, detail, open, ready, total: items.length, items,
       kioskMediaMissing: missing.reduce((n, item) => n + item.mediaMissing, 0),
@@ -1711,7 +1712,19 @@
           controller: { detached: true, sessionDetached: true }
         });
       }
-      base.error = 'Live control is detached. Reattach before requesting STOP.';
+      // A detached instance with nothing playing and nothing open has nothing
+      // to stop: answer ok so a second exit on the rundown machine (playout on
+      // the Air) never fails into recovery. Anything active or open keeps the
+      // error, because a detached instance cannot deliver STOP (sendOut is a
+      // no-op while detached).
+      if (!before.active && !before.open) {
+        return Object.assign(base, {
+          ok: true, acknowledged: true, alreadyDetached: true,
+          local: { programStopped: true, sfxStopped: true, sfxVoicesStopped: 0 },
+          controller: { detached: true, sessionDetached: true }
+        });
+      }
+      base.error = 'Live control is detached while something is still open here. Reattach before requesting STOP.';
       return base;
     }
 
@@ -2756,6 +2769,10 @@
 
   function onSessionDoc(d) {
     maybeSeedBreakRoom(d);   // Break Room test session + empty local show → build the authored demo playout
+    // Fix requests from the rundown machine ride their own top-level map and
+    // are never baselined: a request written while this Mac was offline or
+    // signed out must still run once it can hear the doc. Idempotent by id.
+    try { const fx = d && d.fixRequests; if (fx && typeof fx === 'object') handleFixRequests(fx); } catch (e) {}
     const g = d && d.outrangutan && d.outrangutan.gain;
     const cmd = d && d.outrangutan && d.outrangutan.command;
     const pn = d && d.outrangutan && d.outrangutan.panic;
@@ -2820,6 +2837,164 @@
       } }).catch(notePublishError);
     } catch (e) {}
   }
+  // ── Fix requests from the rundown (Go Live preflight) ───────────────────
+  // sessions/<code>.fixRequests.<id> = { id, target:'playout', kind, detail,
+  // ts, by, byClient, toEndpoint?, outputId?, status:'open'|'ack'|'done'|'failed',
+  // ackTs, ackBy, doneTs, result }. Field-path patches only, never a map set.
+  // Kinds that need no gesture run at once; openOutput (window.open) and
+  // armPlayback (AudioContext) wait for the Do it tap on this Mac.
+  const FIX_STALE_MS = 10 * 60 * 1000;
+  const FIX_AUTORUN = { rejoin: 1, republish: 1, preflight: 1, syncMedia: 1 };
+  const FIX_VERB = {
+    rejoin: 'rejoin the session', republish: 'republish cues and status', preflight: 'run the media check',
+    syncMedia: 'sync media to the kiosk helper', openOutput: 'open the program output',
+    armPlayback: 'arm playout for the first GO', arm: 'arm playout for the first GO',
+  };
+  const _fixSeen = [];
+  const _fixCards = new Map();   // id -> card element
+  function fixSeen(id) { return _fixSeen.indexOf(id) >= 0; }
+  function noteFixSeen(id) { _fixSeen.push(id); if (_fixSeen.length > 64) _fixSeen.shift(); }
+  function fixIdSafe(id) { return typeof id === 'string' && /^[A-Za-z0-9_]{1,120}$/.test(id); }
+  function fixPatch(id, patch) {
+    if (!fbReady() || !sessionCode) return Promise.resolve();
+    const p = {};
+    Object.keys(patch).forEach(k => { p['fixRequests.' + id + '.' + k] = patch[k]; });
+    try { return window._updateDoc(sessionRef(), p).catch(notePublishError); } catch (e) { return Promise.resolve(); }
+  }
+  function handleFixRequests(map) {
+    if (mode !== 'session' || !sessionCode) return;
+    Object.keys(map).forEach(key => {
+      const r = map[key];
+      if (!r || typeof r !== 'object' || r.target !== 'playout' || r.status !== 'open') return;
+      if (!fixIdSafe(r.id) || fixSeen(r.id)) return;
+      if (!(Date.now() - (Number(r.ts) || 0) < FIX_STALE_MS)) return;
+      // Addressed to a specific playout endpoint: only that instance answers.
+      // Unaddressed: only the instance whose Outrangutan screen is on screen
+      // answers, so a rundown machine's background instance stays quiet.
+      if (r.toEndpoint) { if (r.toEndpoint !== OG_SENDER) return; }
+      else if (!isOpen()) return;
+      noteFixSeen(r.id);
+      fixPatch(r.id, { status: 'ack', ackTs: Date.now(), ackBy: OG_SENDER });
+      const kind = String(r.kind || '');
+      if (!FIX_AUTORUN[kind] && !isOpen()) {
+        // Addressed gesture kind (openOutput, armPlayback) while this screen is not up: a
+        // Do-it card here would sit unseen until the rundown's stall timer. Fail at once
+        // so the rundown learns in one snapshot which Mac it reached.
+        fixPatch(r.id, { status: 'failed', doneTs: Date.now(), result: 'Outrangutan is not on screen on this Mac' });
+        slog('session', 'Director asks: ' + (FIX_VERB[kind] || kind) + ': Outrangutan is not on screen on this Mac');
+        return;
+      }
+      slog('session', 'Director asks: ' + (FIX_VERB[kind] || kind));
+      showFixCard(r);
+      if (FIX_AUTORUN[kind]) runFix(r);
+    });
+  }
+  async function runFix(r) {
+    const kind = String(r.kind || '');
+    let ok = true, result = '';
+    const card = _fixCards.get(r.id);
+    if (card) { card.dataset.busy = '1'; const b = card.querySelector('.og-fix-do'); if (b) { b.disabled = true; b.textContent = 'Working'; } }
+    try {
+      switch (kind) {
+        case 'rejoin': {
+          // The ack above is already queued ahead of this resubscribe.
+          subscribeSession(); publishCues(); publishLive(true);
+          ok = !!sessionSub; result = ok ? 'listening on ' + sessionCode : 'not listening: sign in on this Mac, then rejoin';
+          break;
+        }
+        case 'republish': { publishCues(); publishLive(true); result = 'republished ' + cues.length + ' cue' + (cues.length === 1 ? '' : 's'); break; }
+        case 'preflight': {
+          const rep = await preflightReport();
+          const bad = rep.cues.filter(c => !c.ok).slice(0, 50).map(c => ({ id: c.id, num: c.num, name: c.name, issue: c.issue }));
+          const badPads = rep.pads.filter(p => !p.ok).slice(0, 50).map(p => ({ id: p.id, name: p.name, bank: p.bank, issue: p.issue }));
+          const badC = rep.cues.filter(c => !c.ok).length, badP = rep.pads.filter(p => !p.ok).length;
+          try {
+            await window._updateDoc(sessionRef(), { 'outrangutan.preflight': { ts: Date.now(), sender: OG_SENDER, fixId: r.id, cues: rep.cues.length, pads: rep.pads.length, bad, badPads } });
+          } catch (e) { notePublishError(e); }
+          ok = !badC && !badP;
+          result = badC + ' bad cue' + (badC === 1 ? '' : 's') + ', ' + badP + ' bad pad' + (badP === 1 ? '' : 's');
+          break;
+        }
+        case 'syncMedia': {
+          if (!KioskTransport || !helperConnected()) { ok = false; result = 'Kiosk helper offline on the Air'; break; }
+          if (kioskSync.running) { ok = false; result = 'Already syncing, try again in a moment'; break; }
+          await syncMediaToHelper();
+          if (kioskSync.error) { ok = false; result = kioskSync.error; }
+          else result = 'synced ' + kioskSync.total + ' file' + (kioskSync.total === 1 ? '' : 's') + ', renderers re-checking';
+          break;
+        }
+        case 'openOutput': {
+          const o = outputById(r.outputId) || outputs[0];
+          if (!o) { ok = false; result = 'no output configured'; break; }
+          if (o.kiosk) {
+            await openKioskOutput(o);
+            const rec = outputRecord(o.id, false);
+            ok = !!(rec && rec.status !== 'error' && rec.status !== 'closed');
+            result = ok ? 'kiosk launching' : ((rec && rec.error) || 'kiosk launch failed');
+          } else {
+            const w = openOutput(o.id);
+            ok = !!w; result = ok ? 'opened' : 'pop-up blocked, allow pop-ups then press Do it on the Air';
+          }
+          break;
+        }
+        case 'arm': case 'armPlayback': {
+          const st = await armPlayback();
+          ok = !!(st && st.armed);
+          result = ok ? 'armed' : ('not armed: audio ' + (st ? st.audio : 'unknown') + (st && !st.firstCueStaged ? ', first cue not staged' : '') + (st && st.outputsOpen > 0 && st.outputsReady === 0 ? ', no output ready' : ''));
+          break;
+        }
+        default: ok = false; result = 'unknown fix ' + kind;
+      }
+    } catch (e) { ok = false; result = String((e && e.message) || e || 'failed'); }
+    fixPatch(r.id, { status: ok ? 'done' : 'failed', doneTs: Date.now(), result });
+    slog(ok ? 'session' : 'error', 'Fix ' + (FIX_VERB[kind] || kind) + ': ' + (ok ? 'done' : 'failed') + (result ? ' (' + result + ')' : ''));
+    toast((ok ? 'Done: ' : 'Could not ') + (FIX_VERB[kind] || kind) + (result ? '. ' + result.charAt(0).toUpperCase() + result.slice(1) : '') + '.', 4000);
+    hideFixCard(r.id);
+    publishLive(true);
+  }
+  function dismissFix(r) {
+    fixPatch(r.id, { status: 'failed', doneTs: Date.now(), result: 'dismissed on the Air' });
+    slog('session', 'Fix ' + (FIX_VERB[String(r.kind || '')] || r.kind) + ' dismissed here');
+    hideFixCard(r.id);
+  }
+  function fixCardHost() {
+    let host = $('og-fix-cards');
+    if (host) return host;
+    const badge = $('og-mode-badge'); if (!badge || !badge.parentNode) return null;
+    host = document.createElement('div');
+    host.id = 'og-fix-cards';
+    host.style.cssText = 'display:flex;align-items:center;gap:8px;flex:0 1 auto;min-width:0;';
+    badge.parentNode.insertBefore(host, badge.nextSibling);
+    return host;
+  }
+  function showFixCard(r) {
+    const host = fixCardHost();
+    const kind = String(r.kind || '');
+    const verb = FIX_VERB[kind] || ('do "' + kind + '"');
+    const needsTap = !FIX_AUTORUN[kind];
+    toast('The director asks: ' + verb + '.' + (needsTap ? ' Press Do it on this Mac.' : ''), 5000);
+    if (!host) return;
+    const card = document.createElement('div');
+    card.className = 'og-fix-card';
+    card.setAttribute('role', 'status');
+    card.style.cssText = 'display:inline-flex;align-items:center;gap:8px;padding:4px 6px 4px 12px;border-radius:999px;border:1px solid transparent;'
+      + 'background:var(--accent);color:color-mix(in srgb, var(--bg) 18%, #000);font:800 12px/1.2 var(--sans, system-ui);white-space:nowrap;';
+    card.innerHTML = '<span class="og-fix-text">The director asks: ' + esc(verb) + '.</span>'
+      + (needsTap ? '<button type="button" class="og-bar-btn og-capsule og-fix-do">Do it</button>' : '<span class="og-fix-text" style="opacity:.8">Working</span>')
+      + '<button type="button" class="og-bar-btn og-capsule og-fix-dismiss">Dismiss</button>';
+    const doBtn = card.querySelector('.og-fix-do'), dis = card.querySelector('.og-fix-dismiss');
+    if (doBtn) doBtn.onclick = () => { if (card.dataset.busy) return; runFix(r); };   // inside the click: window.open and AudioContext need the gesture
+    if (dis) dis.onclick = () => dismissFix(r);
+    const old = _fixCards.get(r.id); if (old && old.parentNode) old.parentNode.removeChild(old);
+    _fixCards.set(r.id, card);
+    host.appendChild(card);
+  }
+  function hideFixCard(id) {
+    const card = _fixCards.get(id);
+    if (card && card.parentNode) card.parentNode.removeChild(card);
+    _fixCards.delete(id);
+  }
+
   function applyRemoteCommand(cmd) {
     switch (cmd.action) {
       case 'go': go(); break;
@@ -3021,10 +3196,14 @@
     let live = { status: 'idle', ts: now, sender: OG_SENDER };
     if (preInfo) live = { status: 'pre', cueId: preInfo.cue.id, name: preInfo.cue.name, type: preInfo.cue.type, ts: now, sender: OG_SENDER };
     else if (active && active.kind === 'image') {
-      const left = active.remainMs > 0
+      // A held still has no clock: remaining is null and hold is true, so the
+      // rundown strip and the deck print HOLD instead of a frozen 0:00. A
+      // numeric remaining rides only while the still's timer actually runs.
+      const timed = active.remainMs > 0 && !active.held;
+      const left = timed
         ? (active.paused ? active.remainMs : Math.max(0, active.remainMs - (performance.now() - active.timerStart))) / 1000
         : 0;
-      live = { status: active.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: 'image', dur: Math.round(active.cue.duration || 0), remaining: Math.round(left), thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
+      live = { status: active.paused ? 'pause' : 'play', cueId: active.cue.id, name: active.cue.name, type: 'image', dur: Math.round(active.cue.duration || 0), remaining: timed ? Math.round(left) : null, hold: !timed, thumb: active.cue.thumb || '', ts: now, sender: OG_SENDER };
     }
     else if (active && active.el) {
       const el = active.el, end = (active.cue.trimOut != null ? active.cue.trimOut : (isFinite(el.duration) ? el.duration : active.cue.duration));
@@ -3035,6 +3214,10 @@
     // Master gain rides every live packet so remote surfaces (the deck's
     // PLBK vol dial, the rundown machine) can show the real fader position.
     live.gain = Math.round((settings.masterGain || 0) * 100) / 100;
+    // First-GO truth for the remote preflight row: armed reads false on this
+    // Mac until someone taps here (AudioContext starts suspended without a
+    // gesture), and the object says why.
+    try { live.armed = playoutArmed(); } catch (e) {}
     live.seq = ++_liveSeq;
     live.proto = 3;   // 2 = acks commands (outrangutan.cmdAck), senders only retry against proto >= 2; 3 = also consumes the outrangutan.panic lane
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }).catch(notePublishError); } catch (e) {}
@@ -3423,6 +3606,7 @@
     if (rundownArmId === cue.id) rundownArmId = null;   // the standby fired; the next arm re-stamps it
     slog('cue', 'GO · #' + cue.num + ' “' + cue.name + '”' + (cue.preWait > 0 ? ' (pre-wait ' + cue.preWait + 's)' : ''));
     if (cue.preWait > 0) {
+      if (cue.type === 'image') slog('cue', 'Pre-wait ' + cue.preWait + 's before still “' + cue.name + '” shows (Pre-wait field in the Inspector, 0 shows it at once)');
       setStatus('pre');
       preInfo = { cue, until: performance.now() + cue.preWait * 1000 };
       preTimer = setTimeout(() => { preInfo = null; beginMedia(cue); }, cue.preWait * 1000);
@@ -3432,6 +3616,7 @@
     beginMedia(cue);
   }
   async function beginMedia(cue) {
+    clearPrevImageTimer();   // still-to-anything GO: the outgoing still's timer must not end the incoming cue at the old deadline
     if (cue.type === 'image') return beginImage(cue);
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
     if (!media || !media.blob) { slog('error', 'Media missing for “' + cue.name + '” at fire time'); toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
@@ -3550,6 +3735,7 @@
   async function beginImage(cue) {
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
     if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
+    clearPrevImageTimer();
     const prev = active;
     const deck = decks.img, el = deck.el;
     const pre = (preloaded && preloaded.cueId === cue.id && preloaded.kind === 'image') ? preloaded : null;
@@ -3569,7 +3755,11 @@
     }
     if (fi > 0) { el.style.opacity = 0; runFade('in-img', v => { el.style.opacity = v; }, 0, 1, fi, curve); }
     else el.style.opacity = 1;
-    if (active.remainMs > 0) armImageTimer();
+    if (active.remainMs > 0) {
+      armImageTimer();
+      const after = cue.continueMode === 'auto_follow' ? 'follows into the next cue' : cue.endAction === 'black' ? 'fades to black' : 'parks on its last frame';
+      slog('cue', 'Still timer armed: “' + cue.name + '” ' + after + ' in ' + cue.duration + 's (Duration field in the Inspector, 0 holds)');
+    }
     setStatus('play'); startTicker(); renderCueList();
     armCueSfxTie(cue);
     applyKeyForActive();          // stills never key — this also stops a leftover key loop
@@ -3581,9 +3771,13 @@
     clearImageTimer();
     if (!active || active.kind !== 'image' || !(active.remainMs > 0)) return;
     active.timerStart = performance.now();
-    active.imgTimer = setTimeout(() => { if (active && active.kind === 'image') handleEnded(active.cue); }, active.remainMs);
+    const self = active;   // identity guard: a re-fired same still or a later cue is a new object, so an orphaned timer can never end it
+    self.imgTimer = setTimeout(() => { self.imgTimer = null; if (active === self && !self.paused) handleEnded(self.cue); }, self.remainMs);
   }
   function clearImageTimer() { if (active && active.imgTimer) { clearTimeout(active.imgTimer); active.imgTimer = null; } }
+  // The object that is about to be replaced may still own a running still timer
+  // (still-to-still GO skips stopDeck because both live on the img deck).
+  function clearPrevImageTimer() { const prev = active; if (prev && prev.imgTimer) { clearTimeout(prev.imgTimer); prev.imgTimer = null; } }
 
   // ── Phase 2 (master plan): black-slate failure containment ───────────────
   // A cue that dies mid-show never hangs the program: picture cuts to black,
@@ -3696,6 +3890,11 @@
     // end action for the picture/audio (output messages only for picture cues — audio never touches one)
     const deck = active ? deckOf(active) : null;
     const hasPicture = cue.type === 'video' || cue.type === 'image', out = cue.output || 1;
+    if (cue.type === 'image') slog('cue', 'Still timer ended: “' + cue.name + '”' + (cue.endAction === 'black' ? ', fading to black' : (cue.endAction === 'hold' || m === 'manual') ? ', parked on its last frame' : ', cut'));
+    // An expired still on manual continue parks (status idle, frame stays,
+    // no stop to the output): a timer on a still may advance or hold, never
+    // black program. Fade (endAction black) is the explicit way to clear it.
+    if (deck && cue.type === 'image' && m === 'manual' && cue.endAction === 'stop') { if (active) active.held = true; setStatus('idle'); renderCueList(); return; }
     // hold-last-frame: keep the frame up but mark the cue finished — GO must fire
     // the NEXT cue, never resume this one from 0:00 (play() on ended media rewinds)
     if (deck && cue.endAction === 'hold') { try { if (deck.el.pause) deck.el.pause(); } catch (e) {} if (active) active.held = true; setStatus('idle'); if (cue.type === 'video') sendOut({ t: 'holdLast' }, out); renderCueList(); return; }
@@ -3724,6 +3923,7 @@
     if (active && active.held) return;   // a held-last-frame cue is finished — nothing to pause or resume
     if (active && active.kind === 'image') {
       if (active.paused) {
+        if (active.pausedAt) { active.shownAt += performance.now() - active.pausedAt; active.pausedAt = 0; }   // the held clock skips the pause
         active.paused = false; if (active.remainMs > 0) armImageTimer(); setStatus('play');
         // Re-anchor the shared countdown: remainMs is the exact remaining hold,
         // so elapsed is the full duration minus what is left.
@@ -3731,6 +3931,7 @@
       }
       else {
         if (active.imgTimer) { active.remainMs = Math.max(0, active.remainMs - (performance.now() - active.timerStart)); clearImageTimer(); }
+        active.pausedAt = performance.now();
         active.paused = true; setStatus('pause'); saveShow();
       }
       renderCueList(); return;
@@ -3821,23 +4022,23 @@
     if (preInfo) {
       const total = Math.max(1, (Number(preInfo.cue.preWait) || 0) * 1000);
       const remainMs = Math.max(0, preInfo.until - performance.now());
-      return { phase: 'prewait', playing: true, frac: Math.min(1, 1 - (remainMs / total)), remainMs, cueId: preInfo.cue.id };
+      return { phase: 'prewait', playing: true, frac: Math.min(1, 1 - (remainMs / total)), remainMs, cueId: preInfo.cue.id, kind: preInfo.cue.type || null };
     }
-    if (!active) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId: null };
-    const cueId = active.cue.id;
+    if (!active) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId: null, kind: null };
+    const cueId = active.cue.id, kind = active.kind || null;   // kind lets the strip and deck tell a held still (no clock) from a rolling video whose length is unknown
     if (active.kind === 'image') {
       const durMs = cuePlayoutDuration(active.cue) * 1000;
       const paused = !!active.paused;
-      if (!(durMs > 0)) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId };
+      if (!(durMs > 0) || active.held) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId, kind };   // held (no timer, or timer done): no clock
       const remainMs = paused ? Math.max(0, active.remainMs) : Math.max(0, active.remainMs - (performance.now() - active.timerStart));
-      return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, 1 - (remainMs / durMs)), remainMs, cueId };
+      return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, 1 - (remainMs / durMs)), remainMs, cueId, kind };
     }
-    if (!active.el) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId };
+    if (!active.el) return { phase: 'idle', playing: false, frac: 0, remainMs: 0, cueId, kind };
     const paused = !!active.el.paused;
     const dur = cuePlayoutDuration(active.cue, active.el);
-    if (!(dur > 0)) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId };
+    if (!(dur > 0)) return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: null, remainMs: null, cueId, kind };
     const elapsed = Math.max(0, active.el.currentTime - (active.cue.trimIn || 0));
-    return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, elapsed / dur), remainMs: Math.max(0, (dur - elapsed) * 1000), cueId };
+    return { phase: paused ? 'paused' : 'playing', playing: !paused, frac: Math.min(1, elapsed / dur), remainMs: Math.max(0, (dur - elapsed) * 1000), cueId, kind };
   }
   function renderClock() {
     const timeEl = $('og-clock-time'), labelEl = $('og-clock-label'), durEl = $('og-clock-duration'), wrap = $('og-clock');
@@ -3845,6 +4046,7 @@
     const setDuration = (secs) => { if (durEl) durEl.textContent = 'DUR ' + fmtClock(Math.max(0, secs || 0)); };
     // dir: 'up' counting up (elapsed → green), 'down' counting down (remaining → red)
     const setClock = (state, dir) => { wrap.className = 'og-clock' + (state ? ' ' + state : '') + ' ' + (dir === 'up' ? 'og-count-up' : 'og-count-down'); };
+    timeEl.style.color = '';   // only the held-still face is neutral; every other state keeps its count colour
     if (preInfo) {
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
       setDuration(cuePlayoutDuration(preInfo.cue));
@@ -3854,16 +4056,21 @@
     if (active && active.kind === 'image') {
       const c = active.cue;
       setDuration(cuePlayoutDuration(c));
-      if (active.remainMs > 0 || c.duration > 0) {
+      if (!active.held && (active.remainMs > 0 || c.duration > 0)) {
         const left = active.paused ? active.remainMs / 1000
           : Math.max(0, (active.remainMs - (performance.now() - active.timerStart)) / 1000);
         timeEl.textContent = fmtSmpte(left);
         labelEl.textContent = active.paused ? 'PAUSED' : 'REMAINING';
         setClock(active.paused || left <= 10 ? 'warn' : 'run', 'down');
       } else {
-        timeEl.textContent = fmtSmpte((performance.now() - active.shownAt) / 1000);
-        labelEl.textContent = active.paused ? 'PAUSED' : 'HOLD';
-        setClock(active.paused ? 'warn' : 'run', 'up');
+        // A held still is not a timer: the big slot says HOLD on a neutral
+        // face and the elapsed hold sits in the meta slot, frozen while paused.
+        const heldFor = ((active.paused && active.pausedAt ? active.pausedAt : performance.now()) - active.shownAt) / 1000;
+        timeEl.textContent = 'HOLD';
+        timeEl.style.color = '#aeb6c4';   // LED face zone (sanctioned hardcoded hex)
+        labelEl.textContent = active.paused ? 'PAUSED' : (active.held ? 'HELD · TIMER DONE' : 'HOLD');
+        if (durEl) durEl.textContent = 'UP ' + fmtClock(heldFor);
+        setClock(active.paused ? 'warn' : '', 'up');
       }
       return;
     }
@@ -3962,7 +4169,7 @@
         + '<span class="og-cue-num">' + c.num + '</span>'
         + '<span class="og-cue-typeicon og-type-' + c.type + '">' + sym(c.type === 'audio' ? 'department.audio' : c.type === 'image' ? 'content.image' : 'department.video') + '</span>'
         + '<span class="og-cue-name">' + esc(c.name) + '</span>'
-        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" data-tip="Failed to play last time. Replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" data-tip="Tied SFX pad: fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont">' + sym('state.timed') + c.preWait + 's</span>' : '') + '<span>' + durTxt + '</span></span>'
+        + '<span class="og-cue-meta">' + (c.broken ? '<span class="og-cue-cont og-cue-bad" data-tip="Failed to play last time. Replace or re-import this media">' + sym('state.warning') + '</span>' : '') + (c.sfxPadId ? '<span class="og-cue-cont og-cue-sfx" data-tip="Tied SFX pad: fires with this cue' + (c.sfxDelay > 0 ? ' after ' + c.sfxDelay + 's' : '') + '">SFX</span>' : '') + (cont ? '<span class="og-cue-cont">' + cont + '</span>' : '') + (c.xfade > 0 ? '<span class="og-cue-cont">XF' + c.xfade + 's</span>' : '') + (c.preWait > 0 ? '<span class="og-cue-cont" data-tip="Pre-wait: the clock runs before this cue shows">PRE ' + fmtPre(c.preWait) + '</span>' : '') + '<span>' + durTxt + '</span></span>'
         + '</div>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('.og-cue'), el => {
@@ -4029,12 +4236,13 @@
 
     const timingPane =
       sec('Timing',
-        field('Pre-wait (s)', '<input id="og-i-prewait" type="number" min="0" step="0.5" value="' + c.preWait + '">') +
+        field('Pre-wait (s) <span class="og-cue-cont" id="og-i-prewait-badge">' + stillBadge(c, 'preWait') + '</span>', '<input id="og-i-prewait" type="number" min="0" step="0.5" value="' + c.preWait + '">') +
         field('Continue', '<select id="og-i-continue">' +
           opt('manual', 'Manual', c.continueMode) + opt('auto_continue', 'Continue', c.continueMode) + opt('auto_follow', 'Follow', c.continueMode) + '</select>') +
         (c.type === 'image' ?
-          field('Duration (s), 0 holds', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
-          field('On end', '<select id="og-i-endaction">' + opt('stop', 'Cut', c.endAction) + opt('hold', 'Hold', c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
+          field('Duration (s), 0 holds <span class="og-cue-cont" id="og-i-imgdur-badge">' + stillBadge(c, 'duration') + '</span>', '<input id="og-i-imgdur" type="number" min="0" step="0.5" value="' + (c.duration || 0) + '">') +
+          // A still never cuts to black on its own: Cut is not offered (a stored 'stop' reads and behaves as Hold). Fade is the explicit way to clear it.
+          field('On end', '<select id="og-i-endaction">' + opt('hold', 'Hold', c.endAction === 'stop' ? 'hold' : c.endAction) + opt('black', 'Fade', c.endAction) + '</select>')
         : '')
       ) +
       sec('Fades',
@@ -4146,7 +4354,7 @@
     const bind = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
     const live = () => { if (active && active.cue.id === c.id && active.ch) applyChannel(active.ch, { eq: c.eq, comp: c.comp }); };
     bind('og-i-name', 'oninput', e => { c.name = e.target.value; renderCueList(); scheduleSave(); });
-    bind('og-i-prewait', 'onchange', e => { c.preWait = Math.max(0, parseFloat(e.target.value) || 0); renderCueList(); scheduleSave(); });
+    bind('og-i-prewait', 'onchange', e => { c.preWait = Math.max(0, parseFloat(e.target.value) || 0); refreshStillBadge(c, 'preWait'); renderCueList(); scheduleSave(); });
     bind('og-i-continue', 'onchange', e => { c.continueMode = e.target.value; renderCueList(); scheduleSave(); });
     bind('og-i-volume', 'oninput', e => { c.volume = clamp(parseFloat(e.target.value), 0, 1); if (active && active.cue.id === c.id) { deckSetVol(deckOf(active), c.volume); deckGain(deckOf(active), 1); sendOut({ t: 'volume', v: c.volume }, c.output || 1); } scheduleSave(); });
     bind('og-i-eqlow', 'oninput', e => { c.eq.low = parseFloat(e.target.value) || 0; live(); scheduleSave(); });
@@ -4164,9 +4372,14 @@
     bind('og-i-imgdur', 'onchange', e => {   // still-image duration: 0 = hold until advanced
       c.duration = Math.max(0, parseFloat(e.target.value) || 0);
       if (active && active.kind === 'image' && active.cue.id === c.id) {
-        active.remainMs = c.duration > 0 ? c.duration * 1000 : 0;
-        if (active.paused || !(active.remainMs > 0)) clearImageTimer(); else armImageTimer();
+        if (active.held) {   // timer already ended: the still is finished (status IDLE, no clock anywhere), so re-arming would fire Follow with no countdown shown
+          toast('Duration applies the next time this still plays. GO fires the next cue.', 4000);
+        } else {
+          active.remainMs = c.duration > 0 ? c.duration * 1000 : 0;
+          if (active.paused || !(active.remainMs > 0)) clearImageTimer(); else armImageTimer();
+        }
       }
+      refreshStillBadge(c, 'duration');
       renderCueList(); scheduleSave();
     });
     bind('og-i-fit', 'onchange', e => { c.fit = e.target.value; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); sendOut({ t: 'fit', fit: c.fit }, c.output || 1); scheduleSave(); });
@@ -4199,6 +4412,28 @@
     upgradeCheckToToggle(ins, 'og-i-comp');
   }
   function field(label, inner) { return '<div class="og-field"><label>' + label + '</label>' + inner + '</div>'; }
+  // Still timing badges: the Inspector says out loud what a number in the
+  // Pre-wait or Duration field will do, so a stray 5 is never a mystery clock.
+  function stillBadge(c, which) {
+    const v = which === 'duration' ? (c.duration || 0) : (c.preWait || 0);
+    if (which === 'duration') return v > 0 ? 'auto: ' + v + 's' : 'HOLD';
+    return v > 0 ? 'pre-wait: ' + v + 's' : 'none';
+  }
+  const _stillTimerToasted = new Set();
+  function refreshStillBadge(c, which) {
+    const el = $(which === 'duration' ? 'og-i-imgdur-badge' : 'og-i-prewait-badge');
+    if (el) el.textContent = stillBadge(c, which);
+    if (c.type !== 'image') return;
+    const v = which === 'duration' ? (c.duration || 0) : (c.preWait || 0);
+    const key = c.id + ':' + which;
+    if (!(v > 0)) { _stillTimerToasted.delete(key); return; }
+    if (_stillTimerToasted.has(key)) return;
+    _stillTimerToasted.add(key);
+    const then = c.continueMode === 'auto_follow' ? 'auto-advance' : c.endAction === 'black' ? 'fade to black' : 'park on its last frame';
+    toast(which === 'duration'
+      ? 'This still will ' + then + ' after ' + v + 's. Set 0 to hold.'
+      : 'This still will pre-wait ' + v + 's before it shows. Set 0 to show it at once.', 5000);
+  }
   function opt(val, label, cur) { return '<option value="' + val + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + label + '</option>'; }
   function sub(t) { return '<div class="og-insp-sub">' + t + '</div>'; }
   // Inspector-standard section: bold text header on the panel background —

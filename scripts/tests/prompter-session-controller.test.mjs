@@ -150,4 +150,46 @@ test('single-authority: a joining surface adopts the seeded session instead of m
   assert.equal(caller.accepts(ready), true);
 });
 
-console.log('PASS 9 Flowmingo session controller tests');
+test('doc-delivered controls may ignore a stale output target but never a foreign session', () => {
+  // A talent that reloaded on another machine has a fresh instance id; the
+  // operator's commands still carry the OLD target. Over the session doc the
+  // address is production + session only; the BroadcastChannel path keeps
+  // the target check so several local windows stay individually addressed.
+  const talent = createController({ instanceId: 'talent-new', productionCode: 'A' });
+  talent.setIdentity({ sessionId: 'session-A' });
+  const stale = { protocolVersion: PROTOCOL_VERSION, productionCode: 'A', sessionId: 'session-A', targetOutputInstanceId: 'talent-old', action: 'resume' };
+  assert.equal(talent.accepts(stale), false);
+  assert.equal(talent.accepts(stale, { ignoreTarget: true }), true);
+  assert.equal(talent.accepts({ ...stale, sessionId: 'session-rival' }, { ignoreTarget: true }), false);
+  assert.equal(talent.accepts({ ...stale, productionCode: 'B' }, { ignoreTarget: true }), false);
+  assert.equal(talent.accepts({ action: 'resume', targetOutputInstanceId: 'talent-old' }, { allowLegacy: true, ignoreTarget: true }), true);
+});
+
+test('rebind on evidence: a replacement output echoing the current snapshotId becomes ready and takes the queue', () => {
+  const operator = createController({ instanceId: 'operator', productionCode: 'A' });
+  operator.setIdentity({ sessionId: 'session-A' });
+  operator.noteOutput('output-A');
+  const seed = operator.buildSnapshot({ outputInstanceId: 'output-A' });
+  operator.markStateApplied('output-A', seed.snapshotId, seed.state);
+  operator.markDisconnected('output-A', 'missed heartbeats');
+  const command = operator.buildCommand('resume');
+  operator.queueCommand(command);
+  // Output B (the reloaded talent) applied the retargeted doc seed and its
+  // heartbeat echoes the operator's CURRENT snapshotId: that is the evidence.
+  const talentB = createController({ instanceId: 'output-B', productionCode: 'A' });
+  talentB.setIdentity({ sessionId: 'session-A' });
+  talentB.applySnapshot({ ...seed.state, outputInstanceId: 'output-B' }, 'output-B');
+  const beat = talentB.buildHeartbeat();
+  assert.equal(operator.accepts(beat), true);
+  assert.equal(beat.snapshotId, operator.getState().snapshotId);
+  operator.noteOutput('output-B', 'connected');
+  assert.equal(operator.isReady('output-A'), false);
+  assert.equal(operator.markStateApplied('output-B', beat.snapshotId, beat.state), true);
+  assert.equal(operator.isReady('output-B'), true);
+  const queued = operator.takeQueuedCommands('output-B');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].commandId, command.commandId);
+  assert.equal(queued[0].targetOutputInstanceId, 'output-B');
+});
+
+console.log('PASS 11 Flowmingo session controller tests');

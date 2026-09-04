@@ -227,7 +227,7 @@
       tick: jogTick, press: function () { surfaceRun('prompter.cue.current'); } },
     rundownSelect: { label: 'Rundown row', hue: '#5b8df8', turnLabel: 'Pick a row', pressLabel: 'Take that row',
       desc: 'Turn: move the selection up and down the rundown. Press: make the selected row the live row.',
-      readout: function (s) { return s.live ? ((s.live.selectedIndex + 1) + '/' + s.live.rowCount) : '-'; }, bar: function (s) { return s.live && s.live.rowCount ? (s.live.selectedIndex + 1) / s.live.rowCount : 0; },
+      readout: function (s) { return s.live ? ((s.live.selectedNumber || (s.live.selectedIndex + 1)) + '/' + (s.live.rowTotal || s.live.rowCount)) : '-'; }, bar: function (s) { return s.live && s.live.rowCount ? (s.live.selectedIndex + 1) / s.live.rowCount : 0; },
       tick: rundownTick, press: function () { rundownTake(); } },
     showClock: { label: 'Show clock', hue: '#f5b731', turnLabel: 'Nothing (display)', pressLabel: 'Start / pause',
       desc: 'A clock face on the strip. Press the dial (or tap the zone) to start or pause the shared show clock. Turning does nothing on purpose.',
@@ -245,8 +245,9 @@
     obsProgram: { label: 'OBS program', hue: '#e2477b', turnLabel: 'Stream volume', pressLabel: 'Start / stop stream', obsFrame: true,
       desc: 'A live OBS program monitor. Turn: the OBS stream audio volume (choose which input in the OBS row). Press: start or stop the OBS stream.',
       readout: function () { var st = obsState(); return st.connected ? pct(obsVolume()) : 'off'; },
-      bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { return !!obsState().streaming; },
-      tick: obsVolTick, press: function () { var o = OBSc(); if (o && o.isReady && o.isReady()) { try { o.toggleStream(); } catch (e) {} } else toast('Connect OBS first (the OBS Studio row below the deck).'); } },
+      bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { var st = obsState(); return !!(st.streaming || st.streamState === OBS_STARTING); },
+      // The zone press shares the STREAM key's gate (STARTING refusal, late-refusal toast).
+      tick: obsVolTick, press: function () { obsDo('toggleStream', { label: 'STREAM' }); } },
     // The prompter, live on the strip: the talent's current spot in the
     // script, right where the operator's thumb is.
     ptProgram: { label: 'Prompter view', hue: '#b06ef8', turnLabel: 'Faster / slower', pressLabel: 'Play / pause', ptFrame: true,
@@ -263,11 +264,17 @@
       readout: function (s) {
         var po = s.playout || {};
         if (po.status === 'pre') return po.remaining != null ? 'PRE ' + fmtClock(po.remaining) : 'PRE';
+        if (po.hold) return 'HOLD';   // a still with no timer parks; never a fake 0:00
         if (po.loop) return '∞';
-        return (po.status === 'play' || po.status === 'pause') && po.remaining != null ? fmtClock(po.remaining) : 'idle';
+        // A rolling cue with no clock (a video whose duration is not known
+        // yet, a stream) is PLAY, never 'idle': the strip prints the name
+        // with no time and the deck agrees.
+        if (po.status === 'play' || po.status === 'pause') return po.remaining != null ? fmtClock(po.remaining) : (po.status === 'play' ? 'PLAY' : '');
+        return 'idle';
       },
       bar: function (s) {
         var po = s.playout || {};
+        if (po.hold) return null;
         if (po.frac != null) return po.frac;
         return (po.status === 'play' || po.status === 'pause') && po.dur && po.remaining != null ? Math.max(0, Math.min(1, 1 - po.remaining / po.dur)) : null;
       },
@@ -339,11 +346,33 @@
          'pad:2', 'pad:3', 'pad:4', 'none', 'none', 'km:prompter.brake', 'km:prompter.boost', 'none', 'obs.scene:1',
          'cue:1', 'cue:2', 'cue:3', 'none', 'fx.hype', 'km:prompter.editscript', 'km:scrub.open', 'none', 'layout.next']
   };
-  function defaultKeySlots(keys) {
-    var sizes = Object.keys(DEFAULT_LAYOUTS).map(Number).sort(function (a, b) { return a - b; });
+  // Director layouts (2026-09-03): the rundown-only page a student director
+  // runs the show from. BACK / NEXT / TAKE / ABORT ride the control bus and
+  // land on whichever window executes it (caller gated there); ROW is display
+  // only. NO playout transport keys on purpose: GO / STOP / PANIC write to
+  // the Air with no caller gate at all, and the owner runs playback from the
+  // big deck. The 15-key adds the clock verbs, GO LIVE and talent overlays.
+  var DIRECTOR_LAYOUTS = {
+    6:  ['km:rundown.back', 'km:rundown.next', 'rundown.take',
+         'info.rundown', 'clock', 'rundown.abort'],
+    8:  ['km:rundown.back', 'km:rundown.next', 'rundown.take', 'rundown.abort',
+         'info.rundown', 'clock', 'golive', 'layout.next'],
+    15: ['km:rundown.back', 'km:rundown.next', 'rundown.take', 'rundown.abort', 'info.rundown',
+         'clock.start', 'clock.pause', 'clock', 'golive', 'pt.question',
+         'pt.wrap5', 'pt.wrap10', 'pt.overlays.clear', 'layout.prev', 'layout.next']
+  };
+  var LAYOUT_TEMPLATES = { 'default': DEFAULT_LAYOUTS, director: DIRECTOR_LAYOUTS };
+  // Which template a fresh (or reset) layout starts from. The bridge's
+  // session role is only a hint: a signed-in student gets Director, everyone
+  // else the by-app starter; the Add-a-page sheet offers both for any deck.
+  function sessionRole() { var s = surfaceState(); return String((s && s.session && s.session.role) || ''); }
+  function defaultTemplate() { return sessionRole() === 'student' ? 'director' : 'default'; }
+  function defaultKeySlots(keys, template) {
+    var table = LAYOUT_TEMPLATES[template || defaultTemplate()] || DEFAULT_LAYOUTS;
+    var sizes = Object.keys(table).map(Number).sort(function (a, b) { return a - b; });
     var best = sizes[0];
     sizes.forEach(function (n) { if (n <= keys) best = n; });
-    var L = DEFAULT_LAYOUTS[best];
+    var L = table[best];
     var out = []; for (var i = 0; i < keys; i++) out.push({ a: L[i] || 'none' }); return out;
   }
   function defaultTouch(zones) { var out = []; for (var i = 0; i < zones; i++) out.push({ dial: i }); return out; }
@@ -428,7 +457,9 @@
   function bridge() { return window.cueolaSurfaceBridge || null; }
   function surfaceKeymap() { var b = bridge(); try { return (b && b.keymap()) || []; } catch (e) { return []; } }
   function surfaceState() { var b = bridge(); var base = { session: { code: '', active: false }, playout: {}, prompter: null, clock: {}, live: null }; try { return (b && b.state()) || base; } catch (e) { return base; } }
-  function surfaceRun(id) { var b = bridge(); try { b && b.runAction(id); } catch (e) {} }
+  // Returns the action's own result: a strict false means the app refused
+  // it (lsNext off the Live screen, a follower's GO), so the key can flash.
+  function surfaceRun(id) { var b = bridge(); try { return b ? b.runAction(id) : undefined; } catch (e) { return undefined; } }
   function surfacePrompter(a) { var b = bridge(); try { b && b.prompter(a); } catch (e) {} }
   function masterGain() { var b = bridge(); try { return (b && b.masterGain ? b.masterGain() : 0) || 0; } catch (e) { return 0; } }
   function prompterStripInfo() { var b = bridge(); try { return (b && b.prompterStrip && b.prompterStrip()) || null; } catch (e) { return null; } }
@@ -503,16 +534,21 @@
   function rundownTake() { var b = bridge(); var s = surfaceState(); if (b && s.live) { try { b.liveSelect(s.live.selectedIndex || 0, true); } catch (e) {} } }
 
   // ── Dispatch ────────────────────────────────────────────────────────────────
-  function fireSlot(slot, phase, fromDeck) {
+  function fireSlot(slot, phase, fromDeck, keyIdx) {
     if (typeof slot === 'string') slot = { a: slot };
     var a = catalog[slot.a];
     if (!a || a.kind === 'none' || a.kind === 'infoRundown') return;   // display-only keys never dispatch
     if (mode === 'cloud' && dispatchCloud(a, slot, phase)) return;
     // Returns false when the press provably dispatched NOWHERE (a gate refused
     // it): callers paint the red REFUSED flash so a dead press is never silent.
-    var refused = false;
+    // Only the local rundown keymap ids read a strict false as a refusal:
+    // prompter commands return false when they were QUEUED for a talent that
+    // has not linked yet (they apply on link), and that is not a dead press.
+    // keyIdx + fromDeck travel to the OBS path so a LATE refusal (obs-websocket
+    // rejects the request after the press returned) can still flash that key.
+    var refused = false, octx = { key: keyIdx, deck: fromDeck, label: a.label || a.full || a.id };
     switch (a.kind) {
-      case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') surfaceRun(a.keymapId); break;
+      case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') { var kr = surfaceRun(a.keymapId); refused = kr === false && /^rundown\./.test(a.keymapId || ''); } break;
       case 'transport': if (phase === 'down') { var bt = bridge(); try { refused = !!bt && !!bt.playoutTransport && bt.playoutTransport(a.op) === false; } catch (e) {} } break;
       case 'pad': if (phase === 'down') refused = firePlayoutSlot('pad', a.slot) === false; break;
       case 'cue': if (phase === 'down') refused = firePlayoutSlot('cue', a.slot) === false; break;
@@ -527,10 +563,10 @@
       case 'layoutRef': if (phase === 'down' && slot.ref) switchLayoutByNameFor(fromDeck, slot.ref); break;
       case 'talkback': talkbackSet(a.bus, phase === 'down'); break;
       case 'talkbackPanic': if (phase === 'down') releaseTalkback(true); break;
-      case 'obs': if (phase === 'down') refused = obsDo(a.op) === false; break;
-      case 'obsScene': if (phase === 'down') refused = obsSceneSlot(a.slot) === false; break;
-      case 'obsSceneRef': if (phase === 'down' && slot.ref) refused = obsDo2('setScene', slot.ref) === false; break;
-      case 'obsMuteRef': if (phase === 'down' && slot.ref) refused = obsDo2('toggleMute', slot.ref) === false; break;
+      case 'obs': if (phase === 'down') refused = obsDo(a.op, octx) === false; break;
+      case 'obsScene': if (phase === 'down') refused = obsSceneSlot(a.slot, octx) === false; break;
+      case 'obsSceneRef': if (phase === 'down' && slot.ref) refused = obsDo2('setScene', slot.ref, octx) === false; break;
+      case 'obsMuteRef': if (phase === 'down' && slot.ref) refused = obsDo2('toggleMute', slot.ref, octx) === false; break;
       case 'fx': if (phase === 'down' && a.op === 'hype') hypeShow(); break;
       case 'ptOverlay': if (phase === 'down') { var bp = bridge(); try { bp && bp.prompterOverlay && bp.prompterOverlay(a.op); } catch (e) {} } break;
     }
@@ -543,9 +579,45 @@
   // ── OBS bridge accessors ────────────────────────────────────────────────────
   function OBSc() { return window.CueolaOBS; }
   function obsState() { var o = OBSc(); try { return (o && o.state()) || {}; } catch (e) { return {}; } }
-  function obsDo(op) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (bottom of the setup panel).'); return false; } try { o[op] && o[op](); } catch (e) {} }
-  function obsDo2(op, arg) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first.'); return false; } try { o[op] && o[op](arg); } catch (e) {} }
-  function obsSceneSlot(slot) { var st = obsState(), name = (st.scenes || [])[slot - 1]; if (name) return obsDo2('setScene', name); toast('No OBS scene in slot ' + slot + '.'); return false; }
+  var OBS_CONNECT_FIRST = 'Connect OBS first: Deck settings (gear) > OBS Studio.';
+  var OBS_STARTING = 'OBS_WEBSOCKET_OUTPUT_STARTING';
+  // True while OBS is bringing that output up (StreamStateChanged /
+  // RecordStateChanged STARTING, mirrored by cueola-obs.js as streamState /
+  // recordState; older clients without the field read as not starting).
+  function obsOutputStarting(op) {
+    var st = obsState();
+    if (op === 'toggleStream') return st.streamState === OBS_STARTING;
+    if (op === 'toggleRecord') return st.recordState === OBS_STARTING;
+    return false;
+  }
+  // A late refusal (obs-websocket rejected the request, or the 5s timeout)
+  // says why and paints the red REFUSED flash on the key that asked. ctx
+  // carries the key index and deck because fireSlot's refused path is
+  // synchronous and long gone by the time the rejection lands.
+  function noteObsRefusal(ctx, e) {
+    var msg = (e && e.message) || 'request failed';
+    toast('OBS refused ' + ((ctx && ctx.label) || 'the request') + ': ' + msg);
+    if (ctx && ctx.key != null) {
+      if (ctx.deck && ctx.deck !== device) (ctx.deck.refusedFlashUntil = ctx.deck.refusedFlashUntil || [])[ctx.key] = performance.now() + 900;
+      else refusedFlashUntil[ctx.key] = performance.now() + 900;
+    }
+    schedulePaint();
+  }
+  function obsCall(o, op, args, ctx) {
+    var p;
+    try { p = o[op] && o[op].apply(o, args); } catch (e) { noteObsRefusal(ctx, e); return false; }
+    if (p && typeof p.then === 'function') p.then(null, function (e) { noteObsRefusal(ctx, e); });
+  }
+  function obsDo(op, ctx) {
+    var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast(OBS_CONNECT_FIRST); return false; }
+    // Refuse a second STREAM / REC press only while the output is STARTING
+    // (obs-websocket would re-enter start, not stop). NOT while STOPPING: a
+    // second press there is OBS's own force-stop, the way out of a hung stop.
+    if (obsOutputStarting(op)) { toast('OBS is still starting the ' + (op === 'toggleRecord' ? 'recording' : 'stream') + '. Wait for the lamp.'); return false; }
+    return obsCall(o, op, [], ctx);
+  }
+  function obsDo2(op, arg, ctx) { var o = OBSc(); if (!o || !o.isReady || !o.isReady()) { toast(OBS_CONNECT_FIRST); return false; } return obsCall(o, op, [arg], ctx); }
+  function obsSceneSlot(slot, ctx) { var st = obsState(), name = (st.scenes || [])[slot - 1]; if (name) return obsDo2('setScene', name, ctx); toast('No OBS scene in slot ' + slot + '.'); return false; }
   // Stream-output volume: obs-websocket has no master fader, so KeyWi rides ONE
   // chosen audio input (the "stream audio" — usually Desktop Audio). The pick is
   // remembered per browser; auto-guess prefers a desktop/stream-sounding name.
@@ -559,12 +631,16 @@
   }
   function setObsVolInput(name) { try { localStorage.setItem(OBS_VOL_KEY, name || ''); } catch (e) {} schedulePaint(); }
   function obsVolume() { var st = obsState(), n = obsVolInputName(); var v = st.volumes ? st.volumes[n] : null; return v == null ? 1 : Math.max(0, Math.min(1, v)); }
+  var obsVolErrAt = 0;
   function obsVolTick(d) {
     var o = OBSc();
-    if (!o || !o.isReady || !o.isReady()) { toast('Connect OBS first (the OBS Studio row below the deck).'); return; }
+    if (!o || !o.isReady || !o.isReady()) { toast(OBS_CONNECT_FIRST); return; }
     var n = obsVolInputName();
     if (!n) { toast('OBS has no audio inputs to ride.'); return; }
-    try { o.setVolume(n, obsVolume() + d * 0.04); } catch (e) {}
+    // A dial turn is a burst of ticks: catch every rejection (no
+    // unhandledrejection noise) but say so at most once every 3s.
+    var onErr = function (e) { var now = performance.now(); if (now - obsVolErrAt > 3000) { obsVolErrAt = now; toast('OBS refused the volume change: ' + ((e && e.message) || 'request failed')); } };
+    try { var p = o.setVolume(n, obsVolume() + d * 0.04); if (p && typeof p.then === 'function') p.then(null, onErr); } catch (e) { onErr(e); }
     schedulePaint();
   }
   var obsWasReady = false;
@@ -961,6 +1037,8 @@
     if (wizardStep >= 0) wizardRender();
     startPaintLoop();
     startAnim();
+    startGifLoop();
+    dropUndersizedGifs();   // a bigger key face than the frames were decoded for: decode again
     // Silent boot path: no light show and no strip format probe on a mere page
     // load. Both stay on the explicit Connect flow.
     if (silent) paintAll();
@@ -1172,7 +1250,7 @@
       else teardownDevice();
     }
   }
-  function teardownDevice() { stopPaintLoop(); stopAnim(); stopAutoDim(); flushDeviceWrites(); device = null; decks = []; if (!previewMode) profile = null; keyState = []; dialPress = []; pruneKeyArtCaches(); }
+  function teardownDevice() { stopPaintLoop(); stopAnim(); stopGifLoop(); stopAutoDim(); flushDeviceWrites(); device = null; decks = []; if (!previewMode) profile = null; keyState = []; dialPress = []; pruneKeyArtCaches(); }
 
   // Preview mode: a virtual + XL on screen so the deck can be explored, themed,
   // and laid out with no hardware plugged in. Real Connect takes over instantly.
@@ -1183,10 +1261,10 @@
     profile = Device.makeProfile(PREVIEW_PID, { overrides: overrides });
     keyState = new Array(profile.keys).fill(false);
     ensureProfilesShape();
-    render(); paintMirror(); startAnim(); startPaintLoop();
+    render(); paintMirror(); warmGifSlots(); startAnim(); startPaintLoop(); startGifLoop();
     toast('Preview mode: this is your deck on screen. Connect real hardware any time.');
   }
-  function stopPreview() { previewMode = false; profile = null; stopAnim(); stopPaintLoop(); render(); }
+  function stopPreview() { previewMode = false; profile = null; stopAnim(); stopPaintLoop(); stopGifLoop(); render(); }
 
   function onInputReport(e) {
     if (!device) return;
@@ -1199,7 +1277,7 @@
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(keyState, evt.states);
       keyState = evt.states;
-      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else if (fireSlot(mapping().keys[i], 'down') === false) { refusedFlashUntil[i] = performance.now() + 900; } });
+      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else if (fireSlot(mapping().keys[i], 'down', null, i) === false) { refusedFlashUntil[i] = performance.now() + 900; } });
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
@@ -1238,7 +1316,7 @@
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(deck.keyState || [], evt.states);
       deck.keyState = evt.states;
-      edges.downs.forEach(function (i) { deck.pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'down', deck) === false) { (deck.refusedFlashUntil = deck.refusedFlashUntil || [])[i] = performance.now() + 900; } });
+      edges.downs.forEach(function (i) { deck.pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'down', deck, i) === false) { (deck.refusedFlashUntil = deck.refusedFlashUntil || [])[i] = performance.now() + 900; } });
       edges.ups.forEach(function (i) { fireSlot(toSlot((m.keys || [])[i] || { a: 'none' }), 'up', deck); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
@@ -1261,18 +1339,51 @@
 
   // ── Slot rendering helpers ────────────────────────────────────────────────
   // App-family key rims (owner 8/24): every key wears a thin rim in its app's
-  // color — grey Cueola, pink Flowmingo, orange Outrangutan, blue OBS — so a
+  // color (grey Cueola, pink Flowmingo, orange Outrangutan, blue OBS) so a
   // glance sorts the deck by app. On by default; Deck settings turns it off
   // per deck (overrides.appRims === false, stored like the dial flip).
+  // 2026-09-03 (symptom 7): the stroke width and the four colors are per-deck
+  // preferences too. overrides.rimWidth is an integer px measured on a 96px
+  // key face (RIM_REF_PX) and scaled by z/96 so the hardware (72..120px) and
+  // the on-screen mirror (up to 264px) draw the same fraction of the face;
+  // ABSENT means today's formula, pixel-identical to the 8/24 tuning.
+  // overrides.rimColors holds only the non-default '#rrggbb' picks. Both ride
+  // the key spec (spec.rim, spec.rimW) and its signature, so secondary decks,
+  // whose overrides live in deck.cfg, repaint on the next tick by themselves.
   var APP_RIM_COLORS = { cueola: '#8a93a6', flowmingo: '#f06eb4', outrangutan: '#f97316', obs: '#5b8df8' };
+  var RIM_REF_PX = 96, RIM_WIDTH_MIN = 1, RIM_WIDTH_MAX = 12;
+  var RIM_WIDTH_REGULAR = 4;          // what the slider shows for the default formula (0.045 * 96 = 4.3)
+  var RIM_PRESETS = { thin: 2, regular: 0, bold: 7 };   // 0 = default formula (no override stored)
+  var RIM_HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
   function appRimsOn(ov) { var o = ov || overrides; return !o || o.appRims !== false; }
-  function appRimColor(a) {
+  function rimAppKey(a) {
     var g = String((a && a.group) || '');
-    if (/^(OBS|This OBS)/.test(g)) return APP_RIM_COLORS.obs;
-    if (/^Flowmingo/.test(g)) return APP_RIM_COLORS.flowmingo;
-    if (/^(Outrangutan|This show)/.test(g)) return APP_RIM_COLORS.outrangutan;
-    if (/^Cueola/.test(g)) return APP_RIM_COLORS.cueola;
+    if (/^(OBS|This OBS)/.test(g)) return 'obs';
+    if (/^Flowmingo/.test(g)) return 'flowmingo';
+    if (/^(Outrangutan|This show)/.test(g)) return 'outrangutan';
+    if (/^Cueola/.test(g)) return 'cueola';
     return null;
+  }
+  function rimColorFor(key, ov) {
+    var o = ov || overrides, custom = o && o.rimColors ? o.rimColors[key] : '';
+    return (typeof custom === 'string' && RIM_HEX_RE.test(custom)) ? custom.toLowerCase() : APP_RIM_COLORS[key];
+  }
+  function appRimColor(a, ov) { var key = rimAppKey(a); return key ? rimColorFor(key, ov) : null; }
+  // Stored width, clamped; 0 when unset (today's formula). Tolerates a
+  // hand-edited store (NaN, strings, out-of-range values).
+  function rimWidthOf(ov) {
+    var o = ov || overrides, v = o ? Math.round(Number(o.rimWidth)) : 0;
+    if (!v || !isFinite(v)) return 0;
+    return Math.max(RIM_WIDTH_MIN, Math.min(RIM_WIDTH_MAX, v));
+  }
+  function rimWidthShown(ov) { return rimWidthOf(ov) || RIM_WIDTH_REGULAR; }
+  // The rim stroke in canvas px for a face of z px: the stored width scaled
+  // by z/96 (x1.33 while active), or the 8/24 formula when nothing is stored.
+  function rimStrokePx(spec, z) {
+    if (!spec.rim || spec.noOverlay) return 0;
+    var rw = spec.rimW || 0;
+    if (rw) return Math.max(1, z * (rw / RIM_REF_PX) * (spec.active ? 1.33 : 1));
+    return Math.max(3, z * (spec.active ? 0.06 : 0.045));
   }
   function slotAt(i) { var s = mapping().keys[i]; return (typeof s === 'string') ? { a: s } : (s || { a: 'none' }); }
   function slotAction(slot) { return catalog[slot.a] || catalog.none; }
@@ -1322,6 +1433,11 @@
       try { return (o && o.isReady && o.isReady()) ? '' : 'off'; } catch (e) { return 'off'; }
     }
     if (k === 'talkback' || k === 'talkbackPanic') return (tbSocket && tbSocket.readyState === 1) ? '' : 'off';
+    // Local-only rundown keymap keys run in THIS window, which refuses them
+    // unless it is the show caller (strict false: an older bridge without the
+    // flag never dims). Bus verbs stay on busAvailable: they execute wherever
+    // the claim holder is, grant or no grant.
+    if (k === 'keymap' && /^rundown\./.test(a.keymapId || '') && s && s.live && s.live.caller === false) return 'off';
     return '';
   }
 
@@ -1667,7 +1783,7 @@
     var slot = slotAt(i), a = slotAction(slot);
     var active = slotActive(slot, s) || keyState[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
-    if (appRimsOn()) spec.rim = appRimColor(a);
+    if (appRimsOn()) { spec.rim = appRimColor(a); spec.rimW = rimWidthOf(); }
     var avail = slotAvailability(a, s);
     if (avail === 'off') spec.unavail = true;
     else if (avail === 'doubt') spec.doubt = true;
@@ -1692,6 +1808,8 @@
       applyPlayoutProgress(spec, a, slot, s);
       if (slot.style && spec.progress != null) spec.progressStyle = slot.style;   // wipe | ring | bar
       if (active && ((a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord')) || a.kind === 'golive' || a.kind === 'talkback')) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#f5b731' : (a.kind === 'talkback' ? '#22d3a0' : '#ff3b3b'); }
+      // STARTING (OBS bringing the output up, 1 to 3s): a dimmer pulse so the key reads "connecting", not off.
+      else if (a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord') && obsOutputStarting(a.op)) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#8c6a20' : '#8c2626'; }
     }
     return spec;
   }
@@ -1703,7 +1821,8 @@
     var ks = deck.keyState || [], pf = deck.pressFlashUntil || [];
     var active = slotActive(slot, s) || ks[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: ks[i], toggle: !!a.toggle, editing: false };
-    if (appRimsOn((deck.cfg || {}).overrides)) spec.rim = appRimColor(a);
+    var dov = (deck.cfg || {}).overrides;
+    if (appRimsOn(dov)) { spec.rim = appRimColor(a, dov); spec.rimW = rimWidthOf(dov); }
     var avail = slotAvailability(a, s);
     if (avail === 'off') spec.unavail = true;
     else if (avail === 'doubt') spec.doubt = true;
@@ -1726,6 +1845,8 @@
       applyPlayoutProgress(spec, a, slot, s);
       if (slot.style && spec.progress != null) spec.progressStyle = slot.style;
       if (active && ((a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord')) || a.kind === 'golive' || a.kind === 'talkback')) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#f5b731' : (a.kind === 'talkback' ? '#22d3a0' : '#ff3b3b'); }
+      // STARTING (OBS bringing the output up, 1 to 3s): a dimmer pulse so the key reads "connecting", not off.
+      else if (a.kind === 'obs' && (a.op === 'toggleStream' || a.op === 'toggleRecord') && obsOutputStarting(a.op)) { spec.pulse = true; spec.pulseColor = (a.op === 'toggleRecord') ? '#8c6a20' : '#8c2626'; }
     }
     return spec;
   }
@@ -1738,15 +1859,36 @@
   // deck slows to 900ms and multiple decks to 1500ms so a full wave of key
   // writes always drains the HID queue before the next wave queues.
   function rgbStepMs() { return decks.length > 1 ? 1500 : decks.length ? 900 : 500; }
-  function specSig(spec, i) { return [i, spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + (keyImage(spec.img) ? 'R' : 'L') : '', spec.gifFrame == null ? '' : spec.gifFrame, spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, spec.rim || '', spec.unavail ? 'U' : '', spec.doubt ? 'D' : '', spec.refused ? 'X' : '', deckTheme].join('|'); }
+  // The face signature deliberately EXCLUDES the GIF frame index: GIF frames
+  // ride their own 10 fps cadence (gifTick) and never trip the state pass, so
+  // a GIF key reaches paintChangedPass only when its lamp, label, rim, flash
+  // or availability changed. faceSig is also the overlay half of the encoded
+  // frame cache key (same face, any key index, any frame).
+  function specSig(spec, i) { return i + '|' + faceSig(spec); }
+  function faceSig(spec) { return [spec.active, spec.pressed, spec.editing, spec.label, spec.color, spec.emoji, spec.symbol, spec.symbol ? (symbolReady(spec.symbol) ? '1' : '0') : '', spec.glyph, spec.toggle, spec.widget, spec.progress == null ? '' : Math.round(spec.progress * 20), spec.progressStyle || '', spec.preroll == null ? '' : Math.round(spec.preroll * 20), spec.phase || '', spec.pulse ? '1' : '', spec.looping ? '1' : '', spec.flash ? '1' : '', spec.clockText || '', spec.clockRunning ? '1' : '', spec.infoTop || '', spec.infoSub || '', spec.img ? imgSig(spec.img) + imgReadySig(spec.img) : '', spec.noOverlay ? '1' : '', spec.rgbPhase == null ? '' : spec.rgbPhase, spec.rim || '', spec.rimW || '', spec.pulseColor || '', spec.infoTalent || '', spec.unavail ? 'U' : '', spec.doubt ? 'D' : '', spec.refused ? 'X' : '', deckTheme].join('|'); }
+  // Readiness of a key image for the signature: a GIF flips to 'R' when its
+  // frames are decoded (or 'S' when only the static fallback loaded); a still
+  // flips when the Image loaded. Remote GIF sources never touch keyImage
+  // while a decode is pending (the taint rule, see drawKeyInto).
+  function imgReadySig(src) {
+    if (isGifSrc(src)) { var an = gifAnim(src); if (an) return 'R'; var ge = _keyGifs[src]; return ge && ge.err && keyImage(src) ? 'S' : 'L'; }
+    return keyImage(src) ? 'R' : 'L';
+  }
 
   // Rundown info key: row number, row name, running show clock. Pure display.
   function applyRundownInfoSpec(spec, s) {
     spec.widget = 'rowinfo';
     var li = s.liveRowInfo || {}, cur = li.current, lv = s.live || {};
-    spec.infoTop = cur ? ('ROW ' + (cur.index + 1) + (lv.rowCount ? '/' + lv.rowCount : '')) : 'RUNDOWN';
+    var rowTotal = lv.rowTotal || lv.rowCount;
+    spec.infoTop = cur ? ('ROW ' + (cur.number || (cur.index + 1)) + (rowTotal ? '/' + rowTotal : '')) : 'RUNDOWN';
     spec.label = cur ? String(cur.title || '').slice(0, 40) : 'No show';
     spec.infoSub = li.next && li.next.title ? ('NEXT ' + String(li.next.title).slice(0, 30)) : '';
+    // Where the talent actually is (liveRowInfo.talent, additive): a second
+    // line under the row number. 'AHEAD' when the talent is past the live row.
+    var tl = li.talent; spec.infoTalent = '';
+    if (typeof tl === 'string') spec.infoTalent = tl;
+    else if (tl && tl.ahead) spec.infoTalent = 'AHEAD';
+    else if (tl) { var tn = tl.number || (tl.index != null ? tl.index + 1 : 0); if (tn) spec.infoTalent = 'TALENT ' + tn + (tl.title ? ' · ' + String(tl.title).slice(0, 24) : ''); }
     spec.clockText = fmtClockBig(s.clock && s.clock.elapsed);
     spec.clockRunning = !!(s.clock && s.clock.running);
   }
@@ -1759,6 +1901,11 @@
     var e = _keyImgs[src];
     if (e) return e.ok ? e.img : null;
     var img = new Image();
+    // A GIPHY reference (the only remote source toSlot admits) loads with
+    // CORS so a successful load can never taint the shared offscreen canvas;
+    // the CDN answers with access-control-allow-origin: *. A CORS failure is
+    // an onerror, so a tainted image never reaches drawImage.
+    if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
     e = _keyImgs[src] = { img: img, ok: false };
     img.onload = function () { e.ok = true; schedulePaint(); };
     img.onerror = function () { e.ok = false; };
@@ -1767,67 +1914,96 @@
   }
   function imgSig(src) { return src.length + ':' + src.slice(-24); }
   // Animated GIF frames, decoded once per source via WebCodecs (KeyWi is
-  // Chromium-only, same requirement as WebHID). Caps keep memory sane: at most
-  // 90 frames; longer GIFs loop what was decoded. When ImageDecoder is missing
+  // Chromium-only, same requirement as WebHID). Frames land at gifDecodeDim()
+  // (the largest attached key face, at least the mirror size) under a memory
+  // budget; longer GIFs loop what was decoded. When ImageDecoder is missing
   // the key falls back to the static first frame via the plain image cache.
-  var _keyGifs = {};
+  var _keyGifs = {}, _gifSrcSeq = 0;
   function isGifSrc(src) { return /^data:image\/gif;base64,/.test(src) || /\.gif$/i.test(src); }
-  // Frames are stored DOWNSCALED (longest side capped at 224px, 2x the largest
-  // key face) so a highly-compressible huge-dimension GIF can never balloon
-  // into gigabytes of bitmaps (decompression-bomb guard); worst case per GIF
-  // is ~18 MB. Sub-20ms frame delays render at ~100ms in browsers, mirrored
-  // here; the whole loop is stretched to >= 600ms so the 5Hz paint tick shows
-  // every frame instead of strobing past them.
-  var GIF_MAX_DIM = 224, GIF_MIN_FRAME_MS = 120, GIF_MIN_TOTAL_MS = 600;
+  // Frames are stored DOWNSCALED (longest side capped at GIF_MAX_DIM, normally
+  // the attached deck's key face or the on-screen mirror's backing size (132
+  // CSS px times the device pixel ratio, capped at 2x), whichever is larger)
+  // so a highly-compressible huge-dimension GIF can never balloon into
+  // gigabytes of bitmaps (decompression-bomb guard). The frame count is
+  // capped by a memory budget, not a fixed 90: GIF_MEM_BUDGET is the budget
+  // AT the 132 px set (about 6 MB of RGBA per GIF, ~86 frames) and scales
+  // with the square of the decode size so the frame count stays the same
+  // at 224 px on a Retina mirror (~17 MB, the old build's worst case).
+  // Frame delays keep their authored timing (sub-20 ms delays get the
+  // browser-style 100 ms substitution): gifTick advances by accumulated
+  // delay at 10 Hz, so a fast GIF plays at authored speed capped at 10 fps
+  // and a late tick shows the NEXT frame instead of skipping two.
+  var GIF_MAX_DIM = 224, GIF_MIRROR_DIM = 132, GIF_MEM_BUDGET = 6 * 1024 * 1024, GIF_MAX_FRAMES = 300;
+  // The mirror canvases render at device-pixel density (see the key grid in
+  // render): frames decoded for the bare 132 px set upscale soft on Retina.
+  function gifMirrorPx() { var dpr = 1; try { dpr = Math.min(window.devicePixelRatio || 1, 2); } catch (e) {} return Math.round(GIF_MIRROR_DIM * dpr); }
+  function gifDecodeDim() {
+    var d = 0;
+    decks.forEach(function (dk) { if (dk.profile) d = Math.max(d, dk.profile.keyPx || 0); });
+    if (!d && profile) d = profile.keyPx || 0;
+    return Math.min(GIF_MAX_DIM, Math.max(d, gifMirrorPx()));
+  }
+  // Per-decode byte budget: GIF_MEM_BUDGET at 132 px, scaled by area so the
+  // frame count does not shrink when the decode size grows.
+  function gifMemBudget(dim) { return Math.round(GIF_MEM_BUDGET * Math.pow(Math.max(dim, GIF_MIRROR_DIM) / GIF_MIRROR_DIM, 2)); }
   function gifAnim(src) {
     var e = _keyGifs[src];
     if (e) return e.ok ? e : null;
-    e = _keyGifs[src] = { ok: false, frames: [], durs: [], total: 0 };
+    var dim = gifDecodeDim();
+    // id: the short per-source key the encoded-face cache is keyed on (C19).
+    e = _keyGifs[src] = { ok: false, frames: [], durs: [], total: 0, cur: 0, acc: 0, dim: dim, id: ++_gifSrcSeq };
     if (typeof ImageDecoder === 'undefined') { e.err = true; return null; }
     (function () {
-      // fetch() handles data URLs and same-origin asset paths alike.
-      fetch(src).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+      // fetch() handles data URLs, same-origin asset paths and the GIPHY CDN
+      // (CORS: access-control-allow-origin *) alike; ImageDecoder never
+      // touches the canvas taint model.
+      fetch(src).then(function (r) { if (!r.ok) throw new Error('http' + r.status); return r.arrayBuffer(); }).then(function (buf) {
         var dec = new ImageDecoder({ data: buf, type: 'image/gif' });
         return dec.tracks.ready.then(function () {
-          var n = Math.min(dec.tracks.selectedTrack ? dec.tracks.selectedTrack.frameCount : 1, 90);
-          var chain = Promise.resolve();
-          for (var i = 0; i < n; i++) {
-            (function (idx) {
-              chain = chain.then(function () {
-                return dec.decode({ frameIndex: idx }).then(function (res) {
-                  var w = res.image.codedWidth || res.image.displayWidth || 1;
-                  var h = res.image.codedHeight || res.image.displayHeight || 1;
-                  var sc = Math.min(1, GIF_MAX_DIM / Math.max(w, h));
-                  var opts = sc < 1 ? { resizeWidth: Math.max(1, Math.round(w * sc)), resizeHeight: Math.max(1, Math.round(h * sc)), resizeQuality: 'medium' } : undefined;
-                  return createImageBitmap(res.image, opts).then(function (bmp) {
-                    var d = Math.round((res.image.duration || 100000) / 1000);
-                    if (d < 20) d = 100;                       // browser-style substitution
-                    d = Math.max(GIF_MIN_FRAME_MS, d);         // 5Hz tick shows every frame
-                    e.frames.push(bmp); e.durs.push(d); e.total += d;
-                    try { res.image.close(); } catch (e2) {}
-                  });
-                });
+          var n = Math.min(dec.tracks.selectedTrack ? dec.tracks.selectedTrack.frameCount : 1, GIF_MAX_FRAMES);
+          var cap = n;
+          var step = function (idx) {
+            if (idx >= n || idx >= cap) return Promise.resolve();
+            return dec.decode({ frameIndex: idx }).then(function (res) {
+              var w = res.image.codedWidth || res.image.displayWidth || 1;
+              var h = res.image.codedHeight || res.image.displayHeight || 1;
+              var sc = Math.min(1, dim / Math.max(w, h));
+              var bw = Math.max(1, Math.round(w * sc)), bh = Math.max(1, Math.round(h * sc));
+              if (idx === 0) cap = Math.max(2, Math.floor(gifMemBudget(dim) / (bw * bh * 4)));   // memory budget, not a fixed count
+              var opts = sc < 1 ? { resizeWidth: bw, resizeHeight: bh, resizeQuality: 'medium' } : undefined;
+              return createImageBitmap(res.image, opts).then(function (bmp) {
+                var d = Math.round((res.image.duration || 100000) / 1000);
+                if (d < 20) d = 100;                       // browser-style substitution
+                e.frames.push(bmp); e.durs.push(d); e.total += d;
+                try { res.image.close(); } catch (e2) {}
+                return step(idx + 1);
               });
-            })(i);
-          }
-          return chain;
+            });
+          };
+          return step(0);
         }).then(function () { try { dec.close(); } catch (e2) {} });
       }).then(function () {
-        if (e.frames.length) {
-          if (e.total < GIF_MIN_TOTAL_MS && e.frames.length > 1) {
-            var k = GIF_MIN_TOTAL_MS / e.total;
-            e.durs = e.durs.map(function (d) { return Math.round(d * k); });
-            e.total = e.durs.reduce(function (a, b) { return a + b; }, 0);
-          }
-          e.ok = true; schedulePaint();
-        } else e.err = true;
+        if (e.frames.length) { e.ok = true; schedulePaint(); }
+        else e.err = true;
       }).catch(function () { e.err = true; });
     })();
     return null;
   }
-  // Drop cached bitmaps for sources no slot references anymore (any profile,
-  // any deck): a removed or replaced GIF must release its frames, not park
-  // tens of MB for the rest of the session.
+  // Release one decoded GIF (frames and its encoded faces).
+  function dropGifCache(src) {
+    var e = _keyGifs[src];
+    if (e) { (e.frames || []).forEach(function (b) { try { b.close(); } catch (e2) {} }); delete _keyGifs[src]; }
+    gifEncDropSrc(src);
+  }
+  // A larger key face just attached (a + XL after a Mini): frames decoded
+  // for the smaller face would upscale soft, so they decode again lazily.
+  function dropUndersizedGifs() {
+    var dim = gifDecodeDim();
+    Object.keys(_keyGifs).forEach(function (src) { if ((_keyGifs[src].dim || 0) < dim) dropGifCache(src); });
+  }
+  // Drop cached bitmaps (and encoded faces) for sources no slot references
+  // anymore (any profile, any deck): a removed or replaced GIF must release
+  // its frames, not park tens of MB for the rest of the session.
   function pruneKeyArtCaches() {
     var used = {};
     var collect = function (profs) {
@@ -1837,19 +2013,61 @@
     };
     collect(profiles);
     decks.forEach(function (dk) { if (dk.cfg) collect(dk.cfg.profiles); });
-    Object.keys(_keyGifs).forEach(function (src) {
-      if (used[src]) return;
-      (_keyGifs[src].frames || []).forEach(function (b) { try { b.close(); } catch (e) {} });
-      delete _keyGifs[src];
-    });
+    Object.keys(_keyGifs).forEach(function (src) { if (!used[src]) dropGifCache(src); });
     Object.keys(_keyImgs).forEach(function (src) { if (!used[src]) delete _keyImgs[src]; });
+    if (_gifEnc) _gifEnc.forEach(function (v, k) { if (!used[v.src]) gifEncDelete(k); });
   }
-  // Which frame is on show right now (wall-clock driven, loops forever).
-  function gifFrameIndex(anim) {
-    if (!anim || !anim.ok || anim.frames.length < 2 || !anim.total) return 0;
-    var t = performance.now() % anim.total, acc = 0;
-    for (var i = 0; i < anim.durs.length; i++) { acc += anim.durs[i]; if (t < acc) return i; }
-    return 0;
+  // Start decoding every GIF the active page references now, not on its
+  // first paint: a show-time layout load fetches its GIPHY references early.
+  function warmGifSlots() {
+    try { (mapping().keys || []).forEach(function (s) { if (s && s.img && isGifSrc(s.img)) gifAnim(s.img); }); } catch (e) {}
+  }
+  // Which frame is on show right now: the single counter gifTick advances.
+  // keyArtSpec, drawKeyInto and the encoded cache all read this one value, so
+  // the state pass and the GIF loop can never paint different frames.
+  function gifFrameIndex(anim) { return anim && anim.ok ? (anim.cur || 0) : 0; }
+  // Advance a GIF by elapsed wall time, frame by frame through the authored
+  // delays. A stall longer than one loop wraps (modulo) instead of spinning.
+  function gifAdvance(e, dt) {
+    if (!e || !e.ok || e.frames.length < 2 || !e.total) return false;
+    e.acc += dt;
+    if (e.acc >= e.total) e.acc = e.acc % e.total;
+    var before = e.cur, guard = e.frames.length + 1;
+    while (e.acc >= (e.durs[e.cur] || 100) && guard-- > 0) { e.acc -= (e.durs[e.cur] || 100); e.cur = (e.cur + 1) % e.frames.length; }
+    return e.cur !== before;
+  }
+  // Encoded-face cache: JPEG bytes per (src, frame, key face px, rotation,
+  // face signature minus the frame). Filled lazily the first time a frame is
+  // sent, after which a looping GIF costs zero draws and zero encodes: only
+  // the HID packets. Packets are built at send time (they carry the key index
+  // in their header), so one entry serves the same GIF on any key of any
+  // deck with the same face size and rotation. FIFO eviction under a byte
+  // budget; a press flash or lamp change simply adds entries for its frames.
+  var _gifEnc = new Map(), _gifEncBytes = 0, GIF_ENC_BUDGET = 8 * 1024 * 1024;
+  // Keyed on the decoded source's numeric id, never the source itself: an
+  // uploaded GIF is a data URL of up to 480k chars, and a Map key that long
+  // is flattened per entry and per lookup (tens of MB the byte budget never
+  // saw). dropGifCache drops the faces before a re-decode takes a new id.
+  function gifEncKey(spec, z, deg) { var ge = _keyGifs[spec.img]; return ((ge && ge.id) || 0) + '|' + (spec.gifFrame || 0) + '|' + z + '|' + deg + '|' + faceSig(spec); }
+  function gifEncCacheable(spec) { return !!(spec.img && isGifSrc(spec.img) && spec.rgbPhase == null && !spec.pulse && !spec.clockRunning && gifAnim(spec.img)); }
+  function gifEncDelete(k) { var v = _gifEnc.get(k); if (v) { _gifEncBytes -= v.bytes.length; _gifEnc.delete(k); } }
+  function gifEncDropSrc(src) { _gifEnc.forEach(function (v, k) { if (v.src === src) gifEncDelete(k); }); }
+  function gifEncStore(k, src, bytes) {
+    gifEncDelete(k);
+    _gifEnc.set(k, { src: src, bytes: bytes }); _gifEncBytes += bytes.length;
+    while (_gifEncBytes > GIF_ENC_BUDGET && _gifEnc.size) gifEncDelete(_gifEnc.keys().next().value);
+  }
+  // JPEG bytes for one face. Draws on the shared offscreen canvas, so it must
+  // run INSIDE a queued device job. GIF faces come from the encoded cache
+  // when they can (see gifEncCacheable); everything else encodes fresh.
+  async function faceBytes(spec, z, deg) {
+    var ck = gifEncCacheable(spec) ? gifEncKey(spec, z, deg) : '';
+    if (ck) { var hit = _gifEnc.get(ck); if (hit) return hit.bytes; }
+    var cv = offCanvas(z);
+    drawKeyInto(cv, spec, z);
+    var bytes = await jpegFromCanvas(cv, z, deg);
+    if (ck && bytes) gifEncStore(ck, spec.img, bytes);
+    return bytes;
   }
   function drawCover(ctx, img, z) {
     var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
@@ -1860,19 +2078,30 @@
   function drawKeyInto(canvas, spec, z) {
     var ctx = canvas.getContext('2d'); if (!ctx) return;
     var t = theme();
+    // App rim width for this face (0 = no rim), and how far a wider-than-
+    // default rim pushes the corner overlays inward. Today's default rim
+    // (0.045z idle, 0.06z active) yields rimX 0, so untouched decks draw
+    // exactly as before.
+    var rimIn = rimStrokePx(spec, z), rimX = Math.max(0, rimIn - z * 0.06);
     ctx.clearRect(0, 0, z, z);
     ctx.save(); try { t.bg(ctx, z, spec); } catch (e) {} ctx.restore();
     // Custom key image: fills the whole face under the overlays. Animated GIFs
-    // draw their current frame; without WebCodecs they fall back to the static
-    // first frame from the plain image cache.
+    // draw their current frame. While a GIF is still decoding the face shows
+    // a neutral placeholder, never a plain Image of the source: a remote
+    // GIPHY reference drawn through a non-CORS Image would taint the shared
+    // offscreen canvas and kill toBlob for every key. Only a failed decode
+    // (no WebCodecs, bad bytes) falls back to the static first frame from the
+    // plain image cache, which loads remote sources with CORS.
     if (spec.img) {
-      var kim = null;
+      var kim = null, pending = false;
       if (isGifSrc(spec.img)) {
         var anim = gifAnim(spec.img);
         if (anim) kim = anim.frames[Math.min(spec.gifFrame || 0, anim.frames.length - 1)];
+        else { var ge = _keyGifs[spec.img]; pending = !(ge && ge.err); }
       }
-      if (!kim) kim = keyImage(spec.img);
+      if (!kim && !pending) kim = keyImage(spec.img);
       if (kim) { ctx.save(); rr(ctx, 0, 0, z, z, z * 0.15); ctx.clip(); drawCover(ctx, kim, z); ctx.restore(); }
+      else if (pending) { ctx.save(); ctx.fillStyle = rgba(t.sub, 0.18); rr(ctx, z * 0.32, z * 0.32, z * 0.36, z * 0.36, z * 0.08); ctx.fill(); ctx.restore(); }
     }
     var ink = t.ink, gcol = spec.glyphColor || t.glyphColor || ink;
     if (spec.widget === 'clock') {
@@ -1885,13 +2114,22 @@
       if (spec.clockRunning) { var ph = (spec.pulsePhase || 0); var al = 0.45 + 0.45 * Math.sin(ph * 0.5); ctx.fillStyle = rgba('#ff3b3b', al); ctx.beginPath(); ctx.arc(z / 2, z * 0.76, z * 0.06, 0, 7); ctx.fill(); }
     } else if (spec.widget === 'rowinfo') {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.12), 700); ctx.fillText(spec.infoTop || 'RUNDOWN', z / 2, z * 0.16);
+      // A talent line (TALENT n · name, or AHEAD) squeezes the stack a little;
+      // without one the layout is exactly the 8/24 one.
+      var tight = !!spec.infoTalent;
+      ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.12), 700); ctx.fillText(spec.infoTop || 'RUNDOWN', z / 2, z * (tight ? 0.13 : 0.16));
+      if (tight) {
+        var tt = String(spec.infoTalent);
+        ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.1), 600);
+        while (tt.length > 1 && ctx.measureText(tt).width > z * 0.92) tt = tt.slice(0, -2);
+        ctx.fillText(tt === spec.infoTalent ? tt : tt + '…', z / 2, z * 0.26);
+      }
       var nm = String(spec.label || '');
       ctx.fillStyle = ink; ctx.font = t.font(Math.round(z * 0.15), 800);
       while (nm.length > 1 && ctx.measureText(nm).width > z * 0.9) nm = nm.slice(0, -2);
-      ctx.fillText(nm === (spec.label || '') ? nm : nm + '…', z / 2, z * 0.4);
+      ctx.fillText(nm === (spec.label || '') ? nm : nm + '…', z / 2, z * (tight ? 0.42 : 0.4));
       ctx.fillStyle = ink; ctx.font = '800 ' + Math.round(z * 0.2) + 'px ui-monospace, "SF Mono", Menlo, monospace';
-      ctx.fillText(spec.clockText || '0:00', z / 2, z * 0.64);
+      ctx.fillText(spec.clockText || '0:00', z / 2, z * (tight ? 0.62 : 0.64));
       if (spec.infoSub) {
         var nx = String(spec.infoSub);
         ctx.fillStyle = t.sub; ctx.font = t.font(Math.round(z * 0.1), 600);
@@ -1912,7 +2150,7 @@
         ctx.restore();
       }
       // Loop pads carry a static corner marker instead of a wipe.
-      if (!spec.noOverlay && spec.looping) { var mk = Math.max(3, Math.round(z * 0.1)); ctx.fillStyle = t.ring; ctx.fillRect(z - z * 0.08 - mk, z * 0.08, mk, mk); }
+      if (!spec.noOverlay && spec.looping) { var mk = Math.max(3, Math.round(z * 0.1)); ctx.fillStyle = t.ring; ctx.fillRect(z - z * 0.08 - rimX - mk, z * 0.08 + rimX, mk, mk); }
       var hasLabel = spec.label && spec.label.length;
       var gy = hasLabel ? z * 0.37 : z * 0.5, gr = z * (hasLabel ? 0.2 : 0.26);
       var drew = !!spec.img;   // a custom image replaces the icon layer
@@ -1950,24 +2188,28 @@
     // App-family rim: a crisp outermost stroke in the key's app color. Drawn
     // over the theme's hairline, under the pulse ring and press flash. Custom
     // images that opted out of overlays keep their clean face.
-    if (spec.rim && !spec.noOverlay) {
+    if (rimIn > 0) {
       // 2026-08-24: was max(1.5, z*0.022) at 0.6 idle alpha — ~2.5px at 60%
       // on a 112px key face, invisible on the physical deck (the on-screen
       // mirror drew the SAME relative width at up to 264px, so it lied).
       // Now a real edge: ~5px on the + XL, near-opaque idle, full-on active.
-      var rlw2 = Math.max(3, z * (spec.active ? 0.06 : 0.045));
+      // 2026-09-03: the width comes from rimStrokePx (per-deck rimWidth ride
+      // the spec); the 8/24 formula is still the default.
+      var rlw2 = rimIn;
       ctx.strokeStyle = rgba(spec.rim, spec.active ? 1 : 0.88);
       ctx.lineWidth = rlw2;
       rr(ctx, rlw2 / 2, rlw2 / 2, z - rlw2, z - rlw2, z * 0.15); ctx.stroke();
     }
-    if (spec.toggle && !spec.noOverlay) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
-    if (spec.pulse && !spec.noOverlay) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03, z * 0.03, z * 0.94, z * 0.94, z * 0.14); ctx.stroke(); }
+    // Corner dots and the pulse ring step inward by rimX so a bold rim never
+    // paints over them (rimX is 0 at the default width: nothing moves).
+    if (spec.toggle && !spec.noOverlay) { var on = spec.active; ctx.fillStyle = on ? t.ring : 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(z * 0.86 - rimX, z * 0.14 + rimX, z * 0.055, 0, 7); ctx.fill(); }
+    if (spec.pulse && !spec.noOverlay) { var pp = (spec.pulsePhase || 0), a2 = 0.35 + 0.4 * Math.sin(pp * 0.5); ctx.strokeStyle = rgba(spec.pulseColor || '#ff3b3b', a2); ctx.lineWidth = z * 0.05; rr(ctx, z * 0.03 + rimX, z * 0.03 + rimX, z * 0.94 - 2 * rimX, z * 0.94 - 2 * rimX, z * 0.14); ctx.stroke(); }
     // Honest keys (2026-08-24): a key whose press would be refused right now
     // is DIMMED — a lit key that does nothing is how an operator loses trust
     // in the whole surface. A doubt marker (amber dot) means "will send, but
     // no playout machine has checked in".
     if (spec.unavail) { ctx.fillStyle = 'rgba(0,0,0,0.62)'; rr(ctx, 0, 0, z, z, z * 0.15); ctx.fill(); }
-    else if (spec.doubt && !spec.noOverlay) { ctx.fillStyle = '#f5b731'; ctx.beginPath(); ctx.arc(z * 0.14, z * 0.14, z * 0.055, 0, 7); ctx.fill(); }
+    else if (spec.doubt && !spec.noOverlay) { ctx.fillStyle = '#f5b731'; ctx.beginPath(); ctx.arc(z * 0.14 + rimX, z * 0.14 + rimX, z * 0.055, 0, 7); ctx.fill(); }
     // Press flash: a brief white overlay on key input (SD_PRESS_FLASH_MS), and
     // the same overlay while the key is physically held. It composes with the
     // active ring and the progress wipe; it never replaces them.
@@ -1985,28 +2227,41 @@
   // this one FIFO queue. Image jobs coalesce by slot key: if a newer image for
   // the same key (or the strip) is queued before the older one started, the
   // older is dropped, so a burst of state changes paints the newest art, never
-  // the backlog.
-  var hidWriteQueue = [], hidWriteBusy = false;
-  function queueDeviceWrite(slotKey, job) {
+  // the backlog. Two lanes on the one queue: 'state' jobs (lamps, clock,
+  // press flashes, the strip, features) are inserted ahead of any waiting
+  // 'gif' frame job, so GIF traffic never delays a lamp; gifTick drops a
+  // frame outright whenever a state job is waiting or running.
+  var hidWriteQueue = [], hidWriteBusy = false, hidWriteLane = '';
+  function queueDeviceWrite(slotKey, job, lane) {
+    lane = lane === 'gif' ? 'gif' : 'state';
     return new Promise(function (resolve, reject) {
       if (slotKey != null) {
         for (var i = 0; i < hidWriteQueue.length; i++) {
-          if (hidWriteQueue[i].slotKey === slotKey) { hidWriteQueue.splice(i, 1)[0].resolve(false); break; }
+          if (hidWriteQueue[i].slotKey === slotKey) {
+            var old = hidWriteQueue.splice(i, 1)[0]; old.resolve(false);
+            if (old.lane === 'state') lane = 'state';   // a frame replacing a waiting lamp write inherits its priority
+            break;
+          }
         }
       }
-      hidWriteQueue.push({ slotKey: slotKey, job: job, resolve: resolve, reject: reject });
+      var entry = { slotKey: slotKey, job: job, resolve: resolve, reject: reject, lane: lane };
+      var at = hidWriteQueue.length;
+      if (lane === 'state') { for (var g = 0; g < hidWriteQueue.length; g++) { if (hidWriteQueue[g].lane === 'gif') { at = g; break; } } }
+      hidWriteQueue.splice(at, 0, entry);
       drainDeviceWrites();
     });
   }
+  function stateJobsQueued() { for (var i = 0; i < hidWriteQueue.length; i++) { if (hidWriteQueue[i].lane !== 'gif') return true; } return false; }
   async function drainDeviceWrites() {
     if (hidWriteBusy) return;
     hidWriteBusy = true;
     while (hidWriteQueue.length) {
       var next = hidWriteQueue.shift();
+      hidWriteLane = next.lane;
       try { await next.job(); next.resolve(true); }
       catch (e) { next.reject(e); }
     }
-    hidWriteBusy = false;
+    hidWriteBusy = false; hidWriteLane = '';
   }
   function flushDeviceWrites() { while (hidWriteQueue.length) hidWriteQueue.shift().resolve(false); }
 
@@ -2037,6 +2292,7 @@
     // to call schedulePaint. specSig carries the full dynamic state and the
     // strip is sig-deduped, so idle ticks are nearly free.
     paintScheduled = false;
+    reconcileAutoPages();    // role became student after the deck attached: swap an untouched Starter page for Director
     paintChanged();
     refreshDialReadouts();   // keep the on-screen dial values live, not render-stale
   }
@@ -2058,27 +2314,34 @@
   // operator-adjustable — 270 is the + XL's real physical orientation, and any
   // other value just paints the keys wrong.
   function keyDeg() { return profile ? ((((profile.rotation || 0) + (profile.mountRotation || 0)) % 360) + 360) % 360 : 0; }
-  async function keyJpegFromCanvas(cv, z) {
-    var out = cv, deg = keyDeg();
+  function deckDeg(prof) { return prof ? ((((prof.rotation || 0) + (prof.mountRotation || 0)) % 360) + 360) % 360 : 0; }
+  async function jpegFromCanvas(cv, z, deg) {
+    var out = cv;
     if (deg) { var rc = rotCanvas(z), rx = rc.getContext('2d'); rx.clearRect(0, 0, z, z); rx.save(); rx.translate(z / 2, z / 2); rx.rotate(deg * Math.PI / 180); rx.translate(-z / 2, -z / 2); rx.drawImage(cv, 0, 0); rx.restore(); out = rc; }
     var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
   }
+  function keyJpegFromCanvas(cv, z) { return jpegFromCanvas(cv, z, keyDeg()); }
   // The draw + encode happens INSIDE the queued job (the offscreen canvas is
-  // shared, so it must be serialized along with the packet writes).
-  function paintKeyDevice(i, spec) {
+  // shared, so it must be serialized along with the packet writes). GIF faces
+  // come from the encoded cache (faceBytes); lane 'gif' marks a droppable
+  // frame write from gifTick, everything else is a state write.
+  function paintKeyDevice(i, spec, lane) {
     if (!device || !profile) return Promise.resolve(false);
     return queueDeviceWrite('key:' + i, async function () {
       if (!device || !profile) return;
-      var z = profile.keyPx, cv = offCanvas(z);
-      drawKeyInto(cv, spec, z);
-      try { var bytes = await keyJpegFromCanvas(cv, z); if (!bytes) return; var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
-    });
+      var z = profile.keyPx;
+      try { var bytes = await faceBytes(spec, z, keyDeg()); if (!bytes) return; var packets = Device.keyImagePackets(profile, i, bytes); for (var pk = 0; pk < packets.length; pk++) { if (!device) return; await device.hid.sendReport(packets[pk].reportId, packets[pk].data); } } catch (e) {}
+    }, lane);
   }
   function mirrorCanvasFor(i) { var r = root(); if (!r) return null; var btn = r.querySelector('.sd-key[data-key="' + i + '"]'); return btn ? btn.querySelector('canvas') : null; }
   // The on-screen grid shows the SAME art the hardware shows: true WYSIWYG.
-  function paintMirror() { var cur = profile; if (!cur) return; var s = surfaceState(); for (var i = 0; i < cur.keys; i++) { var cv = mirrorCanvasFor(i); if (cv) { var spec = keyArtSpec(i, s); spec.editing = (i === editingKey); drawKeyInto(cv, spec, cv.width); } } }
-  async function paintAll() { var cur = profile; ensureSymbols(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); paintMirror(); await paintChanged(); if (device || previewMode) await paintStrip(true); }
+  // mirrorDirty: the state pass skips mirror draws while the KeyWi screen is
+  // hidden (display:none, nobody can see it); the first pass after it shows
+  // again redraws the whole grid so it catches up.
+  var mirrorDirty = false;
+  function paintMirror() { var cur = profile; if (!cur) return; mirrorDirty = false; var s = surfaceState(); for (var i = 0; i < cur.keys; i++) { var cv = mirrorCanvasFor(i); if (cv) { var spec = keyArtSpec(i, s); spec.editing = (i === editingKey); drawKeyInto(cv, spec, cv.width); } } }
+  async function paintAll() { var cur = profile; ensureSymbols(); warmGifSlots(); lastPainted = new Array(cur ? cur.keys : 0).fill(null); gifFreezeUntil = performance.now() + GIF_FREEZE_MS; paintMirror(); await paintChanged(); if (device || previewMode) await paintStrip(true); }
   // Single-flight: paintChanged runs from the 5Hz tick AND straight from HID
   // input events (paintNow). Two passes interleaving across awaits could stamp
   // a stale signature over fresh art, so one pass runs at a time and a call
@@ -2093,6 +2356,9 @@
   async function paintChangedPass() {
     var cur = profile; if (!cur) return;
     var s = surfaceState();
+    var vis = isSurfaceVisible();
+    if (vis && mirrorDirty) paintMirror();   // the screen just came back: catch the grid up
+    var wrote = 0;
     for (var i = 0; i < cur.keys; i++) {
       var spec = keyArtSpec(i, s); var sig = specSig(spec, i);
       if (sig === lastPainted[i]) continue; lastPainted[i] = sig;
@@ -2100,8 +2366,9 @@
       // frame) must not abort the pass — that froze every higher-indexed key
       // on the deck, clock included (8/20 show).
       try {
-        var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width);
-        if (device) await paintKeyDevice(i, spec);
+        if (vis) { var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width); }
+        else mirrorDirty = true;
+        if (device) { wrote++; await paintKeyDevice(i, spec); }
       } catch (e) {}
     }
     // Secondary decks repaint from their own layouts (no on-screen mirror; the
@@ -2112,28 +2379,75 @@
       for (var k = 0; k < dk.profile.keys; k++) {
         var sp2 = keyArtSpecFor(dk, k, s); var sig2 = specSig(sp2, k);
         if (sig2 === dk.lastPainted[k]) continue; dk.lastPainted[k] = sig2;
-        try { await paintKeyDeviceFor(dk, k, sp2); } catch (e) {}
+        try { wrote++; await paintKeyDeviceFor(dk, k, sp2); } catch (e) {}
       }
     }
+    // Burst freeze: a session join, page switch or Go Live repaints many keys
+    // at once; GIF frame writes stand down for half a second so the lamps
+    // land first. The on-screen mirror keeps animating (gifTick draws it
+    // regardless), so preview mode never stalls.
+    if (wrote >= GIF_BURST_KEYS) gifFreezeUntil = performance.now() + GIF_FREEZE_MS;
     try { if (device || previewMode) await paintStrip(false); } catch (e) {}
   }
-  function paintKeyDeviceFor(deck, i, spec) {
+  function paintKeyDeviceFor(deck, i, spec, lane) {
     if (!deck || !deck.hid || !deck.profile) return Promise.resolve(false);
     return queueDeviceWrite('key:d' + deck.id + ':' + i, async function () {
       if (decks.indexOf(deck) < 0) return;   // unplugged while queued
-      var z = deck.profile.keyPx, cv = offCanvas(z);
-      drawKeyInto(cv, spec, z);
+      var z = deck.profile.keyPx;
       try {
-        var deg = ((((deck.profile.rotation || 0) + (deck.profile.mountRotation || 0)) % 360) + 360) % 360;
-        var out = cv;
-        if (deg) { var rc = rotCanvas(z), rx = rc.getContext('2d'); rx.clearRect(0, 0, z, z); rx.save(); rx.translate(z / 2, z / 2); rx.rotate(deg * Math.PI / 180); rx.translate(-z / 2, -z / 2); rx.drawImage(cv, 0, 0); rx.restore(); out = rc; }
-        var blob = await new Promise(function (res) { out.toBlob(res, 'image/jpeg', 0.9); });
-        if (!blob) return;
-        var bytes = new Uint8Array(await blob.arrayBuffer());
+        var bytes = await faceBytes(spec, z, deckDeg(deck.profile));
+        if (!bytes) return;
         var packets = Device.keyImagePackets(deck.profile, i, bytes);
         for (var pk = 0; pk < packets.length; pk++) { if (decks.indexOf(deck) < 0) return; await deck.hid.sendReport(packets[pk].reportId, packets[pk].data); }
       } catch (e) {}
-    });
+    }, lane);
+  }
+  // ── GIF cadence ────────────────────────────────────────────────────────────
+  // GIF keys animate on their own 10 Hz worker timer, outside the 5 Hz state
+  // pass and the 7.7 Hz anim loop. Each tick advances every decoded GIF by
+  // the elapsed time (a late tick shows the NEXT frame, never two ahead),
+  // then repaints only the keys whose GIF actually moved: the mirror when the
+  // KeyWi screen is visible, the hardware through lane 'gif' writes that are
+  // DROPPED for this tick whenever a state write is running or waiting, the
+  // strip format probe is mid-cycle, or a burst of state repaints just
+  // landed. Stamping lastPainted keeps the state pass from double-writing.
+  var GIF_TICK_MS = 100, GIF_BURST_KEYS = 4, GIF_FREEZE_MS = 500;
+  var gifTimer = null, gifLastTick = 0, gifFreezeUntil = 0;
+  function startGifLoop() { stopGifLoop(); gifLastTick = performance.now(); gifTimer = steadyInterval(gifTick, GIF_TICK_MS); }
+  function stopGifLoop() { if (gifTimer) gifTimer.stop(); gifTimer = null; }
+  function gifWritesAllowed(now) {
+    if (hidWriteBusy && hidWriteLane !== 'gif') return false;
+    if (stateJobsQueued() || stripProbeActive) return false;
+    return now >= gifFreezeUntil;
+  }
+  function gifTick() {
+    var now = performance.now(), dt = Math.min(2000, Math.max(0, now - gifLastTick)); gifLastTick = now;
+    var vis = isSurfaceVisible();
+    if (!profile || hypeRunning || (!device && !vis)) return;
+    var moved = {}, any = false;
+    Object.keys(_keyGifs).forEach(function (src) { if (gifAdvance(_keyGifs[src], dt)) { moved[src] = 1; any = true; } });
+    if (!any) return;
+    var canWrite = !!device && gifWritesAllowed(now);
+    var s = surfaceState(), cur = profile, r = vis ? root() : null;
+    for (var i = 0; i < cur.keys; i++) {
+      var slot = slotAt(i);
+      if (!slot.img || !moved[slot.img]) continue;
+      try {
+        var spec = keyArtSpec(i, s); spec.editing = (i === editingKey);
+        if (r) { var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width); }
+        if (canWrite) { lastPainted[i] = specSig(spec, i); paintKeyDevice(i, spec, 'gif'); }
+      } catch (e) {}
+    }
+    if (!canWrite) return;
+    for (var di = 0; di < decks.length; di++) {
+      var dk = decks[di]; if (dk === device || !dk.profile) continue;
+      var m = deckMapping(dk); dk.lastPainted = dk.lastPainted || [];
+      for (var k = 0; k < dk.profile.keys; k++) {
+        var s2 = (m.keys || [])[k]; var src2 = s2 && typeof s2 === 'object' ? s2.img : '';
+        if (!src2 || !moved[src2]) continue;
+        try { var sp2 = keyArtSpecFor(dk, k, s); dk.lastPainted[k] = specSig(sp2, k); paintKeyDeviceFor(dk, k, sp2, 'gif'); } catch (e) {}
+      }
+    }
   }
   // Animation loop: clock ticks, pulse lamps, playout wipes and pre-rolls, and
   // press flashes all animate. Only animated keys repaint, on-screen every
@@ -2158,6 +2472,20 @@
       // Stamp the signature so the paint tick does not double-write the same
       // frame; the queue coalesces any stale image still waiting for this key.
       if (device && animPhase % 2 === 0) { lastPainted[i] = specSig(spec, i); paintKeyDevice(i, spec); }
+    }
+    // Secondary decks animate too (plan E.8, built 2026-09-03): their pulse
+    // rings, clock dots and RGB flow used to freeze between signature
+    // changes. Same even-phase throttle, same signature stamp, own arrays.
+    for (var di = 0; di < decks.length; di++) {
+      var dk = decks[di]; if (dk === device || !dk.profile) continue;
+      if (animPhase % 2 !== 0) continue;
+      dk.lastPainted = dk.lastPainted || [];
+      for (var k = 0; k < dk.profile.keys; k++) {
+        var sp2 = keyArtSpecFor(dk, k, s);
+        if (!specAnimated(sp2)) continue;
+        sp2.pulsePhase = animPhase;
+        dk.lastPainted[k] = specSig(sp2, k); paintKeyDeviceFor(dk, k, sp2);
+      }
     }
   }
   // The HYPE key: a rainbow ripple parties across the whole deck, then restores.
@@ -2343,11 +2671,13 @@
     // Hardware keeps its strip OBS monitor with the card closed; preview mode
     // (no hardware to feed) only polls while the on-screen strip is visible.
     var want = !!(stripHasObsFrame() && (device || (previewMode && isSurfaceVisible())));
-    if (want && !obsFrameLoop) obsFrameLoop = setInterval(pollObsFrame, 250);
-    else if (!want && obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } }
+    // Worker timer (steadyInterval): a page setInterval throttles to ~1/min
+    // once the tab has been hidden a while, and this tab lives behind OBS.
+    if (want && !obsFrameLoop) obsFrameLoop = steadyInterval(pollObsFrame, 250);
+    else if (!want && obsFrameLoop) { obsFrameLoop.stop(); obsFrameLoop = null; if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } }
   }
   async function pollObsFrame() {
-    if (!stripHasObsFrame() || (!device && !(previewMode && isSurfaceVisible()))) { if (obsFrameLoop) { clearInterval(obsFrameLoop); obsFrameLoop = null; } return; }
+    if (!stripHasObsFrame() || (!device && !(previewMode && isSurfaceVisible()))) { if (obsFrameLoop) { obsFrameLoop.stop(); obsFrameLoop = null; } return; }
     if (obsFrameBusy || !profile || !profile.strip) return;
     var o = OBSc();
     if (!o || !o.isReady || !o.isReady()) { if (obsFrameImg) { obsFrameImg = null; paintStrip(true); } return; }
@@ -2725,10 +3055,24 @@
   // Length caps mirror the upload pipeline (64KB raster / 300KB GIF, as base64
   // chars) so an imported .keywi or hand-edited store obeys the same limits.
   var SLOT_IMG_MAX_CHARS = 90000, SLOT_GIF_MAX_CHARS = 480000;
+  // A GIPHY pick is stored as a REFERENCE, not bytes: slot.gif = { id, url,
+  // w, h } where url is the canonical query-free fixed-width rendition on the
+  // GIPHY media CDN (CORS-enabled, so ImageDecoder and a crossOrigin Image
+  // both stay taint-free). A whole deck of GIFs is a few hundred bytes in a
+  // profile save, so the layout comes back on any laptop. slot.img mirrors
+  // the url so every cache and painter keys on one string.
+  var SLOT_GIF_URL_RE = /^https:\/\/media\d*\.giphy\.com\/media\/[A-Za-z0-9]+\/(200w|100w|giphy)\.gif$/;
+  var GIPHY_ID_RE = /^[A-Za-z0-9]{3,64}$/;
+  function giphyCanonicalUrl(id) { return 'https://media.giphy.com/media/' + id + '/200w.gif'; }
   function toSlot(s) {
     var slot = (typeof s === 'string') ? { a: s } : (s && typeof s === 'object' ? s : { a: 'none' });
+    if (slot.gif != null) {
+      var g = slot.gif, gok = !!(g && typeof g === 'object' && typeof g.id === 'string' && GIPHY_ID_RE.test(g.id) && typeof g.url === 'string' && SLOT_GIF_URL_RE.test(g.url));
+      if (gok) { slot.gif = { id: g.id, url: g.url, w: Math.max(0, parseInt(g.w, 10) || 0), h: Math.max(0, parseInt(g.h, 10) || 0) }; slot.img = g.url; }
+      else { delete slot.gif; if (typeof slot.img === 'string' && /^https?:/i.test(slot.img)) delete slot.img; }
+    }
     if (slot.img != null) {
-      var ok = typeof slot.img === 'string' && (SLOT_IMG_DATA_RE.test(slot.img) || SLOT_IMG_ASSET_RE.test(slot.img));
+      var ok = typeof slot.img === 'string' && (SLOT_IMG_DATA_RE.test(slot.img) || SLOT_IMG_ASSET_RE.test(slot.img) || SLOT_GIF_URL_RE.test(slot.img));
       if (ok && /^data:/.test(slot.img)) ok = slot.img.length <= (/^data:image\/gif/.test(slot.img) ? SLOT_GIF_MAX_CHARS : SLOT_IMG_MAX_CHARS);
       if (!ok) delete slot.img;
     }
@@ -2747,7 +3091,13 @@
   function uniqueName(base) { var name = base || 'Profile', names = Object.keys(profiles).map(function (id) { return profiles[id].name; }), n = name, i = 2; while (names.indexOf(n) >= 0) n = name + ' ' + (i++); return n; }
   // Make every profile fit the connected device (pad/truncate keys, dials, touch).
   function ensureProfilesShape() {
-    if (!Object.keys(profiles).length) { profiles = { p1: { name: 'Default', keys: defaultKeySlots(profile.keys), dials: defaultDialSet(profile), touch: defaultTouch(profile.strip ? profile.strip.zones : 0) } }; activeProfileId = 'p1'; defaultProfileId = 'p1'; }
+    if (!Object.keys(profiles).length) {
+      // auto: provenance of the seeded page, so reconcileAutoPages can swap
+      // an untouched Starter page for Director once the role is known.
+      var tpl = defaultTemplate();
+      profiles = { p1: { name: tpl === 'director' ? 'Director' : 'Default', keys: defaultKeySlots(profile.keys, tpl), dials: defaultDialSet(profile), touch: defaultTouch(profile.strip ? profile.strip.zones : 0), auto: { tpl: tpl, keys: profile.keys } } };
+      activeProfileId = 'p1'; defaultProfileId = 'p1';
+    }
     Object.keys(profiles).forEach(function (id) {
       var p = profiles[id], def = defaultKeySlots(profile.keys);
       p.keys = p.keys && p.keys.length ? p.keys.slice(0, profile.keys) : def;
@@ -2760,6 +3110,46 @@
     });
     if (!profiles[activeProfileId]) activeProfileId = Object.keys(profiles)[0];
     persist(true);   // shape-fitting on connect is not a user edit
+  }
+  // Auto-seeded Starter page vs the session role (2026-09-03): the first
+  // layout is generated the moment a deck attaches, often before the show
+  // code is typed, so a student director who plugs the Mini first would keep
+  // GO / STOP / PANIC (ungated writes to the Air). When the role becomes
+  // student and the seeded page is still exactly the Starter table (one page,
+  // no edits, no art), it becomes the Director page. Never the reverse, and
+  // never a page whose keys differ from the template.
+  var lastAutoRole = null;
+  function slotsMatchTemplate(keys, tpl, n) {
+    var def = defaultKeySlots(n, tpl);
+    if (!keys || keys.length !== def.length) return false;
+    for (var i = 0; i < def.length; i++) {
+      var k = typeof keys[i] === 'string' ? { a: keys[i] } : (keys[i] || {});
+      if (k.a !== def[i].a) return false;
+      // Any other set field (img, gif, label, color, symbol, style ...) is a user touch.
+      if (Object.keys(k).some(function (f) { return f !== 'a' && k[f]; })) return false;
+    }
+    return true;
+  }
+  function reconcileAutoPageFor(profs, prof) {
+    var p = profs && profs.p1;
+    if (!p || !prof || Object.keys(profs).length !== 1) return false;
+    var tpl = p.auto ? p.auto.tpl : 'default';   // a pre-stamp page counts as Starter only when its keys still ARE the Starter table
+    if (tpl !== 'default' || !slotsMatchTemplate(p.keys, 'default', prof.keys)) return false;
+    p.keys = defaultKeySlots(prof.keys, 'director'); p.name = 'Director'; p.auto = { tpl: 'director', keys: prof.keys };
+    return true;
+  }
+  function reconcileAutoPages() {
+    var role = sessionRole();
+    if (role === lastAutoRole) return;
+    lastAutoRole = role;
+    if (role !== 'student' || layoutDirty || previewMode || !decks.length) return;
+    stashActiveDeck();   // the active deck's record shares the globals' profiles object
+    var changed = [];
+    decks.forEach(function (dk) { if (dk.cfg && reconcileAutoPageFor(dk.cfg.profiles, dk.profile)) changed.push(dk); });
+    if (!changed.length) return;
+    changed.forEach(function (dk) { persistDeck(dk); if (dk !== device) repaintDeck(dk); });
+    render(); paintAll();
+    toast('Director page loaded for this show.');
   }
   function switchProfile(id) { if (!profiles[id]) return; activeProfileId = id; persist(true); render(); paintAll(); }
   // Page keys: hop between saved layouts straight from the deck, both ways.
@@ -2805,6 +3195,28 @@
   function deleteActive() { if (Object.keys(profiles).length <= 1) { toast('Keep at least one profile.'); return; } delete profiles[activeProfileId]; if (defaultProfileId === activeProfileId) defaultProfileId = Object.keys(profiles)[0]; activeProfileId = Object.keys(profiles)[0]; persist(); render(); paintAll(); }
   function setDefaultActive() { defaultProfileId = activeProfileId; persist(); render(); toast('"' + mapping().name + '" is the default layout for this deck.'); }
   function resetActive() { mapping().keys = defaultKeySlots(profile.keys); mapping().dials = defaultDialSet(profile); mapping().touch = defaultTouch(profile.strip ? profile.strip.zones : 0); persist(); render(); paintAll(); }
+  // Add a page: pick its starter. "Starter" is the by-app default for this
+  // deck size; "Director" is the rundown-only page a student director runs
+  // the show from (no playout transport keys). Any deck can take either.
+  function openNewPageSheet() {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    var body = '<div class="sd-ed-head">Add a page</div>'
+      + '<div class="sd-ed-desc">Pick what the new page starts with. Every key can be changed afterwards.</div>'
+      + '<button class="sd-picker-opt" data-tpl="default">Starter: every app, laid out for this deck</button>'
+      + '<button class="sd-picker-opt" data-tpl="director">Director: rundown only (BACK, NEXT, TAKE, ABORT, ROW, CLOCK)</button>'
+      + '<div class="sd-save-actions"><button class="btn-secondary" id="sd-tpl-cancel">Cancel</button></div>';
+    var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
+    o.onclick = function (e) { if (e.target === o) closeOverlay(); };
+    bind('sd-tpl-cancel', closeOverlay);
+    o.querySelectorAll('[data-tpl]').forEach(function (btn) {
+      btn.onclick = function () {
+        var tpl = btn.getAttribute('data-tpl') === 'director' ? 'director' : 'default';
+        closeOverlay();
+        addProfile(tpl === 'director' ? 'Director' : 'Page', defaultKeySlots(profile.keys, tpl));
+        toast(tpl === 'director' ? 'Director page added. Set home makes it the page this deck starts on.' : 'Page added.');
+      };
+    });
+  }
 
   // ── Import / export ─────────────────────────────────────────────────────────
   function slug(s) { return String(s || 'layout').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'layout'; }
@@ -2890,8 +3302,76 @@
     var key = 'k_' + slug(p.name).replace(/[^a-z0-9]/g, '_');
     var patch = {}; patch['keywiLayouts.' + key] = layout;
     window._updateDoc(window._doc(window._db, 'profiles', id.username), patch)
-      .then(function () { clearDirty(); closeOverlay(); toast('Layout saved to @' + id.username + '.'); if (leaveAfter) hideScreen(); })
-      .catch(function () { toast('Profile save failed (the updated rules may not be deployed yet). Download a .keywi file instead.'); });
+      .then(function () {
+        _cloudLayouts = _cloudLayouts || {}; _cloudLayouts[key] = layout;
+        clearDirty(); closeOverlay(); toast('Layout saved to @' + id.username + '.'); if (leaveAfter) hideScreen();
+      })
+      .catch(function (e) {
+        // Tell a refused write from a full document: the profile doc is
+        // capped at 1 MiB across every saved layout, and that overflow used
+        // to masquerade as an undeployed-rules problem.
+        var code = (e && e.code) || '', msg = String((e && e.message) || '');
+        if (code === 'permission-denied') toast('Profile save was refused (the updated rules may not be deployed yet). Download a .keywi file instead.');
+        else if (code === 'invalid-argument' || /too large|exceeds|maximum size/i.test(msg)) toast('Your profile is out of room for layouts. Delete an old saved layout, or download a .keywi file instead.');
+        else toast('Profile save failed. Check the connection, or download a .keywi file instead.');
+      });
+  }
+  // ── Saved layouts: read them back ──────────────────────────────────────────
+  // profiles/{username}.keywiLayouts[k_slug] = { name, model, keys, dials,
+  // touch, savedAt }. Loaded once per open (and again after a sign-in), then
+  // offered as 'My layouts' rows; a pick adds a page after every key passes
+  // toSlot (GIPHY references and data URLs validated the same way an
+  // imported .keywi is). Model mismatches are allowed: ensureProfilesShape
+  // pads or trims the key list to this deck, so a layout saved on a + XL
+  // still lands on a Mini with its first keys.
+  var _cloudLayouts = null, _cloudLayoutsFor = '', _cloudLayoutsLoading = false;
+  function loadCloudLayouts() {
+    var idmod = window.CueolaIdentity, id = null;
+    try { id = idmod && idmod.identity && idmod.identity(); } catch (e) {}
+    if (!id || !id.username) { _cloudLayouts = null; _cloudLayoutsFor = ''; return; }
+    if (_cloudLayoutsLoading) return;
+    if (!window._firebaseReady || !window._getDoc || !window._doc || !window._db) return;
+    _cloudLayoutsLoading = true;
+    var p;
+    try { p = window._getDoc(window._doc(window._db, 'profiles', id.username)); } catch (e) { _cloudLayoutsLoading = false; return; }
+    Promise.resolve(p).then(function (snap) {
+      var d = null; try { d = snap && (typeof snap.exists === 'function' ? snap.exists() : snap.exists) ? snap.data() : null; } catch (e) {}
+      var raw = d && d.keywiLayouts, out = {};
+      if (raw && typeof raw === 'object') {
+        Object.keys(raw).forEach(function (k) {
+          var l = raw[k];
+          if (l && typeof l === 'object' && Array.isArray(l.keys)) out[k] = l;
+        });
+      }
+      _cloudLayouts = out; _cloudLayoutsFor = id.username; _cloudLayoutsLoading = false;
+      if (isSurfaceVisible() && (device || previewMode)) { var b = document.getElementById('sd-pf-cloud'); if (!b && Object.keys(out).length) render(); }
+    }).catch(function () { _cloudLayoutsLoading = false; });
+  }
+  function cloudLayoutRows() { return _cloudLayouts ? Object.keys(_cloudLayouts).sort(function (a, b) { return (_cloudLayouts[b].savedAt || 0) - (_cloudLayouts[a].savedAt || 0); }) : []; }
+  function openCloudLayoutsSheet() {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    var rows = cloudLayoutRows();
+    var body = '<div class="sd-ed-head">My layouts</div>'
+      + '<div class="sd-ed-desc">Layouts saved to your profile. Picking one adds it as a page on this deck.</div>'
+      + (rows.length ? rows.map(function (k) {
+          var l = _cloudLayouts[k], when = l.savedAt ? new Date(l.savedAt).toLocaleDateString() : '';
+          var modelName = ''; try { modelName = l.model ? (Device.makeProfile(l.model, {}) || {}).name || '' : ''; } catch (e) {}
+          return '<button class="sd-picker-opt" data-cloud="' + esc(k) + '">' + esc(l.name || 'Layout') + '<span class="sd-note"> · ' + esc((modelName ? modelName + ' · ' : '') + l.keys.length + ' keys' + (when ? ' · ' + when : '')) + '</span></button>';
+        }).join('')
+        : '<div class="sd-note">Nothing saved yet. Save layout, then Save to my profile, puts one here.</div>')
+      + '<div class="sd-save-actions"><button class="btn-secondary" id="sd-cloud-cancel">Cancel</button></div>';
+    var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
+    o.onclick = function (e) { if (e.target === o) closeOverlay(); };
+    bind('sd-cloud-cancel', closeOverlay);
+    o.querySelectorAll('[data-cloud]').forEach(function (btn) {
+      btn.onclick = function () {
+        var l = _cloudLayouts && _cloudLayouts[btn.getAttribute('data-cloud')]; if (!l) return;
+        closeOverlay();
+        addProfile(l.name || 'Layout', l.keys.map(toSlot), Array.isArray(l.dials) ? l.dials.slice() : null, Array.isArray(l.touch) ? JSON.parse(JSON.stringify(l.touch)) : null);
+        clearDirty();   // it is already in the profile; nothing new to save
+        toast('Added "' + mapping().name + '" from your profile.');
+      };
+    });
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
@@ -2982,6 +3462,7 @@
       + '<span class="sd-pf-sp"></span>'
       + '<button class="sd-mini" id="sd-pf-dup" data-tip="Duplicate this page">Duplicate</button>'
       + '<button class="sd-mini" id="sd-pf-home" data-tip="Make this page HOME: the one the deck starts on and the HOME key jumps to">Set home</button>'
+      + (_cloudLayouts && _cloudLayoutsFor ? '<button class="sd-mini" id="sd-pf-cloud" data-tip="Layouts saved to your profile, on any machine you signed in on">My layouts' + (cloudLayoutRows().length ? ' (' + cloudLayoutRows().length + ')' : '') + '</button>' : '')
       + '</div>';
   }
   function startPageRename(id) { pageRenaming = id; render(); }
@@ -3042,6 +3523,108 @@
     paintAll();
     toast(on ? 'Key rims on: app keys wear their app\'s color.' : 'Key rims off.');
   }
+  // Rim stroke width (px on a 96px face, 1..12; RIM_WIDTH_REGULAR = the
+  // default formula, stored as no override). The slider path updates the
+  // sheet IN PLACE (value, readout, preset chips): renderDeckSettings rebuilds
+  // the whole overlay's innerHTML, which would destroy a slider mid-drag.
+  // Preset buttons pass rerender so the sheet redraws once, on the click.
+  function setRimWidth(px, opts) {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    px = Math.round(Number(px));
+    if (!px || !isFinite(px)) px = RIM_WIDTH_REGULAR;
+    px = Math.max(RIM_WIDTH_MIN, Math.min(RIM_WIDTH_MAX, px));
+    if (px === RIM_WIDTH_REGULAR) delete overrides.rimWidth;   // regular = today's formula
+    else overrides.rimWidth = px;
+    persist(true);   // a look preference, not a layout edit: no save nag
+    paintAll();
+    if (opts && opts.rerender) { renderDeckSettings(); return; }
+    var sl = document.getElementById('sd-rim-w'); if (sl && +sl.value !== px) sl.value = px;
+    var lbl = document.getElementById('sd-rim-w-val'); if (lbl) lbl.textContent = px + ' px';
+    var cur = rimWidthOf();
+    [['sd-rim-thin', RIM_PRESETS.thin], ['sd-rim-reg', RIM_PRESETS.regular], ['sd-rim-bold', RIM_PRESETS.bold]].forEach(function (p) {
+      var b = document.getElementById(p[0]); if (b) b.classList.toggle('cur', cur === p[1]);
+    });
+  }
+  // One app's rim color. 'input' fires continuously from a color picker, so
+  // this never re-renders the sheet; the caller re-renders on 'change'.
+  function setRimColor(key, hex) {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    if (!APP_RIM_COLORS[key]) return;
+    hex = String(hex || '').toLowerCase();
+    if (!RIM_HEX_RE.test(hex)) return;
+    overrides.rimColors = overrides.rimColors || {};
+    if (hex === APP_RIM_COLORS[key]) delete overrides.rimColors[key]; else overrides.rimColors[key] = hex;
+    if (!Object.keys(overrides.rimColors).length) delete overrides.rimColors;
+    persist(true);
+    paintAll();
+    recolorTrayChips();
+  }
+  function resetRims() {
+    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    delete overrides.rimWidth; delete overrides.rimColors; delete overrides.appRims;
+    persist(true);
+    renderDeckSettings();
+    paintAll();
+    recolorTrayChips();
+    toast('Key rims back to defaults.');
+  }
+  // The action tray's chips wear the same rim colors; recolor them in place
+  // (the tray only rebuilds with the whole editor).
+  function recolorTrayChips() {
+    var r = root(); if (!r) return;
+    r.querySelectorAll('.sd-actchip[data-act]').forEach(function (chip) {
+      var a = catalog[chip.getAttribute('data-act')];
+      chip.style.setProperty('--chip-rim', appRimColor(a) || 'var(--line, #3a4356)');
+    });
+  }
+  // A settings re-render while the operator is dragging the rim slider or
+  // has a color picker open would destroy that control (the sheet is
+  // innerHTML-rebuilt, and OBS state flips call renderDeckSettings on their
+  // own). Skip it, remember, and redraw once the control is released.
+  var rimSliderDown = false, settingsRerenderPending = false;
+  function rimEditBusy() {
+    if (rimSliderDown) return true;   // pointer held on the slider (focus alone is not enough: Safari leaves a released slider focused)
+    var ae = document.activeElement;   // a color input keeps focus while its picker is open
+    return !!(ae && ae.getAttribute && ae.getAttribute('data-rim-app'));
+  }
+  function settingsRerenderIfPending() { if (settingsRerenderPending && settingsOpen && !rimEditBusy()) { settingsRerenderPending = false; renderDeckSettings(); } }
+  function rimsSection() {
+    var rimsOn = appRimsOn(), rw = rimWidthOf(), shown = rimWidthShown();
+    var apps = [['cueola', 'Cueola'], ['flowmingo', 'Flowmingo'], ['outrangutan', 'Outrangutan'], ['obs', 'OBS']];
+    var html = '<div class="sd-set-sec">Key rims</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">Keys wear a rim in their app\'s color so a glance sorts the deck by app. System keys (pages, mics, fun) stay bare. Width is measured on a 96 px key; smaller decks scale it down.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini' + (rimsOn ? ' cur' : '') + '" id="sd-rims-on">On</button><button class="sd-mini' + (rimsOn ? '' : ' cur') + '" id="sd-rims-off">Off</button></div>';
+    if (rimsOn) {
+      html += '<div class="sd-obs sd-rim-row"><label class="sd-obs-vol-lbl">Stroke</label>'
+        + '<button class="sd-mini' + (rw === RIM_PRESETS.thin ? ' cur' : '') + '" id="sd-rim-thin">Thin</button>'
+        + '<button class="sd-mini' + (rw === RIM_PRESETS.regular ? ' cur' : '') + '" id="sd-rim-reg">Regular</button>'
+        + '<button class="sd-mini' + (rw === RIM_PRESETS.bold ? ' cur' : '') + '" id="sd-rim-bold">Bold</button>'
+        + '<input type="range" id="sd-rim-w" min="' + RIM_WIDTH_MIN + '" max="' + RIM_WIDTH_MAX + '" step="1" value="' + shown + '" aria-label="Rim width"><span id="sd-rim-w-val">' + shown + ' px</span></div>'
+        + '<div class="sd-obs sd-rim-colors">'
+        + apps.map(function (p) { return '<label class="sd-rim-color"><input type="color" data-rim-app="' + p[0] + '" value="' + rimColorFor(p[0]) + '" aria-label="' + p[1] + ' rim color"><span>' + p[1] + '</span></label>'; }).join('')
+        + '<span class="sd-pf-sp"></span><button class="sd-mini" id="sd-rims-reset">Reset</button></div>';
+    }
+    return html;
+  }
+  function wireRims(o) {
+    bind('sd-rims-on', function () { setAppRims(true); });
+    bind('sd-rims-off', function () { setAppRims(false); });
+    bind('sd-rim-thin', function () { setRimWidth(RIM_PRESETS.thin, { rerender: true }); });
+    bind('sd-rim-reg', function () { setRimWidth(RIM_WIDTH_REGULAR, { rerender: true }); });
+    bind('sd-rim-bold', function () { setRimWidth(RIM_PRESETS.bold, { rerender: true }); });
+    bind('sd-rims-reset', resetRims);
+    var rw = document.getElementById('sd-rim-w');
+    if (rw) {
+      rw.oninput = function () { setRimWidth(+rw.value); };
+      var release = function () { rimSliderDown = false; setTimeout(settingsRerenderIfPending, 0); };
+      rw.onpointerdown = function () { rimSliderDown = true; try { window.addEventListener('pointerup', release, { once: true }); } catch (e) {} };
+      rw.onpointerup = release; rw.onpointercancel = release; rw.onchange = release;
+    }
+    o.querySelectorAll('[data-rim-app]').forEach(function (inp) {
+      inp.oninput = function () { setRimColor(inp.getAttribute('data-rim-app'), inp.value); };
+      inp.onchange = function () { setRimColor(inp.getAttribute('data-rim-app'), inp.value); try { inp.blur(); } catch (e) {} renderDeckSettings(); };
+    });
+  }
   // Flip is a fact about the connected deck's encoders, so it lives in this
   // deck's overrides (per product id) and follows the hardware, not the layout.
   function setDialFlip(on) {
@@ -3056,12 +3639,11 @@
   }
   function renderDeckSettings() {
     if (!settingsOpen) return;
+    if (rimEditBusy()) { settingsRerenderPending = true; return; }   // never yank a slider or color picker mid-use
     var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-set-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
     var body = '<div class="sd-ed-head">Deck settings</div>'
       + '<div class="sd-set-sec">Theme</div><div class="sd-theme-chips">' + chips + '</div>'
-      + '<div class="sd-set-sec">Key rims</div>'
-      + '<div class="sd-set-status"><span class="sd-obs-off">Keys wear a thin rim in their app\'s color: grey Cueola, pink Flowmingo, orange Outrangutan, blue OBS. System keys (pages, mics, fun) stay bare.</span></div>'
-      + '<div class="sd-obs"><button class="sd-mini' + (appRimsOn() ? ' cur' : '') + '" id="sd-rims-on">On</button><button class="sd-mini' + (appRimsOn() ? '' : ' cur') + '" id="sd-rims-off">Off</button></div>'
+      + rimsSection()
       + (profile && profile.dials ? '<div class="sd-set-sec">Dials</div>'
         + '<div class="sd-set-status"><span class="sd-obs-off">Clockwise turns forward: the prompter scrubs ahead, volume and speed go up. If this deck\'s dials run the opposite way, flip them here.</span></div>'
         + '<div class="sd-obs"><button class="sd-mini' + (overrides.dialFlip ? '' : ' cur') + '" id="sd-dialdir-n">Normal</button><button class="sd-mini' + (overrides.dialFlip ? ' cur' : '') + '" id="sd-dialdir-r">Reversed</button></div>' : '')
@@ -3077,8 +3659,7 @@
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-set-done', closeOverlay);
-    bind('sd-rims-on', function () { setAppRims(true); });
-    bind('sd-rims-off', function () { setAppRims(false); });
+    wireRims(o);
     bind('sd-dialdir-n', function () { setDialFlip(false); });
     bind('sd-dialdir-r', function () { setDialFlip(true); });
     o.querySelectorAll('[data-set-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-set-theme')); }; });
@@ -3522,29 +4103,43 @@
     var rx = document.getElementById('sd-ed-reactive'); if (rx) rx.onchange = function () { var slot = slotAt(index); if (rx.checked) delete slot.reactive; else slot.reactive = false; mapping().keys[index] = slot; persist(); refreshKey(index); };
     o.querySelectorAll('.sd-sw').forEach(function (sw) { sw.onclick = function () { var slot = slotAt(index), col = sw.getAttribute('data-color'); if (col) slot.color = col; else delete slot.color; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
     o.querySelectorAll('.sd-em').forEach(function (em) { em.onclick = function () { var slot = slotAt(index), pick = em.getAttribute('data-emoji'); slot.icon = (slot.icon === pick) ? '' : pick; if (!slot.icon) delete slot.icon; else delete slot.symbol; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
-    var clr = document.getElementById('sd-ed-clear'); if (clr) clr.onclick = function () { var slot = slotAt(index); delete slot.label; delete slot.hideLabel; delete slot.color; delete slot.icon; delete slot.symbol; delete slot.style; delete slot.flash; delete slot.reactive; delete slot.img; delete slot.noOverlay; mapping().keys[index] = slot; persist(); openKeyEditor(index); };
+    var clr = document.getElementById('sd-ed-clear'); if (clr) clr.onclick = function () { var slot = slotAt(index); delete slot.label; delete slot.hideLabel; delete slot.color; delete slot.icon; delete slot.symbol; delete slot.style; delete slot.flash; delete slot.reactive; delete slot.img; delete slot.gif; delete slot.noOverlay; mapping().keys[index] = slot; persist(); openKeyEditor(index); };
     bind('sd-ed-imgup', function () { var f = document.getElementById('sd-ed-imgfile'); if (f) f.click(); });
     var imgFile = document.getElementById('sd-ed-imgfile'); if (imgFile) imgFile.onchange = function () { if (imgFile.files && imgFile.files[0]) importKeyImage(index, imgFile.files[0]); imgFile.value = ''; };
-    bind('sd-ed-imgclear', function () { var slot = slotAt(index); delete slot.img; delete slot.noOverlay; mapping().keys[index] = slot; persist(); openKeyEditor(index); });
+    bind('sd-ed-imgclear', function () { var slot = slotAt(index); delete slot.img; delete slot.gif; delete slot.noOverlay; mapping().keys[index] = slot; persist(); openKeyEditor(index); });
     var ovl = document.getElementById('sd-ed-overlays'); if (ovl) ovl.onchange = function () { var slot = slotAt(index); if (ovl.checked) delete slot.noOverlay; else slot.noOverlay = true; mapping().keys[index] = slot; persist(); refreshKey(index); };
-    o.querySelectorAll('.sd-funopt').forEach(function (fb) { fb.onclick = function () { var slot = slotAt(index), src = fb.getAttribute('data-funart'); if (slot.img === src) { delete slot.img; delete slot.noOverlay; } else slot.img = src; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
+    o.querySelectorAll('.sd-funopt').forEach(function (fb) { fb.onclick = function () { var slot = slotAt(index), src = fb.getAttribute('data-funart'); if (slot.img === src) { delete slot.img; delete slot.noOverlay; } else slot.img = src; delete slot.gif; mapping().keys[index] = slot; persist(); openKeyEditor(index); }; });
     bind('sd-giphy-keysave', function () {
       var inp = document.getElementById('sd-giphy-key');
-      var v = inp && inp.value.trim();
+      var v = (inp && inp.value.trim()) || '';
       if (!v) { toast('Paste the API key first.'); return; }
+      if (!GIPHY_KEY_RE.test(v)) { toast('That does not look like a GIPHY API key.'); return; }
+      var share = document.getElementById('sd-giphy-share');
+      if (share && share.checked) { shareGiphyKey(v, index); return; }
       try { localStorage.setItem(GIPHY_KEY_LS, v); } catch (e) {}
+      _giphyKeyFormOpen = false;
       openKeyEditor(index);
       giphySearch(index, '');
     });
     bind('sd-giphy-go', function () { giphySearch(index, (document.getElementById('sd-giphy-q') || {}).value || ''); });
     var gq = document.getElementById('sd-giphy-q');
     if (gq) {
-      gq.onkeydown = function (e) { if (e.key === 'Enter') giphySearch(index, gq.value || ''); };
-      // Fresh editor with a saved key: show trending right away.
-      if (!_giphyResults.length) giphySearch(index, '');
-      else renderGiphyResults(index);
+      gq.onkeydown = function (e) { if (e.key === 'Enter') { clearTimeout(_giphyDebounce); giphySearch(index, gq.value || ''); } };
+      // Typing searches on its own after a short pause (debounced, so the
+      // shared class key is not burned one letter at a time).
+      gq.oninput = function () { clearTimeout(_giphyDebounce); var q = gq.value.trim(); if (q.length < 2) return; _giphyDebounce = setTimeout(function () { if (document.getElementById('sd-giphy-q') === gq) giphySearch(index, q); }, GIPHY_DEBOUNCE_MS); };
+      // Fresh editor: show trending right away on the operator's own key. On
+      // the shared class key (GIPHY beta keys allow 100 calls an hour for the
+      // whole lab) trending only shows when it is already cached; the box
+      // otherwise waits for a search.
+      if (_giphyResults.length) renderGiphyResults(index);
+      else if (_giphyTrending) { _giphyResults = _giphyTrending; renderGiphyResults(index); }
+      else if (giphyKeyIsOwn()) giphySearch(index, '');
+      else { var grid0 = document.getElementById('sd-giphy-grid'); if (grid0) grid0.innerHTML = '<div class="sd-note">Type what you want to see and press Search.</div>'; }
     }
-    bind('sd-giphy-forget', function () { try { localStorage.removeItem(GIPHY_KEY_LS); } catch (e) {} _giphyResults = []; openKeyEditor(index); });
+    bind('sd-giphy-forget', function () { try { localStorage.removeItem(GIPHY_KEY_LS); } catch (e) {} _giphyResults = []; _giphyKeyFormOpen = false; openKeyEditor(index); });
+    bind('sd-giphy-change', function () { _giphyKeyFormOpen = true; openKeyEditor(index); });
+    bind('sd-giphy-cancel', function () { _giphyKeyFormOpen = false; openKeyEditor(index); });
     var done = document.getElementById('sd-ed-done'); if (done) done.onclick = closeOverlay;
     paintSymbolPicker();
   }
@@ -3585,29 +4180,99 @@
     return packs;
   }
   // ── GIPHY: search inside the key editor ─────────────────────────────────
-  // The API key is the operator's own (developers.giphy.com), pasted once and
-  // stored on this device only, like the OBS password: never in the repo.
-  // Picks are DOWNLOADED and stored as data URLs through the same validation
-  // as uploads (300 KB cap, taint-safe), so layouts stay portable and the
-  // hardware pipeline never touches a remote URL. Results are rating-capped
-  // at pg-13: this runs in classrooms.
+  // Two keys, one lookup: a key pasted on this device (localStorage, like the
+  // OBS password: never in the repo) wins; otherwise the CLASS key an
+  // instructor shared through the config/giphy doc (open get under the live
+  // ruleset, admin write). A GIPHY key is a public client-side key by
+  // GIPHY's own design (every search shows it in the network tab), so a
+  // shared read adds no exposure; the real limit is the per-key quota. All
+  // API calls go straight from the browser to api.giphy.com: GIPHY's terms
+  // forbid proxying searches, so there is no server in the middle. Picks are
+  // stored as REFERENCES (slot.gif, see toSlot) and decoded from the GIPHY
+  // media CDN with CORS. Results are rating-capped at pg-13: classrooms.
   var GIPHY_KEY_LS = 'cueola_giphy_key';
-  var _giphyResults = [];
-  function giphyKey() { try { return localStorage.getItem(GIPHY_KEY_LS) || ''; } catch (e) { return ''; } }
+  var GIPHY_KEY_RE = /^[A-Za-z0-9]{10,80}$/;
+  var GIPHY_DEBOUNCE_MS = 400;
+  var _giphyResults = [], _giphyTrending = null, _giphyCache = {}, _giphyDebounce = null;
+  var _sharedGiphyKey = '', _sharedGiphyLoading = false, _giphyKeyFormOpen = false;
+  function giphyLocalKey() { try { return localStorage.getItem(GIPHY_KEY_LS) || ''; } catch (e) { return ''; } }
+  function giphyKey() { return giphyLocalKey() || _sharedGiphyKey; }
+  function giphyKeyIsOwn() { return !!giphyLocalKey(); }
+  function isInstructorHere() {
+    var idmod = window.CueolaIdentity, p = null, id = null;
+    try { p = idmod && idmod.profile && idmod.profile(); id = idmod && idmod.identity && idmod.identity(); } catch (e) {}
+    return !!((p && p.role === 'admin') || (id && id.role === 'admin'));
+  }
+  // Load the class key once Firebase is up (startDeckService, open). A
+  // failure (rules not deployed yet, offline) is silent and retried on the
+  // next open; the editor re-renders if it is showing the setup box.
+  function loadSharedGiphyKey() {
+    if (_sharedGiphyKey || _sharedGiphyLoading) return;
+    if (!window._firebaseReady || !window._getDoc || !window._doc || !window._db) return;
+    _sharedGiphyLoading = true;
+    var p;
+    try { p = window._getDoc(window._doc(window._db, 'config', 'giphy')); } catch (e) { _sharedGiphyLoading = false; return; }
+    Promise.resolve(p).then(function (snap) {
+      var d = null; try { d = snap && (typeof snap.exists === 'function' ? snap.exists() : snap.exists) ? snap.data() : null; } catch (e) {}
+      var k = d && typeof d.key === 'string' && GIPHY_KEY_RE.test(d.key) ? d.key : '';
+      _sharedGiphyLoading = false;
+      if (k && k !== _sharedGiphyKey) {
+        _sharedGiphyKey = k;
+        var o = overlay();
+        if (editingKey >= 0 && o && o.classList.contains('on') && document.getElementById('sd-giphy-key')) openKeyEditor(editingKey);
+      }
+    }).catch(function () { _sharedGiphyLoading = false; });
+  }
+  // Instructor: publish one key for the whole class (config/giphy, admin
+  // write by rules). A refusal keeps the key on this device instead.
+  function shareGiphyKey(v, index) {
+    var idmod = window.CueolaIdentity, id = null;
+    try { id = idmod && idmod.identity && idmod.identity(); } catch (e) {}
+    if (!isInstructorHere()) { toast('Only an instructor can share a class key.'); return; }
+    if (!window._firebaseReady || !window._setDoc || !window._doc || !window._db) { toast('Cloud is not reachable right now. The key was kept on this device.'); try { localStorage.setItem(GIPHY_KEY_LS, v); } catch (e) {} openKeyEditor(index); return; }
+    window._setDoc(window._doc(window._db, 'config', 'giphy'), { key: v, updatedAt: Date.now(), updatedBy: (id && id.username) || 'instructor' })
+      .then(function () {
+        _sharedGiphyKey = v; _giphyKeyFormOpen = false; _giphyResults = []; _giphyTrending = null; _giphyCache = {};
+        try { localStorage.removeItem(GIPHY_KEY_LS); } catch (e) {}   // the class key now serves this device too
+        toast('Class key saved. Everyone signed in can search GIPHY now.');
+        openKeyEditor(index);
+      })
+      .catch(function (e) {
+        var denied = e && (e.code === 'permission-denied' || /permission/i.test(String(e.message || '')));
+        try { localStorage.setItem(GIPHY_KEY_LS, v); } catch (e2) {}
+        _giphyKeyFormOpen = false;
+        toast(denied ? 'The class key was refused (sign in as an instructor with your password). It was kept on this device instead.' : 'Could not save the class key. It was kept on this device instead.');
+        openKeyEditor(index);
+        giphySearch(index, '');
+      });
+  }
   function giphyBoxHTML() {
-    if (!giphyKey()) {
+    var admin = isInstructorHere(), own = giphyKeyIsOwn(), shared = !!_sharedGiphyKey;
+    if (!giphyKey() || _giphyKeyFormOpen) {
       return '<div class="sd-giphy-setup">'
-        + '<div class="sd-note">Search GIPHY for key art right here. It needs a free GIPHY API key: create one at developers.giphy.com (Create an App, choose API), then paste it below. Stored on this device only.</div>'
-        + '<div class="sd-giphy-row"><input id="sd-giphy-key" placeholder="Paste your GIPHY API key" autocomplete="off" spellcheck="false"><button class="sd-mini" id="sd-giphy-keysave">Save key</button></div>'
+        + '<div class="sd-note">' + (admin
+            ? 'Search GIPHY for key art right here. It needs a free GIPHY API key: create one at developers.giphy.com (Create an App, choose API), then paste it below. Share it and every student who signs in can search without a key of their own.'
+            : 'Search GIPHY for key art right here. Ask your instructor to share the class key, or paste a free GIPHY API key of your own (developers.giphy.com, Create an App, choose API). A pasted key stays on this device.') + '</div>'
+        + '<div class="sd-giphy-row"><input id="sd-giphy-key" placeholder="Paste a GIPHY API key" autocomplete="off" spellcheck="false"><button class="sd-mini" id="sd-giphy-keysave">Save key</button>'
+        + (_giphyKeyFormOpen ? '<button class="sd-mini" id="sd-giphy-cancel">Cancel</button>' : '') + '</div>'
+        + (admin ? '<label class="sd-ed-check sd-giphy-share"><input type="checkbox" id="sd-giphy-share" checked><span>Use for the whole class</span></label>' : '')
         + '</div>';
     }
-    return '<div class="sd-giphy-row"><input id="sd-giphy-q" placeholder="Search GIPHY (blank shows trending)" autocomplete="off"><button class="sd-mini" id="sd-giphy-go">Search</button></div>'
+    return '<div class="sd-giphy-row"><input id="sd-giphy-q" placeholder="' + (own ? 'Search GIPHY (blank shows trending)' : 'Search GIPHY') + '" autocomplete="off"><button class="sd-mini" id="sd-giphy-go">Search</button></div>'
       + '<div class="sd-giphy-grid" id="sd-giphy-grid"></div>'
-      + '<div class="sd-giphy-note">Powered by GIPHY · PG-13 results only · <button type="button" class="sd-giphy-forget" id="sd-giphy-forget">Remove key</button></div>';
+      + '<div class="sd-giphy-note">Powered by GIPHY · PG-13 results only · '
+      + (own ? '<button type="button" class="sd-giphy-forget" id="sd-giphy-forget">' + (shared ? 'Use the class key instead' : 'Remove key') + '</button>' : 'Class key')
+      + (admin ? ' · <button type="button" class="sd-giphy-forget" id="sd-giphy-change">Change class key</button>' : '')
+      + '</div>';
   }
   function giphySearch(index, q) {
     var key = giphyKey(); if (!key) return;
+    q = String(q || '').trim();
     var grid = document.getElementById('sd-giphy-grid');
+    // Per-session cache: the same search (or trending) never costs a second
+    // call against a key the whole lab shares.
+    var cached = q ? _giphyCache[q.toLowerCase()] : _giphyTrending;
+    if (cached) { _giphyResults = cached; renderGiphyResults(index); return; }
     if (grid) grid.innerHTML = '<div class="sd-note">Searching…</div>';
     var url = 'https://api.giphy.com/v1/gifs/' + (q ? 'search' : 'trending')
       + '?api_key=' + encodeURIComponent(key) + '&limit=24&rating=pg-13'
@@ -3618,16 +4283,15 @@
       if (!r.ok) throw new Error('http' + r.status);
       return r.json();
     }).then(function (j) {
-      _giphyResults = (j.data || []).map(function (g) {
-        var im = g.images || {};
-        var pickList = [im.fixed_width, im.fixed_width_small, im.downsized]
-          .filter(function (r2) { return r2 && r2.url; })
-          .map(function (r2) { return { url: r2.url, size: parseInt(r2.size, 10) || 0 }; });
-        return { title: g.title || 'GIF', thumb: (im.fixed_width_small || im.fixed_width || {}).url || '', picks: pickList };
-      }).filter(function (g) { return g.thumb && g.picks.length; });
+      var list = (j.data || []).map(function (g) {
+        var im = g.images || {}, fw = im.fixed_width || {};
+        return { id: String(g.id || ''), title: g.title || 'GIF', thumb: (im.fixed_width_small || fw).url || '', w: parseInt(fw.width, 10) || 0, h: parseInt(fw.height, 10) || 0 };
+      }).filter(function (g) { return g.thumb && GIPHY_ID_RE.test(g.id); });
+      if (q) _giphyCache[q.toLowerCase()] = list; else _giphyTrending = list;
+      _giphyResults = list;
       renderGiphyResults(index);
     }).catch(function (e) {
-      var msg = e.message === 'badkey' ? 'GIPHY rejected that key. Check it under your apps on developers.giphy.com.'
+      var msg = e.message === 'badkey' ? (giphyKeyIsOwn() ? 'GIPHY rejected that key. Check it under your apps on developers.giphy.com.' : 'GIPHY rejected the class key. Ask your instructor to check it.')
         : e.message === 'rate' ? 'GIPHY rate limit reached. Give it a minute and search again.'
         : 'Could not reach GIPHY. Check the connection and try again.';
       if (grid) grid.innerHTML = '<div class="sd-note">' + esc(msg) + '</div>';
@@ -3644,26 +4308,16 @@
       b.onclick = function () { giphyPick(index, +b.getAttribute('data-gidx')); };
     });
   }
-  // Download the smallest rendition that fits the same caps as an upload.
+  // A pick stores the reference (a few dozen bytes) and starts the decode
+  // right away so the key is moving by the time the editor re-renders.
   function giphyPick(index, gi) {
-    var g = _giphyResults[gi]; if (!g) return;
-    toast('Adding the GIF to the key…');
-    var tryNext = function (list) {
-      if (!list.length) { toast('That GIF is too large even in its small rendition. Pick another.'); return; }
-      var cand = list[0], rest = list.slice(1);
-      if (cand.size && cand.size > 300 * 1024) { tryNext(rest); return; }
-      fetch(cand.url).then(function (r) { if (!r.ok) throw new Error('http'); return r.blob(); }).then(function (blob) {
-        if (blob.size > 300 * 1024) { tryNext(rest); return; }
-        var fr = new FileReader();
-        fr.onload = function () {
-          if (String(fr.result).length > SLOT_GIF_MAX_CHARS) { tryNext(rest); return; }
-          var slot = slotAt(index); slot.img = fr.result; mapping().keys[index] = slot;
-          persist(); openKeyEditor(index);
-        };
-        fr.readAsDataURL(blob);
-      }).catch(function () { tryNext(rest); });
-    };
-    tryNext(g.picks.slice());
+    var g = _giphyResults[gi]; if (!g || !GIPHY_ID_RE.test(g.id)) return;
+    var url = giphyCanonicalUrl(g.id);
+    var slot = slotAt(index);
+    slot.gif = { id: g.id, url: url, w: g.w || 0, h: g.h || 0 }; slot.img = url;
+    mapping().keys[index] = slot;
+    persist(); gifAnim(url); openKeyEditor(index);
+    toast('GIF added to the key.');
   }
 
   // Upload pipeline: decode, square-crop to 256px (>= 2x the largest key face,
@@ -3679,7 +4333,7 @@
       if (file.size > 300 * 1024) { toast('That GIF is over 300 KB. Trim or shrink it (giphy-size clips work well).'); return; }
       var gr = new FileReader();
       gr.onload = function () {
-        var slot = slotAt(index); slot.img = gr.result; mapping().keys[index] = slot; persist(); openKeyEditor(index);
+        var slot = slotAt(index); slot.img = gr.result; delete slot.gif; mapping().keys[index] = slot; persist(); openKeyEditor(index);
       };
       gr.readAsDataURL(file);
       return;
@@ -3701,7 +4355,7 @@
           : [[256, 'image/jpeg', 0.82], [192, 'image/jpeg', 0.75], [144, 'image/jpeg', 0.7]];
         for (var i = 0; i < tries.length; i++) { out = encode(tries[i][0], tries[i][1], tries[i][2]); if (out.length <= 65536) break; }
         if (!out || out.length > 65536) { toast('That image stays too large after compression. Try a simpler one.'); return; }
-        var slot = slotAt(index); slot.img = out; mapping().keys[index] = slot; persist(); openKeyEditor(index);
+        var slot = slotAt(index); slot.img = out; delete slot.gif; mapping().keys[index] = slot; persist(); openKeyEditor(index);
       };
       img.onerror = function () { toast('Could not read that image.'); };
       img.src = reader.result;
@@ -3760,7 +4414,7 @@
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
     bind('sd-learn', function () { learnArmed = !learnArmed; render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
-    bind('sd-pf-new', function () { addProfile('Page'); }); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive);
+    bind('sd-pf-new', openNewPageSheet); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive); bind('sd-pf-cloud', openCloudLayoutsSheet);
     r.querySelectorAll('.sd-page-tab').forEach(function (tab) {
       var id = tab.getAttribute('data-page');
       tab.onclick = function (e) {
@@ -4076,6 +4730,7 @@
     if (deckServiceStarted) return;
     deckServiceStarted = true;
     buildCatalog(); loadTheme();
+    loadSharedGiphyKey(); loadCloudLayouts();
     try { brightness = Math.max(0, Math.min(100, parseInt(localStorage.getItem(BRIGHTNESS_KEY), 10) || 80)); } catch (e) {}
     talkbackConnect();
     // OBS: repaint on state changes, and reconnect automatically if the operator
@@ -4112,6 +4767,12 @@
   }
   if (window._firebaseReady) bootDeckService();
   else window.addEventListener('firebaseReady', bootDeckService, { once: true });
+  // A sign-in or sign-out after boot: the saved-layout rows follow the new
+  // identity (cleared on sign-out), and the class GIPHY key gets its read.
+  document.addEventListener('cueola-identity-change', function () {
+    _cloudLayouts = null; _cloudLayoutsFor = ''; _cloudLayoutsLoading = false;
+    if (deckServiceStarted) { loadCloudLayouts(); loadSharedGiphyKey(); }
+  });
   // App-state push: the main app fires cueola-surface-state on clock start/
   // pause, call stages, cue moves, grants — repaint straight from the event
   // instead of waiting out the 200ms poll (which a throttled background tab
@@ -4121,6 +4782,8 @@
     if (!keyWiSignInGate()) return false;
     showScreen();
     startDeckService();   // idempotent: usually already running from the boot path
+    loadSharedGiphyKey(); // class GIPHY key (retried here if the boot read failed)
+    loadCloudLayouts();   // 'My layouts' rows from the signed-in profile
     render();
     // First visit: the wizard volunteers itself once. After that it lives in
     // the toolbar. If a remembered deck reconnects above, it re-renders in place.
@@ -4142,6 +4805,7 @@
     if (cur && cur.id && cur.id !== 'streamdeck') keyWiReturnScreen = cur.id;
     document.querySelectorAll('.screen.on').forEach(function (s) { s.classList.remove('on'); });
     scr.classList.add('on');
+    mirrorDirty = true;   // the grid was not drawn while hidden; the next pass catches it up
     try { if (typeof window.pushSessionHistoryState === 'function') window.pushSessionHistoryState('streamdeck'); } catch (e) {}
   }
   function hideScreen() {
@@ -4196,6 +4860,9 @@
     // Granted-and-plugged decks, readable from any window without opening the
     // device or disturbing the owner election. Resolves -1 when WebHID is
     // unavailable (no evidence, not a failure).
+    // Preflight fix lane: re-attach every previously granted deck with no
+    // chooser (a fix request from the rundown Mac, or the local fix button).
+    connectGranted: function () { return reattachGrantedDecks(); },
     grantedDecks: function () {
       if (!(navigator.hid && navigator.hid.getDevices)) return Promise.resolve(-1);
       return navigator.hid.getDevices().then(function (list) {
