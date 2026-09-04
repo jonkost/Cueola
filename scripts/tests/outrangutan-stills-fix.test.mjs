@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 
 const js = await readFile(new URL('../../outrangutan/outrangutan.js', import.meta.url), 'utf8');
 const notes = await readFile(new URL('../../outrangutan/NOTES.md', import.meta.url), 'utf8');
+const app = await readFile(new URL('../../cueola-app.js', import.meta.url), 'utf8');
 const slice = (from, to) => { const a = js.indexOf(from); const b = js.indexOf(to, a); assert.ok(a >= 0 && b > a, from + ' .. ' + to); return js.slice(a, b); };
 
 test('publishLive: a held still publishes remaining null + hold true, a timer publishes a number, and live.armed rides every packet', () => {
@@ -155,4 +156,52 @@ test('NOTES.md documents stills and fix requests', () => {
   assert.match(notes, /Duration applies the next time this still plays/);
   assert.match(notes, /Outrangutan is not on screen on this Mac/);
   assert.match(notes, /cueProgress\(\)[^\n]*kind/);
+});
+
+test('output window: an orphaned renderer is reported, and a detached runtime never swallows a fire (9/4 night)', () => {
+  // A renderer binds to the controllerInstanceId baked into its URL and
+  // announces READY once, so reloading the controller page orphans it. The
+  // controller now names that state instead of saying "Output window closed".
+  assert.match(js, /const foreignOutputSeen = new Map\(\);/);
+  assert.match(js, /function foreignOutputFresh\(id\)/);
+  assert.match(js, /normalized\.controllerInstanceId !== OUTPUT_CONTROLLER_ID/);
+  assert.match(js, /foreignOutputSeen\.set\(id, \{ at: Date\.now\(\), controllerInstanceId: normalized\.controllerInstanceId \}\)/);
+  assert.match(js, /foreignOutputSeen\.delete\(id\)/);
+  assert.match(js, /foreignWindow: \(!rec \|\| rec\.status === 'closed'\) && foreignOutputFresh\(o\.id\)/);
+  assert.match(js, /An output window from an earlier page load is still open and cannot hear this page\. Close that window, then press Open\./);
+
+  // Leaving Live detaches the local runtime and leaves the windows open, so
+  // every same-tab fire reclaims first; sendOut would otherwise be a no-op.
+  assert.ok(js.includes('reclaim: () => { try { return outputRuntimeDetached ? reattachLiveControl() : null; }'), 'reclaim only when detached');
+  assert.match(js, /attached: \(\) => !outputRuntimeDetached,/);
+  assert.ok(js.includes('if (p && p.mediaId) { if (outputRuntimeDetached) reattachLiveControl(); firePad(p);'), 'firePad reclaims when detached');
+  assert.ok(js.includes('if (c) { if (outputRuntimeDetached) reattachLiveControl();'), 'fireCue reclaims when detached');
+
+  // And the rundown refuses the same-tab fast path when it still cannot deliver.
+  assert.ok(app.includes('function _ogLocalCanDeliver(local) {'), 'delivery predicate is module level');
+  assert.ok(app.includes("!remoteAirDriving() && _ogLocalCanDeliver(local)"), 'cue fast path checks delivery');
+
+  // Copy rule: no em or en dashes in the lines these fixes added.
+  const added = js.split('\n').filter(line => /foreignOutputSeen|foreignWindow|earlier page load|reclaim: \(\)|attached: \(\)/.test(line));
+  assert.ok(added.length > 0, 'expected the new lines to be present');
+  added.forEach(line => assert.ok(!/[\u2014\u2013]/.test(line), 'no dashes: ' + line));
+});
+
+test('a joined playout machine survives a standalone tap, and every same-tab fast path checks delivery (9/4 night)', () => {
+  // enterOutrangutan('standalone') used to null sessionCode, which changes the
+  // output channel identity and makes ensureChannel close the live output
+  // window. The hub tile, the Live rail recovery and the preflight fix all
+  // pass 'standalone' when the rundown has no code, which is the Air's normal
+  // state, so a joined show must survive it.
+  assert.ok(js.includes("else if (mode === 'session' && sessionCode) { /* keep the joined show */ }"), 'joined show is kept');
+  assert.ok(js.indexOf("else if (mode === 'session' && sessionCode)") < js.indexOf("else { mode = 'standalone'; sessionCode = null; }"), 'the guard precedes the reset');
+
+  // The transport fast paths carry the same delivery guard as the cue path;
+  // local.transport('go') otherwise returns true with no check at all.
+  const guarded = app.split('\n').filter(line => line.includes('local.transport(action)') && line.includes('_ogLocalCanDeliver(local)'));
+  assert.equal(guarded.length, 2, 'both transport fast paths are guarded');
+
+  // Reclaim only in the states the reattach gate already trusts, so an idle
+  // hidden instance on the rundown Mac never re-subscribes and publishes.
+  assert.ok(app.includes('if (_ogLocalRuntimeReattachable()) local.reclaim?.();'), 'reclaim is gated');
 });

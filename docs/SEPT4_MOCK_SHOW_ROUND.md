@@ -107,3 +107,22 @@ An adversarial review of the whole diff (seven lenses, every finding re-verified
 - GIF keys: uploaded GIFs no longer flatten megabytes of cache keys; Retina mirrors are sharp again (decoded GIF memory returns to roughly 17 MB per source); a Mini that attached before the student joined switches to the Director page on its own if its page was untouched.
 
 Cache bump run and WORKER_SCHEMA is 48: every window on every machine reloads on the next visit after the push.
+
+## Output window went dead after the deploy (fixed 9/3 night)
+
+Symptom: Outrangutan plays in its own program area, but the external output window feeding the switcher shows nothing.
+
+Two causes, both now handled.
+
+1. **Reloading the Outrangutan page orphans an already-open output window.** The window binds to the controller identity baked into its URL when it opens, and it announces itself exactly once. Reloading the Outrangutan page (step 2 of the deploy ritual) mints a new controller identity, so the page and the window reject each other in silence: the window keeps painting its last frame and never plays again, while the Outputs panel says "Output window closed". This is pre-existing behavior that the deploy reload triggers.
+   - **What to do right now:** close the external output window, then press Open in the Outputs panel. It comes straight back.
+   - **Order that avoids it:** reload the Outrangutan page FIRST, then open the output window.
+   - The Outputs panel and the preflight now say so instead of reporting the window closed: "An output window from an earlier page load is still open and cannot hear this page. Close that window, then press Open."
+
+2. **After leaving Live, the local playout runtime stayed detached.** Leaving Live detaches the runtime on purpose and deliberately leaves the output windows open. Before this round every Live entry reattached it; this round narrowed that so a rundown Mac cannot publish as a second playout machine. On a one-machine rig that left the runtime detached, so a cue fired from the rundown or a deck key played into nothing while the app reported success. Every same-tab fire now reclaims the runtime first, and if it still cannot deliver, the command is written to the session so a real playout machine can run it.
+
+Deploy note: the first reload after a push can still serve the previous JavaScript from the service worker cache. If a window looks unchanged, reload it once more.
+
+3. **A stray tap on the Air could close the output window outright.** Opening Outrangutan from the hub tile, the Live rail's playback recovery, or the new preflight "Open playout controls" all ask for standalone mode whenever the rundown has no show code, which is the Air's normal state. That dropped the joined show code, which changes the output channel identity, which closes the live output window and drops the Air out of the session. A joined show is now kept in every one of those paths, so a stray tap can no longer tear down a playout machine mid-show.
+
+Also hardened: the transport keys (G, P, S and the deck transport keys) now run the same delivery check as a cue fire, so they can never report success while playing into a detached runtime.

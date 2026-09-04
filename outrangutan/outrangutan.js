@@ -969,11 +969,31 @@
     updateOutputUI();
     return true;
   }
+  // An output window binds to the controllerInstanceId baked into its URL when
+  // it opens, and it announces READY exactly once. Reloading THIS page (the
+  // deploy ritual) mints a new controller id, so an already-open window and
+  // this page reject each other in silence (output-protocol accepts() compares
+  // controllerInstanceId both ways): the window keeps painting its last frame
+  // and never plays again, while this page reports "Output window closed".
+  // In session mode both are still on the same BroadcastChannel, so the orphan
+  // is visible here through its 2 second heartbeat. Record it and say so.
+  const foreignOutputSeen = new Map();
+  function foreignOutputFresh(id) {
+    const seen = foreignOutputSeen.get(Number(id));
+    return !!seen && (Date.now() - seen.at) < 8000;
+  }
   function handleOutputMessage(message, source) {
     if (!message || message._from !== 'output' || seenOutputMessage(message) || !OUTPUT_PROTOCOL) return;
     const normalized = OUTPUT_PROTOCOL.normalizeEnvelope(message);
     const id = Number(normalized.outputId) || 1;
     if (!outputs.some(o => o.id === id)) return;
+    if (normalized.controllerInstanceId && normalized.controllerInstanceId !== OUTPUT_CONTROLLER_ID) {
+      // Not ours. The protocol rejects it downstream anyway; remember it so the
+      // Outputs panel and the preflight can tell the operator to reopen it.
+      foreignOutputSeen.set(id, { at: Date.now(), controllerInstanceId: normalized.controllerInstanceId });
+      return;
+    }
+    foreignOutputSeen.delete(id);
     const rec = outputRecord(id, true), controller = controllerFor(id);
     if (!controller) return;
     const type = normalized.commandType;
@@ -1493,8 +1513,13 @@
         pendingAcks: rec && rec.ackPending ? rec.ackPending.size : 0,
         error: rec ? rec.error : '',
         mode: o.kiosk ? 'kiosk' : 'popup',
-        mediaMissing: rec && Array.isArray(rec.mediaMissing) ? rec.mediaMissing.length : 0
+        mediaMissing: rec && Array.isArray(rec.mediaMissing) ? rec.mediaMissing.length : 0,
+        foreignWindow: (!rec || rec.status === 'closed') && foreignOutputFresh(o.id)
       };
+    });
+    items.forEach(item => {
+      if (!item.foreignWindow) return;
+      item.detail = 'An output window from an earlier page load is still open and cannot hear this page. Close that window, then press Open.';
     });
     const priority = ['error', 'stalled', 'disconnected', 'recovering', 'connecting', 'opening'];
     let status = 'closed';
@@ -5930,6 +5955,12 @@
     returnScreenId = (current && current.id && current.id !== 'outrangutan') ? current.id : 'entry';
     build();
     if (m === 'session') mode = 'session';
+    // Never drop a joined show just because the caller asked for standalone:
+    // the hub tile, the Live rail recovery and the preflight "Open playout
+    // controls" all pass 'standalone' when the rundown has no session code,
+    // which is the Air's normal state. Changing the output channel identity
+    // here makes ensureChannel close the live output window (:1081).
+    else if (mode === 'session' && sessionCode) { /* keep the joined show */ }
     else { mode = 'standalone'; sessionCode = null; }
     reattachLiveControl();
     showScreen();
@@ -6216,8 +6247,18 @@
     // of round-tripping a Firestore command.
     _local: {
       session: () => (mode === 'session' ? sessionCode : ''),
-      firePad: (id) => { const p = padById(id); if (p && p.mediaId) { firePad(p); return true; } return false; },
-      fireCue: (id) => { const c = cueById(id); if (c) { selectedId = c.id; go(); renderCueList(); renderInspector(); renderEditArea(); return true; } return false; },
+      // Leaving Live detaches this runtime and leaves the output windows OPEN
+      // (cleanupOutputRuntime(false)), which makes sendOut() a silent no-op.
+      // Every same-tab fire reclaims first so a cue fired from the rundown or a
+      // deck key still reaches the external window. Idempotent, cheap when
+      // already attached.
+      // Only when actually detached: reattachLiveControl also re-subscribes the
+      // session, and a healthy hidden instance on the rundown Mac must never be
+      // nudged into publishing a second live packet over the playout machine.
+      reclaim: () => { try { return outputRuntimeDetached ? reattachLiveControl() : null; } catch (e) { return null; } },
+      attached: () => !outputRuntimeDetached,
+      firePad: (id) => { const p = padById(id); if (p && p.mediaId) { if (outputRuntimeDetached) reattachLiveControl(); firePad(p); return true; } return false; },
+      fireCue: (id) => { const c = cueById(id); if (c) { if (outputRuntimeDetached) reattachLiveControl(); selectedId = c.id; go(); renderCueList(); renderInspector(); renderEditArea(); return true; } return false; },
       // Rundown standby: select + preload in rundown order, never fire.
       armCue: (id) => { if (!armFromRundown(id)) return false; renderCueList(); renderInspector(); renderEditArea(); return true; },
       // P5: whole-transport fast path for the live-screen keymap (G/P/S/…)

@@ -6957,7 +6957,7 @@ window.cueolaSurfaceBridge = {
   // whose lifecycle gate belongs to the live-screen keyboard path.
   playoutTransport: (action) => {
     const local = window.Outrangutan && window.Outrangutan._local;
-    if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && local.transport(action)) return true;
+    if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local) && local.transport(action)) return true;
     return fireOutrangutanCommand(action, '');
   },
   goLive: () => { try { goLive(); } catch (e) {} },
@@ -9111,6 +9111,16 @@ function _ogOutrangutanOnScreen() {
 function _ogLocalRuntimeReattachable() {
   return _ogOutrangutanOnScreen() || _ogLocalDetachedForReattach;
 }
+// A detached local instance answers every send with a silent no-op, so a
+// same-tab fast path would swallow the command and report success while the
+// external output window sits dead. Reclaim only in the two states the gate
+// above already trusts, then report whether this instance can actually
+// deliver; a false answer sends the command over the wire instead.
+function _ogLocalCanDeliver(local) {
+  if (!local) return false;
+  try { if (_ogLocalRuntimeReattachable()) local.reclaim?.(); } catch (error) {}
+  try { return local.attached ? local.attached() !== false : true; } catch (error) { return true; }
+}
 
 // The show-killer variant of local shadowing: this tab's Outrangutan once
 // joined the session (mode sticks after leaving the screen), so the same-tab
@@ -9579,7 +9589,7 @@ let _ogNoListenerToastAt = 0;
 function fireOutrangutanCommand(action, targetId, opts={}) {
   cancelPendingArm();   // a real command owns the slot; a stale arm must not overwrite it
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && session.code && local.session() === session.code && !remoteAirDriving()) {
+  if (local && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local)) {
     if (action === 'pad' && local.firePad(targetId)) return true;
     if (action === 'cue' && local.fireCue(targetId)) {
       if (opts.armCueId) local.armCue?.(opts.armCueId);
@@ -9761,7 +9771,7 @@ function fireOutrangutanTransport(action) {
     if (action === 'stop' || action === 'fadeStop' || action === 'panic') abortPlayoutCall(action);
   }
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && local.transport(action)) {
+  if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local) && local.transport(action)) {
     toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
     return true;
   }
