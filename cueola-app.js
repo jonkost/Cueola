@@ -3,6 +3,16 @@
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
 const CUEOLA_VERSION = '2.2.1';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
+// Build identity on the wire: the ?v= hash of this script tag ('' if absent).
+// Rides presence, the talent heartbeat and the Air's live packet so preflight
+// can tell when another machine runs a different build.
+window.CUEOLA_BUILD = (() => {
+  try {
+    const s = document.querySelector('script[src*="cueola-app.js"]');
+    const m = s && String(s.getAttribute('src') || '').match(/[?&]v=([^&#]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch { return ''; }
+})();
 
 // ── v2.1 D12.7: runtime budgets — measure, then defer, then gate ────────────
 // Every interval gets an owner and a stop path; this census is how that stays
@@ -498,7 +508,9 @@ function grantRundownControl(username, displayName, position='') {
     position: String(position || ''),
   };
   if (!grant.username) return;
-  window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: grant })
+  // The grant rides with a claim release: the holder's live window claims
+  // on its next tick instead of waiting out the 15 s stale window.
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: grant, busExecutor: null })
     .then(() => toast(`${grant.displayName} now has rundown control.`))
     .catch(err => toast(firebaseConnectionLabel(err, 'Handing control failed')));
   hideOverlay('lsGrantOv');
@@ -1953,7 +1965,10 @@ async function resumeLastSession() {
   freeTextMode = false;
   rememberLastSession(r.code, r.name);
   restoreLocalDraftAsRundownBaseline();
-  if (Number.isFinite(r.lsIdx)) setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue' });
+  // Cloud resume adopts the doc's activeIdx (the room's truth) and only
+  // restores this window's SELECTION; a stored row is pushed only for the
+  // offline local-copy path, where there is no doc to adopt from.
+  if (Number.isFinite(r.lsIdx)) setLiveSelectedCue(r.lsIdx, { activate:!ready && r.role !== 'student', reason:'resume-cue' });
   // The rundown arrives async (cloud snapshot / local draft) — goLive()'s clamp
   // would zero the restored row on a still-empty list. Re-assert it once the
   // beats land (give up quietly after ~6 s; the operator is already back live).
@@ -1965,9 +1980,9 @@ async function resumeLastSession() {
       if (beats.length > r.lsIdx) {
         clearInterval(t);
         if (lsIdx !== r.lsIdx) {
-          setLiveSelectedCue(r.lsIdx, { activate:r.role !== 'student', reason:'resume-cue-reassert' });
+          setLiveSelectedCue(r.lsIdx, { activate:!ready && r.role !== 'student', reason:'resume-cue-reassert' });
           if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
-          syncLiveIdx();
+          if (!ready) syncLiveIdx();
         }
       } else if (tries > 12) clearInterval(t);
     }, 500);
@@ -2054,6 +2069,18 @@ function pushSessionHistoryState(screen) {
     browserBackGuardReady = true;
   } catch {}
 }
+// Reload = rejoin (9/8 sweep C6): the rundown window's URL carries ?code=
+// while joined (the talent and per-app windows already do), so the ?code=
+// boot path rejoins on a reload. Leaving the session removes it.
+function setSessionCodeInUrl(code) {
+  if (!history.replaceState) return;
+  try {
+    const url = new URL(location.href);
+    const c = String(code || '').trim().toUpperCase();
+    if (c) url.searchParams.set('code', c); else url.searchParams.delete('code');
+    if (url.href !== location.href) history.replaceState(history.state, '', url.href);
+  } catch {}
+}
 
 function leaveSessionForFrontPage() {
   captureSessionSnapshot('leave', true);
@@ -2074,6 +2101,7 @@ function leaveSessionForFrontPage() {
   document.getElementById('flowOp')?.classList.remove('on');
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
+  setSessionCodeInUrl('');   // a reload after leaving must not rejoin
   sessionQuestionCards = [];   // prepared question cards belong to the session just left
   // The roster belongs to the session just left too; a stale copy would let
   // the Admin People pane list the wrong show's people until the next snapshot.
@@ -2200,14 +2228,48 @@ function dismissCueolaUpdate() {
 }
 
 function applyCueolaUpdate() {
-  if (!cueolaWaitingWorker) { location.reload(); return; }
+  // A sibling window already activated this worker (clients.claim moved us
+  // under it): the message would be a no-op and controllerchange has already
+  // fired, so the button reloads outright instead of going dead.
+  if (!cueolaWaitingWorker || cueolaWaitingWorker.state !== 'installed') { location.reload(); return; }
   cueolaUpdateApplying = true;
   document.documentElement.dataset.swState = 'updating';
   cueolaWaitingWorker.postMessage({ type:'SKIP_WAITING' });
+  setTimeout(() => { if (cueolaUpdateApplying) location.reload(); }, 4000);   // no controllerchange: reload anyway
+}
+
+// A worker already waiting at page load, with this page not live and not
+// joined (front page or just booted): apply it now and reload once, so the
+// first reload after a push lands on the new build instead of the old one
+// plus a banner. Guarded per tab so a bad worker can never loop the page.
+const SW_AUTOAPPLY_KEY = 'cueola_sw_autoapplied';
+function _swAutoApplyAllowed() {
+  try {
+    if (sessionStorage.getItem(SW_AUTOAPPLY_KEY) === '1') return false;
+    if (performance.now() > 15000) return false;
+    if (typeof liveRuntimeOn === 'function' && liveRuntimeOn()) return false;
+    if (typeof session !== 'undefined' && session?.code) return false;
+    // A ?code= boot is a rejoin and a live reload lands back on Live: the
+    // banner covers both, an automatic reload mid-rejoin could strand the
+    // second boot on the Build screen.
+    if (new URLSearchParams(location.search).get('code')) return false;
+    if (sessionStorage.getItem('cueola_screen') === 'live') return false;
+    return true;
+  } catch { return false; }
 }
 
 function watchCueolaWorker(registration) {
-  if (registration.waiting && navigator.serviceWorker.controller) showCueolaUpdate(registration.waiting);
+  if (registration.waiting && navigator.serviceWorker.controller) {
+    if (_swAutoApplyAllowed()) {
+      try { sessionStorage.setItem(SW_AUTOAPPLY_KEY, '1'); } catch {}
+      cueolaWaitingWorker = registration.waiting;
+      applyCueolaUpdate();
+      return;
+    }
+    showCueolaUpdate(registration.waiting);
+  } else {
+    try { sessionStorage.removeItem(SW_AUTOAPPLY_KEY); } catch {}
+  }
   registration.addEventListener('updatefound', () => {
     const worker = registration.installing;
     if (!worker) return;
@@ -2220,7 +2282,11 @@ function watchCueolaWorker(registration) {
 function initCueolaServiceWorker() {
   if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (cueolaUpdateApplying) location.reload();
+    if (cueolaUpdateApplying) { location.reload(); return; }
+    // Another window applied the update: this page now runs old JS under the
+    // new worker. Its banner button must reload, not wait for a change that
+    // already happened.
+    cueolaWaitingWorker = null;
   });
   navigator.serviceWorker.register('./sw.js', { scope:'./' }).then(registration => {
     watchCueolaWorker(registration);
@@ -4951,7 +5017,11 @@ function migrateBeat(b) {
 // SESSION MANAGEMENT
 // ─────────────────────────────────────────────────────────────
 const presenceId = Math.random().toString(36).slice(2,10);
-let presenceInterval = null;
+let presenceInterval = null;   // { cancel } handle (worker-backed beat)
+function _stopPresenceBeat() {
+  try { presenceInterval?.cancel?.(); } catch {}
+  presenceInterval = null;
+}
 let firestoreUnsub = null;
 const FIREBASE_WAIT_MS = 2500;
 let rundownCloudBeats = [];
@@ -5461,6 +5531,7 @@ function enterRundown() {
   document.getElementById('rundown').classList.add('on');
   document.getElementById('liveshow').classList.remove('on');
   pushSessionHistoryState('build');
+  setSessionCodeInUrl(session?.code && !session.isDemo && !session.isExpert ? session.code : '');
   // P8 (dress-rehearsal find): without this, a stale 'live' from a previous
   // session leaks into the resume record and the banner claims the wrong screen.
   // Capture first — a same-tab reload mid-show must still restore the live screen
@@ -5949,6 +6020,8 @@ function setupFirestore() {
       _lastBusSnapshotAt = 0;
       _busExecutorClaim = null;
       _busClaimSeenAt = 0;
+      _sessionActiveIdxAdopted = false;   // syncLiveIdx must not push a stale row before the doc is read
+      _ogCommandQueue = []; _lastDocOgCommandQueue = []; _ogSeenAckKey = ''; _talentReportedBuild = '';   // proto 4 state is per show
     }
     if (firestoreUnsub) firestoreUnsub();
     pbStartNotesListener();   // per-note live push (resets itself on session change)
@@ -5971,6 +6044,7 @@ function setupFirestore() {
       rundownSyncBlockedMissing = false;
       missingSessionNoticeCode = '';
       _rundownBaselineSeen = true;   // D10.3: a complete session doc is in — launch imports may proceed
+      _sessionActiveIdxAdopted = true;   // the doc has been read here; syncLiveIdx may publish activeIdx again
       // Only a server-confirmed snapshot may claim "connected"; a cached one
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
@@ -6180,6 +6254,11 @@ function setupFirestore() {
           _busClaimSeenAt = deadOnArrival ? 0 : Date.now();
         }
         _busExecutorClaim = d.busExecutor;
+      } else if (d.busExecutor === null && _busExecutorClaim) {
+        // An explicit release (grant hand-off, leaving Live) is "no claim":
+        // readers used to ignore it and wait out the 15 s stale window.
+        _busExecutorClaim = null;
+        _busClaimSeenAt = 0;
       }
       // D11.7: cross-machine deck actions. The gap between snapshot ARRIVALS
       // (this window's clock only) is the freshness evidence — see
@@ -6207,6 +6286,7 @@ function setupFirestore() {
       if (_hb?.ts && !isPrompterSelfSender(_hb.sender) && _hb.ts !== _lastSeenTalentHeartbeatTs
           && (_lastSeenTalentHeartbeatTs !== 0 || Math.abs(Date.now() - _hb.ts) < 60000)) {
         _lastSeenTalentHeartbeatTs = _hb.ts;
+        _talentReportedBuild = String(_hb.build || '');   // preflight Build row
         _recordTalentSighting(_hb.sender);   // counts for preflight even if the message is rejected below
         _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ..._hb });
         _preflightNoteTalentSighting();   // settles a talent fix waiting on this beat
@@ -6416,7 +6496,10 @@ function syncLiveIdx() {
     [`presence.${presenceId}.idx`]: selectedIdx,
     [`presence.${presenceId}.lastSeen`]: Date.now(),
   };
-  if (isShowCaller()) update.activeIdx = liveState.activeCueIndex;
+  // A rejoining window (reload while Live) must adopt the room's row first:
+  // pushing this window's default row over the doc's would drag everyone
+  // back to row 1. Once the doc has been read, the caller publishes as before.
+  if (isShowCaller() && _sessionActiveIdxAdopted) update.activeIdx = liveState.activeCueIndex;
   window._updateDoc(window._doc(window._db,'sessions',session.code), update).catch(()=>{});
 }
 
@@ -6440,12 +6523,19 @@ async function joinPresence() {
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
       [`presence.${presenceId}`]:{name,role:session.role,...identity,...avatarField,
         ...(groupActive() ? { groupId: activeGroupId } : {}),   // D2: group on the presence entry
+        build: window.CUEOLA_BUILD || '',   // build identity for the preflight Build rows
         lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
     });
-    clearInterval(presenceInterval);
-    presenceInterval = setInterval(async()=>{
+    _stopPresenceBeat();
+    // Worker-backed: a plain setInterval in a tab hidden behind OBS throttles
+    // to one wake a minute, and a 90 s presence lapse flips the caller role.
+    const beat = async()=>{
       try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}.lastSeen`]:Date.now()}); } catch {}
-    },30000);
+    };
+    const P = window.CueolaScriptOperatorProtocol;
+    presenceInterval = P?.createSteadyInterval
+      ? P.createSteadyInterval(beat, 30000)
+      : { cancel: clearInterval.bind(null, setInterval(beat, 30000)) };
   } catch {}
 
   // Persist the canonical profile identity with the dashboard-visible roster.
@@ -6469,8 +6559,7 @@ async function joinPresence() {
 }
 
 async function leavePresence() {
-  clearInterval(presenceInterval);
-  presenceInterval = null;
+  _stopPresenceBeat();
   if (!session.code||!window._firebaseReady) return;
   try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}`]:window._deleteField()}); } catch {}
 }
@@ -6927,7 +7016,7 @@ window.cueolaSurfaceBridge = {
   busAvailable: () => {
     try {
       if (liveRuntimeOn() && isShowCaller()) return 'exec';
-      if (window._firebaseReady && session.code && !session.isDemo && !_busPublishWouldBlackHole()) return 'publish';
+      if (window._firebaseReady && session.code && !session.isDemo && _busPublishPermitted() && !_busPublishWouldBlackHole()) return 'publish';
       return '';
     } catch (e) { return 'exec'; }
   },
@@ -6950,14 +7039,23 @@ window.cueolaSurfaceBridge = {
       playing: _sdSafe(() => _sdPrompterPlayingTruth(), false),
     };
   },
-  playoutCue: (id) => fireOutrangutanCommand('cue', id),
-  playoutPad: (id) => fireOutrangutanCommand('pad', id),
-  // Deck transport (go / pause / stop / fadeStop / panic): same-tab Outrangutan
-  // first, session-doc command otherwise. Deliberately NOT fireOutrangutanTransport,
-  // whose lifecycle gate belongs to the live-screen keyboard path.
+  // Deck fires follow the keyboard's lifecycle gate (minus screen visibility):
+  // a cue or pad from a window that is not Live is refused with strict false
+  // unless this window is a solo surface or has Outrangutan on screen.
+  playoutCue: (id) => _deckPlayoutFireAllowed() ? fireOutrangutanCommand('cue', id) : false,
+  playoutPad: (id) => _deckPlayoutFireAllowed() ? fireOutrangutanCommand('pad', id) : false,
+  // Deck transport (go / pause / stop / fadeStop / panic): keyboard semantics.
+  // GO needs the Live lifecycle and takes an armed call; STOP/fade/PANIC abort
+  // a running count and stay ungated. Same-tab Outrangutan only when it is the
+  // designated playout for this window, session-doc command otherwise.
   playoutTransport: (action) => {
+    if (action === 'go' && !_deckPlayoutFireAllowed()) return false;
+    if (_rtrtCall) {
+      if (action === 'go') return takePlayoutCall('deck');
+      if (action === 'stop' || action === 'fadeStop' || action === 'panic') abortPlayoutCall(action);
+    }
     const local = window.Outrangutan && window.Outrangutan._local;
-    if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local) && local.transport(action)) return true;
+    if (local && local.transport && _ogLocalDesignated(local) && _ogLocalCanDeliver(local) && local.transport(action)) return true;
     return fireOutrangutanCommand(action, '');
   },
   goLive: () => { try { goLive(); } catch (e) {} },
@@ -6976,7 +7074,16 @@ window.cueolaSurfaceBridge = {
       if (ok === false) toast('Open the Live screen to drive the show clock.');
     } catch (e) {}
   },
-  liveSelect: (index, take) => { try { take ? setOperatorLiveCue(index, 'deck') : setLiveSelectedCue(index, { source: 'deck' }); } catch (e) {} },
+  // Strict false when nothing moved (bad index, no rows, refused), so the deck
+  // can flash the dial press red instead of pretending it landed.
+  liveSelect: (index, take) => {
+    try {
+      const i = Number(index);
+      if (!Number.isFinite(i) || i < 0 || i >= beats.length) return false;
+      const landed = take ? setOperatorLiveCue(i, 'deck') : setLiveSelectedCue(i, { source: 'deck' });
+      return landed === i ? true : false;
+    } catch (e) { return false; }
+  },
   // Playout volume works cross-machine: local instance when it owns this
   // session, otherwise the published gain (with a short optimistic echo so
   // the dial tracks the hand instead of the ~1-3s publish cadence) and a
@@ -6984,7 +7091,7 @@ window.cueolaSurfaceBridge = {
   // drive the silent local instance and move nothing on the playout machine.
   masterGain: () => {
     try {
-      if (!playoutIsRemote() && !remoteAirDriving()) return window.Outrangutan?.masterGain ? window.Outrangutan.masterGain() : 0;
+      if (_ogLocalDesignated()) return window.Outrangutan?.masterGain ? window.Outrangutan.masterGain() : 0;
       if (_ogGainEcho && Date.now() - _ogGainEcho.ts < 4000) return _ogGainEcho.v;
       const g = Number(outrangutanState.live?.gain);
       return Number.isFinite(g) ? g : 0;
@@ -6992,7 +7099,7 @@ window.cueolaSurfaceBridge = {
   },
   setMasterGain: (v) => {
     try {
-      if (!playoutIsRemote() && !remoteAirDriving()) { window.Outrangutan?.setMasterGain?.(v); return; }
+      if (_ogLocalDesignated()) { window.Outrangutan?.setMasterGain?.(v); return; }
       fireOutrangutanGain(v);
     } catch (e) {}
   },
@@ -7022,15 +7129,21 @@ window.cueolaSurfaceBridge = {
         // session, which is a different truth than "linked and idle".
         // Arrival clock, never the sender's ts: clock skew between Macs must
         // not make a healthy playout read as absent.
-        fresh: !!nowPlaying || !!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < 12000),
+        // Own echoes from this tab's hidden instance never count as a playout
+        // checking in: only a REMOTE packet (or a designated local) is fresh.
+        fresh: !!nowPlaying || _sdSafe(() => _ogLocalDesignated(), false) || !!(_ogRemoteLiveSeenAt && Date.now() - _ogRemoteLiveSeenAt < 12000),
         // Availability truth for honest keys: local = the same-tab fast path
         // will take this fire; sendable = a doc command CAN be written at all.
         // A key whose fire would be refused must LOOK unavailable, never lit.
-        local: _sdSafe(() => {
-          const l = window.Outrangutan && window.Outrangutan._local;
-          return !!(l && session.code && l.session() === session.code && !remoteAirDriving());
-        }, false),
+        local: _sdSafe(() => _ogLocalDesignated(), false),
         sendable: _sdSafe(() => !!(window._firebaseReady && session.code && !session.isDemo), false),
+        // goAllowed: a deck GO/cue/pad fire would pass the lifecycle gate now.
+        goAllowed: _sdSafe(() => _deckPlayoutFireAllowed(), false),
+        // pendingAck: a wire command is still waiting on the Air's cmdAck.
+        pendingAck: _sdSafe(() => _ogPendingCmds.length > 0, false),
+        // pendingIds: which commands are waiting (transport action, or the
+        // cue / pad id), so the deck marks only the matching key.
+        pendingIds: _sdSafe(() => _ogPendingCmds.map(p => p.command.cueId || p.command.padId || p.command.action).filter(Boolean), []),
       },
       prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => _talentMirrorFresh(), false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
@@ -9134,6 +9247,34 @@ function remoteAirDriving() {
   if (!sender) return false;   // pre-sender packets: keep the old behavior
   return sender !== _ogMySender();
 }
+// Is this tab's own Outrangutan the DESIGNATED playout for the show? Only then
+// may a same-tab fast path swallow a fire. The Pro's hidden instance (joined
+// once, screen closed, no output window) is never designated, so its fires
+// go over the wire to the Air instead of into silence (9/8 sweep C4).
+function _ogLocalDesignated(local) {
+  try {
+    local = local || (window.Outrangutan && window.Outrangutan._local);
+    if (!local) return false;
+    const code = String(session.code || '');
+    if (String(local.session?.() || '') !== code) return false;
+    if (remoteAirDriving()) return false;
+    if (_ogOutrangutanOnScreen()) return true;
+    const outputs = window.Outrangutan?.outputStatus?.();
+    if (outputs && Number(outputs.open) > 0) return true;
+    // Solo (no code): the local instance is the only playout there is, as
+    // long as no remote packet has ever been seen here.
+    return !code && !playoutIsRemote() && !_ogRemoteLiveSeenAt;
+  } catch { return false; }
+}
+// Deck fire gate = keyboard gate minus screen visibility: lifecycle live, or a
+// solo surface (no code / demo / expert), or Outrangutan on screen right here.
+function _deckPlayoutFireAllowed() {
+  try {
+    if (liveCommandDispatchAllowed()) return true;
+    if (!session.code || session.isDemo || session.isExpert) return true;
+    return _ogOutrangutanOnScreen();
+  } catch { return false; }
+}
 
 function syncOutrangutanControllerStatus(og=outrangutanState) {
   const remote = playoutIsRemote();
@@ -9202,6 +9343,7 @@ function syncOutrangutanControllerStatus(og=outrangutanState) {
 // this is what kept the "Questions" segment flashing at playout-publish rate.)
 function applyOutrangutanState(og) {
   if (!og) return;
+  if (Array.isArray(og.commandQueue)) _lastDocOgCommandQueue = og.commandQueue;   // proto 4: other writers' entries
   if (og.cmdAck) applyOutrangutanCmdAck(og.cmdAck);   // confirmed delivery: stop retrying acked commands
   // Another window's panic invalidates THIS window's in-flight redeliveries
   // too: a pending GO here would rewrite the slot after the kill and restart
@@ -9589,7 +9731,7 @@ let _ogNoListenerToastAt = 0;
 function fireOutrangutanCommand(action, targetId, opts={}) {
   cancelPendingArm();   // a real command owns the slot; a stale arm must not overwrite it
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local)) {
+  if (local && session.code && _ogLocalDesignated(local) && _ogLocalCanDeliver(local)) {
     if (action === 'pad' && local.firePad(targetId)) return true;
     if (action === 'cue' && local.fireCue(targetId)) {
       if (opts.armCueId) local.armCue?.(opts.armCueId);
@@ -9616,7 +9758,12 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   // per write (retries stay visible to a resubscribed Air) while origId keys
   // the execute-once dedupe. Old Airs ignore the extra field and still get
   // the slot write (plus retries on proto 2).
-  const payload = { 'outrangutan.command': command };
+  // Proto 4: the same write also carries outrangutan.commandQueue (last 8, one
+  // entry per origId) so a burst of fires can no longer overwrite each other
+  // in the single slot before the Air's snapshot lands. Old Airs keep reading
+  // the slot. expiresAt lets the Air drop a write that flushed late.
+  command.expiresAt = command.ts + OG_CMD_EXPIRES_MS;
+  const payload = { 'outrangutan.command': command, 'outrangutan.commandQueue': _ogQueueUpsert(command) };
   if (command.action === 'panic') payload['outrangutan.panic'] = { id: command.commandId, origId: command.origId, ts: command.ts, by: command.by, sender: command.sender };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), payload)
     .catch(err => { logShow('error', 'Outrangutan command failed to send (' + (err?.code || 'network') + ')'); toast(firebaseConnectionLabel(err, 'Outrangutan command failed')); });
@@ -9624,8 +9771,9 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   // The write landing does NOT mean anyone is listening: a playout Mac in
   // local mode, on another code, or refused by the rules consumes nothing,
   // and the command just sits in the slot. Say so (throttled) instead of
-  // letting the operator discover it by dead air.
-  if (!(_ogLiveSeenAt && Date.now() - _ogLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
+  // letting the operator discover it by dead air. Remote arrivals only: this
+  // tab's own hidden instance echoing is not a listener.
+  if (!(_ogRemoteLiveSeenAt && Date.now() - _ogRemoteLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
     _ogNoListenerToastAt = Date.now();
     toast('Sent, but no Outrangutan has checked in on this show. On the playout Mac: open Outrangutan, sign in, and Join Session with code ' + session.code + '.');
   }
@@ -9642,10 +9790,31 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
 // timer, and after the retries run dry the operator is TOLD instead of
 // discovering it by dead air.
 const OG_CMD_RETRY_MS = 2500, OG_CMD_MAX_RETRIES = 2;
+const OG_CMD_EXPIRES_MS = 8000;      // expiresAt = ts + this; the Air drops late flushes
+const OG_CMD_OFFLINE_DROP_MS = 8000; // offline this long: stop retrying, tell the operator
+const OG_CMD_QUEUE_MAX = 8;
 let _ogPendingCmds = [];   // { command, sentAt, retries }
 let _ogCmdRetryTimer = null;
 let _ogSeenPanicId = null; // last observed cross-window panic (observer purge)
+let _ogOfflineSince = 0;   // arrival clock: when navigator.onLine first read false during retries
+let _ogCommandQueue = [];  // this window's view of outrangutan.commandQueue (proto 4)
+let _lastDocOgCommandQueue = [];   // the doc's queue as last seen (other writers' entries survive our write)
+let _ogSeenAckKey = '';    // last cmdAck handled (the field persists on the doc across snapshots)
 function _ogAckSupported() { return Number(outrangutanState?.live?.proto) >= 2; }
+// One entry per origId, newest last, capped: a retry replaces its own entry.
+// Other windows' recent entries (by sender) ride along so two writers stop
+// evicting each other's unseen commands.
+function _ogQueueUpsert(command) {
+  _ogCommandQueue = _ogCommandQueue.filter(c => c && c.origId !== command.origId);
+  _ogCommandQueue.push(command);
+  _ogCommandQueue = _ogCommandQueue.slice(-OG_CMD_QUEUE_MAX);
+  const mine = new Set(_ogCommandQueue.map(c => c.origId));
+  const foreign = (Array.isArray(_lastDocOgCommandQueue) ? _lastDocOgCommandQueue : [])
+    .filter(c => c && c.origId && c.sender !== FLOWMINGO_ENDPOINT_ID && !mine.has(c.origId));
+  return [...foreign, ..._ogCommandQueue]
+    .sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0))
+    .slice(-OG_CMD_QUEUE_MAX);
+}
 function _trackOutCommand(command) {
   // A panic invalidates every in-flight redelivery: pad retries survive the
   // supersede filter below, so one could rewrite the slot after the panic
@@ -9668,6 +9837,16 @@ function _trackOutCommand(command) {
 }
 function _ogCmdRetryTick() {
   const now = Date.now();
+  // Offline for more than 8 s: a retry would only queue in Firestore and
+  // flush late as a ghost fire. Drop the pending entries and say so.
+  const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+  if (!offline) _ogOfflineSince = 0;
+  else if (!_ogOfflineSince) _ogOfflineSince = now;
+  if (offline && now - _ogOfflineSince > OG_CMD_OFFLINE_DROP_MS && _ogPendingCmds.length) {
+    _ogPendingCmds.forEach(p => logShow('error', `Playout never confirmed ${p.command.action}${p.command.cueId ? ' · ' + outrangutanTargetName(p.command.action, p.command.cueId) : ''} (offline)`));
+    _ogPendingCmds = [];
+    toast('Playout did NOT confirm the last command. Check Outrangutan on the playback Mac.');
+  }
   _ogPendingCmds = _ogPendingCmds.filter(p => {
     if (now - p.sentAt < OG_CMD_RETRY_MS) return true;
     if (p.retries >= OG_CMD_MAX_RETRIES) {
@@ -9678,12 +9857,12 @@ function _ogCmdRetryTick() {
     if (!(window._firebaseReady && session.code && !session.isDemo)) return false;
     p.retries += 1; p.sentAt = now;
     _outCmdSeq += 1;
-    p.command = { ...p.command, commandId: `out_${CLIENT_ID}_${now.toString(36)}_${_outCmdSeq}`, ts: now };
+    p.command = { ...p.command, commandId: `out_${CLIENT_ID}_${now.toString(36)}_${_outCmdSeq}`, ts: now, expiresAt: now + OG_CMD_EXPIRES_MS };
     logShow('link', `Playout command unconfirmed, resending ${p.command.action} (try ${p.retries + 1})`);
     // A panic retry rewrites its own field with the FRESH lane id: an Air
     // that resubscribed mid-retry baselined the previous id without
     // executing, and would stay deaf to a reused one.
-    const payload = { 'outrangutan.command': p.command };
+    const payload = { 'outrangutan.command': p.command, 'outrangutan.commandQueue': _ogQueueUpsert(p.command) };
     if (p.command.action === 'panic') payload['outrangutan.panic'] = { id: p.command.commandId, origId: p.command.origId, ts: now, by: p.command.by, sender: p.command.sender };
     try { window._updateDoc(window._doc(window._db, 'sessions', session.code), payload).catch(() => {}); } catch {}
     return true;
@@ -9698,9 +9877,27 @@ function _ensureOgCmdRetryLoop() {
     : { cancel: clearInterval.bind(null, setInterval(_ogCmdRetryTick, 700)) };
 }
 function applyOutrangutanCmdAck(ack) {
-  if (!ack || !ack.origId || !_ogPendingCmds.length) return;
+  if (!ack || !ack.origId) return;
+  // The ack field persists on the doc; handle each one once.
+  const key = String(ack.commandId || '') + '|' + String(ack.origId) + '|' + String(ack.ts || '');
+  if (key === _ogSeenAckKey) return;
+  _ogSeenAckKey = key;
+  if (!_ogPendingCmds.length) return;
+  const matched = _ogPendingCmds.filter(p => (p.command.origId || p.command.commandId) === ack.origId);
   _ogPendingCmds = _ogPendingCmds.filter(p => (p.command.origId || p.command.commandId) !== ack.origId);
   if (!_ogPendingCmds.length && _ogCmdRetryTimer) { _ogCmdRetryTimer.cancel(); _ogCmdRetryTimer = null; }
+  // Honest ack (proto 4): ok:false means the Air heard it and could not play
+  // it. Say why, log it, and let the deck flash the matching key red.
+  if (ack.ok === false && matched.length) {
+    const cmd = matched[0].command;
+    const targetId = cmd.action === 'pad' ? (cmd.padId || '') : (cmd.cueId || '');
+    const name = targetId ? outrangutanTargetName(cmd.action, targetId) : String(cmd.action || 'command').toUpperCase();
+    const reason = String(ack.reason || 'no reason given');
+    const fired = cmd.action === 'cue' || cmd.action === 'pad' || cmd.action === 'go';
+    logShow('error', fired ? `Playout did not play ${name}: ${reason}` : `Playout refused ${name}: ${reason}`);
+    toast(fired ? `Playout did not play ${name}: ${reason}` : `Playout refused ${name}: ${reason}`);
+    try { window.dispatchEvent(new CustomEvent('cueola-playout-refused', { detail: { action: cmd.action, targetId, reason } })); } catch {}
+  }
 }
 
 // Remote master gain: its own doc field (never the single command slot — a
@@ -9771,7 +9968,7 @@ function fireOutrangutanTransport(action) {
     if (action === 'stop' || action === 'fadeStop' || action === 'panic') abortPlayoutCall(action);
   }
   const local = window.Outrangutan && window.Outrangutan._local;
-  if (local && local.transport && session.code && local.session() === session.code && !remoteAirDriving() && _ogLocalCanDeliver(local) && local.transport(action)) {
+  if (local && local.transport && session.code && _ogLocalDesignated(local) && _ogLocalCanDeliver(local) && local.transport(action)) {
     toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
     return true;
   }
@@ -9917,6 +10114,9 @@ function steadyTimeout(fn, ms) {
 let _rtrtManualDoc = null;   // { on, by, ts } adopted from the session doc
 function liveCallManualArm() {
   if (_rtrtManualDoc && typeof _rtrtManualDoc.on === 'boolean') return _rtrtManualDoc.on;
+  // Joined show with no doc field: default OFF. One laptop's stale local flag
+  // must never park the whole show at READY. localStorage is solo-only.
+  if (session.code && !session.isDemo && !session.local) return false;
   try { return localStorage.getItem('cueola_rtrt_manual') === '1'; } catch { return false; }
 }
 function setLiveCallManualArm(on) {
@@ -10139,10 +10339,14 @@ function applyRemoteLiveCall(liveCall) {
 function liveRuntimeOn() {
   try { return liveSessionState().lifecycle === 'live'; } catch (e) { return false; }
 }
+// Returns true (ran), false (ran here and REFUSED: end of rundown, nothing to
+// take) or null (this window cannot run it: off Live, not the caller). Only
+// null may be published to the bus; a local refusal never rides to another
+// machine as if it were a fresh press.
 function runControlBusAction(target, action, source='bus') {
-  if (!liveRuntimeOn()) return false;
+  if (!liveRuntimeOn()) return null;
   if (target === 'rundown') {
-    if (!isShowCaller()) return false;
+    if (!isShowCaller()) return null;
     if (action === 'go' || action === 'next') return lsNext() !== false;
     if (action === 'back' || action === 'prev') return lsPrev() !== false;
     if (action === 'take') return takePlayoutCall(source);
@@ -10153,7 +10357,7 @@ function runControlBusAction(target, action, source='bus') {
     // Same caller gate as the rundown branch: without it every live-open
     // client dispatched duplicate prompter commands, and 'toggle' flipped on
     // each client's own (possibly stale) ptPlaying.
-    if (!isShowCaller()) return false;
+    if (!isShowCaller()) return null;
     if (action === 'toggle') { sendPrompterControl(_sdPrompterPlayingTruth() ? 'pause' : 'resume'); return true; }
     if (action === 'pause' || action === 'resume') { sendPrompterControl(action); return true; }
     if (action === 'top') { sendPrompterControl('reset'); return true; }
@@ -10167,10 +10371,11 @@ function runControlBusAction(target, action, source='bus') {
     // rundown NEXT/TAKE). A local refusal (no claim) returns false QUIETLY so
     // cueolaControlBus publishes the verb instead; verbs already satisfied by
     // the current state report success so no pointless bus write happens.
-    if (!isShowCaller()) return false;
-    if (action === 'start' || action === 'resume') return liveClockRunning ? true : toggleShowClock({ quietRefusal:true });
-    if (action === 'pause') return liveClockRunning ? toggleShowClock({ quietRefusal:true }) : true;
-    if (action === 'toggle') return toggleShowClock({ quietRefusal:true });
+    if (!isShowCaller()) return null;
+    const quiet = ok => (ok ? true : null);   // a quiet clock refusal stays publishable
+    if (action === 'start' || action === 'resume') return liveClockRunning ? true : quiet(toggleShowClock({ quietRefusal:true }));
+    if (action === 'pause') return liveClockRunning ? quiet(toggleShowClock({ quietRefusal:true })) : true;
+    if (action === 'toggle') return quiet(toggleShowClock({ quietRefusal:true }));
     return false;
   }
   return false;
@@ -10180,11 +10385,18 @@ function runControlBusAction(target, action, source='bus') {
 // doc's controlBus field for the executing surface to run. Local-first stays:
 // a same-tab execution never writes.
 let _busCmdSeq = 0;
+// Only a signed-in admin surface or the grant holder may publish: an
+// ungranted student's deck used to advance the show through the owner's window.
+function _busPublishPermitted() {
+  try { return adminSession != null || sessionControlGrantHeldByMe(); } catch (e) { return false; }
+}
 window.cueolaControlBus = (target, action, source) => {
-  let ran = false;
-  try { ran = runControlBusAction(target, action, source || 'local-deck'); } catch { ran = false; }
-  if (ran) return true;
+  let ran = null;
+  try { ran = runControlBusAction(target, action, source || 'local-deck'); } catch { ran = null; }
+  if (ran === true) return true;
+  if (ran === false) return false;   // ran here and refused: never publish a local refusal
   if (!(window._firebaseReady && session.code && !session.isDemo)) return false;
+  if (!_busPublishPermitted()) return false;
   // Publishing into a void is a refusal (deck flashes red), never a lit key
   // over a command nobody can run.
   if (_busPublishWouldBlackHole()) return false;
@@ -10210,7 +10422,29 @@ let _busExecutorClaim = null;   // last busExecutor claim seen on the session do
 let _busClaimSeenAt = 0;        // when THIS window saw the claim change (arrival clock, skew-proof)
 let _busExecutorTimer = null;
 function _busClaimExempt() { return !session.code || session.isDemo || session.isExpert || !window._firebaseReady; }
-function _busClaimIsMine() { return _busExecutorClaim?.clientId === CLIENT_ID; }
+// A claim is per WINDOW: windowId (this window's endpoint id) when the claim
+// carries one, clientId for claims written by older builds. CLIENT_ID is per
+// Chrome profile, so a sibling window used to read the live tab's claim as
+// its own and black-hole every deck press.
+// The claim's window id survives a reload of the same tab (sessionStorage),
+// so a reloaded Live window reads its own pre-reload claim as its own and
+// re-stamps at once instead of waiting out the 15 s stale window.
+const BUS_WINDOW_ID = (() => {
+  try {
+    const k = 'cueola_bus_window';
+    const have = sessionStorage.getItem(k);
+    if (have) return have;
+    const id = 'bw_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem(k, id);
+    return id;
+  } catch { return FLOWMINGO_ENDPOINT_ID; }
+})();
+function _busClaimBelongsHere(claim) {
+  if (!claim) return false;
+  if (claim.windowId) return claim.windowId === BUS_WINDOW_ID;
+  return claim.clientId === CLIENT_ID;
+}
+function _busClaimIsMine() { return _busClaimBelongsHere(_busExecutorClaim); }
 function _busClaimIsStale() {
   if (!_busExecutorClaim) return true;
   // My own claim carries MY clock; a foreign claim's liveness is judged by
@@ -10237,7 +10471,10 @@ function _busPublishWouldBlackHole() {
     if (liveRuntimeOn() && isShowCaller()) return false;
     if (_busClaimIsMine()) return true;
     if (isShowCaller()) return _busClaimIsStale();
-    return !!_callerStateInputs().grantHeldElsewhere && _busClaimIsStale();
+    // A released (absent) claim right after a grant is not a void: the
+    // holder's live window claims on its next tick. Only a claim that went
+    // stale in place means the holder went dark.
+    return !!_callerStateInputs().grantHeldElsewhere && !!_busExecutorClaim && _busClaimIsStale();
   } catch (e) { return false; }
 }
 // Release an own claim the moment this window can no longer execute (left
@@ -10255,7 +10492,7 @@ function _stampBusExecutorClaim() {
   // The claim carries whether its holder is a real admin surface: an admin
   // returning to Live outranks a grant-holder's live claim (see the tick),
   // keeping the "you keep full control alongside them" promise honest.
-  const claim = { clientId: CLIENT_ID, ts: Date.now(), admin: adminSession != null };
+  const claim = { clientId: CLIENT_ID, windowId: BUS_WINDOW_ID, ts: Date.now(), admin: adminSession != null };
   _busExecutorClaim = claim;   // optimistic; the doc echo confirms or corrects it
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).catch(() => {});
 }
@@ -10294,6 +10531,7 @@ function _ensureBusExecutorHeartbeat() {
 //      skew, narrow enough that last class's GO can never fire hours late.
 //      Anything older is consumed WITHOUT executing, with a log line.
 let _lastControlBusId = '';
+let _sessionActiveIdxAdopted = false;   // the doc's activeIdx has been read in this window (reload = rejoin guard)
 let _lastBusSnapshotAt = 0;    // when the previous session snapshot ARRIVED in this window
 const BUS_ARRIVAL_GAP_MS = 15000;
 const BUS_GAP_ADMIT_MS = 30000;
@@ -10319,9 +10557,9 @@ function applyControlBusCommand(cmd, arrivalGapMs=Infinity) {
   if (!liveRuntimeOn() || !isShowCaller()) return;
   // Take it, and execute only after the stamp lands so two surfaces racing
   // on the same stale claim cannot both advance.
-  const claim = { clientId: CLIENT_ID, ts: Date.now() };
+  const claim = { clientId: CLIENT_ID, windowId: BUS_WINDOW_ID, ts: Date.now(), admin: adminSession != null };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { busExecutor: claim }).then(() => {
-    if (_busExecutorClaim && _busExecutorClaim.clientId !== CLIENT_ID) return;  // someone else re-stamped first
+    if (_busExecutorClaim && !_busClaimBelongsHere(_busExecutorClaim)) return;  // someone else re-stamped first
     _busExecutorClaim = claim;
     if (runControlBusAction(cmd.target, cmd.action, 'control-bus')) {
       logShow('link', `Control bus: ${cmd.target} ${cmd.action} (deck on another machine)`);
@@ -10417,8 +10655,12 @@ function maybeArmNextPlayout(fromIdx) {
       ts: Date.now(), by: session.userName || '', sender: FLOWMINGO_ENDPOINT_ID,
       action: 'arm', cueId: armId, padId: '',
     };
+    command.origId = command.commandId;
+    command.expiresAt = command.ts + OG_CMD_EXPIRES_MS;
     try {
-      window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command }).catch(() => {});
+      // The standby rides the queue too (proto 4): a queue-mode Air reads the
+      // slot only for ids the queue does not carry.
+      window._updateDoc(window._doc(window._db, 'sessions', session.code), { 'outrangutan.command': command, 'outrangutan.commandQueue': _ogQueueUpsert(command) }).catch(() => {});
     } catch {}
     _lastArmedNextCueId = armId;
   }, 1200);
@@ -10682,7 +10924,7 @@ function preflightRowHtml(r) {
       <div class="precheck-row ${r.state}" data-key="${esc(r.key)}">
         <div class="precheck-icon">${preflightIcon(r.state)}</div>
         <div class="precheck-body">
-          <div class="precheck-label">${esc(r.key)}</div>
+          <div class="precheck-label">${esc(r.label || r.key)}</div>
           <div class="precheck-detail">${esc(r.detail)}</div>
           ${r.fixNote ? `<div class="precheck-fix-note">${esc(r.fixNote)}</div>` : ''}
         </div>
@@ -10945,6 +11187,12 @@ function recheckPreflightRow(key, f, id) {
           : pct === null ? 'The talent display answered but has not reported its position yet'
           : 'The talent display answered but still reports ' + pct + '%. Press the fix again', '');
       }
+      if (r.key === 'Talent build') {
+        const b = _buildRowState('Talent display', _talentReportedBuild);
+        if (answered && b.state === 'ok') return finish('ok', b.detail);
+        if (!final) return false;
+        return finish('warn', answered ? b.detail : 'The talent display reloaded but has not checked back in. It must be signed in there to link', '');
+      }
       if (kind === 'reload') {
         if (answered) return finish('ok', 'Talent display reloaded and is back. Last seen just now');
         if (!final) return false;
@@ -10966,13 +11214,19 @@ function recheckPreflightRow(key, f, id) {
       }
       return finish('warn', 'The talent display answered the nudge but no heartbeat has landed since. Reload it', 'A reload keeps the show code and re-links on its own when that laptop is signed in');
     };
-    if (verdict(false) === false) waitFor('Answered. Waiting for the next talent heartbeat', 8000, verdict);
+    if (verdict(false) === false) waitFor('Answered. Waiting for the next talent heartbeat', r.key === 'Talent build' ? 20000 : 8000, verdict);
     return;
   }
   if (f.target === 'playout') {
     const verdict = (final) => {
       const fresh = remotePlayoutFresh(outrangutanState);
       const out = outrangutanState.live?.outputs || null;
+      if (r.key === 'Air build') {
+        const b = _buildRowState('Air', outrangutanState.live?.build);
+        if (fresh && b.state === 'ok') return finish('ok', b.detail);
+        if (!final) return false;
+        return finish('warn', fresh ? b.detail : 'The Air reloaded but is not publishing status yet. Open Outrangutan there and join ' + (session.code || 'this show'));
+      }
       if (kind === 'rejoin') {
         if (fresh) { _setRemotePlayoutMachineRow(out); r.fixId = ''; renderPreflightRows(); return true; }
         if (!final) return false;
@@ -11011,7 +11265,7 @@ function recheckPreflightRow(key, f, id) {
       }
       return finish('ok', 'Done on the Air' + (f.result ? ': ' + f.result : ''));
     };
-    if (verdict(false) === false) waitFor('Done on the Air. Waiting for its next status packet', 5000, verdict);
+    if (verdict(false) === false) waitFor('Done on the Air. Waiting for its next status packet', r.key === 'Air build' ? 20000 : 5000, verdict);
     return;
   }
   if (f.target === 'keywi') {
@@ -11024,7 +11278,7 @@ function recheckPreflightRow(key, f, id) {
 // session snapshot after _recordTalentSighting).
 function _preflightNoteTalentSighting() {
   if (!preflightPanelOpen()) return;
-  ['Talent prompter', 'Prompter position'].forEach(key => {
+  ['Talent prompter', 'Prompter position', 'Talent build'].forEach(key => {
     const r = getPreflightRow(key);
     if (!r || !r.fixId || r.state !== 'pend') return;
     const f = _fixRequests[r.fixId];
@@ -11053,6 +11307,21 @@ function _preflightNotePlayoutPacket() {
 function _talentFixAddress() {
   const sender = _latestTalentSightingSender();
   return sender ? { toEndpoint: sender } : {};
+}
+// Build identity rows (C8): ok when the other machine reports the same
+// cueola-app.js hash as this window. An empty report means an older build
+// (before build identity) or a machine that has not reported yet.
+function _buildRowState(who, theirs) {
+  const mine = String(window.CUEOLA_BUILD || '');
+  theirs = String(theirs || '');
+  if (mine && theirs === mine) return { state: 'ok', detail: who + ' is on this build (' + mine.slice(0, 8) + ')' };
+  const detail = who + ' is on an older build' + (theirs ? ' (' + theirs.slice(0, 8) + ', this window ' + (mine.slice(0, 8) || 'unknown') + ')' : ' (it reports none)') + '. Reload it there';
+  return { state: 'warn', detail };
+}
+function _buildPreflightRow(key, group, who, theirs, fix, fixNote) {
+  const row = { key, label: 'Build', group, ..._buildRowState(who, theirs) };
+  if (row.state !== 'ok') { row.fix = fix; if (fixNote) row.fixNote = fixNote; }
+  return row;
 }
 // Address for Air requests that need the machine that is publishing now.
 function _airFixAddress() {
@@ -11350,7 +11619,21 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
       // every packet; the 'Arm on the Air' fix runs armPlayback inside its
       // Do it tap and the next packet settles the row.
       addPreflightRow({ key: 'Playout first GO', group: 'playout', ..._remoteFirstGoRow(outrangutanState.live?.armed) });
+      // Build identity: the Air publishes live.build; a mismatch is the
+      // silent failure behind fixes that die unanswered and stale acks.
+      addPreflightRow(_buildPreflightRow('Air build', 'playout', 'Air', outrangutanState.live?.build,
+        { label: 'Reload the Air', remote: { target: 'playout', kind: 'reload', extra: _airFixAddress() } },
+        'The output window stays open across the reload'));
     }
+    renderPreflightRows();
+  }
+  // Talent build identity rides its heartbeat; only a talent that has checked
+  // in gets the row (the Talent prompter row already covers a missing one).
+  if (run !== _preflightRun) return;
+  if (_latestTalentSightingTs()) {
+    addPreflightRow(_buildPreflightRow('Talent build', 'talent', 'Talent display', _talentReportedBuild,
+      { label: 'Reload talent display', remote: { target: 'talent', kind: 'reload', extra: _talentFixAddress() } },
+      'A reload keeps the show code and re-links on its own when that laptop is signed in'));
     renderPreflightRows();
   }
 
@@ -11862,7 +12145,19 @@ function enterLiveSessionScreen(liveState) {
   const timerEl = document.getElementById('ls-timer');
   if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
   startWallClock();
+  // C1: the deck follows the Live window. Steal ownership from a sibling
+  // window (the launcher's /keywibird window, a parked tab) so a press
+  // executes here, where the lifecycle is live.
+  try { window.CueolaStreamDeck?.claimForLive?.({ enter: true }); } catch (error) {}
 }
+// The claim repeats whenever a live window comes back (tab shown, laptop
+// wake, bfcache restore): a standby window may have taken the deck meanwhile.
+['visibilitychange', 'resume', 'pageshow'].forEach(evt => {
+  (evt === 'visibilitychange' || evt === 'resume' ? document : window).addEventListener(evt, () => {
+    if (evt === 'visibilitychange' && document.visibilityState !== 'visible') return;
+    try { if (liveRuntimeOn()) window.CueolaStreamDeck?.claimForLive?.(); } catch (error) {}
+  });
+});
 
 function showRundown() {
   if (liveSessionState().lifecycle === 'live') return requestExitLive();
@@ -14231,7 +14526,9 @@ function _notePrompterTalentSeen(msg={}) {
     _talentReportedPct = Math.max(0, Math.min(100, Number(msg.talentProgressPct)));
     _talentMirrorSeenAt = Date.now();
   }
-  if (typeof msg.state?.running === 'boolean') { _talentReportedPlaying = msg.state.running; _talentMirrorSeenAt = Date.now(); }
+  // A stalled talent (playing flag up, nothing moving) reads as not playing
+  // so the deck lamp goes off instead of lying.
+  if (typeof msg.state?.running === 'boolean') { _talentReportedPlaying = msg.state.running && msg.state.stalled !== true; _talentMirrorSeenAt = Date.now(); }
   _adoptTalentRowTruth(msg.state || {});   // display truth too: the deck's ROW key reads it in every window
   if (!_prompterOperatorRuntimeActive) return false;
   const wasSilent = !_prompterHasRecentTalent();
@@ -14690,6 +14987,7 @@ function cuePrompterToLiveRow(opts={}) {
 let _lastTalentPosPct = -1;
 let _talentReportedPct = null;   // the talent's own percent, from its heartbeats
 let _talentReportedPlaying = null;   // the talent's transport truth (heartbeat state.running); null until observed
+let _talentReportedBuild = '';       // the talent's build (heartbeat build), '' until seen or on an older build
 let _talentMirrorSeenAt = 0;     // last ACCEPTED mirror adoption (never bumped by rejected messages)
 let _talentHeldAtRow = null;     // row the talent's cue hold is waiting at, from heartbeats
 let _talentRowNum = null;        // the row the talent MEASURED at its read line (heartbeats/acks); null from old talents
@@ -16182,7 +16480,7 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
 function sendPrompterControl(action, payload=null) {
   if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
-    return;
+    return false;   // strict false: a deck key can flash the refusal
   }
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op', payload);
@@ -16201,12 +16499,16 @@ function sendPrompterControl(action, payload=null) {
     // question flags" happened on show day: with the handshake incomplete,
     // off-commands queued forever instead of reaching the talent.
     if (isCollaborativePrompterControl(action)) {
-      return dispatchPrompterCommand(control, 'live', isQuietPrompterControl(action));
+      const sent = dispatchPrompterCommand(control, 'live', isQuietPrompterControl(action));
+      // No doc path and no talent output known: nothing could receive it.
+      return (sent && _activePrompterOutputInstanceId) ? sent : false;
     }
     prompterSessionController.queueCommand(control);
     projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for talent to apply state' : 'Waiting for Flowmingo output');
     markLivePrompterStatus(`${flowOpControlLabel(action)} queued`, 'busy');
-    return false;
+    // Queued for a talent that has not linked yet applies on link: not a dead
+    // press, so the deck does not flash it red (review 9/13).
+    return true;
   }
   return dispatchPrompterCommand(control, 'live', isQuietPrompterControl(action));
 }
@@ -16503,7 +16805,10 @@ function ptTalentHeartbeat() {
     // A hidden or occluded talent window gets no animation frames: say so
     // instead of reporting a running crawl that is not moving.
     visibility:document.visibilityState,
-    stalled:!!(ptPlaying && document.visibilityState === 'hidden'),
+    // Stalled = playing but nothing advanced in the last second (no frame and
+    // no worker fallback step). The fallback keeps an occluded window
+    // scrolling, so hidden alone no longer means stalled.
+    stalled:ptFreeRunStalled(),
   };
   const heartbeat = ptPostOperatorMessage({ ...rawHeartbeat, talentProgressPct: ptProgressPct() });
   ptPostPing('heartbeat'); // compatibility for older operator tabs
@@ -16520,6 +16825,7 @@ function ptTalentHeartbeat() {
           snapshotId:heartbeat.snapshotId || '',
           talentProgressPct:ptProgressPct(),
           state:heartbeat.state,
+          build:window.CUEOLA_BUILD || '',   // build identity for the preflight Build row
         }
       }).catch(ptNoteCloudWriteRefused);
     } catch {}
@@ -16725,8 +17031,42 @@ function ptCheckAutoPauseMarkers() {
 
 let _ptProgPaintAt = 0;
 let _ptNextChipPaintAt = 0;
-function ptScrollLoop(ts) {
+// Free-run fallback (9/8 sweep C10): an occluded or hidden talent window gets
+// no animation frames, so the crawl froze while state.running stayed true.
+// A worker timer steps the same loop whenever no frame has landed for 250 ms.
+const PT_FREERUN_FALLBACK_MS = 250;
+let _ptLastFrameAt = 0;      // performance.now() of the last rAF-driven step
+let _ptLastFallbackAt = 0;   // performance.now() of the last worker-driven step
+let _ptFreeRunFallback = null;
+function _ptFreeRunFallbackTick() {
+  if (!ptPlaying) { _ptStopFreeRunFallback(); return; }
+  if (ptGlide || ptJog) return;   // travel has its own hidden-landing watchdogs
+  const now = performance.now();
+  if (now - Math.max(_ptLastFrameAt, _ptLastFallbackAt) < PT_FREERUN_FALLBACK_MS) return;
+  _ptLastFallbackAt = now;
+  if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
+  ptScrollLoop(now, true);
+}
+function _ptStartFreeRunFallback() {
+  if (_ptFreeRunFallback) return;
+  const P = window.CueolaScriptOperatorProtocol;
+  _ptFreeRunFallback = P?.createSteadyInterval
+    ? P.createSteadyInterval(_ptFreeRunFallbackTick, PT_FREERUN_FALLBACK_MS)
+    : { cancel: clearInterval.bind(null, setInterval(_ptFreeRunFallbackTick, PT_FREERUN_FALLBACK_MS)) };
+}
+function _ptStopFreeRunFallback() {
+  try { _ptFreeRunFallback?.cancel?.(); } catch {}
+  _ptFreeRunFallback = null;
+}
+// Honest stalled flag for the heartbeat: playing, not travelling, and no
+// step of either kind in the last second.
+function ptFreeRunStalled() {
+  if (!ptPlaying || ptGlide || ptJog) return false;
+  return (performance.now() - Math.max(_ptLastFrameAt, _ptLastFallbackAt)) > 1000;
+}
+function ptScrollLoop(ts, fromFallback=false) {
   if (!ptPlaying) return;
+  if (!fromFallback) _ptLastFrameAt = ts;
   if (ptGlide || ptJog) {
     // A glide (or an in-flight jog scrub) owns the position while it travels;
     // keep the loop alive so the crawl resumes seamlessly from where it lands.
@@ -16737,8 +17077,8 @@ function ptScrollLoop(ts) {
   if (ptLastTime === null) ptLastTime = ts;
   // Clamped: a hidden or occluded window gets no frames, and the first frame
   // back used to apply the whole hidden span as one leap. The ease below
-  // already clamped; the step did not.
-  const delta = Math.min(ts - ptLastTime, 100);
+  // already clamped; the step did not. A fallback step may span a full tick.
+  const delta = Math.min(ts - ptLastTime, fromFallback ? PT_FREERUN_FALLBACK_MS * 2 : 100);
   ptLastTime = ts;
 
   if (ptBraking) {
@@ -17150,7 +17490,9 @@ function ptStartPlay() {
   ptLastTime = null;
   prompterSessionController.setTransport({ running:true, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
   ptSyncPlayIcons(true);
+  _ptLastFrameAt = _ptLastFallbackAt = performance.now();
   ptAnimFrame = requestAnimationFrame(ptScrollLoop);
+  _ptStartFreeRunFallback();   // keeps an occluded window scrolling
   notifyControlSurfaceState();
 }
 
@@ -17166,6 +17508,7 @@ function ptStopPlay() {
   ptRenderHoldChip();
   if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
   ptAnimFrame = null;
+  _ptStopFreeRunFallback();
   prompterSessionController.setTransport({ running:false, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
   ptSyncPlayIcons(false);
   notifyControlSurfaceState();
@@ -31384,6 +31727,17 @@ function cueolaAppPath() {
   try { stored = JSON.parse(localStorage.getItem('cueola_session') || 'null'); } catch {}
   // Clear it immediately so a refresh doesn't re-trigger
   localStorage.removeItem('cueola_session');
+  // Reload = rejoin: a ?code= that matches the resume record (refreshed every
+  // 20 s while joined, cleared on leave) rejoins with that identity and role
+  // instead of parking on the front page with a banner.
+  if (urlCode && !stored) {
+    try {
+      const r = readResumeState();
+      if (r && String(r.code).toUpperCase() === String(urlCode).toUpperCase()) {
+        stored = { code: r.code, userName: r.name || '', role: r.role || 'instructor', profileId: r.profileId || '', username: r.username || '', profileAliases: r.profileAliases || [], showName: r.showName || '' };
+      }
+    } catch {}
+  }
 
   const code = urlCode || stored?.code;
   if (!code) return;

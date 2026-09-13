@@ -215,24 +215,24 @@
     prompterSpeed: { label: 'Prompter speed', hue: '#b06ef8', turnLabel: 'Faster / slower', pressLabel: 'Play / pause',
       desc: 'Turn: prompter scroll speed. Press: start or stop the scroll.',
       readout: function (s) { return s.prompter ? String(Math.round(s.prompter.speed || 0)) : '-'; }, bar: function (s) { return s.prompter ? Math.min(1, (s.prompter.speed || 0) / 200) : 0; },
-      tick: function (d) { surfacePrompter(d > 0 ? 'speed_up' : 'speed_down'); }, press: function () { surfaceRun('prompter.playpause'); } },
+      tick: function (d) { return surfacePrompter(d > 0 ? 'speed_up' : 'speed_down'); }, press: function () { return surfaceRun('prompter.playpause'); } },
     prompterSize: { label: 'Text size', hue: '#b06ef8', turnLabel: 'Bigger / smaller', pressLabel: 'Reset size',
       desc: 'Turn: talent text size. Press: back to the default size.',
       readout: function (s) { return s.prompter ? String(Math.round(s.prompter.size || 0)) : '-'; }, bar: function (s) { return s.prompter ? Math.min(1, (s.prompter.size || 0) / 120) : 0; },
-      tick: function (d) { surfacePrompter(d > 0 ? 'size_up' : 'size_down'); }, press: function () { surfacePrompter('reset'); } },
+      tick: function (d) { return surfacePrompter(d > 0 ? 'size_up' : 'size_down'); }, press: function () { return surfacePrompter('reset'); } },
     prompterScrub: { label: 'Prompter scrub', hue: '#22d3d3', turnLabel: 'Scrub the script', pressLabel: 'Cue to live row',
       desc: 'Turn: glide the prompter anywhere in the script, like a scrub wheel on a video editor. Press: snap it to the current live row.',
       readout: function (s) { var live = jogLivePct(s); return live != null ? Math.round(live) + '%' : '-'; },
       bar: function (s) { var live = jogLivePct(s); return live != null ? live / 100 : 0; },
-      tick: jogTick, press: function () { surfaceRun('prompter.cue.current'); } },
+      tick: jogTick, press: function () { return surfaceRun('prompter.cue.current'); } },
     rundownSelect: { label: 'Rundown row', hue: '#5b8df8', turnLabel: 'Pick a row', pressLabel: 'Take that row',
       desc: 'Turn: move the selection up and down the rundown. Press: make the selected row the live row.',
       readout: function (s) { return s.live ? ((s.live.selectedNumber || (s.live.selectedIndex + 1)) + '/' + (s.live.rowTotal || s.live.rowCount)) : '-'; }, bar: function (s) { return s.live && s.live.rowCount ? (s.live.selectedIndex + 1) / s.live.rowCount : 0; },
-      tick: rundownTick, press: function () { rundownTake(); } },
+      tick: rundownTick, press: function () { return rundownTake(); } },
     showClock: { label: 'Show clock', hue: '#f5b731', turnLabel: 'Nothing (display)', pressLabel: 'Start / pause',
       desc: 'A clock face on the strip. Press the dial (or tap the zone) to start or pause the shared show clock. Turning does nothing on purpose.',
       readout: function (s) { return fmtClock(s.clock && s.clock.elapsed); }, bar: function (s) { return s.clock && s.clock.running ? 1 : 0; }, live: function (s) { return !!(s.clock && s.clock.running); },
-      tick: function () {}, press: function () { var b = bridge(); try { b && b.showClock && b.showClock('toggle'); } catch (e) {} } },
+      tick: function () {}, press: function () { var b = bridge(); try { return b && b.showClock ? b.showClock('toggle') : undefined; } catch (e) { return undefined; } } },
     brightness: { label: 'Deck light', hue: '#f5b731', turnLabel: 'Brighter / dimmer', pressLabel: 'Reset to 80%',
       desc: 'Turn: the physical deck backlight. Press: back to the default brightness.',
       readout: function () { return pct(brightness / 100); }, bar: function () { return brightness / 100; },
@@ -247,7 +247,7 @@
       readout: function () { var st = obsState(); return st.connected ? pct(obsVolume()) : 'off'; },
       bar: function () { var st = obsState(); return st.connected ? obsVolume() : null; }, live: function () { var st = obsState(); return !!(st.streaming || st.streamState === OBS_STARTING); },
       // The zone press shares the STREAM key's gate (STARTING refusal, late-refusal toast).
-      tick: obsVolTick, press: function () { obsDo('toggleStream', { label: 'STREAM' }); } },
+      tick: obsVolTick, press: function () { return obsDo('toggleStream', { label: 'STREAM' }); } },
     // The prompter, live on the strip: the talent's current spot in the
     // script, right where the operator's thumb is.
     ptProgram: { label: 'Prompter view', hue: '#b06ef8', turnLabel: 'Faster / slower', pressLabel: 'Play / pause', ptFrame: true,
@@ -255,7 +255,7 @@
       readout: function (s) { return s.prompter && s.prompter.playing ? 'ROLL' : 'HOLD'; },
       bar: function () { var p = prompterStripInfo(); return p ? Math.max(0, Math.min(1, (p.pct || 0) / 100)) : null; },
       live: function (s) { return !!(s.prompter && s.prompter.playing); },
-      tick: function (d) { surfacePrompter(d > 0 ? 'speed_up' : 'speed_down'); }, press: function () { surfaceRun('prompter.playpause'); } },
+      tick: function (d) { return surfacePrompter(d > 0 ? 'speed_up' : 'speed_down'); }, press: function () { return surfaceRun('prompter.playpause'); } },
     // Outrangutan program on the strip: real video frames for clips (imported
     // media is same-origin, so this stays taint-safe), a name-and-countdown
     // card for audio cues.
@@ -279,7 +279,7 @@
         return (po.status === 'play' || po.status === 'pause') && po.dur && po.remaining != null ? Math.max(0, Math.min(1, 1 - po.remaining / po.dur)) : null;
       },
       live: function (s) { return (s.playout || {}).status === 'play'; },
-      tick: function (d) { setMaster(masterGain() + d * 0.03); }, press: function () { surfaceRun('playout.pause'); } },
+      tick: function (d) { setMaster(masterGain() + d * 0.03); }, press: function () { return surfaceRun('playout.pause'); } },
     // Micochondria on the strip: one zone, split in half. TKB on the left,
     // VofU on the right, each half lit while that mic is live. Tap = off-air panic.
     micoStatus: { label: 'Micochondria', hue: '#22d3a0', turnLabel: 'Nothing (status)', pressLabel: 'All talk off', micoSplit: true,
@@ -420,6 +420,7 @@
   var deckOwnerRelease = null;     // resolves the held lock's callback promise
   var deckStandbyCtl = null;       // AbortController for the queued standby claim
   var deckHeldElsewhere = false;   // another window is the deck window (UI hint)
+  var deckHeldByOtherApp = false;  // the last dev.open() failed: another app (Elgato's) holds the USB device
   // Mirrors cueola-app.js's talent-boot detection (IS_PROMPTER_TALENT_BOOT):
   // the dedicated output window (?prompter=1) and the in-page talent doors.
   var AUX_OUTPUT_BOOT = (function () {
@@ -460,7 +461,12 @@
   // Returns the action's own result: a strict false means the app refused
   // it (lsNext off the Live screen, a follower's GO), so the key can flash.
   function surfaceRun(id) { var b = bridge(); try { return b ? b.runAction(id) : undefined; } catch (e) { return undefined; } }
-  function surfacePrompter(a) { var b = bridge(); try { b && b.prompter(a); } catch (e) {} }
+  // Passes the prompter verb's own result through: a strict false is a
+  // refusal (Flowmingo Op lockout, no doc path, no session) so a dial or
+  // strip zone can flash red the way a key does.
+  function surfacePrompter(a) { var b = bridge(); try { return b ? b.prompter(a) : undefined; } catch (e) { return undefined; } }
+  // This window's own lifecycle: true only while the Live screen runtime is on.
+  function liveHere() { var s = surfaceState(); return !!(s && s.live && s.live.on); }
   function masterGain() { var b = bridge(); try { return (b && b.masterGain ? b.masterGain() : 0) || 0; } catch (e) { return 0; } }
   function prompterStripInfo() { var b = bridge(); try { return (b && b.prompterStrip && b.prompterStrip()) || null; } catch (e) { return null; } }
   // The Outrangutan program video for the strip monitor. SAME-ORIGIN ONLY:
@@ -528,10 +534,16 @@
     jogLastFlushAt = performance.now();
     var n = Math.max(-200, Math.min(200, Math.round(jogPend)));
     jogPend = 0;
-    if (n) surfacePrompter('seek_line_' + n);
+    if (n && surfacePrompter('seek_line_' + n) === false) {
+      // A refused scrub (Flowmingo Op holds the prompter) flashes the scrub zone.
+      var di = mapping().dials.indexOf('prompterScrub');
+      if (di >= 0) { noteDialRefused(null, di); paintNow(); }
+    }
   }
-  function rundownTick(d) { var b = bridge(); if (!b) return; var s = surfaceState(); if (!s.live) return; var next = Math.max(0, Math.min((s.live.rowCount || 1) - 1, (s.live.selectedIndex || 0) + (d > 0 ? 1 : -1))); try { b.liveSelect(next, false); } catch (e) {} }
-  function rundownTake() { var b = bridge(); var s = surfaceState(); if (b && s.live) { try { b.liveSelect(s.live.selectedIndex || 0, true); } catch (e) {} } }
+  // Both return liveSelect's own result: a strict false (nothing selected,
+  // not the caller) flashes the dial's strip zone red like a refused key.
+  function rundownTick(d) { var b = bridge(); if (!b) return false; var s = surfaceState(); if (!s.live) return false; var next = Math.max(0, Math.min((s.live.rowCount || 1) - 1, (s.live.selectedIndex || 0) + (d > 0 ? 1 : -1))); try { return b.liveSelect(next, false); } catch (e) { return undefined; } }
+  function rundownTake() { var b = bridge(); var s = surfaceState(); if (!(b && s.live)) return false; try { return b.liveSelect(s.live.selectedIndex || 0, true); } catch (e) { return undefined; } }
 
   // ── Dispatch ────────────────────────────────────────────────────────────────
   function fireSlot(slot, phase, fromDeck, keyIdx) {
@@ -541,14 +553,15 @@
     if (mode === 'cloud' && dispatchCloud(a, slot, phase)) return;
     // Returns false when the press provably dispatched NOWHERE (a gate refused
     // it): callers paint the red REFUSED flash so a dead press is never silent.
-    // Only the local rundown keymap ids read a strict false as a refusal:
-    // prompter commands return false when they were QUEUED for a talent that
-    // has not linked yet (they apply on link), and that is not a dead press.
+    // ANY strict false from a keymap action is a refusal (9/8 C2): the app
+    // side now returns false only when the press did nothing (a queued
+    // prompter command for an unlinked talent returns true), so every dead
+    // press flashes, prompter and playout keys included.
     // keyIdx + fromDeck travel to the OBS path so a LATE refusal (obs-websocket
     // rejects the request after the press returned) can still flash that key.
     var refused = false, octx = { key: keyIdx, deck: fromDeck, label: a.label || a.full || a.id };
     switch (a.kind) {
-      case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') { var kr = surfaceRun(a.keymapId); refused = kr === false && /^rundown\./.test(a.keymapId || ''); } break;
+      case 'keymap': if (a.hold) { var b = bridge(); try { phase === 'down' ? b.holdStart(a.keymapId) : b.holdStop(a.keymapId); } catch (e) {} } else if (phase === 'down') { refused = surfaceRun(a.keymapId) === false; } break;
       case 'transport': if (phase === 'down') { var bt = bridge(); try { refused = !!bt && !!bt.playoutTransport && bt.playoutTransport(a.op) === false; } catch (e) {} } break;
       case 'pad': if (phase === 'down') refused = firePlayoutSlot('pad', a.slot) === false; break;
       case 'cue': if (phase === 'down') refused = firePlayoutSlot('cue', a.slot) === false; break;
@@ -770,7 +783,7 @@
   // retries later, so plugging the deck in, granting it from another window,
   // or quitting the Elgato app gets picked up without a reload.
   function electDeckOwner() {
-    if (!navigator.hid || deckOwner || deckStandbyCtl) return;
+    if (!navigator.hid || deckOwner || deckStandbyCtl || claimForLiveInFlight) return;
     if (!locksAvailable()) { reattachGrantedDecks(); return; }   // old Chromium: single-window behavior
     acquireDeckOwnership({ ifAvailable: true }).then(function (mine) {
       if (!mine) {
@@ -826,9 +839,14 @@
   // a random re-check delay so two standbys can't ping-pong the steal.
   var DECK_BEAT_KEY = 'cueola_keywi_owner_beat';
   var DECK_BEAT_MS = 2500, DECK_BEAT_STALE_MS = 8000;
+  // A beat stamped by a LIVE window gets a longer leash from a standby that
+  // is not live itself (9/8 C1): a hidden Live tab still stamps from the
+  // worker timer, only a frozen one stops, so a non-live window must not
+  // steal the deck from the show's own Live window on an 8 s hiccup.
+  var DECK_BEAT_LIVE_STALE_MS = 30000;
   var deckBeatLoop = null, deckStealArmed = false;
   function stampDeckBeat() {
-    try { localStorage.setItem(DECK_BEAT_KEY, JSON.stringify({ ts: Date.now(), decks: decks.length })); } catch (e) {}
+    try { localStorage.setItem(DECK_BEAT_KEY, JSON.stringify({ ts: Date.now(), decks: decks.length, live: liveHere() })); } catch (e) {}
   }
   function deckBeatStale() {
     try {
@@ -836,12 +854,21 @@
       // No beat at all = pre-watchdog owner or a cleared store: do not steal
       // on missing evidence, only on a beat that provably stopped.
       if (!b || !b.ts || !b.decks) return false;
-      return (Date.now() - b.ts) > DECK_BEAT_STALE_MS;
+      var leash = (b.live && !liveHere()) ? DECK_BEAT_LIVE_STALE_MS : DECK_BEAT_STALE_MS;
+      return (Date.now() - b.ts) > leash;
     } catch (e) { return false; }
   }
   function deckBeatTick() {
     if (deckOwner) { if (decks.length) stampDeckBeat(); return; }
     if (!deckHeldElsewhere || deckStealArmed) return;
+    // Deck follows Live (9/8 C1): if this window is live and a NON-live
+    // window is driving the deck (our go-live claim came up empty because the
+    // Elgato app still held the USB device, then the other window's election
+    // won it), take it back. A live-marked beat is never touched here, so two
+    // live windows cannot ping-pong.
+    if (liveHere() && !deckLetGoByUser && !claimForLiveInFlight) {
+      try { var lb = JSON.parse(localStorage.getItem(DECK_BEAT_KEY) || 'null'); if (lb && lb.decks && lb.live === false) { claimForLive(); return; } } catch (e) {}
+    }
     if (!deckBeatStale()) return;
     // Re-check after a jittered delay: if another standby already stole and is
     // stamping again, stand down.
@@ -877,6 +904,45 @@
     handles.forEach(function (d) { try { d.hid.oninputreport = null; } catch (e) {} try { d.hid.close(); } catch (e) {} });
     releaseDeckOwnership();
     try { localStorage.removeItem(DECK_BEAT_KEY); } catch (e) {}
+  }
+  // The deck follows Live (9/8 C1): the window entering the Live screen (and
+  // the Live window coming back from hidden or a sleep) becomes the deck
+  // window. Cancel our own standby, steal the lock, re-attach every granted
+  // deck silently (no light show, no strip probe: it is a page, not a
+  // Connect), stamp the beat. Idempotent, never toasts on success; the aux
+  // output windows never take part. Resolves true when this window owns the
+  // deck when it settles.
+  var claimForLiveInFlight = null;
+  var deckLetGoByUser = false;    // a voluntary Disconnect stands until the operator connects again or re-enters Live
+  function claimForLive(opts) {
+    if (AUX_OUTPUT_BOOT || !navigator.hid) return Promise.resolve(false);
+    if (opts && opts.enter) deckLetGoByUser = false;
+    if (deckLetGoByUser) return Promise.resolve(false);
+    if (!deckServiceStarted) bootDeckService();
+    if (!deckServiceStarted) return Promise.resolve(false);
+    if (autoDimmed) noteDeckInput();                         // going Live wakes a dimmed deck
+    if (deckOwner || !locksAvailable()) { if (decks.length) stampDeckBeat(); return Promise.resolve(true); }   // already ours (or single-window Chromium)
+    if (claimForLiveInFlight) return claimForLiveInFlight;
+    if (deckStandbyCtl) { try { deckStandbyCtl.abort(); } catch (e) {} deckStandbyCtl = null; }
+    claimForLiveInFlight = acquireDeckOwnership({ steal: true }).then(function (stole) {
+      if (!stole || !deckOwner) return false;
+      // A boot election that ran ahead of this steal may have queued our own
+      // standby; it would answer our own later release by re-attaching.
+      if (deckStandbyCtl) { try { deckStandbyCtl.abort(); } catch (e) {} deckStandbyCtl = null; }
+      return reattachGrantedDecks().then(function () {
+        if (decks.length) { stampDeckBeat(); deckHeldElsewhere = false; }
+        else {
+          // Empty-handed (deck unplugged, Elgato app holding it): give the
+          // lock back so the window we took it from can pick the deck up
+          // again, and rejoin the election from here.
+          releaseDeckOwnership();
+          setTimeout(electDeckOwner, 250);
+        }
+        if (isSurfaceVisible()) render();
+        return !!decks.length;
+      });
+    }).catch(function () { return false; }).then(function (v) { claimForLiveInFlight = null; return v; });
+    return claimForLiveInFlight;
   }
 
   // The silent multi-deck re-attach; the election, the standby failover, and
@@ -927,6 +993,7 @@
   }
   async function connect() {
     if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return false; }
+    deckLetGoByUser = false;
     var own = await ensureDeckOwnership();
     if (!own.ok) { toast('Could not take the Stream Deck over from the other Cueola window.'); return false; }
     var candidates = [];
@@ -958,6 +1025,7 @@
   async function addDeck() {
     if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return;
     }
+    deckLetGoByUser = false;
     var own = await ensureDeckOwnership();
     if (!own.ok) { toast('Could not take the Stream Deck over from the other Cueola window.'); return; }
     try {
@@ -995,10 +1063,13 @@
     var already = deckForHid(dev);
     if (already) { activateDeck(already); return true; }
     if (!deckOwnerNow()) return false;
-    try { if (!dev.opened) await dev.open(); } catch (e) {
+    try { if (!dev.opened) await dev.open(); deckHeldByOtherApp = false; } catch (e) {
       // Silent boot path: another app (usually Elgato's) holds the device.
       // Note it in the console and move on; the explicit Connect flow keeps
-      // the loud toast.
+      // the loud toast. Either way the flag lets deckStatus() tell the
+      // preflight row WHY the deck is not attached (a device the browser
+      // says is gone is a different story: NotFoundError is not held).
+      if (!(e && e.name === 'NotFoundError')) deckHeldByOtherApp = true;
       if (silent) { try { console.info('[KeyWi] auto-attach skipped: the device is held by another app (quit the Elgato Stream Deck app).'); } catch (e2) {} }
       else toast('Could not open the Stream Deck. Quit the Elgato Stream Deck app (it grabs the device), then Connect again.');
       return false;
@@ -1184,7 +1255,7 @@
       });
     }
     lines.push('');
-    lines.push('Dial check (turn each dial while this report is open; test turns are captured here and NOT sent to the apps):');
+    lines.push('Dial check (turn each dial while this report is open; every turn is logged here and held back from the apps, and its strip zone flashes red to say it was seen):');
     if (d.dialEvents && d.dialEvents.length) d.dialEvents.forEach(function (row) { lines.push('  ' + row); });
     else if (!d.liveDials) lines.push('  this capture ran without a connected deck, so dial turns cannot be seen here. Close this report, press Connect deck, then open Diagnostics again from the Deck details row.');
     else lines.push('  no dial turns seen yet. Turn the scrub dial clockwise: the newest row should say "forward". If it says "back": select that deck\'s tab above the keys, open Deck settings, and set Dials to Reversed (the flip is saved per deck).');
@@ -1234,10 +1305,19 @@
     var hid = deck.hid, prof = deck.profile;
     removeDeck(deck);   // with no decks left this flushes the queue, so the goodbye below is the only writer left
     var rep = null; try { rep = Device.resetReport(prof); } catch (e) {}
+    // A voluntary Disconnect that leaves this window deck-less hands the
+    // ownership back the way pagehide does (mirror of releaseDeckOnLeave):
+    // the beat goes away and the lock is released, so a standby window's
+    // frozen-owner watchdog never reads the silence as a dead owner and
+    // "takes over" a deck the operator just let go of on purpose. No
+    // re-election from here: that would re-attach the deck right back.
+    var letGo = !decks.length && deckOwner;
+    if (letGo) { deckLetGoByUser = true; try { localStorage.removeItem(DECK_BEAT_KEY); } catch (e) {} }
+    function letGoNow() { if (letGo && !decks.length && deckOwner) releaseDeckOwnership(); }
     queueDeviceWrite(null, async function () {
       if (rep) { try { await hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} }
       try { hid.close(); } catch (e) {}
-    }).catch(function () {});
+    }).then(letGoNow, letGoNow);
     render();
   }
   // Drop one deck. If it was the active one, the next open deck takes over the
@@ -1277,21 +1357,40 @@
     if (evt.type === 'keys') {
       var edges = Device.keyEdges(keyState, evt.states);
       keyState = evt.states;
-      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { openKeyEditor(i, true); } else if (fireSlot(mapping().keys[i], 'down', null, i) === false) { refusedFlashUntil[i] = performance.now() + 900; } });
+      // Learn mode consumes the press (it opens the editor instead of
+      // dispatching, by design) and says so with the red flash: a consumed
+      // press is never silent (9/8 C10).
+      edges.downs.forEach(function (i) { pressFlashUntil[i] = performance.now() + SD_PRESS_FLASH_MS; if (learnArmed) { refusedFlashUntil[i] = performance.now() + 900; openKeyEditor(i, true); } else if (fireSlot(mapping().keys[i], 'down', null, i) === false) { refusedFlashUntil[i] = performance.now() + 900; } });
       edges.ups.forEach(function (i) { if (!learnArmed) fireSlot(mapping().keys[i], 'up'); });
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
-      // A VISIBLE diagnostics report captures rotations WITHOUT dispatching
-      // them (like learn mode): its own text invites test turns, and a test
-      // turn must never scrub the live talent prompter or ride the show
-      // volume. A report left open off-screen must NOT keep eating dials:
-      // that read as a dead deck mid-show.
-      if (evt.kind === 'rotate') { if (diagCaptureActive()) noteDiagDials(evt, device); else evt.ticks.forEach(function (t, i) { if (t) { if (learnArmed) { openDialEditor(i, true); } else dialTick(i, t * dialDirFor(device)); } }); }
-      else evt.press.forEach(function (down, i) { if (down !== dialPress[i]) { dialPress[i] = down; if (down && !learnArmed) dialPressFire(i); } });
+      // A VISIBLE diagnostics report LOGS every rotation with the sign this
+      // driver read and holds the turn back from the apps (the Dial check
+      // exists to test direction without moving the talent), but never
+      // silently: the dial's strip zone flashes red so a consumed turn reads
+      // as consumed, not as a dead deck (9/8 C10). Learn mode consumes the
+      // same way and opens the dial editor.
+      var diagHold = diagCaptureActive();
+      if (evt.kind === 'rotate') { if (diagHold) noteDiagDials(evt, device); evt.ticks.forEach(function (t, i) { if (t) { if (learnArmed) { noteDialRefused(null, i); openDialEditor(i, true); } else if (diagHold) noteDialRefused(null, i); else dialTick(i, t * dialDirFor(device)); } }); }
+      else evt.press.forEach(function (down, i) { if (down !== dialPress[i]) { dialPress[i] = down; if (down) { if (learnArmed) { noteDialRefused(null, i); openDialEditor(i, true); } else if (diagHold) noteDialRefused(null, i); else dialPressFire(i); } } });
       paintNow();
     } else if (evt.type === 'touch') { touchFire(evt); paintNow(); }
   }
-  function diagCaptureActive() { return !!diagInfo && isSurfaceVisible(); }
+  // Dial and touch-strip refusals (9/8 C2): when the bridge verb behind a
+  // dial turn, a dial press or a zone tap returns a strict false, that dial's
+  // strip zone paints a brief red bar, the same 900 ms vocabulary as a key's
+  // refused flash. Stored per deck record (preview mode keeps a loose array).
+  var previewDialRefused = [];
+  function dialRefusedArr(deck) { var d = deck || device; if (!d) return previewDialRefused; return (d.dialRefusedUntil = d.dialRefusedUntil || []); }
+  function noteDialRefused(deck, i) { if (i == null || i < 0) return; dialRefusedArr(deck)[i] = performance.now() + 900; }
+  function dialRefusedNow(deck, i) { return ((dialRefusedArr(deck))[i] || 0) > performance.now(); }
+  // Runs a controller verb and notes a strict-false refusal on that dial.
+  function dialVerb(deck, i, c, verb, arg) {
+    if (!c || typeof c[verb] !== 'function') return;
+    var r; try { r = c[verb](arg); } catch (e) { return; }
+    if (r === false) noteDialRefused(deck, i);
+  }
+  function diagCaptureActive() { return !!diagInfo && isSurfaceVisible() && document.visibilityState === 'visible'; }
   // The dial-direction contract: clockwise = forward / up / more, always. The
   // sign convention is the DECK's (firmware), so the flip is stored per device
   // (overrides.dialFlip, Deck settings → Dials) and applied right here, where
@@ -1321,21 +1420,22 @@
       if (edges.downs.length || edges.ups.length) paintNow();
     } else if (evt.type === 'dials') {
       deck.dialPress = deck.dialPress || [];
-      if (evt.kind === 'rotate') { if (diagCaptureActive()) noteDiagDials(evt, deck); else evt.ticks.forEach(function (t, i) { if (t) { var c = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c) { try { c.tick(t * dialDirFor(deck)); } catch (e2) {} } } }); }
-      else evt.press.forEach(function (down, i) { if (down !== deck.dialPress[i]) { deck.dialPress[i] = down; if (down) { var c2 = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c2) { try { c2.press(); } catch (e2) {} } } } });
+      var diagHold2 = diagCaptureActive();
+      if (evt.kind === 'rotate') { if (diagHold2) noteDiagDials(evt, deck); evt.ticks.forEach(function (t, i) { if (t) { var c = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c) { if (diagHold2) noteDialRefused(deck, i); else dialVerb(deck, i, c, 'tick', t * dialDirFor(deck)); } } }); }
+      else evt.press.forEach(function (down, i) { if (down !== deck.dialPress[i]) { deck.dialPress[i] = down; if (down) { var c2 = DIAL_CONTROLLERS[(m.dials || [])[i]]; if (c2) { if (diagHold2) noteDialRefused(deck, i); else dialVerb(deck, i, c2, 'press'); } } } });
       paintNow();
     } else if (evt.type === 'touch' && evt.zone != null) {
       var zSlot = (m.touch || [])[evt.zone] || { dial: evt.zone };
       var c3 = DIAL_CONTROLLERS[(m.dials || [])[zSlot.dial]];
-      if (c3 && evt.gesture !== 'flick') { try { c3.press(); } catch (e3) {} }
-      else if (c3 && evt.gesture === 'flick') { try { c3.tick(evt.x2 > evt.x ? 3 : -3); } catch (e3) {} }
+      if (c3 && evt.gesture !== 'flick') { dialVerb(deck, zSlot.dial, c3, 'press'); }
+      else if (c3 && evt.gesture === 'flick') { dialVerb(deck, zSlot.dial, c3, 'tick', evt.x2 > evt.x ? 3 : -3); }
       paintNow();
     }
   }
   function controllerForDial(i) { return DIAL_CONTROLLERS[mapping().dials[i]]; }
-  function dialTick(i, ticks) { var c = controllerForDial(i); if (c) { try { c.tick(ticks); } catch (e) {} } }
-  function dialPressFire(i) { var c = controllerForDial(i); if (c) { try { c.press(); } catch (e) {} } }
-  function touchFire(evt) { if (evt.zone == null) return; var z = (mapping().touch[evt.zone]) || { dial: evt.zone }; var c = DIAL_CONTROLLERS[mapping().dials[z.dial]]; if (c && evt.gesture !== 'flick') { try { c.press(); } catch (e) {} } else if (c && evt.gesture === 'flick') { try { c.tick(evt.x2 > evt.x ? 3 : -3); } catch (e) {} } }
+  function dialTick(i, ticks) { dialVerb(null, i, controllerForDial(i), 'tick', ticks); }
+  function dialPressFire(i) { dialVerb(null, i, controllerForDial(i), 'press'); }
+  function touchFire(evt) { if (evt.zone == null) return; var z = (mapping().touch[evt.zone]) || { dial: evt.zone }; var c = DIAL_CONTROLLERS[mapping().dials[z.dial]]; if (c && evt.gesture !== 'flick') { dialVerb(null, z.dial, c, 'press'); } else if (c && evt.gesture === 'flick') { dialVerb(null, z.dial, c, 'tick', evt.x2 > evt.x ? 3 : -3); } }
 
   // ── Slot rendering helpers ────────────────────────────────────────────────
   // App-family key rims (owner 8/24): every key wears a thin rim in its app's
@@ -1414,7 +1514,7 @@
   // The 8/24 show was driven blind: keys stayed fully lit while every press
   // died in a gate. PANIC is never dimmed — the kill switch must always look
   // available (its dispatch path is ungated too).
-  function slotAvailability(a, s) {
+  function slotAvailability(a, s, slot) {
     var k = a.kind;
     if (k === 'bus' || k === 'clock') {
       var b = bridge(), av = 'exec';
@@ -1424,8 +1524,19 @@
     if (k === 'transport' || k === 'pad' || k === 'cue' || k === 'padRef' || k === 'cueRef') {
       if (k === 'transport' && a.op === 'panic') return '';
       var p = (s && s.playout) || {};
-      if (p.local) return '';
+      // goAllowed === false (9/8 C3): a fire would be refused (lifecycle not
+      // live), so GO and every cue / pad key dim. Pause, stop and fade stay
+      // ungated on the app side and stay lit here. An older bridge without
+      // the flag never dims.
+      var fires = k !== 'transport' || a.op === 'go';
+      if (fires && p.goAllowed === false) return 'off';
+      // pendingAck (9/8 C5): THIS key's command is on the wire with no ack yet,
+      // so its amber doubt dot shows until the Air answers. pendingIds names
+      // the pending actions and targets; an older bridge only has the boolean.
+      var pend = Array.isArray(p.pendingIds) ? slotPendingIn(a, slot || {}, p.pendingIds, s) : !!p.pendingAck;
+      if (p.local) return pend ? 'doubt' : '';
       if (!p.sendable) return 'off';
+      if (pend) return 'doubt';
       return p.fresh ? '' : 'doubt';
     }
     if (k === 'obs' || k === 'obsScene' || k === 'obsSceneRef' || k === 'obsMuteRef') {
@@ -1784,7 +1895,7 @@
     var active = slotActive(slot, s) || keyState[i];
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: keyState[i], toggle: !!a.toggle, editing: (i === editingKey) };
     if (appRimsOn()) { spec.rim = appRimColor(a); spec.rimW = rimWidthOf(); }
-    var avail = slotAvailability(a, s);
+    var avail = slotAvailability(a, s, slot);
     if (avail === 'off') spec.unavail = true;
     else if (avail === 'doubt') spec.doubt = true;
     spec.refused = (refusedFlashUntil[i] || 0) > performance.now();
@@ -1823,7 +1934,7 @@
     var spec = { color: slotColor(slot), label: slot.hideLabel ? '' : slotLabel(slot, s), active: active, pressed: ks[i], toggle: !!a.toggle, editing: false };
     var dov = (deck.cfg || {}).overrides;
     if (appRimsOn(dov)) { spec.rim = appRimColor(a, dov); spec.rimW = rimWidthOf(dov); }
-    var avail = slotAvailability(a, s);
+    var avail = slotAvailability(a, s, slot);
     if (avail === 'off') spec.unavail = true;
     else if (avail === 'doubt') spec.doubt = true;
     spec.refused = ((deck.refusedFlashUntil || [])[i] || 0) > performance.now();
@@ -2231,22 +2342,28 @@
   // press flashes, the strip, features) are inserted ahead of any waiting
   // 'gif' frame job, so GIF traffic never delays a lamp; gifTick drops a
   // frame outright whenever a state job is waiting or running.
+  // A third lane, 'flash' (9/8 C10): press-flash and refused-flash key
+  // writes, and the brightness wake that precedes a press after auto-dim,
+  // go to the FRONT of the queue, ahead of waiting strip jobs and animation
+  // frames, so the operator's own press always paints within one pass.
   var hidWriteQueue = [], hidWriteBusy = false, hidWriteLane = '';
   function queueDeviceWrite(slotKey, job, lane) {
-    lane = lane === 'gif' ? 'gif' : 'state';
+    lane = lane === 'gif' ? 'gif' : (lane === 'flash' ? 'flash' : 'state');
     return new Promise(function (resolve, reject) {
       if (slotKey != null) {
         for (var i = 0; i < hidWriteQueue.length; i++) {
           if (hidWriteQueue[i].slotKey === slotKey) {
             var old = hidWriteQueue.splice(i, 1)[0]; old.resolve(false);
-            if (old.lane === 'state') lane = 'state';   // a frame replacing a waiting lamp write inherits its priority
+            if (old.lane === 'flash' || lane === 'flash') lane = 'flash';   // a replacement never loses the priority it is replacing
+            else if (old.lane === 'state') lane = 'state';   // a frame replacing a waiting lamp write inherits its priority
             break;
           }
         }
       }
       var entry = { slotKey: slotKey, job: job, resolve: resolve, reject: reject, lane: lane };
       var at = hidWriteQueue.length;
-      if (lane === 'state') { for (var g = 0; g < hidWriteQueue.length; g++) { if (hidWriteQueue[g].lane === 'gif') { at = g; break; } } }
+      if (lane === 'flash') { at = 0; for (var f = 0; f < hidWriteQueue.length; f++) { if (hidWriteQueue[f].lane !== 'flash') { at = f; break; } at = f + 1; } }
+      else if (lane === 'state') { for (var g = 0; g < hidWriteQueue.length; g++) { if (hidWriteQueue[g].lane === 'gif') { at = g; break; } } }
       hidWriteQueue.splice(at, 0, entry);
       drainDeviceWrites();
     });
@@ -2368,7 +2485,9 @@
       try {
         if (vis) { var cv = mirrorCanvasFor(i); if (cv) drawKeyInto(cv, spec, cv.width); }
         else mirrorDirty = true;
-        if (device) { wrote++; await paintKeyDevice(i, spec); }
+        // A press or refused flash jumps the HID queue (lane 'flash'), ahead
+        // of any waiting strip or GIF job: input feedback paints first.
+        if (device) { wrote++; await paintKeyDevice(i, spec, (spec.flash || spec.refused) ? 'flash' : undefined); }
       } catch (e) {}
     }
     // Secondary decks repaint from their own layouts (no on-screen mirror; the
@@ -2379,7 +2498,7 @@
       for (var k = 0; k < dk.profile.keys; k++) {
         var sp2 = keyArtSpecFor(dk, k, s); var sig2 = specSig(sp2, k);
         if (sig2 === dk.lastPainted[k]) continue; dk.lastPainted[k] = sig2;
-        try { wrote++; await paintKeyDeviceFor(dk, k, sp2); } catch (e) {}
+        try { wrote++; await paintKeyDeviceFor(dk, k, sp2, (sp2.flash || sp2.refused) ? 'flash' : undefined); } catch (e) {}
       }
     }
     // Burst freeze: a session join, page switch or Go Live repaints many keys
@@ -2545,7 +2664,10 @@
         live: !!(c && c.live && c.live(s)),
         obsFrame: !!(c && c.obsFrame),
         ptFrame: !!(c && c.ptFrame),
-        ogFrame: !!(c && c.ogFrame)
+        ogFrame: !!(c && c.ogFrame),
+        // A refused dial verb (9/8 C2) paints a brief red bar on this zone;
+        // it rides the signature so the 5Hz tick clears it when it expires.
+        refused: dialRefusedNow(null, (mapping().touch[z] || { dial: z }).dial)
       };
       // Live-content zones fold their motion into the paint signature, so the
       // 5Hz tick repaints exactly when the content moved: the prompter as the
@@ -2699,6 +2821,14 @@
     ctx.fillStyle = '#07090d'; ctx.fillRect(0, 0, cw, ch);
     var zw = cw / cells.length;
     cells.forEach(function (cell, i) {
+      drawStripCell(ctx, cell, i, zw, ch);
+      // REFUSED (9/8 C2): the zone's verb returned a strict false. A red bar
+      // across the top of the zone for 900 ms, the strip's version of the
+      // key's red flash; drawn last so every zone kind shows it.
+      if (cell.refused) { ctx.fillStyle = 'rgba(224,49,49,0.9)'; ctx.fillRect(i * zw + 3, 3, zw - 6, 8); }
+    });
+  }
+  function drawStripCell(ctx, cell, i, zw, ch) {
       var x0 = i * zw, x = x0 + zw / 2;
       if (cell.obsFrame) {
         // Live OBS program monitor for this zone (cover-fit the latest frame).
@@ -2769,7 +2899,6 @@
         ctx.fillStyle = cell.hue; ctx.fillRect(bx, by, Math.round(bw * cell.bar), 5);
       }
       if (cell.tap) { ctx.fillStyle = '#6b7690'; ctx.font = '600 11px -apple-system, "Segoe UI", sans-serif'; ctx.fillText('tap: ' + cell.tap, x, ch - 8); }
-    });
   }
   // Wrapped-line layout cache for the strip prompter. Wrapping measures every
   // word, so it happens once per (text, font, zone width) and the 5Hz tick
@@ -2931,9 +3060,9 @@
   async function renderStripJpeg(cells) {
     return stripBytesFromContent(function (ctx, cw, ch) { drawStripContent(ctx, cells, cw, ch); });
   }
-  function sendFeature(rep) {
+  function sendFeature(rep, lane) {
     if (!device) return;
-    queueDeviceWrite(null, async function () { if (device) { try { await device.hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} } }).catch(function () {});
+    queueDeviceWrite(null, async function () { if (device) { try { await device.hid.sendFeatureReport(rep.reportId, rep.data); } catch (e) {} } }, lane).catch(function () {});
   }
   function setBrightness(pctVal) {
     brightness = Math.max(0, Math.min(100, Math.round(pctVal)));
@@ -2965,12 +3094,18 @@
   function autoDimCheck() {
     autoDimTimer = null;
     if (!device || !profile || autoDimmed) return;
+    // Never dim a deck that is driving a live show (9/8 C10): while this
+    // window's Live runtime is on the check just comes back later.
+    if (liveHere()) { autoDimTimer = setTimeout(autoDimCheck, AUTO_DIM_AFTER_MS + 250); return; }
     var idle = Date.now() - lastDeckInputAt;
     if (idle >= AUTO_DIM_AFTER_MS) { autoDimmed = true; sendFeature(Device.brightnessReport(profile, Math.min(brightness, AUTO_DIM_PCT))); }
     else autoDimTimer = setTimeout(autoDimCheck, AUTO_DIM_AFTER_MS - idle + 250);
   }
+  // The first press after auto-dim wakes the deck AND still dispatches (the
+  // operator meant it): the brightness restore rides the front 'flash' lane
+  // so it lands before that press's own flash write.
   function noteDeckInput() {
-    if (autoDimmed) { autoDimmed = false; if (device && profile) sendFeature(Device.brightnessReport(profile, brightness)); }
+    if (autoDimmed) { autoDimmed = false; if (device && profile) sendFeature(Device.brightnessReport(profile, brightness), 'flash'); }
     armAutoDim();
   }
   function stopAutoDim() { clearTimeout(autoDimTimer); autoDimTimer = null; autoDimmed = false; }
@@ -3975,8 +4110,23 @@
   // ── Key editor (action + cues-by-name + label + colour + icon) ─────────────
   function overlay() { return document.getElementById('sd-picker'); }
   function closeOverlay() { _leaveAfterSave = false; settingsOpen = false; var o = overlay(); if (o) o.className = 'sd-picker'; if (editingKey >= 0) { editingKey = -1; schedulePaint(); render(); } }
+  // Learn mode (9/8 C10): armed for at most 20 s, then it cancels itself, so
+  // a forgotten learn toggle can never keep eating presses mid-show.
+  var LEARN_TIMEOUT_MS = 20000, learnTimer = null;
+  function armLearn(on) {
+    clearTimeout(learnTimer); learnTimer = null;
+    learnArmed = !!on;
+    if (!learnArmed) return;
+    learnTimer = setTimeout(function () {
+      learnTimer = null;
+      if (!learnArmed) return;
+      learnArmed = false;
+      toast('Learn mode ended: nothing was pressed in 20 seconds.');
+      if (isSurfaceVisible()) render();
+    }, LEARN_TIMEOUT_MS);
+  }
   function openKeyEditor(index, fromLearn) {
-    learnArmed = false; editingKey = index; schedulePaint();
+    armLearn(false); editingKey = index; schedulePaint();
     var slot = slotAt(index), s = surfaceState();
     var groups = {};
     // Ref kinds are bound from the live "This show" / "This OBS" sections below,
@@ -4386,7 +4536,7 @@
     schedulePaint();
   }
   function openDialEditor(index, fromLearn) {
-    learnArmed = false;
+    armLearn(false);
     var cur = mapping().dials[index];
     var body = '<div class="sd-ed-head">Dial ' + (index + 1) + (fromLearn ? ' <span class="sd-ed-learned">learned</span>' : '') + '</div><div class="sd-picker-list">';
     Object.keys(DIAL_CONTROLLERS).forEach(function (id) {
@@ -4413,7 +4563,7 @@
     });
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
-    bind('sd-learn', function () { learnArmed = !learnArmed; render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
+    bind('sd-learn', function () { armLearn(!learnArmed); render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
     bind('sd-pf-new', openNewPageSheet); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive); bind('sd-pf-cloud', openCloudLayoutsSheet);
     r.querySelectorAll('.sd-page-tab').forEach(function (tab) {
       var id = tab.getAttribute('data-page');
@@ -4778,6 +4928,49 @@
   // instead of waiting out the 200ms poll (which a throttled background tab
   // stretches to minutes). paintChanged() no-ops when no deck is active.
   window.addEventListener('cueola-surface-state', paintNow);
+  // Honest playout ack (9/8 C5): the app fires cueola-playout-refused when
+  // the Air answered a command with ok:false (unknown cue, no media, play()
+  // rejected, output detached). Every key that could have sent that command
+  // flashes red: transport keys by op (and the km:playout.* keys the default
+  // layouts use), cue / pad slots resolving to the target id, cueRef / padRef
+  // keys by ref. The ack lands after the press returned, so this is the
+  // late-refusal path, like OBS's.
+  // Is one of the pending (unacked) commands this slot's? ids carry the
+  // transport action for verbs and the cue / pad id for fires.
+  function slotPendingIn(a, slot, ids, s) {
+    if (!a || !ids.length) return false;
+    if (a.kind === 'transport') return ids.indexOf(a.op) >= 0;
+    if (a.kind === 'keymap') return /^playout\./.test(a.keymapId || '') && ids.indexOf(a.keymapId.slice(8)) >= 0;
+    if (a.kind === 'cueRef' || a.kind === 'padRef') return ids.indexOf(String(slot.ref || '')) >= 0;
+    if (a.kind === 'cue' || a.kind === 'pad') {
+      var map = (a.kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {};
+      var id = Object.keys(map)[a.slot - 1];
+      return !!id && ids.indexOf(id) >= 0;
+    }
+    return false;
+  }
+  function slotMatchesRefusal(slot, d, s) {
+    var a = slotAction(slot); if (!a) return false;
+    var act = String(d.action || ''), tid = d.targetId != null ? String(d.targetId) : '';
+    if (a.kind === 'transport') return !!act && a.op === act;
+    if (a.kind === 'keymap') return !!act && a.keymapId === (act === 'fadeStop' ? 'playout.fade' : 'playout.' + act);
+    if (!tid) return false;
+    if (a.kind === 'cueRef' || a.kind === 'padRef') return String(slot.ref || '') === tid;
+    if (a.kind === 'cue' || a.kind === 'pad') {
+      var map = (a.kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {};
+      return Object.keys(map)[a.slot - 1] === tid;
+    }
+    return false;
+  }
+  window.addEventListener('cueola-playout-refused', function (e) {
+    var d = (e && e.detail) || {};
+    if (!d.action && d.targetId == null) return;
+    var s = surfaceState(), now = performance.now(), hit = false;
+    function sweep(keys, arr) { (keys || []).forEach(function (k, i) { if (slotMatchesRefusal(toSlot(k || { a: 'none' }), d, s)) { arr[i] = now + 900; hit = true; } }); }
+    if (device || previewMode) sweep(mapping().keys, refusedFlashUntil);
+    decks.forEach(function (dk) { if (dk !== device) sweep((deckMapping(dk).keys || []), (dk.refusedFlashUntil = dk.refusedFlashUntil || [])); });
+    if (hit) paintNow();
+  });
   function open() {
     if (!keyWiSignInGate()) return false;
     showScreen();
@@ -4855,8 +5048,13 @@
       var beat = null;
       try { beat = JSON.parse(localStorage.getItem(DECK_BEAT_KEY) || 'null'); } catch (e) {}
       var beatFresh = !!(beat && beat.ts && beat.decks && (Date.now() - beat.ts) <= DECK_BEAT_STALE_MS);
-      return { connectedHere: !!device, decksHere: decks.length, drivenElsewhere: !device && beatFresh, elsewhereDecks: beatFresh ? beat.decks : 0 };
+      // heldByOtherApp: the last open attempt found the USB device held by
+      // another app (the Elgato one), so the preflight row can say so.
+      return { connectedHere: !!device, decksHere: decks.length, drivenElsewhere: !device && beatFresh, elsewhereDecks: beatFresh ? beat.decks : 0, elsewhereLive: beatFresh && !!beat.live, heldByOtherApp: !device && deckHeldByOtherApp };
     },
+    // The deck follows Live (9/8 C1): the app calls this when a window enters
+    // the Live screen and whenever that window comes back to the foreground.
+    claimForLive: claimForLive,
     // Granted-and-plugged decks, readable from any window without opening the
     // device or disturbing the owner election. Resolves -1 when WebHID is
     // unavailable (no evidence, not a failure).

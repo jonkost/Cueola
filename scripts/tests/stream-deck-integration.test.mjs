@@ -188,12 +188,19 @@ test('KeyWi: every device write rides one serialized queue, with per-slot coales
   // Key images (paintChanged AND animateKeys both go through paintKeyDevice).
   const painter = deckSlice('function paintKeyDevice(i, spec, lane)', 'function mirrorCanvasFor');
   assert.match(painter, /queueDeviceWrite\('key:' \+ i/);
-  assert.match(deckSlice('async function paintChanged()', 'function startAnim'), /paintKeyDevice\(i, spec\)/);
+  // 9/8 C10: the state pass hands a press or refused flash to the front
+  // 'flash' lane so input feedback paints ahead of waiting strip / GIF jobs.
+  assert.match(deckSlice('async function paintChanged()', 'function startAnim'), /paintKeyDevice\(i, spec, \(spec\.flash \|\| spec\.refused\) \? 'flash' : undefined\)/);
+  assert.match(deckSlice('async function paintChanged()', 'function startAnim'), /paintKeyDeviceFor\(dk, k, sp2, \(sp2\.flash \|\| sp2\.refused\) \? 'flash' : undefined\)/);
+  const laneQ = deckSlice('function queueDeviceWrite(slotKey, job, lane)', 'function stateJobsQueued');
+  assert.match(laneQ, /lane = lane === 'gif' \? 'gif' : \(lane === 'flash' \? 'flash' : 'state'\);/);
+  assert.match(laneQ, /if \(lane === 'flash'\) \{ at = 0;/);
+  assert.match(deckSlice('function noteDeckInput()', 'function stopAutoDim'), /sendFeature\(Device\.brightnessReport\(profile, brightness\), 'flash'\)/);
   assert.match(deckSlice('function animateKeys()', 'async function hypeShow'), /paintKeyDevice\(i, spec\)/);
   // Strip, lightshow, brightness/reset features, and test patterns all queue.
   assert.match(deckSlice('async function paintStrip(force)', 'function drawStripMirrorCanvas'), /queueDeviceWrite\('strip'/);
   assert.match(deckSlice('async function connectLightShow()', 'function onDisconnect'), /queueDeviceWrite\('key:' \+ order\[k\]/);
-  assert.match(deckSlice('function sendFeature(rep)', 'function setBrightness'), /queueDeviceWrite\(null/);
+  assert.match(deckSlice('function sendFeature(rep, lane)', 'function setBrightness'), /queueDeviceWrite\(null/);
   assert.match(deckSlice('async function testPattern()', 'async function testStrip'), /queueDeviceWrite\('key:' \+ i/);
   assert.match(deckSlice('async function sendStripVariant(v)', 'async function stripProbe'), /queueDeviceWrite\(null/);
   assert.match(deckSlice('async function testStrip()', 'function deviceDiag'), /queueDeviceWrite\(null/);
@@ -505,7 +512,10 @@ test('KeyWi: auto-dim drops to 20% after five idle minutes and restores on any i
   // Dim never raises brightness, and both writes ride the queued feature path.
   assert.match(dim, /sendFeature\(Device\.brightnessReport\(profile, Math\.min\(brightness, AUTO_DIM_PCT\)\)\)/);
   assert.match(dim, /function noteDeckInput\(\)/);
-  assert.match(dim, /sendFeature\(Device\.brightnessReport\(profile, brightness\)\)/);
+  // 9/8 C10: the wake after auto-dim rides the front 'flash' lane so it lands
+  // before the press's own flash write, and a live window never dims at all.
+  assert.match(dim, /sendFeature\(Device\.brightnessReport\(profile, brightness\), 'flash'\)/);
+  assert.match(deckSlice('function autoDimCheck()', 'function noteDeckInput'), /if \(liveHere\(\)\) \{ autoDimTimer = setTimeout\(autoDimCheck, AUTO_DIM_AFTER_MS \+ 250\); return; \}/);
   // Every hardware input restores; teardown stops the timer.
   assert.match(deckSlice('function onInputReport(e)', 'function controllerForDial'), /noteDeckInput\(\)/);
   assert.match(deckSlice('function teardownDevice()', 'function startPreview'), /stopAutoDim\(\)/);
@@ -607,7 +617,9 @@ test('KeyWi: dial direction is a per-deck contract applied where encoder ticks e
   const primary = deckSlice('function onInputReport(e)', 'function onSecondaryInput');
   assert.match(primary, /dialTick\(i, t \* dialDirFor\(device\)\)/);
   const secondary = deckSlice('function onSecondaryInput(deck, e)', 'function controllerForDial');
-  assert.match(secondary, /c\.tick\(t \* dialDirFor\(deck\)\)/);
+  // 9/8 C2: ticks now route through dialVerb (which notes a strict-false
+  // refusal on that dial); the flip still happens right where the tick enters.
+  assert.match(secondary, /dialVerb\(deck, i, c, 'tick', t \* dialDirFor\(deck\)\)/);
   assert.doesNotMatch(secondary, /dialDirFor\(deck\).*x2 > evt\.x|x2 > evt\.x.*dialDirFor/);
   const dirFn = deckSlice('function dialDirFor(deck)', 'function paintNow()');
   assert.match(dirFn, /ov\.dialFlip \? -1 : 1/);
@@ -624,13 +636,23 @@ test('KeyWi: dial direction is a per-deck contract applied where encoder ticks e
   assert.match(deckSlice('function diagText()', 'function diagPanel'), /Dial check/);
   assert.match(primary, /noteDiagDials\(evt, device\)/);
   assert.match(secondary, /noteDiagDials\(evt, deck\)/);
-  // A VISIBLE report captures test turns WITHOUT dispatching them (a test
-  // turn must never scrub the live prompter), but a report left open
-  // off-screen never eats dials (that read as dead hardware mid-show), and
-  // leaving the KeyWi screen ends the capture entirely.
-  assert.match(primary, /if \(diagCaptureActive\(\)\) noteDiagDials\(evt, device\); else evt\.ticks\.forEach/);
-  assert.match(secondary, /if \(diagCaptureActive\(\)\) noteDiagDials\(evt, deck\); else evt\.ticks\.forEach/);
-  assert.match(deck, /function diagCaptureActive\(\) \{ return !!diagInfo && isSurfaceVisible\(\); \}/);
+  // 9/8 C10 (owner call 9/13): a VISIBLE report LOGS every turn and HOLDS it
+  // back from the apps (the Dial check must not move the talent), but never
+  // silently: the dial zone flashes red. Leaving the KeyWi screen ends it.
+  assert.match(primary, /var diagHold = diagCaptureActive\(\);/);
+  assert.match(primary, /else if \(diagHold\) noteDialRefused\(null, i\); else dialTick\(i/);
+  assert.match(primary, /else if \(diagHold\) noteDialRefused\(null, i\); else dialPressFire\(i\)/);
+  assert.match(secondary, /var diagHold2 = diagCaptureActive\(\);/);
+  assert.match(secondary, /if \(diagHold2\) noteDialRefused\(deck, i\); else dialVerb\(deck, i, c, 'tick'/);
+  assert.match(secondary, /if \(diagHold2\) noteDialRefused\(deck, i\); else dialVerb\(deck, i, c2, 'press'\)/);
+  assert.match(deckSlice('function diagText()', 'function diagPanel'), /held back from the apps/);
+  assert.match(deck, /function diagCaptureActive\(\) \{ return !!diagInfo && isSurfaceVisible\(\) && document\.visibilityState === 'visible'; \}/);
+  // Review fixes 9/13: scrub refusal flashes its zone; a voluntary Disconnect
+  // is not undone by refocus; own standby aborted after a live steal; doubt dot per key.
+  assert.match(deck, /var di = mapping\(\)\.dials\.indexOf\('prompterScrub'\)/);
+  assert.match(deck, /var deckLetGoByUser = false;/);
+  assert.match(deck, /if \(deckLetGoByUser\) return Promise\.resolve\(false\);/);
+  assert.match(deck, /function slotPendingIn\(a, slot, ids, s\)/);
   assert.match(deckSlice('function hideScreen()', 'window.addEventListener(\'blur\''), /diagInfo = null; clearTimeout\(diagDialRenderTimer\)/);
   assert.match(deckSlice('function noteDiagDials(evt, deck)', 'function diagPanel'), /deckName \+ ' dial '/);
   assert.match(deckSlice('async function runDiagnostics()', 'function diagText()'), /liveDials: !!device/);
@@ -816,7 +838,8 @@ test('KeyWi OBS keys: late refusals flash and speak, STARTING is a gate and a pu
   assert.match(deckSlice('function specSig(spec, i)', '// Rundown info key'), /spec\.pulseColor \|\| ''/);
   // The strip zone press shares the gate; its dot breathes while STARTING.
   const strip = deckSlice("obsProgram: { label: 'OBS program'", "ptProgram: { label: 'Prompter view'");
-  assert.match(strip, /press: function \(\) \{ obsDo\('toggleStream', \{ label: 'STREAM' \}\); \}/);
+  // 9/8 C2: the press returns obsDo's result so a refused zone tap flashes.
+  assert.match(strip, /press: function \(\) \{ return obsDo\('toggleStream', \{ label: 'STREAM' \}\); \}/);
   assert.match(strip, /st\.streaming \|\| st\.streamState === OBS_STARTING/);
   // Volume ticks catch rejections (throttled toast, no unhandledrejection noise).
   assert.match(deckSlice('function obsVolTick(d)', 'var obsWasReady'), /p\.then\(null, onErr\)/);
@@ -838,14 +861,21 @@ test('KeyWi: honest playback HOLD, keymap refusals flash, rundown keymap keys di
   // PLAY (pause: nothing, the strip prints PAUSED itself), never 'idle'.
   assert.match(og, /if \(po\.status === 'play' \|\| po\.status === 'pause'\) return po\.remaining != null \? fmtClock\(po\.remaining\) : \(po\.status === 'play' \? 'PLAY' : ''\);\n\s+return 'idle';/);
   assert.equal((og.match(/'HOLD'/g) || []).length, 1);
-  // runAction's own result comes back; a strict false is a refused press
-  // for the local rundown keymap ids only (C20): a prompter command returns
-  // false when it was QUEUED for an unlinked talent, and that is not refused.
+  // runAction's own result comes back; 9/8 C2: ANY strict false from a
+  // keymap action is a refused press (the app side now returns false only
+  // when the press did nothing), so the old /^rundown\./ filter is gone.
   assert.match(deck, /function surfaceRun\(id\) \{ var b = bridge\(\); try \{ return b \? b\.runAction\(id\) : undefined; \}/);
   const fire = deckSlice('function fireSlot(slot, phase, fromDeck, keyIdx)', 'function dispatchCloud');
-  assert.match(fire, /else if \(phase === 'down'\) \{ var kr = surfaceRun\(a\.keymapId\); refused = kr === false && \/\^rundown\\\.\/\.test\(a\.keymapId \|\| ''\); \} break;/);
-  assert.doesNotMatch(fire, /refused = surfaceRun\(a\.keymapId\) === false/);
-  const avail = deckSlice('function slotAvailability(a, s)', '// ── Rich key art');
+  assert.match(fire, /else if \(phase === 'down'\) \{ refused = surfaceRun\(a\.keymapId\) === false; \} break;/);
+  assert.doesNotMatch(fire, /\/\^rundown\\\.\/\.test\(a\.keymapId/);
+  // Dials and strip zones refuse the same way: the verb's strict false marks
+  // that dial's zone, and the strip paints a red bar on it.
+  assert.match(deck, /function surfacePrompter\(a\) \{ var b = bridge\(\); try \{ return b \? b\.prompter\(a\) : undefined; \}/);
+  assert.match(deck, /function dialVerb\(deck, i, c, verb, arg\)/);
+  assert.match(deckSlice('function dialVerb(deck, i, c, verb, arg)', '// ── Slot rendering helpers'), /if \(r === false\) noteDialRefused\(deck, i\);/);
+  assert.match(deckSlice('async function paintStrip(force)', 'function drawStripMirrorCanvas'), /refused: dialRefusedNow\(null, \(mapping\(\)\.touch\[z\] \|\| \{ dial: z \}\)\.dial\)/);
+  assert.match(deckSlice('function drawStripContent(ctx, cells, cw, ch)', 'function drawStripCell'), /if \(cell\.refused\) \{ ctx\.fillStyle = 'rgba\(224,49,49,0\.9\)'/);
+  const avail = deckSlice('function slotAvailability(a, s, slot)', '// ── Rich key art');
   assert.match(avail, /if \(k === 'keymap' && \/\^rundown\\\.\/\.test\(a\.keymapId \|\| ''\) && s && s\.live && s\.live\.caller === false\) return 'off';/);
   assert.match(deck, /id: 'golive', kind: 'golive', machineLocal: true[^\n]*lamp: function \(s\) \{ return !!\(s\.live && s\.live\.on\); \}/);
   // ROW key: a second line for the talent's row when the bridge publishes it.
@@ -865,7 +895,10 @@ test('Outrangutan cross-machine: baseline consumption, loud sync failures, no wa
   // every cross-machine fire in silence when two Macs' clocks drifted.
   const doc = app.slice(app.indexOf('function onSessionDoc(d)'), app.indexOf('function applyRemoteCommand'));
   assert.match(doc, /if \(!sessionDocPrimed\) \{/);
-  assert.match(doc, /lastCmdId = cmd\.commandId;\n        slog\('session'/);
+  // 9/13 C5: with a commandQueue on the doc the slot is never consumed; the
+  // old slot path (old Pro) still baselines and logs the skip.
+  assert.match(doc, /lastCmdId = cmd\.commandId;\n        if \(!queue\) slog\('session'/);
+  assert.match(doc, /function consumeCommandQueue|consumeCommandQueue\(/);
   assert.doesNotMatch(doc, /Date\.now\(\) - cmd\.ts > 30000/);
   assert.doesNotMatch(doc, /Date\.now\(\) - g\.ts < 30000/);
   // A refused or dead session listener surfaces itself and retries: the rules
@@ -888,6 +921,57 @@ test('KeyWi: the Playback monitor distinguishes idle from not-linked', () => {
   assert.match(og, /Playback idle/);
   assert.match(og, /Playback not linked/);
   assert.match(og, /Open Outrangutan and join this show/);
+});
+
+test('KeyWi 9/8 reliability: deck follows Live, honest refusals, timers and hardware feedback', () => {
+  // C1: the app can make the Live window the deck window; the beat says
+  // whether its owner is live, and a NON-live standby gives a live owner a
+  // 30 s leash before the frozen-owner steal (a hidden live tab still stamps).
+  assert.match(deck, /claimForLive: claimForLive,/);
+  const claim = deckSlice('function claimForLive(opts)', '// The silent multi-deck re-attach');
+  assert.match(claim, /if \(AUX_OUTPUT_BOOT \|\| !navigator\.hid\) return Promise\.resolve\(false\);/);
+  assert.match(claim, /deckStandbyCtl\.abort\(\)/);
+  assert.match(claim, /acquireDeckOwnership\(\{ steal: true \}\)/);
+  assert.match(claim, /return reattachGrantedDecks\(\)\.then\(function \(\) \{\n\s+if \(decks\.length\) \{ stampDeckBeat\(\);/);
+  assert.doesNotMatch(claim, /toast\(/);
+  assert.match(deckSlice('function stampDeckBeat()', 'function deckBeatStale'), /decks: decks\.length, live: liveHere\(\)/);
+  assert.match(deck, /DECK_BEAT_LIVE_STALE_MS = 30000/);
+  assert.match(deckSlice('function deckBeatStale()', 'function deckBeatTick'), /var leash = \(b\.live && !liveHere\(\)\) \? DECK_BEAT_LIVE_STALE_MS : DECK_BEAT_STALE_MS;/);
+  assert.match(deck, /function liveHere\(\) \{ var s = surfaceState\(\); return !!\(s && s\.live && s\.live\.on\); \}/);
+  // C3 + C5 deck side: GO / cue / pad keys dim when a fire would be refused
+  // (pause, stop, fade and PANIC stay lit); the amber doubt dot shows while a
+  // command waits for its ack.
+  const avail = deckSlice('function slotAvailability(a, s, slot)', '// ── Rich key art');
+  assert.match(avail, /var fires = k !== 'transport' \|\| a\.op === 'go';\n\s+if \(fires && p\.goAllowed === false\) return 'off';/);
+  assert.match(avail, /var pend = Array\.isArray\(p\.pendingIds\) \? slotPendingIn\(a, slot \|\| \{\}, p\.pendingIds, s\) : !!p\.pendingAck;/);
+  assert.match(avail, /if \(pend\) return 'doubt';/);
+  // C5: the honest-ack refusal event red-flashes every key that could have
+  // sent the command (transport op, km:playout.* keys, cue / pad slot or ref).
+  assert.match(deck, /window\.addEventListener\('cueola-playout-refused', function \(e\)/);
+  const m = deckSlice('function slotMatchesRefusal(slot, d, s)', "window.addEventListener('cueola-playout-refused'");
+  assert.match(m, /if \(a\.kind === 'transport'\) return !!act && a\.op === act;/);
+  assert.match(m, /if \(a\.kind === 'keymap'\) return !!act && a\.keymapId === \(act === 'fadeStop' \? 'playout\.fade' : 'playout\.' \+ act\);/);
+  assert.match(m, /if \(a\.kind === 'cueRef' \|\| a\.kind === 'padRef'\) return String\(slot\.ref \|\| ''\) === tid;/);
+  assert.match(m, /return Object\.keys\(map\)\[a\.slot - 1\] === tid;/);
+  // C10: learn mode times out after 20 s and a consumed learn press flashes
+  // red; the dial learn path marks the dial's zone the same way.
+  assert.match(deck, /LEARN_TIMEOUT_MS = 20000/);
+  assert.match(deckSlice('function armLearn(on)', 'function openKeyEditor'), /learnArmed = false;\n\s+toast\('Learn mode ended: nothing was pressed in 20 seconds\.'\);/);
+  const keys = deckSlice('function onInputReport(e)', 'function onSecondaryInput');
+  assert.match(keys, /if \(learnArmed\) \{ refusedFlashUntil\[i\] = performance\.now\(\) \+ 900; openKeyEditor\(i, true\); \}/);
+  assert.match(keys, /if \(learnArmed\) \{ noteDialRefused\(null, i\); openDialEditor\(i, true\); \}/);
+  assert.match(deck, /function openKeyEditor\(index, fromLearn\) \{\n\s+armLearn\(false\); editingKey = index;/);
+  assert.match(deck, /function openDialEditor\(index, fromLearn\) \{\n\s+armLearn\(false\);/);
+  // Minors: a voluntary Disconnect that leaves the window deck-less drops the
+  // beat and releases the lock (no watchdog "take over" of a deck let go on
+  // purpose), and deckStatus says when another app holds the USB device.
+  const dis = deckSlice('function disconnect()', 'function removeDeck');
+  assert.match(dis, /var letGo = !decks\.length && deckOwner;/);
+  assert.match(dis, /if \(letGo\) \{ deckLetGoByUser = true; try \{ localStorage\.removeItem\(DECK_BEAT_KEY\); \} catch \(e\) \{\} \}/);
+  assert.match(dis, /\}\)\.then\(letGoNow, letGoNow\);/);
+  assert.doesNotMatch(dis, /electDeckOwner/);
+  assert.match(deckSlice('async function openDeviceNow(dev, silent)', 'async function connectLightShow'), /if \(!\(e && e\.name === 'NotFoundError'\)\) deckHeldByOtherApp = true;/);
+  assert.match(deckSlice('deckStatus: function () {', 'claimForLive: claimForLive'), /heldByOtherApp: !device && deckHeldByOtherApp/);
 });
 
 for (const { name, run } of tests) {

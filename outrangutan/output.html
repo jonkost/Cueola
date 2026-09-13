@@ -103,7 +103,8 @@
   const bc = ('BroadcastChannel' in self) ? new BroadcastChannel(channelName) : null;
   const runtime = {
     mediaLoadStatus: 'empty', playbackStatus: 'stopped', cueId: '', mediaId: '',
-    error: '', recoverability: 'none', recoveryNeedsResume: false
+    error: '', recoverability: 'none', recoveryNeedsResume: false,
+    audioLocked: false   // C7: unmuted play() refused, rolling muted; the controller page's gesture retries
   };
   let dbPromise = null;
   let imgUrl = null;
@@ -115,6 +116,7 @@
   let heartbeatTimer = null;
   let shuttingDown = false;
   let syncing = false;
+  let syncSeen = false, readyReannounce = null;   // C7: READY repeats until the first SYNC_STATE
   let standbyText = '';   // operator-set idle text; empty string = pure black standby frame
 
   function send(message) {
@@ -447,11 +449,13 @@
   function hideUnlock() { if (!unlockEl) return; unlockEl.classList.remove('on'); document.body.classList.remove('unlock-visible'); }
   function clearPendingUnlock() {
     _blockedPlayRetry = null;
+    runtime.audioLocked = false;
     if (_mutedFallbackDeck) { _mutedFallbackDeck.el.muted = false; _mutedFallbackDeck = null; }
     hideUnlock();
   }
   function retryBlockedPlayback() {
     hideUnlock();
+    runtime.audioLocked = false;   // a local gesture: the retry below re-flags it if still refused
     const retry = _blockedPlayRetry, dk = _mutedFallbackDeck;
     _blockedPlayRetry = null;
     _mutedFallbackDeck = null;
@@ -474,6 +478,7 @@
       return { ok: false, error: runtime.error };
     }
     runtime.playbackStatus = 'playing';
+    if (started && typeof started.then === 'function') started.then(() => { if (!d.el.muted) runtime.audioLocked = false; }, () => {});
     if (started && typeof started.catch === 'function') {
       started.catch((error) => {
         if (!context.isCurrent() || (error && error.name === 'AbortError')) return;
@@ -497,9 +502,15 @@
             _mutedFallbackDeck = d;
             const muted = d.el.play();
             if (muted && typeof muted.catch === 'function') muted.catch(() => {});
+            // C7: silent but rolling, and no chip over program. The controller
+            // page reads audioLocked from the heartbeat; its next gesture
+            // re-sends audio routing plus a resume so this deck can retry.
+            runtime.audioLocked = true;
+            sendHeartbeat();
+          } else {
+            showUnlock('Tap or press a key to start playback');
+            rendererError('Playback requires operator interaction. Click or press any key in this window.', d.mediaId, 'operator');
           }
-          showUnlock(restoreSound ? 'Tap or press a key for sound' : 'Tap or press a key to start playback');
-          rendererError('Playback requires operator interaction. Click or press any key in this window.', d.mediaId, 'operator');
         } else {
           rendererError('Playback could not start.', d.mediaId, 'operator');
         }
@@ -610,6 +621,7 @@
     // (or replaces it): it never un-mutes, and it is the only way a blocked
     // video ever starts, so clearing it would strand a dark output.
     _mutedFallbackDeck = null;
+    if (!on) runtime.audioLocked = false;   // audio off: nothing is waiting on a gesture
     if (!on && _blockedPlayRetry && _blockedPlayRetry.restoresSound) {
       _blockedPlayRetry = null;
       hideUnlock();
@@ -647,7 +659,10 @@
     // granting activation — otherwise the chip died and sound never returned.
     if (on) setTimeout(() => {
       if (!context.isCurrent()) return;
-      if (runtime.playbackStatus !== 'playing' || !front || !front.el.paused) return;
+      if (runtime.playbackStatus !== 'playing' || !front || !front.el.paused) {
+        if (front && !front.el.muted && !front.el.paused) runtime.audioLocked = false;   // unmute held: sound is on
+        return;
+      }
       const dk = front;
       dk.el.muted = true;
       _mutedFallbackDeck = dk;
@@ -657,6 +672,7 @@
         if (!context.isCurrent() || dk !== front) return;
         dk.el.muted = false;
         const p = dk.el.play();
+        if (p && typeof p.then === 'function') p.then(() => { if (!dk.el.muted) runtime.audioLocked = false; }, () => {});
         if (p && typeof p.catch === 'function') p.catch(err => {
           if (err && err.name === 'NotAllowedError') {
             dk.el.muted = true;
@@ -664,13 +680,13 @@
             if (again && typeof again.catch === 'function') again.catch(() => {});
             _blockedPlayRetry = retrySound;
             _mutedFallbackDeck = dk;
-            showUnlock('Tap or press a key for sound');
+            runtime.audioLocked = true; sendHeartbeat();   // C7: no chip over program, the controller page's gesture retries
           }
         });
       };
       retrySound.restoresSound = true;
       _blockedPlayRetry = retrySound;
-      showUnlock('Tap or press a key for sound');
+      runtime.audioLocked = true; sendHeartbeat();   // C7: no chip over program, the controller page's gesture retries
     }, 120);
     return { ok: true };
   }
@@ -873,7 +889,9 @@
     if (shuttingDown) return;
     const state = observedState(overrides);
     publishDomState(state);
-    send(outputProtocol.buildHeartbeat(state));
+    const beat = outputProtocol.buildHeartbeat(state);
+    if (runtime.audioLocked) beat.payload.audioLocked = true;   // C7, additive: old controllers ignore it
+    send(beat);
   }
 
   async function applySnapshot(message, context) {
@@ -955,6 +973,7 @@
     return { ok: true };
   }
   function receiveSync(message) {
+    if (!syncSeen) { syncSeen = true; if (readyReannounce) readyReannounce.stop(); }
     if (syncApplied.has(message.commandId)) {
       send(outputProtocol.buildStateApplied(message.commandId));
       return;
@@ -1057,6 +1076,23 @@
 
   publishDomState(outputProtocol.getState());
   send(outputProtocol.buildReady());
+  // C7: READY is repeated every 5 s until the first SYNC_STATE lands (bounded
+  // to 2 minutes), so a controller page that was not listening at load (a
+  // reload of it, a channel that opened late) still adopts this window. A
+  // Worker keeps the cadence when this window is hidden.
+  readyReannounce = (() => {
+    let count = 0, worker = null, timer = null;
+    function stop() { if (worker) { try { worker.terminate(); } catch (e) {} worker = null; } if (timer) { clearInterval(timer); timer = null; } }
+    const tick = () => {
+      if (shuttingDown || syncSeen || ++count > 24) { stop(); return; }
+      send(outputProtocol.buildReady());
+    };
+    try {
+      worker = new Worker(URL.createObjectURL(new Blob(['setInterval(function () { postMessage(1); }, 5000);'], { type: 'text/javascript' })));
+      worker.onmessage = tick;
+    } catch (e) { timer = setInterval(tick, 5000); }
+    return { stop };
+  })();
   // Phase 9 (D10.2): defensive persist() — this window reads the media library
   // straight from IndexedDB; the grant is origin-wide (main app asks too) and
   // the result is advisory only.
@@ -1073,6 +1109,7 @@
   window.addEventListener('beforeunload', () => {
     shuttingDown = true;
     if (heartbeatTimer) heartbeatTimer.stop();
+    if (readyReannounce) readyReannounce.stop();
     cancelAnimationFrame(frameRAF);
     commandQueue.close('output window closed');
     cancelRendererEffects();

@@ -67,7 +67,7 @@ test('fixRequests receiver runs before the first-snapshot baseline and answers b
   const primedAt = doc.indexOf('if (!sessionDocPrimed) {');
   assert.ok(fixAt >= 0 && primedAt > fixAt, 'fix requests are read before the baseline return');
   const lane = slice('const FIX_STALE_MS', 'function applyRemoteCommand(cmd)');
-  assert.match(lane, /FIX_AUTORUN = \{ rejoin: 1, republish: 1, preflight: 1, syncMedia: 1 \}/);
+  assert.match(lane, /FIX_AUTORUN = \{ rejoin: 1, republish: 1, preflight: 1, syncMedia: 1, reload: 1 \}/);   // 9/8 C8: the Air reloads on the director's build catch-up
   assert.match(lane, /r\.target !== 'playout' \|\| r\.status !== 'open'/);
   assert.match(lane, /\^\[A-Za-z0-9_\]\{1,120\}\$/);                      // identifier-safe ids only
   assert.match(lane, /p\['fixRequests\.' \+ id \+ '\.' \+ k\] = patch\[k\]/); // field-path patch, never a map set
@@ -179,7 +179,8 @@ test('output window: an orphaned renderer is reported, and a detached runtime ne
 
   // And the rundown refuses the same-tab fast path when it still cannot deliver.
   assert.ok(app.includes('function _ogLocalCanDeliver(local) {'), 'delivery predicate is module level');
-  assert.ok(app.includes("!remoteAirDriving() && _ogLocalCanDeliver(local)"), 'cue fast path checks delivery');
+  // 9/8 C4: the fast path also needs the local instance to be the DESIGNATED playout (remoteAirDriving lives inside it).
+  assert.ok(app.includes("_ogLocalDesignated(local) && _ogLocalCanDeliver(local)"), 'cue fast path checks designation and delivery');
 
   // Copy rule: no em or en dashes in the lines these fixes added.
   const added = js.split('\n').filter(line => /foreignOutputSeen|foreignWindow|earlier page load|reclaim: \(\)|attached: \(\)/.test(line));

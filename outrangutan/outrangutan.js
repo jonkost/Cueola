@@ -31,9 +31,21 @@
   const MEDIA_STORE = 'media', SHOW_STORE = 'show', SHOW_KEY = 'current';
   const OUTPUT_CHANNEL_PREFIX = 'outrangutan-output-v2:';
   const OUTPUT_PROTOCOL = window.CueolaOutputProtocol;
-  const OUTPUT_CONTROLLER_ID = 'ogc_' + ((globalThis.crypto && globalThis.crypto.randomUUID)
-    ? globalThis.crypto.randomUUID().replace(/[^a-zA-Z0-9_-]/g, '')
-    : (Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)));
+  // Per TAB, not per page load (C7): an open output window binds to the
+  // controller id baked into its URL, so a reload of this page (the deploy
+  // ritual) must come back with the same id or the window goes deaf.
+  // sessionStorage is the tab's own memory; a fresh tab still mints a fresh id.
+  const OUTPUT_CONTROLLER_ID = (() => {
+    let id = '';
+    try { id = sessionStorage.getItem('og_controller_id') || ''; } catch (e) {}
+    if (!/^ogc_[a-zA-Z0-9_-]{8,}$/.test(id)) {
+      id = 'ogc_' + ((globalThis.crypto && globalThis.crypto.randomUUID)
+        ? globalThis.crypto.randomUUID().replace(/[^a-zA-Z0-9_-]/g, '')
+        : (Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)));
+      try { sessionStorage.setItem('og_controller_id', id); } catch (e) {}
+    }
+    return id;
+  })();
   const STANDALONE_OUTPUT_SESSION_ID = 'standalone_' + OUTPUT_CONTROLLER_ID;
   const SCHEMA = 3;
   const PAD_COUNT = 12;          // SFX board slots per bank (default; user-expandable)
@@ -678,15 +690,15 @@
     renderPads(); renderPadInspector(); scheduleSave();
   }
   async function firePad(pad) {
-    if (!pad || !pad.mediaId) return;
-    if (!ensureAudio()) { toast('Web Audio unavailable in this browser.'); return; }
+    if (!pad || !pad.mediaId) return { ok: false, reason: 'pad has no media' };
+    if (!ensureAudio()) { toast('Web Audio unavailable in this browser.'); return { ok: false, reason: 'Web Audio unavailable on the playout Mac' }; }
     let rt = padRT.get(pad.id);
     if (!rt) { rt = { ch: makeChannel(), voices: [], buffer: bufferCache.get(pad.mediaId) || null }; padRT.set(pad.id, rt); }
     if (!rt.buffer) { rt.buffer = bufferCache.get(pad.mediaId) || null; }
-    if (!rt.buffer) { const b = await decodeBuffer(pad.mediaId); if (!b) { slog('error', 'SFX pad “' + pad.name + '” would not decode'); toast('Could not decode “' + pad.name + '”.'); return; } rt.buffer = b; }
+    if (!rt.buffer) { const b = await decodeBuffer(pad.mediaId); if (!b) { slog('error', 'SFX pad “' + pad.name + '” would not decode'); toast('Could not decode “' + pad.name + '”.'); return { ok: false, reason: (pad.name || 'pad') + ' would not decode' }; } rt.buffer = b; }
 
     if (!settings.multiTrigger) pads.forEach(p => { if (p.id !== pad.id) stopPad(p); });
-    if (pad.retrigger === 'toggle' && rt.voices.length) { stopPad(pad); return; }
+    if (pad.retrigger === 'toggle' && rt.voices.length) { stopPad(pad); return { ok: true }; }
     if (pad.retrigger === 'restart' || !settings.multiTrigger) stopVoices(rt);
     slog('sfx', 'Pad · “' + (pad.name || 'Pad') + '”');
 
@@ -708,6 +720,7 @@
     rt.voices.push(src);
     renderPadLive(pad.id);
     publishSfxFire(pad, src._ogDur);   // P4: discrete fire event → follower chips (voice length rides along)
+    return { ok: true };
   }
   function stopVoices(rt) { if (!rt) return; rt.voices.slice().forEach(v => { try { v.onended = null; v.stop(); } catch (e) {} }); rt.voices = []; }
   function stopPad(pad) { const rt = padRT.get(pad.id); if (!rt) return; cancelFade('padin-' + pad.id); stopVoices(rt); renderPadLive(pad.id); }
@@ -993,10 +1006,23 @@
       foreignOutputSeen.set(id, { at: Date.now(), controllerInstanceId: normalized.controllerInstanceId });
       return;
     }
-    foreignOutputSeen.delete(id);
     const rec = outputRecord(id, true), controller = controllerFor(id);
     if (!controller) return;
-    const type = normalized.commandType;
+    let type = normalized.commandType, readyEnvelope = message;
+    if (type !== OUTPUT_PROTOCOL.MESSAGE_TYPES.READY && !rec.outputInstanceId && normalized.outputInstanceId) {
+      // C7 adoption: after a reload of this page the surviving window keeps
+      // heartbeating under the same controller id (persisted per tab), but
+      // this page has no record of it and its READY went out long ago. Treat
+      // the first envelope from an unrecorded renderer as its READY and run
+      // the normal SYNC_STATE handshake (a paused snapshot). Held back while
+      // another Outrangutan window on this Mac may own it (peer ping).
+      if (peerOwnsOutputs(id, normalized)) return;
+      if (Date.now() - channelOpenedAt < 800) return;   // let a live peer answer the join ping first; the next heartbeat retries
+      readyEnvelope = Object.assign({}, message, { commandType: OUTPUT_PROTOCOL.MESSAGE_TYPES.READY, commandId: normalized.commandId + '_adopt' });
+      type = OUTPUT_PROTOCOL.MESSAGE_TYPES.READY;
+      slog('output', (outputById(id)?.label || ('Output ' + id)) + ' was already running from before this page loaded, adopting it.');
+    }
+    foreignOutputSeen.delete(id);
     if (type === OUTPUT_PROTOCOL.MESSAGE_TYPES.READY) {
       if (rec.lastReadyMessageAt && normalized.timestamp < rec.lastReadyMessageAt) return;
       const replaced = !!rec.outputInstanceId && rec.outputInstanceId !== normalized.outputInstanceId;
@@ -1007,7 +1033,7 @@
         });
         postOutputEnvelope(retire, rec, false);
       }
-      if (!controller.noteReady(message)) return;
+      if (!controller.noteReady(readyEnvelope)) return;
       if (replaced) rec.win = source || null;
       else if (source) rec.win = source;
       clearAckTimers(rec);
@@ -1040,6 +1066,11 @@
       if (!controller.noteHeartbeat(message)) return;
       const state = controller.getState(String(id));
       applyControllerState(rec, state);
+      // C7: the renderer's unmuted play() was refused and it is rolling muted
+      // (no chip over program); the next gesture on THIS page re-sends audio.
+      const audioLocked = !!(normalized.payload && normalized.payload.audioLocked);
+      if (audioLocked && !rec.audioLocked) announceOutput(rec, 'audio-locked', (outputById(id)?.label || ('Output ' + id)) + ' is playing without sound until you tap or press a key on this page.');
+      rec.audioLocked = audioLocked;
       if (rec.status === 'stalled' && previousStatus !== 'stalled') announceOutput(rec, 'stalled', (outputById(id)?.label || ('Output ' + id)) + ' stopped painting frames.');
       if (rec.status === 'error' && previousStatus !== 'error') announceOutput(rec, 'heartbeat-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'renderer error.'));
       const rendererRecovered = wasUnavailable && state.heartbeatStatus === 'healthy' && !['stalled', 'error'].includes(state.rendererStatus);
@@ -1075,6 +1106,46 @@
       updateOutputUI();
     }
   }
+  // Major 990: two Outrangutan tabs joined to the same code on one Mac would
+  // both open the session channel, both publish live packets and both answer
+  // commands. On join, ask the channel who is already driving this session; a
+  // live controller answers, and this page says so instead of stealing.
+  let peerController = null;   // { page, controller, at, pinged? } of a live peer that answered
+  let channelOpenedAt = 0;
+  function peerLive() { return (isOpen() || !!sessionSub) && !outputRuntimeDetached && mode === 'session' && !!sessionCode; }
+  function postPeer(kind) {
+    if (!bc) return;
+    try { bc.postMessage({ _og: true, _from: 'controller', _peer: kind, page: OG_SENDER, controller: OUTPUT_CONTROLLER_ID, session: outputChannelSessionId, live: peerLive() }); } catch (e) {}
+  }
+  function pingPeerControllers() { peerController = null; postPeer('ping'); }
+  function handlePeerController(msg) {
+    if (!msg || msg.page === OG_SENDER || msg.session !== outputChannelSessionId) return;
+    if (msg._peer === 'ping') { if (peerLive()) postPeer('pong'); return; }
+    if (msg._peer !== 'pong' || !msg.live) return;
+    const first = !peerController;
+    peerController = { page: msg.page, controller: msg.controller, at: Date.now() };
+    if (!first) return;
+    // Stop listening here (mode and sessionCode stay, so a later Join re-pings
+    // and takes over once the peer is gone): two live tabs for one code would
+    // both answer every command. The badge goes to NOT LISTENING on purpose.
+    unsubscribeSession(); setModeBadge();
+    const same = msg.controller === OUTPUT_CONTROLLER_ID ? ' (a duplicated tab)' : '';
+    slog('error', 'Another Outrangutan window on this Mac is already driving ' + (sessionCode || 'this session') + same + '. Use that window.');
+    toast('⚠ Another Outrangutan window on this Mac is already driving ' + (sessionCode || 'this session') + '. Use that window, or close it and rejoin here.', 8000);
+    updateOutputUI();
+  }
+  // Adoption guard: while a live peer answered, an output heartbeat is its
+  // window, not ours. Re-ask every 10 s so a closed peer frees the adoption.
+  function peerOwnsOutputs(id, normalized) {
+    if (!peerController) return false;
+    const now = Date.now();
+    const hold = () => { foreignOutputSeen.set(id, { at: now, controllerInstanceId: normalized.controllerInstanceId }); return true; };
+    if (now - peerController.at < 10000) return hold();
+    if (!peerController.pinged) { peerController.pinged = now; postPeer('ping'); return hold(); }
+    if (now - peerController.pinged < 3000) return hold();
+    peerController = null;   // no answer twice: the peer is gone, adopt
+    return false;
+  }
   function ensureChannel() {
     const desired = desiredOutputSessionId();
     if (outputRuntimeDetached) return desired;
@@ -1090,7 +1161,9 @@
     }
     if (!bc && 'BroadcastChannel' in window) {
       bc = new BroadcastChannel(OUTPUT_CHANNEL_PREFIX + outputChannelSessionId);
-      bc.onmessage = e => handleOutputMessage(e.data, null);
+      bc.onmessage = e => { if (e.data && e.data._from === 'controller' && e.data._peer) handlePeerController(e.data); else handleOutputMessage(e.data, null); };
+      channelOpenedAt = Date.now();
+      if (mode === 'session' && sessionCode) pingPeerControllers();   // major 990: is another Outrangutan window on this Mac already driving this code
     }
     helperSync(outputChannelSessionId);
     return outputChannelSessionId;
@@ -1519,7 +1592,9 @@
     });
     items.forEach(item => {
       if (!item.foreignWindow) return;
-      item.detail = 'An output window from an earlier page load is still open and cannot hear this page. Close that window, then press Open.';
+      item.detail = peerController
+        ? 'Another Outrangutan window on this Mac is already driving this session and owns the output window. Use that window.'
+        : 'An output window from an earlier page load is still open and cannot hear this page. Close that window, then press Open.';
     });
     const priority = ['error', 'stalled', 'disconnected', 'recovering', 'connecting', 'opening'];
     let status = 'closed';
@@ -2715,6 +2790,23 @@
   // Strictly an overlay — every transport path fires LOCALLY first (live-critical
   // never blocks on the network); sync is best-effort and survives a drop.
   const OG_SENDER = 'outrangutan_' + Math.random().toString(36).slice(2, 9);
+  // C8: build identity = the cueola-app.js script tag's v query (every
+  // Outrangutan runs inside index.html); window.CUEOLA_BUILD when present.
+  let _ogBuild = '';
+  function ogBuild() {
+    if (_ogBuild) return _ogBuild;
+    let v = '';
+    try {
+      if (typeof window.CUEOLA_BUILD === 'string') v = window.CUEOLA_BUILD;
+      if (!v) {
+        const s = document.querySelector('script[src*="cueola-app.js"]');
+        const m = /[?&]v=([^&#]*)/.exec((s && s.getAttribute('src')) || '');
+        v = m ? decodeURIComponent(m[1]) : '';
+      }
+    } catch (e) { v = ''; }
+    _ogBuild = v;
+    return v;
+  }
   let sessionSub = null;          // onSnapshot unsubscribe
   let lastCmdId = null;           // dedupe handled commands (snapshots re-fire)
   let lastGainId = null;          // dedupe remote gain writes (own field, own guard)
@@ -2739,6 +2831,7 @@
   function subscribeSession() {
     unsubscribeSession();
     if (mode !== 'session' || !sessionCode) return;
+    if (peerController && Date.now() - peerController.at < 10000) return;   // another window on this Mac drives this code (major 990)
     if (!fbReady()) {
       // Firebase may still be booting — attach the sync bus as soon as it's up
       // instead of silently leaving the joined session deaf.
@@ -2770,7 +2863,7 @@
     publishCues(); publishLive(true);
     startLiveHeartbeat();
   }
-  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } clearTimeout(subRetryTimer); subRetryTimer = null; lastCmdId = null; lastGainId = null; lastPanicId = null; sessionDocPrimed = false; subErrToasted = false; pubErrToasted = false; stopLiveHeartbeat(); }
+  function unsubscribeSession() { if (sessionSub) { try { sessionSub(); } catch (e) {} sessionSub = null; } clearTimeout(subRetryTimer); subRetryTimer = null; lastCmdId = null; lastGainId = null; lastPanicId = null; sessionDocPrimed = false; subErrToasted = false; pubErrToasted = false; expiredToasted = false; stopLiveHeartbeat(); }
 
   // Idle heartbeat: publishLive only ticks with the play RAF, so an idle
   // playout machine used to publish NOTHING — the rundown machine could not
@@ -2801,6 +2894,11 @@
     const g = d && d.outrangutan && d.outrangutan.gain;
     const cmd = d && d.outrangutan && d.outrangutan.command;
     const pn = d && d.outrangutan && d.outrangutan.panic;
+    // Proto 4 sender: the last 8 commands ride outrangutan.commandQueue (one
+    // entry per origId, newest last). When the queue is there the slot is
+    // compat only and never consumed; an old Pro (no queue) keeps the slot.
+    const queue = d && d.outrangutan && Array.isArray(d.outrangutan.commandQueue) ? d.outrangutan.commandQueue : null;
+    const now = Date.now();
     // Baseline, not wall clock: the FIRST snapshot after subscribing marks
     // whatever already sits in the command/gain slots as consumed without
     // applying it (we must not fire a command from before we joined). After
@@ -2813,7 +2911,21 @@
       if (pn && pn.id) lastPanicId = pn.id;
       if (cmd && cmd.commandId) {
         lastCmdId = cmd.commandId;
-        slog('session', 'Synced to ' + sessionCode + ' (an older queued command was skipped, live from now on)');
+        if (!queue) slog('session', 'Synced to ' + sessionCode + ' (an older queued command was skipped, live from now on)');
+      }
+      if (queue) {
+        // Queue prime: entries more than 10 s from this clock are baselined
+        // as seen; anything fresher is a fire that landed while this Mac was
+        // (re)subscribing and still runs. Seen memory lives for the page, so
+        // a rejoin never replays what already ran here.
+        let skipped = 0;
+        queue.forEach(q => {
+          if (!q || typeof q !== 'object' || !q.commandId) return;
+          if (Math.abs(proNow() - (Number(q.ts) || 0)) <= 10000) return;
+          noteCmdOrig(q.origId || q.commandId); noteCmdId(q.commandId); skipped++;
+        });
+        slog('session', 'Synced to ' + sessionCode + (skipped ? ' (' + skipped + ' older queued command' + (skipped === 1 ? '' : 's') + ' skipped, live from now on)' : ''));
+        consumeCommandQueue(queue, now, pn && pn.ts);
       }
       return;
     }
@@ -2836,29 +2948,128 @@
       if (!cmdOrigSeen(orig)) { noteCmdOrig(orig); panic(); }
       ackRemoteCommand({ commandId: pn.id, origId: orig });
     }
+    // proto 4: the queue is the truth for every commandId it carries. A writer
+    // that only filled the slot (no queue entry for this commandId) still gets
+    // its command from the slot path below; prime already baselined lastCmdId.
+    if (queue) {
+      // Live snapshot: new foreign entries teach the sender's clock first.
+      queue.forEach(q => { if (q && q.commandId && !cmdIdSeen(q.commandId) && q.sender !== OG_SENDER) learnProClock(q); });
+      consumeCommandQueue(queue, now, pn && pn.ts);
+      if (!cmd || !cmd.commandId || queue.some(q => q && q.commandId === cmd.commandId)) return;
+    }
     if (!cmd || !cmd.commandId || cmd.commandId === lastCmdId) return;
     if (cmd.sender === OG_SENDER) return;                       // ignore our own writes (loop guard)
     lastCmdId = cmd.commandId;
+    learnProClock(cmd);
     // Delivery is confirmed, never assumed: the sender retries an unconfirmed
     // command (same origId, new commandId) because the single slot can be
     // overwritten, and the post-subscribe baseline eats whatever it holds. A
     // retry whose ORIGINAL already ran here is acked (stops the retrying) but
     // never executed twice.
-    if (cmdOrigSeen(cmd.origId)) { ackRemoteCommand(cmd); return; }
-    noteCmdOrig(cmd.origId || cmd.commandId);
-    applyRemoteCommand(cmd);
-    ackRemoteCommand(cmd);
+    runRemoteCommand(cmd);
   }
-  // Executed-origin memory for the retry protocol (bounded; a show fires far
-  // fewer than 24 commands between any two retries).
+  // Queue lane: every entry whose commandId is new here is handled once, in
+  // array order. Own writes are skipped, and an entry whose expiresAt is more
+  // than 8 s past plus 10 s of clock skew (older than 18 s) is dropped: the
+  // sender gave up on it (offline flush) and a late fire would be wrong.
+  // The sender stamps ts and expiresAt on ITS clock. Every command that
+  // arrives on a live (non-prime) snapshot teaches this Mac the rundown Mac's
+  // clock offset (arrival minus stamp, latency included), so the expiry and
+  // the reconnect window compare in the sender's time and a drifted clock
+  // cannot make every fire read as too old. Unknown on a fresh page load:
+  // then the raw clock with its 10 s allowance applies, as before.
+  let _proClockOffset = null;
+  function learnProClock(cmd) {
+    const ts = Number(cmd && cmd.ts) || 0;
+    if (!ts) return;
+    const off = Date.now() - ts;
+    if (!isFinite(off) || Math.abs(off) > 6 * 3600 * 1000) return;
+    _proClockOffset = _proClockOffset == null ? off : Math.round(_proClockOffset * 0.7 + off * 0.3);
+  }
+  function proNow() { return _proClockOffset == null ? Date.now() : Date.now() - _proClockOffset; }
+  function consumeCommandQueue(queue, now, lanePanicTs) {
+    now = proNow();
+    // A stop or panic in this snapshot defeats every older fire that landed
+    // with it: the operator killed program after that fire was sent, so
+    // running it now would bring program back. Superseded fires are acked as
+    // refused with a plain reason so the sender stops retrying them.
+    const killTs = Math.max(lanePanicTs || 0, ...queue
+      .filter(q => q && !cmdIdSeen(q.commandId) && (q.action === 'panic' || q.action === 'stop' || q.action === 'fadeStop'))
+      .map(q => Number(q.ts) || 0));
+    queue.forEach(q => {
+      if (!q || typeof q !== 'object' || !q.commandId || cmdIdSeen(q.commandId)) return;
+      noteCmdId(q.commandId);
+      if (q.sender === OG_SENDER) return;
+      const exp = Number(q.expiresAt) || 0;
+      if (exp && now - exp > (_proClockOffset == null ? 18000 : 10000)) {
+        noteCmdOrig(q.origId || q.commandId);
+        slog('session', 'Skipped an expired queued command (' + String(q.action || 'command') + ')');
+        if (!expiredToasted) { expiredToasted = true; toast('Skipped a command from the rundown as too old. Check that both Macs keep the same clock.', 8000); }
+        return;
+      }
+      const fires = q.action === 'go' || q.action === 'cue' || q.action === 'pad' || q.action === 'pause';
+      if (fires && Number(q.ts) < killTs) {
+        const orig = q.origId || q.commandId;
+        noteCmdOrig(orig);
+        const res = { ok: false, reason: 'superseded by stop' };
+        _cmdOrigResult.set(orig, res); trimOrigResults();
+        slog('session', 'Skipped a queued ' + String(q.action) + ': superseded by stop');
+        ackRemoteCommand(q, res);
+        return;
+      }
+      runRemoteCommand(q);
+    });
+  }
+  // One origId runs once for the page life; a retry (same origId, new
+  // commandId) is re-acked with the stored outcome but never executed twice.
+  function runRemoteCommand(cmd) {
+    const orig = cmd.origId || cmd.commandId;
+    if (cmdOrigSeen(orig)) {
+      const stored = _cmdOrigResult.get(orig);
+      if (!stored) {
+        // The original is still running (a media load in flight): ack the
+        // retry with the real outcome once it lands, never a guessed ok.
+        const p = _cmdOrigInflight.get(orig);
+        if (p) { p.then(res => ackRemoteCommand(cmd, res)); return; }
+      }
+      ackRemoteCommand(cmd, stored || { ok: true });
+      return;
+    }
+    noteCmdOrig(orig);
+    let run;
+    try { run = Promise.resolve(applyRemoteCommand(cmd)); } catch (e) { run = Promise.reject(e); }
+    const settled = run.then(
+      r => ({ ok: !r || r.ok !== false, reason: (r && r.reason) ? String(r.reason) : '' }),
+      e => ({ ok: false, reason: typeof e === 'string' ? e : String((e && e.message) || e || 'failed') })
+    );
+    _cmdOrigInflight.set(orig, settled);
+    settled.then(res => {
+      _cmdOrigInflight.delete(orig);
+      _cmdOrigResult.set(orig, res); trimOrigResults();
+      if (!res.ok) slog('error', 'Playout refused ' + String(cmd.action || 'command') + ': ' + res.reason);
+      ackRemoteCommand(cmd, res);
+    });
+  }
+  // Executed-origin memory for the retry protocol (bounded at 64, page life:
+  // it survives a resubscribe on purpose, so a rejoin never replays a fire).
   const _cmdOrigSeen = [];
+  const _cmdOrigResult = new Map();   // origId -> { ok, reason } for re-acking a retry
+  const _cmdOrigInflight = new Map(); // origId -> settled-result promise while the original still runs
+  let expiredToasted = false;         // one clock-skew toast per subscribe (reset in unsubscribeSession)
+  const _cmdIdSeen = [];              // queue entries already handled (a retry gets a new commandId)
   function cmdOrigSeen(id) { return !!id && _cmdOrigSeen.indexOf(id) >= 0; }
-  function noteCmdOrig(id) { if (!id) return; _cmdOrigSeen.push(id); if (_cmdOrigSeen.length > 24) _cmdOrigSeen.shift(); }
-  function ackRemoteCommand(cmd) {
+  function noteCmdOrig(id) { if (!id || cmdOrigSeen(id)) return; _cmdOrigSeen.push(id); if (_cmdOrigSeen.length > 64) _cmdOrigResult.delete(_cmdOrigSeen.shift()); }
+  function trimOrigResults() { while (_cmdOrigResult.size > 64) _cmdOrigResult.delete(_cmdOrigResult.keys().next().value); }
+  function cmdIdSeen(id) { return !!id && _cmdIdSeen.indexOf(id) >= 0; }
+  function noteCmdId(id) { if (!id || cmdIdSeen(id)) return; _cmdIdSeen.push(id); if (_cmdIdSeen.length > 64) _cmdIdSeen.shift(); }
+  // Ack shape (proto 4, additive): { commandId, origId, ts, sender, ok, reason }.
+  function ackRemoteCommand(cmd, result) {
     if (mode !== 'session' || !sessionCode || !fbReady()) return;
+    const ok = !result || result.ok !== false;
     try {
       window._updateDoc(sessionRef(), { 'outrangutan.cmdAck': {
         commandId: cmd.commandId || '', origId: cmd.origId || cmd.commandId || '', ts: Date.now(), sender: OG_SENDER,
+        ok, reason: ok ? '' : String((result && result.reason) || 'refused').slice(0, 200),
       } }).catch(notePublishError);
     } catch (e) {}
   }
@@ -2869,14 +3080,22 @@
   // Kinds that need no gesture run at once; openOutput (window.open) and
   // armPlayback (AudioContext) wait for the Do it tap on this Mac.
   const FIX_STALE_MS = 10 * 60 * 1000;
-  const FIX_AUTORUN = { rejoin: 1, republish: 1, preflight: 1, syncMedia: 1 };
+  const FIX_AUTORUN = { rejoin: 1, republish: 1, preflight: 1, syncMedia: 1, reload: 1 };
   const FIX_VERB = {
     rejoin: 'rejoin the session', republish: 'republish cues and status', preflight: 'run the media check',
-    syncMedia: 'sync media to the kiosk helper', openOutput: 'open the program output',
+    syncMedia: 'sync media to the kiosk helper', openOutput: 'open the program output', reload: 'reload the playout page',
     armPlayback: 'arm playout for the first GO', arm: 'arm playout for the first GO',
   };
   const _fixSeen = [];
   const _fixCards = new Map();   // id -> card element
+  // A reload fix marks itself done in sessionStorage before leaving, so the
+  // reloaded page never runs the same request again if its done patch was lost.
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.indexOf('og_fix_done_') === 0) _fixSeen.push(k.slice('og_fix_done_'.length));
+    }
+  } catch (e) {}
   function fixSeen(id) { return _fixSeen.indexOf(id) >= 0; }
   function noteFixSeen(id) { _fixSeen.push(id); if (_fixSeen.length > 64) _fixSeen.shift(); }
   function fixIdSafe(id) { return typeof id === 'string' && /^[A-Za-z0-9_]{1,120}$/.test(id); }
@@ -2916,7 +3135,7 @@
   }
   async function runFix(r) {
     const kind = String(r.kind || '');
-    let ok = true, result = '';
+    let ok = true, result = '', reloadAfterFix = false;
     const card = _fixCards.get(r.id);
     if (card) { card.dataset.busy = '1'; const b = card.querySelector('.og-fix-do'); if (b) { b.disabled = true; b.textContent = 'Working'; } }
     try {
@@ -2962,6 +3181,17 @@
           }
           break;
         }
+        case 'reload': {
+          // C8 build catch-up from the rundown: save, mark done, then reload.
+          // The output window survives (controller id persists per tab) and
+          // the join sheet rejoins this code on its own once the profile is
+          // back (og_rejoin_after_reload), on the launcher's own address.
+          try { await saveShow(); } catch (e) {}
+          try { sessionStorage.setItem('og_rejoin_after_reload', sessionCode || ''); } catch (e) {}
+          reloadAfterFix = true;
+          result = 'reloading';
+          break;
+        }
         case 'arm': case 'armPlayback': {
           const st = await armPlayback();
           ok = !!(st && st.armed);
@@ -2971,11 +3201,21 @@
         default: ok = false; result = 'unknown fix ' + kind;
       }
     } catch (e) { ok = false; result = String((e && e.message) || e || 'failed'); }
-    fixPatch(r.id, { status: ok ? 'done' : 'failed', doneTs: Date.now(), result });
+    const done = fixPatch(r.id, { status: ok ? 'done' : 'failed', doneTs: Date.now(), result });
     slog(ok ? 'session' : 'error', 'Fix ' + (FIX_VERB[kind] || kind) + ': ' + (ok ? 'done' : 'failed') + (result ? ' (' + result + ')' : ''));
     toast((ok ? 'Done: ' : 'Could not ') + (FIX_VERB[kind] || kind) + (result ? '. ' + result.charAt(0).toUpperCase() + result.slice(1) : '') + '.', 4000);
     hideFixCard(r.id);
     publishLive(true);
+    if (reloadAfterFix) {
+      // Let the done patch leave first. The launcher's address brings this
+      // page straight back into Outrangutan with the code in hand.
+      const target = 'index.html?app=outrangutan&code=' + encodeURIComponent(sessionCode || '');
+      let went = false;
+      try { sessionStorage.setItem('og_fix_done_' + r.id, '1'); } catch (e) {}
+      const leave = () => { if (went) return; went = true; try { location.replace(target); } catch (e) { location.reload(); } };
+      Promise.resolve(done).then(leave, leave);
+      setTimeout(leave, 1500);
+    }
   }
   function dismissFix(r) {
     fixPatch(r.id, { status: 'failed', doneTs: Date.now(), result: 'dismissed on the Air' });
@@ -3020,27 +3260,37 @@
     _fixCards.delete(id);
   }
 
-  function applyRemoteCommand(cmd) {
+  // C5: resolves to { ok, reason } for the honest ack. A plain string is
+  // thrown for a refusal the sender prints as is (unknown cue or pad, no
+  // media, output detached, nothing playable); a refused play() comes back
+  // from the fire path itself.
+  async function applyRemoteCommand(cmd) {
+    const fireable = () => { if (outputRuntimeDetached) throw 'output detached on the playout Mac'; };
+    let result = { ok: true };
+    let fired = null;   // the fire's promise: awaited only after the arm and pads below have landed
     switch (cmd.action) {
-      case 'go': go(); break;
+      case 'go': fireable(); fired = go(); break;
       case 'stop': stopAll(); break;
       case 'panic': panic(); break;
       case 'fadeStop': fadeStopAll(); break;
-      case 'pause': pauseResume(); break;   // P5: live-screen P key
+      case 'pause': if (!active && !preInfo) throw 'nothing playing'; pauseResume(); break;   // P5: live-screen P key
       case 'cue': {
+        fireable();
         const c = cueById(cmd.cueId) || cues.find(x => String(x.num) === String(cmd.cueId));
-        if (c) { selectedId = c.id; go(); }
-        else toast('Rundown fired a cue Outrangutan doesn’t have on this device (' + cmd.cueId + ').');
+        if (!c) { toast('Rundown fired a cue Outrangutan doesn’t have on this device (' + cmd.cueId + ').'); throw 'cue ' + String(cmd.cueId || '') + ' is not on this Mac'; }
+        selectedId = c.id; fired = go();
         break;
       }
       case 'pad': {   // Phase 4 (master plan): rundown-cued SFX
+        fireable();
         const p = padById(cmd.padId);
-        if (p && p.mediaId) firePad(p);
-        else toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.');
+        if (!p) { toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.'); throw 'pad is not on this Mac'; }
+        if (!p.mediaId) { toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.'); throw (p.name || 'pad') + ' has no media'; }
+        fired = firePad(p);
         break;
       }
-      case 'arm': armFromRundown(cmd.cueId); break;   // rundown standby: select + preload, never fire
-      default: return;
+      case 'arm': if (!armFromRundown(cmd.cueId)) throw 'cue ' + String(cmd.cueId || '') + ' is not on this Mac'; break;   // rundown standby: select + preload, never fire
+      default: throw 'unknown action ' + String(cmd.action || '');
     }
     // A fire can carry the next rundown standby on the same write (single
     // command slot: a separate arm write could swallow an unconsumed fire).
@@ -3052,7 +3302,12 @@
       if (p && p.mediaId) firePad(p);
       else toast('Rundown fired an SFX pad Outrangutan doesn’t have on this device.');
     });
+    // The fire settles last: go() consumed the standby before its first await,
+    // so a second command arriving during this media load can no longer land
+    // its arm before this command's arm and then lose it to the stale one.
+    if (fired) result = await fired;
     renderCueList(); renderInspector(); renderEditArea();
+    return (result && typeof result === 'object') ? result : { ok: true };
   }
 
   // Rundown standby (pre-show fix plan): the rundown advance arms the next
@@ -3244,7 +3499,8 @@
     // gesture), and the object says why.
     try { live.armed = playoutArmed(); } catch (e) {}
     live.seq = ++_liveSeq;
-    live.proto = 3;   // 2 = acks commands (outrangutan.cmdAck), senders only retry against proto >= 2; 3 = also consumes the outrangutan.panic lane
+    live.proto = 4;   // 2 = acks commands (outrangutan.cmdAck), senders only retry against proto >= 2; 3 = also consumes the outrangutan.panic lane; 4 = consumes outrangutan.commandQueue, acks carry ok/reason
+    live.build = ogBuild();   // C8: so the rundown's preflight can tell an Air on an older build
     try { window._updateDoc(sessionRef(), { 'outrangutan.live': live }).catch(notePublishError); } catch (e) {}
   }
 
@@ -3586,18 +3842,21 @@
   }
   // GO doubles as RESUME while the program is paused — the AVT-lab fix:
   // trigger-after-pause continues from the pause offset, never from the top.
+  // Returns the fire's outcome ({ ok, reason }, or a promise of one) so a
+  // remote command can be acked honestly (C5); local callers ignore it.
   function go() {
-    if (isActivePaused()) { pauseResume(); return; }
+    if (isActivePaused()) { pauseResume(); return { ok: true }; }
     let cue = cueById(selectedId);
     if (!cue) { cue = cues.find(c => c.armed !== false); if (cue) selectedId = cue.id; }
-    if (!cue) { toast('No cue to fire. Add media first.'); return; }
+    if (!cue) { toast('No cue to fire. Add media first.'); return { ok: false, reason: 'nothing to fire' }; }
     // A live rundown standby (arm command) outranks this list's own order,
     // ONCE: it is consumed here, and the next rundown advance re-stamps it.
     const next = (rundownArmId && rundownArmId !== cue.id ? rundownArmId : '') || nextArmedAfter(cue.id);
-    fireCue(cue);
+    const fired = fireCue(cue);
     selectedId = next || selectedId;
     rundownArmId = null;
     renderCueList(); renderInspector(); renderEditArea();
+    return fired;
   }
   // The green transport button (and its advertised GO/Space key): toggle pause
   // while a cue is live, else fire the armed cue (folding in resume). Pausing an
@@ -3636,15 +3895,15 @@
       preInfo = { cue, until: performance.now() + cue.preWait * 1000 };
       preTimer = setTimeout(() => { preInfo = null; beginMedia(cue); }, cue.preWait * 1000);
       startTicker(); renderCueList();
-      return;
+      return { ok: true };
     }
-    beginMedia(cue);
+    return beginMedia(cue);
   }
   async function beginMedia(cue) {
     clearPrevImageTimer();   // still-to-anything GO: the outgoing still's timer must not end the incoming cue at the old deadline
     if (cue.type === 'image') return beginImage(cue);
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
-    if (!media || !media.blob) { slog('error', 'Media missing for “' + cue.name + '” at fire time'); toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
+    if (!media || !media.blob) { slog('error', 'Media missing for “' + cue.name + '” at fire time'); toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return { ok: false, reason: 'media missing for ' + cue.name }; }
     ensureAudio();
     const isAudio = cue.type === 'audio';
     const prev = active;
@@ -3684,9 +3943,9 @@
         if (!isAudio && prev && prev.kind === 'video') showDeck(deckOf(prev));
         selectedId = cue.id;
         renderCueList(); renderInspector(); renderEditArea();
-        return;
+        return { ok: false, reason: 'play was refused by the browser, tap or press a key on the playout Mac' };
       }
-      failLive(cue, deck, e); return;
+      failLive(cue, deck, e); return { ok: false, reason: cue.name + ' failed to play' + (e && e.message ? ' (' + e.message + ')' : '') };
     }
 
     const curve = fadeCurveOf(cue);
@@ -3726,6 +3985,7 @@
     }
     else publishPlayingStart(cue);   // v2.1 D11.4: one write per start, clients tick locally
     preloadNext(cue);             // Phase 2 (master plan): stage the next armed cue for an instant GO
+    return { ok: true };
   }
 
   // v2.1 D11.4: the cross-machine countdown. Published ONCE per clip start
@@ -3759,7 +4019,7 @@
   // arms an auto-advance timer that honours the cue's continue/end settings.
   async function beginImage(cue) {
     const media = await idbGet(MEDIA_STORE, cue.mediaId);
-    if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return; }
+    if (!media || !media.blob) { toast('Media missing for "' + cue.name + '".'); setStatus('idle'); return { ok: false, reason: 'media missing for ' + cue.name }; }
     clearPrevImageTimer();
     const prev = active;
     const deck = decks.img, el = deck.el;
@@ -3791,6 +4051,7 @@
     fireObsForCue(cue);
     publishPlayingStart(cue);     // v2.1 D11.4
     preloadNext(cue);
+    return { ok: true };
   }
   function armImageTimer() {
     clearImageTimer();
@@ -5792,6 +6053,26 @@
         if (!d.contains(e.target)) d.removeAttribute('open');
       });
     });
+    // C7: audio unlock rides THIS page's gesture. An output window whose
+    // unmuted play() was refused keeps the picture rolling muted and flags
+    // audioLocked in its heartbeat (no chip over program); the next tap or key
+    // here re-sends its audio routing and a resume so the deck can retry.
+    let _unlockSentAt = 0;
+    const unlockOutputsOnGesture = () => {
+      if (!isOpen() || outputRuntimeDetached) return;
+      if (!Array.from(outputWins.values()).some(rec => rec.audioLocked)) return;
+      if (Date.now() - _unlockSentAt < 2000) return;   // one retry per gesture burst, not one per keystroke
+      _unlockSentAt = Date.now();
+      outputWins.forEach((rec, id) => {
+        if (!rec.audioLocked) return;
+        const o = outputById(id); if (!o) return;
+        sendOut({ t: 'audio', on: !!o.audioOn, sinkId: o.sinkId || '' }, id);
+        if (active && active.el && !active.el.paused && Number(active.cue.output || 1) === Number(id)) sendOut({ t: 'resume' }, id);
+        rec.audioLocked = false;   // optimistic: the next heartbeat re-flags it if the output still refused
+      });
+    };
+    document.addEventListener('pointerdown', unlockOutputsOnGesture, true);
+    document.addEventListener('keydown', unlockOutputsOnGesture, true);
     window.addEventListener('beforeunload', () => { if (cues.length || pads.length) saveShow(); });
 
     built = true;
@@ -6082,6 +6363,21 @@
     renderTransportKeys(); renderAll();
     sheet.classList.add('on');
     renderOgJoinChoices();
+    // After a director's reload fix: rejoin the same code on our own once the
+    // signed-in profile is back (it restores asynchronously), so the Air does
+    // not sit on this sheet with nobody at it. One try, bounded to 10 s.
+    let rejoin = '';
+    try { rejoin = sessionStorage.getItem('og_rejoin_after_reload') || ''; sessionStorage.removeItem('og_rejoin_after_reload'); } catch (e) {}
+    if (rejoin && codeEl && codeEl.value === rejoin) {
+      let waited = 0;
+      const tryJoin = () => {
+        const open = $('og-join');
+        if (!open || !open.classList.contains('on')) return;
+        if (ogJoinProfile()) { decorateOgJoinIdentity(); slog('session', 'Rejoining ' + rejoin + ' after the reload'); joinSession(); return; }
+        if ((waited += 250) < 10000) setTimeout(tryJoin, 250);
+      };
+      setTimeout(tryJoin, 250);
+    }
     setTimeout(() => {
       let f = (codeEl && codeEl.value) ? nameEl : codeEl;
       if (f === nameEl && nameEl && nameEl.readOnly) f = $('og-join-go');   // locked profile name: land on the join button
@@ -6132,9 +6428,26 @@
   }
 
   function exitOutrangutan() {
-    stopAll({ silent: true }); stopAllPads(); closeSessionJoin(); unsubscribeSession();
+    stopAll({ silent: true }); stopAllPads(); closeSessionJoin();
     outputs.forEach(o => { const r = outputWins.get(o.id); if (r && r.identify) identifyOutput(o.id, false); });
-    cleanupOutputRuntime(true);
+    const joined = mode === 'session' && !!sessionCode;
+    const driving = joined && outputs.some(o => isOutputAlive(o.id));
+    if (driving) {
+      // Joined with a program output up (the Air): leave the screen only. The
+      // runtime, the output records, the watchdog and the session listener
+      // all stay, so the rundown keeps its playout and re-entry's
+      // reattachLiveControl is a harmless no-op (major 6137). A stray back
+      // chevron used to kill the program display here.
+    } else if (joined) {
+      // Joined with no output window (a rundown Mac's copy): go deaf and park
+      // the runtime for reattach, so this hidden copy never answers a command
+      // the real playout Mac also hears.
+      unsubscribeSession();
+      preserveOutputRuntimeForReattach(); outputRuntimeDetached = true; cleanupOutputRuntime(false);
+    } else {
+      unsubscribeSession();
+      cleanupOutputRuntime(true);   // standalone: close the outputs as before
+    }
     closeOutputsPanel(); closeSdPanel();
     // Hide (don't dismiss) a pending Chrome sheet — exiting mid-entry must not
     // latch it against the hidden screen or burn the one-time flag unseen.

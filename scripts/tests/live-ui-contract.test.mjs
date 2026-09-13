@@ -904,9 +904,16 @@ test('playout commands are confirmed, retried, and never swallowed silently (8/2
   assert.match(app, /steadyTimeout\(\(\) => sendPrompterControl\(`seek_row_\$\{rowNum\}`, payload\), 150\)/);
   // Air side: acks every command, dedupes retries by origId, fires pads that
   // ride a cue write, and stamps the ack-capable protocol version.
-  assert.match(playbackJs, /ackRemoteCommand\(cmd\)/);
-  assert.match(playbackJs, /cmdOrigSeen\(cmd\.origId\)/);
-  assert.match(playbackJs, /live\.proto = 3/);
+  // 9/8 C5: the ack carries the outcome ({ ok, reason }), the origId memory
+  // is checked on the normalized origin, and proto 4 says the queue is consumed.
+  assert.match(playbackJs, /ackRemoteCommand\(cmd, res\)/);
+  // 9/13: a retry of an origin still in flight waits for the real outcome
+  // (_cmdOrigInflight) instead of guessing ok; a settled origin re-acks its stored result.
+  assert.match(playbackJs, /const p = _cmdOrigInflight\.get\(orig\);\n        if \(p\) \{ p\.then\(res => ackRemoteCommand\(cmd, res\)\); return; \}/);
+  assert.match(playbackJs, /ackRemoteCommand\(cmd, stored \|\| \{ ok: true \}\);/);
+  assert.match(playbackJs, /live\.proto = 4/);
+  assert.match(playbackJs, /ok, reason: ok \? '' : String\(\(result && result\.reason\) \|\| 'refused'\)\.slice\(0, 200\),/);
+  assert.match(playbackJs, /Array\.isArray\(d\.outrangutan\.commandQueue\)/);
   assert.match(playbackJs, /Array\.isArray\(cmd\.pads\)/);
   // A deaf Air LOOKS deaf: the mode badge flips to NOT LISTENING.
   assert.match(playbackJs, /NOT LISTENING/);
@@ -1021,7 +1028,8 @@ test('deck strip monitors ride show truth in every window, not just the Live one
   // idle" from "no playout linked to this session". Liveness uses the
   // ARRIVAL clock (this window's), never the sender's ts: clock skew between
   // Macs must not make a healthy playout read as absent.
-  assert.match(app, /fresh: !!nowPlaying \|\| !!\(_ogLiveSeenAt && Date\.now\(\) - _ogLiveSeenAt < 12000\)/);
+  // 9/8 C4: the deck doubt dot reads REMOTE arrivals (or a designated local), never this tab's own echo.
+  assert.match(app, /fresh: !!nowPlaying \|\| _sdSafe\(\(\) => _ogLocalDesignated\(\), false\) \|\| !!\(_ogRemoteLiveSeenAt && Date\.now\(\) - _ogRemoteLiveSeenAt < 12000\)/);
   assert.match(app.slice(app.indexOf('function applyOutrangutanState'), app.indexOf('function playoutNow')), /_ogLiveSeenAt = Date\.now\(\)/);
   // Firing into a show with no playout listening warns the operator
   // (throttled) instead of leaving them to discover it by dead air.
@@ -1367,14 +1375,18 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   assert.match(app, /function liveRuntimeOn\(\) \{\n  try \{ return liveSessionState\(\)\.lifecycle === 'live'; \}/);
   const bus = app.slice(app.indexOf('function runControlBusAction('), app.indexOf('function fireOutrangutanAutoForBeat('));
   assert.doesNotMatch(bus, /liveshow'\)\?\.classList\.contains\('on'\)/);
-  assert.match(bus, /function runControlBusAction\(target, action, source='bus'\) \{\n  if \(!liveRuntimeOn\(\)\) return false;/);
+  // 9/8 C9: null = this window cannot run it (publishable); false = ran here and refused (never published).
+  assert.match(bus, /function runControlBusAction\(target, action, source='bus'\) \{\n  if \(!liveRuntimeOn\(\)\) return null;/);
+  assert.match(bus, /if \(ran === false\) return false;/);
+  assert.match(bus, /if \(!_busPublishPermitted\(\)\) return false;/);
   assert.match(bus, /if \(_busPublishWouldBlackHole\(\)\) return false;\n  _busCmdSeq \+= 1;/);
   // C8 + G3: an own claim is a void whenever this window cannot execute
   // (fresh or stale); a grant holder still on Build with no fresh claim
   // elsewhere is a void too; the follower + stale-claim rule stays.
   assert.match(bus, /if \(liveRuntimeOn\(\) && isShowCaller\(\)\) return false;\n    if \(_busClaimIsMine\(\)\) return true;\n    if \(isShowCaller\(\)\) return _busClaimIsStale\(\);/);
   assert.doesNotMatch(bus, /if \(_busClaimIsMine\(\)\) return !liveRuntimeOn\(\) && !_busClaimIsStale\(\);/);
-  assert.match(bus, /return !!_callerStateInputs\(\)\.grantHeldElsewhere && _busClaimIsStale\(\);/);
+  // 9/8 C9: a released (absent) claim right after a grant is not a void; only a claim stale in place is.
+  assert.match(bus, /return !!_callerStateInputs\(\)\.grantHeldElsewhere && !!_busExecutorClaim && _busClaimIsStale\(\);/);
   assert.match(bus, /function _releaseOwnBusExecutorClaim\(\) \{\n  try \{\n    if \(_busClaimExempt\(\) \|\| !_busClaimIsMine\(\)\) return;\n    _busExecutorClaim = null;\n[^\n]*\{ busExecutor: null \}/);
   assert.match(app, /markResumeState\(\);\n  \/\/ Off Live[^\n]*\n[^\n]*\n  _releaseOwnBusExecutorClaim\(\);/);
   assert.match(app, /_heldControlGrantBefore = held;\n[^\n]*\n[^\n]*\n  try \{ if \(!isShowCaller\(\)\) _releaseOwnBusExecutorClaim\(\); \} catch \{\}/);
@@ -1398,8 +1410,9 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
 
 test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (9/4 slice A3)', () => {
   // 1. Crawl delta is clamped and the clock restarts on visibility resume.
-  const loop = app.slice(app.indexOf('function ptScrollLoop(ts)'), app.indexOf('function ptElementAtReadLine'));
-  assert.match(loop, /const delta = Math\.min\(ts - ptLastTime, 100\);/);
+  const loop = app.slice(app.indexOf('function ptScrollLoop(ts, fromFallback=false)'), app.indexOf('function ptElementAtReadLine'));
+  // 9/8 C10: a worker-driven fallback step (occluded window) may span a full tick; frames stay clamped at 100.
+  assert.match(loop, /const delta = Math\.min\(ts - ptLastTime, fromFallback \? PT_FREERUN_FALLBACK_MS \* 2 : 100\);/);
   assert.match(loop, /const step = \(ptLiveSpeed \/ 60\) \* \(delta \/ 16\.67\);/);
   assert.match(loop, /Math\.exp\(-delta \/ 270\)/);
   assert.match(loop, /document\.addEventListener\('visibilitychange', \(\) => \{\n  if \(document\.visibilityState === 'visible'\) ptLastTime = null;/);
@@ -1455,7 +1468,9 @@ test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (
   //    when the window is hidden instead of reporting a running crawl.
   assert.match(app, /ptHeartbeatInterval = P\?\.createSteadyInterval\n      \? P\.createSteadyInterval\(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS\)/);
   assert.match(app, /_ptAckTimer = steadyTimeout\(\(\) => \{[\s\S]{0,700}\}, 300\);/);
-  assert.match(app, /visibility:document\.visibilityState,\n    stalled:!!\(ptPlaying && document\.visibilityState === 'hidden'\),/);
+  // 9/8 C10: stalled = playing with no frame AND no fallback step in the last second (hidden alone no longer stalls).
+  assert.match(app, /visibility:document\.visibilityState,\n(?:[^\n]*\n){3}    stalled:ptFreeRunStalled\(\),/);
+  assert.match(app, /function ptFreeRunStalled\(\) \{\n  if \(!ptPlaying \|\| ptGlide \|\| ptJog\) return false;/);
   // 10. Scrub never pauses or glides.
   const scrub = app.slice(app.indexOf('function ptSeekToProgress(pct)'), app.indexOf('// ── Jog smoother'));
   assert.doesNotMatch(scrub, /ptStopPlay|ptGlideToOffset/);

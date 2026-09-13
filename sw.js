@@ -136,12 +136,12 @@ const SHELL_ASSETS = [
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=3d7a460a37',
+  'cueola-app.js?v=284ac568a0',
   'outrangutan/outrangutan.css?v=db06e87104',
-  'outrangutan/outrangutan.js?v=2266bc4aa0',
+  'outrangutan/outrangutan.js?v=6e2583a2cd',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=7ea9a03cd8',
-  'cueola-streamdeck.js?v=344d426df7',
+  'cueola-streamdeck.js?v=c6cbf78a64',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -262,7 +262,13 @@ const versionSignature = SHELL_ASSETS
 // push-to-fix, deck rims + Director layouts + GIF cache, OBS keepalive,
 // Outrangutan HOLD + fix receiver, segment-free row numbers): index.html,
 // script-operator.html and every module changed; every window reloads.
-const WORKER_SCHEMA = '48';
+// 48->49: 9/13 reliability round (deck follows the Live window, every refused
+// deck press flashes red, playout command queue + honest acks proto 4, the
+// Pro never plays into its own hidden Outrangutan, reload rejoins the show,
+// output window survives an Outrangutan reload, build identity on the wire
+// with preflight rows, bus claim per window, presence on a worker timer):
+// every module changed; every window reloads.
+const WORKER_SCHEMA = '49';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
