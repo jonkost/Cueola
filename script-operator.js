@@ -478,6 +478,12 @@
 
   function onDelegatedChange(event) {
     const target = event.target;
+    if (target.id === 'rowInfoToggle') {
+      // Discrete talent state (like the slates): the host mirrors it at send
+      // time and the talent ack trues the switch up on the next snapshot.
+      sendIntent('control', { action: target.checked ? 'rowinfo_on' : 'rowinfo_off' });
+      return;
+    }
     if (target.matches('input[type="range"][data-preview-prefix]')) {
       target.dataset.dragging = '';
       cancelPreviewIntent(target);
@@ -777,6 +783,8 @@
     patchStateButton('reversing', reversing);
     patchStateButton('forward', !reversing);
     patchStateButton('mirrored', Boolean(first(snapshot, ['mirrored', 'mirror', 'prompter.mirrored']) ?? false));
+    const rowInfoBox = document.getElementById('rowInfoToggle');
+    if (rowInfoBox) rowInfoBox.checked = Boolean(first(snapshot, ['rowInfoOn', 'prompter.rowInfoOn']) ?? true);
 
     const uiTheme = normalizeTheme(first(snapshot, ['uiTheme', 'cueolaTheme', 'theme']));
     const prompterTheme = normalizeTheme(first(snapshot, ['prompterTheme', 'prompter.theme'])) || activeTheme;

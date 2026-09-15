@@ -291,6 +291,20 @@ h1 { margin: 2px 0 0; font-family: var(--syne); font-size: 18px; letter-spacing:
    so without it every pane ran together as one column. Returned as an inset
    shadow rule rather than a border: same 1px line, still a shadow not a stroke. */
 .control-section { padding: 14px 0; border-top: 1px solid transparent; box-shadow: inset 0 1px 0 var(--glass-border); }
+/* Switch row under a control grid (Screen: Row info on talent). */
+.control-switch { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 7px 10px; border-radius: var(--ui-radius-control); background: color-mix(in srgb, var(--s2) 62%, transparent); color: var(--text2); font-size: 12px; font-weight: 700; cursor: pointer; user-select: none; }
+.control-switch:has(input:checked) { color: var(--text); }
+/* Toggle sliders (owner 9/15): every checkbox in the app paints as a switch.
+   Native semantics stay (checked, change, disabled, :checked selectors); only
+   the paint changes. --sw-w / --sw-h resize it per context, --sw-on recolors
+   the on state (the prompter uses its own accent). [data-native] opts out.
+   :not() lifts specificity above the per-label `.x input` sizing rules. */
+input[type="checkbox"]:not([data-native]){-webkit-appearance:none;appearance:none;position:relative;flex:none;box-sizing:border-box;width:var(--sw-w,34px);height:var(--sw-h,20px);margin:0;padding:0;border:0;border-radius:999px;background:color-mix(in srgb,var(--text) 18%,var(--s3,#333));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 12%,transparent);cursor:pointer;vertical-align:middle;transition:background .18s var(--ease,ease),box-shadow .18s var(--ease,ease);outline-offset:2px}
+input[type="checkbox"]:not([data-native])::before{content:'';position:absolute;top:2px;left:2px;width:calc(var(--sw-h,20px) - 4px);height:calc(var(--sw-h,20px) - 4px);border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:transform .18s var(--ease,ease)}
+input[type="checkbox"]:not([data-native]):checked{background:var(--sw-on,var(--accent));box-shadow:none}
+input[type="checkbox"]:not([data-native]):checked::before{transform:translateX(calc(var(--sw-w,34px) - var(--sw-h,20px)))}
+input[type="checkbox"]:not([data-native]):disabled{opacity:.45;cursor:not-allowed}
+input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--sw-on,var(--accent))}
 .control-section:first-child { border-top: 0; box-shadow: none; }
 .control-section h2 { margin: 0 0 10px; font-size: 12px; line-height: 1.2; }
 .section-help { margin: -3px 0 11px; color: var(--text2); font-size: 11px; line-height: 1.45; }

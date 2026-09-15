@@ -130,14 +130,14 @@ const SHELL_ASSETS = [
   'cueola-prompter-session.js?v=4e90f2af78',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=0649e410fa',
-  'script-operator.css?v=c94dad6df1',
+  'script-operator.js?v=4ba6f3e531',
+  'script-operator.css?v=f7743fc234',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=284ac568a0',
-  'outrangutan/outrangutan.css?v=db06e87104',
+  'cueola-app.js?v=1990c1e508',
+  'outrangutan/outrangutan.css?v=41a940bd2e',
   'outrangutan/outrangutan.js?v=6e2583a2cd',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=7ea9a03cd8',
@@ -268,7 +268,7 @@ const versionSignature = SHELL_ASSETS
 // output window survives an Outrangutan reload, build identity on the wire
 // with preflight rows, bus claim per window, presence on a worker timer):
 // every module changed; every window reloads.
-const WORKER_SCHEMA = '49';
+const WORKER_SCHEMA = '50';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

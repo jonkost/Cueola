@@ -14272,6 +14272,7 @@ function buildCompletePrompterState() {
       align:ptAlign,
       theme:ptThemeName,
       mirrored:ptMirrored,
+      rowInfoOn:ptRowInfoOn,
       panelVisible:ptPanelVisible,
       overlaySize:Math.max(0, Math.min(4, Number(ptClockState?.size ?? 1))),
     }
@@ -14423,6 +14424,7 @@ function applyCompletePrompterState(message, options={}) {
     if (['left','center','right'].includes(display.align)) ptSetAlign(display.align);
     if (display.theme && PT_THEMES[display.theme]) ptSetTheme(display.theme);
     if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
+    if (typeof display.rowInfoOn === 'boolean') ptSetRowInfo(display.rowInfoOn);
     if (Number.isFinite(Number(display.overlaySize))) ptSetOverlaySize(Number(display.overlaySize));
   }
   // Position and transport: seed scope only, and never for a live renderer
@@ -14606,6 +14608,7 @@ function adoptPrompterTalentState(state={}) {
     flowOpSetTheme(state.theme);
   }
   if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
+  if (typeof state.rowInfoOn === 'boolean') ptRowInfoOn = state.rowInfoOn;
   // Overlay reconciliation: acks carry slate/question/clock state so every
   // operator window trues up to talent truth (multiple operators stay honest).
   if (typeof state.techSlateOn === 'boolean' || typeof state.colorBarsOn === 'boolean') {
@@ -15217,7 +15220,7 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '3';
+const SCRIPT_OP_REGION_VERSION = '4';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -15258,6 +15261,9 @@ function patchScriptOpPrompterControls(region) {
     button.classList.toggle('active', active);
     button.classList.toggle('on', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  region.querySelectorAll('[data-prompter-rowinfo]').forEach(box => {
+    if (box.checked !== ptRowInfoOn) box.checked = ptRowInfoOn;
   });
 }
 
@@ -15378,7 +15384,8 @@ const SCRIPT_OPERATOR_CONTROL_ACTIONS = new Set([
   'brake_start','brake_stop','boost_start','boost_stop',
   'align_left','align_center','align_right','slate_tech_on','slate_tech_off',
   'slate_bars_on','slate_bars_off','clock_timeofday','clock_off',
-  'clock_size_up','clock_size_down','question_on','question_off','overlays_clear'
+  'clock_size_up','clock_size_down','question_on','question_off','overlays_clear',
+  'rowinfo_on','rowinfo_off'
 ]);
 let _scriptOpWin = null;
 let _scriptOpHost = null;
@@ -15448,6 +15455,7 @@ function scriptOperatorSnapshot() {
     position:Number(ptOffset),
     reversing:Boolean(ptReversing),
     mirrored:Boolean(ptMirrored),
+    rowInfoOn:Boolean(ptRowInfoOn),
     techSlateOn:Boolean(ptTechSlateOn),
     colorBarsOn:Boolean(ptColorBarsOn),
     questionOn:Boolean(ptQuestionOn), questionText:ptQuestionText || '',
@@ -15473,6 +15481,7 @@ function scriptOperatorSnapshot() {
       align:ptAlign,
       progress:ptProgressPct(),
       mirrored:Boolean(ptMirrored),
+      rowInfoOn:Boolean(ptRowInfoOn),
       theme:ptThemeName,
       techSlateOn:Boolean(ptTechSlateOn),
       colorBarsOn:Boolean(ptColorBarsOn),
@@ -16073,6 +16082,7 @@ function isCollaborativePrompterControl(action) {
       || action.startsWith('question_')
       || action.startsWith('slate_')
       || action.startsWith('overlays_')   // master clear for every overlay
+      || action.startsWith('rowinfo_')    // NEXT / HOLDING chips on the talent
       || action.startsWith('seek_');   // cue to row / scrub position
 }
 
@@ -16455,7 +16465,7 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
   if (!action) return;
   if (!(action.startsWith('slate_') || action.startsWith('question_')
       || action.startsWith('clock_') || action.startsWith('wrapup_')
-      || action.startsWith('overlays_'))) return;
+      || action.startsWith('overlays_') || action.startsWith('rowinfo_'))) return;
   if (origin === 'flowop') {
     flowOpApplyControlPreview(action, true, payload);
     return;
@@ -16470,6 +16480,8 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
     ptColorBarsOn = action === 'slate_bars_on';
   } else if (action.startsWith('question_')) {
     applyQuestionAction(action, 'talent', payload?.text);
+  } else if (action.startsWith('rowinfo_')) {
+    ptRowInfoOn = action === 'rowinfo_on';
   } else {
     applyClockActionToState(action, 'talent');
   }
@@ -16535,6 +16547,11 @@ let ptBraking = false;
 let ptBoosting = false;
 let ptReversing = false;
 let ptMirrored = false;
+// Row info (owner 9/15): the NEXT / HOLDING chips along the bottom of the
+// talent screen. A talent-local preference, driven from the talent panel or
+// any operator surface (rowinfo_on / rowinfo_off); truth rides the ack as
+// rowInfoOn so every operator window's switch trues up to the talent.
+let ptRowInfoOn = (() => { try { return localStorage.getItem('cueola_prompter_rowinfo') !== '0'; } catch { return true; } })();
 let ptPanelVisible = true;
 let ptPanelScale = 1;
 // Size and alignment persist like the theme: a talent (or operator) reload
@@ -17318,6 +17335,7 @@ function poScreenSectionHTML() {
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
         <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
       </div>
+      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
     </div>`;
 }
 function promptOpControlsHTML(includeLiveActions = true) {
@@ -18228,6 +18246,45 @@ function ptToggleMirror() {
   if (btn) btn.classList.toggle('active', ptMirrored);
 }
 
+// Row info on the talent screen (NEXT / HOLDING chips). CSS does the hiding
+// (.rowinfo-off on #promptypus) so the chip logic keeps running untouched and
+// a re-enable shows the current truth at once.
+function ptSetRowInfo(on, { persist=true } = {}) {
+  ptRowInfoOn = on !== false;
+  const screen = ptEl('promptypus');
+  if (screen) screen.classList.toggle('rowinfo-off', !ptRowInfoOn);
+  const box = ptEl('pt-rowinfo-toggle');
+  if (box && box.checked !== ptRowInfoOn) box.checked = ptRowInfoOn;
+  if (persist) { try { localStorage.setItem('cueola_prompter_rowinfo', ptRowInfoOn ? '1' : '0'); } catch {} }
+}
+
+// The NEXT / HOLDING chips sit above the talent panel. The panel's height
+// depends on window width (it wraps to two or three rows), so CSS reads the
+// measured lift from --pt-panel-lift instead of guessing. A panel dragged off
+// the bottom edge (top half of the screen) contributes nothing.
+let _ptPanelLiftObserver = null;
+function ptMeasurePanelLift() {
+  const screen = ptEl('promptypus');
+  const panel = ptEl('pt-panel');
+  if (!screen || !panel) return;
+  let lift = 0;
+  if (!panel.classList.contains('hidden')) {
+    const r = panel.getBoundingClientRect();
+    const h = screen.getBoundingClientRect().bottom;
+    if (r.height && r.top > h / 2) lift = Math.max(0, Math.round(h - r.top));
+  }
+  screen.style.setProperty('--pt-panel-lift', `${lift}px`);
+}
+function ptWatchPanelLift() {
+  ptMeasurePanelLift();
+  if (_ptPanelLiftObserver || typeof ResizeObserver !== 'function') return;
+  const panel = ptEl('pt-panel');
+  if (!panel) return;
+  _ptPanelLiftObserver = new ResizeObserver(() => ptMeasurePanelLift());
+  _ptPanelLiftObserver.observe(panel);
+  window.addEventListener('resize', ptMeasurePanelLift);
+}
+
 function ptToggleFullscreen() {
   const el = ptEl('promptypus');
   if (!el) return;
@@ -18245,6 +18302,7 @@ function ptTogglePanel() {
   const hint = ptEl('pt-hint');
   if (panel) panel.classList.toggle('hidden', !ptPanelVisible);
   if (hint) hint.classList.toggle('hidden', !ptPanelVisible);
+  ptMeasurePanelLift();
   // The bar fades with the controls (opacity only: the stage top stays put).
   const bar = ptEl('pt-bar');
   if (bar) bar.classList.toggle('hidden', !ptPanelVisible);
@@ -18290,6 +18348,7 @@ function ptCardApplyPos(id, x, y) {
   card.style.setProperty(cfg.varX, Math.round(x) + 'px');
   card.style.setProperty(cfg.varY, Math.round(y) + 'px');
   cfg.pos = { x: Math.round(x), y: Math.round(y) };
+  if (id === 'pt-panel') ptMeasurePanelLift();   // the chips ride above the panel
 }
 
 function ptCardDragStart(e, id) {
@@ -18345,6 +18404,7 @@ function ptApplyPanelScale(scale) {
   if (val) val.textContent = Math.round(ptPanelScale * 100) + '%';
   try { localStorage.setItem('cueola_pt_panel_scale', String(ptPanelScale)); } catch (e) {}
   ptCardReclamp('pt-panel');   // a grown panel can poke past the edge
+  ptMeasurePanelLift();
 }
 function ptAdjustPanelScale(delta) { ptApplyPanelScale(ptPanelScale + delta); }
 
@@ -18936,6 +18996,7 @@ function ptStateSnapshot() {
     align: ptAlign,
     theme: ptThemeName,
     mirrored: ptMirrored,
+    rowInfoOn: ptRowInfoOn,
     panelVisible: ptPanelVisible,
     heldAtRow: ptAutoHeldRow,
     rowNum: ptCurrentRowNum(),
@@ -19483,6 +19544,8 @@ function ptHandleRemoteControl(action, payload=null) {
     case 'theme_outrangutan': ptSetTheme('outrangutan'); break;
     case 'theme_prepbear': ptSetTheme('prepbear'); break;
     case 'mirror':     ptToggleMirror(); break;
+    case 'rowinfo_on':  ptSetRowInfo(true); break;
+    case 'rowinfo_off': ptSetRowInfo(false); break;
     case 'hide_interface': ptTogglePanel(); break;
     case 'fullscreen':
       if (ptEl('promptypus')?.classList.contains('on')) ptToggleFullscreen();
@@ -19565,6 +19628,7 @@ function flowOpControlLabel(action) {
     clock_timeofday:'Time clock', clock_off:'Clock off',
     clock_size_up:'Clock bigger', clock_size_down:'Clock smaller',
     question_on:'Question indicator', question_off:'Question cleared',
+    rowinfo_on:'Row info on', rowinfo_off:'Row info off',
     overlays_clear:'Clear all overlays'
   };
   if (action?.startsWith('theme_')) return `${CUEOLA_THEME_LABELS[action.replace('theme_', '')] || 'Theme'} theme`;
@@ -19628,6 +19692,8 @@ function flowOpApplyControlPreview(action, quiet=false, payload=null) {
       case 'slate_tech_off': setFlowOpSlateState('off'); break;
       case 'slate_bars_on': setFlowOpSlateState('bars'); break;
       case 'slate_bars_off': setFlowOpSlateState('off'); break;
+      case 'rowinfo_on': ptRowInfoOn = true; break;
+      case 'rowinfo_off': ptRowInfoOn = false; break;
       case 'pause': flowOpPlaying = false; break;
       case 'resume': flowOpPlaying = true; break;
       case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
@@ -19807,6 +19873,7 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
         <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
       </div>
+      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
     </div>`;
   return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
     ${opInspHeadHTML('flow')}
@@ -19869,6 +19936,8 @@ function flowOpSyncControls() {
   document.querySelectorAll('[data-flowop-align]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
   });
+  const rowInfo = flowOpEl('flowOpRowInfo');
+  if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
     btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
@@ -20562,6 +20631,8 @@ function enterPrompter() {
   ptSetTheme(ptThemeName);
   ptSetAlign(ptAlign);
   ptSetSize(ptFontSize);
+  ptSetRowInfo(ptRowInfoOn, { persist:false });
+  ptWatchPanelLift();
   const storedOverlay = ptStoredOverlaySize();
   if (storedOverlay != null) ptSetOverlaySize(storedOverlay, { persist:false });
   ptRenderClockOverlay();

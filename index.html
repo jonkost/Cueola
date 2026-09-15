@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=db06e87104">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=41a940bd2e">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -990,6 +990,22 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cc-checks{display:flex;gap:16px;margin:6px 0}
 .cc-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer}
 .cc-check input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px}
+/* Toggle sliders (owner 9/15): every checkbox in the app paints as a switch.
+   Native semantics stay (checked, change, disabled, :checked selectors); only
+   the paint changes. --sw-w / --sw-h resize it per context, --sw-on recolors
+   the on state (the prompter uses its own accent). [data-native] opts out.
+   :not() lifts specificity above the per-label `.x input` sizing rules. */
+input[type="checkbox"]:not([data-native]){-webkit-appearance:none;appearance:none;position:relative;flex:none;box-sizing:border-box;width:var(--sw-w,34px);height:var(--sw-h,20px);margin:0;padding:0;border:0;border-radius:999px;background:color-mix(in srgb,var(--text) 18%,var(--s3,#333));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 12%,transparent);cursor:pointer;vertical-align:middle;transition:background .18s var(--ease,ease),box-shadow .18s var(--ease,ease);outline-offset:2px}
+input[type="checkbox"]:not([data-native])::before{content:'';position:absolute;top:2px;left:2px;width:calc(var(--sw-h,20px) - 4px);height:calc(var(--sw-h,20px) - 4px);border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:transform .18s var(--ease,ease)}
+input[type="checkbox"]:not([data-native]):checked{background:var(--sw-on,var(--accent));box-shadow:none}
+input[type="checkbox"]:not([data-native]):checked::before{transform:translateX(calc(var(--sw-w,34px) - var(--sw-h,20px)))}
+input[type="checkbox"]:not([data-native]):disabled{opacity:.45;cursor:not-allowed}
+input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--sw-on,var(--accent))}
+/* Compact switches for the two tiny mono labels in the Script Op desk. */
+.ls-rtrt-mode input,.ls-talent-pos-follow input{--sw-w:24px;--sw-h:14px}
+/* Switch rows inside the operator panels (Script Op Screen, Flowmingo Op Screen). */
+.flow-switch-row{display:flex;flex-direction:row-reverse;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:7px 10px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--s2) 62%,transparent);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;user-select:none}
+.flow-switch-row:has(input:checked){color:var(--text)}
 /* Guided rows section (playback cue wizard) */
 .cc-checks-stack{flex-direction:column;align-items:flex-start;gap:8px}
 .cc-guided-rows .field-hint{margin-top:6px}
@@ -2773,25 +2789,30 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s;touch-action:none}
 #pt-stage.mirrored{transform:scaleX(-1)}
-/* HOLDING / NEXT chips sit in the gutters beside the read line, inside
-   #pt-stage so a beam splitter flips them with the copy. Shared glass with
-   the clock overlay; the hold chip pulses three times then holds steady. */
-#pt-hold-chip,#pt-next-chip{position:absolute;z-index:40;top:calc(50% + 14px);max-width:clamp(180px,calc((100vw - min(900px,90vw))/2 - 40px),380px);display:flex;flex-direction:column;gap:2px;padding:8px 14px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;pointer-events:none}
-#pt-hold-chip[hidden],#pt-next-chip[hidden]{display:none}
-#pt-next-chip{left:28px;opacity:.62}
-#pt-hold-chip{right:28px;top:calc(50% - 60px);animation:ptHoldPulse 2.4s ease-in-out 3}
+/* HOLDING / NEXT chips sit along the bottom edge of the stage (owner 9/15:
+   off the read line, so nothing competes with the copy being read), inside
+   #pt-stage so a beam splitter flips them with the copy. NEXT bottom left,
+   HOLDING bottom right; they never show together. Both lift above the talent
+   panel while it is open and yield to a WRAP banner. Shared glass with the
+   clock overlay; the hold chip pulses three times then holds steady.
+   .rowinfo-off on #promptypus hides both (the Row info switch on the talent
+   panel, Script Op, and Flowmingo Op; talent truth rides the ack as rowInfoOn). */
+#pt-hold-chip,#pt-next-chip{position:absolute;z-index:40;bottom:calc(28px + env(safe-area-inset-bottom));max-width:min(440px,calc(50vw - 40px));display:flex;flex-direction:row;align-items:baseline;gap:10px;padding:8px 14px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;pointer-events:none}
+#pt-hold-chip[hidden],#pt-next-chip[hidden],#promptypus.rowinfo-off #pt-hold-chip,#promptypus.rowinfo-off #pt-next-chip{display:none}
+#pt-next-chip{left:28px;opacity:.72}
+#pt-hold-chip{right:28px;animation:ptHoldPulse 2.4s ease-in-out 3}
 #pt-hold-chip .pt-chip-label{color:var(--pt-accent,#7ec8ff)}
-/* Narrow windows (1000px and under): the gutter beside the copy column is
-   5vw or less, so the 180px floor above would paint the chips over the
-   script. The chips drop into the bottom fade zone as compact one-line
-   pills, lift above the talent panel like the wrap banner does, and yield
-   to a WRAP banner (NEXT and HOLDING never show together, so the two
-   corners never collide). Same id specificity as above: source order wins. */
-@media(max-width:1000px){
-#pt-hold-chip,#pt-next-chip{top:auto;bottom:calc(72px + env(safe-area-inset-bottom));max-width:calc(50vw - 40px);flex-direction:row;align-items:baseline;gap:8px;padding:6px 10px}
-#pt-hold-chip .pt-chip-row,#pt-next-chip .pt-chip-row{font-size:18px}
-#promptypus:has(#pt-panel:not(.hidden)) #pt-hold-chip,#promptypus:has(#pt-panel:not(.hidden)) #pt-next-chip{bottom:calc(140px + env(safe-area-inset-bottom))}
+/* --pt-panel-lift is the talent panel's measured height from the bottom edge
+   (ptWatchPanelLift, ResizeObserver); the panel wraps to two or three rows on
+   narrow windows, so a fixed lift put the chips behind it. */
+#promptypus:has(#pt-panel:not(.hidden)) #pt-hold-chip,#promptypus:has(#pt-panel:not(.hidden)) #pt-next-chip{bottom:calc(var(--pt-panel-lift,140px) + 16px + env(safe-area-inset-bottom))}
 #promptypus:has(.pt-clock-overlay.wrap.on) #pt-hold-chip,#promptypus:has(.pt-clock-overlay.wrap.on) #pt-next-chip{display:none}
+/* Narrow windows (1000px and under): compact one-line pills in the bottom
+   fade zone. Same id specificity as above: source order wins. */
+@media(max-width:1000px){
+#pt-hold-chip,#pt-next-chip{bottom:calc(72px + env(safe-area-inset-bottom));gap:8px;padding:6px 10px}
+#pt-hold-chip .pt-chip-row,#pt-next-chip .pt-chip-row{font-size:18px}
+#promptypus:has(#pt-panel:not(.hidden)) #pt-hold-chip,#promptypus:has(#pt-panel:not(.hidden)) #pt-next-chip{bottom:calc(var(--pt-panel-lift,140px) + 12px + env(safe-area-inset-bottom))}
 }
 .pt-chip-label{font-family:var(--mono);font-size:13px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-ovl-fg-dim);line-height:1.15}
 .pt-chip-row{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:0;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
@@ -2846,6 +2867,9 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-ctrl-group{display:flex;align-items:center;gap:8px}
 .pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:11px;min-width:44px}
+/* Talent panel switch (Row info). Prompter-accented like the rest of the panel. */
+.pt-switch{display:inline-flex;align-items:center;gap:8px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:11px;cursor:pointer;user-select:none}
+.pt-switch input{--sw-on:var(--pt-accent,var(--accent));--sw-w:32px;--sw-h:18px}
 .pt-btn{background:color-mix(in srgb,var(--pt-text,var(--text)) 8%,transparent);border:1px solid transparent;color:color-mix(in srgb,var(--pt-text,var(--text2)) 82%,transparent);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:var(--mono);font-size:12px;transition:background .15s,border-color .15s,color .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
 .pt-btn .sf-symbol{font-size:1.25em}
 .pt-btn:disabled{opacity:.42;cursor:default}
@@ -5767,6 +5791,7 @@ input.pt-range::-moz-range-thumb,
       <button class="pt-btn" onclick="ptResetScroll()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Reset</span></button>
       <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()">Mirror</button>
       <button class="pt-btn" onclick="ptToggleFullscreen()"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
+      <label class="pt-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom"><input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)"><span>Row info</span></label>
     </div>
   </div>
 
@@ -7518,7 +7543,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=284ac568a0"></script>
+<script src="cueola-app.js?v=1990c1e508"></script>
 <script src="outrangutan/outrangutan.js?v=6e2583a2cd"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

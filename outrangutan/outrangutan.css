@@ -589,6 +589,17 @@
 .og-field-row3 .og-field label { font-size: 11px; }
 .og-check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text2); cursor: pointer; user-select: none; }
 .og-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+/* Toggle sliders (owner 9/15): every checkbox in the app paints as a switch.
+   Native semantics stay (checked, change, disabled, :checked selectors); only
+   the paint changes. --sw-w / --sw-h resize it per context, --sw-on recolors
+   the on state (the prompter uses its own accent). [data-native] opts out.
+   :not() lifts specificity above the per-label `.x input` sizing rules. */
+input[type="checkbox"]:not([data-native]){-webkit-appearance:none;appearance:none;position:relative;flex:none;box-sizing:border-box;width:var(--sw-w,34px);height:var(--sw-h,20px);margin:0;padding:0;border:0;border-radius:999px;background:color-mix(in srgb,var(--text) 18%,var(--s3,#333));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 12%,transparent);cursor:pointer;vertical-align:middle;transition:background .18s var(--ease,ease),box-shadow .18s var(--ease,ease);outline-offset:2px}
+input[type="checkbox"]:not([data-native])::before{content:'';position:absolute;top:2px;left:2px;width:calc(var(--sw-h,20px) - 4px);height:calc(var(--sw-h,20px) - 4px);border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:transform .18s var(--ease,ease)}
+input[type="checkbox"]:not([data-native]):checked{background:var(--sw-on,var(--accent));box-shadow:none}
+input[type="checkbox"]:not([data-native]):checked::before{transform:translateX(calc(var(--sw-w,34px) - var(--sw-h,20px)))}
+input[type="checkbox"]:not([data-native]):disabled{opacity:.45;cursor:not-allowed}
+input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--sw-on,var(--accent))}
 .og-check-inline { font-size: 12px; }
 
 /* the kit: label-left rows separated by hairlines, controls on the panel bg */
