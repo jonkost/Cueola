@@ -2262,6 +2262,7 @@ function setSessionCodeInUrl(code) {
 
 function leaveSessionForFrontPage() {
   resetLiveShared();
+  if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
   captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   try { liveSessionController.leave({ reason:'session-leave' }); }
@@ -5550,6 +5551,14 @@ async function joinPreProSession() {
     // joinPresence first: it SETS the whole presence entry, so the landing
     // page's pbPage announce (issued after, same client queue) survives it.
     joinPresence();
+    // P0-2: a Planner-only join used to get ONE read of the show and nothing
+    // after; the live merge lives in the session listener that only the
+    // rundown path attached. Attach it here too, so edits from other devices
+    // land while the planner is open.
+    rundownCloudBeats = cloneRundownValue(beats);
+    rundownShadowBeats = cloneRundownValue(beats);
+    rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+    setupFirestore();
     if (preProJoinTarget === 'notes') openProductionNotes();
     else openPaperworkHub();
     window.CueolaIdentity?.noteJoin(code, name);
@@ -21408,9 +21417,9 @@ function updatePbSaveStatus() {
   if (!chips.length) return;
   const state = pbSaveStatusState();
   const label = state === 'saving' ? 'Saving…'
-    : state === 'offline' ? 'Saved on this device, reconnecting'
+    : state === 'offline' ? 'Not saved. Check the connection.'
     : state === 'local' ? 'Saved on this device'
-    : 'All changes saved';
+    : 'Saved';
   const icon = state === 'saving' ? sfIcon('time.clock')
     : state === 'offline' ? sfIcon('state.warning')
     : sfIcon('state.success');
@@ -21488,17 +21497,18 @@ function pbCollectionsToArrays(doc) {
   return out;
 }
 
-// Leaf-granular wire writes stay DARK until every client ships the engine:
-// a leaf-writing client puts map-shaped collections on the wire that the
-// deployed array-reading build cannot see, and mixed-version saves accumulate
-// orphan rows (P2607 incident, 2026-07-15). Flip to true only as part of a
-// coordinated deploy (with a WORKER_SCHEMA bump so cached clients refresh).
-window.CUEOLA_PB_LEAF_SYNC = false;
+// 3.0: field-level writes are ON. Every Planner save writes only the leaves
+// that changed (masked field paths + per-leaf stamps), so two people editing
+// different fields of the same page never clobber each other. The engine
+// reads both wire shapes; 3.0 ships with a WORKER_SCHEMA bump so no
+// array-only client stays live (the P2607 mixed-version incident guard).
+window.CUEOLA_PB_LEAF_SYNC = true;
 
 function persistPreProData(patch, section) {
   const Sync = preProSyncEngine();
   const previous = loadPreProData();
-  const now = Date.now();
+  // Stamps compare across devices, so they ride server time (skew-proof).
+  const now = liveServerNow();
   if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) return persistPreProDataLegacy(previous, patch, section, now);
   const nextRaw = pbAdoptRowIdentity(previous, { ...previous, ...(patch || {}) });
   delete nextRaw.activeCallSheetIndex; // selected sheet is device-local, never shared
@@ -21631,7 +21641,20 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
     }
     pbBeginCloudSave(changedPaths);
     _pbLastCloudSaveError = null;
-    window._updateDoc(ref, updates).then(() => {
+    // D2: the FIRST save to a group whose subdoc doesn't exist yet retries as
+    // a setDoc merge (updateDoc requires an existing doc).
+    const groupSeedFallback = err => {
+      if (!groupActive() || err?.code !== 'not-found') return Promise.reject(err);
+      const seed = { prePro: {}, updatedAt: now };
+      for (const [key, value] of Object.entries(updates)) {
+        const path = key.replace(/^prePro\./, '').split('.');
+        let cur = seed.prePro;
+        for (let i = 0; i < path.length - 1; i++) { if (typeof cur[path[i]] !== 'object' || cur[path[i]] === null) cur[path[i]] = {}; cur = cur[path[i]]; }
+        cur[path[path.length - 1]] = value;
+      }
+      return window._setDoc(ref, seed, { merge: true });
+    };
+    window._updateDoc(ref, updates).catch(groupSeedFallback).then(() => {
       pbEndCloudSave(changedPaths);
     }).catch(err => {
       _pbLastCloudSaveError = err;
@@ -21664,7 +21687,7 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
   if (recoverNewerLocal && recKeys.length
       && window._firebaseReady && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert) {
     // Device came back with newer local leaves — re-push just those.
-    const now = Date.now();
+    const now = liveServerNow();
     const localNorm = Sync.normalizeDoc(local).doc;
     const updates = { 'prePro.updatedAt': now };
     const changed = [];
@@ -21683,7 +21706,7 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
       }
     }
     if (changed.length) {
-      const ref = window._doc(window._db, 'sessions', session.code);
+      const ref = preProDocRef();   // D2: recovery lands on the active workspace too
       pbBeginCloudSave(changed);
       window._updateDoc(ref, updates).then(() => pbEndCloudSave(changed)).catch(err => {
         _pbLastCloudSaveError = err;
@@ -28940,8 +28963,8 @@ function safetyPpeProblem(list) {
   const entries = normalizeSafetyPpe(list);
   const real = entries.filter(ppeEntryIsReal);
   if (real.length >= PPE_MIN_ITEMS) return '';
-  if (entries.length > real.length) return 'Entries like "none" or "N/A" do not count. Name the real equipment.';
-  return `List at least ${PPE_MIN_ITEMS} PPE items for this production.`;
+  if (entries.length > real.length) return `"None" and "N/A" do not count. Name the real gear (${real.length} of ${PPE_MIN_ITEMS} so far).`;
+  return `List at least ${PPE_MIN_ITEMS} PPE items (${real.length} so far).`;
 }
 const PPE_PLACEHOLDERS = [
   'e.g. Closed-toe shoes for all crew',
@@ -28951,7 +28974,11 @@ const PPE_PLACEHOLDERS = [
 function renderSafetyPpeList(items) {
   const el = document.getElementById('sp-ppe-list');
   if (!el) return;
-  const rows = normalizeSafetyPpe(items);
+  // Render every row as given, blanks included: "Add PPE item" pushes an
+  // empty row that the student is about to type into. Only validation and
+  // the export drop blanks (normalizeSafetyPpe). Dropping them here made the
+  // new row vanish and deleted every other untyped row with it (P0-1).
+  const rows = (Array.isArray(items) ? items : []).map(v => String(v || '').trim());
   const display = rows.length ? rows : ['', '', ''];
   const problem = safetyPpeProblem(rows);
   el.innerHTML = `
@@ -28960,7 +28987,7 @@ function renderSafetyPpeList(items) {
       <button class="sp-ppe-remove" type="button" onclick="removeSafetyPpeRow(${i})" data-tip="Remove item" aria-label="Remove PPE item">${sfIcon('action.close')}</button>
     </div>`).join('')}
     <button class="call-add-btn u-mt10" type="button" onclick="addSafetyPpeRow()">${sfIcon('action.add')}<span>Add PPE item</span></button>
-    <div class="sp-ppe-status ${problem ? 'bad' : 'ok'}">${problem ? esc(problem) : `${rows.filter(ppeEntryIsReal).length} PPE item(s) listed.`}</div>
+    <div class="sp-ppe-status ${problem ? 'bad' : 'ok'}">${problem ? esc(problem) : `${normalizeSafetyPpe(rows).filter(ppeEntryIsReal).length} PPE items listed.`}</div>
   `;
 }
 function updateSafetyPpeStatus() {
@@ -28969,7 +28996,7 @@ function updateSafetyPpeStatus() {
   const rows = collectSafetyPpe();
   const problem = safetyPpeProblem(rows);
   el.className = `sp-ppe-status ${problem ? 'bad' : 'ok'}`;
-  el.textContent = problem || `${normalizeSafetyPpe(rows).filter(ppeEntryIsReal).length} PPE item(s) listed.`;
+  el.textContent = problem || `${normalizeSafetyPpe(rows).filter(ppeEntryIsReal).length} PPE items listed.`;
 }
 function collectSafetyPpe(keepBlank=false) {
   const rows = [];
@@ -31344,7 +31371,18 @@ async function exportPreProPackagePDF() {
   // OSHA PPE gate: the submitted package must carry a real PPE list. The
   // preview still renders (with a REQUIRED marker) so the gap is visible.
   if (paperworkTypeEnabled('safety-plan') && !validSafetyPpe(loadPreProData().safety?.ppe)) {
-    toast(`Export blocked: the Safety Plan needs at least ${PPE_MIN_ITEMS} real OSHA PPE items. "None" and "N/A" do not count.`, 4200);
+    const have = normalizeSafetyPpe(loadPreProData().safety?.ppe).filter(ppeEntryIsReal).length;
+    toast(`Not exported yet: the Safety Plan needs ${PPE_MIN_ITEMS} PPE items (${have} listed). Add them, then export again.`, 5000);
+    // Take the student to the list instead of leaving them to find it.
+    try {
+      openPaperworkItem('safety-plan');
+      setTimeout(() => {
+        const list = document.getElementById('sp-ppe-list');
+        list?.scrollIntoView({ behavior:'smooth', block:'center' });
+        const firstBlank = [...document.querySelectorAll('[data-sp-ppe]')].find(i => !i.value.trim());
+        (firstBlank || document.querySelector('[data-sp-ppe]'))?.focus();
+      }, 350);
+    } catch {}
     return;
   }
   let snapshot;
