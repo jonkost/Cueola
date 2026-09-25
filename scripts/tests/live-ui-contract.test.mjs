@@ -1024,7 +1024,7 @@ test('one timer loop: every Live readout is wall-clock math from one worker-back
   assert.match(tick, /if \(!liveTickerWanted\(\)\) \{ stopLiveTicker\(\); return; \}/);
   assert.match(tick, /elapsedSecs = Math\.floor\(elapsedMs \/ 1000\);/);
   assert.match(tick, /if \(sec === _liveTickLastSec\) return;/);
-  assert.match(tick, /updateWallClock\(\);\n\s+updateLiveOverview\(\);\n\s+renderLiveCallCountdown\(\);\n\s+liveLinkTickBody\(\);\n\s+if \(playoutNow\(\) != null\) renderOutCountdowns\(\);/);
+  assert.match(tick, /updateWallClock\(\);\n\s+updateLiveOverview\(\);\n\s+renderLiveCallCountdown\(\);\n\s+renderLiveStatusItem\('director', liveDirectorStatusRecord\(\)\);\n\s+renderLiveStatusItem\('controls', liveControlsStatusRecord\(\)\);\n\s+liveLinkTickBody\(\);\n\s+if \(playoutNow\(\) != null\) renderOutCountdowns\(\);/);
   assert.match(tick, /\} else if \(_liveLinksActive\(\)\) \{\n\s+liveLinkTickBody\(\);/);
   assert.match(tick, /containError\('Live tick', error\)/);
   assert.doesNotMatch(tick, /setInterval|setTimeout/);
