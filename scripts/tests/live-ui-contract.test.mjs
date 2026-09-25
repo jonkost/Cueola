@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [app, html, liveController, playbackJs, playbackCss, streamdeckJs, cueModel] = await Promise.all([
+const [app, html, liveController, playbackJs, playbackCss, streamdeckJs] = await Promise.all([
   readFile(new URL('../../cueola-app.js', import.meta.url), 'utf8'),
   readFile(new URL('../../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../../cueola-live-session.js', import.meta.url), 'utf8'),
   readFile(new URL('../../outrangutan/outrangutan.js', import.meta.url), 'utf8'),
   readFile(new URL('../../outrangutan/outrangutan.css', import.meta.url), 'utf8'),
   readFile(new URL('../../cueola-streamdeck.js', import.meta.url), 'utf8'),
-  readFile(new URL('../../cueola-cue-model.js', import.meta.url), 'utf8'),
 ]);
 
 const tests = [];
@@ -72,41 +71,40 @@ test('row selection is keyboard-operable and never aliases GO', () => {
   assert.match(app, /event\?\.stopPropagation\?\.\(\)/);
 });
 
-test('one type per cue, one call line everywhere: rundown, Live and export (3.0 cue model)', () => {
-  assert.match(app, /function liveCallLineHTML\(typeId, line, className=''\)/);
-  assert.doesNotMatch(app, /liveCueOperationLine|LIVE_CUE_OPERATION|label:'READY'|label:'ROLL'/);
-  assert.doesNotMatch(app.slice(app.indexOf('function liveCallLineHTML'), app.indexOf('function lrpCueHere')), />[▶■○]\s*\$\{esc/);
-  // `type` rides the patch whitelist; `done` is gone.
-  assert.match(app, /\['type','style','info','notes','min','sec','color','helperFor','helperRole','_createdAt','_createdBy'\]/);
-  // Migration is the cue model's, run once per beat from migrateBeat.
-  assert.match(app, /window\.CueolaCueModel\.migrateBeat\(\{ \.\.\.b, cues: newCues \}\)/);
-  assert.match(html, /<script src="cueola-cue-model\.js\?v=[^"]+"><\/script>/);
-  // No generated helper rows and no cell modal; old helper rows still render
-  // with their tags and are swept with their parent.
-  assert.doesNotMatch(app, /syncPlaybackHelperRows|cc-guided-prep|saveCueConfig|openCueConfig|buildCueConfigFields|function openEdit\(/);
+test('Live cue renderers share READY and TAKE vocabulary', () => {
+  assert.match(app, /ready:\{ label:'READY'/);
+  assert.match(app, /take:\{ label:'TAKE'/);
+  assert.match(app, /function liveCueOperationLine/);
+  assert.doesNotMatch(app.slice(app.indexOf('function renderLiveCurrent'), app.indexOf('function liveRowPreview')), />[▶■○]\s*\$\{esc/);
+});
+
+test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted beats (R1)', () => {
+  // Playback-only chip overrides; every other cue type keeps READY/TAKE above.
+  assert.match(app, /ready:\{ label:'ROLL'/);
+  assert.match(app, /take:\{ label:'OUT'/);
+  assert.match(app, /LIVE_CUE_OPERATION_OVERRIDES\[cueType\]/);
+  assert.match(app, /function liveCueOperationLine\(operation, text, className='', style='', cueType=''\)/);
+  // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
+  // silently drops every beat field it does not list.
+  assert.match(app, /\['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'\]/);
+  // saveCueConfig is the single chokepoint that generates PREP/OUT rows.
+  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
+  assert.match(save, /syncPlaybackHelperRows\(b, prevCell, d\)/);
+  const sync = app.slice(app.indexOf('function syncPlaybackHelperRows('), app.indexOf('function removeCueCfg()'));
+  assert.match(sync, /helperFor: String\(parent\.id\), helperRole: role/);
+  assert.match(sync, /beats\.splice\(role === 'prep' \? pIdx : pIdx \+ 1, 0, row\)/);
+  // The wizard offers the guided rows as opt-in checkboxes.
+  assert.match(app, /id="cc-guided-prep"/);
+  assert.match(app, /id="cc-guided-out"/);
+  // Helper rows render with role tags in the builder table and the live grid.
   assert.match(app, /rundown-row-helper helper-\$\{b\.helperRole\}/);
   assert.match(app, /live-row-helper helper-\$\{b\.helperRole\}/);
-  assert.match(app, /Removed the cue and its PREP\/OUT helper rows\./);
-  // The printed rundown carries the call line and explains it once.
-  assert.match(app, /<b>Call<\/b> = what happens when the director takes the cue/);
-  // Add a cue = type → name → duration → Add; nothing is inserted before Add.
-  assert.match(html, /id="addCueTypes"/);
-  assert.match(html, /id="ac-add" onclick="addCueSubmit\(\)" disabled/);
-  assert.doesNotMatch(html, /id="ar-step-2"|Open Cue Builder|id="cueConfigModal"|id="editOv"/);
-  assert.match(app, /CueModel\.newBeat\(\{\n\s+id: nextBeatId\(\), type: addCueType, name,/);
-  // The rundown is a list, not a table with department lanes.
-  assert.match(html, /<div class="cue-list" id="rdBody"/);
-  assert.doesNotMatch(html, /class="rd-table"/);
-  assert.doesNotMatch(app, /colOrder|COL_META/);
-  // The editor opens in place; every field has a ⓘ that is a button (touch).
-  assert.match(app, /function cueEditorHTML\(b, i\)/);
-  assert.match(app, /INFO_POPS\[`cue-\$\{t\.id\}-\$\{f\.key\}`\]/);
-  assert.match(app, /class="info-btn" aria-label="About \$\{esc\(label \|\| id\)\}" onclick="toggleInfoPop\(event,'\$\{id\}'\)"/);
-  // Typing saves on a debounce; a remote render never wipes the field being typed in.
-  assert.match(app, /_cueSaveTimer = setTimeout\(\(\) => \{ _cueSaveTimer = null; syncToFirestore\(\); \}, 600\);/);
-  assert.match(app, /if \(!opts\.force && rundownEditorHasFocus\(\)\) \{ _rundownRenderDeferred = true; return; \}/);
-  // Live grid: number, state, cue, call, time. No department columns.
-  assert.match(app, /<th class="live-col-cue">Call<\/th>\n\s+<th class="live-col-time">Time<\/th>/);
+  assert.match(html, /\.helper-tag-prep/);
+  assert.match(html, /\.helper-tag-out/);
+  // Deleting a parent playback row sweeps its helpers in the same pass.
+  assert.match(app, /Removed the row and its PREP\/OUT helper rows\./);
+  // The printed rundown legend teaches the playback vocabulary too.
+  assert.match(app, /For playback rows: <b>ROLL<\/b> = start the clip · <b>OUT<\/b> = the plan for getting out/);
 });
 
 test('subsystem failures have persistent local recovery surfaces', () => {
@@ -451,11 +449,12 @@ test('pre-roll countdown then take: one per-cue count, an abort window, publishe
   assert.match(remote, /_remoteLiveCall = liveCall\.stage === 'preroll' \? \{ endsAt: Date\.now\(\) \+ Math\.max\(0, ms - Math\.max\(0, Date\.now\(\) - liveCall\.stageAt\)\) \} : null;/);
   // The cue editor: "Roll this clip on TAKE" + a bounded pre-roll field that
   // saveCueConfig persists; old CALL cells migrate to the 3 s they used to get.
-  assert.match(app, /id="cc-out-auto" \$\{d\.outAuto \? 'checked' : ''\}\$\{save\}> Roll this clip on TAKE<\/label>/);
+  assert.match(app, /id="cc-out-auto" \$\{d\.outAuto \? 'checked' : ''\}> Roll this clip on TAKE<\/label>/);
   assert.match(app, /<input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1"/);
-  const save = app.slice(app.indexOf('function cueLinkInput(id)'), app.indexOf('function cueSetTint('));
-  assert.match(save, /if \(pre\) d\.preRoll = Math\.max\(0, Math\.min\(60, Math\.round\(Number\(pre\.value\) \|\| 0\)\)\);/);
-  assert.match(cueModel, /out\.preRoll = Number\.isFinite\(Number\(d\.preRoll\)\) \? Math\.max\(0, Math\.round\(Number\(d\.preRoll\)\)\) : \(d\.outAuto \? 3 : 0\);/);
+  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
+  assert.match(save, /const preRoll = Math\.max\(0, Math\.min\(60, Math\.round\(Number\(document\.getElementById\('cc-out-preroll'\)\?\.value\) \|\| 0\)\)\);\n\s+d\.preRoll = preRoll;/);
+  const migrate = app.slice(app.indexOf('function migrateBeat(b)'), app.indexOf('\nfunction ', app.indexOf('function migrateBeat(b)') + 1));
+  assert.match(migrate, /if \(pb && pb\.outAuto && pb\.preRoll === undefined\) newCues\.playback = \{ \.\.\.pb, preRoll: 3 \};/);
   // The row badge names the pre-roll instead of CALL.
   assert.match(app, /\$\{pre \? `TAKE · \$\{pre\}s` : 'TAKE'\}<\/span>/);
 });
@@ -995,7 +994,7 @@ test('seq-gated live record: sessions/{CODE}.live is the room\'s truth, the dire
   assert.match(html, /window\._increment=increment;/);
   // syncLiveIdx is a stub: no follower ever writes the show position, and
   // browsing as a follower writes nothing at all.
-  assert.doesNotMatch(app, /function syncLiveIdx\(/);   // the old follower writer is gone, not stubbed
+  assert.match(app, /function syncLiveIdx\(\) \{\n  markResumeState\(\);\n\}/);
   const browse = app.slice(app.indexOf('function lsBrowseAsFollower('), app.indexOf('function lsNext('));
   assert.doesNotMatch(browse, /syncLiveIdx|_updateDoc|presence\./);
   // Entering Live as the director seeds a record only when there is none.
@@ -1033,7 +1032,9 @@ test('one timer loop: every Live readout is wall-clock math from one worker-back
   assert.match(app, /function setLiveText\(id, text\) \{\n  const el = document\.getElementById\(id\);\n  if \(!el\) return;\n  if \(_liveTickText\.get\(id\) === text\) return;/);
   // The old entry points survive as aliases so nothing new can break.
   assert.match(app, /function ensureLiveLinkTicker\(\) \{ startLiveTicker\(\); \}/);
-  assert.doesNotMatch(app, /function (stopLiveLinkTicker|startWallClock|stopWallClock)\(/);   // no second loop, no aliases
+  assert.match(app, /function stopLiveLinkTicker\(\) \{\}/);
+  assert.match(app, /function startWallClock\(\) \{ startLiveTicker\(\); \}/);
+  assert.match(app, /function stopWallClock\(\) \{\}/);
   // startTimer only sets the anchor and starts the loop; the playout ticker
   // sync only asks for the loop.
   const start = app.slice(app.indexOf('function startTimer(anchorMs)'), app.indexOf('// ── 3.0: the one Live timer loop'));
@@ -1884,7 +1885,7 @@ test('show clock survives leaving Live; Back on Live is the same sheet; refusals
   // interval to clear; the one Live loop keeps deriving from the anchor).
   // Re-entry seeds the room's live record, then the remote resume check,
   // then the loop.
-  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function isFollowingSelf('));
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
   assert.match(enter, /registerCleanup\('live-clock', \(\) => \{\n    updateLiveClockButton\(\);\n    notifyControlSurfaceState\(\);\n  \}\);/);
   assert.doesNotMatch(enter, /registerCleanup\('live-clock', \(\) => stopTimer\(false\)\)/);
   assert.doesNotMatch(enter, /clearInterval|stopTimer\(/);
@@ -1951,7 +1952,7 @@ test('pre-live grant from the Build screen: chip, banner, union roster, presence
   assert.match(adminUi, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);
   const presence = app.slice(app.indexOf('function renderPresence(map)'), app.indexOf('const active = getActivePresencePeople();'));
   assert.match(presence, /refreshCallerPresenceState\(\);/);
-  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function isFollowingSelf('));
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
   assert.match(enter, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);/);
   const leave = app.slice(app.indexOf('function leaveLiveSessionScreen(liveState, context={})'), app.indexOf('function isFollowingSelf()'));
   assert.match(leave, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);

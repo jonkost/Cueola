@@ -101,7 +101,3 @@ Presence entry, 30 s heartbeat and the 90 s activity window; `participants`; `co
 - Should students land straight in Live (following) after joining, or on the rundown with "Watch live"?
 - Should the "Students must sign in" default stay on?
 - Is the standalone Blank Slate mode still needed, or is it a "free text" toggle on any show?
-
-## 7. Shipped in 3.0
-
-From section 3: the one-screen New show dialog (dashboard) and Watch live for everyone but the director (the preflight and the Ready Before Show prompt are the director's only). Not yet done, pending the open questions and the copy approval: the single join screen for every door, the front-door rework, the Director seat wording, the preflight-as-status-strip, the launcher rename, and retiring the old URL spellings.

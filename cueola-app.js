@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '3.0.0';
+const CUEOLA_VERSION = '2.2.1';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 // Build identity on the wire: the ?v= hash of this script tag ('' if absent).
 // Rides presence, the talent heartbeat and the Air's live packet so preflight
@@ -104,6 +104,25 @@ const CT = {
   gfx:      { label:'GFX',      color:'var(--cue-gfx)',      bg:'color-mix(in srgb,var(--cue-gfx) 14%,transparent)',      symbol:'department.graphics' },
   script:   { label:'SCRIPT',   color:'var(--cue-script)',   bg:'color-mix(in srgb,var(--cue-script) 14%,transparent)',   symbol:'department.script' },
 };
+
+// Column ordering — persisted per user in localStorage
+const COL_META = {
+  video:    { label:'Video',    color:'var(--cue-video)',    symbol:'department.video' },
+  audio:    { label:'Audio',    color:'var(--cue-audio)',    symbol:'department.audio' },
+  playback: { label:'Playback', color:'var(--cue-playback)', symbol:'department.playback' },
+  gfx:      { label:'GFX',      color:'var(--cue-gfx)',      symbol:'department.graphics' },
+  lighting: { label:'Lighting', color:'var(--cue-lighting)', symbol:'department.lighting' },
+  script:   { label:'Script',   color:'var(--cue-script)',   symbol:'department.script' },
+};
+const COL_DEFAULTS = ['video','audio','playback','gfx','lighting','script'];
+let colOrder = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem('cueola_col_order')||'null');
+    if (Array.isArray(s) && s.length === 6 && s.every(c=>COL_DEFAULTS.includes(c))) return s;
+  } catch {}
+  return [...COL_DEFAULTS];
+})();
+let colDragSrc = null;
 
 // ─────────────────────────────────────────────────────────────
 // STATE
@@ -404,7 +423,6 @@ function refreshCallerPresenceState() {
   let caller = null;
   try { caller = isShowCaller(); } catch { caller = null; }
   renderShowCallerBadge();
-  updateGoLiveButton();
   if (caller !== _lastCallerTruth) {
     _lastCallerTruth = caller;
     updateLiveGoControl();
@@ -814,9 +832,11 @@ function liveLinkTickBody() {
   if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
 }
 function ensureLiveLinkTicker() { startLiveTicker(); }
+function stopLiveLinkTicker() {}
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
 let followTargetId = '';    // presence id keeps duplicate/stale display names from hijacking follow
+let editId = null;
 let elapsedSecs = 0;
 // True once the show clock has run in THIS page load. A stopped clock with
 // leftover elapsedSecs on a fresh load means the session hydrated a parked
@@ -882,6 +902,7 @@ let _presenceClockWrite = null; // { sentAt, ackAt } of this window's last prese
 let _presenceClockSeen = 0;    // server ms of the last presence stamp sampled
 
 function liveServerNow() { return liveServerClock.now(Date.now()); }
+function liveRecord() { return liveShared.get(); }
 function liveDirectorName() {
   const rec = liveShared.get();
   if (!rec.directorId) return '';
@@ -2166,8 +2187,16 @@ setInterval(() => {
   if (inSession && session?.code && !session.isDemo && !session.isExpert) markResumeState();
 }, 20000);
 
+// Add-row wizard state
+let arStyle = null;
+let arCueType = null; // single selected type in step 2
+
 // Edit mode (gates row/column drag)
 let editMode = false;
+
+// Cue config modal state
+let cueConfigBeatId = null;
+let cueConfigType   = null;
 
 // Presence cache for follow chips
 let currentPresence = {};
@@ -2179,6 +2208,9 @@ let sessionParticipantRecords = [];
 
 // Live script edit
 let liveScriptEditIdx = null;
+
+// Edit style (for edit overlay)
+let editStyle = null;
 
 // Prompt Op Mode — teleprompter-operator focused live view
 let promptOpMode = false;
@@ -2279,7 +2311,7 @@ function fmtDur(b) {
 }
 
 function totalSecs() {
-  return beats.reduce((acc, b) => acc + CueModel.durationSeconds(b), 0);
+  return beats.reduce((acc,b) => acc + (b.min||0)*60 + (b.sec||0), 0);
 }
 
 function fmtSecs(t) {
@@ -4137,6 +4169,10 @@ function basePlandaBearAssignmentOptions(data=basePreProData()) {
   return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
+function plandaBearAssignmentOptions(data=basePreProData()) {
+  return plandaBearAssignmentCatalog(data).map(option => option.label);
+}
+
 function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOptions(), fuzzy=true) {
   const out = [];
   const add = label => {
@@ -5115,6 +5151,12 @@ function syncSessionSources() {
   localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources));
 }
 
+function getSources(key) {
+  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
+  const removed = sessionCustomSources.__removed?.[key] || [];
+  return [...defaults.filter(s=>!removed.includes(s)), ...(sessionCustomSources[key]||[])];
+}
+
 function migrateOldCue(type, d) {
   if (!d) return d;
   if (
@@ -5153,16 +5195,18 @@ function migrateBeat(b) {
     if (b.type && b.cueData && Object.keys(b.cueData).length) {
       cues[b.type] = migrateOldCue(b.type, b.cueData);
     }
-    return migrateBeat({ id:b.id, style:b.style||'flex', info:b.info||'', notes:b.notes||'', min:b.min||0, sec:b.sec||0, cues });
+    return { id:b.id, style:b.style||'flex', info:b.info||'', notes:b.notes||'', min:b.min||0, sec:b.sec||0, done:b.done||false, cues };
   }
   // Has cues — migrate each cue's fields to ready/take format
   const newCues = {};
   Object.keys(b.cues).forEach(type => {
     newCues[type] = CT[type] ? migrateOldCue(type, b.cues[type]) : b.cues[type];
   });
-  // 3.0: one type per cue, minimal fields, one call line (cueola-cue-model.js).
-  // Every pre-3.0 cell is parsed once; anything unreadable lands in notes.
-  return window.CueolaCueModel ? window.CueolaCueModel.migrateBeat({ ...b, cues: newCues }) : { ...b, cues: newCues };
+  // 3.0: the READY·TRACK·ROLL call took three seconds before firing; a linked
+  // clip that ran that call keeps a 3 s pre-roll so nothing changes on air.
+  const pb = newCues.playback;
+  if (pb && pb.outAuto && pb.preRoll === undefined) newCues.playback = { ...pb, preRoll: 3 };
+  return { ...b, cues: newCues };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -5251,6 +5295,26 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
   restoreLocalDraftAsRundownBaseline();
   enterRundown();
   toast('Opened local copy. Shared sync is unavailable while offline.');
+}
+
+function openLocalPlandaBear(code='', name='You') {
+  session = sessionWithProfileIdentity({ code:(code || 'LOCAL').trim().toUpperCase(), role:'instructor', userName:name || 'You', isDemo:false, isExpert:false }, name);
+  freeTextMode = true;
+  rememberLastSession(session.code, session.userName);
+  restoreLocalDraft();
+  const data = loadPreProData();
+  show = {
+    name:data.production || show.name || 'Untitled Show',
+    start:normalizeTimeValue(data.showStart || show.start),
+  };
+  hideModal('modal-prepro-join');
+  if (preProJoinTarget === 'notes') {
+    openProductionNotes();
+    toast('Opened local Production Notes. Shared sync is unavailable while offline.');
+  } else {
+    openPaperworkHub();
+    toast('Opened local Planda Bear copy. Shared sync is unavailable while offline.');
+  }
 }
 
 // Remember the last show code + name so the user only enters them once,
@@ -5877,7 +5941,7 @@ function rundownBeatKey(beat) {
 
 function buildBeatPatch(before, after) {
   const patch = {};
-  ['type','style','info','notes','min','sec','color','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
+  ['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
     if (!rundownValueEqual(before?.[key], after?.[key])) patch[key] = cloneRundownValue(after?.[key]);
   });
   const cuePatch = {};
@@ -6185,7 +6249,7 @@ function setupFirestore() {
       rundownSyncBlockedMissing = false;
       missingSessionNoticeCode = '';
       _rundownBaselineSeen = true;   // D10.3: a complete session doc is in — launch imports may proceed
-      _sessionActiveIdxAdopted = true;   // the doc has been read here; publishLiveTake may mirror activeIdx again
+      _sessionActiveIdxAdopted = true;   // the doc has been read here; syncLiveIdx may publish activeIdx again
       // Only a server-confirmed snapshot may claim "connected"; a cached one
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
@@ -6594,6 +6658,13 @@ function syncToFirestore() {
   }
   setCloudSyncState('saving', 'Cloud sync saving changes...');
   flushRundownSyncQueue();
+}
+
+// 3.0: the live position rides publishLiveTake (director) only. Followers
+// browsing on their own no longer write anything: presence.idx was a second,
+// unordered source of "where is the show" and is display-only now.
+function syncLiveIdx() {
+  markResumeState();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -7615,22 +7686,6 @@ const INFO_POPS = {
     body: 'The show code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
   },
 };
-// 3.0: every cue field carries its own ⓘ (works on touch: it is a button).
-(function registerCueInfoPops() {
-  const M = window.CueolaCueModel;
-  if (!M) return;
-  M.TYPES.forEach(t => M.fields(t.id).forEach(f => {
-    INFO_POPS[`cue-${t.id}-${f.key}`] = { title: `${t.label}: ${f.label}`, lesson: 'cueola-build', section: 'steps', body: esc(f.help) };
-  }));
-  INFO_POPS['cue-type'] = { title: 'Cue types', lesson: 'cueola-build', section: 'know',
-    body: [...M.TYPES, M.SEGMENT].map(t => `<b>${esc(t.label)}</b>: ${esc(t.blurb)}.`).join(' ') + ' One cue has one type; the type decides which fields it shows.' };
-  INFO_POPS['cue-duration'] = { title: 'Duration', lesson: 'cueola-build', section: 'steps',
-    body: 'How long this cue is planned to run. Blank means no fixed time. The show adds every duration up to give each cue a start time and the show an end time.' };
-  INFO_POPS['cue-extras'] = { title: 'Also on this cue', lesson: 'cueola-build', section: 'steps',
-    body: 'One cue has one type. When the director needs two things at the same moment (take camera 2 and open a mic), add the second call here. It shows as a small icon after the call line.' };
-  INFO_POPS['cue-highlight'] = { title: 'Highlight', lesson: 'cueola-build', section: 'steps',
-    body: 'Color a cue any way your crew reads it. The color shows in the rundown, in Live, and on the printed rundown.' };
-})();
 let _infoPopOpenId = '';
 let _infoPopTrigger = null;
 function closeInfoPop() {
@@ -7714,102 +7769,120 @@ function jogScrubHandleKey(e, phase) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// RUNDOWN (3.0): one list of cues. A cue has one type, a name, a duration
-// and a call line. Tap a row to open its editor in place; nothing lives in a
-// modal, nothing needs a hover.
+// RUNDOWN RENDERING
 // ─────────────────────────────────────────────────────────────
-const CueModel = window.CueolaCueModel;
-const CUE_TYPE_CSS = { camera:'video', audio:'audio', graphic:'gfx', playback:'playback', lighting:'lighting', script:'script', segment:'segment' };
-let expandedCueId = null;          // the one cue whose editor is open
-let _rundownRenderDeferred = false;
-let _cueSaveTimer = null;
-
 function toggleEditMode() {
   editMode = !editMode;
   const btn = document.getElementById('editModeBtn');
   if (btn) {
-    setSymbolButtonLabel(btn, editMode ? 'action.confirm' : 'action.drag', editMode ? 'Done' : 'Reorder');
+    setSymbolButtonLabel(btn, editMode ? 'action.confirm' : 'action.edit', editMode ? 'Done Editing' : 'Edit');
     if (editMode) btn.dataset.state = 'editing';
     else delete btn.dataset.state;
   }
-  renderRundown({ force:true });
+  renderRundown();
+}
+
+function renderTableHeaders() {
+  const thead = document.querySelector('.rd-head');
+  if (!thead) return;
+  const dynCols = colOrder.map(type => {
+    const m = COL_META[type];
+    if (editMode) {
+      return `<th class="col-cue${type==='script'?' col-script-c':''}"
+                style="color:${m.color}"
+                draggable="true"
+                ondragstart="colDragStart(event,'${type}')"
+                ondragover="colDragOver(event,this)"
+                ondrop="colDrop(event,'${type}')"
+                ondragend="colDragEnd(event)"
+                data-col="${type}"
+                data-tip="Drag to reorder">${sfIcon(m.symbol)} ${m.label} ${sfIcon('action.drag','col-grip')}</th>`;
+    }
+    return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${sfIcon(m.symbol)} ${m.label}</th>`;
+  }).join('');
+  const dragCol = editMode ? `<th class="col-drag" data-tip="Drag rows to reorder">${sfIcon('action.drag')}</th>` : '<th class="col-drag"></th>';
+  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
+}
+
+function colDragStart(e, type) {
+  colDragSrc = type;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.dataset.state = 'dragging';
+}
+function colDragOver(e, el) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  if (el && el.dataset.col !== colDragSrc) el.classList.add('col-drag-over');
+}
+function reRenderActiveGrid() {
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+  else renderRundown();
+}
+function colDrop(e, targetType) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  if (!colDragSrc || colDragSrc === targetType) { colDragSrc=null; return; }
+  const fi = colOrder.indexOf(colDragSrc), ti = colOrder.indexOf(targetType);
+  if (fi < 0 || ti < 0) { colDragSrc=null; return; }
+  colOrder.splice(fi, 1); colOrder.splice(ti, 0, colDragSrc);
+  localStorage.setItem('cueola_col_order', JSON.stringify(colOrder));
+  colDragSrc = null;
+  reRenderActiveGrid();
+}
+function colDragEnd(e) {
+  delete e.currentTarget.dataset.state;
+  document.querySelectorAll('.col-drag-over').forEach(c=>c.classList.remove('col-drag-over'));
+  colDragSrc = null;
 }
 
 function toggleSegmentCollapse(id) {
   if (collapsedSegments.has(id)) collapsedSegments.delete(id);
   else collapsedSegments.add(id);
   try { localStorage.setItem('cueola_collapsed_segs', JSON.stringify([...collapsedSegments])); } catch {}
-  renderRundown({ force:true });
+  renderRundown();
 }
 
-function cueBeat(id) { return beats.find(x => String(x.id) === String(id)) || null; }
-
-// A remote change must not wipe the field someone is typing in. Text inputs
-// inside the open editor hold the render back; it runs on the next focusout.
-function rundownEditorHasFocus() {
-  const a = document.activeElement;
-  return Boolean(a && a.matches?.('input,textarea,select') && a.closest?.('#rdBody .cue-editor'));
-}
-document.getElementById('rdBody')?.addEventListener('focusout', () => {
-  setTimeout(() => { if (_rundownRenderDeferred && !rundownEditorHasFocus()) renderRundown(); }, 0);
-});
-
-function infoBtn(id, label) {
-  return `<button type="button" class="info-btn" aria-label="About ${esc(label || id)}" onclick="toggleInfoPop(event,'${id}')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>`;
-}
-
-function cueTypeBadgeHTML(typeId, short=false) {
-  const t = CueModel.typeDef(typeId);
-  if (!t) return '';
-  return `<span class="cue-type-badge tb-${CUE_TYPE_CSS[typeId] || typeId}" style="--cue-clr:${t.color}">${sfIcon(t.symbol)}<span>${short ? t.short : t.label}</span></span>`;
-}
-
-function cueDurationLabel(b) { return CueModel.formatDuration(b) || '—'; }
-
-function renderRundownHeader() {
-  const name = show.name || 'Untitled Show';
-  setLiveText('rd-name', name);
-  setLiveText('rd-start', show.start ? clock(show.start, 0) : '—');
-  const total = totalSecs();
-  setLiveText('rd-dur', fmtSecs(total));
-  setLiveText('rd-count', String(rowDisplayTotal()));   // segments never count
-  setLiveText('rd-end', show.start ? clock(show.start, total) : '—');
-  updateGoLiveButton();
-}
-
-function renderRundown(opts={}) {
-  if (!opts.force && rundownEditorHasFocus()) { _rundownRenderDeferred = true; return; }
-  _rundownRenderDeferred = false;
+function renderRundown() {
   resolveOutrangutanNameLinks();   // name-authored playback links pick up ids when a matching show is present
-  renderRundownHeader();
-  const fill = document.getElementById('progFill');
-  if (fill) fill.style.width = '0%';
+  renderTableHeaders();
+  const name = show.name||'Untitled Show';
+  document.getElementById('rd-name').textContent = name;
+  document.getElementById('rd-start').textContent = show.start ? clock(show.start,0) : '—';
 
-  const list = document.getElementById('rdBody');
-  if (!list) return;
+  const total = totalSecs();
+  document.getElementById('rd-dur').textContent = fmtSecs(total);
+  document.getElementById('rd-count').textContent = rowDisplayTotal();   // segments never count
+  document.getElementById('rd-end').textContent = show.start ? clock(show.start, total) : '—';
+  document.getElementById('progFill').style.width = '0%';
+
+  const tbody = document.getElementById('rdBody');
   if (!beats.length) {
-    list.innerHTML = `<div class="empty-rundown">
-        <div class="empty-rundown-title">Add your first cue</div>
-        <div class="empty-rundown-sub">A rundown is a list of cues in show order. Each cue is one thing that happens: a camera, a mic, a graphic, a clip, a lighting look, or a line of script.</div>
-        <button class="empty-rundown-btn" onclick="openAddCue()">+ Add cue</button>
-      </div>`;
+    tbody.innerHTML = `<tr><td colspan="10">
+      <div class="empty-rundown">
+        <div class="empty-rundown-title">Start with your first row</div>
+        <div class="empty-rundown-sub">${freeTextMode ? 'Blank Slate is free-form. Add a row, then type directly into any cue cell without guided setup.' : 'Build the rundown one production beat at a time. Each row can hold video, audio, playback, graphics, lighting, and script cues.'}</div>
+        <button class="empty-rundown-btn" onclick="openAddRow()">Add First Row</button>
+      </div>
+    </td></tr>`;
+    renderAddRowBtn(tbody);
     updateBotBar();
     return;
   }
 
-  // Child counts per segment, plus where each block ends so the contextual
-  // add sits at the end of every block (new cues land inside their segment).
+  // Pre-compute child counts per segment, plus where each block ENDS so the
+  // contextual add-row can sit at the end of every block (pre-show fix plan:
+  // new items land inside their segment, not at the bottom of the rundown).
   const segChildCounts = {};
-  const segEndAt = {};
+  const segEndAt = {};   // beat index -> { segId, label } for the block ending at that row
   let _csi = null, _csLabel = '', _csEnd = -1;
   beats.forEach((b, i) => {
     if (b.style === 'segment') {
       if (_csi !== null) segEndAt[_csEnd] = { segId:_csi, label:_csLabel };
-      else if (i > 0) segEndAt[i - 1] = { segId:null, label:'' };
+      else if (i > 0) segEndAt[i - 1] = { segId:null, label:'' };   // leading unsegmented block
       _csi = b.id; _csLabel = b.info || 'Segment'; _csEnd = i;
       segChildCounts[b.id] = 0;
     } else if (_csi !== null) {
-      segChildCounts[_csi] = (segChildCounts[_csi] || 0) + 1;
+      segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
       _csEnd = i;
     }
   });
@@ -7818,351 +7891,110 @@ function renderRundown(opts={}) {
 
   let offsetSecs = 0;
   let activeSegCollapsed = false;
-  let cueNum = 0;
+  let cueNum = 0; // number non-segment beats
   let html = '';
   beats.forEach((b, i) => {
-    const startStr = show.start ? clock(show.start, offsetSecs) : '';
-    offsetSecs += CueModel.durationSeconds(b);
+    const dur = fmtDur(b);
+    const startStr = show.start ? clock(show.start, offsetSecs) : '—';
+    offsetSecs += (b.min||0)*60+(b.sec||0); // always advance even when collapsed
+
     if (b.style === 'segment') {
       activeSegCollapsed = collapsedSegments.has(b.id);
-      html += segmentRowHTML(b, i, segChildCounts[b.id] || 0, activeSegCollapsed);
-      html += segmentAddRowHTML(i, segEndAt);
+      const cc = segChildCounts[b.id] || 0;
+      const editActions = editMode ? `
+        <div class="row-edit-actions">
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
+          <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
+          <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
+        </div>` : '';
+      html += `<tr class="cue-row segment-row${editMode?' edit-mode-row':''}${rowTintClass(b)}" ${editMode?'draggable="true"':''} data-id="${b.id}" onclick="${editMode?'openEdit('+b.id+')':'toggleSegmentCollapse('+b.id+')'}">
+        <td class="seg-td" colspan="${colOrder.length + 4}">
+          <div class="seg-row-inner">
+            <span class="seg-collapse-icon">${sfIcon(activeSegCollapsed ? 'action.collapse' : 'action.expand')}</span>
+            <span class="seg-label-text">${esc(b.info || 'Segment')}</span>
+            ${b.notes ? `<span class="seg-notes-text">${esc(b.notes)}</span>` : ''}
+            <span class="seg-count-badge">${cc} cue${cc===1?'':'s'}${activeSegCollapsed?' · collapsed':''}</span>
+          </div>
+          ${editActions}
+        </td>
+      </tr>`;
+      html += segmentAddRowHTML(i, segEndAt, colOrder);
       return;
     }
-    cueNum++;   // a hidden child row still owns its number
-    if (activeSegCollapsed) { html += segmentAddRowHTML(i, segEndAt); return; }
-    html += cueRowHTML(b, i, cueNum, startStr);
-    html += segmentAddRowHTML(i, segEndAt);
+
+    // Number BEFORE the collapse check: a hidden child row still owns its
+    // number, so the rows after a collapsed segment match Live and the deck.
+    cueNum++;
+    if (activeSegCollapsed) {
+      html += segmentAddRowHTML(i, segEndAt, colOrder);   // block end keeps its add (expand-then-add)
+      return; // hide child rows; offsetSecs already incremented
+    }
+
+    const editActions = editMode ? `
+      <div class="row-edit-actions">
+        <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
+        <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
+        <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" data-tip="Add row before">+ Before</button>
+        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
+        <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" data-tip="Add row after">+ After</button>
+      </div>` : '';
+    const helperCls = isHelperBeat(b) ? ` rundown-row-helper helper-${b.helperRole}` : '';
+    html += `<tr class="cue-row${editMode?' edit-mode-row':''}${helperCls}${rowTintClass(b)}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
+      <td class="cd cd-drag" data-tip="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
+      <td class="cd cd-num">${cueNum}</td>
+      <td class="cd cd-pad">
+        <div class="cd-name">${helperRoleTagHTML(b)}${esc(b.info||'—')}${rundownRowPresenceHTML(b.id)}</div>
+        ${b.notes?`<div class="cd-subnote">${esc(b.notes)}</div>`:''}
+        <span class="style-pill pill-inline style-${b.style||'flex'}">${sfIcon(b.style==='timed'?'state.timed':'state.flex')} ${(b.style||'flex').toUpperCase()}</span>
+        ${editMode ? '' : '<div class="row-open-hint">Click row to edit</div>'}
+        ${editActions}
+      </td>
+      <td class="cd cd-pad">
+        ${startStr!=='—'?`<div class="cd-time-start">${startStr}</div>`:''}
+        <div class="cd-time-dur">${dur}</div>
+      </td>
+      ${colOrder.map(type=>`<td class="cd-cue-cell">${getCueCell(b,type)}</td>`).join('')}
+    </tr>`;
+    html += segmentAddRowHTML(i, segEndAt, colOrder);
   });
-  if (!hasSegments) html += `<div class="add-row-tr"><button class="add-row-btn-el" onclick="openAddCue()">+ Add cue</button></div>`;
-  list.innerHTML = html;
+
+  tbody.innerHTML = html;
+  // With segments, every block already ends in its own contextual add (the
+  // last block's add doubles as add-at-end, and the wizard's segment card
+  // still creates new segments there). Without segments: the classic single
+  // button at the bottom.
+  if (!hasSegments) renderAddRowBtn(tbody);
   initDrag();
   updateBotBar();
   updateNowNext();
 }
 
-function segmentAddRowHTML(i, segEndAt) {
+// The contextual add-row at the end of a segment block: inserts INSIDE the
+// block (addRowAt after its last row) instead of appending at the rundown
+// bottom and needing a drag up. A collapsed block keeps its button (expand
+// first, then add) so a fully collapsed rundown never loses every add entry.
+function segmentAddRowHTML(i, segEndAt, colOrder) {
   const end = segEndAt[i];
   if (!end) return '';
   const collapsed = end.segId !== null && collapsedSegments.has(end.segId);
-  const label = end.segId === null ? '+ Add cue' : `+ Add cue · ${esc(end.label)}`;
+  const label = end.segId === null ? '+ Add Row' : `+ Add Row · ${esc(end.label)}`;
   const click = collapsed ? `segAddIntoCollapsed(${end.segId},${i})` : `addRowAt(${i},'after')`;
-  return `<div class="add-row-tr seg-add-tr"><button class="add-row-btn-el seg-add-btn" onclick="${click}">${label}</button></div>`;
+  return `<tr class="add-row-tr seg-add-tr"><td colspan="${colOrder.length + 4}"><button class="add-row-btn-el seg-add-btn" onclick="${click}">${label}</button></td></tr>`;
 }
 
+// Adding into a collapsed segment expands it first so the inserted row is
+// visible where it landed, then opens the wizard at the block's end.
 function segAddIntoCollapsed(segId, i) {
   if (collapsedSegments.has(segId)) toggleSegmentCollapse(segId);
   addRowAt(i, 'after');
 }
 
-function segmentRowHTML(b, i, childCount, collapsed) {
-  const open = expandedCueId === b.id;
-  const cls = ['cue-row', 'segment-row', editMode ? 'edit-mode-row' : '', open ? 'is-open' : '', rowTintClass(b).trim()].filter(Boolean).join(' ');
-  return `<div class="${cls}" data-id="${b.id}"${editMode ? ' draggable="true"' : ''}>
-    <div class="seg-row-inner" role="button" tabindex="0" aria-expanded="${!collapsed}" onclick="toggleSegmentCollapse(${b.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSegmentCollapse(${b.id})}">
-      ${editMode ? `<span class="cue-grip" aria-hidden="true">${sfIcon('action.drag')}</span>` : ''}
-      <span class="seg-collapse-icon">${sfIcon(collapsed ? 'action.collapse' : 'action.expand')}</span>
-      <span class="seg-label-text">${esc(b.info || 'Segment')}</span>
-      ${b.notes ? `<span class="seg-notes-text">${esc(b.notes)}</span>` : ''}
-      <span class="seg-count-badge">${childCount} cue${childCount === 1 ? '' : 's'}${collapsed ? ' · collapsed' : ''}</span>
-      <button type="button" class="seg-edit-btn" aria-label="Edit segment ${esc(b.info || '')}" aria-expanded="${open}" onclick="event.stopPropagation();toggleCueOpen(${b.id})">${sfIcon(open ? 'chevron.up' : 'action.edit')}</button>
-    </div>
-    ${open ? `<div class="cue-editor" id="cue-editor-${b.id}">${segmentEditorHTML(b, i)}</div>` : ''}
-  </div>`;
+function renderAddRowBtn(tbody) {
+  const tr = document.createElement('tr');
+  tr.className = 'add-row-tr';
+  tr.innerHTML = `<td colspan="10"><button class="add-row-btn-el" onclick="openAddRow()">+ Add Row</button></td>`;
+  tbody.appendChild(tr);
 }
-
-function cueRowHTML(b, i, num, startStr) {
-  const s = CueModel.summary(b);
-  const t = CueModel.typeDef(s.type);
-  const open = expandedCueId === b.id;
-  const cls = ['cue-row', `type-${CUE_TYPE_CSS[s.type]}`, open ? 'is-open' : '', editMode ? 'edit-mode-row' : '',
-    isHelperBeat(b) ? `rundown-row-helper helper-${b.helperRole}` : '', rowTintClass(b).trim()].filter(Boolean).join(' ');
-  return `<div class="${cls}" data-id="${b.id}"${editMode ? ' draggable="true"' : ''} style="--cue-clr:${t.color}">
-    <div class="cue-row-main" role="button" tabindex="0" aria-expanded="${open}" onclick="toggleCueOpen(${b.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCueOpen(${b.id})}">
-      ${editMode ? `<span class="cue-grip" aria-hidden="true">${sfIcon('action.drag')}</span>` : ''}
-      <span class="cue-num">${num}</span>
-      ${cueTypeBadgeHTML(s.type)}
-      <span class="cue-main-text">
-        <span class="cue-name">${cueNameInnerHTML(b, s)}</span>
-        <span class="cue-line">${cueLineInnerHTML(s)}</span>
-      </span>
-      <span class="cue-time"><span class="cue-dur">${esc(cueDurationLabel(b))}</span>${startStr ? `<span class="cue-start">${startStr}</span>` : ''}</span>
-      <span class="cue-chevron" aria-hidden="true">${sfIcon(open ? 'chevron.up' : 'chevron.down')}</span>
-    </div>
-    ${open ? `<div class="cue-editor" id="cue-editor-${b.id}">${cueEditorHTML(b, i)}</div>` : ''}
-  </div>`;
-}
-function cueNameInnerHTML(b, s) {
-  return `${helperRoleTagHTML(b)}${esc(s.name || 'Untitled cue')}${rundownRowPresenceHTML(b.id)}`;
-}
-function cueLineInnerHTML(s) {
-  const extras = s.extras.map(x => {
-    const xt = CueModel.typeDef(x);
-    return `<span class="cue-extra" style="color:${xt.color}" role="img" aria-label="${xt.label} also on this cue">${sfIcon(xt.symbol)}</span>`;
-  }).join('');
-  return `${s.line ? esc(s.line) : '<span class="cue-line-empty">Open to fill in the call</span>'}${extras}`;
-}
-
-// ── The in-place editor ──────────────────────────────────────
-function toggleCueOpen(id) {
-  flushCueSave();
-  const next = expandedCueId === id ? null : id;
-  expandedCueId = next;
-  setRundownPresence(next);
-  renderRundown({ force:true });
-  if (next != null) document.getElementById(`cue-editor-${next}`)?.scrollIntoView?.({ block:'nearest' });
-}
-
-function cueDurationInputsHTML(id, b, handler) {
-  return `<div class="cue-dur-in">
-    <input class="field-in" type="number" inputmode="numeric" min="0" max="180" value="${b.min ? b.min : ''}" placeholder="0" aria-label="Minutes" oninput="${handler}(${id},'min',this.value)">
-    <span class="cue-dur-colon" aria-hidden="true">:</span>
-    <input class="field-in" type="number" inputmode="numeric" min="0" max="59" value="${b.sec ? pad(b.sec) : ''}" placeholder="00" aria-label="Seconds" oninput="${handler}(${id},'sec',this.value)">
-  </div>`;
-}
-
-function cueEditorHTML(b, i) {
-  const type = CueModel.beatType(b);
-  const cellKey = CueModel.cellKey(type);
-  const cell = b.cues?.[cellKey] || CueModel.newCell(type);
-  const t = CueModel.typeDef(type);
-  const typeRow = `<div class="cue-ed-typerow" role="radiogroup" aria-label="Cue type">
-      ${CueModel.TYPES.map(x => `<button type="button" class="cue-type-pick${x.id === type ? ' sel' : ''}" style="--cue-clr:${x.color}" aria-pressed="${x.id === type}" onclick="changeCueType(${b.id},'${x.id}')">${sfIcon(x.symbol)}<span>${x.label}</span></button>`).join('')}
-      ${infoBtn('cue-type', 'cue types')}
-    </div>`;
-  const spine = `<div class="cue-ed-grid">
-      <div class="field"><label class="field-lbl" for="ce-name-${b.id}">Name</label><input class="field-in" id="ce-name-${b.id}" value="${esc(b.info || '')}" maxlength="80" placeholder="What this cue is called" oninput="cueSpineInput(${b.id},'info',this.value)"></div>
-      <div class="field"><div class="field-lbl-row"><span class="field-lbl">Duration</span>${infoBtn('cue-duration', 'duration')}</div>${cueDurationInputsHTML(b.id, b, 'cueSpineInput')}</div>
-    </div>`;
-  const primary = freeTextMode ? freeTextFieldHTML(b, type, cellKey, cell) : cueFieldsHTML(b, type, cellKey, cell, f => f.primary);
-  const moreFields = freeTextMode ? [] : CueModel.fields(type).filter(f => !f.primary && !(type === 'playback' && f.key === 'preRoll'));
-  const links = (type === 'playback' || type === 'audio') ? outrangutanCueFields(cellKey, cell, b.id) : '';
-  const more = (moreFields.length || links) ? `<details class="cue-ed-more"${moreFields.some(f => cell[f.key] !== '' && cell[f.key] !== undefined && cell[f.key] !== false && !(f.key === 'audioFromClip')) || links && (cell.outCueId || cell.outPadId || cell.outCueName || cell.outPadName) ? ' open' : ''}>
-      <summary>More for ${t.label.toLowerCase()}</summary>
-      ${cueFieldsHTML(b, type, cellKey, cell, f => moreFields.includes(f))}
-      ${links}
-    </details>` : '';
-  const notes = `<div class="field"><label class="field-lbl" for="ce-notes-${b.id}">Notes</label><textarea class="field-in cue-notes-in" id="ce-notes-${b.id}" rows="2" placeholder="Anything the crew needs to know." oninput="cueSpineInput(${b.id},'notes',this.value)">${esc(b.notes || '')}</textarea></div>`;
-  return `${typeRow}${spine}<div class="cue-ed-fields" style="--cue-clr:${t.color}">${primary}</div>${more}${notes}${cueExtrasHTML(b, type)}${rowTintChipsHTML(b)}${cueActionsHTML(b, i)}`;
-}
-
-function segmentEditorHTML(b, i) {
-  return `<div class="cue-ed-grid">
-      <div class="field"><label class="field-lbl" for="ce-name-${b.id}">Title</label><input class="field-in" id="ce-name-${b.id}" value="${esc(b.info || '')}" maxlength="80" placeholder="e.g. Act 1, Opening block, Break" oninput="cueSpineInput(${b.id},'info',this.value)"></div>
-      <div class="field"><label class="field-lbl" for="ce-notes-${b.id}">Notes</label><input class="field-in" id="ce-notes-${b.id}" value="${esc(b.notes || '')}" maxlength="120" placeholder="Optional" oninput="cueSpineInput(${b.id},'notes',this.value)"></div>
-    </div>${rowTintChipsHTML(b)}${cueActionsHTML(b, i)}`;
-}
-
-function cueActionsHTML(b, i) {
-  const seg = b.style === 'segment';
-  return `<div class="cue-ed-actions">
-      <button type="button" class="row-ea-btn" onclick="moveRowUp(${b.id})"${i === 0 ? ' disabled' : ''}>${sfIcon('chevron.up')} Move up</button>
-      <button type="button" class="row-ea-btn" onclick="moveRowDown(${b.id})"${i === beats.length - 1 ? ' disabled' : ''}>${sfIcon('chevron.down')} Move down</button>
-      <button type="button" class="row-ea-btn" onclick="addRowAt(${i},'after')">+ Add cue after</button>
-      <span class="u-flex1"></span>
-      <button type="button" class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})">${sfIcon('action.delete')} Delete ${seg ? 'segment' : 'cue'}</button>
-    </div>`;
-}
-
-// Blank Slate: one typed line instead of fields.
-function freeTextFieldHTML(b, type, cellKey, cell) {
-  const id = `cf-${b.id}-${cellKey}-on`;
-  const script = type === 'script' ? cueFieldsHTML(b, type, cellKey, cell, f => f.key === 'text') : '';
-  return `<div class="field"><label class="field-lbl" for="${id}">Call</label><input class="field-in" id="${id}" value="${esc(cell.on || '')}" maxlength="160" placeholder="Type the call the way you would say it" autocomplete="off" oninput="cueFieldInput(${b.id},'${cellKey}','on',this.value)"></div>${script}`;
-}
-
-function cueFieldsHTML(b, type, cellKey, cell, keep) {
-  return CueModel.fields(type).filter(keep).map(f => cueFieldHTML(b, type, cellKey, cell, f)).join('');
-}
-
-function cueFieldHTML(b, type, cellKey, cell, f) {
-  const id = `cf-${b.id}-${cellKey}-${f.key}`;
-  const val = cell[f.key];
-  const info = infoBtn(`cue-${type}-${f.key}`, f.label);
-  const label = `<div class="field-lbl-row"><label class="field-lbl" for="${id}">${f.label}</label>${info}</div>`;
-  const arg = JSON.stringify(cellKey);
-  if (f.kind === 'choice') {
-    const chips = f.options.map(o => {
-      const v = o.v !== undefined ? o.v : o, l = o.label !== undefined ? o.label : o;
-      return `<button type="button" class="chip${val === v ? ' sel' : ''}" aria-pressed="${val === v}" onclick="cueFieldChoice(${b.id},${esc(arg)},'${f.key}',${esc(JSON.stringify(v))},this)">${esc(l)}</button>`;
-    }).join('');
-    return `<div class="field"><div class="field-lbl-row"><span class="field-lbl" id="${id}">${f.label}</span>${info}</div><div class="chip-grid cue-choice" role="group" aria-labelledby="${id}">${chips}</div></div>`;
-  }
-  if (f.kind === 'toggle') {
-    return `<div class="field"><label class="cc-check"><input type="checkbox" id="${id}" ${val ? 'checked' : ''} onchange="cueFieldInput(${b.id},${esc(arg)},'${f.key}',this.checked)"> ${f.label}</label>${info}</div>`;
-  }
-  if (f.kind === 'number') {
-    return `<div class="field">${label}<input class="field-in cue-num-in" id="${id}" type="number" inputmode="numeric" min="${f.min ?? 0}"${f.max != null ? ` max="${f.max}"` : ''} value="${val === '' || val == null ? '' : esc(String(val))}" oninput="cueFieldInput(${b.id},${esc(arg)},'${f.key}',this.value)"></div>`;
-  }
-  if (f.kind === 'textarea') {
-    const upload = type === 'script' ? `<label class="cue-upload"><input type="file" accept=".txt,.pdf" hidden onchange="loadScriptFile(this,'${id}')"><span class="row-ea-btn">Load a .txt or .pdf</span></label>` : '';
-    return `<div class="field">${label}<textarea class="field-in cue-script-in" id="${id}" rows="6" placeholder="${esc(f.placeholder || '')}" oninput="cueFieldInput(${b.id},${esc(arg)},'${f.key}',this.value)">${esc(val || '')}</textarea>${upload}</div>`;
-  }
-  const list = f.suggest ? `<datalist id="${id}-list">${f.suggest.map(s => `<option value="${esc(s)}">`).join('')}</datalist>` : '';
-  return `<div class="field">${label}<input class="field-in" id="${id}" value="${esc(val || '')}" placeholder="${esc(f.placeholder || '')}" maxlength="160" autocomplete="off"${list ? ` list="${id}-list"` : ''} oninput="cueFieldInput(${b.id},${esc(arg)},'${f.key}',this.value)">${list}</div>`;
-}
-
-// "Also on this cue": a second department call on the same cue (take 2 and
-// open the mic). Each extra uses the same minimal fields as its own type.
-function cueExtrasHTML(b, primaryType) {
-  const present = CueModel.callsForBeat(b).filter(c => c.type !== primaryType).map(c => c.type);
-  const stored = Object.keys(b.cues || {}).map(k => CueModel.typeForCell(k)).filter(x => x && x !== primaryType);
-  const shown = [...new Set([...present, ...stored])];
-  const blocks = shown.map(x => {
-    const xt = CueModel.typeDef(x), key = CueModel.cellKey(x), cell = b.cues?.[key] || CueModel.newCell(x);
-    const fieldsHTML = freeTextMode ? freeTextFieldHTML(b, x, key, cell) : cueFieldsHTML(b, x, key, cell, f => f.primary);
-    return `<div class="cue-extra-block" style="--cue-clr:${xt.color}">
-      <div class="cue-extra-head">${cueTypeBadgeHTML(x)}<span class="u-flex1"></span><button type="button" class="row-ea-btn row-ea-del" onclick="removeCueExtra(${b.id},'${key}')">${sfIcon('action.delete')} Remove</button></div>
-      ${fieldsHTML}
-    </div>`;
-  }).join('');
-  const addable = CueModel.TYPES.filter(x => x.id !== primaryType && !shown.includes(x.id));
-  const adders = addable.map(x => `<button type="button" class="chip cue-extra-add" style="--cue-clr:${x.color}" onclick="addCueExtra(${b.id},'${x.id}')">+ ${x.label}</button>`).join('');
-  return `<div class="cue-extras"><div class="field-lbl-row"><span class="field-lbl">Also on this cue</span>${infoBtn('cue-extras', 'also on this cue')}</div>${blocks}${adders ? `<div class="chip-grid">${adders}</div>` : ''}</div>`;
-}
-
-function addCueExtra(id, typeId) {
-  const b = cueBeat(id); if (!b) return;
-  const key = CueModel.cellKey(typeId);
-  b.cues = b.cues || {};
-  if (!b.cues[key]) b.cues[key] = CueModel.newCell(typeId);
-  renderRundown({ force:true });
-  document.getElementById(`cf-${b.id}-${key}-${CueModel.fields(typeId)[0]?.key}`)?.focus?.({ preventScroll:true });
-  scheduleCueSave();
-}
-function removeCueExtra(id, key) {
-  const b = cueBeat(id); if (!b || !b.cues?.[key]) return;
-  const t = CueModel.typeDef(CueModel.typeForCell(key));
-  if (!CueModel.isCellEmpty(t.id, b.cues[key]) && !dangerConfirm(`Remove the ${t.label.toLowerCase()} call from this cue?`, 'Only this extra call is removed. The cue itself stays.')) return;
-  delete b.cues[key];
-  renderRundown({ force:true });
-  scheduleCueSave();
-}
-function changeCueType(id, typeId) {
-  const b = cueBeat(id); if (!b || b.style === 'segment' || !CueModel.typeDef(typeId) || typeId === 'segment') return;
-  if (CueModel.beatType(b) === typeId) return;
-  const key = CueModel.cellKey(typeId);
-  b.type = typeId;
-  b.cues = b.cues || {};
-  if (!b.cues[key]) b.cues[key] = CueModel.newCell(typeId);
-  // The old type's call, if it had one, stays as an extra so nothing is lost.
-  Object.keys(b.cues).forEach(k => { const x = CueModel.typeForCell(k); if (x && x !== typeId && CueModel.isCellEmpty(x, b.cues[k])) delete b.cues[k]; });
-  renderRundown({ force:true });
-  scheduleCueSave();
-}
-
-function cueSpineInput(id, key, value) {
-  const b = cueBeat(id); if (!b) return;
-  if (key === 'min' || key === 'sec') {
-    b[key] = Math.max(0, parseInt(value, 10) || 0);
-    if (key === 'sec') b.sec = Math.min(59, b.sec);
-    if (b.style !== 'segment') b.style = (b.min || b.sec) ? 'timed' : 'flex';
-  } else b[key] = String(value ?? '');
-  cueRowRefresh(b);
-  scheduleCueSave();
-}
-function cueFieldInput(id, cellKey, key, value) {
-  const b = cueBeat(id); if (!b) return;
-  const type = CueModel.typeForCell(cellKey);
-  if (!type) return;
-  b.cues = b.cues || {};
-  const base = b.cues[cellKey] || CueModel.newCell(type);
-  if (key === 'on') { b.cues[cellKey] = { ...base, _v: CueModel.SCHEMA, on: String(value ?? '') }; }
-  else b.cues[cellKey] = CueModel.setField(type, base, key, key === 'preRoll' || key === 'hold' ? (value === '' ? '' : Math.max(0, Math.round(Number(value) || 0))) : value);
-  cueRowRefresh(b);
-  scheduleCueSave();
-}
-function cueFieldChoice(id, cellKey, key, value, el) {
-  const b = cueBeat(id); if (!b) return;
-  const cur = b.cues?.[cellKey]?.[key];
-  const next = cur === value ? '' : value;   // tap the chosen chip again to clear it
-  cueFieldInput(id, cellKey, key, next);
-  el.parentElement?.querySelectorAll('.chip').forEach(c => {
-    const on = c === el && next !== '';
-    c.classList.toggle('sel', on);
-    c.setAttribute('aria-pressed', String(on));
-  });
-}
-// Playback / SFX links (the Outrangutan block) read their own controls.
-function cueLinkInput(id) {
-  const b = cueBeat(id); if (!b) return;
-  const cue = document.getElementById('cc-out-cue'), pad = document.getElementById('cc-out-pad');
-  const auto = document.getElementById('cc-out-auto'), padAuto = document.getElementById('cc-out-pad-auto');
-  const pre = document.getElementById('cc-out-preroll');
-  const type = CueModel.beatType(b);
-  ['playback', 'audio'].forEach(x => {
-    const key = CueModel.cellKey(x);
-    if (!b.cues?.[key]) return;
-    const d = { ...b.cues[key], _v: CueModel.SCHEMA };
-    if (x === 'playback' && cue) {
-      const outCue = cue.value || '', outAuto = auto?.checked || false;
-      if (outCue === '__name__') d.outAuto = outAuto;   // unresolved name link kept as authored
-      else if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; delete d.outCueName; }
-      else { delete d.outCueId; delete d.outAuto; delete d.outCueName; }
-      if (pre) d.preRoll = Math.max(0, Math.min(60, Math.round(Number(pre.value) || 0)));
-    }
-    if (pad && (x === type || (x === 'playback' && type === 'playback'))) {
-      const outPad = pad.value || '', outPadAuto = padAuto?.checked || false;
-      if (outPad === '__name__') d.outPadAuto = outPadAuto;
-      else if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; delete d.outPadName; }
-      else { delete d.outPadId; delete d.outPadAuto; delete d.outPadName; }
-    }
-    d.on = CueModel.callLine(x, d);
-    b.cues[key] = d;
-  });
-  cueRowRefresh(b);
-  scheduleCueSave();
-}
-function cueSetTint(id, tint, el) {
-  const b = cueBeat(id); if (!b) return;
-  const def = ROW_TINTS.find(t => t.id === tint);
-  if (def) b.color = def.id; else delete b.color;
-  el?.parentElement?.querySelectorAll('.tint-chip').forEach(c => c.classList.toggle('sel', c === el));
-  const row = document.querySelector(`#rdBody .cue-row[data-id="${b.id}"]`);
-  if (row) { row.className = row.className.replace(/\s*row-tint-\w+/g, '') + rowTintClass(b); }
-  scheduleCueSave();
-}
-
-// Keep the collapsed summary of the open row honest while typing, without a
-// full re-render (which would take the keyboard away).
-function cueRowRefresh(b) {
-  const row = document.querySelector(`#rdBody .cue-row[data-id="${b.id}"]`);
-  if (row) {
-    if (b.style === 'segment') {
-      const l = row.querySelector('.seg-label-text'); if (l) l.textContent = b.info || 'Segment';
-      const n = row.querySelector('.seg-notes-text'); if (n) n.textContent = b.notes || '';
-    } else {
-      const s = CueModel.summary(b);
-      const name = row.querySelector('.cue-name'); if (name) name.innerHTML = cueNameInnerHTML(b, s);
-      const line = row.querySelector('.cue-line'); if (line) line.innerHTML = cueLineInnerHTML(s);
-      const dur = row.querySelector('.cue-dur'); if (dur) dur.textContent = cueDurationLabel(b);
-    }
-  }
-  refreshCueStarts();
-  renderRundownHeader();
-  updateBotBar();
-  updateNowNext();
-}
-function refreshCueStarts() {
-  if (!show.start) return;
-  let offset = 0;
-  beats.forEach(b => {
-    const el = document.querySelector(`#rdBody .cue-row[data-id="${b.id}"] .cue-start`);
-    if (el) el.textContent = clock(show.start, offset);
-    offset += CueModel.durationSeconds(b);
-  });
-}
-function scheduleCueSave() {
-  clearTimeout(_cueSaveTimer);
-  _cueSaveTimer = setTimeout(() => { _cueSaveTimer = null; syncToFirestore(); }, 600);
-}
-function flushCueSave() {
-  if (!_cueSaveTimer) return;
-  clearTimeout(_cueSaveTimer);
-  _cueSaveTimer = null;
-  syncToFirestore();
-}
-window.addEventListener('pagehide', flushCueSave);
 
 function getCueOn(d)  { return d?.on  || d?.take  || ''; }   // new format, fallback legacy
 function getCueOff(d) { return d?.off || d?.ready || ''; }   // new format, fallback legacy
@@ -8172,6 +8004,30 @@ function getCueOff(d) { return d?.off || d?.ready || ''; }   // new format, fall
 function scriptCueText(d) {
   if (d?.scriptType === 'Dialogue') return cleanPrompterText(d.dialogueNote || d.text || '');
   return cleanPrompterText(d?.text || d?.dialogueNote || '');
+}
+
+function getCueCell(b, type) {
+  const tc = CT[type];
+  const d = b.cues?.[type];
+  const on  = getCueOn(d);
+  const off = getCueOff(d);
+  const scriptText = type === 'script' ? scriptCueText(d) : '';
+  const isEmpty = !on && !off && (type !== 'script' || !scriptText) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
+  if (isEmpty) {
+    return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" data-tip="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
+  }
+  const lines = [
+    on  ? `<div class="cue-on-line"><span class="cue-on-dot">${sfIcon('marker.go')}</span>${esc(on)}</div>`  : '',
+    off ? `<div class="cue-off-line"><span class="cue-off-dot">${sfIcon('marker.stop')}</span>${esc(off)}</div>` : '',
+  ].filter(Boolean).join('');
+  const scriptMeta = scriptText
+    ? `<div class="script-present-line">${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} · ${scriptLineLabel(scriptText)}</div>`
+    : '';
+  const outBadge = (type === 'playback' ? outrangutanCellBadge(d, b.id) : '') + ((type === 'playback' || type === 'audio') ? outrangutanSfxBadge(d) : '');
+  return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
+    <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
+    <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
+  </div>`;
 }
 
 function scriptLineCount(text) {
@@ -8210,34 +8066,36 @@ function initDrag() {
   const tbody = document.getElementById('rdBody');
   if (!tbody || !editMode) return;
   let dragSrc = null;
-  const rows = () => tbody.querySelectorAll('.cue-row');
-  rows().forEach(tr=>{
+  tbody.querySelectorAll('tr.cue-row').forEach(tr=>{
     tr.addEventListener('dragstart', e => { dragSrc=tr; tr.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
-    tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); rows().forEach(r=>r.classList.remove('drag-over')); });
-    tr.addEventListener('dragover', e=>{ e.preventDefault(); rows().forEach(r=>r.classList.remove('drag-over')); if(tr!==dragSrc)tr.classList.add('drag-over'); });
+    tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('drag-over')); });
+    tr.addEventListener('dragover', e=>{ e.preventDefault(); tbody.querySelectorAll('tr').forEach(r=>r.classList.remove('drag-over')); if(tr!==dragSrc)tr.classList.add('drag-over'); });
     tr.addEventListener('drop', e=>{
       e.preventDefault();
       if (!dragSrc||dragSrc===tr) return;
-      const si=beats.findIndex(b=>String(b.id)===dragSrc.dataset.id);
-      const ti=beats.findIndex(b=>String(b.id)===tr.dataset.id);
+      const si=beats.findIndex(b=>b.id===parseInt(dragSrc.dataset.id));
+      const ti=beats.findIndex(b=>b.id===parseInt(tr.dataset.id));
       if (si<0||ti<0) return;
       const [moved]=beats.splice(si,1); beats.splice(ti,0,moved);
-      renderRundown({ force:true }); syncToFirestore();
+      renderRundown(); syncToFirestore();
     });
   });
 }
 
 function rowConfirmLabel(id) {
   const b = beats.find(x => x.id === id);
-  if (!b) return 'this cue';
-  const label = (b.info || 'Untitled cue').trim();
-  return `"${label}"${b.style === 'segment' ? ' segment' : ''}`;
+  if (!b) return 'this row';
+  const label = (b.info || 'Untitled row').trim();
+  return `"${label}"${b.style === 'segment' ? ' segment' : ' row'}`;
 }
 
 // Guided helper rows (PREP/OUT) generated for a playback cue. They are ordinary
 // flex rows: they play, advance, move, and delete like any other row. helperFor
 // holds the parent beat id and helperRole says which job the row does.
 function isHelperBeat(b) { return Boolean(b?.helperFor && b?.helperRole); }
+function findPlaybackHelperRow(parentId, role) {
+  return beats.find(x => String(x.helperFor || '') === String(parentId) && x.helperRole === role) || null;
+}
 function helperRoleTagHTML(b) {
   if (!isHelperBeat(b)) return '';
   return `<span class="helper-role-tag helper-tag-${b.helperRole}">${b.helperRole === 'prep' ? 'PREP' : 'OUT'}</span>`;
@@ -8270,127 +8128,1185 @@ function rowTintPrintStyle(b) {
   const t = rowTintDef(b);
   return t ? ` style="background:${t.print}"` : '';
 }
-function rowTintChipsHTML(b) {
-  const current = rowTintDef(b)?.id || '';
-  const none = `<button type="button" class="chip tint-chip${!current ? ' sel' : ''}" onclick="cueSetTint(${b.id},'',this)" aria-label="No highlight">None</button>`;
-  return `<div class="field"><div class="field-lbl-row"><span class="field-lbl">Highlight</span>${infoBtn('cue-highlight', 'highlight')}</div>
-    <div class="chip-grid tint-grid">${none}${ROW_TINTS.map(t => `<button type="button" class="chip tint-chip${current === t.id ? ' sel' : ''}" style="--row-tint:${t.color}" onclick="cueSetTint(${b.id},'${t.id}',this)" aria-label="${t.label} highlight"><span class="tint-dot"></span></button>`).join('')}</div></div>`;
+function rowTintChipsHTML(current) {
+  const none = `<button type="button" class="chip tint-chip${!current ? ' sel' : ''}" onclick="edSetTint('',this)" data-tip="No highlight">None</button>`;
+  return `<div class="field"><label class="field-lbl">Highlight <span style="color:var(--text3)">(optional)</span></label>
+    <div class="chip-grid tint-grid">${none}${ROW_TINTS.map(t => `<button type="button" class="chip tint-chip${current === t.id ? ' sel' : ''}" style="--row-tint:${t.color}" onclick="edSetTint('${t.id}',this)" data-tip="${t.label}" aria-label="${t.label} highlight"><span class="tint-dot"></span></button>`).join('')}</div>
+    <div class="field-hint">Color a row any way your crew reads it. The tint shows in the rundown, Live, and the exported rundown.</div></div>`;
 }
 
 function removeRow(id) {
-  if (!dangerConfirm(`Delete ${rowConfirmLabel(id)}?`, 'The cue and its calls are removed for everyone in this show. Undo is in the Edit menu.')) return;
-  // A parent playback row from before 3.0 takes its generated PREP/OUT helper
-  // rows with it in the same pass. Deleting a helper row alone removes only it.
+  if (!dangerConfirm(`Remove ${rowConfirmLabel(id)}?`, 'This removes the row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
+  // A parent playback row takes its generated PREP/OUT helper rows with it in
+  // the same pass. Deleting a helper row alone removes only that row.
   const helperIds = beats.filter(b => String(b.helperFor || '') === String(id)).map(b => b.id);
   beats = beats.filter(b => b.id !== id && !helperIds.includes(b.id));
-  if (expandedCueId === id) { expandedCueId = null; setRundownPresence(null); }
-  renderRundown({ force:true }); syncToFirestore();
-  toast(helperIds.length ? 'Removed the cue and its PREP/OUT helper rows.' : 'Cue deleted.');
+  renderRundown(); syncToFirestore();
+  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : 'Row removed.');
 }
 
 function moveRowUp(id) {
   const i = beats.findIndex(b => b.id === id);
   if (i <= 0) return;
   [beats[i-1], beats[i]] = [beats[i], beats[i-1]];
-  renderRundown({ force:true }); syncToFirestore();
+  renderRundown(); syncToFirestore();
 }
 
 function moveRowDown(id) {
   const i = beats.findIndex(b => b.id === id);
   if (i < 0 || i >= beats.length - 1) return;
   [beats[i], beats[i+1]] = [beats[i+1], beats[i]];
-  renderRundown({ force:true }); syncToFirestore();
+  renderRundown(); syncToFirestore();
 }
 
 // insertIdx = index to insert at; position = 'before'|'after'
 let _insertIdx = null;
 function addRowAt(idx, position) {
   _insertIdx = position === 'after' ? idx + 1 : idx;
-  openAddCue();
+  openAddRow();
 }
 
 // ─────────────────────────────────────────────────────────────
-// ADD A CUE: pick a type → name → duration → Add. Nothing is inserted until
-// Add is pressed; the new cue opens in place so its call can be filled in.
+// ADD ROW WIZARD
 // ─────────────────────────────────────────────────────────────
-let addCueType = null;
-const ADD_CUE_NAMES = ['Show open', 'Cold open', 'PKG', 'Toss', 'Live shot', 'Bumper', 'Break', 'Intro', 'Signoff'];
+const AR_TYPE_DESC = {
+  video:    'Camera, source switch',
+  audio:    'Mics, music, sound',
+  lighting: 'Fixtures, scenes, looks',
+  playback: 'Clip rolls, VT, media',
+  gfx:      'Graphics, lower thirds',
+  script:   'Copy, dialogue, Flowmingo',
+};
 
-function openAddCue(type) {
-  addCueType = CueModel.typeDef(type) ? type : null;
-  const grid = document.getElementById('addCueTypes');
-  if (grid) {
-    grid.innerHTML = [...CueModel.TYPES, CueModel.SEGMENT].map(t => `<button type="button" class="opt-card cue-type-card${addCueType === t.id ? ' sel' : ''}" id="actype-${t.id}" style="--oc:${t.color};--ob:color-mix(in srgb,${t.color} 12%,transparent)" aria-pressed="${addCueType === t.id}" onclick="addCuePick('${t.id}')">
-        <div class="opt-icon opt-icon-lg" style="color:${t.color}">${sfIcon(t.symbol)}</div>
-        <div class="opt-name" style="color:${t.color}">${t.label}</div>
-        <div class="opt-desc">${esc(t.blurb)}</div>
-      </button>`).join('');
-  }
-  const names = document.getElementById('addCueSuggest');
-  if (names) names.innerHTML = ADD_CUE_NAMES.map(n => `<button type="button" class="chip" onclick="addCuePickName(${esc(JSON.stringify(n))})">${esc(n)}</button>`).join('');
-  const nameIn = document.getElementById('ac-name');
+function openAddRow() {
+  arStyle = 'timed';
+  arCueType = null;
+  const nameIn = document.getElementById('ar-name-input');
   if (nameIn) nameIn.value = '';
-  ['ac-min', 'ac-sec'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  addCueValidate();
+  const notesIn = document.getElementById('ar-notes-input');
+  if (notesIn) notesIn.value = '';
+  const minIn = document.getElementById('ar-min');
+  if (minIn) minIn.value = '0';
+  const secIn = document.getElementById('ar-sec');
+  if (secIn) secIn.value = '30';
+  document.getElementById('ar-next-1').disabled = false;
+  const suggestionGrid = document.querySelector('#ar-step-1 .chip-grid');
+  if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
+  const stepLabel = document.querySelector('#ar-step-1 .ar-step-label');
+  if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row: Step 1 of 2';
+  const nextBtn = document.getElementById('ar-next-1');
+  if (nextBtn) nextBtn.innerHTML = `<span>${freeTextMode ? 'Add Row' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
+  document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('opt-timed')?.classList.add('sel');
+  const durWrap = document.getElementById('ar-dur-wrap');
+  if (durWrap) durWrap.style.display = '';
+  document.getElementById('ar-step-1').classList.add('on');
+  document.getElementById('ar-step-2').classList.remove('on');
+  buildArContext();
   showOverlay('addRowOv');
-  if (!addCueType) document.getElementById('actype-camera')?.focus({ preventScroll:true });
-  else setTimeout(() => nameIn?.focus(), 60);
+  setTimeout(()=>nameIn?.focus(), 80);
 }
 
-function addCuePick(type) {
-  addCueType = type;
-  document.querySelectorAll('#addCueTypes .opt-card').forEach(c => {
-    const on = c.id === `actype-${type}`;
-    c.classList.toggle('sel', on);
-    c.setAttribute('aria-pressed', String(on));
-  });
-  addCueValidate();
-  document.getElementById('ac-name')?.focus({ preventScroll:true });
-}
-function addCuePickName(name) {
-  const el = document.getElementById('ac-name');
-  if (el) el.value = name;
-  addCueValidate();
-}
-function addCueValidate() {
-  const btn = document.getElementById('ac-add');
-  const seg = addCueType === 'segment';
-  const durWrap = document.getElementById('ac-dur-wrap');
-  if (durWrap) durWrap.hidden = seg;
-  const nameLbl = document.getElementById('ac-name-lbl');
-  if (nameLbl) nameLbl.textContent = seg ? 'Title' : 'Name';
-  if (btn) {
-    btn.disabled = !addCueType;
-    const label = btn.querySelector('span');
-    if (label) label.textContent = seg ? 'Add segment' : (addCueType ? `Add ${CueModel.typeDef(addCueType).label.toLowerCase()} cue` : 'Add cue');
+function arGoStep2() {
+  if (!arStyle) return;
+  if (freeTextMode || arStyle === 'segment') {
+    insertAddRowBeat();
+    hideOverlay('addRowOv');
+    renderRundown();
+    syncToFirestore();
+    toast(arStyle === 'segment' ? 'Segment marker added.' : 'Row added.');
+    return;
   }
+  arCueType = null;
+  const grid = document.getElementById('arTypeGrid');
+  grid.innerHTML = Object.keys(CT).map(type => {
+    const tc = CT[type];
+    return `<button type="button" class="opt-card" id="artype-${type}"
+        style="--oc:${tc.color};--ob:${tc.bg}"
+        onclick="arSelectCueType('${type}')">
+      <div class="opt-icon opt-icon-lg">${sfIcon(tc.symbol)}</div>
+      <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
+      <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
+    </button>`;
+  }).join('');
+  document.getElementById('ar-next-2').disabled = true;
+  document.getElementById('ar-step-1').classList.remove('on');
+  document.getElementById('ar-step-2').classList.add('on');
 }
-function addCueKey(event) {
-  if (event.key === 'Enter') { event.preventDefault(); addCueSubmit(); }
+
+function arSelectCueType(type) {
+  arCueType = type;
+  document.querySelectorAll('#arTypeGrid .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById(`artype-${type}`)?.classList.add('sel');
+  document.getElementById('ar-next-2').disabled = false;
 }
-function addCueSubmit() {
-  if (!addCueType) { toast('Pick a cue type first.'); return; }
-  const name = document.getElementById('ac-name')?.value?.trim() || '';
-  const beat = CueModel.newBeat({
-    id: nextBeatId(), type: addCueType, name,
-    min: document.getElementById('ac-min')?.value, sec: document.getElementById('ac-sec')?.value,
-    createdAt: Date.now(), createdBy: presenceId,
-  });
-  if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) beats.splice(_insertIdx, 0, beat);
-  else beats.push(beat);
+
+function buildAddRowBeat() {
+  const info  = document.getElementById('ar-name-input')?.value?.trim()||'';
+  const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
+  const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
+  const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
+  const now = Date.now();
+  return { id:nextBeatId(), style:arStyle, info, notes, min, sec, done:false, cues:{}, _createdAt:now, _createdBy:presenceId };
+}
+
+function insertAddRowBeat() {
+  const newBeat = buildAddRowBeat();
+  if (_insertIdx !== null && _insertIdx >= 0 && _insertIdx <= beats.length) {
+    beats.splice(_insertIdx, 0, newBeat);
+  } else {
+    beats.push(newBeat);
+  }
   _insertIdx = null;
+  return newBeat;
+}
+
+function arCreateRowAndOpenCueBuilder() {
+  if (!arStyle || !arCueType) return;
+  const newBeat = insertAddRowBeat();
   hideOverlay('addRowOv');
-  expandedCueId = beat.style === 'segment' ? null : beat.id;
-  setRundownPresence(expandedCueId);
-  renderRundown({ force:true });
+  renderRundown();
   syncToFirestore();
-  document.querySelector(`#rdBody .cue-row[data-id="${beat.id}"]`)?.scrollIntoView?.({ block:'nearest' });
-  toast(beat.style === 'segment' ? 'Segment added.' : 'Cue added. Fill in the call below it.');
+  toast('Row added. Configure the cue.');
+  setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
 }
-function closeAddCue(e) {
-  if (e && e.target.closest('.ar-wrap')) return;
-  _insertIdx = null;
-  hideOverlay('addRowOv');
+
+function arGoStep1() {
+  document.getElementById('ar-step-2').classList.remove('on');
+  document.getElementById('ar-step-1').classList.add('on');
+}
+
+function closeAddRowOv(e) {
+  if (e && !e.target.closest('.ar-wrap')) { _insertIdx = null; hideOverlay('addRowOv'); }
+  else if (!e) { _insertIdx = null; hideOverlay('addRowOv'); }
+}
+
+function buildArContext() {
+  const ctx = document.getElementById('arContext');
+  const last4 = beats.slice(-4);
+  if (!last4.length) { ctx.innerHTML=''; return; }
+  ctx.innerHTML = `<div class="ar-ctx-label">Last ${last4.length} row${last4.length>1?'s':''}</div>`+
+    last4.map(b => {
+      const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
+      const badges = types.map(t=>`<span class="type-badge tb-${t} tb-mini" style="color:${CT[t].color};background:${CT[t].bg}">${sfIcon(CT[t].symbol)}</span>`).join('');
+      return `<div class="ar-ctx-row">
+        <span class="ar-ctx-num">${beats.indexOf(b)+1}</span>
+        <span class="ar-ctx-badges">${badges||'<span class="ar-ctx-none">—</span>'}</span>
+        <span class="ar-ctx-name">${esc(b.info||'—')}</span>
+        <span class="ar-ctx-dur">${fmtDur(b)}</span>
+      </div>`;
+    }).join('');
+}
+
+function arSelectStyle(s) {
+  arStyle = s;
+  document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById(`opt-${s}`)?.classList.add('sel');
+  const durWrap = document.getElementById('ar-dur-wrap');
+  if (durWrap) durWrap.style.display = s==='timed' ? '' : 'none';
+  const nextBtn = document.getElementById('ar-next-1');
+  if (nextBtn && !freeTextMode) {
+    nextBtn.innerHTML = `<span>${s === 'segment' ? 'Add Segment Marker' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
+  }
+  updateArNextEnabled();
+}
+
+function updateArNextEnabled() {
+  document.getElementById('ar-next-1').disabled = !arStyle;
+}
+
+function arPickName(name) {
+  const el = document.getElementById('ar-name-input');
+  if (el) el.value = name;
+  updateArNextEnabled();
+}
+
+// buildArFields removed — wizard now single-step; cue types configured via table cells
+
+// ─────────────────────────────────────────────────────────────
+// CUE CONFIG MODAL (per-cell)
+// ─────────────────────────────────────────────────────────────
+function openCueConfig(beatId, type) {
+  cueConfigBeatId = beatId;
+  cueConfigType   = type;
+  // Reset all state
+  _vOnSrc='';_vOnAct='';_vOnShot='';_vOffTrans='';_vOffDest='';
+  _aOnSrc='';_aOnCueType='';_aOffSrc='';_aOffCall='';
+  _pOnAction='';_pOffHow='';_pOffRet='';
+  _gOnType='';_gOnSrc='';_gOnTrans='';_gOffType='';_gOffHow='';
+  _lOnAction='';_lOnFix='';_lOnSpecial='';_lOffFix='';_lOffHow='';_lOffSpecial='';
+  _sOnType='Script';_sOnSrc='';
+  _sOnTags = [...(beats.find(x=>x.id===beatId)?.cues?.script?.scriptTags||[])];
+  const b = beats.find(x=>x.id===beatId); if (!b) return;
+  const existing = b.cues?.[type] || null;
+  const tc = CT[type];
+  document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
+  const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
+  document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing);
+  document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
+  showModal('cueConfigModal');
+  setRundownPresence(beatId);
+}
+
+function buildFreeTextCueFields(type, d) {
+  d = d || {};
+  const isScript = type === 'script';
+  return `
+    <div class="field">
+      <label class="field-lbl">${isScript ? 'Script Cue (short label)' : 'Ready (standby)'}</label>
+      <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="${isScript ? 'e.g. Host · Begin (a trigger note, not the script)' : 'Type anything...'}" maxlength="160" autocomplete="off">
+      ${isScript ? '<div class="field-hint">A short trigger note. On the prompter it shows only as dimmed guidance the talent does not read.</div>' : ''}
+    </div>
+    ${isScript ? '' : `<div class="field">
+      <label class="field-lbl">Take (go)</label>
+      <input class="field-in" id="cc-off-text" value="${esc(getCueOff(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
+    </div>`}
+    ${isScript ? `<div class="field">
+      <label class="field-lbl">Speaker name</label>
+      <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="e.g. Host, Anchor, Narrator" maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-lbl">Script Copy (what the talent reads)</label>
+      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="8" placeholder="Type or paste the words the talent reads aloud. THIS is what appears big on the prompter.">${esc(d.text||'')}</textarea>
+    </div>` : ''}
+    <div class="field">
+      <label class="field-lbl">Notes</label>
+      <textarea class="field-in cc-note-ta" id="cc-notes" rows="3" placeholder="Anything the team needs to know.">${esc(d.notes||'')}</textarea>
+    </div>`;
+}
+
+function ccChips(chips, fn) {
+  return chips.map(c => {
+    // JSON-stringify the JS argument, then HTML-escape the whole attribute —
+    // chip values/labels include custom source names synced from other devices.
+    const val = esc(JSON.stringify((c.v !== undefined ? c.v : c).toString()));
+    const lbl = esc((c.label || c).toString());
+    return `<button type="button" class="cc-chip" onclick="${fn}(${val})">${lbl}</button>`;
+  }).join('');
+}
+function ccCustomSrcField(id, val) {
+  return `<input class="field-in cc-custom-in" id="${id}" value="${esc(val||'')}" placeholder="Type custom source name…" style="display:none" oninput="ccCustomSrcInput('${id}')">`;
+}
+
+// ── Cue config tab switcher ─────────────────────────
+function ccTab(tab) {
+  document.querySelectorAll('.cc-tab-btn').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.cc-panel').forEach(p => p.style.display = p.dataset.tab === tab ? '' : 'none');
+}
+
+// ── Chip helpers ────────────────────────────────────
+function ccSelChip(groupId, val) {
+  document.querySelectorAll(`#${groupId} .cc-chip`).forEach(c =>
+    c.classList.toggle('sel', c.textContent.trim() === val || (c.getAttribute('data-val')||'') === val));
+}
+function ccShowCustom(fieldId, targetBuildFn) {
+  document.getElementById(fieldId).style.display = '';
+  document.getElementById(fieldId).focus();
+  if (targetBuildFn) window[targetBuildFn]?.();
+}
+function ccCustomSrcInput(fieldId) {
+  // triggers rebuild on whichever type is open
+  const fns = { 'cc-v-custom':'_ccVOnBuild','cc-a-custom':'_ccAOnBuild','cc-s-custom':'_ccSOnBuild' };
+  if (fns[fieldId]) window[fns[fieldId]]?.();
+}
+
+function buildCueConfigFields(type, d) {
+  d = d || {};
+  const onVal  = d.on  !== undefined ? d.on  : (d.take  || '');
+  const offVal = d.off !== undefined ? d.off : (d.ready || '');
+  const notes  = d.notes || '';
+  let onPanel = '', offPanel = '';
+
+  // Step header helper
+  const step = (n, lbl) =>
+    `<div class="cc-step-lbl"><span class="cc-step-num">${n}</span>${lbl}</div>`;
+
+  // ══ VIDEO ══════════════════════════════════════════
+  if (type === 'video') {
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Source</div>
+        <div class="cc-chip-grid" id="vOn-src">
+          ${ccChips(getSources('video'), 'ccVOnSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-custom','_ccVOnBuild')">+ Custom</button>
+        </div>
+        ${ccCustomSrcField('cc-v-custom', d.customSrc)}
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Action</div>
+        <div class="cc-chip-grid" id="vOn-act">
+          ${ccChips(['Ready','Standby','Set','Set with Media Wipe'], 'ccVOnAct')}
+        </div>
+      </div>
+      <div class="cc-section" id="vOn-shot-row" style="display:none">
+        <div class="cc-section-lbl">Shot type</div>
+        <div class="cc-chip-grid" id="vOn-shot">
+          ${ccChips(['Wide','Medium','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 · Wide" maxlength="120" autocomplete="off">
+      </div>`;
+
+    offPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Destination</div>
+        <div class="cc-chip-grid" id="vOff-dest">
+          ${ccChips(['Black', ...getSources('video')], 'ccVOffDest')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-dest-custom','_ccVOffBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none" oninput="_ccVOffBuild()">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Transition</div>
+        <div class="cc-chip-grid" id="vOff-trans">
+          ${ccChips(['Take','Dissolve','Media Wipe','Fade to Black'], 'ccVOffTrans')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-trans-custom','_ccVOffBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-v-off-trans-custom" value="" placeholder="Type custom transition…" style="display:none" oninput="_ccVOffBuild()">
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Dissolve to Black" maxlength="120" autocomplete="off">
+      </div>`;
+
+  // ══ AUDIO ══════════════════════════════════════════
+  } else if (type === 'audio') {
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Source</div>
+        <div class="cc-chip-grid" id="aOn-src">
+          ${ccChips(getSources('audio'), 'ccAOnSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-custom','_ccAOnBuild')">+ Custom</button>
+        </div>
+        ${ccCustomSrcField('cc-a-custom', d.customSrc)}
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Cue type</div>
+        <div class="cc-chip-grid" id="aOn-cue">
+          ${ccChips(['Open Mic','Track PLBK','Fade In','Play'], 'ccAOnCueType')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-cue-custom','_ccAOnBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-a-cue-custom" value="" placeholder="Type custom cue type…" style="display:none" oninput="_ccAOnBuild()">
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic · Host" maxlength="120" autocomplete="off">
+      </div>`;
+
+    offPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Source</div>
+        <div class="cc-chip-grid" id="aOff-src">
+          ${ccChips([...getSources('audio'), 'All'], 'ccAOffSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-off-custom','_ccAOffBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none" oninput="_ccAOffBuild()">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Cue</div>
+        <div class="cc-chip-grid" id="aOff-call">
+          ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic · Host" maxlength="120" autocomplete="off">
+      </div>`;
+
+  // ══ PLAYBACK ════════════════════════════════════════
+  } else if (type === 'playback') {
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="field">
+        <label class="field-lbl">Clip name</label>
+        <input class="field-in" id="cc-play-clip" value="${esc(d.clip||'')}" placeholder="e.g. SC_042 or HOFL_122_Open" maxlength="60" autocomplete="off" oninput="ccPOnBuild()">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Action</div>
+        <div class="cc-chip-grid" id="pOn-act">
+          ${ccChips(['Ready','Roll'], 'ccPOnAct')}
+        </div>
+      </div>
+      <div class="cc-section" id="pOn-dur-row" style="display:none">
+        <div class="cc-section-lbl">Duration (TRT)</div>
+        <div class="cc-row-start">
+          <div class="field cc-time-col">
+            <label class="field-lbl">Min</label>
+            <input class="field-in cc-time-in" id="cc-play-min" type="number" min="0" max="99" value="${d.trtMin||''}" placeholder="0" oninput="ccPOnBuild()">
+          </div>
+          <div class="cc-time-sep">:</div>
+          <div class="field cc-time-col">
+            <label class="field-lbl">Sec</label>
+            <input class="field-in cc-time-in" id="cc-play-sec" type="number" min="0" max="59" value="${d.trtSec||''}" placeholder="00" oninput="ccPOnBuild()">
+          </div>
+        </div>
+        <div class="field u-mt10">
+          <label class="field-lbl">SMPTE Timecode <span class="lbl-hint">(HH:MM:SS:FF)</span></label>
+          <input class="field-in u-mono" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" oninput="ccPOnBuild()">
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} ROLL CUE <span class="lbl-hint">(how the playback starts)</span></label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 · 0:45 TRT" maxlength="120" autocomplete="off">
+      </div>`;
+
+    offPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Return to</div>
+        <div class="cc-chip-grid" id="pOff-ret">
+          ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','PLBK','Host','Anchor','Studio','Live'], 'ccPOffReturn')}
+        </div>
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">How it ends</div>
+        <div class="cc-chip-grid" id="pOff-how">
+          ${ccChips(['Cut PLBK','Fade PLBK','Stop','Roll Next','Take Live'], 'ccPOffHow')}
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} OUT CUE <span class="lbl-hint">(the plan for getting out)</span></label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK · Take CAM 1" maxlength="120" autocomplete="off">
+      </div>`;
+
+  // ══ GFX ═════════════════════════════════════════════
+  } else if (type === 'gfx') {
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Graphic type</div>
+        <div class="cc-chip-grid" id="gOn-type">
+          ${ccChips(['Lower 3rd','Full Screen','Bug'], 'ccGOnType')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-g-custom','ccGOnBuild')">+ Custom</button>
+        </div>
+        <input class="field-in cc-custom-in" id="cc-g-custom" value="${esc(d.customType||'')}" placeholder="Type custom graphic type…" style="display:none" oninput="ccGOnBuild()">
+      </div>
+      <div class="cc-section">
+        <div class="cc-section-lbl">Source</div>
+        <div class="cc-chip-grid" id="gOn-src">
+          ${ccChips(getSources('gfx'), 'ccGOnSrc')}
+        </div>
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Transition</div>
+        <div class="cc-chip-grid" id="gOn-trans">
+          ${ccChips(['Cut','Auto On'], 'ccGOnTrans')}
+        </div>
+      </div>
+      <div class="cc-section">
+        <div class="cc-section-lbl">Motion type</div>
+        <div class="cc-checks">
+          <label class="cc-check"><input type="checkbox" id="cc-g-fixed" ${d.isFixed?'checked':''}> Fixed</label>
+          <label class="cc-check"><input type="checkbox" id="cc-g-animated" ${d.isAnimated?'checked':''}> Animated</label>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-lbl">Content <span class="lbl-hint">(what it reads / shows)</span></label>
+        <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, sponsor bug, intro card" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On · Lower 3rd GFX" maxlength="120" autocomplete="off">
+      </div>`;
+
+    offPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Graphic type</div>
+        <div class="cc-chip-grid" id="gOff-type">
+          ${ccChips(['Lower 3rd','Full Screen','Bug','This GFX'], 'ccGOffType')}
+        </div>
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Take it out</div>
+        <div class="cc-chip-grid" id="gOff-how">
+          ${ccChips(['Lost It','Auto Off','Clear All'], 'ccGOffHow')}
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It · Lower 3rd" maxlength="120" autocomplete="off">
+      </div>`;
+
+  // ══ LIGHTING ════════════════════════════════════════
+  } else if (type === 'lighting') {
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Fixture / Area</div>
+        <div class="cc-chip-grid" id="lOn-fix">
+          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
+          <button type="button" class="cc-chip ${d.lightingGoFeature?'sel':''}" onclick="ccLOnSpecial('GoFeature')">Go to Feature</button>
+          <button type="button" class="cc-chip ${d.lightingGoCue?'sel':''}" onclick="ccLOnSpecial('GoCue')">Go to Cue</button>
+        </div>
+      </div>
+      <div class="cc-section" id="lOn-gofeature-row" style="display:${d.lightingGoFeature?'':'none'}">
+        <div class="cc-section-lbl">Feature name / details</div>
+        <input class="field-in" id="cc-l-gofeature" value="${esc(d.lightingGoFeature||'')}" placeholder="e.g. Front wash warm, interview key" maxlength="80" oninput="_ccLOnBuild()">
+      </div>
+      <div class="cc-section" id="lOn-gocue-row" style="display:${d.lightingGoCue?'':'none'}">
+        <div class="cc-section-lbl">Board cue number / label</div>
+        <input class="field-in" id="cc-l-gocue" value="${esc(d.lightingGoCue||'')}" placeholder="e.g. Cue 14.5" maxlength="60" oninput="_ccLOnBuild()">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Action</div>
+        <div class="cc-chip-grid" id="lOn-act">
+          ${ccChips(['Cue On','At','Color','Gobo'], 'ccLOnAct')}
+        </div>
+      </div>
+      <div class="cc-section" id="lOn-intensity-row" style="display:none">
+        <div class="cc-section-lbl">Intensity</div>
+        <div class="u-row">
+          <input class="field-in u-maxw120" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" oninput="_ccLOnBuild()">
+          <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
+        </div>
+      </div>
+      <div class="cc-section" id="lOn-color-row" style="display:none">
+        <div class="cc-section-lbl">Color</div>
+        <div class="cc-chip-grid" id="lOn-color">
+          ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
+        </div>
+        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" oninput="_ccLOnBuild()">
+      </div>
+      <div class="cc-section" id="lOn-gobo-row" style="display:none">
+        <div class="cc-section-lbl">Gobo</div>
+        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 · Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
+      </div>
+      <div class="field">
+        <label class="field-lbl">Lighting notes <span class="lbl-hint">(cue numbers, focus, wash details)</span></label>
+        <textarea class="field-in cc-note-ta-sm" id="cc-l-notes-detail" rows="2" placeholder="e.g. Cue 14.5: Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key · Cue On" maxlength="120" autocomplete="off">
+      </div>`;
+
+    offPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Fixture / Area</div>
+        <div class="cc-chip-grid" id="lOff-fix">
+          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
+          <button type="button" class="cc-chip ${d.lightingOffGoFeature?'sel':''}" onclick="ccLOffSpecial('GoFeature')">Go to Feature</button>
+          <button type="button" class="cc-chip ${d.lightingOffGoCue?'sel':''}" onclick="ccLOffSpecial('GoCue')">Go to Cue</button>
+        </div>
+      </div>
+      <div class="cc-section" id="lOff-gofeature-row" style="display:${d.lightingOffGoFeature?'':'none'}">
+        <div class="cc-section-lbl">Feature name / details</div>
+        <input class="field-in" id="cc-l-off-gofeature" value="${esc(d.lightingOffGoFeature||'')}" placeholder="e.g. House lights up full" maxlength="80" oninput="_ccLOffBuild()">
+      </div>
+      <div class="cc-section" id="lOff-gocue-row" style="display:${d.lightingOffGoCue?'':'none'}">
+        <div class="cc-section-lbl">Board cue number / label</div>
+        <input class="field-in" id="cc-l-off-gocue" value="${esc(d.lightingOffGoCue||'')}" placeholder="e.g. Cue 20" maxlength="60" oninput="_ccLOffBuild()">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Lighting out</div>
+        <div class="cc-chip-grid" id="lOff-how">
+          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','House Up','Cross Fade','Hold'], 'ccLOffHow')}
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key · Fade Out" maxlength="120" autocomplete="off">
+      </div>`;
+
+  // ══ SCRIPT ══════════════════════════════════════════
+  } else if (type === 'script') {
+    const isDialogue = d.scriptType === 'Dialogue';
+    onPanel = `
+      ${step(1,'What is it?')}
+      <div class="cc-section">
+        <div class="cc-section-lbl">Script type</div>
+        <div class="cc-chip-grid" id="sOn-type">
+          <button type="button" class="cc-chip ${isDialogue?'':'sel'}" onclick="ccSOnType('Script')">Script</button>
+          <button type="button" class="cc-chip ${isDialogue?'sel':''}" onclick="ccSOnType('Dialogue')">Dialogue</button>
+        </div>
+      </div>
+      <div class="cc-section">
+        <div class="cc-section-lbl">Tags</div>
+        <div class="cc-chip-grid" id="sOn-tags">
+          ${(()=>{const tags=['Cold Open','Show Open','PKG Intro','Live Shot','VO','Toss','Guest Intro','Open Conversation','Tease','Throw to Break','Signoff'];const cur=d.scriptTags||[];return tags.map(t=>`<button type="button" class="cc-chip ${cur.includes(t)?'sel':''}" onclick="ccSOnTag('${t}')">${t}</button>`).join('');})()}
+        </div>
+      </div>
+      <div class="cc-section">
+        <div class="cc-section-lbl">Source / Speaker</div>
+        <div class="cc-chip-grid" id="sOn-src">
+          ${ccChips([...getSources('scriptWho'), 'Narrator','Anchor'], 'ccSOnSrc')}
+          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-custom','_ccSOnBuild')">+ Custom</button>
+        </div>
+        ${ccCustomSrcField('cc-s-custom', d.customSrc)}
+        <input class="field-in u-mt8" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="Speaker name for Flowmingo headers…" maxlength="80" autocomplete="off">
+      </div>
+      ${step(2,'What will you do with it?')}
+      <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
+        <div class="field">
+          <label class="field-lbl">Script copy <span class="lbl-hint">(feeds Flowmingo)</span></label>
+          <textarea class="field-in cc-script-ta" id="cc-s-text" rows="5" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
+          <div class="marker-chip-row">
+            <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
+            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-lbl">Upload script <span class="lbl-hint">(.txt or .pdf)</span></label>
+          <input type="file" class="cc-file-in" id="cc-s-file" accept=".txt,.md,.pdf" onchange="loadScriptFile(this,'cc-s-text')">
+        </div>
+      </div>
+      <div id="sOn-dialogue-panel" style="${isDialogue?'':'display:none'}">
+        <div class="field">
+          <label class="field-lbl">Dialogue note <span class="lbl-hint">(brief description only)</span></label>
+          <input class="field-in" id="cc-s-dialogue" value="${esc(d.dialogueNote||'')}" placeholder="e.g. Host and guest discuss the segment topic (unscripted)" maxlength="160" autocomplete="off">
+        </div>
+      </div>
+      <div class="cc-divider"></div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} SCRIPT CUE <span class="lbl-hint">(short label, not the script)</span></label>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host · Begin" maxlength="120" autocomplete="off">
+        <div class="field-hint">A trigger note for the crew. The prompter shows it only as dimmed guidance; the words the talent reads go in Script Copy above.</div>
+      </div>`;
+
+    offPanel = '';
+  }
+
+  // Script: single tab; all others: On/Off tabs. Playback speaks its own
+  // vocabulary: the standby panel is the ROLL CUE, the go panel is the OUT CUE.
+  const isScript = type === 'script';
+  const isPlayback = type === 'playback';
+  const tabHtml = isScript ? '' : `
+    <div class="cc-tabs">
+      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">${sfIcon('marker.ready')} ${isPlayback ? 'Roll' : 'Ready'}</button>
+      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">${sfIcon('marker.go')} ${isPlayback ? 'Out' : 'Take'}</button>
+    </div>`;
+  return `
+    ${tabHtml}
+    <div class="cc-panel" data-tab="on">${onPanel}</div>
+    ${isScript ? '' : `<div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>`}
+    ${isPlayback ? ccGuidedRowsSection(d) : ''}
+    <div class="cc-divider"></div>
+    <div class="field">
+      <label class="field-lbl">Notes <span class="lbl-hint">(for your crew)</span></label>
+      <textarea class="field-in cc-note-ta" id="cc-notes" rows="2" placeholder="Add context, reminders, or crew instructions…">${esc(notes)}</textarea>
+    </div>`;
+}
+
+// R1 guided rows: the playback cue wizard can generate a PREP row before the
+// cue and an OUT row after it. Fresh cells default both boxes on; on an
+// existing cell each box mirrors whether that helper row exists right now
+// (checked means saving refreshes its generated text).
+function ccGuidedRowsSection(d) {
+  const parent = beats.find(x => x.id === cueConfigBeatId);
+  const prepExists = Boolean(findPlaybackHelperRow(parent?.id, 'prep'));
+  const outExists = Boolean(findPlaybackHelperRow(parent?.id, 'out'));
+  const freshCell = !getCueOn(d) && !getCueOff(d) && !(d.clip || '');
+  const bothDefault = freshCell && !prepExists && !outExists;
+  return `
+    <div class="cc-divider"></div>
+    <div class="cc-section cc-guided-rows">
+      <div class="cc-section-lbl">Guided rows</div>
+      <div class="cc-checks cc-checks-stack">
+        <label class="cc-check"><input type="checkbox" id="cc-guided-prep" ${(bothDefault || prepExists) ? 'checked' : ''}> Add a PREP row before this cue (ready the playback, track the audio)</label>
+        <label class="cc-check"><input type="checkbox" id="cc-guided-out" ${(bothDefault || outExists) ? 'checked' : ''}> Add an OUT row after this cue (where the show goes next)</label>
+      </div>
+      <div class="field-hint">PREP readies the clip before the call; OUT is where the show goes after it ends. Guided rows are real rundown rows. Students can edit or delete them.</div>
+    </div>`;
+}
+
+// ══ VIDEO On helpers ════════════════════════════════
+let _vOnSrc='',_vOnAct='',_vOnShot='';
+function ccVOnSrc(src) {
+  _vOnSrc=src; _vOnAct=''; _vOnShot='';
+  ccSelChip('vOn-src',src);
+  document.querySelectorAll('#vOn-act .cc-chip,#vOn-shot .cc-chip').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('vOn-shot-row').style.display = 'none';
+  _ccVOnBuild();
+}
+function ccVOnAct(act) {
+  _vOnAct=act; ccSelChip('vOn-act',act);
+  const isLive = /^(CAM|CPU|ME)/.test(_vOnSrc);
+  document.getElementById('vOn-shot-row').style.display = isLive ? '' : 'none';
+  _ccVOnBuild();
+}
+function ccVOnShot(shot) {
+  _vOnShot=shot==='—'?'':shot; ccSelChip('vOn-shot',shot); _ccVOnBuild();
+}
+function _ccVOnBuild() {
+  if (!_vOnSrc) return;
+  const src  = document.getElementById('cc-v-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-v-custom')?.value||_vOnSrc) : _vOnSrc;
+  const act  = _vOnAct || 'Set';
+  const shot = _vOnShot ? ` · ${_vOnShot}` : '';
+  const el   = document.getElementById('cc-on-text');
+  if (el) el.value = `${act} ${src}${shot}`;
+}
+
+// ══ VIDEO Off helpers ═══════════════════════════════
+let _vOffTrans='',_vOffDest='';
+function ccVOffTrans(t){ _vOffTrans=t; ccSelChip('vOff-trans',t); _ccVOffBuild(); }
+function ccVOffDest(d) { _vOffDest=d;  ccSelChip('vOff-dest',d);  _ccVOffBuild(); }
+function _ccVOffBuild() {
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const destCustomEl = document.getElementById('cc-v-off-dest-custom');
+  const transCustomEl = document.getElementById('cc-v-off-trans-custom');
+  const d = (destCustomEl?.style.display!=='none' && destCustomEl?.value) ? destCustomEl.value : (_vOffDest||'Black');
+  const t = (transCustomEl?.style.display!=='none' && transCustomEl?.value) ? transCustomEl.value : (_vOffTrans||'Take');
+  el.value = d==='Black' ? `${t} to Black` : `${t} to ${d}`;
+}
+
+// ══ AUDIO On helpers ════════════════════════════════
+let _aOnSrc='',_aOnCueType='';
+function ccAOnSrc(src) {
+  _aOnSrc=src; ccSelChip('aOn-src',src);
+  _ccAOnBuild();
+}
+function ccAOnCueType(t) { _aOnCueType=t; ccSelChip('aOn-cue',t); _ccAOnBuild(); }
+function _ccAOnBuild() {
+  const src = document.getElementById('cc-a-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-a-custom')?.value||_aOnSrc) : _aOnSrc;
+  const cueCustomEl = document.getElementById('cc-a-cue-custom');
+  const cue = (cueCustomEl?.style.display!=='none' && cueCustomEl?.value) ? cueCustomEl.value : _aOnCueType;
+  const el  = document.getElementById('cc-on-text'); if(!el) return;
+  const parts=[cue,src].filter(Boolean);
+  el.value = parts.join(' · ');
+}
+
+// ══ AUDIO Off helpers ═══════════════════════════════
+let _aOffSrc='',_aOffCall='';
+function ccAOffSrc(src) {
+  _aOffSrc=src; ccSelChip('aOff-src',src);
+  _ccAOffBuild();
+}
+function ccAOffCall(val) { _aOffCall=val; ccSelChip('aOff-call',val); _ccAOffBuild(); }
+function _ccAOffBuild() {
+  const src = document.getElementById('cc-a-off-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-a-off-custom')?.value||_aOffSrc) : _aOffSrc;
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const parts=[_aOffCall,src].filter(Boolean);
+  el.value = parts.join(' · ');
+}
+
+// ══ PLAYBACK On helpers ═════════════════════════════
+let _pOnAction='';
+function ccPOnAct(act){
+  _pOnAction=act; ccSelChip('pOn-act',act);
+  document.getElementById('pOn-dur-row').style.display = act==='Roll' ? '' : 'none';
+  ccPOnBuild();
+}
+function ccPOnBuild(){
+  const clip=document.getElementById('cc-play-clip')?.value?.trim()||'';
+  const min=parseInt(document.getElementById('cc-play-min')?.value)||0;
+  const sec=parseInt(document.getElementById('cc-play-sec')?.value)||0;
+  const smpte=document.getElementById('cc-play-smpte')?.value?.trim()||'';
+  const trt=(min||sec)?` · ${min}:${sec.toString().padStart(2,'0')} TRT`:'';
+  const smpteStr=smpte?` [${smpte}]`:'';
+  const act=_pOnAction||'Roll';
+  const el=document.getElementById('cc-on-text'); if(!el) return;
+  el.value=clip?`${act} ${clip}${trt}${smpteStr}`:act;
+}
+
+// ══ PLAYBACK Off helpers ════════════════════════════
+let _pOffHow='',_pOffRet='';
+function ccPOffHow(v)    { _pOffHow=v; ccSelChip('pOff-how',v);  _ccPOffBuild(); }
+function ccPOffReturn(v) { _pOffRet=v; ccSelChip('pOff-ret',v); _ccPOffBuild(); }
+function _ccPOffBuild(){
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const parts=[_pOffHow,_pOffRet?`Take ${_pOffRet}`:''].filter(Boolean);
+  el.value=parts.join(' · ')||_pOffHow;
+}
+
+// ══ GFX On helpers ══════════════════════════════════
+let _gOnType='',_gOnSrc='',_gOnTrans='';
+function ccGOnType(t){ _gOnType=t; ccSelChip('gOn-type',t); ccGOnBuild(); }
+function ccGOnSrc(s) { _gOnSrc=s;  ccSelChip('gOn-src',s);  ccGOnBuild(); }
+function ccGOnTrans(t){ _gOnTrans=t; ccSelChip('gOn-trans',t); ccGOnBuild(); }
+function ccGOnBuild(){
+  const type = document.getElementById('cc-g-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-g-custom')?.value?.trim()||_gOnType) : _gOnType;
+  const content=document.getElementById('cc-gfx-content')?.value?.trim()||'';
+  const trans=_gOnTrans||'Cut';
+  const el=document.getElementById('cc-on-text'); if(!el) return;
+  const parts=[trans,type||(content?'GFX':''),content?`(${content})`:''].filter(Boolean);
+  el.value=parts.join(' · ');
+}
+
+// ══ GFX Off helpers ═════════════════════════════════
+let _gOffType='',_gOffHow='';
+function ccGOffType(t){
+  _gOffType=t; ccSelChip('gOff-type',t);
+  _ccGOffBuild();
+}
+function ccGOffHow(val){ _gOffHow=val; ccSelChip('gOff-how',val); _ccGOffBuild(); }
+function _ccGOffBuild(){
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  const label=(_gOffType&&_gOffType!=='This GFX')?_gOffType:'';
+  const parts=[_gOffHow,label].filter(Boolean);
+  el.value=parts.join(' · ')||_gOffHow;
+}
+
+// ══ LIGHTING On helpers ═════════════════════════════
+let _lOnAction='',_lOnFix='',_lOnSpecial=''; // special: 'GoFeature'|'GoCue'|''
+function ccLOnFix(v){
+  _lOnFix=v; _lOnSpecial='';
+  // deselect Go to Feature / Go to Cue visually
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
+  ccSelChip('lOn-fix',v);
+  document.getElementById('lOn-gofeature-row').style.display='none';
+  document.getElementById('lOn-gocue-row').style.display='none';
+  _ccLOnBuild();
+}
+function ccLOnSpecial(which){
+  _lOnSpecial=which; _lOnFix='';
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
+  // highlight the clicked special button
+  const label = which==='GoFeature'?'Go to Feature':'Go to Cue';
+  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
+  document.getElementById('lOn-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
+  document.getElementById('lOn-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
+  _ccLOnBuild();
+}
+function ccLOnAct(v){
+  _lOnAction=v; ccSelChip('lOn-act',v);
+  document.getElementById('lOn-intensity-row').style.display = v==='At'    ? '' : 'none';
+  document.getElementById('lOn-color-row').style.display     = v==='Color' ? '' : 'none';
+  document.getElementById('lOn-gobo-row').style.display      = v==='Gobo'  ? '' : 'none';
+  _ccLOnBuild();
+}
+function ccLOnIntensity(v){
+  const el=document.getElementById('cc-l-intensity'); if(el) el.value=v; _ccLOnBuild();
+}
+function ccLOnColor(v){
+  const el=document.getElementById('cc-l-color'); if(el) el.value=v; _ccLOnBuild();
+}
+function _ccLOnBuild(){
+  const el=document.getElementById('cc-on-text'); if(!el) return;
+  // Determine fixture string
+  let fix=_lOnFix;
+  if(_lOnSpecial==='GoFeature'){
+    const val=document.getElementById('cc-l-gofeature')?.value?.trim()||'';
+    fix=val?`Go to Feature: ${val}`:'Go to Feature';
+    el.value=fix; return;
+  }
+  if(_lOnSpecial==='GoCue'){
+    const val=document.getElementById('cc-l-gocue')?.value?.trim()||'';
+    fix=val?`Go to Cue ${val}`:'Go to Cue';
+    el.value=fix; return;
+  }
+  const act=_lOnAction||'Cue On';
+  let detail='';
+  if(_lOnAction==='At'){
+    const int=document.getElementById('cc-l-intensity')?.value||'';
+    detail=int?`At ${int}`:'At';
+  } else if(_lOnAction==='Color'){
+    const col=document.getElementById('cc-l-color')?.value||'';
+    detail=col?`Color: ${col}`:'Color';
+  } else if(_lOnAction==='Gobo'){
+    const gob=document.getElementById('cc-l-gobo')?.value||'';
+    detail=gob?`Gobo: ${gob}`:'Gobo';
+  }
+  const parts=[fix,detail||act].filter(Boolean);
+  el.value=parts.join(' · ');
+}
+
+// ══ LIGHTING Off helpers ════════════════════════════
+let _lOffFix='',_lOffHow='',_lOffSpecial='';
+function ccLOffFix(v){
+  _lOffFix=v; _lOffSpecial='';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
+  ccSelChip('lOff-fix',v);
+  document.getElementById('lOff-gofeature-row').style.display='none';
+  document.getElementById('lOff-gocue-row').style.display='none';
+  _ccLOffBuild();
+}
+function ccLOffSpecial(which){
+  _lOffSpecial=which; _lOffFix='';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
+  const label=which==='GoFeature'?'Go to Feature':'Go to Cue';
+  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
+  document.getElementById('lOff-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
+  document.getElementById('lOff-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
+  _ccLOffBuild();
+}
+function ccLOffHow(val){ _lOffHow=val; ccSelChip('lOff-how',val); _ccLOffBuild(); }
+function _ccLOffBuild(){
+  const el=document.getElementById('cc-off-text'); if(!el) return;
+  if(_lOffSpecial==='GoFeature'){
+    const val=document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
+    el.value=val?`Go to Feature: ${val}`:'Go to Feature'; return;
+  }
+  if(_lOffSpecial==='GoCue'){
+    const val=document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
+    el.value=val?`Go to Cue ${val}`:'Go to Cue'; return;
+  }
+  const parts=[_lOffFix,_lOffHow].filter(Boolean);
+  el.value=parts.join(' · ')||_lOffHow;
+}
+
+// ══ SCRIPT tag helpers ══════════════════════════════
+let _sOnTags = [];
+function ccSOnTag(tag) {
+  const idx = _sOnTags.indexOf(tag);
+  if (idx>=0) _sOnTags.splice(idx,1); else _sOnTags.push(tag);
+  document.querySelectorAll('#sOn-tags .cc-chip').forEach(c=>{
+    c.classList.toggle('sel', _sOnTags.includes(c.textContent));
+  });
+  _ccSOnBuild();
+}
+
+// ══ SCRIPT On helpers ═══════════════════════════════
+let _sOnType='Script',_sOnSrc='';
+function ccSOnType(t){
+  _sOnType=t;
+  document.querySelectorAll('#sOn-type .cc-chip').forEach(c=>c.classList.toggle('sel',c.textContent===t));
+  document.getElementById('sOn-script-panel').style.display   = t==='Dialogue'?'none':'';
+  document.getElementById('sOn-dialogue-panel').style.display = t==='Dialogue'?'':'none';
+  _ccSOnBuild();
+}
+function ccSOnSrc(v){ _sOnSrc=v; ccSelChip('sOn-src',v); _ccSOnBuild(); }
+function _ccSOnBuild(){
+  const src=document.getElementById('cc-s-custom')?.style.display!=='none'
+    ? (document.getElementById('cc-s-custom')?.value||_sOnSrc) : _sOnSrc;
+  const el=document.getElementById('cc-on-text'); if(!el) return;
+  el.value=src?`${src} · Begin`:'Begin';
+}
+
+
+function saveCueConfig() {
+  const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
+  if (!b.cues) b.cues = {};
+  // R1 guided rows: the prior cell state tells regeneration which helper-row
+  // text is still generator-owned and which text a student rewrote by hand.
+  const prevCell = b.cues[cueConfigType] ? cloneRundownValue(b.cues[cueConfigType]) : null;
+  const d = {
+    on:    (document.getElementById('cc-on-text')?.value ||'').trim(),
+    off:   (document.getElementById('cc-off-text')?.value||'').trim(),
+    notes: (document.getElementById('cc-notes')?.value   ||'').trim(),
+  };
+  // Type-specific extras
+  switch(cueConfigType) {
+    case 'video':
+      d.customSrc = document.getElementById('cc-v-custom')?.value?.trim()||'';
+      break;
+    case 'audio':
+      d.customSrc  = document.getElementById('cc-a-custom')?.value?.trim()||'';
+      break;
+    case 'playback':
+      d.clip    = document.getElementById('cc-play-clip')?.value?.trim()||'';
+      d.trtMin  = document.getElementById('cc-play-min')?.value||'';
+      d.trtSec  = document.getElementById('cc-play-sec')?.value||'';
+      d.smpte   = document.getElementById('cc-play-smpte')?.value?.trim()||'';
+      break;
+    case 'gfx':
+      d.customType  = document.getElementById('cc-g-custom')?.value?.trim()||'';
+      d.gfxContent  = document.getElementById('cc-gfx-content')?.value?.trim()||'';
+      d.isFixed     = document.getElementById('cc-g-fixed')?.checked||false;
+      d.isAnimated  = document.getElementById('cc-g-animated')?.checked||false;
+      break;
+    case 'lighting':
+      d.lightingDetail      = document.getElementById('cc-l-notes-detail')?.value?.trim()||'';
+      d.intensity           = document.getElementById('cc-l-intensity')?.value?.trim()||'';
+      d.color               = document.getElementById('cc-l-color')?.value?.trim()||'';
+      d.gobo                = document.getElementById('cc-l-gobo')?.value?.trim()||'';
+      d.lightingGoFeature   = document.getElementById('cc-l-gofeature')?.value?.trim()||'';
+      d.lightingGoCue       = document.getElementById('cc-l-gocue')?.value?.trim()||'';
+      d.lightingOffGoFeature= document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
+      d.lightingOffGoCue    = document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
+      break;
+    case 'script':
+      d.scriptType  = _sOnType;
+      d.customSrc   = document.getElementById('cc-s-custom')?.value?.trim()||'';
+      d.speaker     = document.getElementById('cc-s-speaker')?.value?.trim()||'';
+      d.text        = document.getElementById('cc-s-text')?.value||'';
+      d.dialogueNote= document.getElementById('cc-s-dialogue')?.value?.trim()||'';
+      d.scriptTags  = [..._sOnTags];
+      break;
+  }
+  // Outrangutan links — playback cells carry cue + SFX links; audio cells carry SFX (P4)
+  if (cueConfigType === 'playback') {
+    const outCue = document.getElementById('cc-out-cue')?.value || '';
+    const outAuto = document.getElementById('cc-out-auto')?.checked || false;
+    if (outCue === '__name__') { d.outAuto = outAuto; }   // unresolved name link kept as authored
+    else if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; delete d.outCueName; }
+    else { delete d.outCueId; delete d.outAuto; delete d.outCueName; }
+    const preRoll = Math.max(0, Math.min(60, Math.round(Number(document.getElementById('cc-out-preroll')?.value) || 0)));
+    d.preRoll = preRoll;
+  }
+  if (cueConfigType === 'playback' || cueConfigType === 'audio') {
+    const outPad = document.getElementById('cc-out-pad')?.value || '';
+    const outPadAuto = document.getElementById('cc-out-pad-auto')?.checked || false;
+    if (outPad === '__name__') { d.outPadAuto = outPadAuto; }   // unresolved name link kept as authored
+    else if (outPad) { d.outPadId = outPad; d.outPadAuto = outPadAuto; delete d.outPadName; }
+    else { delete d.outPadId; delete d.outPadAuto; delete d.outPadName; }
+  }
+  // QLab integration removed 2026-07-13 (owner decision) — stale qlabCue/
+  // qlabAction/qlabAuto fields on old rows are dropped whenever a cue is re-saved.
+  delete d.qlabCue; delete d.qlabAction; delete d.qlabAuto;
+  b.cues[cueConfigType] = d;
+  const helperNote = cueConfigType === 'playback' ? syncPlaybackHelperRows(b, prevCell, d) : '';
+  hideModal('cueConfigModal');
+  setRundownPresence(null);
+  renderRundown(); syncToFirestore();
+  toast(helperNote ? `Cue saved. ${helperNote}` : 'Cue saved.');
+}
+
+// ─────────────────────────────────────────────────────────────
+// R1 GUIDED ROWS (playback cue wizard → PREP/ROLL/OUT rundown rows)
+// The wizard teaches the full playback sequence as real rows: a PREP row
+// readies the clip and tracks the audio, the parent row is the roll cue, and
+// an OUT row states the plan for getting out. All generation runs through
+// saveCueConfig, the one place a playback cell is written.
+// ─────────────────────────────────────────────────────────────
+
+// Mirror of ccPOnBuild's grammar, computed from a saved cell instead of the
+// modal inputs. Lets generation ask: was this on text machine-composed?
+function composePlaybackOnText(act, cell) {
+  const clip = (cell?.clip || '').trim();
+  const min = parseInt(cell?.trtMin) || 0;
+  const sec = parseInt(cell?.trtSec) || 0;
+  const smpte = (cell?.smpte || '').trim();
+  const trt = (min || sec) ? ` · ${min}:${sec.toString().padStart(2,'0')} TRT` : '';
+  const smpteStr = smpte ? ` [${smpte}]` : '';
+  return clip ? `${act} ${clip}${trt}${smpteStr}` : act;
+}
+
+// Mirror of _ccPOffBuild's grammar, read back out of a saved off text:
+// '<how> · Take <return>', 'Take <return>', or a bare how.
+function parsePlaybackOffText(off) {
+  const text = String(off || '').trim();
+  if (!text) return { how:'', ret:'' };
+  const m = text.match(/^(?:(.*?) · )?Take (.+)$/);
+  if (m) return { how:(m[1] || '').trim(), ret:m[2].trim() };
+  return { how:text, ret:'' };
+}
+
+function playbackHelperClipName(cell, parent) {
+  const linked = cell?.outCueId ? ((outrangutanState.cues || {})[cell.outCueId]?.name || '') : '';
+  return (cell?.clip || '').trim() || linked || (cell?.outCueName || '') || (parent?.info || '').trim() || 'playback';
+}
+
+// Deterministic helper-row content from one playback cell. Regeneration runs
+// this same function over the PRIOR cell state to tell generated text apart
+// from a student's manual edit.
+function buildPlaybackHelperContent(role, cell, parent) {
+  if (role === 'prep') {
+    const clip = playbackHelperClipName(cell, parent);
+    return {
+      info: `PREP: ${clip}`,
+      notes: 'Get the playback ready before the roll.',
+      cues: {
+        playback: { on:`Ready ${clip} in PLBK`, off:'', notes:'' },
+        audio: { on:'Track PLBK audio', off:'' },
+      },
+    };
+  }
+  const savedOff = String(getCueOff(cell) || '').trim();
+  const parsed = parsePlaybackOffText(savedOff);
+  const outLabel = [parsed.how, parsed.ret ? `Take ${parsed.ret}` : ''].filter(Boolean).join(' · ') || savedOff || 'Back to the show';
+  const cues = {};
+  if (parsed.ret) cues.video = { on:`Ready ${parsed.ret}`, off:`Take ${parsed.ret}` };
+  return {
+    info: `OUT: ${outLabel}`,
+    notes: 'Where the show goes when the playback ends.',
+    cues,
+  };
+}
+
+// Create or refresh the PREP/OUT helper rows for one saved playback cell.
+// Never deletes a helper row (students remove rows themselves) and never
+// overwrites text a student changed by hand. Returns a short toast note.
+function syncPlaybackHelperRows(parent, prevCell, cell) {
+  const prepWanted = document.getElementById('cc-guided-prep')?.checked || false;
+  const outWanted = document.getElementById('cc-guided-out')?.checked || false;
+  if (!prepWanted && !outWanted) return '';
+  // Generation needs something to prep: a clip name or an Outrangutan link.
+  if (!((cell.clip || '').trim() || cell.outCueId || cell.outCueName)) return '';
+  const now = Date.now();
+  const createdRoles = [], updatedRoles = [];
+  let keptEdited = false;
+  [['prep', prepWanted], ['out', outWanted]].forEach(([role, wanted]) => {
+    if (!wanted) return;
+    const generated = buildPlaybackHelperContent(role, cell, parent);
+    const existing = findPlaybackHelperRow(parent.id, role);
+    if (!existing) {
+      const row = {
+        id: nextBeatId(), style:'flex',
+        info: generated.info, notes: generated.notes,
+        min:0, sec:0, done:false,
+        cues: generated.cues,
+        helperFor: String(parent.id), helperRole: role,
+        _createdAt: now, _createdBy: presenceId,
+      };
+      const pIdx = beats.indexOf(parent);
+      beats.splice(role === 'prep' ? pIdx : pIdx + 1, 0, row);
+      createdRoles.push(role === 'prep' ? 'PREP' : 'OUT');
+      return;
+    }
+    // Refresh only generator-owned text: a field updates when it is empty or
+    // still reads exactly what the prior cell state would have generated.
+    const prior = prevCell ? buildPlaybackHelperContent(role, prevCell, parent) : null;
+    let touched = false, edited = false;
+    ['info', 'notes'].forEach(key => {
+      if (existing[key] === generated[key]) return;
+      if (!existing[key] || (prior && existing[key] === prior[key])) { existing[key] = generated[key]; touched = true; }
+      else edited = true;
+    });
+    const existingCues = existing.cues || {};
+    if (stableStringify(existingCues) !== stableStringify(generated.cues)) {
+      const cuesUntouched = !Object.keys(existingCues).length
+        || (prior && stableStringify(existingCues) === stableStringify(prior.cues));
+      if (cuesUntouched) { existing.cues = cloneRundownValue(generated.cues); touched = true; }
+      else edited = true;
+    }
+    if (edited) keptEdited = true;
+    else if (touched) updatedRoles.push(role === 'prep' ? 'PREP' : 'OUT');
+  });
+  // The PREP row owns the ready step now, so a machine-composed 'Ready' parent
+  // becomes the roll cue. Hand-typed on text stays untouched.
+  if (prepWanted && cell.on === composePlaybackOnText('Ready', cell)) {
+    cell.on = composePlaybackOnText('Roll', cell);
+  }
+  const parts = [];
+  if (createdRoles.length) parts.push(`${createdRoles.join(' and ')} row${createdRoles.length > 1 ? 's' : ''} added`);
+  if (updatedRoles.length) parts.push(`${updatedRoles.join(' and ')} row${updatedRoles.length > 1 ? 's' : ''} updated`);
+  let note = parts.length ? `${parts.join(', ')}.` : '';
+  if (keptEdited) note += `${note ? ' ' : ''}Your edited helper text was kept.`;
+  return note;
+}
+
+function removeCueCfg() {
+  const b = beats.find(x=>x.id===cueConfigBeatId); if (!b||!b.cues) return;
+  const cueName = CT[cueConfigType]?.label || cueConfigType || 'cue';
+  if (!dangerConfirm(`Remove ${cueName} from ${rowConfirmLabel(cueConfigBeatId)}?`, 'Only this cue cell is removed. Other cues on the row stay in place.')) return;
+  delete b.cues[cueConfigType];
+  hideModal('cueConfigModal');
+  setRundownPresence(null);
+  renderRundown(); syncToFirestore(); toast('Cue removed.');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -8915,38 +9831,37 @@ function outrangutanPadOptions(cur, curName) {
 // the Live cadence, fires nothing, and narrates each beat — so the call can
 // be SEEN while it is being set up, not first discovered on air (the "Fire
 // now" test buttons skip the call entirely, which hid it from builders).
-function outrangutanCueFields(type, d, beatId) {
+function outrangutanCueFields(type, d) {
   if (type !== 'playback' && type !== 'audio') return '';
   d = d || {};
-  const save = beatId != null ? ` onchange="cueLinkInput(${beatId})"` : '';
   const emptyCues = !Object.keys(outrangutanState.cues || {}).length;
   const emptyPads = !Object.keys(outrangutanState.pads || {}).length;
   const cuePart = type !== 'playback' ? '' : `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
           <label class="field-lbl">Link to an Outrangutan cue</label>
-          <select class="field-in" id="cc-out-cue"${save}>${outrangutanCueOptions(d.outCueId || '', d.outCueName || '')}</select>
+          <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '', d.outCueName || '')}</select>
           ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}${save}> Roll this clip on TAKE</label>
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Roll this clip on TAKE</label>
       <div class="cc-trigger-row cc-preroll-row">
         <label class="field-lbl" for="cc-out-preroll">Pre-roll</label>
-        <input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1" value="${Number.isFinite(Number(d.preRoll)) ? Number(d.preRoll) : 0}" aria-label="Pre-roll seconds"${save}>
+        <input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1" value="${Number.isFinite(Number(d.preRoll)) ? Number(d.preRoll) : 0}" aria-label="Pre-roll seconds">
         <span class="lbl-hint">seconds before the clip is on air (0 = at once)</span>
       </div>`;
   const sfxPart = `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
           <label class="field-lbl">SFX pad</label>
-          <select class="field-in" id="cc-out-pad"${save}>${outrangutanPadOptions(d.outPadId || '', d.outPadName || '')}</select>
+          <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '', d.outPadName || '')}</select>
           ${emptyPads ? `<div class="cc-out-hint">Assign pads on Outrangutan's SFX board to list them here.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}${save}> Fire this SFX on TAKE</label>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
   return `
     <div class="field cc-trigger cc-outrangutan">
-      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> ${type === 'playback' ? 'Playback link' : 'SFX link'} <span class="cc-trigger-optional">(optional)</span>${type === 'playback' ? `<button type="button" class="info-btn" aria-label="How the playback call works" onclick="toggleInfoPop(event,'playback-call')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>` : ''}</div>
+      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">(optional)</span>${type === 'playback' ? `<button type="button" class="info-btn" aria-label="How the playback call works" onclick="toggleInfoPop(event,'playback-call')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>` : ''}</div>
       ${cuePart}
       ${sfxPart}
       <div class="cc-trigger-actions">
@@ -9273,6 +10188,14 @@ function resolveOutrangutanNameLinks() {
   }));
   _outNameLinksPresent = remaining;
   return changed;
+}
+
+// Small SFX chip on rundown cells that link a pad (P4) — name only, no live state.
+function outrangutanSfxBadge(d) {
+  if (!d || (!d.outPadId && !d.outPadName)) return '';
+  const p = (outrangutanState.pads || {})[d.outPadId];
+  const label = p ? `${p.emoji ? p.emoji + ' ' : ''}${p.name}` : (d.outPadName || 'Linked SFX');
+  return `<div class="cue-out-badge cue-sfx-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">SFX · ${esc(label)}</span>${d.outPadAuto ? '<span class="cue-out-live cue-out-auto">AUTO</span>' : ''}</div>`;
 }
 
 // Manual SFX trigger button for the live focus view (P4).
@@ -9868,12 +10791,12 @@ async function loadScriptFile(input, targetId) {
         });
         if (i<pdf.numPages) text+='\n\n';
       }
-      if (target) { target.value = text.trim(); target.dispatchEvent(new Event('input', { bubbles:true })); }
+      if (target) target.value = text.trim();
     } catch { toast('PDF read failed. Try a .txt file'); }
     return;
   }
   const reader = new FileReader();
-  reader.onload = e => { if (target) { target.value = e.target.result; target.dispatchEvent(new Event('input', { bubbles:true })); } };
+  reader.onload = e => { if (target) target.value = e.target.result; };
   reader.readAsText(file);
 }
 
@@ -9882,6 +10805,87 @@ async function loadScriptFile(input, targetId) {
 // ─────────────────────────────────────────────────────────────
 // EDIT
 // ─────────────────────────────────────────────────────────────
+function openEdit(id) {
+  const b = beats.find(x=>x.id===id); if (!b) return;
+  editId = id;
+  editStyle = b.style||'flex';
+  editColor = rowTintDef(b) ? rowTintDef(b).id : '';
+  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit Segment Marker' : 'Edit Row';
+  let h;
+  if (b.style === 'segment') {
+    h = `
+      <div class="field"><label class="field-lbl">Section Label</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
+      <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
+      ${rowTintChipsHTML(editColor)}`;
+  } else {
+    h = `
+      <div class="field"><label class="field-lbl">Name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80"></div>
+      <div class="field"><label class="field-lbl">Notes</label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
+      <div class="field"><label class="field-lbl">Duration</label>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center">
+          <input class="field-in" id="ed-min" type="number" min="0" max="180" value="${b.min||0}" style="text-align:center;font-family:var(--mono)">
+          <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
+          <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
+        </div></div>
+      <div class="field"><label class="field-lbl">Style</label>
+        <div class="chip-grid">
+          <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
+          <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
+        </div></div>
+      ${rowTintChipsHTML(editColor)}`;
+  }
+  document.getElementById('editFields').innerHTML = h;
+  showOverlay('editOv');
+  setRundownPresence(id);
+}
+
+function edSetStyle(s, el) {
+  editStyle = s;
+  document.querySelectorAll('#editFields .chip:not(.tint-chip)').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+let editColor = '';
+function edSetTint(id, el) {
+  editColor = ROW_TINTS.some(t => t.id === id) ? id : '';
+  document.querySelectorAll('#editFields .tint-chip').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function closeEdit(e) {
+  if (e && e.target!==document.getElementById('editOv')) return;
+  hideOverlay('editOv');
+  setRundownPresence(null);
+}
+
+function saveEdit() {
+  const b = beats.find(x=>x.id===editId); if (!b) return;
+  b.info  = document.getElementById('ed-info').value.trim()||b.info;
+  b.notes = document.getElementById('ed-notes').value.trim();
+  if (editColor) b.color = editColor; else delete b.color;
+  if (b.style !== 'segment') {
+    b.min = parseInt(document.getElementById('ed-min')?.value)||0;
+    b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
+    if (editStyle && editStyle !== 'segment') b.style = editStyle;
+  }
+  hideOverlay('editOv');
+  setRundownPresence(null);
+  renderRundown(); syncToFirestore(); toast('Saved.');
+}
+
+function v(id) { return document.getElementById(id)?.value?.trim()||''; }
+
+function deleteCue() {
+  if (!dangerConfirm(`Remove ${rowConfirmLabel(editId)}?`, 'This removes the entire row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
+  // Mirror removeRow: a parent playback row takes its PREP/OUT helper rows too.
+  const helperIds = beats.filter(b => String(b.helperFor || '') === String(editId)).map(b => b.id);
+  beats = beats.filter(b => b.id !== editId && !helperIds.includes(b.id));
+  hideOverlay('editOv');
+  setRundownPresence(null);
+  renderRundown(); syncToFirestore();
+  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : 'Row removed.');
+}
+
 // ─────────────────────────────────────────────────────────────
 // LIVE SHOW
 // ─────────────────────────────────────────────────────────────
@@ -10492,19 +11496,7 @@ function collectPlayoutLinks() {
   return { cues, pads };
 }
 
-// The preflight is the director's checklist. Everyone else opens Live and
-// follows: no checklist, no second confirmation.
-function confirmGoLive() {
-  if (!isShowCaller()) { goLive(); return; }
-  runPreflight(false);
-}
-function updateGoLiveButton() {
-  const btn = document.getElementById('goLiveBtn');
-  if (!btn) return;
-  const director = isShowCaller();
-  btn.innerHTML = `<span class="live-dot"></span>${director ? 'Go Live' : 'Watch live'}`;
-  btn.setAttribute('aria-label', director ? 'Go Live: run the checks, then open Live' : 'Watch live: open Live and follow the director');
-}
+function confirmGoLive() { runPreflight(false); }
 function openPreflightPanel() { runPreflight(true); }
 
 // ── Per-row fix verbs ────────────────────────────────────────────────────────
@@ -11098,7 +12090,7 @@ function preflightJump(beatId) {
   }
   if (!document.getElementById('rundown')?.classList.contains('on')) return;
   setTimeout(() => {   // let the screen swap paint first (not rAF — headless previews starve it)
-    const row = document.querySelector(`#rdBody .cue-row[data-id="${beatId}"]`);
+    const row = document.querySelector(`#rdBody tr[data-id="${beatId}"]`) || document.querySelector(`tr[data-id="${beatId}"]`);
     if (!row) { toast('Row not found. It may have been deleted.'); return; }
     row.scrollIntoView({ block: 'center', behavior: 'smooth' });
     row.classList.add('preflight-hit');
@@ -11238,6 +12230,11 @@ function enterLiveSessionScreen(liveState) {
     try { if (liveRuntimeOn()) window.CueolaStreamDeck?.claimForLive?.(); } catch (error) {}
   });
 });
+
+function showRundown() {
+  if (liveSessionState().lifecycle === 'live') return requestExitLive();
+  return liveSessionState();
+}
 
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
@@ -11711,7 +12708,7 @@ async function recoverLiveToBuilder() {
 }
 
 function offsetBeforeIndex(idx) {
-  return beats.slice(0, Math.max(0, idx)).reduce((acc, b) => acc + CueModel.durationSeconds(b), 0);
+  return beats.slice(0, Math.max(0, idx)).reduce((acc,b)=>acc+(b.min||0)*60+(b.sec||0),0);
 }
 
 function liveRemainingSecs() {
@@ -12234,14 +13231,64 @@ function clearLiveTransientRuntime() {
   document.body.style.userSelect = '';
 }
 
-// 3.0: one call line per department, in the same words everywhere (rundown,
-// Live, the export). No READY/TAKE pairs: the director says the line, TAKE
-// makes it happen.
-function liveCallLineHTML(typeId, line, className='') {
-  if (!line) return '';
-  const t = CueModel.typeDef(typeId);
-  if (!t) return '';
-  return `<div class="${className}" style="--cue-clr:${t.color}" aria-label="${esc(t.label)}: ${esc(line)}"><span class="live-call-type" style="color:${t.color}">${sfIcon(t.symbol)}</span><span>${esc(line)}</span></div>`;
+function renderLiveCurrent(b, i) {
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
+  const sd = b.cues?.script;
+  const adminCaller = isAdminShowCaller();
+  const rowStart = show.start ? clock(show.start, offsetBeforeIndex(i)) : '—';
+  const elapsedRows = `${rowDisplayNumber(i)} / ${rowDisplayTotal()}`;
+  const cueBlocks = types.map(t => {
+    const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
+    // Department identity is a fill, not a rail. It has to be an OPAQUE fill on
+    // this one surface: .lv-cur-card is already accent-tinted (13%->6%) and sits
+    // on #liveshow's radial accent wash, so a see-through tint stacked on top of
+    // both and pushed .lv-cue-take (12px, --text2) under 4.5:1. Mixing the same
+    // 14% into --s1 lands the block on its own plate, immune to the card
+    // gradient and the wash, at 4.6-5.2:1 on every theme (light one included).
+    return `<div class="lv-cue-block" style="border-left-color:transparent;background:color-mix(in srgb,${tc.color} 14%,var(--s1))">
+      <div class="lv-cue-label" style="color:${tc.color}">${sfIcon(tc.symbol)} ${tc.label}</div>
+      ${liveCueOperationLine('ready', on, 'lv-cue-ready', '', t)}
+      ${liveCueOperationLine('take', off, 'lv-cue-take', '', t)}
+    </div>`;
+  }).join('');
+  return `<div class="lv-cur-card">
+    <div class="lv-cur-badge">${sfIcon('marker.active')} NOW · Row ${rowDisplayNumber(i)}</div>
+    <div class="lv-cur-name">${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
+    ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
+    ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
+    <div class="lv-cur-meta">
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Scheduled</div><div class="lv-cur-mv">${rowStart}</div></div>
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Position</div><div class="lv-cur-mv">${elapsedRows}</div></div>
+      <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtProductionSecs(liveRemainingSecs()):'—'}</div></div>
+    </div>
+    ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
+    ${scriptCueText(sd)?`<div class="lv-cur-script">${esc(scriptCueText(sd))}</div>`:''}
+    ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">${sfIcon('action.edit')} Edit &amp; Push</button>`:''}
+  </div>`;
+}
+
+function renderLiveNext(b, i, isRunner) {
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]&&t!=='script');
+  const cueSmall = types.map(t => {
+    const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
+    return `<div class="lv-next-cue" style="border-left-color:transparent;background:${tc.bg}">
+      <span style="color:${tc.color}">${sfIcon(tc.symbol)}</span>
+      ${liveCueOperationLine('ready', on, 'lv-next-cue-line', '', t)}
+      ${liveCueOperationLine('take', off, 'lv-next-cue-line muted', '', t)}
+    </div>`;
+  }).join('');
+  const handler = isRunner ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
+  return `<div class="lv-next-card" onclick="${handler}">
+    <div class="lv-next-badge">NEXT → Row ${rowDisplayNumber(i)}</div>
+    <div class="lv-next-name">${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
+    ${b.notes?`<div class="lv-next-note">${esc(b.notes)}</div>`:''}
+    ${cueSmall?`<div class="lv-next-cues">${cueSmall}</div>`:''}
+    ${fmtDur(b)!=='—'?`<div class="lv-next-dur">${fmtDur(b)}</div>`:''}
+  </div>`;
 }
 
 function liveRowPreview(idx) {
@@ -12250,28 +13297,34 @@ function liveRowPreview(idx) {
   const titleEl = document.getElementById('lrpTitle');
   const bodyEl  = document.getElementById('lrpBody');
   if (!titleEl||!bodyEl) return;
-  titleEl.textContent = `${rowDisplayNumber(idx)}. ${b.info||'—'}`;
-  const calls = CueModel.callsForBeat(b);
+  titleEl.textContent = `${idx+1}. ${b.info||'—'}`;
+  const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
   let html = '';
   if (b.notes) html += `<div style="color:var(--text2);font-size:13px;margin-bottom:12px;line-height:1.5">${esc(b.notes)}</div>`;
   if (fmtDur(b)!=='—') html += `<div style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:10px">Duration: ${fmtDur(b)}</div>`;
-  calls.forEach(c => {
-    const tc = CueModel.typeDef(c.type);
-    const scriptText = c.type === 'script' ? scriptCueText(c.cell) : '';
-    html += `<div style="border-left:3px solid transparent;padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:color-mix(in srgb,${tc.color} 14%,transparent)">
+  types.forEach(t => {
+    const d = b.cues[t], tc = CT[t];
+    const on  = getCueOn(d);
+    const off = getCueOff(d);
+    // The script body used to be split off the operation lines by a rule. It gets
+    // its own inset plate instead: --s1 steps away from the cyan cue tint in both
+    // directions (darker on the dark themes, white on Polar Bear), so the break
+    // survives without a stroke.
+    html += `<div style="border-left:3px solid transparent;padding:8px 12px;margin-bottom:8px;border-radius:0 8px 8px 0;background:${tc.bg}">
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
-      ${scriptText ? '' : liveCallLineHTML(c.type, c.line, 'live-preview-cue-line emphasized')}
-      ${scriptText ? `<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:4px;white-space:pre-wrap;padding:8px 10px;background:var(--s1);border-radius:8px">${esc(scriptText)}</div>` : ''}
+      ${liveCueOperationLine('ready', on, 'live-preview-cue-line', '', t)}
+      ${liveCueOperationLine('take', off, 'live-preview-cue-line emphasized', '', t)}
+      ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid transparent;padding:8px 10px;background:var(--s1);border-radius:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
-  if (!calls.length) html = '<div class="empty-rundown"><div class="empty-rundown-sub">No call on this cue yet.</div></div>';
+  if (!types.length) html = '<div class="empty-rundown"><div class="empty-rundown-sub">No cues configured for this row.</div></div>';
   bodyEl.innerHTML = html;
   const prevBtn = document.getElementById('lrpPrevBtn');
   const nextBtn = document.getElementById('lrpNextBtn');
   if (prevBtn) prevBtn.disabled = idx <= 0;
   if (nextBtn) nextBtn.disabled = idx >= beats.length - 1;
-  // "Cue here": offered to the director, hidden on the current row, segments,
-  // disabled and failed rows.
+  // "Cue here": offered to any driving operator (same gate as GO), hidden on
+  // the current row, segments, disabled and failed rows.
   const cueBtn = document.getElementById('lrpCueBtn');
   const cueHint = document.getElementById('lrpCueHint');
   if (cueBtn) {
@@ -12288,44 +13341,6 @@ function liveRowPreview(idx) {
   showOverlay('lsRowPreviewOv');
 }
 
-// The grid's one cue column: the call line per department, the linked
-// playout badge, and a tap-to-open script when there is one.
-function liveCellForBeat(b, beatIdx) {
-  const calls = CueModel.callsForBeat(b);
-  const sd = b.cues?.script;
-  const scriptText = scriptCueText(sd);
-  const lines = calls.filter(c => !(c.type === 'script' && scriptText)).map(c => liveCallLineHTML(c.type, c.line, 'live-cue-go')).join('');
-  const outBadge = b.cues?.playback ? outrangutanCellBadge(b.cues.playback, b.id) : '';
-  const scriptMeta = scriptText
-    ? `<div class="live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})" data-tip="Open full script">${sfIcon('content.script')} ${scriptLineLabel(scriptText)} · tap to open</div>`
-    : '';
-  if (!lines && !outBadge && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
-  return `<div class="live-cue-cell">${lines}${outBadge}${scriptMeta}</div>`;
-}
-
-// Clean cue chips for the Focus view — only the cue's programmed departments.
-function focusCuesForBeat(b) {
-  const calls = CueModel.callsForBeat(b);
-  if (!calls.length) return '<div class="lf-nocue">No call on this cue</div>';
-  return `<div class="lf-cues">` + calls.map(c => {
-    const tc = CueModel.typeDef(c.type), d = c.cell;
-    let lines = '';
-    if (c.type === 'script') {
-      const text = scriptCueText(d);
-      lines = text ? `<div class="lf-cue-take">${sfIcon('content.script')} Script ready · ${scriptLineLabel(text)}</div>` : liveCallLineHTML(c.type, c.line, 'lf-cue-take');
-    } else lines = liveCallLineHTML(c.type, c.line, 'lf-cue-take');
-    const outGo = c.type === 'playback' ? outrangutanGoBtnHTML(b.id, d) : '';
-    const sfxGo = (c.type === 'playback' || c.type === 'audio') ? outrangutanSfxGoBtnHTML(b.id, CueModel.cellKey(c.type), d) : '';
-    const goBtn = outGo + sfxGo;
-    const outBadge = c.type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
-    return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
-      <div class="lf-cue-dept">${sfIcon(tc.symbol)} ${tc.label}</div>
-      <div class="lf-cue-lines">${lines}${outBadge}</div>
-      ${goBtn}
-    </div>`;
-  }).join('') + `</div>`;
-}
-
 function lrpCueHere() {
   const idx = previewRowIdx;
   hideOverlay('lsRowPreviewOv');
@@ -12338,6 +13353,89 @@ function previewRelativeRow(delta) {
   const next = previewRowIdx + delta;
   if (next < 0 || next >= beats.length) return;
   liveRowPreview(next);
+}
+
+function liveCellForBeat(b, type, beatIdx) {
+  const tc = CT[type];
+  const d = b.cues?.[type];
+  if (!d && type === 'script') {
+    return `<div class="live-script-open" onclick="event.stopPropagation();openLiveScript(${beatIdx})" data-tip="Add script">+</div>`;
+  }
+  if (!d) return `<div class="live-cue-empty">·</div>`;
+  const on = getCueOn(d);
+  const off = getCueOff(d);
+  const isScript = type === 'script';
+  const scriptText = isScript ? scriptCueText(d) : '';
+  const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
+  if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
+  // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
+  // bold, department-coloured action line. "Ready one… take one."
+  // D11.4: linked playout rows carry the badge (cue name · ON AIR · live
+  // countdown) in the grid view too.
+  const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
+  return `<div class="live-cue-cell${isScript?' live-script-cell':''}" style="--cue-clr:${tc.color}" ${isScript?`onclick="event.stopPropagation();openLiveScript(${beatIdx})" data-tip="Open full script"`:''}>
+    ${liveCueOperationLine('ready', on, 'live-cue-rdy', '', type)}
+    ${liveCueOperationLine('take', off, 'live-cue-go', `color:${tc.color}`, type)}
+    ${outBadge}
+    ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
+  </div>`;
+}
+
+const LIVE_CUE_OPERATION = Object.freeze({
+  ready:{ label:'READY', title:'Stand by this cue before taking it' },
+  take:{ label:'TAKE', title:'Execute this programmed cue' },
+});
+
+// Playback cells speak the guided-row vocabulary: ROLL starts the clip, OUT is
+// the plan for getting out. Every other cue type keeps READY/TAKE.
+const LIVE_CUE_OPERATION_OVERRIDES = Object.freeze({
+  playback: Object.freeze({
+    ready:{ label:'ROLL', title:'Roll cue: how the playback starts' },
+    take:{ label:'OUT', title:'Out cue: the plan for getting out' },
+  }),
+});
+
+function liveCueOperationLine(operation, text, className='', style='', cueType='') {
+  if (!text) return '';
+  const meta = LIVE_CUE_OPERATION_OVERRIDES[cueType]?.[operation]
+    || LIVE_CUE_OPERATION[operation] || LIVE_CUE_OPERATION.ready;
+  // Quiet marker icons (the original cue-line look) carry the READY/TAKE
+  // vocabulary in the title/aria label instead of a boxed verb chip.
+  return `<div class="${className}"${style ? ` style="${style}"` : ''} data-tip="${meta.title}" aria-label="${meta.label}: ${esc(text)}">${sfIcon(operation === 'take' ? 'marker.go' : 'marker.ready')} <span>${esc(text)}</span></div>`;
+}
+
+// Clean cue chips for the Focus view — only the row's programmed departments.
+function focusCuesForBeat(b) {
+  const filled = colOrder.filter(type => {
+    const d = b.cues?.[type];
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)));
+  });
+  if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
+  return `<div class="lf-cues">` + filled.map(type => {
+    const d = b.cues[type], tc = CT[type];
+    const on = getCueOn(d), off = getCueOff(d);
+    let lines = '';
+    if (type === 'script') {
+      const text = scriptCueText(d);
+      lines = `<div class="lf-cue-take">${sfIcon('content.script')} ${d.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ready · ${scriptLineLabel(text)}</div>`;
+    } else {
+      // All Live representations use the same operation vocabulary: the `on`
+      // field is READY/standby and the `off` field is TAKE/execute.
+      if (on)  lines += liveCueOperationLine('ready', on, 'lf-cue-ready', '', type);
+      if (off) lines += liveCueOperationLine('take', off, 'lf-cue-take', '', type);
+    }
+    const outGo = type === 'playback' ? outrangutanGoBtnHTML(b.id, d) : '';
+    const sfxGo = (type === 'playback' || type === 'audio') ? outrangutanSfxGoBtnHTML(b.id, type, d) : '';
+    const goBtn = outGo + sfxGo;
+    // D11.4: the playout badge (linked cue · ON AIR · live countdown) belongs
+    // in the operator's focus view too, not just the grid.
+    const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
+    return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
+      <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
+      <div class="lf-cue-lines">${lines}${outBadge}</div>
+      ${goBtn}
+    </div>`;
+  }).join('') + `</div>`;
 }
 
 const LIVE_ROW_STATE_LABEL = Object.freeze({
@@ -12410,8 +13508,8 @@ function renderLiveFocus() {
   const nextBeatIdx = liveNextPlayableCueIndex(curIdx);
   const next = nextBeatIdx >= 0 ? beats[nextBeatIdx] : null;
   const total = beats.length;
-  const remainSecs = beats.slice(curIdx).reduce((a, b) => a + CueModel.durationSeconds(b), 0);
-  const startStr = show.start ? clock(show.start, offsetBeforeIndex(curIdx)) : '';
+  const remainSecs = beats.slice(curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0);
+  const startStr = show.start ? clock(show.start, beats.slice(0, curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0)) : '';
   const canJump = isFollowingSelf() && isAdminShowCaller();
 
   let html = `<div class="lf-wrap">
@@ -12500,23 +13598,26 @@ function renderLive() {
   // canJump = can click arbitrary rows to jump position (admin show callers only)
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
+  // Only show department columns actually used in this show — no empty lanes.
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))); }));
+  const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">
     <thead><tr>
       <th class="live-col-num">#</th>
       <th class="live-col-status">State</th>
-      <th class="live-col-name">Cue</th>
-      <th class="live-col-cue">Call</th>
+      <th class="live-col-name">Row</th>
       <th class="live-col-time">Time</th>
+      ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
-    const durSecs = CueModel.durationSeconds(b);
+    const durSecs = (b.min||0)*60+(b.sec||0);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += durSecs;
 
     if (b.style === 'segment') {
-      const colSpan = 5;
+      const colSpan = 4 + showCols.length;
       html += `<tr class="live-segment-header${rowTintClass(b)}">
         <td colspan="${colSpan}" class="live-seg-cell">
           <span class="live-seg-label">${esc(b.info || 'Segment')}</span>
@@ -12545,11 +13646,11 @@ function renderLive() {
       <td><div class="live-num">${rowDisplayNumber(i)}</div></td>
       <td><div class="live-row-states">${liveRowStateChips(i)}</div>${goButton}</td>
       <td>
-        <div class="live-name">${cueTypeBadgeHTML(CueModel.beatType(b), true)}${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
+        <div class="live-name">${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
         ${b.notes?`<div class="live-note">${esc(b.notes)}</div>`:''}
       </td>
-      <td class="live-cue-td">${liveCellForBeat(b,i)}</td>
       <td><div class="live-time"><strong>${fmtDur(b)}</strong>${startStr}</div></td>
+      ${showCols.map(type=>`<td class="live-cue-td">${liveCellForBeat(b,type,i)}</td>`).join('')}
     </tr>`;
   });
   html += `</tbody></table></div>`;
@@ -12685,6 +13786,17 @@ function insertLivePanelMarker(text) {
 // Audience questions now ride the questions lane (pushChatQuestion) as a
 // QUESTION-labeled overlay card, never script copy.
 
+function insertCueScriptMarker(text) {
+  const ta = document.getElementById('cc-s-text');
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const pos = start + text.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+}
+
 // After a punch-in, show the operator WHERE it landed: scroll the desk
 // editor to the edited row's header. (The talent side needs no seek — the
 // anchor-preserving re-layout keeps their read line put, and an edit to the
@@ -12702,8 +13814,10 @@ function scrollLiveEditorToRow(rowNum) {
 function saveLiveScript() {
   const b = beats[liveScriptEditIdx]; if (!b) return;
   if (!b.cues) b.cues={};
+  if (!b.cues.script) b.cues.script={ready:'',take:''};
   const edited = cleanPrompterText(document.getElementById('lsScriptEditText').value);
-  b.cues.script = CueModel.setField('script', b.cues.script || CueModel.newCell('script'), 'text', edited);
+  if (b.cues.script.scriptType === 'Dialogue') b.cues.script.dialogueNote = edited;
+  else b.cues.script.text = edited;
   const editedRowNum = rowDisplayNumber(liveScriptEditIdx);
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
   livePrompterDraftDirty = false;
@@ -14672,6 +15786,10 @@ function maybeResumeScriptOpHost() {
   } catch (error) { containError('Script Operator resume', error); }
 }
 
+function dockScriptOpPopout() {
+  stopScriptOperatorHost({ reason:'Script Operator window closed', closeWindow:true, clearWindow:true, notify:true });
+}
+
 window.addEventListener('pagehide', () => {
   // Reload survival: do NOT close the pop-out and do NOT tell it to give up.
   // pagehide fires for reloads too, and killing the window here was why every
@@ -15023,6 +16141,7 @@ function saveScreenChoiceFor(win, screenId) {
       : '');
   } catch {}
 }
+function savedTalentScreenIdentity() { return savedScreenIdentityFor('talent'); }
 function savedTalentScreen() { return savedScreenFor('talent'); }
 
 function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true }={}) {
@@ -18118,9 +19237,11 @@ function insertQuestionAtPrompterText(text) {
   const b = beats[rowIndexFromDisplayNumber(rowNum)];
   if (!b) return false;
   if (!b.cues) b.cues = {};
-  const s = b.cues.script || CueModel.newCell('script');
+  if (!b.cues.script) b.cues.script = { ready:'', take:'' };
+  const s = b.cues.script;
   const line = 'QUESTION: ' + t;
-  b.cues.script = CueModel.setField('script', s, 'text', cleanPrompterText(((s.text || '').trim() + '\n\n' + line).trim()));
+  if (s.scriptType === 'Dialogue') s.dialogueNote = cleanPrompterText(((s.dialogueNote || s.text || '').trim() + '\n\n' + line).trim());
+  else s.text = cleanPrompterText(((s.text || '').trim() + '\n\n' + line).trim());
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
   sendToPrompter();
   renderLive(); syncToFirestore();
@@ -19071,8 +20192,23 @@ function ptSaveScript() {
   ptCloseEdit();
 }
 
+function ptLoadFromCueola() {
+  if (prompterText && prompterText.trim()) {
+    ptInitScriptFromCueola(prompterText);
+    ptCloseEdit();
+    toast('Loaded script from Cueola');
+  } else {
+    toast('No script in Cueola yet. Add script cues and push to Flowmingo from the live view.');
+  }
+}
+
 let ptCueolaSub = null;
 let ptLastCueolaScript = null; // last script SOURCE applied from the cloud feed (loop guard)
+
+function ptCurrentPlainText() {
+  const textEl = ptEl('pt-text');
+  return textEl ? ptExtractText(textEl) : '';
+}
 
 function ptSetCueolaStatus(text, isError=false) {
   const status = ptEl('pt-cueola-status');
@@ -19740,6 +20876,11 @@ function updateWallClock() {
   setLiveText('ls-clock', `${h12}:${pad(m)}:${pad(s)} ${ap}`);
 }
 
+// The wall clock previously only ticked inside the show-clock interval, so it
+// sat frozen (or "—") until Start Show was pressed. Time of day must run the
+// whole time the live screen is up (owner directive 2026-07-20).
+function startWallClock() { startLiveTicker(); }
+function stopWallClock() {}
 
 function stopTimer(stopPrompter=true) {
   liveTimerStartMs = null;
@@ -20434,7 +21575,7 @@ function persistPreProDataLegacy(previous, patch, section, now) {
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps=null) {
-  // 'LOCAL' is the no-session sentinel (openLocalOutrangutan):
+  // 'LOCAL' is the no-session sentinel (openLocalPlandaBear/openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
   // D2: writes land on the ACTIVE workspace — the group subdoc when grouped.
@@ -24766,7 +25907,7 @@ function pnAddAsScript(noteId) {
   if (!note || !beat) { toast('Pick a target row first.'); return; }
   if (!note.text)     { toast('Note has no text to use as script.'); return; }
   if (!beat.cues) beat.cues = {};
-  beat.cues.script = CueModel.setField('script', beat.cues.script || CueModel.newCell('script'), 'text', note.text);
+  beat.cues.script = { ...(beat.cues.script || {}), text: note.text };
   renderRundown();
   syncToFirestore();
   toast(`Script set on row ${beats.indexOf(beat) + 1}.`);
@@ -25423,6 +26564,38 @@ async function showRundownPaperPreview() {
   }
 }
 
+// Every Outrangutan link programmed on a row, for the printed rundown's
+// Outrangutan column (V2 Phase 5 item 5). Names resolve from the live state
+// the Outrangutan module publishes; ids print as-is when it isn't open.
+function outrangutanRowSummary(b, savedState=outrangutanState) {
+  const parts = [];
+  for (const type of Object.keys(b.cues || {})) {
+    const d = b.cues[type];
+    if (d?.outCueId) { const c = savedState?.cues?.[d.outCueId]; parts.push(`Cue: ${c?.name || d.outCueId}${d.outAuto ? ' (auto)' : ''}`); }
+    if (d?.outPadId) { const p = savedState?.pads?.[d.outPadId]; parts.push(`SFX pad: ${p?.name || d.outPadId}${d.outPadAuto ? ' (auto)' : ''}`); }
+  }
+  return parts;
+}
+
+// v2.1 D9.5: student-friendly rundown print. Reduced broadcast columns are
+// the DEFAULT (all-columns stays one toggle away), the Outrangutan column is
+// gone from print (stays in-app — D9.3), widths are proportional via
+// <colgroup>, and every page carries a running total + total-runtime footer,
+// a READY/TAKE legend, and numbered segments.
+let rundownExportColumns = (() => {
+  try { return localStorage.getItem('cueola_rundown_export_columns') === 'all' ? 'all' : 'broadcast'; }
+  catch { return 'broadcast'; }
+})();
+function setRundownExportColumns(mode) {
+  rundownExportColumns = mode === 'all' ? 'all' : 'broadcast';
+  try { localStorage.setItem('cueola_rundown_export_columns', rundownExportColumns); } catch {}
+  // Refresh whichever preview is open so the toggle answers immediately.
+  if (document.getElementById('paperPreviewModal')?.classList.contains('on')) {
+    if (activePaperworkItemId === 'rundown') showRundownPaperPreview();
+    else showPreProPackagePreview();
+  }
+}
+
 function rundownFmtTotal(secs) {
   const s = Math.max(0, Math.round(secs));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
@@ -25432,41 +26605,73 @@ function rundownFmtTotal(secs) {
 function rundownPreviewTableHTML(snapshot=null) {
   const rundownBeats = Array.isArray(snapshot?.beats) ? snapshot.beats : beats;
   const rundownShow = snapshot?.show || show;
-  const M = CueModel;
-  // Written scripts never print here (owner 2026-08-30): a script cue prints
-  // its call line (the first line) like every other department.
-  const callsFor = b => M.callsForBeat(b).map(c => `<span class="cue-${M.cellKey(c.type)}"><span class="cue-dept">${esc(M.typeDef(c.type).short)}</span> ${esc(c.line)}</span>`);
-  const columnCount = 8;
+  // Owner 2026-08-30: the export matches the rundown builder exactly — every
+  // department column prints, empty or not, and the broadcast combined-column
+  // preset is retired.
+  const allColumns = true;
+  const cueParts = (b, type) => {
+    const d = b.cues?.[type];
+    const on = getCueOn(d), off = getCueOff(d);
+    // Written scripts never print here (owner 2026-08-30): the script column
+    // carries only its READY/TAKE cue labels, like every other department.
+    // Same operation vocabulary as the editor and Live: on = READY (standby), off = TAKE (go).
+    return [on && `<span class="cue-type">READY</span> ${esc(on)}`, off && `<span class="cue-type">TAKE</span> ${esc(off)}`].filter(Boolean);
+  };
+  const cellFor = (b, type) => {
+    const parts = cueParts(b, type);
+    return parts.length ? parts.join('<br>') : '<span class="cue-muted">-</span>';
+  };
+  // Broadcast preset folds the five department columns into one labeled list.
+  const combinedCues = b => {
+    const lines = ['video','audio','playback','gfx','lighting'].flatMap(type => {
+      const parts = cueParts(b, type);
+      return parts.length ? [`<span class="cue-${type}"><span class="cue-dept">${type.toUpperCase()}</span> ${parts.join(' · ')}</span>`] : [];
+    });
+    return lines.length ? lines.join('<br>') : '<span class="cue-muted">-</span>';
+  };
+  const columnCount = allColumns ? 11 : 7;
   let offsetSecs = 0;
   let pdfCueNum = 0;
   let segmentNum = 0;
   const rows = rundownBeats.map(b => {
     const start = rundownShow.start ? clock(rundownShow.start, offsetSecs) : '-';
-    offsetSecs += M.durationSeconds(b);
+    offsetSecs += (b.min||0)*60+(b.sec||0);
     if (b.style === 'segment') {
       segmentNum++;
       return `<tr><td colspan="${columnCount}" style="background:#f4f5f7;font-weight:800;padding:8px 6px;font-size:10px;text-transform:uppercase;border-left:3px solid #4e5664">Segment ${segmentNum}: ${esc(b.info||'Untitled')}</td></tr>`;
     }
     pdfCueNum++;
     const total = rundownFmtTotal(offsetSecs);
-    const type = M.typeDef(M.beatType(b));
-    const calls = callsFor(b);
-    return `<tr${rowTintPrintStyle(b)}>
+    const lead = `
       <td>${pdfCueNum}</td>
-      <td class="cue-${M.cellKey(type.id)}"><span class="cue-type">${esc(type.label)}</span></td>
-      <td><strong>${esc(b.info||'-')}</strong></td>
-      <td>${calls.length ? calls.join('<br>') : '<span class="cue-muted">-</span>'}</td>
+      <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
       <td>${fmtDur(b)}</td>
-      <td class="cue-total">${total}</td>
-      <td>${b.notes ? `<span class="cue-muted">${esc(b.notes)}</span>` : ''}</td>
+      <td class="cue-total">${total}</td>`;
+    if (!allColumns) {
+      return `<tr${rowTintPrintStyle(b)}>${lead}
+      <td>${combinedCues(b)}</td>
+      <td class="cue-script">${cellFor(b,'script')}</td>
+    </tr>`;
+    }
+    return `<tr${rowTintPrintStyle(b)}>${lead}
+      <td class="cue-video">${cellFor(b,'video')}</td>
+      <td class="cue-audio">${cellFor(b,'audio')}</td>
+      <td class="cue-playback">${cellFor(b,'playback')}</td>
+      <td class="cue-gfx">${cellFor(b,'gfx')}</td>
+      <td class="cue-lighting">${cellFor(b,'lighting')}</td>
+      <td class="cue-script">${cellFor(b,'script')}</td>
     </tr>`;
   }).join('');
-  const colgroup = '<colgroup><col style="width:3%"><col style="width:8%"><col style="width:18%"><col style="width:30%"><col style="width:7%"><col style="width:6%"><col style="width:7%"><col style="width:21%"></colgroup>';
-  const headCells = '<th>#</th><th>Type</th><th>Cue</th><th>Call</th><th>Start</th><th>Dur</th><th>Total</th><th>Notes</th>';
-  const legend = `<div class="paper-rundown-legend"><b>Call</b> = what happens when the director takes the cue · <b>Total</b> = running show time</div>`;
-  const totalFooter = `<tfoot><tr><td colspan="6" style="text-align:right;font-weight:800">Total runtime</td><td class="cue-total" style="font-weight:800">${rundownFmtTotal(offsetSecs)}</td><td></td></tr></tfoot>`;
-  return `<div class="paper-landscape">${legend}<table class="paper-rundown-grid">${colgroup}<thead><tr>${headCells}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}">No cues yet.</td></tr>`}</tbody>${totalFooter}</table></div>`;
+  const colgroup = allColumns
+    ? '<colgroup><col style="width:3%"><col style="width:15%"><col style="width:6%"><col style="width:5%"><col style="width:6%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:12%"></colgroup>'
+    : '<colgroup><col style="width:4%"><col style="width:21%"><col style="width:7%"><col style="width:6%"><col style="width:7%"><col style="width:38%"><col style="width:17%"></colgroup>';
+  const headCells = allColumns
+    ? '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th class="cue-video">Video</th><th class="cue-audio">Audio</th><th class="cue-playback">Playback</th><th class="cue-gfx">GFX</th><th class="cue-lighting">Lighting</th><th class="cue-script">Script</th>'
+    : '<th>#</th><th>Row</th><th>Start</th><th>Dur</th><th>Total</th><th>Cues</th><th class="cue-script">Script</th>';
+  const legend = `<div class="paper-rundown-legend"><b>READY</b> = standby the source · <b>TAKE</b> = go · For playback rows: <b>ROLL</b> = start the clip · <b>OUT</b> = the plan for getting out · Total = running show time</div>`;
+  const totalFooter = `<tfoot><tr><td colspan="4" style="text-align:right;font-weight:800">Total runtime</td><td class="cue-total" style="font-weight:800">${rundownFmtTotal(offsetSecs)}</td><td colspan="${columnCount - 5}"></td></tr></tfoot>`;
+  return `<div class="paper-landscape">${legend}<table class="paper-rundown-grid">${colgroup}<thead><tr>${headCells}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}">No rows yet.</td></tr>`}</tbody>${totalFooter}</table></div>`;
 }
 
 let lastCallSheetExportSnapshot = null;
@@ -30109,7 +31314,7 @@ function fillCallSheetCrewFromRoster() {
 // v2.1 D9.7: estimated wrap = show start (or call) + the rundown's total
 // runtime. One tap, still editable.
 function estimateWrapFromRundown() {
-  const totalSecs = beats.reduce((n, b) => n + CueModel.durationSeconds(b), 0);
+  const totalSecs = beats.reduce((n, b) => n + (b.min||0)*60 + (b.sec||0), 0);
   if (!totalSecs) { toast('The rundown has no timed rows yet.'); return; }
   const startVal = timeInputValue('pp-show-start') || timeInputValue('pp-call');
   if (!startVal) { toast('Set a show start or call time first.'); return; }
