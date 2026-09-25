@@ -28,6 +28,7 @@ export const ASSETS = [
   'cueola-identity.js',
   'cueola-admin-auth.js',
   'cueola-live-session.js',
+  'cueola-live-state.js',
   'cueola-link-state.js',
   'cueola-keymap.js',
   'cueola-prompter-session.js',

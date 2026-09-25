@@ -138,8 +138,31 @@ const LIVE_STATUS_SURFACES = Object.freeze({
   prompter:{ id:'ls-status-flowmingo', actions:'ls-status-flowmingo-actions', label:'Flowmingo' },
   playback:{ id:'ls-status-playback', actions:'ls-status-playback-actions', label:'Playback' },
   scriptOperator:{ id:'ls-status-script', actions:'ls-status-script-actions', label:'Script Operator' },
-  sync:{ id:'ls-status-sync', actions:'ls-status-sync-actions', label:'Cloud sync' },
+  sync:{ id:'ls-status-sync', actions:'ls-status-sync-actions', label:'Saved' },
+  director:{ id:'ls-status-director', actions:'ls-status-director-actions', label:'Director' },
+  controls:{ id:'ls-status-controls', actions:'ls-status-controls-actions', label:'Controls' },
 });
+
+// 3.0 (P0-4): who is driving and whether this window's controls work, as
+// plain status rows on the Live screen instead of a console line.
+function liveDirectorStatusRecord() {
+  if (session.isDemo || session.isExpert || !session.code) return { status:'active', detail:'You (this device)' };
+  if (isShowCaller()) return { status:'active', detail:'You. TAKE moves everyone.' };
+  const name = liveDirectorName() || (sessionControlGrant ? (sessionControlGrant.displayName || sessionControlGrant.username) : '');
+  if (name) return { status:'connected', detail:`${name}. You are following.` };
+  return { status:'connecting', detail:'Waiting for the director to connect' };
+}
+function liveControlsStatusRecord() {
+  const live = liveRuntimeOn();
+  const caller = isShowCaller();
+  let deck = null;
+  try { deck = window.CueolaStreamDeck?.deckStatus?.(); } catch {}
+  const deckWord = !deck ? '' : deck.connectedHere ? 'Stream Deck ready' : deck.drivenElsewhere ? 'Stream Deck on another window' : deck.heldByOtherApp ? 'Stream Deck held by another app' : '';
+  if (!live) return { status:'closed', detail:'Open Live to use the keys' };
+  if (!caller) return { status:'connected', detail:`Arrow keys browse only${deckWord ? ' · ' + deckWord : ''}` };
+  if (liveTakeGate.isBusy()) return { status:'active', detail:'Taking…' };
+  return { status:'active', detail:`Keys ready: → TAKE · ← back${deckWord ? ' · ' + deckWord : ''}` };
+}
 
 const liveSessionController = window.CueolaLiveSession.createController({
   onEnter: enterLiveSessionScreen,
@@ -271,6 +294,8 @@ function renderLiveStatusRail(state=liveSessionController?.getState?.()) {
   Object.entries(state.subsystems || {}).forEach(([name, record]) => renderLiveStatusItem(name, record));
   const syncRecord = liveSyncStatusRecord();
   renderLiveStatusItem('sync', syncRecord);
+  renderLiveStatusItem('director', liveDirectorStatusRecord());
+  renderLiveStatusItem('controls', liveControlsStatusRecord());
   const problems = [
     ...Object.entries(state.subsystems || {}),
     ['sync', syncRecord],
@@ -787,42 +812,31 @@ function _beginTalentReconnectNudges() {
 // One owned ticker evaluates hysteresis and the definitive death signals
 // (window closed). Started by the surfaces that need it; stops itself when
 // nothing is active (D12.7: every timer has an owner and a stop path).
-let _liveLinkTicker = null;
 function _liveLinksActive() {
   return _prompterOperatorRuntimeActive
     || Boolean(_scriptOpHost)
     || document.getElementById('liveshow')?.classList.contains('on')
     || false;
 }
-function ensureLiveLinkTicker() {
-  if (_liveLinkTicker) return;
-  _liveLinkTicker = setInterval(() => {
-    if (!_liveLinksActive()) { stopLiveLinkTicker(); return; }
-    // Definitive: a same-device talent window that is closed is not "degraded".
-    if (_prompterTalentWin && _prompterTalentWin.closed) {
-      if (!['lost','off'].includes(liveLinkState.getLink('talent')?.status)) {
-        liveLinkState.noteLost('talent', 'Talent window closed');
-      }
-      // A closed window has no transport: drop the stale "scrolling" mirror
-      // so the exit sheet, the deck lamps and the pop-out stop reporting a
-      // talent that no longer exists (unless a remote talent is still heard).
-      if (ptPlaying && !_prompterHasRecentTalent()) _dropTalentTransportMirror();
+// Once a second, from the one Live loop (liveTick): hysteresis and the
+// definitive death signals (window closed).
+function liveLinkTickBody() {
+  // Definitive: a same-device talent window that is closed is not "degraded".
+  if (_prompterTalentWin && _prompterTalentWin.closed) {
+    if (!['lost','off'].includes(liveLinkState.getLink('talent')?.status)) {
+      liveLinkState.noteLost('talent', 'Talent window closed');
     }
-    liveLinkState.tick();
-    // Playout truth rides Outrangutan's own heartbeat/ack ages — re-derive so
-    // its aging demotes the link even with no fresh publishes.
-    if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
-  }, 1000);
+    if (ptPlaying && !_prompterHasRecentTalent()) _dropTalentTransportMirror();
+  }
+  liveLinkState.tick();
+  if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
 }
-function stopLiveLinkTicker() {
-  clearInterval(_liveLinkTicker);
-  _liveLinkTicker = null;
-}
+function ensureLiveLinkTicker() { startLiveTicker(); }
+function stopLiveLinkTicker() {}
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
 let followTargetId = '';    // presence id keeps duplicate/stale display names from hijacking follow
 let editId = null;
-let timerInterval = null;
 let elapsedSecs = 0;
 // True once the show clock has run in THIS page load. A stopped clock with
 // leftover elapsedSecs on a fresh load means the session hydrated a parked
@@ -873,6 +887,171 @@ const prompterSessionController = window.CueolaPrompterSession.createController(
   productionCode: session.code,
 });
 window.CueolaPrompterController = prompterSessionController;
+
+// ── 3.0 shared live state (P0-3 / §2.1) ─────────────────────────────────────
+// sessions/{CODE}.live = { idx, seq, cueStartedAt, showStartedAt, directorId }
+// is the one source of truth for the live show. Only the director writes it;
+// every TAKE increments seq; readers apply an update only when seq moves
+// forward (cueola-live-state.js), so a take is idempotent on every device.
+const liveServerClock = window.CueolaLiveState.createServerClock();
+const liveShared = window.CueolaLiveState.createLiveState({ clientId: CLIENT_ID });
+const liveTakeGate = window.CueolaLiveState.createTakeGate({ debounceMs: 300 });
+let _liveRecordSeen = false;   // the doc carries a `live` record (legacy activeIdx is ignored from then on)
+let _liveTakeWrite = null;     // { seq, sentAt, ackAt } of this director's in-flight take
+let _presenceClockWrite = null; // { sentAt, ackAt } of this window's last presence write
+let _presenceClockSeen = 0;    // server ms of the last presence stamp sampled
+
+function liveServerNow() { return liveServerClock.now(Date.now()); }
+function liveRecord() { return liveShared.get(); }
+function liveDirectorName() {
+  const rec = liveShared.get();
+  if (!rec.directorId) return '';
+  if (rec.directorId === CLIENT_ID) return session.userName || 'You';
+  return String(_liveDirectorName || '');
+}
+let _liveDirectorName = '';
+
+// Feed the server clock from this window's own round trips: a write stamped
+// with serverTimestamp() comes back resolved; server value minus the local
+// send/ack midpoint is one sample.
+function noteServerClockSample(serverValue, write) {
+  if (!write || !serverValue || typeof serverValue.toMillis !== 'function') return;
+  const ms = serverValue.toMillis();
+  if (!ms || ms === _presenceClockSeen) return;
+  _presenceClockSeen = ms;
+  liveServerClock.addSample(ms, write.sentAt, write.ackAt || Date.now());
+}
+
+function resetLiveShared() {
+  liveShared.reset(null);
+  _liveRecordSeen = false;
+  _liveTakeWrite = null;
+  _liveDirectorName = '';
+  liveTakeGate.reset();
+}
+
+// Reader side: adopt the doc's live record (sequence-gated) and move this
+// window's ON AIR cue to it. Followers' cursors follow too unless they are
+// browsing on their own; the director keeps their own cursor.
+function adoptLiveRecordFromDoc(d, snap) {
+  const rec = d.live;
+  if (!rec || typeof rec !== 'object') return false;
+  _liveRecordSeen = true;
+  if (rec.directorName !== undefined) _liveDirectorName = String(rec.directorName || '');
+  const startedAt = window.CueolaLiveState.millis(rec.cueStartedAt) || Number(rec.cueStartedAtLocal) || 0;
+  const pending = Boolean(snap?.metadata?.hasPendingWrites);
+  // The director's own echo, server-confirmed: one clock sample for free.
+  if (!pending && _liveTakeWrite && rec.directorId === CLIENT_ID && Number(rec.seq) >= _liveTakeWrite.seq) {
+    noteServerClockSample(rec.cueStartedAt, _liveTakeWrite);
+    _liveTakeWrite = null;
+  }
+  const result = liveShared.adopt({ ...rec, cueStartedAt: startedAt });
+  if (!result.applied) return false;
+  applyRoomLiveCue(result.state, 'live-record');
+  return true;
+}
+
+function applyRoomLiveCue(state, reason) {
+  let idx = Number(state?.idx);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= beats.length) return;
+  if (liveCueIsDisabled(idx)) idx = liveNextPlayableCueIndex(idx);
+  if (idx < 0) return;
+  const follower = !isShowCaller();
+  try { adoptLiveActiveCue(idx, { select: follower && !browsingSelf, reason }); }
+  catch (error) { containError('Live cue adoption', error); return; }
+  if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+  else if (document.getElementById('rundown')?.classList.contains('on')) updateNowNext();
+  refreshCallerPresenceState();
+}
+
+// Director side: one press = one take. Debounced, locked while the write is
+// in flight, optimistic locally, and the echo never advances again.
+function takeCue(index, reason, opts = {}) {
+  const gate = liveTakeGate.tryAcquire(Date.now());
+  if (!gate.ok) return false;
+  blurLiveControl();
+  const fromIdx = liveActiveCueIndex();
+  const beat = beats[index];
+  let take = null;
+  try {
+    setOperatorLiveCue(index, reason);
+    take = liveShared.take(index, { nowMs: liveServerNow(), reason });
+    if (opts.fire) {
+      updatePrompterOnAdvance(beats[fromIdx] || null, beat, { advance: true });
+      if (fireOutrangutanAutoForBeat(beat) === false) throw new Error('Automatic playback dispatch was rejected');
+      if (!_rtrtCall) maybeArmNextPlayout(index);
+    } else {
+      updatePrompterOnAdvance(null, beat, { advance: index > fromIdx });
+      maybeArmNextPlayout(index);
+    }
+    logShow('cue', `${opts.logVerb || 'Take'} → row ${rowDisplayNumber(index)}${rowLogLabel(beat)}`);
+  } catch (error) {
+    liveShared.settle(false);
+    liveTakeGate.release();
+    markLiveCueFailure(index, error, `${reason}-failed`);
+    containError('Live TAKE', error);
+    return false;
+  }
+  renderLive();
+  updateLiveGoControl();
+  markResumeState();
+  publishLiveTake(take.patch).finally(() => { liveTakeGate.release(); updateLiveGoControl(); });
+  return true;
+}
+
+// The one write that moves the room. Carries the legacy activeIdx mirror for
+// windows that have not reloaded onto 3.0 yet.
+function publishLiveTake(patch) {
+  if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) {
+    liveShared.settle(true);
+    return Promise.resolve(false);
+  }
+  const sentAt = Date.now();
+  _liveTakeWrite = { seq: patch.seq, sentAt, ackAt: 0 };
+  const update = {
+    'live.idx': patch.idx,
+    'live.seq': typeof window._increment === 'function' ? window._increment(1) : patch.seq,
+    'live.cueStartedAt': typeof window._serverTimestamp === 'function' ? window._serverTimestamp() : patch.cueStartedAt,
+    'live.cueStartedAtLocal': patch.cueStartedAt,
+    'live.showStartedAt': patch.showStartedAt,
+    'live.directorId': CLIENT_ID,
+    'live.directorName': session.userName || '',
+    'live.takenAt': patch.takenAt,
+    [`presence.${presenceId}.idx`]: patch.idx,
+    [`presence.${presenceId}.lastSeen`]: Date.now(),
+  };
+  if (_sessionActiveIdxAdopted) update.activeIdx = patch.idx;
+  return window._updateDoc(window._doc(window._db, 'sessions', session.code), update)
+    .then(() => { if (_liveTakeWrite && _liveTakeWrite.seq === patch.seq) _liveTakeWrite.ackAt = Date.now(); liveShared.settle(true); return true; })
+    .catch(err => {
+      liveShared.settle(false);
+      const rec = liveShared.get();
+      if (rec.idx >= 0) applyRoomLiveCue(rec, 'take-rolled-back');
+      toast(firebaseConnectionLabel(err, 'That take did not reach the room'));
+      setCloudSyncState('error', 'Not saved. Check the connection.');
+      return false;
+    });
+}
+
+// Entering Live as the director on a show that has no live record yet: seed
+// one from this window's cue so followers have something to adopt.
+function publishLivePositionOnEnter() {
+  if (!isShowCaller()) return;
+  if (_liveRecordSeen || liveShared.get().seq > 0) return;
+  const idx = liveActiveCueIndex();
+  if (idx < 0) return;
+  const take = liveShared.take(idx, { nowMs: liveServerNow(), reason: 'enter-live' });
+  publishLiveTake(take.patch);
+}
+
+// A pressed button keeps focus, and the keymap defers to focused controls, so
+// the arrow keys went dead right after a mouse TAKE. Give focus back to the page.
+function blurLiveControl() {
+  const el = document.activeElement;
+  if (el && el !== document.body && el.closest && el.closest('#liveshow') && !isTextEditingTarget(el)) {
+    try { el.blur(); } catch {}
+  }
+}
 
 // Declared later in the file (let); read defensively so an early caller can
 // never trip the temporal dead zone.
@@ -1982,7 +2161,6 @@ async function resumeLastSession() {
         if (lsIdx !== r.lsIdx) {
           setLiveSelectedCue(r.lsIdx, { activate:!ready && r.role !== 'student', reason:'resume-cue-reassert' });
           if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
-          if (!ready) syncLiveIdx();
         }
       } else if (tries > 12) clearInterval(t);
     }, 500);
@@ -2083,6 +2261,7 @@ function setSessionCodeInUrl(code) {
 }
 
 function leaveSessionForFrontPage() {
+  resetLiveShared();
   captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   try { liveSessionController.leave({ reason:'session-leave' }); }
@@ -3565,7 +3744,7 @@ function renderAdminPaneSession() {
         <select id="adminFollowSelect" class="field-in admin-follow-in">
           ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
         </select>
-        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive(document.getElementById('adminFollowSelect').value)">Force everyone live</button>
+        <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive()">Move everyone to Live</button>
       </div>
     </div>`;
   }
@@ -5010,6 +5189,10 @@ function migrateBeat(b) {
   Object.keys(b.cues).forEach(type => {
     newCues[type] = CT[type] ? migrateOldCue(type, b.cues[type]) : b.cues[type];
   });
+  // 3.0: the READY·TRACK·ROLL call took three seconds before firing; a linked
+  // clip that ran that call keeps a 3 s pre-roll so nothing changes on air.
+  const pb = newCues.playback;
+  if (pb && pb.outAuto && pb.preRoll === undefined) newCues.playback = { ...pb, preRoll: 3 };
   return { ...b, cues: newCues };
 }
 
@@ -6020,7 +6203,8 @@ function setupFirestore() {
       _lastBusSnapshotAt = 0;
       _busExecutorClaim = null;
       _busClaimSeenAt = 0;
-      _sessionActiveIdxAdopted = false;   // syncLiveIdx must not push a stale row before the doc is read
+      _sessionActiveIdxAdopted = false;   // the legacy activeIdx mirror waits for the doc to be read
+      resetLiveShared();
       _ogCommandQueue = []; _lastDocOgCommandQueue = []; _ogSeenAckKey = ''; _talentReportedBuild = '';   // proto 4 state is per show
     }
     if (firestoreUnsub) firestoreUnsub();
@@ -6036,7 +6220,7 @@ function setupFirestore() {
         if (!snap.metadata?.fromCache) markSharedSessionUnavailable('missing');
         return;
       }
-      const d = snap.data() || {};
+      const d = snap.data({ serverTimestamps: 'estimate' }) || {};
       if (!isCompleteRundownSessionDocument(d)) {
         if (!snap.metadata?.fromCache) markSharedSessionUnavailable('incomplete');
         return;
@@ -6138,42 +6322,21 @@ function setupFirestore() {
       }
       onAssignmentRevisionSnapshot(d);
       if (d.preProNotes !== undefined) onRemoteProductionNotes(d.preProNotes);
-      // The shared show cue is authoritative independently of this device's
-      // local/followed selection. Older code folded both values into lsIdx.
-      if (Number.isFinite(d.activeIdx)) {
-        // A parked or legacy doc can point the shared cue at a segment marker
-        // or a disabled/deleted row (TH2607: activeIdx 0 on a leading segment
-        // from session creation). The Live run ledger rightly refuses those —
-        // resolve to the next playable row, and contain any residual throw so
-        // one bad index cannot abort the rest of this snapshot handler
-        // (presence, prompter, clock, and rundown updates all ride below).
-        const remoteActiveIdx = liveCueIsDisabled(d.activeIdx)
-          ? liveNextPlayableCueIndex(d.activeIdx)
-          : d.activeIdx;
-        if (remoteActiveIdx >= 0 && remoteActiveIdx < beats.length) {
-          try { adoptLiveActiveCue(remoteActiveIdx, { select:false, reason:'firestore-active-cue' }); }
+      // 3.0: the doc's `live` record is the room's truth, sequence-gated so a
+      // replayed or echoed write can never advance a device twice. A doc that
+      // has no record yet (pre-3.0 show, or nobody has gone live) falls back to
+      // the legacy activeIdx integer, adopted idempotently.
+      adoptControlGrant(d.controlGrant);   // first, so the very snapshot that moves control re-routes followers
+      if (!adoptLiveRecordFromDoc(d, snap) && !_liveRecordSeen && Number.isFinite(d.activeIdx)) {
+        const remoteActiveIdx = liveCueIsDisabled(d.activeIdx) ? liveNextPlayableCueIndex(d.activeIdx) : d.activeIdx;
+        if (remoteActiveIdx >= 0 && remoteActiveIdx < beats.length && remoteActiveIdx !== liveActiveCueIndex()) {
+          try { adoptLiveActiveCue(remoteActiveIdx, { select: !isShowCaller() && !browsingSelf, reason:'firestore-active-cue' }); }
           catch (error) { containError('Remote active-cue adoption', error); }
+          if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
         }
       }
-      // Following: mirror the position of whoever I follow (their broadcast
-      // presence.idx). Browsing self keeps my own position. A student who hasn't
-      // chosen mirrors the show caller (first instructor). The grant adopts
-      // FIRST so the very snapshot that moves control also re-routes followers.
-      adoptControlGrant(d.controlGrant);
-      adoptRtrtManual(d.rtrtManual);   // Manual TAKE is show-wide, not per-device
-      {
-        const followedIdx = resolveFollowedIdx(d.presence, {
-          followTarget, followTargetId, browsingSelf, role: session.role, myName: session.userName,
-          myUsername: myControlUsername(),
-          grantUsername: sessionControlGrant?.username ? String(sessionControlGrant.username).toLowerCase() : '',
-        });
-        const targetIdx = followedIdx != null ? followedIdx
-          : (session.role === 'student' && !sessionControlGrantHeldByMe() && Number.isFinite(d.activeIdx) && !browsingSelf && !followTarget ? d.activeIdx : null);
-        if (targetIdx != null && targetIdx !== lsIdx) {
-          setLiveSelectedCue(targetIdx, { reason:'followed-cue' });
-          if (document.getElementById('liveshow').classList.contains('on')) renderLive();
-        }
-      }
+      // Server clock: this window's own presence stamp, once it is server-confirmed.
+      if (!snap.metadata?.hasPendingWrites) noteServerClockSample(d.presence?.[presenceId]?.at, _presenceClockWrite);
       _adoptDocPrompterSession(d);
       maybeResumeScriptOpHost();   // reload survival: re-host a still-open pop-out
       // Remember the doc's control queue so this window's next command write
@@ -6320,17 +6483,10 @@ function setupFirestore() {
         const age = Date.now() - (cmd.ts||0);
         if (age < 30000 && cmd.ts > _lastHandledForceCmdTs) { // only act on new commands < 30 seconds old
           _lastHandledForceCmdTs = cmd.ts;
-          if (cmd.type === 'followMe' && cmd.name !== session.userName) {
-            forceFollowPerson(cmd.name, d.presence);
-            toast(`Now following: ${cmd.name}`);
-          }
           if (cmd.type === 'forceLive') {
             const liveOn = document.getElementById('liveshow').classList.contains('on');
             if (!liveOn) goLive();
-            setTimeout(() => {
-              if (cmd.name === session.userName) { followSelf(); }
-              else { forceFollowPerson(cmd.name, d.presence); toast(`Forced live, following ${cmd.name}`); }
-            }, 500);
+            toast('The instructor moved everyone to Live.');
           }
         }
       }
@@ -6483,24 +6639,11 @@ function syncToFirestore() {
   flushRundownSyncQueue();
 }
 
+// 3.0: the live position rides publishLiveTake (director) only. Followers
+// browsing on their own no longer write anything: presence.idx was a second,
+// unordered source of "where is the show" and is display-only now.
 function syncLiveIdx() {
-  markResumeState();   // P7: live position rides the resume record (Decisions #14)
-  if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) return;
-  const liveState = liveSessionState();
-  const selectedIdx = liveState.selectedCueIndex;
-  // Broadcast my own position into my presence record so anyone following me
-  // mirrors it. (Your navigation only moves your followers, not the whole room.)
-  // Only an instructor driving their own position publishes the shared active
-  // cue. A follower/student browsing locally must never overwrite show state.
-  const update = {
-    [`presence.${presenceId}.idx`]: selectedIdx,
-    [`presence.${presenceId}.lastSeen`]: Date.now(),
-  };
-  // A rejoining window (reload while Live) must adopt the room's row first:
-  // pushing this window's default row over the doc's would drag everyone
-  // back to row 1. Once the doc has been read, the caller publishes as before.
-  if (isShowCaller() && _sessionActiveIdxAdopted) update.activeIdx = liveState.activeCueIndex;
-  window._updateDoc(window._doc(window._db,'sessions',session.code), update).catch(()=>{});
+  markResumeState();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -6520,17 +6663,28 @@ async function joinPresence() {
   const myAv = pbNormalizeAvatar(pbMyAvatar());
   const avatarField = myAv && myAv.type !== 'initials' ? { avatar: myAv } : {};
   try {
+    _presenceClockWrite = { sentAt: Date.now(), ackAt: 0 };
     await window._updateDoc(window._doc(window._db,'sessions',session.code),{
       [`presence.${presenceId}`]:{name,role:session.role,...identity,...avatarField,
         ...(groupActive() ? { groupId: activeGroupId } : {}),   // D2: group on the presence entry
         build: window.CUEOLA_BUILD || '',   // build identity for the preflight Build rows
-        lastSeen:Date.now(),following:session.userName,followingId:'',idx:Math.max(lsIdx,0)}
+        lastSeen:Date.now(),idx:Math.max(lsIdx,0),
+        at: typeof window._serverTimestamp === 'function' ? window._serverTimestamp() : Date.now()}
     });
+    if (_presenceClockWrite) _presenceClockWrite.ackAt = Date.now();
     _stopPresenceBeat();
     // Worker-backed: a plain setInterval in a tab hidden behind OBS throttles
     // to one wake a minute, and a 90 s presence lapse flips the caller role.
     const beat = async()=>{
-      try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}.lastSeen`]:Date.now()}); } catch {}
+      const write = { sentAt: Date.now(), ackAt: 0 };
+      _presenceClockWrite = write;
+      try {
+        await window._updateDoc(window._doc(window._db,'sessions',session.code),{
+          [`presence.${presenceId}.lastSeen`]:Date.now(),
+          [`presence.${presenceId}.at`]: typeof window._serverTimestamp === 'function' ? window._serverTimestamp() : Date.now(),
+        });
+        write.ackAt = Date.now();
+      } catch {}
     };
     const P = window.CueolaScriptOperatorProtocol;
     presenceInterval = P?.createSteadyInterval
@@ -6897,7 +7051,11 @@ function keymapDispatch(e, phase) {
   if (scope === 'live' && !liveCommandDispatchAllowed()) {
     if (phase === 'up') releaseLiveCommandHolds();
     const matched = KEYMAP.some(action => action.scope === 'live' && keymapBindings(action).some(binding => keymapMatches(e, binding)));
-    if (matched) consumeRemoteKey(e);
+    if (matched) {
+      consumeRemoteKey(e);
+      // No silent refusals: a key that did nothing must say why (P0-4).
+      if (phase === 'down' && !e.repeat) liveCommandDispatchAllowed({ notify:true });
+    }
     return matched;
   }
   // Overlays own their keys before the map runs.
@@ -7080,8 +7238,8 @@ window.cueolaSurfaceBridge = {
     try {
       const i = Number(index);
       if (!Number.isFinite(i) || i < 0 || i >= beats.length) return false;
-      const landed = take ? setOperatorLiveCue(i, 'deck') : setLiveSelectedCue(i, { source: 'deck' });
-      return landed === i ? true : false;
+      if (take) return jumpToLsCue(i, { confirmed:true });
+      return setLiveSelectedCue(i, { reason:'deck' }) === i;
     } catch (e) { return false; }
   },
   // Playout volume works cross-machine: local instance when it owns this
@@ -7409,9 +7567,9 @@ uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeE
 // ─────────────────────────────────────────────────────────────
 const INFO_POPS = {
   'playback-call': {
-    title: 'The playback call: READY · TRACK · ROLL · TAKE',
+    title: 'Rolling a clip on TAKE',
     lesson: 'cueola-live', section: 'steps',
-    body: 'Link this row to an Outrangutan cue and check <b>Run the playback call</b>. In Live, when GO advances onto this row, Cueola calls it like a director: <b>READY</b> (the clip goes on standby), <b>TRACK</b> (audio up), <b>ROLL</b> (about to fire), then <b>TAKE</b> plays the clip. Each step is one second. Press <b>S</b> to abort before it fires; <b>G</b> skips the wait and takes right now. Prefer to pull the trigger yourself? Turn on Manual TAKE in Live and GO only readies the clip. The PREP and OUT guided rows below put the ready and the get-out on paper as real rundown rows.',
+    body: 'Link this cue to a playback clip and tick <b>Roll this clip on TAKE</b>. When the director takes the cue, the clip rolls. <b>Pre-roll</b> is a countdown before it is on air (0 means at once); everyone sees the count. <b>S</b> cancels the count so nothing rolls; <b>G</b> rolls it now.',
   },
   'export-package': {
     title: 'What’s in the export',
@@ -7866,16 +8024,18 @@ function updateBotBar() {
   const total = totalSecs();
   const elapsed = Math.min(elapsedSecs, total);
   const remain  = Math.max(total-elapsed, 0);
-  document.getElementById('bb-el').textContent = fmtProductionSecs(elapsed);
-  document.getElementById('bb-rm').textContent = remain>0 ? fmtProductionSecs(remain) : '—';
+  setLiveText('bb-el', fmtProductionSecs(elapsed));
+  setLiveText('bb-rm', remain>0 ? fmtProductionSecs(remain) : '—');
 }
 
 function updateNowNext() {
-  const idx = beats.length ? Math.max(lsIdx, 0) : -1;
+  const active = liveActiveCueIndex();
+  const idx = beats.length ? Math.max(active >= 0 ? active : lsIdx, 0) : -1;
   const now  = beats[idx];
-  const next = beats[idx+1];
-  document.getElementById('nn-now').textContent = 'NOW → '+(now?now.info:'—');
-  document.getElementById('nn-nxt').textContent = 'NEXT → '+(next?next.info:'—');
+  const nextIdx = liveNextPlayableCueIndex(idx);
+  const next = nextIdx >= 0 ? beats[nextIdx] : null;
+  setLiveText('nn-now', 'ON AIR → '+(now?now.info:'—'));
+  setLiveText('nn-nxt', 'STANDBY → '+(next?next.info:'—'));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -8973,6 +9133,8 @@ function saveCueConfig() {
     if (outCue === '__name__') { d.outAuto = outAuto; }   // unresolved name link kept as authored
     else if (outCue || outAuto) { d.outCueId = outCue; d.outAuto = outAuto; delete d.outCueName; }
     else { delete d.outCueId; delete d.outAuto; delete d.outCueName; }
+    const preRoll = Math.max(0, Math.min(60, Math.round(Number(document.getElementById('cc-out-preroll')?.value) || 0)));
+    d.preRoll = preRoll;
   }
   if (cueConfigType === 'playback' || cueConfigType === 'audio') {
     const outPad = document.getElementById('cc-out-pad')?.value || '';
@@ -9566,12 +9728,9 @@ function renderOutCountdowns() {
 // Owned ticker (D12.7 discipline): runs only while playout is doing anything,
 // any cue or pad, linked to a rundown row or not (R2). The interval re-runs
 // this sync, so an expired pad or a gone-idle clip stops the timer itself.
-let _outCountdownTicker = null;
 function syncOutCountdownTicker() {
-  const active = playoutNow() != null;
-  if (active && !_outCountdownTicker) _outCountdownTicker = setInterval(syncOutCountdownTicker, 500);
-  if (!active && _outCountdownTicker) { clearInterval(_outCountdownTicker); _outCountdownTicker = null; }
   renderOutCountdowns();
+  if (playoutNow() != null) startLiveTicker();
 }
 
 // P4: SFX fire → transient chip in the live overview (Decisions #7). Stale/dup
@@ -9651,34 +9810,6 @@ function outrangutanPadOptions(cur, curName) {
 // the Live cadence, fires nothing, and narrates each beat — so the call can
 // be SEEN while it is being set up, not first discovered on air (the "Fire
 // now" test buttons skip the call entirely, which hid it from builders).
-let _ccCallDemoTimer = null;
-function runCueCallDemo() {
-  const box = document.getElementById('ccCallDemo');
-  const stageEl = document.getElementById('ccCallDemoStage');
-  const noteEl = document.getElementById('ccCallDemoNote');
-  if (!box || !stageEl || !noteEl) return;
-  const steps = [
-    ['ready', 'READY', 'GO landed on this row. The clip goes on standby in Outrangutan.'],
-    ['track', 'TRACK', 'Audio is up next. The crew hears the call coming.'],
-    ['roll', 'ROLL', 'Last second. S aborts the call; G takes right now.'],
-    ['take', 'TAKE', 'The clip fires and plays. That is the whole call.'],
-    ['done', 'DEMO', 'Nothing was fired. In Live, this runs when GO advances onto this row.'],
-  ];
-  clearTimeout(_ccCallDemoTimer);
-  box.hidden = false;
-  let i = 0;
-  const step = () => {
-    const [stage, label, note] = steps[i];
-    box.dataset.stage = stage;
-    stageEl.textContent = label;
-    noteEl.textContent = note;
-    i += 1;
-    if (i < steps.length) _ccCallDemoTimer = setTimeout(step, stage === 'take' ? 1600 : RTRT_STAGE_MS);
-    else _ccCallDemoTimer = setTimeout(() => { box.hidden = true; }, 6000);
-  };
-  step();
-}
-
 function outrangutanCueFields(type, d) {
   if (type !== 'playback' && type !== 'audio') return '';
   d = d || {};
@@ -9692,9 +9823,12 @@ function outrangutanCueFields(type, d) {
           ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Run the playback call when this row goes live</label>
-      <div class="field-hint">The call: when GO lands on this row, READY · TRACK · ROLL · TAKE tick one second apart and the clip plays itself. The count IS the abort window (S key or the ABORT button). Unchecked, the clip only fires from its row GO button and the row shows a MANUAL chip.</div>
-      <div class="field-hint cc-call-hint">GO onto this row in Live runs <b>READY · TRACK · ROLL</b>, then <b>TAKE</b> fires the clip. S aborts. Watch it: <b>See the call</b> below.</div>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Roll this clip on TAKE</label>
+      <div class="cc-trigger-row cc-preroll-row">
+        <label class="field-lbl" for="cc-out-preroll">Pre-roll</label>
+        <input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1" value="${Number.isFinite(Number(d.preRoll)) ? Number(d.preRoll) : 0}" aria-label="Pre-roll seconds">
+        <span class="lbl-hint">seconds before the clip is on air (0 = at once)</span>
+      </div>`;
   const sfxPart = `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
@@ -9710,14 +9844,9 @@ function outrangutanCueFields(type, d) {
       ${cuePart}
       ${sfxPart}
       <div class="cc-trigger-actions">
-        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-call-demo-btn" onclick="runCueCallDemo()" data-tip="A safe on-screen demo of the READY · TRACK · ROLL · TAKE call. Fires nothing.">${sfIcon('media.play')} See the call</button>` : ''}
         ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()" data-tip="Really plays the cue in Outrangutan right now, skipping the call"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
         <button type="button" class="cc-trigger-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
       </div>
-      ${type === 'playback' ? `<div class="cc-call-demo" id="ccCallDemo" hidden data-stage="ready" aria-live="polite">
-        <div class="cc-call-demo-stage" id="ccCallDemoStage">READY</div>
-        <div class="cc-call-demo-note" id="ccCallDemoNote"></div>
-      </div>` : ''}
     </div>`;
 }
 
@@ -10079,17 +10208,13 @@ function outrangutanGoBtnHTML(beatId, d) {
 // recoverable, and browsing/selecting rows never starts the sequence — only
 // the advance/GO path does. Manual armed-call mode (op steps READY, TAKE only
 // on the TAKE action) is a show-level setting for dedicated-playback-op rigs.
-const RTRT_STAGES = ['ready', 'track', 'roll'];
-const RTRT_STAGE_MS = 1000;
-let _rtrtCall = null;   // { beat, rowIdx, cueId, stage, timer, manual }
+let _rtrtCall = null;   // { beat, rowIdx, cueId, stage, timer, endsAt, preRollMs }
 
 // Chrome clamps a hidden tab's setTimeout to once a MINUTE after ~5 idle
 // minutes, and during a show this tab IS hidden (the operator lives in OBS).
-// A raw setTimeout here parked the READY count and fired the TAKE up to a
-// minute late, or never (the 8/24 show). Every show-critical one-shot rides a
-// worker timer instead: worker timers are exempt from intensive throttling.
-// Returns { cancel } like createSteadyInterval; falls back to setTimeout when
-// workers are unavailable so nothing new can break.
+// Every show-critical one-shot rides a worker timer instead: worker timers
+// are exempt from intensive throttling. Returns { cancel }; falls back to
+// setTimeout when workers are unavailable so nothing new can break.
 function steadyTimeout(fn, ms) {
   const P = window.CueolaScriptOperatorProtocol;
   if (P?.createSteadyInterval) {
@@ -10106,75 +10231,13 @@ function steadyTimeout(fn, ms) {
   return { cancel: () => clearTimeout(t) };
 }
 
-// Manual TAKE is a SHOW setting, not a device setting. It used to live only
-// in localStorage, so a machine swap (or a long-forgotten checkbox) silently
-// turned every call into a parked READY + mandatory TAKE press (8/20 show).
-// In a cloud session the session doc is the authority; localStorage is the
-// fallback for local/demo shows and the seed for the first write.
-let _rtrtManualDoc = null;   // { on, by, ts } adopted from the session doc
-function liveCallManualArm() {
-  if (_rtrtManualDoc && typeof _rtrtManualDoc.on === 'boolean') return _rtrtManualDoc.on;
-  // Joined show with no doc field: default OFF. One laptop's stale local flag
-  // must never park the whole show at READY. localStorage is solo-only.
-  if (session.code && !session.isDemo && !session.local) return false;
-  try { return localStorage.getItem('cueola_rtrt_manual') === '1'; } catch { return false; }
-}
-function setLiveCallManualArm(on) {
-  try { localStorage.setItem('cueola_rtrt_manual', on ? '1' : '0'); } catch {}
-  if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
-    _rtrtManualDoc = { on: !!on, by: CLIENT_ID, ts: Date.now() };
-    try { window._updateDoc(window._doc(window._db, 'sessions', session.code), { rtrtManual: _rtrtManualDoc }).catch(() => {}); } catch {}
-  }
-  toast(on ? 'Manual TAKE armed: GO readies the clip, TAKE fires it.' : 'Automatic call: GO runs READY · TRACK · ROLL, then TAKE.');
-  renderLivePrompterControls();
-  // Turning manual OFF must un-park a call that is already sitting at READY:
-  // the operator who flips the switch mid-park expects THIS call to run, not
-  // only the next one (the parked call never fired at all before this).
-  if (!on) resumeParkedPlayoutCall('manual-off');
-}
-function adoptRtrtManual(value) {
-  const next = value && typeof value.on === 'boolean' ? value : null;
-  if (JSON.stringify(next) === JSON.stringify(_rtrtManualDoc)) return;
-  const before = liveCallManualArm();
-  _rtrtManualDoc = next;
-  if (liveCallManualArm() !== before) {
-    // Announce a mode flip that arrived from another machine — the operator
-    // must never discover it by a call parking unexpectedly at READY.
-    if (next && next.by !== CLIENT_ID) toast(liveCallManualArm()
-      ? 'Manual TAKE was turned ON for this show (from another machine).'
-      : 'Playback calls are back to automatic READY · TRACK · ROLL · TAKE.');
-    renderLivePrompterControls();
-    // Only the machine that ran the GO holds _rtrtCall. A REMOTE flip to
-    // automatic resumes it only when the park is fresh and still matches the
-    // live row: the flipping operator may not even see this park (banners go
-    // stale-hidden after 15s), and firing a minutes-old clip for a row the
-    // show has left, with nobody local touching anything, is how a wrong
-    // clip goes to air. A stale park stays parked; the banner's AUTO button
-    // (or TAKE) remains the local, deliberate way to run it.
-    if (!liveCallManualArm() && _rtrtCall) {
-      const fresh = Date.now() - (_rtrtCall.parkAt || 0) <= 15000;
-      if (fresh && _rtrtCall.rowIdx === liveActiveCueIndex()) resumeParkedPlayoutCall('manual-off-remote');
-      else renderLiveCallBanner(_rtrtCall.stage);
-    }
-  }
-}
-// A manual call parked at READY converts to the automatic count: same call,
-// same abort window, the countdown just starts now. The banner's AUTO button
-// and both manual-off paths land here.
-function resumeParkedPlayoutCall(source) {
-  if (!_rtrtCall || !_rtrtCall.manual || _rtrtCall.stage !== 'ready' || _rtrtCall.timer) return false;
-  _rtrtCall.manual = false;
-  logShow('media', `Playback call switched to automatic · row ${_rtrtCall.rowIdx + 1} (${source})`);
-  publishLiveCall('ready');
-  renderLiveCallBanner('ready');
-  notifyControlSurfaceState();
-  _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
-  return true;
-}
-// The banner's AUTO button: one click fixes the SHOW setting (so the next GO
-// runs automatically too) and resumes the call that is parked right now.
-function resumePlayoutCallAuto() {
-  setLiveCallManualArm(false);
+// 3.0: the playback pre-roll is a PROPERTY of the cue (seconds), never a mode
+// or a button. TAKE on a linked playback cue with preRoll 0 fires at once;
+// with preRoll N it counts down N seconds on every device, then fires. STOP,
+// PANIC or a newer TAKE cancel the count and nothing plays.
+function playbackPreRollMs(beat) {
+  const n = Number(beat?.cues?.playback?.preRoll);
+  return Number.isFinite(n) && n > 0 ? Math.round(Math.min(n, 60) * 1000) : 0;
 }
 
 function publishLiveCall(stage, call=_rtrtCall) {
@@ -10183,8 +10246,8 @@ function publishLiveCall(stage, call=_rtrtCall) {
     window._updateDoc(window._doc(window._db, 'sessions', session.code), {
       liveCall: {
         stage, beatId: call?.beat?.id ?? '', rowIdx: call?.rowIdx ?? -1,
-        cueId: call?.cueId || '', stageAt: Date.now(), stageMs: RTRT_STAGE_MS,
-        by: CLIENT_ID, manual: Boolean(call?.manual),
+        cueId: call?.cueId || '', stageAt: Date.now(), stageMs: Number(call?.preRollMs) || 0,
+        by: CLIENT_ID,
       },
     }).catch(() => {});
   } catch {}
@@ -10193,64 +10256,54 @@ function publishLiveCall(stage, call=_rtrtCall) {
 function renderLiveCallBanner(stage, call=_rtrtCall, mine=true) {
   const banner = document.getElementById('lsCallBanner');
   if (!banner) return;
-  const active = stage && stage !== 'take' && stage !== 'abort';
+  const active = stage === 'preroll';
   banner.hidden = !stage;
   if (!stage) return;
   banner.dataset.stage = stage;
+  _liveTickText.delete('lsCallStage');
   const stageEl = document.getElementById('lsCallStage');
   const nameEl = document.getElementById('lsCallName');
-  // A manual call parks at READY forever — say so, or it reads as a hang.
-  const parkedManual = stage === 'ready' && !!call?.manual;
   if (stageEl) {
-    stageEl.textContent = stage === 'take' ? 'TAKE' : stage === 'abort' ? 'ABORTED'
-      : parkedManual ? 'READY · MANUAL' : stage.toUpperCase();
-    // The chip itself explains the park: without this, a stuck READY · MANUAL
-    // reads as a hang and the fix (a show-level setting) is undiscoverable.
-    // Followers never get the AUTO button, so their copy points at the
-    // control that DOES work from any machine: the Manual TAKE checkbox.
-    if (parkedManual) stageEl.setAttribute('data-tip', mine
-      ? 'Manual TAKE is on for this show, so this call waits for TAKE. Press AUTO to switch the show back to the automatic READY · TRACK · ROLL · TAKE count.'
-      : 'Manual TAKE is on for this show, so this call waits for the caller\'s TAKE. Turning off Manual TAKE (armed call) in the On Air controls switches the show back to the automatic count.');
-    else stageEl.removeAttribute('data-tip');
+    const secs = call?.endsAt ? Math.max(0, Math.ceil((call.endsAt - Date.now()) / 1000)) : 0;
+    stageEl.textContent = stage === 'take' ? 'ROLLING' : stage === 'abort' ? 'CANCELLED' : secs > 0 ? `ROLLING IN ${secs}` : 'ROLLING';
   }
   if (nameEl) {
     const rowNum = (call?.rowIdx ?? -1) >= 0 ? `Row ${rowDisplayNumber(call.rowIdx)}` : '';
-    nameEl.textContent = [rowNum, call?.beat?.info || ''].filter(Boolean).join(' · ') || 'Playback call';
+    nameEl.textContent = [rowNum, call?.beat?.info || ''].filter(Boolean).join(' · ') || 'Playback';
   }
   banner.querySelectorAll('button').forEach(b => { b.hidden = !mine || !active; });
-  // AUTO shows only to the call's owner, only while parked in manual: it flips
-  // the show to automatic and this call starts counting immediately.
-  const autoBtn = document.getElementById('lsCallAuto');
-  if (autoBtn) autoBtn.hidden = autoBtn.hidden || !parkedManual;
   if (stage === 'take' || stage === 'abort') {
     setTimeout(() => { if (banner.dataset.stage === stage) banner.hidden = true; }, stage === 'take' ? 900 : 1400);
   }
 }
 
 function beginPlayoutCall(beat, rowIdx) {
-  // Advancing again while a call is still counting aborts the outgoing call
-  // properly (log line, follower banner, toast) instead of dropping it silently.
+  // A newer TAKE while a count is still running cancels the old count properly
+  // (log line, follower banner, toast) instead of dropping it silently.
   if (_rtrtCall) abortPlayoutCall('superseded');
   cancelPlayoutCallTimer();
   const cueId = beat?.cues?.playback?.outCueId || '';
-  const manual = liveCallManualArm();
-  _rtrtCall = { beat, rowIdx, cueId, stage: 'ready', timer: null, manual, parkAt: Date.now() };
-  logShow('media', `Playback call READY · row ${rowDisplayNumber(rowIdx)}${manual ? ' (manual TAKE)' : ''}`);
-  publishLiveCall('ready');
-  renderLiveCallBanner('ready');
+  const preRollMs = playbackPreRollMs(beat);
+  _rtrtCall = { beat, rowIdx, cueId, stage: 'preroll', timer: null, endsAt: Date.now() + preRollMs, preRollMs };
+  if (!preRollMs) return takePlayoutCall('take');
+  logShow('media', `Pre-roll ${Math.round(preRollMs / 1000)}s · row ${rowDisplayNumber(rowIdx)}`);
+  publishLiveCall('preroll');
+  renderLiveCallBanner('preroll');
   notifyControlSurfaceState();
-  if (!manual) _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+  _rtrtCall.timer = steadyTimeout(() => takePlayoutCall('auto'), preRollMs);
   return true;
 }
 
-function stepPlayoutCall() {
-  if (!_rtrtCall) return;
-  const nextIdx = RTRT_STAGES.indexOf(_rtrtCall.stage) + 1;
-  if (nextIdx >= RTRT_STAGES.length) { takePlayoutCall('auto'); return; }
-  _rtrtCall.stage = RTRT_STAGES[nextIdx];
-  publishLiveCall(_rtrtCall.stage);
-  renderLiveCallBanner(_rtrtCall.stage);
-  _rtrtCall.timer = steadyTimeout(() => stepPlayoutCall(), RTRT_STAGE_MS);
+// Seconds left on the pre-roll, from the one Live loop. Followers count from
+// the stage stamp the director published.
+let _remoteLiveCall = null;
+function renderLiveCallCountdown() {
+  const banner = document.getElementById('lsCallBanner');
+  if (!banner || banner.hidden || banner.dataset.stage !== 'preroll') return;
+  const endsAt = _rtrtCall ? _rtrtCall.endsAt : (_remoteLiveCall ? _remoteLiveCall.endsAt : 0);
+  if (!endsAt) return;
+  const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+  setLiveText('lsCallStage', left > 0 ? `ROLLING IN ${left}` : 'ROLLING');
 }
 
 function cancelPlayoutCallTimer() {
@@ -10299,14 +10352,14 @@ function abortPlayoutCall(source='abort') {
   logShow('media', `Playback call ABORTED · row ${rowDisplayNumber(call.rowIdx)} (${source})`);
   // Say WHY: an unexplained "aborted" toast reads as the system acting on its
   // own, and turns a diagnosable cause into a ghost story mid-show.
-  const why = source === 'superseded' ? 'a newer GO took over'
+  const why = source === 'superseded' ? 'a newer TAKE took over'
     : source === 'left-live' ? 'the Live screen closed on the calling machine'
     : source === 'stop' || source === 'fadeStop' ? 'STOP during the count'
     : source === 'panic' ? 'PANIC'
-    : source === 'control-bus' || source === 'local-deck' || source === 'deck' ? 'deck ABORT key'
-    : source === 'button' ? 'the ABORT button'
+    : source === 'control-bus' || source === 'local-deck' || source === 'deck' ? 'the deck Cancel key'
+    : source === 'button' ? 'the Cancel button'
     : source;
-  toast(`Playback call aborted (${why}). Nothing fired.`);
+  toast(`Pre-roll cancelled (${why}). Nothing rolled.`);
   publishLiveCall('abort', call);
   renderLiveCallBanner('abort', call);
   notifyControlSurfaceState();
@@ -10321,7 +10374,11 @@ function applyRemoteLiveCall(liveCall) {
   if (Date.now() - liveCall.stageAt > 15000) return;   // stale call from an old show
   _lastRemoteLiveCallAt = liveCall.stageAt;
   const beat = beats.find(b => b.id === liveCall.beatId) || null;
-  renderLiveCallBanner(liveCall.stage, { beat, rowIdx: liveCall.rowIdx, cueId: liveCall.cueId, manual: liveCall.manual }, false);
+  // Count from the director's stamp translated onto this clock (arrival time
+  // is close enough: the stamp is fresh by the 15 s test above).
+  const ms = Number(liveCall.stageMs) || 0;
+  _remoteLiveCall = liveCall.stage === 'preroll' ? { endsAt: Date.now() + Math.max(0, ms - Math.max(0, Date.now() - liveCall.stageAt)) } : null;
+  renderLiveCallBanner(liveCall.stage, { beat, rowIdx: liveCall.rowIdx, cueId: liveCall.cueId, endsAt: _remoteLiveCall?.endsAt || 0 }, false);
 }
 
 // ── D11.7: session control bus — one Stream Deck drives the whole rig ───────
@@ -10682,9 +10739,10 @@ function outrangutanCellBadge(d, beatId) {
   // it would run READY · TRACK · ROLL · TAKE when GO lands on it.
   // Both states now have a tell: the 8/20 show lost time to rows that LOOKED
   // linked but silently needed the per-row GO because auto was unchecked.
+  const pre = Number(d.preRoll) || 0;
   const call = d.outAuto
-    ? `<span class="cue-out-callchip" data-tip="GO onto this row in Live runs the playback call: READY · TRACK · ROLL · TAKE">CALL</span>`
-    : `<span class="cue-out-callchip cue-out-manualchip" data-tip="Linked but NOT on the call: this clip only fires from its row GO button. Tick 'Run the playback call' in the row editor to automate it.">MANUAL</span>`;
+    ? `<span class="cue-out-callchip" data-tip="Rolls on TAKE${pre ? ` after a ${pre}s pre-roll` : ''}">${pre ? `TAKE · ${pre}s` : 'TAKE'}</span>`
+    : `<span class="cue-out-callchip cue-out-manualchip" data-tip="Linked but not rolled on TAKE: fire it from the row's button.">MANUAL</span>`;
   return `<div class="cue-out-badge"${beatId != null ? ` data-outbadge="${esc(String(beatId))}"` : ''}><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">${esc(name)}</span>${dur}${call}${status}${remain}</div>`;
 }
 
@@ -12110,7 +12168,6 @@ function enterLiveSessionScreen(liveState) {
   // window re-adopts the exact same origin on re-entry (below). Pausing for
   // the room is an explicit choice in the exit sheet.
   liveSessionController.registerCleanup('live-clock', () => {
-    clearInterval(timerInterval); timerInterval = null;
     updateLiveClockButton();
     notifyControlSurfaceState();
   });
@@ -12135,16 +12192,10 @@ function enterLiveSessionScreen(liveState) {
   renderCallerBanner();
   sendToPrompter(true);
   renderLive();
-  syncLiveIdx();
-  // Our own clock kept running while this window sat on the Build screen
-  // (the 'live-clock' cleanup only clears the tick): restart it from the
-  // preserved anchor, so nothing is rebroadcast and nobody rewinds.
-  if (liveClockRunning && !timerInterval && liveTimerStartMs) startTimer(liveTimerStartMs);
+  publishLivePositionOnEnter();
   resumeRemoteClockIfRunning();  // late joiner picks up a clock already running
   updateLiveClockButton();
-  const timerEl = document.getElementById('ls-timer');
-  if (timerEl) timerEl.textContent = fmtProductionClock(elapsedSecs * 1000);
-  startWallClock();
+  startLiveTicker();
   // C1: the deck follows the Live window. Steal ownership from a sibling
   // window (the launcher's /keywibird window, a parked tab) so a press
   // executes here, where the lifecycle is live.
@@ -12166,7 +12217,6 @@ function showRundown() {
 
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
-  stopWallClock();
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
@@ -12230,7 +12280,7 @@ function classifyFlowmingoLiveExit() {
   // as ptPlaying, and its leave must never pause the show's prompter.
   let mine = true;
   try { mine = isShowCaller(); } catch { mine = true; }
-  const controlledBy = mine ? '' : (sessionControlGrant?.displayName || sessionControlGrant?.username || 'The show caller');
+  const controlledBy = mine ? '' : (sessionControlGrant?.displayName || sessionControlGrant?.username || liveDirectorName() || 'The director');
   return {
     active,
     reachable,
@@ -12313,7 +12363,7 @@ function liveExitConsequenceLines(outputs, choices) {
   const prompter = outputs.prompter || {};
   if (prompter.notMine && (prompter.active || prompter.reachable)) {
     // A follower's leave never touches the talent: say who does.
-    lines.push({ icon:'content.script', label:'Talent screen:', text:`${prompter.active ? 'keeps running' : 'stays where it is'}. ${prompter.controlledBy || 'The show caller'} controls it.`, state:'on' });
+    lines.push({ icon:'content.script', label:'Talent screen:', text:`${prompter.active ? 'keeps running' : 'stays where it is'}. ${prompter.controlledBy || 'The director'} controls it.`, state:'on' });
   } else {
     lines.push(prompter.reachable
       ? { icon:'content.script', label:'Talent screen:', text:'holds on the current line. The script stays up.', state:'on' }
@@ -12670,14 +12720,13 @@ function toggleShowClock(opts={}) {
   // machine instead of dead-ending here with a toast.
   if (!liveCommandDispatchAllowed({ notify: !opts.quietRefusal })) return false;
   if (!canDriveShowClock()) {
-    if (!opts.quietRefusal) toast('The show caller controls the clock for everyone.');
+    if (!opts.quietRefusal) toast('Only the director runs the show clock.');
     return false;
   }
   if (liveClockRunning) {
     stopTimer(false);
     liveClockRunning = false;
   } else {
-    returnToOwnLivePosition();
     startTimer();
   }
   updateLiveClockButton();
@@ -12694,7 +12743,7 @@ function toggleShowClock(opts={}) {
 function liveStartShowPressed() {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!canDriveShowClock()) {
-    toast('The show caller controls the clock for everyone.');
+    toast('Only the director runs the show clock.');
     return false;
   }
   const activeIdx = liveActiveCueIndex();
@@ -12719,11 +12768,8 @@ function lsStartFromTop() {
   stopTimer(false);
   elapsedSecs = 0;
   liveTimerStartMs = null;
-  setOperatorLiveCue(firstIdx, 'start-from-top');
-  logShow('cue', 'Show start → from the top · row ' + (firstIdx + 1) + rowLogLabel(beats[firstIdx]));
-  renderLive();
+  takeCue(firstIdx, 'start-from-top', { fire:false, logVerb:'Show start → from the top' });
   sendToPrompter(false);
-  syncLiveIdx();
   startTimer();
   updateLiveClockButton();
   updateLiveOverview();
@@ -12751,14 +12797,16 @@ function restartShowClock() {
   // Same as goLive: never park the live position on a leading segment marker
   while (restartIdx >= 0 && restartIdx < beats.length && beats[restartIdx]?.style === 'segment') restartIdx++;
   if (restartIdx >= beats.length) restartIdx = beats.length ? beats.length - 1 : -1;
-  setOperatorLiveCue(restartIdx, 'restart-show');
-  const t = document.getElementById('ls-timer');
-  if (t) { t.textContent = fmtProductionClock(0); t.classList.remove('warn'); }
+  if (restartIdx >= 0) {
+    if (liveRuntimeOn()) takeCue(restartIdx, 'restart-show', { fire:false, logVerb:'Restart → from the top' });
+    else setOperatorLiveCue(restartIdx, 'restart-show');
+  }
+  setLiveText('ls-timer', fmtProductionClock(0));
+  document.getElementById('ls-timer')?.classList.remove('warn');
   updateBotBar();
   updateLiveClockButton();
   updateLiveRemain();
   if (document.getElementById('liveshow')?.classList.contains('on')) { renderLive(); sendToPrompter(false); }
-  syncLiveIdx();
   broadcastShowClock();  // reset everyone's clock to 0:00 / stopped
   closeAdminPanel();
   toast('Show restarted: clock at 0:00, back to the top.');
@@ -12979,14 +13027,21 @@ function updateLiveOverview() {
   const total = totalSecs();
   const remain = liveRemainingSecs();
   const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (activeIdx+1)/beats.length*100 : 0);
-  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const setText = setLiveText;
   setText('ls-show-title', show.name || 'Untitled Show');
   setText('ls-show-sub', `${beats.length ? `Row ${Math.min(rowDisplayNumber(activeIdx), rowDisplayTotal())} of ${rowDisplayTotal()}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
   setText('ls-stat-now', cur ? cur.info || `Row ${rowDisplayNumber(activeIdx)}` : '—');
-  setText('ls-stat-next', next ? next.info || `Row ${rowDisplayNumber(nextIdx)}` : 'End');
+  setText('ls-stat-next', next ? next.info || `Row ${rowDisplayNumber(nextIdx)}` : 'End of show');
   setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
+  // Time on the ON AIR cue: server-time arithmetic against the take stamp.
+  const rec = liveShared.get();
+  const cueDur = cur ? window.CueolaLiveState.cueSeconds(cur) : 0;
+  const cueElapsed = rec.cueStartedAt && rec.idx === activeIdx ? Math.floor(liveShared.elapsedCueMs(liveServerNow()) / 1000) : 0;
+  setText('ls-stat-now-time', cur && (cueElapsed || cueDur)
+    ? `${window.CueolaLiveState.formatSeconds(cueElapsed)}${cueDur ? ' of ' + window.CueolaLiveState.formatSeconds(cueDur) : ''}`
+    : '');
   const fill = document.getElementById('ls-progress-fill');
-  if (fill) fill.style.width = `${progress}%`;
+  if (fill) { const w = `${progress}%`; if (fill.style.width !== w) fill.style.width = w; }
   updateLiveRemain();
 }
 
@@ -12995,9 +13050,10 @@ function updateLiveRemain() {
   const el = document.getElementById('ls-remain');
   if (!el) return;
   const ms = liveRemainingMs();
-  el.textContent = fmtProductionClock(ms);
+  setLiveText('ls-remain', fmtProductionClock(ms));
   const totalMs = totalSecs() * 1000;
-  el.classList.toggle('warn', totalMs > 0 && ms <= totalMs * 0.1);
+  const warn = totalMs > 0 && ms <= totalMs * 0.1;
+  if (el.classList.contains('warn') !== warn) el.classList.toggle('warn', warn);
 }
 
 function applyLivePrompterPanelState() {
@@ -13382,7 +13438,7 @@ function liveRowStateChips(index, options={}) {
     const cls = execution.status === 'completed' ? 'done' : execution.status;
     chips.push(`<span class="live-status ${cls}"${failureTitle}>${LIVE_ROW_STATE_LABEL[execution.status]}</span>`);
   } else if (index === liveNextPlayableCueIndex(state.activeCueIndex)) {
-    chips.push('<span class="live-status next">Next</span>');
+    chips.push('<span class="live-status next">Standby</span>');
   } else {
     chips.push('<span class="live-status later">Later</span>');
   }
@@ -13400,21 +13456,22 @@ function updateLiveGoControl(projectedState=null) {
   const activeIndex = state.activeCueIndex >= 0 ? state.activeCueIndex : state.selectedCueIndex;
   const nextIndex = liveNextPlayableCueIndex(activeIndex);
   const failed = nextIndex >= 0 && liveCueExecutionStatus(nextIndex) === 'failed';
-  const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && isShowCaller();
+  const dispatchable = state.lifecycle === 'live' && nextIndex >= 0 && !failed && isShowCaller() && !liveTakeGate.isBusy();
   const nextBeat = nextIndex >= 0 ? beats[nextIndex] : null;
-  const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${rowDisplayNumber(nextIndex)} · ${nextBeat.info || 'Untitled cue'}` : 'End of rundown';
+  const text = nextBeat ? `${failed ? 'Recover ' : ''}Row ${rowDisplayNumber(nextIndex)} · ${nextBeat.info || 'Untitled cue'}` : 'End of show';
   label.textContent = text;
   button.disabled = !dispatchable;
   button.setAttribute('aria-disabled', dispatchable ? 'false' : 'true');
   const studentLocked = !isShowCaller() && session.code && !session.isDemo && !session.isExpert && session.role === 'student';
   const holderName = sessionControlGrant ? (sessionControlGrant.displayName || sessionControlGrant.username) : '';
-  button.setAttribute('data-tip', dispatchable ? `GO to ${text}`
-    : failed ? `Recover failed row ${rowDisplayNumber(nextIndex)} before GO`
+  button.setAttribute('data-tip', dispatchable ? `TAKE ${text}`
+    : liveTakeGate.isBusy() ? 'Taking…'
+    : failed ? `Recover failed row ${rowDisplayNumber(nextIndex)} before TAKE`
     : studentLocked ? (holderName
-      ? `${holderName} has rundown control. The instructor can move it from the CALLER chip on the Build screen or the caller badge here.`
-      : 'Joined as a student: the show caller advances the rundown. An instructor can grant you control from the CALLER chip on the Build screen or the caller badge here.')
-    : nextBeat ? 'Follow the active show caller to use GO'
-    : 'No upcoming cue');
+      ? `${holderName} is the director. The instructor can change that from the DIRECTOR chip.`
+      : 'Only the director can TAKE. The instructor can make you director from the DIRECTOR chip.')
+    : nextBeat ? 'Only the director can TAKE'
+    : 'No cue on standby');
   button.removeAttribute('title');
   // The visible label is hidden (even Prev/GO pair): the data-tip text is the
   // accessible name, so screen readers still hear the next-cue preview.
@@ -13752,33 +13809,21 @@ function saveLiveScript() {
 
 function jumpToLsCue(i, opts = {}) {
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  // Same gate as GO (isShowCaller): blocks students in shared sessions
+  // Same gate as TAKE (isShowCaller): blocks students in shared sessions
   // but keeps the solo/demo carve-out where the operator always drives.
   if (!isShowCaller()) return false;
   // Standard show callers advance sequentially UNLESS they explicitly confirmed
   // a jump (the row-preview "Cue here" ask) — that confirm IS the safety rail.
   if (isStandardShowCaller() && !opts.confirmed) return false;
   if (liveCueIsDisabled(i)) {
-    toast(`Row ${rowDisplayNumber(i)} is disabled and cannot go active.`);
+    toast(`Row ${rowDisplayNumber(i)} is disabled and cannot go on air.`);
     return false;
   }
   if (liveCueExecutionStatus(i) === 'failed') {
-    toast(`Recover failed row ${rowDisplayNumber(i)} before making it active.`);
+    toast(`Recover failed row ${rowDisplayNumber(i)} before taking it.`);
     return false;
   }
-  const fromIdx = liveActiveCueIndex();   // direction keys the prompter intent: captured before the move
-  try { setOperatorLiveCue(i, 'jump-cue'); }
-  catch (error) {
-    containError('Live row activation', error);
-    return false;
-  }
-  renderLive();
-  // A forward 'Cue here' keeps the talent's never-travel-backward guard; a
-  // backward one (a false start) glides back so the row is actually re-read.
-  updatePrompterOnAdvance(null, beats[i], { advance: i > fromIdx });
-  maybeArmNextPlayout(i);
-  syncLiveIdx();
-  return liveActiveCueIndex() === i;
+  return takeCue(i, 'jump-cue', { fire:false, logVerb:'Cue to' });
 }
 
 function selectLiveRundownRow(event, i) {
@@ -13821,7 +13866,6 @@ function detachIfFollowing() {
   followTarget = '';
   followTargetId = '';
   renderFollowChips();
-  updateFollowInPresence(session.userName);
 }
 
 // Followers browse (owner 9/3): a Live window that is not the show caller
@@ -13838,12 +13882,11 @@ function lsBrowseAsFollower(direction) {
   if (target >= 0) {
     setLiveSelectedCue(target, { reason:'browse' });
     renderLive();
-    syncLiveIdx();   // presence idx only: activeIdx publishes from the caller alone
   }
   if (Date.now() - _browseToastAt > 8000) {
     _browseToastAt = Date.now();
-    const holder = sessionControlGrant ? (sessionControlGrant.displayName || sessionControlGrant.username) : '';
-    toast(`Browsing. ${holder || 'The instructor'} is calling the show.`);
+    const director = liveDirectorName() || (sessionControlGrant ? (sessionControlGrant.displayName || sessionControlGrant.username) : '');
+    toast(director ? `Browsing. ${director} is the director.` : 'Browsing. Waiting for the director to connect.');
   }
   return true;
 }
@@ -13853,28 +13896,14 @@ function lsNext() {
   if (!isShowCaller()) return lsBrowseAsFollower(1);
   detachIfFollowing();
   const activeIdx = liveActiveCueIndex();
-  const prev = beats[activeIdx];
   const ni = liveNextPlayableCueIndex(activeIdx);
-  if (ni < 0) { toast('End of rundown. There is no next row.'); updateLiveGoControl(); return false; }
+  if (ni < 0) { toast('End of rundown. There is no next cue.'); updateLiveGoControl(); return false; }
   if (liveCueExecutionStatus(ni) === 'failed') {
-    toast(`Recover failed row ${rowDisplayNumber(ni)} before GO.`);
+    toast(`Recover failed row ${rowDisplayNumber(ni)} before TAKE.`);
     updateLiveGoControl();
     return false;
   }
-  try {
-    setOperatorLiveCue(ni, 'advance-cue');
-    updatePrompterOnAdvance(prev, beats[lsIdx], { advance: lsIdx > activeIdx });   // GO is the forward move
-    if (fireOutrangutanAutoForBeat(beats[lsIdx]) === false) throw new Error('Automatic playback dispatch was rejected');
-    if (!_rtrtCall) maybeArmNextPlayout(lsIdx);   // an armed call arms on its TAKE instead
-    logShow('cue', 'Advance → row ' + rowDisplayNumber(lsIdx) + rowLogLabel(beats[lsIdx]));
-    renderLive();
-    syncLiveIdx();
-    return true;
-  } catch (error) {
-    markLiveCueFailure(ni, error, 'advance-cue-failed');
-    containError('Live GO', error);
-    return false;
-  }
+  return takeCue(ni, 'advance-cue', { fire:true, logVerb:'Take' });
 }
 // P7: short human label for a row in the show log.
 function rowLogLabel(b) {
@@ -13888,62 +13917,15 @@ function lsPrev() {
   detachIfFollowing();
   const fromIdx = liveActiveCueIndex();
   const ni = livePreviousPlayableCueIndex(fromIdx);
-  if (ni >= 0) {
-    try { setOperatorLiveCue(ni, 'previous-cue'); }
-    catch (error) { containError('Previous Live cue', error); return false; }
-    logShow('cue', 'Back → row ' + rowDisplayNumber(lsIdx) + rowLogLabel(beats[lsIdx]));
-    renderLive();
-    // Backward: the bare verb, so the talent glides back to the row (on the
-    // talent an advance never travels backward, so Back must not be one).
-    updatePrompterOnAdvance(null, beats[lsIdx], { advance: lsIdx > fromIdx });
-    maybeArmNextPlayout(lsIdx);
-    syncLiveIdx();
-    return true;
-  }
-  return false;
+  if (ni < 0) return false;
+  // Backward: the bare verb, so the talent glides back to the row (on the
+  // talent an advance never travels backward, so Back must not be one).
+  return takeCue(ni, 'previous-cue', { fire:false, logVerb:'Back' });
 }
 
-// Per-person following: which position should I mirror? Browsing self → null (keep
-// my own). Otherwise mirror my explicit follow target, or — for a student who hasn't
-// chosen — the show caller (first instructor broadcasting a position).
-function resolveFollowedIdx(presence, opts) {
-  if (!opts || opts.browsingSelf) return null;
-  const people = activePresenceEntries(presence);
-  if (opts.followTargetId) {
-    const target = people.find(([id]) => id === opts.followTargetId)?.[1];
-    if (target && Number.isFinite(target.idx)) return target.idx;
-  }
-  if (opts.followTarget && opts.followTarget !== opts.myName) {
-    const t = people.find(([, p]) => sameParticipantName(p?.name, opts.followTarget))?.[1];
-    if (t && Number.isFinite(t.idx)) return t.idx;
-  }
-  if (opts.role === 'student') {
-    // With a control grant active, the granted operator IS the show caller:
-    // undecided students mirror them, not the first instructor. The holder
-    // never mirrors THEMSELVES: their own stale presence echo must not yank
-    // their view back mid-navigation.
-    if (opts.grantUsername && opts.grantUsername === opts.myUsername) return null;
-    if (opts.grantUsername) {
-      const holder = people.find(([, p]) => p?.username && String(p.username).toLowerCase() === opts.grantUsername && Number.isFinite(p.idx))?.[1];
-      if (holder) return holder.idx;
-    }
-    const caller = people.find(([, p]) => p && p.role === 'instructor' && Number.isFinite(p.idx))?.[1];
-    if (caller) return caller.idx;
-  }
-  return null;
-}
-
-function participantNameKey(name) {
-  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function sameParticipantName(a, b) {
-  return participantNameKey(a) === participantNameKey(b);
-}
-
-// Newest active connection first. A person can have an old tab or reconnect
-// under the same display name; following must use the live record, not whichever
-// object property Firestore happens to enumerate first.
+// 3.0: everyone's ON AIR cue is the director's (the doc's live record). A
+// follower may browse the rundown on their own; "Back to ON AIR" snaps the
+// cursor back. There is no per-person following any more.
 function activePresenceEntries(presence=currentPresence) {
   const now = Date.now();
   return Object.entries(presence || {})
@@ -13952,22 +13934,6 @@ function activePresenceEntries(presence=currentPresence) {
 }
 
 // Who am I effectively following right now (for highlighting the right chip)?
-function effectiveFollowedName(presence) {
-  if (browsingSelf) return session.userName;
-  if (followTargetId && presence?.[followTargetId]?.name) return presence[followTargetId].name;
-  if (followTarget) return followTarget;
-  if (session.role === 'student') {
-    if (sessionControlGrant?.username) {
-      const key = String(sessionControlGrant.username).toLowerCase();
-      const holder = activePresenceEntries(presence).find(([, p]) => p?.username && String(p.username).toLowerCase() === key)?.[1];
-      if (holder) return holder.name;
-    }
-    const caller = activePresenceEntries(presence).find(([, p]) => p?.role === 'instructor')?.[1];
-    if (caller) return caller.name;
-  }
-  return session.userName;
-}
-
 // D12.3: who has the wheel, permanently on the main bar. Renders from the
 // same predicate that gates GO and the same presence data followers see.
 // One model feeds the Live badge (#lsCallerBadge), the Build toolbar chip
@@ -13988,24 +13954,19 @@ function showCallerBadgeModel() {
   }
   if (isShowCaller()) {
     model.state = 'caller';
-    model.text = 'CALLER · You';
-    const how = adminSession ? ' (admin)' : model.heldByMe ? ' (granted control)' : '';
-    model.title = `${session.userName || 'This device'} is calling the show${how}`;
+    model.text = 'DIRECTOR · You';
+    const how = adminSession ? ' (instructor)' : model.heldByMe ? ' (made director)' : '';
+    model.title = `${session.userName || 'This device'} is the director${how}`;
     // An admin who is the caller only because the grant holder has not
     // connected yet: say who the wheel is waiting for.
     if (grantNamed && !model.heldByMe && !model.holderPresent) {
       model.chipState = 'granted';
-      model.chipText = `CALLER: ${model.holderName} (not connected)`;
-      model.title = `${model.holderName} gets rundown control when they connect. Until then you are calling the show.`;
+      model.chipText = `DIRECTOR: ${model.holderName} (not connected)`;
+      model.title = `${model.holderName} becomes the director when they connect. Until then you are.`;
     } else {
       model.chipState = 'caller';
-      model.chipText = 'CALLER: You';
+      model.chipText = 'DIRECTOR: You';
     }
-  } else if (followTarget) {
-    model.text = `FOLLOWING · ${followTarget}`;
-    model.title = `Mirroring ${followTarget}'s position`;
-    model.chipText = grantNamed && !model.heldByMe ? `CALLER: ${model.holderName}` : 'CALLER: You';
-    model.chipState = grantNamed && !model.heldByMe ? 'granted' : 'caller';
   } else if (grantNamed) {
     // A grant names THE caller for the room: the badge must not keep pointing
     // at an instructor while a granted student drives. And it must not keep
@@ -14013,22 +13974,22 @@ function showCallerBadgeModel() {
     // to the instructor by then, so the badge says so and nudges a take-back.
     model.chipState = 'granted';
     if (model.holderPresent) {
-      model.text = `CALLER · ${model.holderName}`;
-      model.chipText = `CALLER: ${model.holderName}`;
-      model.title = `${model.holderName} is calling the show (granted by ${sessionControlGrant.grantedBy || 'an instructor'})${model.holderPosition ? ' · ' + model.holderPosition : ''}`;
+      model.text = `DIRECTOR · ${model.holderName}`;
+      model.chipText = `DIRECTOR: ${model.holderName}`;
+      model.title = `${model.holderName} is the director${model.holderPosition ? ' · ' + model.holderPosition : ''}`;
     } else {
-      model.text = `CALLER · ${model.holderName} (offline)`;
-      model.chipText = `CALLER: ${model.holderName} (not connected)`;
-      model.title = `${model.holderName} holds rundown control but is not connected. Followers mirror the instructor meanwhile. An admin can take control back here.`;
+      model.text = `DIRECTOR · ${model.holderName} (offline)`;
+      model.chipText = `DIRECTOR: ${model.holderName} (not connected)`;
+      model.title = `${model.holderName} is the director but is not connected. The instructor can take it back here.`;
     }
   } else {
-    const instructor = activePresenceEntries(currentPresence)
-      .find(([, p]) => p?.role === 'instructor' && !sameParticipantName(p.name, session.userName));
-    model.text = instructor ? `CALLER · ${instructor[1].name}` : 'VIEWER';
-    model.title = instructor ? `${instructor[1].name} is calling the show` : 'Following the show caller';
-    model.chipText = instructor ? `CALLER: ${instructor[1].name}` : 'CALLER: not set';
+    const name = liveDirectorName() || activePresenceEntries(currentPresence)
+      .find(([, p]) => p?.role === 'instructor' && !sameParticipantName(p.name, session.userName))?.[1]?.name || '';
+    model.text = name ? `DIRECTOR · ${name}` : 'FOLLOWING';
+    model.title = name ? `${name} is the director` : 'Waiting for the director';
+    model.chipText = name ? `DIRECTOR: ${name}` : 'DIRECTOR: not set';
   }
-  if (model.canPick) model.title += ' · Tap to hand control to a student';
+  if (model.canPick) model.title += ' · Tap to make someone director';
   return model;
 }
 
@@ -14115,113 +14076,32 @@ function renderCallerBanner() {
 }
 
 function renderFollowChips() {
-  const chips = document.getElementById('followChips');
-  if (!chips) return;
   renderShowCallerBadge();
-  const activeName = effectiveFollowedName(currentPresence);
-  const seenNames = new Set();
-  const others = activePresenceEntries(currentPresence)
-    .filter(([, p]) => !sameParticipantName(p.name, session.userName))
-    .filter(([, p]) => {
-      const key = participantNameKey(p.name);
-      if (seenNames.has(key)) return false;
-      seenNames.add(key);
-      return true;
-    });
-  let html = `<button type="button" class="follow-chip follow-self ${activeName===session.userName?'active':''}" onclick="followSelf()" aria-pressed="${activeName===session.userName?'true':'false'}">Myself</button>`;
-  others.forEach(([id, p])=>{
-    const isActive = followTargetId ? followTargetId === id : sameParticipantName(activeName, p.name);
-    html+=`<button type="button" class="follow-chip ${isActive?'active':''}" data-follow-id="${esc(id)}" data-follow-name="${esc(p.name)}" onclick="followPerson(this)" aria-pressed="${isActive?'true':'false'}">${esc(p.name)}<span class="p-tip-label" style="margin-left:5px">${p.role==='instructor'?'INST':'STU'}</span></button>`;
-  });
-  chips.innerHTML = html;
-  const forceBtn = document.getElementById('forceFollowBtn');
-  if (forceBtn) {
-    forceBtn.style.display = (session.role === 'instructor' && isFollowingSelf()) ? '' : 'none';
-  }
+  const btn = document.getElementById('lsBackToNow');
+  if (!btn) return;
+  const state = liveSessionState();
+  const away = state.lifecycle === 'live' && !isShowCaller() && state.activeCueIndex >= 0 && state.selectedCueIndex !== state.activeCueIndex;
+  btn.hidden = !away;
 }
 
+// A follower who browsed away comes back to the room's ON AIR cue.
 function followSelf() {
-  browsingSelf = true;        // detach and browse the rundown on my own
+  browsingSelf = false;
   followTarget = '';
   followTargetId = '';
+  const active = liveActiveCueIndex();
+  if (active >= 0 && !isShowCaller()) setLiveSelectedCue(active, { reason:'back-to-on-air' });
   renderFollowChips();
-  updateFollowInPresence(session.userName);
-}
-
-function followPerson(el, legacyName='', legacyId='') {
-  const name = el?.dataset?.followName || legacyName;
-  const id = el?.dataset?.followId || legacyId;
-  if (!name) return;
-  browsingSelf = false;
-  followTarget = name;
-  followTargetId = id;
-  renderFollowChips();
-  toast(`Following ${name}`);
-  updateFollowInPresence(name, id);
-  // Snap to their position immediately if they're broadcasting one.
-  const target = (id && currentPresence?.[id]) ||
-    activePresenceEntries(currentPresence).find(([, p]) => sameParticipantName(p?.name, name))?.[1];
-  if (target && Number.isFinite(target.idx)) {
-    setLiveSelectedCue(target.idx, { reason:'follow-person' });
-    if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
-  }
-}
-
-// Adopt a follow target without a click (used by the force-follow commands).
-function forceFollowPerson(name, presence) {
-  const targetEntry = activePresenceEntries(presence || currentPresence)
-    .find(([, p]) => sameParticipantName(p?.name, name));
-  browsingSelf = false;
-  followTarget = name;
-  followTargetId = targetEntry?.[0] || '';
-  renderFollowChips();
-  updateFollowInPresence(name, followTargetId);
-  const target = targetEntry?.[1];
-  if (target && Number.isFinite(target.idx)) setLiveSelectedCue(target.idx, { reason:'forced-follow' });
   if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
 }
 
-function updateFollowInPresence(name, targetId='') {
-  if (!session.code || session.isDemo || !window._firebaseReady) return;
-  window._updateDoc(window._doc(window._db,'sessions',session.code), {
-    [`presence.${presenceId}.following`]: name,
-    [`presence.${presenceId}.followingId`]: targetId,
-  }).catch(()=>{});
-}
-
-function returnToOwnLivePosition() {
-  if (!liveCommandDispatchAllowed({ notify:true })) return false;
-  const ownIdx = currentPresence?.[presenceId]?.idx;
-  browsingSelf = true;
-  followTarget = '';
-  followTargetId = '';
-  if (Number.isFinite(ownIdx)) setOperatorLiveCue(ownIdx, 'return-to-own-cue');
-  renderFollowChips();
-  updateFollowInPresence(session.userName);
-  renderLive();
-  sendToPrompter(false);
-  syncLiveIdx();
-}
-
-// Show Caller: force all users to follow them
-function forceMeAsShowCaller() {
-  if (!session.code || session.isDemo) return;
-  if (!dangerConfirm('Make everyone follow your live position?', 'This broadcasts a command to synced collaborators in this session.')) return;
-  window._updateDoc(window._doc(window._db,'sessions',session.code), {
-    forceCmd: { type:'followMe', name:session.userName, role:session.role, ts:Date.now() }
-  }).catch(err => reportCloudWriteFailure('Show caller command', err));
-  toast('Forcing all users to follow you.');
-}
-
-// Admin: force everyone live and following a specific person
-function adminForceLive(followName) {
+function adminForceLive() {
   if (!adminSession || !session.code) return;
-  if (!followName || followName === 'No users online') { toast('No live users to follow.'); return; }
-  if (!dangerConfirm(`Force everyone live following ${followName}?`, 'This can move other devices into Live view and change who they follow. Use it only when you are actively show-calling.', { requireText:'LIVE' })) return;
+  if (!dangerConfirm('Move everyone to Live?', 'Every connected device opens the Live screen on the director\'s cue.', { requireText:'LIVE' })) return;
   window._updateDoc(window._doc(window._db,'sessions',session.code), {
-    forceCmd: { type:'forceLive', name:followName, ts:Date.now() }
+    forceCmd: { type:'forceLive', name:session.userName || '', ts:Date.now() }
   }).catch(err => reportCloudWriteFailure('Force live command', err));
-  toast(`Forcing everyone live, following ${followName}.`);
+  toast('Moving everyone to Live.');
   closeAdminPanel();
 }
 
@@ -18197,7 +18077,6 @@ function liveActionsHTML(scope = 'po', disabled = false) {
   return `${rowCue}
     <div class="flow-control-section flow-control-onair">
       <div class="flow-control-title">On Air</div>
-      ${isFlow ? '' : `<label class="ls-rtrt-mode" data-tip="GO readies the linked clip. Only an explicit TAKE fires it."><input type="checkbox" ${liveCallManualArm() ? 'checked' : ''} onchange="setLiveCallManualArm(this.checked)"> Manual TAKE (armed call)</label>`}
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
         <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
         <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
@@ -20888,68 +20767,99 @@ function resumeRemoteClockIfRunning() {
 }
 
 function startTimer(anchorMs) {
-  stopTimer(false);
   liveClockRunning = true;
   _clockRanThisLoad = true;
   // anchorMs lets a synced (remote) clock line up to the exact origin the caller
   // started from; locally we derive it from the elapsed time so far.
   const start = (typeof anchorMs === 'number' && anchorMs > 0) ? anchorMs : (Date.now() - elapsedSecs * 1000);
   liveTimerStartMs = start;
-  // The interval ticks at frame rate (~30Hz) so the frame counters stay live,
-  // but most of what it used to call is whole-second data: repainting the
-  // overview, bot bar, and wall clock 30 times a second forced continuous
-  // layout work in the show window for the entire show. Frame-granular
-  // readouts (ls-timer, ls-remain, ls-stat-remain) keep the full rate; the
-  // rest updates once per second.
-  let lastTickSec = -1;
-  timerInterval = setInterval(()=>{
-    const elapsedMs = Date.now() - start;
-    elapsedSecs = Math.floor(elapsedMs / 1000);
-    const el = document.getElementById('ls-timer');
-    const total = totalSecs();
-    if (el) {
-      el.textContent = fmtProductionClock(elapsedMs);
-      el.classList.toggle('warn', total>0 && elapsedSecs>total*0.9);
-    }
-    updateLiveRemain();
-    const remainEl = document.getElementById('ls-stat-remain');
-    if (remainEl) remainEl.textContent = liveRemainingSecs() ? fmtProductionClock(liveRemainingMs()) : '—';
-    if (elapsedSecs !== lastTickSec) {
-      lastTickSec = elapsedSecs;
-      updateBotBar();
-      updateLiveOverview();
-      updateWallClock();
-    }
-  },1000 / Math.min(frameRate, 30));
+  startLiveTicker();
   updateLiveClockButton();
   notifyControlSurfaceState();
 }
 
+// ── 3.0: the one Live timer loop ─────────────────────────────────────────────
+// Worker-backed (immune to background throttling), 10 Hz for the frame digits,
+// everything else once a second. Every readout is wall-clock math against a
+// start time; nothing counts ticks. Only text that changed is written.
+let _liveTickerHandle = null;
+let _liveTickLastSec = -1;
+const _liveTickText = new Map();
+function setLiveText(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (_liveTickText.get(id) === text) return;
+  _liveTickText.set(id, text);
+  el.textContent = text;
+}
+function liveTickerWanted() {
+  return liveClockRunning || _liveLinksActive() || playoutNow() != null
+    || document.getElementById('rundown')?.classList.contains('on') && elapsedSecs > 0;
+}
+function startLiveTicker() {
+  if (_liveTickerHandle) return;
+  const P = window.CueolaScriptOperatorProtocol;
+  _liveTickerHandle = P?.createSteadyInterval
+    ? P.createSteadyInterval(liveTick, 100)
+    : { cancel: clearInterval.bind(null, setInterval(liveTick, 100)) };
+  liveTick();
+}
+function stopLiveTicker() {
+  try { _liveTickerHandle?.cancel?.(); } catch {}
+  _liveTickerHandle = null;
+  _liveTickText.clear();
+  _liveTickLastSec = -1;
+}
+function liveTick() {
+  try {
+    if (!liveTickerWanted()) { stopLiveTicker(); return; }
+    const now = Date.now();
+    const liveOn = document.getElementById('liveshow')?.classList.contains('on');
+    if (liveClockRunning && liveTimerStartMs) {
+      const elapsedMs = now - liveTimerStartMs;
+      elapsedSecs = Math.floor(elapsedMs / 1000);
+      if (liveOn) {
+        setLiveText('ls-timer', fmtProductionClock(elapsedMs));
+        const total = totalSecs();
+        const warn = total > 0 && elapsedSecs > total * 0.9;
+        const el = document.getElementById('ls-timer');
+        if (el && el.classList.contains('warn') !== warn) el.classList.toggle('warn', warn);
+        setLiveText('ls-remain', fmtProductionClock(liveRemainingMs()));
+        setLiveText('ls-stat-remain', liveRemainingSecs() ? fmtProductionClock(liveRemainingMs()) : '—');
+      }
+    }
+    const sec = Math.floor(now / 1000);
+    if (sec === _liveTickLastSec) return;
+    _liveTickLastSec = sec;
+    if (liveOn) {
+      updateWallClock();
+      updateLiveOverview();
+      renderLiveCallCountdown();
+      liveLinkTickBody();
+      if (playoutNow() != null) renderOutCountdowns();
+    } else if (_liveLinksActive()) {
+      liveLinkTickBody();
+    }
+    updateBotBar();
+  } catch (error) {
+    containError('Live tick', error);
+  }
+}
+
 function updateWallClock() {
-  const clockEl = document.getElementById('ls-clock');
-  if (!clockEl) return;
   const now = new Date();
   const h=now.getHours(), m=now.getMinutes(), s=now.getSeconds();
   const ap=h>=12?'PM':'AM', h12=h%12||12;
-  clockEl.textContent=`${h12}:${pad(m)}:${pad(s)} ${ap}`;
+  setLiveText('ls-clock', `${h12}:${pad(m)}:${pad(s)} ${ap}`);
 }
 
 // The wall clock previously only ticked inside the show-clock interval, so it
 // sat frozen (or "—") until Start Show was pressed. Time of day must run the
 // whole time the live screen is up (owner directive 2026-07-20).
-let wallClockInterval = null;
-function startWallClock() {
-  clearInterval(wallClockInterval);
-  wallClockInterval = setInterval(updateWallClock, 1000);
-  updateWallClock();
-}
-function stopWallClock() {
-  clearInterval(wallClockInterval);
-  wallClockInterval = null;
-}
+function startWallClock() { startLiveTicker(); }
+function stopWallClock() {}
 
 function stopTimer(stopPrompter=true) {
-  clearInterval(timerInterval); timerInterval=null;
   liveTimerStartMs = null;
   liveClockRunning = false;
   updateLiveClockButton();

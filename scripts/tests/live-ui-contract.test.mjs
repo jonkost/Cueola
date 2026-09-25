@@ -13,11 +13,29 @@ const [app, html, liveController, playbackJs, playbackCss, streamdeckJs] = await
 const tests = [];
 function test(name, run) { tests.push({ name, run }); }
 
-test('Live exposes one dominant, explicitly named GO control', () => {
+test('Live exposes one dominant control, and its one verb is TAKE (3.0)', () => {
   assert.match(html, /<button(?=[^>]*id="lsGoBtn")(?=[^>]*\bls-go-primary\b)[^>]*>/);
-  assert.match(html, /id="lsGoLabel"[^>]*>Next cue</);
+  // One live verb: the kicker reads TAKE, the label names the standby cue,
+  // Previous is Back. No GO anywhere on the transport pair.
+  assert.match(html, /<span class="ls-go-kicker">TAKE<\/span>/);
+  assert.match(html, /id="lsGoLabel"[^>]*>Standby</);
+  assert.match(html, /id="lsGoBtn"[^>]*aria-label="TAKE the standby cue"/);
+  assert.match(html, /class="ls-btn ls-prev" onclick="lsPrev\(\)" aria-label="Back one cue">[\s\S]*?<span>Back<\/span>/);
+  assert.doesNotMatch(html, /<span class="ls-go-kicker">GO<\/span>|>Previous<\/span>/);
   assert.match(app, /function updateLiveGoControl\(projectedState=null\)/);
-  assert.match(app, /GO to \$\{text\}/);
+  assert.match(app, /TAKE \$\{text\}/);
+  assert.doesNotMatch(app, /GO to \$\{text\}/);
+  // The tooltip refusals speak TAKE and the DIRECTOR chip, never GO / CALLER.
+  const goAt = app.indexOf('function updateLiveGoControl(');
+  const go = app.slice(goAt, app.indexOf('\nfunction ', goAt + 1));
+  assert.match(go, /liveTakeGate\.isBusy\(\) \? 'Taking…'/);
+  assert.match(go, /before TAKE`/);
+  assert.match(go, /'Only the director can TAKE'/);
+  assert.match(go, /from the DIRECTOR chip\./);
+  assert.match(go, /'No cue on standby'/);
+  assert.doesNotMatch(go, /CALLER chip|to use GO/);
+  // The lock also holds while a take is in flight (one press = one take).
+  assert.match(go, /isShowCaller\(\) && !liveTakeGate\.isBusy\(\);/);
   assert.match(
     app.slice(app.indexOf('function renderLive()'), app.indexOf('function openLiveScript')),
     /if \(!beats\.length\)[\s\S]*updateLiveGoControl\(\);[\s\S]*return;/,
@@ -90,13 +108,41 @@ test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted 
 });
 
 test('subsystem failures have persistent local recovery surfaces', () => {
-  for (const id of ['ls-status-flowmingo', 'ls-status-playback', 'ls-status-script', 'ls-status-sync']) {
+  for (const id of ['ls-status-flowmingo', 'ls-status-playback', 'ls-status-script', 'ls-status-sync', 'ls-status-director', 'ls-status-controls']) {
     assert.match(html, new RegExp(`id="${id}"`));
     assert.match(html, new RegExp(`id="${id}-actions"`));
   }
   assert.match(app, /function recoverLiveSubsystem\(name\)/);
   assert.match(app, /if \(tone === 'error'\)/);
   assert.match(html, /id="lsStatusAnnouncement"[^>]*aria-live="polite"/);
+});
+
+test('the status rail says who is driving and whether this window\'s keys work (3.0 director/controls rows)', () => {
+  // Two new surfaces beside the subsystems; the sync row is plain "Saved".
+  assert.match(app, /sync:\{ id:'ls-status-sync', actions:'ls-status-sync-actions', label:'Saved' \}/);
+  assert.match(app, /director:\{ id:'ls-status-director', actions:'ls-status-director-actions', label:'Director' \}/);
+  assert.match(app, /controls:\{ id:'ls-status-controls', actions:'ls-status-controls-actions', label:'Controls' \}/);
+  assert.match(html, /id="ls-status-sync-label">Saved</);
+  assert.match(html, /id="ls-status-director"[^>]*data-live-subsystem="director"/);
+  assert.match(html, /id="ls-status-controls"[^>]*data-live-subsystem="controls"/);
+  // The rail render paints both records every pass, next to the sync record.
+  const rail = app.slice(app.indexOf('function renderLiveStatusRail('), app.indexOf('function updateLiveStatusRailVisibility('));
+  assert.match(rail, /renderLiveStatusItem\('director', liveDirectorStatusRecord\(\)\);\s*\n\s*renderLiveStatusItem\('controls', liveControlsStatusRecord\(\)\);/);
+  // Director: you (TAKE moves everyone), a named director you follow, or a
+  // wait state; never a silent blank.
+  const director = app.slice(app.indexOf('function liveDirectorStatusRecord()'), app.indexOf('function liveControlsStatusRecord()'));
+  assert.match(director, /if \(isShowCaller\(\)\) return \{ status:'active', detail:'You\. TAKE moves everyone\.' \};/);
+  assert.match(director, /const name = liveDirectorName\(\) \|\|/);
+  assert.match(director, /detail:`\$\{name\}\. You are following\.`/);
+  assert.match(director, /detail:'Waiting for the director to connect'/);
+  // Controls: closed off Live, browse-only for followers, busy while a take is
+  // in flight, and the key legend (→ TAKE · ← back) for the director.
+  const controls = app.slice(app.indexOf('function liveControlsStatusRecord()'), app.indexOf('const liveSessionController = '));
+  assert.match(controls, /if \(!live\) return \{ status:'closed', detail:'Open Live to use the keys' \};/);
+  assert.match(controls, /if \(!caller\) return \{ status:'connected', detail:`Arrow keys browse only/);
+  assert.match(controls, /if \(liveTakeGate\.isBusy\(\)\) return \{ status:'active', detail:'Taking…' \};/);
+  assert.match(controls, /Keys ready: → TAKE · ← back/);
+  assert.match(controls, /window\.CueolaStreamDeck\?\.deckStatus\?\.\(\)/);
 });
 
 test('the Live cloud rail consumes the same status owner as the builder badge', () => {
@@ -347,33 +393,70 @@ test('cue advance never moves the prompter; the op lines it up deliberately (D11
   assert.match(app, /parked mid-scroll/);
 });
 
-test('Ready·Track·Roll·Take: armed call with an abort window, published for all (D11.3)', () => {
-  // GO on a linked-playout row starts the visible call — never an instant fire.
+test('pre-roll countdown then take: one per-cue count, an abort window, published for all (3.0 replaces D11.3)', () => {
+  // TAKE on a linked-playout row goes through the call — never a bare fire.
   const auto = app.slice(app.indexOf('function fireOutrangutanAutoForBeat('), app.indexOf('function outrangutanCellBadge('));
   assert.match(auto, /return beginPlayoutCall\(beat, rowIdx\)/);
   assert.doesNotMatch(auto, /d\.outAuto && d\.outCueId\) fireOutrangutanCommand/);
-  // The 3-second window steps READY → TRACK → ROLL, then TAKE; the browsing
-  // path (selectLiveRundownRow) never begins a call.
-  assert.match(app, /const RTRT_STAGES = \['ready', 'track', 'roll'\]/);
-  assert.match(app, /const RTRT_STAGE_MS = 1000/);
+  // The READY·TRACK·ROLL·TAKE stage machine and the Manual TAKE mode are gone.
+  for (const gone of ['RTRT_STAGES', 'RTRT_STAGE_MS', 'stepPlayoutCall', 'liveCallManualArm', 'setLiveCallManualArm', 'adoptRtrtManual',
+    'resumeParkedPlayoutCall', 'resumePlayoutCallAuto', 'cueola_rtrt_manual', 'runCueCallDemo', 'ccCallDemo', 'lsCallAuto']) {
+    assert.doesNotMatch(app, new RegExp(gone), `${gone} must stay deleted`);
+  }
+  assert.doesNotMatch(html, /id="lsCallAuto"|onclick="resumePlayoutCallAuto|onclick="runCueCallDemo|id="ccCallDemo"|Manual TAKE/);
+  // The pre-roll is a property of the cue: 0 takes at once, N counts N
+  // seconds on a worker timer, then takes ('auto').
+  assert.match(app, /function playbackPreRollMs\(beat\) \{\n  const n = Number\(beat\?\.cues\?\.playback\?\.preRoll\);\n  return Number\.isFinite\(n\) && n > 0 \? Math\.round\(Math\.min\(n, 60\) \* 1000\) : 0;/);
+  const begin = app.slice(app.indexOf('function beginPlayoutCall('), app.indexOf('function renderLiveCallCountdown('));
+  assert.match(begin, /if \(_rtrtCall\) abortPlayoutCall\('superseded'\);/);
+  assert.match(begin, /const preRollMs = playbackPreRollMs\(beat\);/);
+  assert.match(begin, /_rtrtCall = \{ beat, rowIdx, cueId, stage: 'preroll', timer: null, endsAt: Date\.now\(\) \+ preRollMs, preRollMs \};/);
+  assert.match(begin, /if \(!preRollMs\) return takePlayoutCall\('take'\);/);
+  assert.match(begin, /logShow\('media', `Pre-roll \$\{Math\.round\(preRollMs \/ 1000\)\}s · row \$\{rowDisplayNumber\(rowIdx\)\}`\);/);
+  assert.match(begin, /publishLiveCall\('preroll'\);\s*\n\s*renderLiveCallBanner\('preroll'\);/);
+  assert.match(begin, /_rtrtCall\.timer = steadyTimeout\(\(\) => takePlayoutCall\('auto'\), preRollMs\);/);
+  assert.doesNotMatch(begin, /[^y] setTimeout\(/);
+  // The browsing path (selectLiveRundownRow) never begins a call.
   const select = app.slice(app.indexOf('function selectLiveRundownRow('), app.indexOf('function lsNext('));
   assert.doesNotMatch(select, /beginPlayoutCall|fireOutrangutanAutoForBeat/);
-  // G is TAKE-now. S aborts the armed call AND falls through to the normal
+  // G rolls now. S cancels the count AND falls through to the normal
   // transport stop, so panic always silences playing media (INC-19 decision).
   assert.match(app, /if \(action === 'go'\) return takePlayoutCall\('take-now'\)/);
   assert.match(app, /if \(action === 'stop' \|\| action === 'fadeStop' \|\| action === 'panic'\) abortPlayoutCall\(action\)/);
   assert.doesNotMatch(app, /return abortPlayoutCall\(action\)/);
-  assert.match(html, /onclick="takePlayoutCall\('button'\)"/);
-  assert.match(html, /onclick="abortPlayoutCall\('button'\)"/);
+  assert.match(html, /onclick="takePlayoutCall\('button'\)" aria-label="Roll the clip now \(G\)">Roll now · G</);
+  assert.match(html, /onclick="abortPlayoutCall\('button'\)" aria-label="Cancel so nothing plays \(S\)">Cancel · S</);
+  assert.match(html, /id="lsCallBanner" data-stage="preroll"/);
+  assert.match(html, /\.ls-call-banner\[data-stage="preroll"\] \.ls-call-stage\{/);
   assert.match(app, /abortPlayoutCall\('left-live'\)/);
-  // Every stage publishes on the session doc (additive field) and every
-  // viewer renders it; stale calls are discarded.
+  // The banner counts down (ROLLING IN N), from the one Live loop; followers
+  // count from the director's published stamp.
+  const banner = app.slice(app.indexOf('function renderLiveCallBanner('), app.indexOf('function beginPlayoutCall('));
+  assert.match(banner, /const active = stage === 'preroll';/);
+  assert.match(banner, /stage === 'take' \? 'ROLLING' : stage === 'abort' \? 'CANCELLED' : secs > 0 \? `ROLLING IN \$\{secs\}` : 'ROLLING'/);
+  assert.doesNotMatch(banner, /parkedManual|MANUAL|lsCallAuto/);
+  const countdown = app.slice(app.indexOf('function renderLiveCallCountdown('), app.indexOf('function cancelPlayoutCallTimer('));
+  assert.match(countdown, /const endsAt = _rtrtCall \? _rtrtCall\.endsAt : \(_remoteLiveCall \? _remoteLiveCall\.endsAt : 0\);/);
+  assert.match(countdown, /setLiveText\('lsCallStage', left > 0 \? `ROLLING IN \$\{left\}` : 'ROLLING'\);/);
+  assert.match(app, /renderLiveCallCountdown\(\);/);
+  // Every stage publishes on the session doc (additive field, stageMs = the
+  // pre-roll) and every viewer renders it; stale calls are discarded.
   assert.match(app, /liveCall: \{/);
+  assert.match(app, /stageAt: Date\.now\(\), stageMs: Number\(call\?\.preRollMs\) \|\| 0,/);
   assert.match(app, /applyRemoteLiveCall\(d\.liveCall\)/);
-  assert.match(app, /stageAt > 15000\b|stageAt < |Date\.now\(\) - liveCall\.stageAt > 15000/);
-  // Manual armed-call mode is a show-level setting.
-  assert.match(app, /cueola_rtrt_manual/);
-  assert.match(app, /setLiveCallManualArm/);
+  const remote = app.slice(app.indexOf('function applyRemoteLiveCall('), app.indexOf('// ── D11.7: session control bus'));
+  assert.match(remote, /Date\.now\(\) - liveCall\.stageAt > 15000/);
+  assert.match(remote, /_remoteLiveCall = liveCall\.stage === 'preroll' \? \{ endsAt: Date\.now\(\) \+ Math\.max\(0, ms - Math\.max\(0, Date\.now\(\) - liveCall\.stageAt\)\) \} : null;/);
+  // The cue editor: "Roll this clip on TAKE" + a bounded pre-roll field that
+  // saveCueConfig persists; old CALL cells migrate to the 3 s they used to get.
+  assert.match(app, /id="cc-out-auto" \$\{d\.outAuto \? 'checked' : ''\}> Roll this clip on TAKE<\/label>/);
+  assert.match(app, /<input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1"/);
+  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
+  assert.match(save, /const preRoll = Math\.max\(0, Math\.min\(60, Math\.round\(Number\(document\.getElementById\('cc-out-preroll'\)\?\.value\) \|\| 0\)\)\);\n\s+d\.preRoll = preRoll;/);
+  const migrate = app.slice(app.indexOf('function migrateBeat(b)'), app.indexOf('\nfunction ', app.indexOf('function migrateBeat(b)') + 1));
+  assert.match(migrate, /if \(pb && pb\.outAuto && pb\.preRoll === undefined\) newCues\.playback = \{ \.\.\.pb, preRoll: 3 \};/);
+  // The row badge names the pre-roll instead of CALL.
+  assert.match(app, /\$\{pre \? `TAKE · \$\{pre\}s` : 'TAKE'\}<\/span>/);
 });
 
 test('playout countdown publishes once per start and ticks locally everywhere (D11.4)', () => {
@@ -430,8 +513,12 @@ test('controls never lie, never move, never silently refuse (D11.5)', () => {
   assert.match(activate, /Segment headers organize the rundown/);
   assert.match(activate, /is disabled\. Enable it in the rundown/);
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
-  assert.match(next, /toast\('End of rundown\. There is no next row\.'\)/);
+  assert.match(next, /toast\('End of rundown\. There is no next cue\.'\)/);
   assert.match(app, /Live commands are paused\. The show screen is still settling/);
+  // 3.0 (P0-4): a live key swallowed before Live is ready says why, once per
+  // press, instead of dying silently in keymapDispatch.
+  const dispatch = app.slice(app.indexOf('function keymapDispatch(e, phase)'), app.indexOf('function keymapDispatch(e, phase)') + 1800);
+  assert.match(dispatch, /if \(matched\) \{\n\s+consumeRemoteKey\(e\);\n[^\n]*\n\s+if \(phase === 'down' && !e\.repeat\) liveCommandDispatchAllowed\(\{ notify:true \}\);\n\s+\}/);
   // Fixed geometry: Previous and GO share one even min-width and the next-cue
   // preview text stays out of the button (hover tip/aria carry it instead).
   assert.match(html, /\.ls-nav \.ls-btn\{[^}]*min-width:116px/);
@@ -620,9 +707,37 @@ test('drawer and drag handles are safe for pointer and keyboard operation', () =
   assert.match(app, /element\.inert = drawerOpen/);
 });
 
-test('follow targets use native buttons with pressed state', () => {
-  assert.match(app, /<button type="button" class="follow-chip follow-self/);
-  assert.match(app, /aria-pressed="\$\{isActive\?'true':'false'\}"/);
+test('one ON AIR for the room: no per-person following, a follower who browsed away gets Back to on air (3.0)', () => {
+  // The follow bar and every per-person following path are gone, not hidden.
+  assert.doesNotMatch(html, /<div class="follow-bar">|id="followChips"|id="forceFollowBtn"|follow-chip follow-self/);
+  for (const gone of ['resolveFollowedIdx', 'effectiveFollowedName', 'followPerson', 'forceFollowPerson', 'updateFollowInPresence', 'forceMeAsShowCaller']) {
+    assert.doesNotMatch(app, new RegExp(`function ${gone}\\(`), `${gone} must stay deleted`);
+  }
+  assert.doesNotMatch(app, /cmd\.type === 'followMe'/);
+  assert.doesNotMatch(app, /presence\.\$\{presenceId\}\.following/);
+  // The overview cards: On air (with time on cue), Standby, Time left, and
+  // the one native button that snaps a browsing follower back.
+  assert.match(html, /<div class="ls-stat-label">On air<\/div><div class="ls-stat-value live" id="ls-stat-now">/);
+  assert.match(html, /<div class="ls-stat-sub" id="ls-stat-now-time"><\/div>/);
+  assert.match(html, /<button type="button" class="ls-back-now" id="lsBackToNow" onclick="followSelf\(\)" hidden>Back to on air<\/button>/);
+  assert.match(html, /<div class="ls-stat-label">Standby<\/div>/);
+  assert.match(html, /<div class="ls-stat-label">Time left<\/div>/);
+  assert.match(html, /\.ls-back-now\[hidden\]\{display:none\}/);
+  // renderFollowChips only decides whether that button shows: a follower on
+  // Live whose cursor left the ON AIR cue.
+  const chips = app.slice(app.indexOf('function renderFollowChips()'), app.indexOf('function followSelf()'));
+  assert.match(chips, /const away = state\.lifecycle === 'live' && !isShowCaller\(\) && state\.activeCueIndex >= 0 && state\.selectedCueIndex !== state\.activeCueIndex;/);
+  assert.match(chips, /btn\.hidden = !away;/);
+  assert.doesNotMatch(chips, /innerHTML|follow-chip/);
+  // followSelf snaps the cursor back to ON AIR; it never detaches to browse.
+  const self = app.slice(app.indexOf('function followSelf()'), app.indexOf('function returnToOwnLivePosition()'));
+  assert.match(self, /browsingSelf = false;/);
+  assert.match(self, /if \(active >= 0 && !isShowCaller\(\)\) setLiveSelectedCue\(active, \{ reason:'back-to-on-air' \}\);/);
+  // Admin "move everyone to Live" takes no name and follows nobody.
+  assert.match(app, /function adminForceLive\(\) \{/);
+  assert.match(app, /onclick="adminForceLive\(\)">Move everyone to Live</);
+  assert.match(app, /forceCmd: \{ type:'forceLive', name:session\.userName \|\| '', ts:Date\.now\(\) \}/);
+  assert.match(app, /toast\('The instructor moved everyone to Live\.'\);/);
 });
 
 test('same-tab control-surface probe, repaint push, and liveRowInfo honor the bridge contract', () => {
@@ -831,32 +946,101 @@ test('prompter scrub eases toward an accumulating target instead of teleporting'
   assert.match(app, /if \(ptJog\) ptJog\.target \*= ratio/);
 });
 
-test('a parked manual playback call resumes when Manual TAKE turns off, from the banner or any machine', () => {
-  // The resume: same call, same abort window, countdown starts now.
-  const resume = app.slice(app.indexOf('function resumeParkedPlayoutCall'), app.indexOf('function resumePlayoutCallAuto'));
-  assert.match(resume, /_rtrtCall\.stage !== 'ready' \|\| _rtrtCall\.timer\) return false/);
-  assert.match(resume, /_rtrtCall\.manual = false/);
-  // steadyTimeout, never setTimeout: a hidden tab's raw timers are throttled
-  // to once a minute, which parked calls and fired TAKEs late (8/24 show).
-  assert.match(resume, /steadyTimeout\(\(\) => stepPlayoutCall\(\), RTRT_STAGE_MS\)/);
-  assert.doesNotMatch(resume, /[^y] setTimeout\(/);
-  // Both manual-off paths land there: the local checkbox/AUTO button, and a
-  // flip adopted from another machine. The REMOTE flip is gated: only a fresh
-  // park on the current live row auto-fires; a stale or moved-past park stays
-  // parked (the flipping operator may not even see this machine's banner).
-  assert.match(app.slice(app.indexOf('function setLiveCallManualArm'), app.indexOf('function adoptRtrtManual')), /resumeParkedPlayoutCall\('manual-off'\)/);
-  const remoteFlip = app.slice(app.indexOf('function adoptRtrtManual'), app.indexOf('function resumeParkedPlayoutCall'));
-  assert.match(remoteFlip, /Date\.now\(\) - \(_rtrtCall\.parkAt \|\| 0\) <= 15000/);
-  assert.match(remoteFlip, /_rtrtCall\.rowIdx === liveActiveCueIndex\(\)/);
-  assert.match(remoteFlip, /resumeParkedPlayoutCall\('manual-off-remote'\)/);
-  assert.match(app, /stage: 'ready', timer: null, manual, parkAt: Date\.now\(\)/);
-  // The banner explains the park and offers AUTO right where the op is stuck.
-  assert.match(html, /id="lsCallAuto" onclick="resumePlayoutCallAuto\(\)"/);
-  assert.match(html, /\.ls-call-auto\{background:color-mix/);
-  const banner = app.slice(app.indexOf('function renderLiveCallBanner'), app.indexOf('function beginPlayoutCall'));
-  assert.match(banner, /const parkedManual = stage === 'ready' && !!call\?\.manual/);
-  assert.match(banner, /autoBtn\.hidden = autoBtn\.hidden \|\| !parkedManual/);
-  assert.match(banner, /stageEl\.setAttribute\('data-tip'/);
+test('seq-gated live record: sessions/{CODE}.live is the room\'s truth, the director publishes, everyone adopts once (3.0)', () => {
+  // The shared model is the module, not ad-hoc doc fields.
+  assert.match(html, /<script src="cueola-live-state\.js\?v=/);
+  assert.match(app, /const liveServerClock = window\.CueolaLiveState\.createServerClock\(\);/);
+  assert.match(app, /const liveShared = window\.CueolaLiveState\.createLiveState\(\{ clientId: CLIENT_ID \}\);/);
+  assert.match(app, /const liveTakeGate = window\.CueolaLiveState\.createTakeGate\(\{ debounceMs: 300 \}\);/);
+  // Reader: the snapshot handler adopts the record (sequence-gated in the
+  // module) and moves the ON AIR cue from it; a doc with no record yet falls
+  // back to the legacy activeIdx integer, and never again once a record was
+  // seen. The grant adopts FIRST so the same snapshot re-routes followers.
+  const adopt = app.slice(app.indexOf('function adoptLiveRecordFromDoc(d, snap)'), app.indexOf('function applyRoomLiveCue('));
+  assert.match(adopt, /const rec = d\.live;\n  if \(!rec \|\| typeof rec !== 'object'\) return false;\n  _liveRecordSeen = true;/);
+  assert.match(adopt, /const result = liveShared\.adopt\(\{ \.\.\.rec, cueStartedAt: startedAt \}\);\n  if \(!result\.applied\) return false;\n  applyRoomLiveCue\(result\.state, 'live-record'\);/);
+  const snapshot = app.slice(app.indexOf('function setupFirestore()'), app.indexOf('function syncToFirestore()'));
+  assert.match(snapshot, /adoptControlGrant\(d\.controlGrant\);[^\n]*\n\s+if \(!adoptLiveRecordFromDoc\(d, snap\) && !_liveRecordSeen && Number\.isFinite\(d\.activeIdx\)\) \{/);
+  assert.match(snapshot, /remoteActiveIdx !== liveActiveCueIndex\(\)\) \{\n\s+try \{ adoptLiveActiveCue\(remoteActiveIdx, \{ select: !isShowCaller\(\) && !browsingSelf, reason:'firestore-active-cue' \}\); \}/);
+  assert.match(snapshot, /snap\.data\(\{ serverTimestamps: 'estimate' \}\)/);
+  assert.doesNotMatch(snapshot, /resolveFollowedIdx|adoptRtrtManual|followed-cue/);
+  // The room's cue lands through ONE path: followers' cursors follow unless
+  // they are browsing; the director keeps their own cursor.
+  const room = app.slice(app.indexOf('function applyRoomLiveCue('), app.indexOf('function takeCue('));
+  assert.match(room, /const follower = !isShowCaller\(\);\n  try \{ adoptLiveActiveCue\(idx, \{ select: follower && !browsingSelf, reason \}\); \}/);
+  // Director: one press = one take. Debounced + locked while in flight,
+  // optimistic locally, rolled back on a refused write. Every advance path
+  // (TAKE, Back, Cue here, start from top, restart) is a takeCue.
+  const take = app.slice(app.indexOf('function takeCue('), app.indexOf('function publishLiveTake('));
+  assert.match(take, /const gate = liveTakeGate\.tryAcquire\(Date\.now\(\)\);\n  if \(!gate\.ok\) return false;/);
+  assert.match(take, /take = liveShared\.take\(index, \{ nowMs: liveServerNow\(\), reason \}\);/);
+  assert.match(take, /if \(opts\.fire\) \{\n\s+updatePrompterOnAdvance\(beats\[fromIdx\] \|\| null, beat, \{ advance: true \}\);\n\s+if \(fireOutrangutanAutoForBeat\(beat\) === false\) throw new Error\('Automatic playback dispatch was rejected'\);\n\s+if \(!_rtrtCall\) maybeArmNextPlayout\(index\);/);
+  assert.match(take, /\} else \{\n\s+updatePrompterOnAdvance\(null, beat, \{ advance: index > fromIdx \}\);\n\s+maybeArmNextPlayout\(index\);/);
+  assert.match(take, /liveShared\.settle\(false\);\n\s+liveTakeGate\.release\(\);\n\s+markLiveCueFailure\(index, error, `\$\{reason\}-failed`\);/);
+  assert.match(take, /publishLiveTake\(take\.patch\)\.finally\(\(\) => \{ liveTakeGate\.release\(\); updateLiveGoControl\(\); \}\);/);
+  assert.match(app, /return takeCue\(ni, 'advance-cue', \{ fire:true, logVerb:'Take' \}\);/);
+  assert.match(app, /return takeCue\(ni, 'previous-cue', \{ fire:false, logVerb:'Back' \}\);/);
+  assert.match(app, /return takeCue\(i, 'jump-cue', \{ fire:false, logVerb:'Cue to' \}\);/);
+  assert.match(app, /takeCue\(firstIdx, 'start-from-top', \{ fire:false, logVerb:'Show start → from the top' \}\);/);
+  assert.match(app, /if \(liveRuntimeOn\(\)\) takeCue\(restartIdx, 'restart-show', \{ fire:false, logVerb:'Restart → from the top' \}\);/);
+  // The one write: seq via the server increment, cueStartedAt via the server
+  // clock, the legacy activeIdx mirror only once the doc has been read.
+  const publish = app.slice(app.indexOf('function publishLiveTake('), app.indexOf('function publishLivePositionOnEnter('));
+  assert.match(publish, /'live\.seq': typeof window\._increment === 'function' \? window\._increment\(1\) : patch\.seq,/);
+  assert.match(publish, /'live\.cueStartedAt': typeof window\._serverTimestamp === 'function' \? window\._serverTimestamp\(\) : patch\.cueStartedAt,/);
+  assert.match(publish, /'live\.directorId': CLIENT_ID,/);
+  assert.match(publish, /if \(_sessionActiveIdxAdopted\) update\.activeIdx = patch\.idx;/);
+  assert.match(publish, /liveShared\.settle\(false\);\n\s+const rec = liveShared\.get\(\);\n\s+if \(rec\.idx >= 0\) applyRoomLiveCue\(rec, 'take-rolled-back'\);/);
+  assert.match(html, /window\._increment=increment;/);
+  // syncLiveIdx is a stub: no follower ever writes the show position, and
+  // browsing as a follower writes nothing at all.
+  assert.match(app, /function syncLiveIdx\(\) \{\n  markResumeState\(\);\n\}/);
+  const browse = app.slice(app.indexOf('function lsBrowseAsFollower('), app.indexOf('function lsNext('));
+  assert.doesNotMatch(browse, /syncLiveIdx|_updateDoc|presence\./);
+  // Entering Live as the director seeds a record only when there is none.
+  const enterSeed = app.slice(app.indexOf('function publishLivePositionOnEnter('), app.indexOf('function blurLiveControl('));
+  assert.match(enterSeed, /if \(!isShowCaller\(\)\) return;\n  if \(_liveRecordSeen \|\| liveShared\.get\(\)\.seq > 0\) return;/);
+  // Per-session reset on join and on leave.
+  assert.equal((app.match(/resetLiveShared\(\);/g) || []).length, 2);
+  // The deck's take goes through the same gate as a confirmed Cue here.
+  assert.match(app, /if \(take\) return jumpToLsCue\(i, \{ confirmed:true \}\);/);
+  // Time on the ON AIR cue is server-clock arithmetic against the take stamp.
+  assert.match(app, /const cueElapsed = rec\.cueStartedAt && rec\.idx === activeIdx \? Math\.floor\(liveShared\.elapsedCueMs\(liveServerNow\(\)\) \/ 1000\) : 0;/);
+});
+
+test('one timer loop: every Live readout is wall-clock math from one worker-backed tick (3.0)', () => {
+  // The four old intervals are gone: show clock, wall clock, link ticker,
+  // playout countdown all ride liveTick.
+  for (const gone of ['timerInterval', 'wallClockInterval', '_liveLinkTicker', '_outCountdownTicker']) {
+    assert.doesNotMatch(app, new RegExp(`\\b${gone}\\b`), `${gone} must stay deleted`);
+  }
+  assert.match(app, /function startLiveTicker\(\) \{\n  if \(_liveTickerHandle\) return;/);
+  assert.match(app, /P\.createSteadyInterval\(liveTick, 100\)/);
+  assert.match(app, /function stopLiveTicker\(\) \{/);
+  const tick = app.slice(app.indexOf('function liveTick()'), app.indexOf('function updateWallClock()'));
+  // Self-stopping, error-contained; elapsed is derived from the anchor, never
+  // counted; the per-second work (overview, wall clock, pre-roll countdown,
+  // link hysteresis, playout countdowns) runs once a second.
+  assert.match(tick, /if \(!liveTickerWanted\(\)\) \{ stopLiveTicker\(\); return; \}/);
+  assert.match(tick, /elapsedSecs = Math\.floor\(elapsedMs \/ 1000\);/);
+  assert.match(tick, /if \(sec === _liveTickLastSec\) return;/);
+  assert.match(tick, /updateWallClock\(\);\n\s+updateLiveOverview\(\);\n\s+renderLiveCallCountdown\(\);\n\s+liveLinkTickBody\(\);\n\s+if \(playoutNow\(\) != null\) renderOutCountdowns\(\);/);
+  assert.match(tick, /\} else if \(_liveLinksActive\(\)\) \{\n\s+liveLinkTickBody\(\);/);
+  assert.match(tick, /containError\('Live tick', error\)/);
+  assert.doesNotMatch(tick, /setInterval|setTimeout/);
+  // Only changed text is written.
+  assert.match(app, /function setLiveText\(id, text\) \{\n  const el = document\.getElementById\(id\);\n  if \(!el\) return;\n  if \(_liveTickText\.get\(id\) === text\) return;/);
+  // The old entry points survive as aliases so nothing new can break.
+  assert.match(app, /function ensureLiveLinkTicker\(\) \{ startLiveTicker\(\); \}/);
+  assert.match(app, /function stopLiveLinkTicker\(\) \{\}/);
+  assert.match(app, /function startWallClock\(\) \{ startLiveTicker\(\); \}/);
+  assert.match(app, /function stopWallClock\(\) \{\}/);
+  // startTimer only sets the anchor and starts the loop; the playout ticker
+  // sync only asks for the loop.
+  const start = app.slice(app.indexOf('function startTimer(anchorMs)'), app.indexOf('// ── 3.0: the one Live timer loop'));
+  assert.match(start, /liveTimerStartMs = start;\n  startLiveTicker\(\);/);
+  assert.doesNotMatch(start, /setInterval/);
+  assert.match(app, /function syncOutCountdownTicker\(\) \{\n  renderOutCountdowns\(\);\n  if \(playoutNow\(\) != null\) startLiveTicker\(\);\n\}/);
 });
 
 test('every per-app window joins the show session the launcher hands it (?code=)', () => {
@@ -1066,8 +1250,8 @@ test('control bus survives clock skew and non-executing windows never steal the 
   // A ghost abort is a diagnosis now: the toast names the source, including
   // the same-machine deck path's 'deck' token.
   const abortFn = app.slice(app.indexOf('function abortPlayoutCall'), app.indexOf('function applyRemoteLiveCall'));
-  assert.match(abortFn, /aborted \(\$\{why\}\)/);
-  assert.match(abortFn, /source === 'deck' \? 'deck ABORT key'/);
+  assert.match(abortFn, /cancelled \(\$\{why\}\)/);
+  assert.match(abortFn, /source === 'deck' \? 'the deck Cancel key'/);
 });
 
 test('talent overlay CSS: theme tokens, stage-relative banners, honest read line, mirror, doctrine (9/4 slice F)', () => {
@@ -1296,14 +1480,16 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   const browse = app.slice(app.indexOf('function lsBrowseAsFollower('), app.indexOf('function lsNext('));
   assert.match(browse, /const from = liveSelectedCueIndex\(\);/);
   assert.match(browse, /setLiveSelectedCue\(target, \{ reason:'browse' \}\)/);
-  assert.match(browse, /renderLive\(\);\s+syncLiveIdx\(\);/);
+  assert.match(browse, /setLiveSelectedCue\(target, \{ reason:'browse' \}\);\s+renderLive\(\);\s+\}/);
+  assert.doesNotMatch(browse, /syncLiveIdx/);   // 3.0: a follower's browse writes nothing
   assert.match(browse, /Date\.now\(\) - _browseToastAt > 8000/);
-  assert.match(browse, /is calling the show\./);
-  assert.doesNotMatch(browse, /updatePrompterOnAdvance|fireOutrangutanAutoForBeat|maybeArmNextPlayout|logShow/);
+  assert.match(browse, /is the director\.`/);
+  assert.match(browse, /'Browsing\. Waiting for the director to connect\.'/);
+  assert.doesNotMatch(browse, /updatePrompterOnAdvance|fireOutrangutanAutoForBeat|maybeArmNextPlayout|logShow|takeCue/);
   assert.match(browse, /return true;\n\}/);
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
   assert.match(next, /if \(!liveCommandDispatchAllowed\(\{ notify:true \}\)\) return false;\n  if \(!isShowCaller\(\)\) return lsBrowseAsFollower\(1\);/);
-  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function resolveFollowedIdx('));
+  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function activePresenceEntries('));
   assert.match(prev, /if \(!isShowCaller\(\)\) return lsBrowseAsFollower\(-1\);/);
   // Advance intent: only updatePrompterOnAdvance sends { advance:true }; the
   // payload reaches ptSeekToRow from both remote-control receivers.
@@ -1688,20 +1874,28 @@ test('leaving Live is one sheet: consequences, optional toggles, Stay/Leave, out
   const classify = app.slice(app.indexOf('function classifyOutrangutanLiveExit()'), app.indexOf('function classifyLiveExitOutputs()'));
   assert.match(classify, /const remote = playoutIsRemote\(\);/);
   assert.match(classify, /const reporting = remote \? remotePlayoutFresh\(outrangutanState\) : Boolean\(window\.Outrangutan\);/);
-  // Stale talent mirrors are dropped when the same-device window is observed closed.
-  const ticker = app.slice(app.indexOf('function ensureLiveLinkTicker()'), app.indexOf('function stopLiveLinkTicker()'));
+  // Stale talent mirrors are dropped when the same-device window is observed
+  // closed (3.0: the per-second link body runs from the one Live loop).
+  const ticker = app.slice(app.indexOf('function liveLinkTickBody()'), app.indexOf('function ensureLiveLinkTicker()'));
   assert.match(ticker, /if \(ptPlaying && !_prompterHasRecentTalent\(\)\) _dropTalentTransportMirror\(\);/);
 });
 
 test('show clock survives leaving Live; Back on Live is the same sheet; refusals name the Live screen (9/4 slice A4)', () => {
-  // 'live-clock' cleanup clears the local tick only; re-entry restarts from
-  // the preserved anchor before the remote resume check.
+  // 'live-clock' cleanup never stops the shared clock (3.0: there is no local
+  // interval to clear; the one Live loop keeps deriving from the anchor).
+  // Re-entry seeds the room's live record, then the remote resume check,
+  // then the loop.
   const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
-  assert.match(enter, /registerCleanup\('live-clock', \(\) => \{\n    clearInterval\(timerInterval\); timerInterval = null;/);
+  assert.match(enter, /registerCleanup\('live-clock', \(\) => \{\n    updateLiveClockButton\(\);\n    notifyControlSurfaceState\(\);\n  \}\);/);
   assert.doesNotMatch(enter, /registerCleanup\('live-clock', \(\) => stopTimer\(false\)\)/);
-  const restartAt = enter.indexOf('if (liveClockRunning && !timerInterval && liveTimerStartMs) startTimer(liveTimerStartMs);');
+  assert.doesNotMatch(enter, /clearInterval|stopTimer\(/);
+  const seedAt = enter.indexOf('publishLivePositionOnEnter();');
   const resumeAt = enter.indexOf('resumeRemoteClockIfRunning();');
-  assert.ok(restartAt > 0 && resumeAt > restartAt, 'anchor restart runs before resumeRemoteClockIfRunning');
+  const loopAt = enter.indexOf('startLiveTicker();');
+  assert.ok(seedAt > 0 && resumeAt > seedAt && loopAt > resumeAt, 'seed the live record, then resumeRemoteClockIfRunning, then the loop');
+  assert.doesNotMatch(enter, /syncLiveIdx\(\)|startWallClock\(\)/);
+  const leave = app.slice(app.indexOf('function leaveLiveSessionScreen(liveState, context={})'), app.indexOf('function isFollowingSelf()'));
+  assert.doesNotMatch(leave, /stopWallClock|stopLiveTicker/);   // the loop stops itself when nothing wants it
   // The senderId echo guard stays (a previous session's clock must not resume).
   assert.match(app, /if \(_remoteClockState\.senderId === presenceId\) return;/);
   // Leaving the session clears the remote clock mirror and the grant.
@@ -1729,20 +1923,29 @@ test('pre-live grant from the Build screen: chip, banner, union roster, presence
   // badge's picker gate and opens the same picker.
   assert.match(app, /function showCallerBadgeModel\(\)/);
   assert.match(app, /canPick: Boolean\(adminSession && session\.code && !session\.isDemo && !session\.isExpert\),/);
-  assert.match(app, /model\.chipText = 'CALLER: You';/);
-  assert.match(app, /model\.chipText = `CALLER: \$\{model\.holderName\}`;/);
-  assert.match(app, /model\.chipText = `CALLER: \$\{model\.holderName\} \(not connected\)`;/);
+  // 3.0 vocabulary: the badge/chip say DIRECTOR (never CALLER / VIEWER), a
+  // room with no director yet reads FOLLOWING.
+  const model = app.slice(app.indexOf('function showCallerBadgeModel()'), app.indexOf('function renderShowCallerBadge('));
+  assert.match(model, /model\.text = 'DIRECTOR · You';/);
+  assert.match(model, /model\.chipText = 'DIRECTOR: You';/);
+  assert.match(model, /model\.chipText = `DIRECTOR: \$\{model\.holderName\}`;/);
+  assert.match(model, /model\.chipText = `DIRECTOR: \$\{model\.holderName\} \(not connected\)`;/);
+  assert.match(model, /model\.text = name \? `DIRECTOR · \$\{name\}` : 'FOLLOWING';/);
+  assert.match(model, /const name = liveDirectorName\(\) \|\| activePresenceEntries\(currentPresence\)/);
+  assert.doesNotMatch(model, /CALLER|VIEWER|followTarget/);
   assert.match(app, /const chip = document\.getElementById\('rdCallerBtn'\);/);
   assert.match(html, /<button id="rdCallerBtn" type="button" style="display:none" data-state="viewer" onclick="openControlGrantPicker\(\)"/);
   const toolbar = html.slice(html.indexOf('<div class="screen" id="rundown">'), html.indexOf('<div class="show-strip">'));
   assert.match(toolbar, /id="rdCallerBtn"/);
   assert.match(toolbar, /id="rdCallerBanner" role="status" hidden/);
-  assert.match(toolbar, /<strong>You are calling the show\.<\/strong> GO advances the rundown for everyone\./);
-  assert.match(toolbar, /class="rd-caller-banner-deck" hidden>Your Stream Deck works while you hold control\./);
+  assert.match(toolbar, /<strong>You are the director\.<\/strong> TAKE moves everyone to the next cue\./);
+  assert.match(toolbar, /class="rd-caller-banner-deck" hidden>Your Stream Deck works while you are director\./);
   assert.match(toolbar, /rd-caller-banner-cta" type="button" onclick="confirmGoLive\(\)"/);
   assert.doesNotMatch(toolbar, /rd-caller-banner-cta"[^>]*onclick="goLive\(\)"/);
-  const live = html.slice(html.indexOf('<div class="screen" id="liveshow">'), html.indexOf('<div class="follow-bar">'));
+  const live = html.slice(html.indexOf('<div class="screen" id="liveshow">'), html.indexOf('<div class="ls-overview" aria-label="Live show overview">'));
   assert.match(live, /id="lsCallerBanner" role="status" hidden/);
+  assert.match(live, /<strong>You are the director\.<\/strong> TAKE moves everyone to the next cue\./);
+  assert.doesNotMatch(live, /calling the show|GO advances/);
   // Re-render hooks: grant transition, admin UI, presence, enter and leave Live.
   assert.match(app, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);\n  notifyControlSurfaceState\(\);\n\}/);
   const adminUi = app.slice(app.indexOf('function updateAdminUI()'), app.indexOf('function openAdminLogin()'));
@@ -1774,8 +1977,9 @@ test('pre-live grant from the Build screen: chip, banner, union roster, presence
   assert.match(app, /grantHeldElsewhere: grantHeldByPresentOther\(\),/);
   assert.match(app, /return window\.CueolaLiveSession\.resolveGrantHeldElsewhere\(\{/);
   assert.match(liveController, /function resolveGrantHeldElsewhere\(input\)/);
-  // Tooltip at the locked-GO site names the Build chip.
-  assert.match(app, /from the CALLER chip on the Build screen or the caller badge here/);
+  // Tooltip at the locked-TAKE site names the DIRECTOR chip.
+  assert.match(app, /The instructor can change that from the DIRECTOR chip\./);
+  assert.match(app, /The instructor can make you director from the DIRECTOR chip\./);
 });
 
 test('Go Live preflight: grouped by machine, every failing row carries a fix verb (9/3 lane 14)', () => {
@@ -1921,17 +2125,24 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   assert.match(app, /const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && \(Date\.now\(\) - _flowOpTalentSeenAt\) < 20000;/);
   const stop = app.slice(app.indexOf('function stopPrompterOperatorRuntime()'), app.indexOf('function updatePrompterOnAdvance('));
   assert.match(stop, /_lastSeenTalentHeartbeatTs = 0;\n  _lastSeenTalentAppliedTs = 0;/);
-  // C5: intent keyed on direction at every caller; no bare { advance:true } literal.
+  // C5: intent keyed on direction at every caller; no bare { advance:true }
+  // literal outside takeCue's fire branch (3.0: every advance is a takeCue,
+  // so the direction rule lives in ONE place: fire = forward, else compare).
   const advance = app.slice(app.indexOf('function updatePrompterOnAdvance('), app.indexOf('function cuePrompterToLiveRow('));
   assert.match(advance, /function updatePrompterOnAdvance\(prevBeat, newBeat, opts=\{\}\)/);
+  const take = app.slice(app.indexOf('function takeCue('), app.indexOf('function publishLiveTake('));
+  assert.match(take, /const fromIdx = liveActiveCueIndex\(\);/);
+  assert.match(take, /updatePrompterOnAdvance\(beats\[fromIdx\] \|\| null, beat, \{ advance: true \}\);/);
+  assert.match(take, /updatePrompterOnAdvance\(null, beat, \{ advance: index > fromIdx \}\);/);
+  assert.equal((app.match(/updatePrompterOnAdvance\(/g) || []).length, 3, 'the definition and takeCue\'s two branches only');
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
-  assert.match(next, /updatePrompterOnAdvance\(prev, beats\[lsIdx\], \{ advance: lsIdx > activeIdx \}\);/);
-  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function resolveFollowedIdx('));
+  assert.match(next, /takeCue\(ni, 'advance-cue', \{ fire:true/);
+  const prev = app.slice(app.indexOf('function lsPrev('), app.indexOf('function activePresenceEntries('));
   assert.match(prev, /const fromIdx = liveActiveCueIndex\(\);\n  const ni = livePreviousPlayableCueIndex\(fromIdx\);/);
-  assert.match(prev, /updatePrompterOnAdvance\(null, beats\[lsIdx\], \{ advance: lsIdx > fromIdx \}\);/);
+  assert.match(prev, /takeCue\(ni, 'previous-cue', \{ fire:false/);
   const jump = app.slice(app.indexOf('function jumpToLsCue('), app.indexOf('function lsNext('));
-  assert.match(jump, /const fromIdx = liveActiveCueIndex\(\);[^\n]*\n  try \{ setOperatorLiveCue\(i, 'jump-cue'\); \}/);
-  assert.match(jump, /updatePrompterOnAdvance\(null, beats\[i\], \{ advance: i > fromIdx \}\);/);
+  assert.match(jump, /return takeCue\(i, 'jump-cue', \{ fire:false, logVerb:'Cue to' \}\);/);
+  assert.doesNotMatch(jump, /setOperatorLiveCue\(i, 'jump-cue'\)/);
   const cue = app.slice(app.indexOf('function cuePrompterToLiveRow('), app.indexOf('let _lastTalentPosPct'));
   assert.match(cue, /Previous, a backward 'Cue here' and every explicit cue/);
   // C5 talent belt: an advance below the noted live row is explicit. C7: the
@@ -1997,17 +2208,19 @@ test('9/4 fix round slice A2: C9/G5 row numbers, C14 Esc = Stay live, C15/C16/C1
   // C9 + G5: every crew-facing row number is the display number (segments
   // never count): GO label, refusal toast, Recover chip, show-log lines.
   assert.match(app, /data-tip="Recover row \$\{rowDisplayNumber\(index\)\}" aria-label="Recover failed row \$\{rowDisplayNumber\(index\)\}"/);
-  assert.match(app, /: failed \? \`Recover failed row \$\{rowDisplayNumber\(nextIndex\)\} before GO\`/);
-  assert.match(app, /toast\(\`Recover failed row \$\{rowDisplayNumber\(ni\)\} before GO\.\`\);/);
+  assert.match(app, /: failed \? \`Recover failed row \$\{rowDisplayNumber\(nextIndex\)\} before TAKE\`/);
+  assert.match(app, /toast\(\`Recover failed row \$\{rowDisplayNumber\(ni\)\} before TAKE\.\`\);/);
   assert.match(app, /'Went live · row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
-  assert.match(app, /'Advance → row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
-  assert.match(app, /'Back → row ' \+ rowDisplayNumber\(lsIdx\) \+ rowLogLabel/);
-  assert.match(app, /Playback call READY · row \$\{rowDisplayNumber\(rowIdx\)\}/);
+  // 3.0: every take logs through takeCue with its verb (Take / Back / Cue to /
+  // Show start / Restart), and the playback call logs its pre-roll.
+  assert.match(app, /logShow\('cue', `\$\{opts\.logVerb \|\| 'Take'\} → row \$\{rowDisplayNumber\(index\)\}\$\{rowLogLabel\(beat\)\}`\);/);
+  assert.match(app, /Pre-roll \$\{Math\.round\(preRollMs \/ 1000\)\}s · row \$\{rowDisplayNumber\(rowIdx\)\}/);
   assert.match(app, /TAKE · row \$\{rowDisplayNumber\(call\.rowIdx\)\} \(\$\{source\}\)/);
   assert.match(app, /Playback call ABORTED · row \$\{rowDisplayNumber\(call\.rowIdx\)\}/);
   assert.doesNotMatch(app, /Recover (failed )?row \$\{(ni|index|nextIndex) \+ 1\}/);
-  assert.doesNotMatch(app, /(Went live|Advance →|Back →) · row ' \+ \(lsIdx \+ 1\)/);
-  assert.doesNotMatch(app, /(READY|TAKE|ABORTED) · row \$\{(call\.)?rowIdx \+ 1\}/);
+  assert.doesNotMatch(app, /(Went live|Advance →|Back →|Take →) · row ' \+ \(lsIdx \+ 1\)/);
+  assert.doesNotMatch(app, /(READY|TAKE|ABORTED|Pre-roll[^·]*) · row \$\{(call\.)?rowIdx \+ 1\}/);
+  assert.doesNotMatch(app, /Playback call READY/);
   // C14: Escape on the leave-live sheet is Stay live, never a bare close;
   // the special case sits AFTER the data-esc-hold gate and the sheet has no
   // hold attribute, so it always runs.
@@ -2053,7 +2266,7 @@ test('9/4 fix round slice A2: C9/G5 row numbers, C14 Esc = Stay live, C15/C16/C1
   assert.match(classify, /try \{ mine = isShowCaller\(\); \} catch \{ mine = true; \}/);
   assert.match(classify, /needsDisposition:active && reachable && mine,\n    notMine:!mine,\n    controlledBy,/);
   assert.match(app, /if \(before\.notMine\) return \{ ok:true, acknowledged:true, before, paused:false, skipped:'not-caller' \};\n  if \(!before\.active\)/);
-  assert.match(app, /text:\`\$\{prompter\.active \? 'keeps running' : 'stays where it is'\}\. \$\{prompter\.controlledBy \|\| 'The show caller'\} controls it\.\`, state:'on'/);
+  assert.match(app, /text:\`\$\{prompter\.active \? 'keeps running' : 'stays where it is'\}\. \$\{prompter\.controlledBy \|\| 'The director'\} controls it\.\`, state:'on'/);
   // G4: the remote Playout first GO row reads the Air's live.armed, fixes via
   // armPlayback addressed to the Air, and settles on the next packet.
   const asyncRun = app.slice(app.indexOf('async function runPreflightAsync('), app.indexOf('function obsSystemStatus()'));

@@ -125,6 +125,7 @@ const SHELL_ASSETS = [
   'cueola-identity.js?v=e02e00ae43',
   'cueola-admin-auth.js?v=82979270bc',
   'cueola-live-session.js?v=c28b5f25d0',
+  'cueola-live-state.js?v=dev',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=4e90f2af78',
