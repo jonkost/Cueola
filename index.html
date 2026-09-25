@@ -277,7 +277,89 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .rd-table th:last-child,.rd-table td:last-child{border-right:none;box-shadow:none}
 .col-drag{width:20px}.col-num{width:32px}.col-info{width:22%}
 .col-time{width:92px}.col-cue{width:12%}.col-script-c{width:14%}.col-acts{width:58px}
-.rd-scroll{width:100%}
+.rd-scroll{width:100%;overflow-x:hidden}
+
+/* ── 3.0 cue list: one row per cue (number · type · name · call · duration),
+   editor opens in place; every target ≥44px; nothing needs a hover. ── */
+.cue-list{display:flex;flex-direction:column;padding:8px 12px 96px;width:100%;max-width:1180px;margin:0 auto}
+.cue-list .cue-row{border-radius:10px;background:color-mix(in srgb,var(--text) 2.5%,transparent);margin-bottom:4px;cursor:default;box-shadow:inset 3px 0 0 var(--cue-clr,transparent)}
+.cue-list .cue-row:nth-child(even){background:color-mix(in srgb,var(--text) 4%,transparent)}
+.cue-list .cue-row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.cue-list .cue-row.is-open{background:color-mix(in srgb,var(--cue-clr,var(--accent)) 7%,var(--s1));box-shadow:inset 3px 0 0 var(--cue-clr,var(--accent)),0 0 0 1px color-mix(in srgb,var(--cue-clr,var(--accent)) 35%,transparent)}
+.cue-list .cue-row[class*="row-tint-"]{background:color-mix(in srgb,var(--row-tint) 16%,var(--bg))}
+.cue-list .cue-row.segment-row{background:transparent;box-shadow:none;margin-top:6px}
+.cue-list .cue-row.preflight-hit{box-shadow:inset 3px 0 0 var(--cue-clr,var(--accent)),0 0 0 2px var(--accent)}
+.cue-row-main{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 12px;min-height:52px;cursor:pointer;border-radius:10px}
+.edit-mode-row .cue-row-main{grid-template-columns:auto auto auto minmax(0,1fr) auto auto}
+.cue-row-main:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.cue-grip{color:var(--text3);cursor:grab;font-size:14px;padding:0 2px}
+.cue-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text3);min-width:26px;text-align:right}
+.cue-type-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cue-clr);background:color-mix(in srgb,var(--cue-clr) 14%,transparent);white-space:nowrap;min-width:88px}
+.cue-type-badge .sf-symbol{font-size:12px}
+.lv-cur-name .cue-type-badge,.lv-next-name .cue-type-badge,.live-name .cue-type-badge{min-width:0;margin-right:8px;vertical-align:middle}
+.cue-main-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cue-name{font-family:var(--sans);font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cue-line{font-size:13px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.cue-line-empty{color:var(--text3);font-style:italic}
+.cue-extra{font-size:12px;display:inline-flex}
+.cue-time{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-family:var(--mono)}
+.cue-dur{font-size:14px;font-weight:700;color:var(--text)}
+.cue-start{font-size:11px;color:var(--text3)}
+.cue-chevron{color:var(--text3);font-size:12px;width:16px;text-align:center}
+.seg-edit-btn{appearance:none;border:none;background:transparent;color:var(--text3);min-width:40px;min-height:40px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin:-6px -6px -6px 0}
+.seg-edit-btn:hover,.seg-edit-btn:focus-visible{background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text)}
+.cue-list .seg-row-inner{border-radius:10px;min-height:48px;cursor:pointer;border-top:0;border-bottom:0}
+.cue-list .seg-row-inner:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.cue-list .add-row-tr{display:flex;justify-content:center;padding:8px 0 12px}
+.cue-list .seg-add-tr{padding:0 0 10px}
+.cue-list .add-row-btn-el{min-height:44px}
+.cue-editor{padding:6px 14px 16px 16px;display:flex;flex-direction:column;gap:14px;border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent);cursor:default}
+.cue-ed-typerow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cue-type-pick{appearance:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:8px;border:1.5px solid transparent;background:var(--btn-fill);color:var(--text2);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer}
+.cue-type-pick.sel{border-color:var(--cue-clr);color:var(--cue-clr);background:color-mix(in srgb,var(--cue-clr) 14%,transparent)}
+.cue-type-pick .sf-symbol{font-size:13px}
+.cue-ed-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
+.cue-ed-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.cue-ed-fields .field:has(.cue-script-in){grid-column:1/-1}
+.field-lbl-row{display:flex;align-items:center;gap:4px;min-height:22px}
+.field-lbl-row .field-lbl{margin:0}
+.cue-dur-in{display:grid;grid-template-columns:76px auto 76px;align-items:center;gap:4px}
+.cue-dur-in .field-in{text-align:center;font-family:var(--mono);padding:10px 8px}
+.cue-dur-colon{font-family:var(--mono);color:var(--text3);text-align:center}
+.cue-num-in{max-width:160px}
+.cue-choice .chip{min-height:40px}
+.cue-ed-more{border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:10px;padding:0 12px}
+.cue-ed-more>summary{cursor:pointer;padding:10px 0;font-size:13px;font-weight:600;color:var(--text2);list-style:none;display:flex;align-items:center;gap:6px;min-height:44px}
+.cue-ed-more>summary::before{content:'▸';font-size:11px;color:var(--text3)}
+.cue-ed-more[open]>summary::before{content:'▾'}
+.cue-ed-more>summary::-webkit-details-marker{display:none}
+.cue-ed-more>*:not(summary){margin-bottom:12px}
+.cue-extras{display:flex;flex-direction:column;gap:8px}
+.cue-extra-block{border-radius:10px;padding:10px 12px;background:color-mix(in srgb,var(--cue-clr) 8%,var(--s1));box-shadow:inset 3px 0 0 var(--cue-clr);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.cue-extra-head{grid-column:1/-1;display:flex;align-items:center;gap:8px}
+.cue-extra-add{border-color:color-mix(in srgb,var(--cue-clr) 40%,transparent);color:var(--cue-clr);min-height:40px}
+.cue-ed-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent)}
+.cue-ed-actions .row-ea-btn,.cue-extra-head .row-ea-btn{min-height:40px;padding:6px 12px;font-size:12px;font-family:var(--sans);display:inline-flex;align-items:center;gap:5px}
+.cue-upload{display:inline-flex;margin-top:6px;cursor:pointer}
+.cue-notes-in{resize:vertical;min-height:44px}
+.cue-script-in{resize:vertical;line-height:1.6;min-height:120px}
+.cue-type-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:14px}
+.cue-type-card{min-height:88px}
+.cue-type-card:focus-visible{outline:2px solid var(--accent)}
+.ar-panel .cue-name-suggest{display:flex;flex-wrap:wrap;margin:-4px 0 12px}
+.ar-panel .field{margin-bottom:12px}
+.live-call-type{display:inline-flex;font-size:12px;margin-right:6px}
+.live-cue-cell{display:flex;flex-direction:column;gap:3px}
+.live-cue-go{display:flex;align-items:baseline;font-size:13px;color:var(--text)}
+.live-script-open{cursor:pointer;color:var(--cue-script);font-size:12px}
+@media (max-width:720px){
+  .cue-row-main{gap:8px;padding:8px 10px}
+  .cue-type-badge span{display:none}
+  .cue-type-badge{min-width:0;padding:5px 7px}
+  .cue-row-main .cue-chevron{display:none}
+  .cue-ed-grid{grid-template-columns:1fr}
+  .cue-name,.cue-line{white-space:normal}
+}
 .rd-table{min-width:1280px}
 .rd-head th{background:color-mix(in srgb,var(--s2) 96%,black);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);font-size:11px;font-family:var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--text2);padding:11px 10px;white-space:nowrap;font-weight:700;position:sticky;top:0;z-index:10;border-bottom: 2px solid transparent;box-shadow:inset 0 -1px rgba(255,255,255,.025)}
 /* Pinned left columns: one solid, uniform background across all three so there's
@@ -481,7 +563,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Live rundown grid */
 .live-grid-wrap{overflow:auto;min-height:0;border: 1px solid transparent;border-radius:8px;background:rgba(255,255,255,.012)}
-.live-grid{width:100%;min-width:860px;border-collapse:separate;border-spacing:0;table-layout:fixed}   /* same sticky-column stroke fix as .rd-table */
+.live-grid{width:100%;min-width:0;border-collapse:separate;border-spacing:0;table-layout:fixed}   /* same sticky-column stroke fix as .rd-table */
 .live-grid th,.live-grid td{border-bottom: 1px solid transparent;vertical-align:middle}
 .live-grid th{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--s2) 96%,black);padding:7px 8px;font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);text-align:left;font-weight:800}
 .live-grid td{padding:8px;background:color-mix(in srgb,var(--bg) 70%,transparent)}
@@ -5451,23 +5533,7 @@ input.pt-range::-moz-range-thumb,
   <div class="prog"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
   <div class="rd-body">
     <div class="rd-scroll">
-      <table class="rd-table" id="rdTable">
-        <thead>
-          <tr class="rd-head">
-            <th class="col-drag"></th>
-            <th class="col-num">#</th>
-            <th class="col-info">Name</th>
-            <th class="col-time">Start / Dur</th>
-            <th class="col-cue u-c-video"><span class="sf-symbol" data-symbol="department.video" aria-hidden="true"></span> Video</th>
-            <th class="col-cue u-c-green"><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span> Audio</th>
-            <th class="col-cue u-c-red"><span class="sf-symbol" data-symbol="department.playback" aria-hidden="true"></span> Playback</th>
-            <th class="col-cue u-c-yellow"><span class="sf-symbol" data-symbol="department.graphics" aria-hidden="true"></span> GFX</th>
-            <th class="col-cue u-c-purple"><span class="sf-symbol" data-symbol="department.lighting" aria-hidden="true"></span> Lighting</th>
-            <th class="col-script-c u-c-cyan"><span class="sf-symbol" data-symbol="department.script" aria-hidden="true"></span> Script</th>
-          </tr>
-        </thead>
-        <tbody id="rdBody"></tbody>
-      </table>
+      <div class="cue-list" id="rdBody" role="list" aria-label="Rundown"></div>
     </div>
     <div class="pn-panel" id="pnPanel" role="complementary" aria-label="Production Notes"></div>
   </div>
@@ -5888,108 +5954,31 @@ input.pt-range::-moz-range-thumb,
 <!-- ══════════════════════════════════════════
      ADD ROW OVERLAY
 ══════════════════════════════════════════ -->
-<div class="overlay" id="addRowOv" onclick="closeAddRowOv(event)">
+<div class="overlay" id="addRowOv" onclick="closeAddCue(event)">
   <div class="ar-wrap" id="arWrap">
-    <div class="ar-context" id="arContext"></div>
-    <div class="ar-panel">
+    <div class="ar-panel" role="dialog" aria-labelledby="addCueHeading">
       <div class="sheet-handle"></div>
-
-      <!-- Step 1: Cue Name + Style -->
-      <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">New Row: Step 1 of 2</div>
-        <div class="ar-heading">Add a row</div>
-        <div class="field">
-          <label class="field-lbl">Cue Name / Label</label>
-          <input class="field-in" id="ar-name-input" type="text" placeholder='e.g. "Show Open"' maxlength="80" autocomplete="off" oninput="updateArNextEnabled()">
-        </div>
-        <div class="chip-grid" style="margin-top:-6px">
-          <button class="chip suggested-label" data-tip="The first full production moment after countdown: music, graphics, camera, and talent come together." onclick="arPickName('Show Open')">Show Open</button>
-          <button class="chip suggested-label" data-tip="A quick opening segment before the main show open, often used for a hook, tease, or dramatic start." onclick="arPickName('Cold Open')">Cold Open</button>
-          <button class="chip suggested-label" data-tip="Package: a pre-produced video story or edited segment that rolls from playback." onclick="arPickName('PKG')">PKG</button>
-          <button class="chip suggested-label" data-tip="A handoff from one host, guest, camera, segment, or location to another." onclick="arPickName('Toss')">Toss</button>
-          <button class="chip suggested-label" data-tip="A live camera or remote segment, usually with timing and IFB-style crew cues." onclick="arPickName('Live Shot')">Live Shot</button>
-          <button class="chip suggested-label" data-tip="A short transition into or out of a break, often with music, graphics, or a quick tease." onclick="arPickName('Bumper')">Bumper</button>
-          <button class="chip suggested-label" data-tip="The closing row for final thanks, credits, music, graphics, and fade out." onclick="arPickName('Signoff')">Signoff</button>
-          <button class="chip suggested-label" data-tip="A planned pause in the show flow, such as commercial, reset, station break, or classroom pause." onclick="arPickName('Break')">Break</button>
-          <button class="chip suggested-label" data-tip="A general setup or lead-in row before a segment, guest, topic, or scripted moment." onclick="arPickName('Intro')">Intro</button>
-          <button class="chip suggested-label" data-tip="An unscripted conversation segment where talent can speak naturally from prompts or topic notes." onclick="arPickName('Open Conversation')">Open Conversation</button>
-        </div>
-        <div>
-          <div class="field-lbl u-mb8">Style</div>
-          <div class="opt-grid-3">
-            <button type="button" class="opt-card oc-accent" id="opt-timed" onclick="arSelectStyle('timed')">
-              <div class="opt-icon"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></div>
-              <div class="opt-name">Timed</div>
-              <div class="opt-desc">Fixed duration. Clock counts down.</div>
-            </button>
-            <button type="button" class="opt-card oc-neutral" id="opt-flex" onclick="arSelectStyle('flex')">
-              <div class="opt-icon"><span class="sf-symbol" data-symbol="state.flex" aria-hidden="true"></span></div>
-              <div class="opt-name">Flex</div>
-              <div class="opt-desc">No fixed time. Expand as needed.</div>
-            </button>
-            <button type="button" class="opt-card oc-yellow" id="opt-segment" onclick="arSelectStyle('segment')">
-              <div class="opt-icon"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span></div>
-              <div class="opt-name">Segment</div>
-              <div class="opt-desc">Section divider. Collapses its cues in build.</div>
-            </button>
-          </div>
-        </div>
-        <div id="ar-dur-wrap" style="display:none">
-          <label class="field-lbl">Duration</label>
-          <div class="u-dur-grid">
-            <input class="field-in u-time-in" id="ar-min" type="number" min="0" max="180" placeholder="0">
-            <div class="u-time-in u-muted">:</div>
-            <input class="field-in u-time-in" id="ar-sec" type="number" min="0" max="59" placeholder="00">
-          </div>
-          <div class="u-minsec-row"><span>MIN</span><span>SEC</span></div>
-        </div>
-        <div class="field">
-          <label class="field-lbl">Notes <span class="u-muted">(optional)</span></label>
-          <input class="field-in" id="ar-notes-input" type="text" placeholder="Additional info for the crew" maxlength="120" autocomplete="off">
-        </div>
-        <div class="ar-nav">
-          <button class="ar-back" onclick="closeAddRowOv()">Cancel</button>
-          <button class="ar-next" id="ar-next-1" onclick="arGoStep2()" disabled><span>Choose Cue Type</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
+      <div class="ar-heading" id="addCueHeading">Add a cue</div>
+      <div class="field-lbl-row"><span class="field-lbl">Type</span><button type="button" class="info-btn" aria-label="About cue types" onclick="toggleInfoPop(event,'cue-type')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+      <div class="opt-grid-3 cue-type-grid" id="addCueTypes" role="group" aria-label="Cue type"></div>
+      <div class="field">
+        <label class="field-lbl" id="ac-name-lbl" for="ac-name">Name</label>
+        <input class="field-in" id="ac-name" type="text" placeholder='e.g. "Show open"' maxlength="80" autocomplete="off" oninput="addCueValidate()" onkeydown="addCueKey(event)">
+      </div>
+      <div class="chip-grid cue-name-suggest" id="addCueSuggest"></div>
+      <div class="field" id="ac-dur-wrap">
+        <label class="field-lbl" for="ac-min">Duration <span class="u-muted">(optional)</span></label>
+        <div class="cue-dur-in">
+          <input class="field-in" id="ac-min" type="number" inputmode="numeric" min="0" max="180" placeholder="0" aria-label="Minutes" onkeydown="addCueKey(event)">
+          <span class="cue-dur-colon" aria-hidden="true">:</span>
+          <input class="field-in" id="ac-sec" type="number" inputmode="numeric" min="0" max="59" placeholder="00" aria-label="Seconds" onkeydown="addCueKey(event)">
         </div>
       </div>
-
-      <!-- Step 2: Cue type selection -->
-      <div class="ar-step" id="ar-step-2">
-        <div class="ar-step-label">Step 2 of 2 · Cue Type</div>
-        <div class="ar-heading">What type of cue is this?</div>
-        <div class="opt-grid-3" id="arTypeGrid"></div>
-        <div class="ar-nav">
-          <button class="ar-back" onclick="arGoStep1()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Back</span></button>
-          <button class="ar-next" id="ar-next-2" onclick="arCreateRowAndOpenCueBuilder()" disabled><span>Open Cue Builder</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
-        </div>
+      <div class="ar-nav">
+        <button class="ar-back" type="button" onclick="closeAddCue()">Cancel</button>
+        <button class="ar-next" type="button" id="ac-add" onclick="addCueSubmit()" disabled><span>Add cue</span></button>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     EDIT OVERLAY
-══════════════════════════════════════════ -->
-<div class="overlay" id="editOv" onclick="closeEdit(event)">
-  <div class="sheet edit-sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title" id="editTitle">Edit Cue</div>
-    <div class="edit-fields" id="editFields"></div>
-    <button class="save-btn" onclick="saveEdit()"><span class="sf-symbol" data-symbol="action.confirm" aria-hidden="true"></span><span>Save Changes</span></button>
-    <button class="del-btn" onclick="deleteCue()">Remove this row</button>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     CUE CONFIG MODAL
-══════════════════════════════════════════ -->
-<div class="modal-wrap" id="cueConfigModal" data-esc-hold>
-  <div class="modal u-modal-scroll" style="max-width:520px">
-    <div class="modal-title" id="cueConfigTitle">Configure Cue</div>
-    <div id="cueConfigFields"></div>
-    <button class="btn-primary" onclick="saveCueConfig()">Save</button>
-    <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Remove this cue</button>
-    <button class="btn-secondary" onclick="hideModal('cueConfigModal')">Cancel</button>
   </div>
 </div>
 
@@ -7519,6 +7508,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-identity.js?v=e02e00ae43"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
+<script src="cueola-cue-model.js?v=dev"></script>
 <script src="cueola-live-state.js?v=dev"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
