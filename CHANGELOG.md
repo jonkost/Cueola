@@ -1,5 +1,66 @@
 # Changelog
 
+## v3.0.0: One TAKE, one live record, fixes and a lighter app (built 2026-09-25)
+
+Cueola 3.0 keeps the rundown you know (rows with the department cells
+across) and fixes what happened underneath it: Live has one verb, the room
+shares one live position, the timer is one loop, and the show stops
+skipping beats.
+
+### Live: one verb
+- The Ready / Roll / Go buttons are one button: TAKE. The next cue is always
+  on standby, so there is nothing to arm. Back goes one cue back.
+- Everyone in the show sees the same ON AIR and STANDBY. Only the director's
+  TAKE moves the show; everyone else follows. A follower who scrolls away
+  gets a Back to on air button.
+- The room shares one live record with a sequence number, so a late or
+  doubled write can never make the show jump twice or go backwards. Cue and
+  show time are computed from the server clock, so every screen shows the
+  same number.
+- One timer loop drives every readout. Opening and closing Live never
+  starts a second clock, and TAKE is refused while the last TAKE is still
+  being written (no double takes on a bounce).
+- A linked playback clip rolls on TAKE. Pre-roll is a number of seconds on
+  the cue (a countdown everyone sees) instead of a mode or a button.
+- The Live status rail says who the director is and whether this window's
+  keys and Stream Deck work, in words.
+
+### Fixed
+- Safety plan: PPE items can be added and saved again, and the export tells
+  you exactly what is missing (and takes you there) instead of silently
+  refusing.
+- Planner: the paperwork syncs live between computers again, field by
+  field, and the save chip says Saving… / Saved / Not saved honestly.
+- Controllers: a Stream Deck or keyboard press that cannot act says why
+  (in the rail and in a toast) instead of doing nothing; a mouse TAKE no
+  longer steals the keyboard.
+- Call sheet and schedule time fields start blank instead of inheriting a
+  time you did not enter.
+- Positions typed into a role row save even when the row was added from a
+  note.
+
+### Setup
+- Dashboard: New show is one screen and one button. The show code and
+  paperwork choices sit behind More options.
+- Rundown: everyone but the director gets Watch live, which opens Live at
+  once. The director keeps Go Live and the pre-show checks.
+
+### Smaller
+- 217 CSS rules and 14 functions nobody used are gone; duration math has
+  one home.
+- Every control is at least 44 px tall on a touch screen.
+- New module cueola-live-state.js (the shared live record, the server clock
+  and the TAKE gate), covered by node tests; a browser smoke test runs the
+  demo show through Live.
+
+### Not in this release
+- The one-type-per-cue rundown list from the 3.0 brief (§2.2–2.4) was built,
+  went live for an hour, and was pulled: Jon wants rows with the department
+  cells across. The rundown, cue editor and add-row wizard are 2.2.1's.
+- The word list (docs/v3-glossary.md) and the copy rewrite table
+  (docs/v3-copy-audit.md) are drafted, not applied. Lesson text is
+  unchanged because the narration audio is generated from it.
+
 ## Unreleased: Stage Plot layers, signal flow, and the System Plot Plan workflow (built 2026-08-13)
 
 The Stage Plot grows into the tool for the three System Plot Plan checkpoints

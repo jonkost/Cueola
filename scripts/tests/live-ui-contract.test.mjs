@@ -994,7 +994,7 @@ test('seq-gated live record: sessions/{CODE}.live is the room\'s truth, the dire
   assert.match(html, /window\._increment=increment;/);
   // syncLiveIdx is a stub: no follower ever writes the show position, and
   // browsing as a follower writes nothing at all.
-  assert.match(app, /function syncLiveIdx\(\) \{\n  markResumeState\(\);\n\}/);
+  assert.doesNotMatch(app, /function syncLiveIdx\(/);   // the old follower writer is gone, not stubbed
   const browse = app.slice(app.indexOf('function lsBrowseAsFollower('), app.indexOf('function lsNext('));
   assert.doesNotMatch(browse, /syncLiveIdx|_updateDoc|presence\./);
   // Entering Live as the director seeds a record only when there is none.
@@ -1032,9 +1032,7 @@ test('one timer loop: every Live readout is wall-clock math from one worker-back
   assert.match(app, /function setLiveText\(id, text\) \{\n  const el = document\.getElementById\(id\);\n  if \(!el\) return;\n  if \(_liveTickText\.get\(id\) === text\) return;/);
   // The old entry points survive as aliases so nothing new can break.
   assert.match(app, /function ensureLiveLinkTicker\(\) \{ startLiveTicker\(\); \}/);
-  assert.match(app, /function stopLiveLinkTicker\(\) \{\}/);
-  assert.match(app, /function startWallClock\(\) \{ startLiveTicker\(\); \}/);
-  assert.match(app, /function stopWallClock\(\) \{\}/);
+  assert.doesNotMatch(app, /function (stopLiveLinkTicker|startWallClock|stopWallClock)\(/);   // no second loop, no aliases
   // startTimer only sets the anchor and starts the loop; the playout ticker
   // sync only asks for the loop.
   const start = app.slice(app.indexOf('function startTimer(anchorMs)'), app.indexOf('// ── 3.0: the one Live timer loop'));
@@ -1885,7 +1883,7 @@ test('show clock survives leaving Live; Back on Live is the same sheet; refusals
   // interval to clear; the one Live loop keeps deriving from the anchor).
   // Re-entry seeds the room's live record, then the remote resume check,
   // then the loop.
-  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function isFollowingSelf('));
   assert.match(enter, /registerCleanup\('live-clock', \(\) => \{\n    updateLiveClockButton\(\);\n    notifyControlSurfaceState\(\);\n  \}\);/);
   assert.doesNotMatch(enter, /registerCleanup\('live-clock', \(\) => stopTimer\(false\)\)/);
   assert.doesNotMatch(enter, /clearInterval|stopTimer\(/);
@@ -1952,7 +1950,7 @@ test('pre-live grant from the Build screen: chip, banner, union roster, presence
   assert.match(adminUi, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);
   const presence = app.slice(app.indexOf('function renderPresence(map)'), app.indexOf('const active = getActivePresencePeople();'));
   assert.match(presence, /refreshCallerPresenceState\(\);/);
-  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function showRundown()'));
+  const enter = app.slice(app.indexOf('function enterLiveSessionScreen(liveState)'), app.indexOf('function isFollowingSelf('));
   assert.match(enter, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);/);
   const leave = app.slice(app.indexOf('function leaveLiveSessionScreen(liveState, context={})'), app.indexOf('function isFollowingSelf()'));
   assert.match(leave, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);

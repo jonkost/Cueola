@@ -125,7 +125,7 @@ const SHELL_ASSETS = [
   'cueola-identity.js?v=e02e00ae43',
   'cueola-admin-auth.js?v=82979270bc',
   'cueola-live-session.js?v=c28b5f25d0',
-  'cueola-live-state.js?v=dev',
+  'cueola-live-state.js?v=6314983dd7',
   'cueola-link-state.js?v=effa089bdc',
   'cueola-keymap.js?v=ffb4fb0e1a',
   'cueola-prompter-session.js?v=4e90f2af78',
@@ -137,7 +137,7 @@ const SHELL_ASSETS = [
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=1990c1e508',
+  'cueola-app.js?v=ef241a5a25',
   'outrangutan/outrangutan.css?v=41a940bd2e',
   'outrangutan/outrangutan.js?v=6e2583a2cd',
   'cueola-streamdeck-device.js?v=48990ed663',
@@ -269,7 +269,11 @@ const versionSignature = SHELL_ASSETS
 // output window survives an Outrangutan reload, build identity on the wire
 // with preflight rows, bus claim per window, presence on a worker timer):
 // every module changed; every window reloads.
-const WORKER_SCHEMA = '50';
+// 50->51: Cueola 3.0. One TAKE, one live record (sessions/{CODE}.live), one
+// timer loop, the one-screen New show dialog, dead CSS and dead code removed:
+// index.html, dashboard.html, cueola-app.js and the new cueola-live-state.js
+// all changed; every window reloads.
+const WORKER_SCHEMA = '51';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

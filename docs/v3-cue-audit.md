@@ -91,3 +91,7 @@ Runs once per beat on read (`migrateBeat`), and the rewritten shape is written b
 - Should extra department calls on one cue stay (a director's "take 2, mic 1 up" moment), or is one call per cue enough for class?
 - Do clips need pre-roll at all (question 3)? If not, `preRoll` stays 0 and hidden.
 - Should the old TRT (m:ss) and SMPTE fields survive as playback expand fields, or is the cue duration enough?
+
+## 7. Outcome
+
+Sections 4 and 5 were built (a pure `cueola-cue-model.js`, a list rundown with an in-place editor, an add-cue sheet, migration) and released as 3.0.0 for about an hour on 2026-09-25. Jon rejected the list on sight: the rundown must stay rows with the department cells across. The work is reverted from `main`; it survives in the branch history (commit a79a2cc) should any part of it (the per-type field set, the call line, the migration) be wanted inside the row layout later.
