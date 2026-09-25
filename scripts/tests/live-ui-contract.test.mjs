@@ -1099,7 +1099,9 @@ test('talent overlay CSS: theme tokens, stage-relative banners, honest read line
   assert.match(rule('#pt-hold-chip,#pt-next-chip'), /background:var\(--pt-ovl-bg\)/);
   assert.match(css, /\.pt-chip-label\{/);
   assert.match(css, /\.pt-chip-row\{/);
-  assert.match(css, /#pt-hold-chip\[hidden\],#pt-next-chip\[hidden\]\{display:none\}/);
+  // The 2026-09-15 prompter update folded the rowinfo-off variants into the
+  // same rule; the contract is that a hidden chip renders nothing.
+  assert.match(css, /#pt-hold-chip\[hidden\],#pt-next-chip\[hidden\][^{]*\{display:none\}/);
   // Wrap stays red with white copy; expired copy is pinned white; the
   // QUESTION tag stays yellow on dark.
   assert.match(rule('.pt-clock-overlay.wrap'), /#b31322[^}]*color:#fff/);
@@ -1172,10 +1174,13 @@ test('talent overlay CSS: theme tokens, stage-relative banners, honest read line
   // above the talent panel, and yield to a WRAP banner.
   const narrow = css.match(/@media\(max-width:1000px\)\{\n#pt-hold-chip,#pt-next-chip\{[^}]*\}[\s\S]*?\n\}/);
   assert.ok(narrow, 'narrow-width chip media block');
-  assert.match(narrow[0], /#pt-hold-chip,#pt-next-chip\{top:auto;bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\);max-width:calc\(50vw - 40px\);flex-direction:row;align-items:baseline;gap:8px;padding:6px 10px\}/);
+  // The base rule already lays the chips out as row pills (2026-09-15 prompter
+  // update); the narrow block only re-anchors them and shrinks the padding.
+  assert.match(narrow[0], /#pt-hold-chip,#pt-next-chip\{[^}]*bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\)[^}]*gap:8px;padding:6px 10px\}/);
   assert.match(narrow[0], /#pt-hold-chip \.pt-chip-row,#pt-next-chip \.pt-chip-row\{font-size:18px\}/);
-  assert.match(narrow[0], /#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-hold-chip,#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-next-chip\{bottom:calc\(140px \+ env\(safe-area-inset-bottom\)\)\}/);
-  assert.match(narrow[0], /#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-hold-chip,#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-next-chip\{display:none\}/);
+  assert.match(narrow[0], /#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-hold-chip,#promptypus:has\(#pt-panel:not\(\.hidden\)\) #pt-next-chip\{bottom:calc\((?:var\(--pt-panel-lift,140px\)|140px) \+ (?:12px \+ )?env\(safe-area-inset-bottom\)\)\}/);
+  // The WRAP banner takes the chips' place at every width (base rule).
+  assert.match(css, /#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-hold-chip,#promptypus:has\(\.pt-clock-overlay\.wrap\.on\) #pt-next-chip\{display:none\}/);
   // Source order: the narrow block must follow the base chip rule (same id
   // specificity, so order decides).
   assert.ok(css.indexOf('#pt-hold-chip,#pt-next-chip{position:absolute') < css.indexOf('@media(max-width:1000px){\n#pt-hold-chip'));
