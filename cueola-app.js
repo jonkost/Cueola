@@ -3525,6 +3525,10 @@ function initAdminAuthAdapter() {
   CueolaAdminAuth.onChange(session => {
     adminSession = session ? { id:session.id, uid:session.uid, username:session.username, name:session.name, level:session.level } : null;
     updateAdminUI();
+    // Instructor standing restores asynchronously on a cold reload; until it
+    // does, this window is a follower. Repaint everything that depends on the
+    // director truth as soon as it lands (P0-4: "controls worked later").
+    try { refreshCallerPresenceState(); renderLiveStatusRail(); updateLiveGoControl(); notifyControlSurfaceState(); } catch {}
     // An admin password sign-in never dispatches cueola-identity-change, so
     // the talent door's pending link and show rows follow it from here.
     try { if (isFlowmingoTalentActive()) ptOnIdentityMaybeChanged(); } catch {}
@@ -4276,8 +4280,11 @@ function getRolePositionOptions(data=basePreProData()) {
 }
 
 function addPositionOption() {
-  const name = (prompt('Add a position for this production:') || '').trim();
-  if (!name) return;
+  const input = document.getElementById('pbNewPositionName');
+  let name = String(input?.value || '').trim();
+  if (!name && !input) name = (prompt('Add a position for this production:') || '').trim();
+  if (!name) { input?.focus(); return; }
+  if (input) input.value = '';
   const data = basePreProData();
   const key = name.toLowerCase();
   const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom.slice() : [];
@@ -4808,9 +4815,14 @@ async function saveRoleAssignmentsFromAdmin() {
     return false;
   }
   const draft = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
-  const incomplete = draft.find(row => !row.profileId || !row.positionId || !row.person || !row.position);
-  if (incomplete) {
-    setAssignmentSaveState('failed', 'Every assignment needs a saved student profile and a position.');
+  const incompleteAt = draft.findIndex(row => !row.profileId || !row.positionId || !row.person || !row.position);
+  if (incompleteAt >= 0) {
+    const row = draft[incompleteAt];
+    const who = row.person ? row.person : `Row ${incompleteAt + 1}`;
+    const missing = !row.profileId && !row.person ? 'a saved student profile'
+      : !row.profileId ? 'a saved student profile (pick the name from the list)'
+      : 'a position';
+    setAssignmentSaveState('failed', `${who} needs ${missing}. Nothing was saved yet.`);
     return false;
   }
   const pairs = new Set();
@@ -20844,6 +20856,8 @@ function liveTick() {
       updateWallClock();
       updateLiveOverview();
       renderLiveCallCountdown();
+      renderLiveStatusItem('director', liveDirectorStatusRecord());
+      renderLiveStatusItem('controls', liveControlsStatusRecord());
       liveLinkTickBody();
       if (playoutNow() != null) renderOutCountdowns();
     } else if (_liveLinksActive()) {
@@ -22546,6 +22560,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
         <span class="admin-src-label">Positions</span>
         <div class="admin-src-chips">
           ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
+          <input class="admin-in admin-src-new" id="pbNewPositionName" placeholder="New position" maxlength="40" onkeydown="if(event.key==='Enter'){event.preventDefault();addPositionOption()}">
           <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
         </div>
       </div>
@@ -24949,7 +24964,7 @@ function pushTodoToProductionSchedule(itemText, sourceName) {
   const data = loadPreProData();
   const raw = { ...(data.productionSchedule || {}) };
   const rows = (Array.isArray(raw.checklist) && raw.checklist.length ? raw.checklist : defaultProductionSchedule().checklist)
-    .map(normalizeProductionChecklistRow);
+    .map(row => normalizeProductionChecklistRow(row, -1));
   if (rows.some(r => r.item.trim().toLowerCase() === item.toLowerCase())) {
     toast('Already on the Ready Before Show checklist.');
     return false;
@@ -31233,8 +31248,10 @@ function renderCallSheetPeople() {
 
 function addCallSheetPerson() {
   syncCallSheetPeopleFromDOM();
-  // New crew/talent default to the sheet's overall call time (editable per person).
-  callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:timeInputValue('pp-call') });
+  // A new person's call time starts blank (P1-2). The sheet's overall call
+  // time already prints once at the top; copying it into every row made a
+  // time appear that nobody typed.
+  callSheetPeople.push({ name:'', position:'', email:'', phone:'', call:'' });
   renderCallSheetPeople();
   // The Add button sits outside #pp-crew-grid, so the refresh guard cannot
   // protect the new row: save it now or the next snapshot deletes it before
@@ -31263,7 +31280,7 @@ function fillCallSheetCrewFromRoster() {
     if (!byPerson.has(key)) byPerson.set(key, { name, positions: [] });
     if (position && !byPerson.get(key).positions.includes(position)) byPerson.get(key).positions.push(position);
   });
-  const defaultCall = timeInputValue('pp-call');
+  const defaultCall = '';   // P1-2: filled rows start with no personal call time
   let added = 0, updated = 0;
   byPerson.forEach(entry => {
     const key = entry.name.toLowerCase();
