@@ -587,9 +587,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    no box to fill, and without it adjacent terms run together in the grid. */
 .term-group-head{grid-column:1/-1;font-size:11px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);padding:14px 2px 2px;border-bottom: 1px solid var(--border);margin-bottom:4px}
 .term-group-head:first-child{padding-top:2px}
-.ns-steps{display:flex;gap:6px;margin:6px 0 14px}
-.ns-step-dot{font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3);background:color-mix(in srgb,var(--text) 7%,transparent);border: 1px solid transparent;border-radius:999px;padding:4px 10px}
-.ns-step-dot.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:transparent}
+.ns-check{flex-direction:row;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer}.ns-check input{width:18px;height:18px;accent-color:var(--accent)}
+.ns-more{border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:10px;padding:0 12px;margin:6px 0 10px}.ns-more>summary{cursor:pointer;padding:10px 0;font-size:13px;font-weight:600;color:var(--text2)}.ns-more>.field{margin-bottom:12px}
 .detail-task{margin-bottom:16px;padding:12px 14px;border: 1px solid transparent;border-radius:var(--ui-radius-group);background:var(--s1)}
 .detail-task-title{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
 /* v2.1 D6 — paperwork config fieldset */
@@ -962,8 +961,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   <div class="new-session-card" id="newSessionCard" onclick="openNewSession()" style="display:none">
     <div class="ns-icon">+</div>
     <div class="ns-body">
-      <div class="ns-title">Create a New Session</div>
-      <div class="ns-desc">Cueola generates the show code automatically. Share it with your crew.</div>
+      <div class="ns-title">New show</div>
+      <div class="ns-desc">Name it, press Create, share the code.</div>
     </div>
   </div>
 
@@ -1063,52 +1062,34 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   </div>
 </div>
 
-<!-- ── MODAL: NEW SESSION ── -->
-<!-- v2.1 Phase 4: session creation is a 3-step wizard. A hidden groups step
-     joins between Paperwork and Create when Phase 6 lands. -->
+<!-- ── MODAL: NEW SHOW (3.0: one screen, one button) ── -->
 <div class="modal-wrap" id="modal-new">
   <div class="modal">
-    <div class="modal-title">New Session</div>
-    <div class="ns-steps" id="ns-steps">
-      <span class="ns-step-dot on" data-ns-dot="1">1 · Show</span>
-      <span class="ns-step-dot" data-ns-dot="2">2 · Who can join</span>
-      <span class="ns-step-dot" data-ns-dot="3">3 · Paperwork</span>
+    <div class="modal-title">New show</div>
+    <div class="modal-sub">Name it and press Create. The show code is made for you and shows on the next screen.</div>
+    <div class="field">
+      <label class="field-lbl" for="new-showname">Show name</label>
+      <input class="field-in" id="new-showname" type="text" placeholder="e.g. Campus News" maxlength="60" onkeydown="if(event.key==='Enter')nsWizardNext()">
     </div>
-    <div data-ns-step="1">
-      <div class="modal-sub">Name the show. Set your own show code or leave it blank and Cueola will generate one.</div>
-      <div class="field">
-        <label class="field-lbl">Show Name</label>
-        <input class="field-in" id="new-showname" type="text" placeholder="e.g. Campus News" maxlength="60">
-      </div>
-      <div class="field">
-        <label class="field-lbl">Show Code <span class="vocab-hint" data-tip="The short code a crew types on the front page to join this show's rundown.">ⓘ</span> <span style="color:var(--text3)">(optional)</span></label>
-        <input class="field-in" id="new-code" type="text" placeholder="e.g. 2604A" maxlength="24" style="font-family:var(--mono-num);font-size:22px;letter-spacing:.15em;text-transform:uppercase;text-align:center" oninput="this.value=this.value.toUpperCase()">
-        <div class="field-hint">Leave blank to auto-generate · Auto format: YYMM + 4 letters e.g. 2604KWXR</div>
-      </div>
-      <div class="field">
-        <label class="field-lbl">Show Start Time <span style="color:var(--text3)">(optional)</span></label>
-        <input class="field-in" id="new-start" type="time">
-      </div>
+    <div class="field">
+      <label class="field-lbl" for="new-start">Start time <span style="color:var(--text3)">(optional)</span></label>
+      <input class="field-in" id="new-start" type="time">
     </div>
-    <div data-ns-step="2" hidden>
-      <div class="modal-sub">Decide what it takes to get in. You can change this any time in Session Setup.</div>
+    <label class="field ns-check"><input type="checkbox" id="new-entrycode" checked> Students must sign in with a class key <span class="vocab-hint" data-tip="A class key is the term-long key students use to create their profile and sign in. Off means anyone with the show code can join.">ⓘ</span></label>
+    <details class="ns-more">
+      <summary>More options</summary>
       <div class="field">
-        <label class="field-lbl">Entry Requirement <span class="vocab-hint" data-tip="A class key is the term-long key students use to create their profile and sign in.">ⓘ</span></label>
-        <select class="field-in" id="new-entrycode">
-          <option value="off">Show code only: anyone with the code joins</option>
-          <option value="on">Show code + class key: students must sign in with a profile</option>
-        </select>
+        <label class="field-lbl" for="new-code">Show code <span style="color:var(--text3)">(optional)</span></label>
+        <input class="field-in" id="new-code" type="text" placeholder="Made for you if blank" maxlength="24" style="font-family:var(--mono-num);font-size:18px;letter-spacing:.12em;text-transform:uppercase;text-align:center" oninput="this.value=this.value.toUpperCase()">
       </div>
-    </div>
-    <div data-ns-step="3" hidden>
-      <div class="modal-sub">Pick the paperwork this class will use. Nothing is deleted by turning a type off.</div>
       <div class="field">
+        <div class="field-lbl">Paperwork for this class</div>
         <div id="new-paperwork-fieldset"></div>
-        <div class="field-hint">Presets fill the checkboxes. Change this later in Session Setup.</div>
+        <div class="field-hint">Nothing is deleted by turning a type off. Change it later in Session Setup.</div>
       </div>
-    </div>
+    </details>
     <div class="modal-err" id="new-err">Could not connect. Check your internet and try again.</div>
-    <button class="btn-full btn-primary" onclick="nsWizardNext()" id="new-btn">Next →</button>
+    <button class="btn-full btn-primary" onclick="nsWizardNext()" id="new-btn">Create show →</button>
     <button class="btn-full btn-secondary" onclick="nsWizardBack()" id="new-back-btn" style="margin-top:4px">Cancel</button>
   </div>
 </div>
@@ -1126,8 +1107,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 <!-- ── MODAL: SESSION CREATED ── -->
 <div class="modal-wrap" id="modal-created">
   <div class="modal">
-    <div class="modal-title">Session Ready</div>
-    <div class="modal-sub">Share this code with your crew. They'll use it to join the rundown from any device.</div>
+    <div class="modal-title">Show created</div>
+    <div class="modal-sub">Share this code with your crew. They join the show with it from any device.</div>
     <div class="code-box">
       <div class="code-big" id="created-code">—</div>
       <div class="code-lbl">Show Code</div>
@@ -1137,7 +1118,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
       </div>
     </div>
     <div style="font-size:12px;color:var(--text2);line-height:1.7;background:var(--s2);border-radius:var(--ui-radius-control);padding:12px;border-left:3px solid var(--accent)">
-      <span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> This session is saved permanently. Anyone with the code can return to this rundown at any time.
+      <span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The show is saved for good. Anyone with the code can come back to it; when sign-in is required they sign in first.
     </div>
     <button class="btn-full btn-primary" onclick="openCreatedSession()">Open Rundown →</button>
     <button class="btn-full btn-secondary" onclick="hideModal('modal-created')" style="margin-top:4px">Back to Dashboard</button>
@@ -2682,29 +2663,21 @@ async function removeDashboardAdmin(uid) {
 }
 
 // ── CREATE SESSION ─────────────────────────────────────────────
-// v2.1 Phase 4: creation wizard steps (1 show · 2 who can join · 3 paperwork).
-let nsWizardStep = 1;
-const NS_WIZARD_LAST_STEP = 3;
-function nsWizardShow(step) {
-  nsWizardStep = Math.max(1, Math.min(NS_WIZARD_LAST_STEP, step));
-  document.querySelectorAll('[data-ns-step]').forEach(el => { el.hidden = Number(el.dataset.nsStep) !== nsWizardStep; });
-  document.querySelectorAll('[data-ns-dot]').forEach(el => el.classList.toggle('on', Number(el.dataset.nsDot) <= nsWizardStep));
-  document.getElementById('new-btn').textContent = nsWizardStep === NS_WIZARD_LAST_STEP ? 'Create Session →' : 'Next →';
-  document.getElementById('new-back-btn').textContent = nsWizardStep === 1 ? 'Cancel' : '← Back';
+// 3.0: creating a show is one screen (name, start time, sign-in) and one
+// button; the code and paperwork choices sit behind More options.
+function nsWizardShow() {
+  document.getElementById('new-btn').textContent = 'Create show →';
   document.getElementById('new-err').classList.remove('on');
 }
 function nsWizardNext() {
-  if (nsWizardStep === 1 && !document.getElementById('new-showname').value.trim()) {
+  if (!document.getElementById('new-showname').value.trim()) {
     showErr('new-err', 'Give the show a name first.');
+    document.getElementById('new-showname').focus();
     return;
   }
-  if (nsWizardStep === NS_WIZARD_LAST_STEP) { createNewSession(); return; }
-  nsWizardShow(nsWizardStep + 1);
+  createNewSession();
 }
-function nsWizardBack() {
-  if (nsWizardStep === 1) { hideModal('modal-new'); return; }
-  nsWizardShow(nsWizardStep - 1);
-}
+function nsWizardBack() { hideModal('modal-new'); }
 
 function openNewSession() {
   document.getElementById('new-showname').value = '';
@@ -2713,11 +2686,12 @@ function openNewSession() {
   // Decision 12(a): profiles are required by default — new sessions start
   // with the class-key requirement ON; the toggle survives for deliberate
   // guest sessions.
-  document.getElementById('new-entrycode').value = 'on';
+  document.getElementById('new-entrycode').checked = true;
   document.getElementById('new-err').classList.remove('on');
   renderPaperworkConfigFieldset('new-paperwork-fieldset', {});   // D6: fresh = everything on
-  nsWizardShow(1);
+  nsWizardShow();
   showModal('modal-new');
+  setTimeout(() => document.getElementById('new-showname')?.focus(), 60);
 }
 
 function getCueolaShareOrigin() {
@@ -2739,7 +2713,7 @@ async function createNewSession() {
   const ready = await waitForFirebase();
   if (!ready) {
     showErr('new-err','Could not connect to Firebase. Check your internet and try again.');
-    btn.textContent = 'Create Session →'; btn.disabled = false;
+    btn.textContent = 'Create show →'; btn.disabled = false;
     return;
   }
 
@@ -2755,7 +2729,7 @@ async function createNewSession() {
     const existing = await getDoc(window._doc(db(), 'sessions', code));
     if (existing.exists()) {
       showErr('new-err', `Code ${code} is already in use. Pick a different code or delete that session first.`);
-      btn.textContent = 'Create Session →'; btn.disabled = false;
+      btn.textContent = 'Create show →'; btn.disabled = false;
       return;
     }
     const newPaperwork = paperworkFieldsetMap('new-paperwork-fieldset');
@@ -2772,7 +2746,7 @@ async function createNewSession() {
       createdAt: window._serverTimestamp(),
       participants: [],
       // v2.1 Phase 4 wizard: entry requirement chosen at creation.
-      requireLoginCode: document.getElementById('new-entrycode')?.value === 'on',
+      requireLoginCode: document.getElementById('new-entrycode')?.checked !== false,
       // v2.1 (D6): seed the parent-doc paperwork config only when something
       // is turned off — missing map = everything enabled.
       ...(Object.keys(newPaperwork).length ? { prePro: { paperworkEnabled: newPaperwork } } : {}),
@@ -2784,12 +2758,12 @@ async function createNewSession() {
 
     hideModal('modal-new');
     showModal('modal-created');
-    btn.textContent = 'Create Session →'; btn.disabled = false;
+    btn.textContent = 'Create show →'; btn.disabled = false;
 
     await loadSessions();
   } catch(e) {
     showErr('new-err', 'Error: ' + e.message);
-    btn.textContent = 'Create Session →'; btn.disabled = false;
+    btn.textContent = 'Create show →'; btn.disabled = false;
   }
 }
 

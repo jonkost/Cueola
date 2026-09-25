@@ -404,6 +404,7 @@ function refreshCallerPresenceState() {
   let caller = null;
   try { caller = isShowCaller(); } catch { caller = null; }
   renderShowCallerBadge();
+  updateGoLiveButton();
   if (caller !== _lastCallerTruth) {
     _lastCallerTruth = caller;
     updateLiveGoControl();
@@ -813,7 +814,6 @@ function liveLinkTickBody() {
   if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
 }
 function ensureLiveLinkTicker() { startLiveTicker(); }
-function stopLiveLinkTicker() {}
 let browsingSelf = false;   // true = browse the rundown on my own (Following: Myself)
 let followTarget = '';      // name of the person whose position I mirror ('' = self / show caller)
 let followTargetId = '';    // presence id keeps duplicate/stale display names from hijacking follow
@@ -882,7 +882,6 @@ let _presenceClockWrite = null; // { sentAt, ackAt } of this window's last prese
 let _presenceClockSeen = 0;    // server ms of the last presence stamp sampled
 
 function liveServerNow() { return liveServerClock.now(Date.now()); }
-function liveRecord() { return liveShared.get(); }
 function liveDirectorName() {
   const rec = liveShared.get();
   if (!rec.directorId) return '';
@@ -2280,7 +2279,7 @@ function fmtDur(b) {
 }
 
 function totalSecs() {
-  return beats.reduce((acc,b) => acc + (b.min||0)*60 + (b.sec||0), 0);
+  return beats.reduce((acc, b) => acc + CueModel.durationSeconds(b), 0);
 }
 
 function fmtSecs(t) {
@@ -4138,10 +4137,6 @@ function basePlandaBearAssignmentOptions(data=basePreProData()) {
   return plandaBearAssignmentCatalog(data).map(option => option.label);
 }
 
-function plandaBearAssignmentOptions(data=basePreProData()) {
-  return plandaBearAssignmentCatalog(data).map(option => option.label);
-}
-
 function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOptions(), fuzzy=true) {
   const out = [];
   const add = label => {
@@ -5120,12 +5115,6 @@ function syncSessionSources() {
   localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources));
 }
 
-function getSources(key) {
-  const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
-  const removed = sessionCustomSources.__removed?.[key] || [];
-  return [...defaults.filter(s=>!removed.includes(s)), ...(sessionCustomSources[key]||[])];
-}
-
 function migrateOldCue(type, d) {
   if (!d) return d;
   if (
@@ -5262,26 +5251,6 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
   restoreLocalDraftAsRundownBaseline();
   enterRundown();
   toast('Opened local copy. Shared sync is unavailable while offline.');
-}
-
-function openLocalPlandaBear(code='', name='You') {
-  session = sessionWithProfileIdentity({ code:(code || 'LOCAL').trim().toUpperCase(), role:'instructor', userName:name || 'You', isDemo:false, isExpert:false }, name);
-  freeTextMode = true;
-  rememberLastSession(session.code, session.userName);
-  restoreLocalDraft();
-  const data = loadPreProData();
-  show = {
-    name:data.production || show.name || 'Untitled Show',
-    start:normalizeTimeValue(data.showStart || show.start),
-  };
-  hideModal('modal-prepro-join');
-  if (preProJoinTarget === 'notes') {
-    openProductionNotes();
-    toast('Opened local Production Notes. Shared sync is unavailable while offline.');
-  } else {
-    openPaperworkHub();
-    toast('Opened local Planda Bear copy. Shared sync is unavailable while offline.');
-  }
 }
 
 // Remember the last show code + name so the user only enters them once,
@@ -6216,7 +6185,7 @@ function setupFirestore() {
       rundownSyncBlockedMissing = false;
       missingSessionNoticeCode = '';
       _rundownBaselineSeen = true;   // D10.3: a complete session doc is in — launch imports may proceed
-      _sessionActiveIdxAdopted = true;   // the doc has been read here; syncLiveIdx may publish activeIdx again
+      _sessionActiveIdxAdopted = true;   // the doc has been read here; publishLiveTake may mirror activeIdx again
       // Only a server-confirmed snapshot may claim "connected"; a cached one
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
@@ -6625,13 +6594,6 @@ function syncToFirestore() {
   }
   setCloudSyncState('saving', 'Cloud sync saving changes...');
   flushRundownSyncQueue();
-}
-
-// 3.0: the live position rides publishLiveTake (director) only. Followers
-// browsing on their own no longer write anything: presence.idx was a second,
-// unordered source of "where is the show" and is display-only now.
-function syncLiveIdx() {
-  markResumeState();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -7812,6 +7774,7 @@ function renderRundownHeader() {
   setLiveText('rd-dur', fmtSecs(total));
   setLiveText('rd-count', String(rowDisplayTotal()));   // segments never count
   setLiveText('rd-end', show.start ? clock(show.start, total) : '—');
+  updateGoLiveButton();
 }
 
 function renderRundown(opts={}) {
@@ -8275,9 +8238,6 @@ function rowConfirmLabel(id) {
 // flex rows: they play, advance, move, and delete like any other row. helperFor
 // holds the parent beat id and helperRole says which job the row does.
 function isHelperBeat(b) { return Boolean(b?.helperFor && b?.helperRole); }
-function findPlaybackHelperRow(parentId, role) {
-  return beats.find(x => String(x.helperFor || '') === String(parentId) && x.helperRole === role) || null;
-}
 function helperRoleTagHTML(b) {
   if (!isHelperBeat(b)) return '';
   return `<span class="helper-role-tag helper-tag-${b.helperRole}">${b.helperRole === 'prep' ? 'PREP' : 'OUT'}</span>`;
@@ -8376,8 +8336,6 @@ function openAddCue(type) {
   if (!addCueType) document.getElementById('actype-camera')?.focus({ preventScroll:true });
   else setTimeout(() => nameIn?.focus(), 60);
 }
-// Older callers (lessons, deck) still say "add row".
-function openAddRow() { openAddCue(); }
 
 function addCuePick(type) {
   addCueType = type;
@@ -9315,14 +9273,6 @@ function resolveOutrangutanNameLinks() {
   }));
   _outNameLinksPresent = remaining;
   return changed;
-}
-
-// Small SFX chip on rundown cells that link a pad (P4) — name only, no live state.
-function outrangutanSfxBadge(d) {
-  if (!d || (!d.outPadId && !d.outPadName)) return '';
-  const p = (outrangutanState.pads || {})[d.outPadId];
-  const label = p ? `${p.emoji ? p.emoji + ' ' : ''}${p.name}` : (d.outPadName || 'Linked SFX');
-  return `<div class="cue-out-badge cue-sfx-badge"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg> <span class="cue-out-name">SFX · ${esc(label)}</span>${d.outPadAuto ? '<span class="cue-out-live cue-out-auto">AUTO</span>' : ''}</div>`;
 }
 
 // Manual SFX trigger button for the live focus view (P4).
@@ -10542,7 +10492,19 @@ function collectPlayoutLinks() {
   return { cues, pads };
 }
 
-function confirmGoLive() { runPreflight(false); }
+// The preflight is the director's checklist. Everyone else opens Live and
+// follows: no checklist, no second confirmation.
+function confirmGoLive() {
+  if (!isShowCaller()) { goLive(); return; }
+  runPreflight(false);
+}
+function updateGoLiveButton() {
+  const btn = document.getElementById('goLiveBtn');
+  if (!btn) return;
+  const director = isShowCaller();
+  btn.innerHTML = `<span class="live-dot"></span>${director ? 'Go Live' : 'Watch live'}`;
+  btn.setAttribute('aria-label', director ? 'Go Live: run the checks, then open Live' : 'Watch live: open Live and follow the director');
+}
 function openPreflightPanel() { runPreflight(true); }
 
 // ── Per-row fix verbs ────────────────────────────────────────────────────────
@@ -11277,11 +11239,6 @@ function enterLiveSessionScreen(liveState) {
   });
 });
 
-function showRundown() {
-  if (liveSessionState().lifecycle === 'live') return requestExitLive();
-  return liveSessionState();
-}
-
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
   document.getElementById('liveshow').classList.remove('on');
@@ -11754,7 +11711,7 @@ async function recoverLiveToBuilder() {
 }
 
 function offsetBeforeIndex(idx) {
-  return beats.slice(0, Math.max(0, idx)).reduce((acc,b)=>acc+(b.min||0)*60+(b.sec||0),0);
+  return beats.slice(0, Math.max(0, idx)).reduce((acc, b) => acc + CueModel.durationSeconds(b), 0);
 }
 
 function liveRemainingSecs() {
@@ -12287,56 +12244,6 @@ function liveCallLineHTML(typeId, line, className='') {
   return `<div class="${className}" style="--cue-clr:${t.color}" aria-label="${esc(t.label)}: ${esc(line)}"><span class="live-call-type" style="color:${t.color}">${sfIcon(t.symbol)}</span><span>${esc(line)}</span></div>`;
 }
 
-function renderLiveCurrent(b, i) {
-  const calls = CueModel.callsForBeat(b);
-  const sd = b.cues?.script;
-  const scriptText = scriptCueText(sd);
-  const adminCaller = isAdminShowCaller();
-  const rowStart = show.start ? clock(show.start, offsetBeforeIndex(i)) : '—';
-  const elapsedRows = `${rowDisplayNumber(i)} / ${rowDisplayTotal()}`;
-  // Department identity is an OPAQUE fill on this one surface (the card is
-  // already accent-tinted over the radial wash); mixing 14% into --s1 keeps
-  // the line at 4.6-5.2:1 on every theme.
-  const cueBlocks = calls.filter(c => !(c.type === 'script' && scriptText)).map(c => {
-    const tc = CueModel.typeDef(c.type);
-    return `<div class="lv-cue-block" style="border-left-color:transparent;background:color-mix(in srgb,${tc.color} 14%,var(--s1))">
-      <div class="lv-cue-label" style="color:${tc.color}">${sfIcon(tc.symbol)} ${tc.label}</div>
-      ${liveCallLineHTML(c.type, c.line, 'lv-cue-take')}
-    </div>`;
-  }).join('');
-  return `<div class="lv-cur-card">
-    <div class="lv-cur-badge">${sfIcon('marker.active')} ON AIR · ${rowDisplayNumber(i)}</div>
-    <div class="lv-cur-name">${cueTypeBadgeHTML(CueModel.beatType(b), true)}${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
-    ${b.notes?`<div class="lv-cur-note">${esc(b.notes)}</div>`:''}
-    ${fmtDur(b)!=='—'?`<div class="lv-cur-dur">${fmtDur(b)}</div>`:''}
-    <div class="lv-cur-meta">
-      <div class="lv-cur-mi"><div class="lv-cur-ml">Scheduled</div><div class="lv-cur-mv">${rowStart}</div></div>
-      <div class="lv-cur-mi"><div class="lv-cur-ml">Position</div><div class="lv-cur-mv">${elapsedRows}</div></div>
-      <div class="lv-cur-mi"><div class="lv-cur-ml">Show Left</div><div class="lv-cur-mv">${liveRemainingSecs()?fmtProductionSecs(liveRemainingSecs()):'—'}</div></div>
-    </div>
-    ${cueBlocks?`<div class="lv-cue-blocks">${cueBlocks}</div>`:''}
-    ${scriptText?`<div class="lv-cur-script">${esc(scriptText)}</div>`:''}
-    ${sd&&adminCaller?`<button class="ltr-edit-btn" style="margin-top:8px" onclick="openLiveScript(${i})">${sfIcon('action.edit')} Edit &amp; Push</button>`:''}
-  </div>`;
-}
-
-function renderLiveNext(b, i, isRunner) {
-  const cueSmall = CueModel.callsForBeat(b).filter(c => c.type !== 'script').map(c => {
-    const tc = CueModel.typeDef(c.type);
-    return `<div class="lv-next-cue" style="border-left-color:transparent;background:color-mix(in srgb,${tc.color} 14%,transparent)">
-      ${liveCallLineHTML(c.type, c.line, 'lv-next-cue-line')}
-    </div>`;
-  }).join('');
-  const handler = isRunner ? `jumpToLsCue(${i})` : `liveRowPreview(${i})`;
-  return `<div class="lv-next-card" onclick="${handler}">
-    <div class="lv-next-badge">STANDBY · ${rowDisplayNumber(i)}</div>
-    <div class="lv-next-name">${cueTypeBadgeHTML(CueModel.beatType(b), true)}${helperRoleTagHTML(b)}${esc(b.info||'—')}</div>
-    ${b.notes?`<div class="lv-next-note">${esc(b.notes)}</div>`:''}
-    ${cueSmall?`<div class="lv-next-cues">${cueSmall}</div>`:''}
-    ${fmtDur(b)!=='—'?`<div class="lv-next-dur">${fmtDur(b)}</div>`:''}
-  </div>`;
-}
-
 function liveRowPreview(idx) {
   const b = beats[idx]; if (!b) return;
   previewRowIdx = idx;
@@ -12503,8 +12410,8 @@ function renderLiveFocus() {
   const nextBeatIdx = liveNextPlayableCueIndex(curIdx);
   const next = nextBeatIdx >= 0 ? beats[nextBeatIdx] : null;
   const total = beats.length;
-  const remainSecs = beats.slice(curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0);
-  const startStr = show.start ? clock(show.start, beats.slice(0, curIdx).reduce((a, b) => a + (b.min || 0) * 60 + (b.sec || 0), 0)) : '';
+  const remainSecs = beats.slice(curIdx).reduce((a, b) => a + CueModel.durationSeconds(b), 0);
+  const startStr = show.start ? clock(show.start, offsetBeforeIndex(curIdx)) : '';
   const canJump = isFollowingSelf() && isAdminShowCaller();
 
   let html = `<div class="lf-wrap">
@@ -12604,7 +12511,7 @@ function renderLive() {
     </tr></thead><tbody>`;
 
   beats.forEach((b, i) => {
-    const durSecs = (b.min||0)*60+(b.sec||0);
+    const durSecs = CueModel.durationSeconds(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += durSecs;
 
@@ -14765,10 +14672,6 @@ function maybeResumeScriptOpHost() {
   } catch (error) { containError('Script Operator resume', error); }
 }
 
-function dockScriptOpPopout() {
-  stopScriptOperatorHost({ reason:'Script Operator window closed', closeWindow:true, clearWindow:true, notify:true });
-}
-
 window.addEventListener('pagehide', () => {
   // Reload survival: do NOT close the pop-out and do NOT tell it to give up.
   // pagehide fires for reloads too, and killing the window here was why every
@@ -15120,7 +15023,6 @@ function saveScreenChoiceFor(win, screenId) {
       : '');
   } catch {}
 }
-function savedTalentScreenIdentity() { return savedScreenIdentityFor('talent'); }
 function savedTalentScreen() { return savedScreenFor('talent'); }
 
 function openFlowmingoTalentWindow({ replace=false, code='', fallbackInPage=true }={}) {
@@ -19169,23 +19071,8 @@ function ptSaveScript() {
   ptCloseEdit();
 }
 
-function ptLoadFromCueola() {
-  if (prompterText && prompterText.trim()) {
-    ptInitScriptFromCueola(prompterText);
-    ptCloseEdit();
-    toast('Loaded script from Cueola');
-  } else {
-    toast('No script in Cueola yet. Add script cues and push to Flowmingo from the live view.');
-  }
-}
-
 let ptCueolaSub = null;
 let ptLastCueolaScript = null; // last script SOURCE applied from the cloud feed (loop guard)
-
-function ptCurrentPlainText() {
-  const textEl = ptEl('pt-text');
-  return textEl ? ptExtractText(textEl) : '';
-}
 
 function ptSetCueolaStatus(text, isError=false) {
   const status = ptEl('pt-cueola-status');
@@ -19853,11 +19740,6 @@ function updateWallClock() {
   setLiveText('ls-clock', `${h12}:${pad(m)}:${pad(s)} ${ap}`);
 }
 
-// The wall clock previously only ticked inside the show-clock interval, so it
-// sat frozen (or "—") until Start Show was pressed. Time of day must run the
-// whole time the live screen is up (owner directive 2026-07-20).
-function startWallClock() { startLiveTicker(); }
-function stopWallClock() {}
 
 function stopTimer(stopPrompter=true) {
   liveTimerStartMs = null;
@@ -20552,7 +20434,7 @@ function persistPreProDataLegacy(previous, patch, section, now) {
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps=null) {
-  // 'LOCAL' is the no-session sentinel (openLocalPlandaBear/openLocalOutrangutan):
+  // 'LOCAL' is the no-session sentinel (openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert) return;
   // D2: writes land on the ACTIVE workspace — the group subdoc when grouped.
@@ -25541,38 +25423,6 @@ async function showRundownPaperPreview() {
   }
 }
 
-// Every Outrangutan link programmed on a row, for the printed rundown's
-// Outrangutan column (V2 Phase 5 item 5). Names resolve from the live state
-// the Outrangutan module publishes; ids print as-is when it isn't open.
-function outrangutanRowSummary(b, savedState=outrangutanState) {
-  const parts = [];
-  for (const type of Object.keys(b.cues || {})) {
-    const d = b.cues[type];
-    if (d?.outCueId) { const c = savedState?.cues?.[d.outCueId]; parts.push(`Cue: ${c?.name || d.outCueId}${d.outAuto ? ' (auto)' : ''}`); }
-    if (d?.outPadId) { const p = savedState?.pads?.[d.outPadId]; parts.push(`SFX pad: ${p?.name || d.outPadId}${d.outPadAuto ? ' (auto)' : ''}`); }
-  }
-  return parts;
-}
-
-// v2.1 D9.5: student-friendly rundown print. Reduced broadcast columns are
-// the DEFAULT (all-columns stays one toggle away), the Outrangutan column is
-// gone from print (stays in-app — D9.3), widths are proportional via
-// <colgroup>, and every page carries a running total + total-runtime footer,
-// a READY/TAKE legend, and numbered segments.
-let rundownExportColumns = (() => {
-  try { return localStorage.getItem('cueola_rundown_export_columns') === 'all' ? 'all' : 'broadcast'; }
-  catch { return 'broadcast'; }
-})();
-function setRundownExportColumns(mode) {
-  rundownExportColumns = mode === 'all' ? 'all' : 'broadcast';
-  try { localStorage.setItem('cueola_rundown_export_columns', rundownExportColumns); } catch {}
-  // Refresh whichever preview is open so the toggle answers immediately.
-  if (document.getElementById('paperPreviewModal')?.classList.contains('on')) {
-    if (activePaperworkItemId === 'rundown') showRundownPaperPreview();
-    else showPreProPackagePreview();
-  }
-}
-
 function rundownFmtTotal(secs) {
   const s = Math.max(0, Math.round(secs));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
@@ -30259,7 +30109,7 @@ function fillCallSheetCrewFromRoster() {
 // v2.1 D9.7: estimated wrap = show start (or call) + the rundown's total
 // runtime. One tap, still editable.
 function estimateWrapFromRundown() {
-  const totalSecs = beats.reduce((n, b) => n + (b.min||0)*60 + (b.sec||0), 0);
+  const totalSecs = beats.reduce((n, b) => n + CueModel.durationSeconds(b), 0);
   if (!totalSecs) { toast('The rundown has no timed rows yet.'); return; }
   const startVal = timeInputValue('pp-show-start') || timeInputValue('pp-call');
   if (!startVal) { toast('Set a show start or call time first.'); return; }
