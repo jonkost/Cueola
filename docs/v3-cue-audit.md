@@ -91,3 +91,7 @@ Runs once per beat on read (`migrateBeat`), and the rewritten shape is written b
 - Should extra department calls on one cue stay (a director's "take 2, mic 1 up" moment), or is one call per cue enough for class?
 - Do clips need pre-roll at all (question 3)? If not, `preRoll` stays 0 and hidden.
 - Should the old TRT (m:ss) and SMPTE fields survive as playback expand fields, or is the cue duration enough?
+
+## 7. Shipped in 3.0
+
+Sections 4 and 5 are implemented: `cueola-cue-model.js` holds the types, the per-type fields, the call line and the migration (tests in `scripts/tests/cue-model.test.mjs`); the rundown list, the in-place editor, the add-cue sheet and the Live/export consumers are in `cueola-app.js` (browser checks in `scripts/tests/rundown-smoke.browser.mjs`). Differences from the proposal: the old TRT fields become the cue duration and SMPTE goes to notes (question 4 answered by doing); `autoAdvance` and `audioFromClip` are stored and shown but not yet wired to playback (question 2); pre-roll is only shown on a linked clip.

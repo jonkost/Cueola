@@ -1,5 +1,87 @@
 # Changelog
 
+## v3.0.0: One TAKE, one type per cue, a rundown you can read on an iPad (built 2026-09-25)
+
+Cueola 3.0 is about teaching the show, not the software. Live has one verb.
+A cue has one type. The rundown is a list you can scan and edit with a
+thumb. Under the hood the live position, the timer and the cue data were
+rebuilt so a show stops skipping beats.
+
+### Live: one verb
+- The Ready / Roll / Go buttons are one button: TAKE. The next cue is always
+  on standby, so there is nothing to arm. Back goes one cue back.
+- Everyone in the show sees the same ON AIR and STANDBY. Only the director's
+  TAKE moves the show; everyone else follows. A follower who scrolls away
+  gets a Back to on air button.
+- The room shares one live record with a sequence number, so a late or
+  doubled write can never make the show jump twice or go backwards. Cue and
+  show time are computed from the server clock, so every screen shows the
+  same number.
+- One timer loop drives every readout. Opening and closing Live never
+  starts a second clock, and TAKE is refused while the last TAKE is still
+  being written (no double takes on a bounce).
+- A linked playback clip rolls on TAKE. Pre-roll is now a number of seconds
+  on the cue (a countdown everyone sees) instead of a mode or a button.
+- The Live status rail says who the director is and whether this window's
+  keys and Stream Deck work, in words.
+- Live shows # · State · Cue · Call · Time. No department columns, no
+  sideways scrolling.
+
+### Cues: one type each
+- A cue is a camera, audio, graphic, playback, lighting or script cue (or a
+  segment title). Each type shows only its own fields: camera and shot;
+  source and on/off/under/up; graphic and on-screen text; clip with in, out
+  and pre-roll; look; script text and speaker. Everything shares number,
+  name, duration and notes.
+- The rundown is a list: number, type, name, call line, duration. Tap a
+  cue to edit it in place; tap again to close. Every field has a ⓘ that
+  works on touch. Typing saves by itself.
+- Add a cue is: pick a type, name it, give it a duration, Add. Nothing is
+  inserted until you press Add.
+- A second call on the same cue (take camera 2 and open the mic) lives
+  under "Also on this cue" and shows as a small icon after the call line.
+- Old shows migrate on open. Every READY / TAKE cell becomes the new
+  fields; anything the parser cannot read is kept in the cue's notes with
+  its old label, so nothing a student typed is lost. Old PREP / OUT helper
+  rows stay as ordinary cues; new ones are no longer generated.
+- The printed rundown lists Type, Cue, Call, Start, Dur, Total and Notes.
+
+### Fixed
+- Safety plan: PPE items can be added and saved again, and the export tells
+  you exactly what is missing (and takes you there) instead of silently
+  refusing.
+- Planner: the paperwork syncs live between computers again, field by
+  field, and the save chip says Saving… / Saved / Not saved honestly.
+- Controllers: a Stream Deck or keyboard press that cannot act says why
+  (in the rail and in a toast) instead of doing nothing; a mouse TAKE no
+  longer steals the keyboard.
+- Call sheet and schedule time fields start blank instead of inheriting a
+  time you did not enter.
+- Positions typed into a role row save even when the row was added from a
+  note.
+
+### Setup
+- Dashboard: New show is one screen and one button. The show code and
+  paperwork choices sit behind More options.
+- Rundown: everyone but the director gets Watch live, which opens Live at
+  once. The director keeps Go Live and the pre-show checks.
+
+### Smaller
+- 395 CSS rules and 20 functions nobody used are gone; duration math has
+  one home. index.html is 34 KB smaller and cueola-app.js 63 KB smaller.
+- Every control is at least 44 px tall on a touch screen.
+- New modules: cueola-live-state.js (the shared live record, the server
+  clock and the TAKE gate) and cueola-cue-model.js (cue types, fields, call
+  lines and migration), both covered by node tests. Two browser smoke tests
+  run the demo show at iPad width.
+
+### Waiting on Jon
+- The word list (docs/v3-glossary.md) and the copy rewrite table
+  (docs/v3-copy-audit.md) are drafted but not applied. Lesson text is
+  unchanged because the narration audio is generated from it.
+- Open questions from the brief are listed at the end of docs/v3-recon.md
+  and in the setup-flow and cue audits.
+
 ## Unreleased: Stage Plot layers, signal flow, and the System Plot Plan workflow (built 2026-08-13)
 
 The Stage Plot grows into the tool for the three System Plot Plan checkpoints

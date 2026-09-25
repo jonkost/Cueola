@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '2.2.1';
+const CUEOLA_VERSION = '3.0.0';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 // Build identity on the wire: the ?v= hash of this script tag ('' if absent).
 // Rides presence, the talent heartbeat and the Air's live packet so preflight
