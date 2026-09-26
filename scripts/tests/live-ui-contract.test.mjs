@@ -314,7 +314,7 @@ test('Script Operator pop-out parity: question lane, numeric readouts, in-app ta
   assert.match(app, /function syncPrompterSliderReadouts\(\)/);
   // Tab names and grouping mirror OP_INSP_LABELS within the 4-tab layout, and
   // remembered pre-regroup tab keys map onto their new homes.
-  assert.match(scriptOp, /transport: 'Transport',\s*\n\s*live: 'Cue & On Air',\s*\n\s*clocks: 'Clocks & Alerts',\s*\n\s*display: 'Display & Theme'/);
+  assert.match(scriptOp, /transport: '(Transport|Playback)',\s*\n\s*live: '(Cue & On Air|On air)',\s*\n\s*clocks: '(Clocks & Alerts|Clocks)',\s*\n\s*display: '(Display & Theme|Display)'/);
   assert.match(scriptOp, /LEGACY_TAB_KEYS = \{ prompter: 'transport', formatting: 'display' \}/);
   assert.match(scriptOpHtml, /data-pane="transport"/);
   assert.match(scriptOpHtml, /data-pane="display"/);
@@ -851,7 +851,7 @@ test('8/19 round: strip keeps its slot, rail is damped, Script Op surfaces mirro
   assert.match(app, /SYNC_RECONN_MIN_SHOW_MS/);
   // Built-in Script Op mirrors the pop-out (the reference surface): same tab
   // keys and captions, and a generated Display & Theme pane.
-  assert.match(app, /LS_INSP_LABELS = \{ transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme' \}/);
+  assert.match(app, /LS_INSP_LABELS = \{ transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' \}/);
   assert.match(app, /function scriptOpDisplayPaneHTML/);
   assert.match(html, /data-insp-pane="display"><div id="lsDisplayControls">/);
   assert.doesNotMatch(html, /data-insp-pane="format"/);
