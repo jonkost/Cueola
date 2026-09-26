@@ -14310,7 +14310,7 @@ function updateLsPrompter() {
 // drawer. The chosen tab is remembered so the panel reopens where you work.
 // Tab keys and captions mirror the pop-out's TAB_LABELS (script-operator.js):
 // the pop-out is the reference surface the built-in is based on.
-const LS_INSP_LABELS = { transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme' };
+const LS_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' };
 function lsInspTab(key) {
   if (!LS_INSP_LABELS[key]) key = 'transport';
   document.querySelectorAll('#lsOperatorDrawer .insp-tab').forEach(b => {
@@ -14319,8 +14319,6 @@ function lsInspTab(key) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   document.querySelectorAll('#lsOperatorDrawer .insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
-  const cap = document.getElementById('lsInspCaption');
-  if (cap) cap.textContent = LS_INSP_LABELS[key];
   try { localStorage.setItem('cueola_insp_tab', key); } catch {}
 }
 function lsInspRestoreTab() {
@@ -16509,7 +16507,6 @@ function opInspHeadHTML(scope) {
       ${Object.keys(OP_INSP_LABELS).map(key =>
         `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span><span class="insp-tab-lbl">${OP_INSP_LABELS[key]}</span></button>`).join('')}
     </div>
-    <div class="insp-caption" data-insp-caption>${OP_INSP_LABELS.transport}</div>
   </div>`;
 }
 function opInspTab(scope, key) {
@@ -16521,8 +16518,6 @@ function opInspTab(scope, key) {
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     panel.querySelectorAll('.insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
-    const cap = panel.querySelector('[data-insp-caption]');
-    if (cap) cap.textContent = OP_INSP_LABELS[key];
   });
   try { localStorage.setItem(`cueola_op_insp_tab_${scope}`, key); } catch {}
 }
