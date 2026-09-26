@@ -589,6 +589,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-back-now{margin-top:6px;height:32px;padding:0 12px;border-radius:9px;border:1px solid transparent;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font:700 11px var(--sans);cursor:pointer}
 .ls-back-now[hidden]{display:none}
 .cc-preroll-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.cc-title{display:flex;align-items:center;gap:8px}
+.cc-lines{display:grid;gap:10px;padding:12px;border-radius:10px;background:color-mix(in srgb,var(--text) 3%,transparent);margin-bottom:14px}
+.cc-lines .field{gap:4px}
+.field-lbl-row{display:flex;align-items:center;gap:4px}
+.field-lbl-row .field-lbl{margin:0}
+.cc-pickers{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
+.cc-pickers-hint{font-size:12.5px;line-height:1.5;color:var(--text2)}
+.cc-pickers .cc-section{margin:0}
+.cc-pickers .cc-chip{min-height:38px}
+.cc-upload{cursor:pointer}
+.ar-panel .ar-cue-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.ar-cue-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:52px;padding:8px 12px;white-space:normal;text-align:left;font-family:var(--sans);font-size:13px;font-weight:600}
+.ar-cue-chip.sel{color:var(--cue-clr);border-color:color-mix(in srgb,var(--cue-clr) 50%,transparent);background:color-mix(in srgb,var(--cue-clr) 14%,transparent)}
+.ar-cue-desc{font-size:11px;font-weight:400;color:var(--text3)}
+.ar-cue-chip.sel .ar-cue-desc{color:inherit;opacity:.8}
+.ar-heading .info-btn{vertical-align:middle}
+@media (max-width:600px){.ar-panel .ar-cue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cc-preroll-row .field-lbl{margin:0}
 .cc-preroll-row .cc-time-in{width:64px}
 .ls-show-label,.ls-stat-label{font-size:9.5px;font-family:var(--sans);font-weight:700;letter-spacing:.035em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
@@ -5737,77 +5754,67 @@ input.pt-range::-moz-range-thumb,
 ══════════════════════════════════════════ -->
 <div class="overlay" id="addRowOv" onclick="closeAddRowOv(event)">
   <div class="ar-wrap" id="arWrap">
-    <div class="ar-context" id="arContext"></div>
-    <div class="ar-panel">
+    <div class="ar-panel" role="dialog" aria-labelledby="arHeading">
       <div class="sheet-handle"></div>
-
-      <!-- Step 1: Cue Name + Style -->
       <div class="ar-step on" id="ar-step-1">
-        <div class="ar-step-label">New Row: Step 1 of 2</div>
-        <div class="ar-heading">Add a row</div>
+        <div class="ar-heading" id="arHeading">Add a row <button type="button" class="info-btn" aria-label="About rows and cues" onclick="toggleInfoPop(event,'add-row')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
         <div class="field">
-          <label class="field-lbl">Cue Name / Label</label>
-          <input class="field-in" id="ar-name-input" type="text" placeholder='e.g. "Show Open"' maxlength="80" autocomplete="off" oninput="updateArNextEnabled()">
+          <label class="field-lbl" for="ar-name-input">Name</label>
+          <input class="field-in" id="ar-name-input" type="text" placeholder='e.g. "Show open"' maxlength="80" autocomplete="off" onkeydown="arKey(event)">
         </div>
-        <div class="chip-grid" style="margin-top:-6px">
-          <button class="chip suggested-label" data-tip="The first full production moment after countdown: music, graphics, camera, and talent come together." onclick="arPickName('Show Open')">Show Open</button>
-          <button class="chip suggested-label" data-tip="A quick opening segment before the main show open, often used for a hook, tease, or dramatic start." onclick="arPickName('Cold Open')">Cold Open</button>
-          <button class="chip suggested-label" data-tip="Package: a pre-produced video story or edited segment that rolls from playback." onclick="arPickName('PKG')">PKG</button>
-          <button class="chip suggested-label" data-tip="A handoff from one host, guest, camera, segment, or location to another." onclick="arPickName('Toss')">Toss</button>
-          <button class="chip suggested-label" data-tip="A live camera or remote segment, usually with timing and IFB-style crew cues." onclick="arPickName('Live Shot')">Live Shot</button>
-          <button class="chip suggested-label" data-tip="A short transition into or out of a break, often with music, graphics, or a quick tease." onclick="arPickName('Bumper')">Bumper</button>
-          <button class="chip suggested-label" data-tip="The closing row for final thanks, credits, music, graphics, and fade out." onclick="arPickName('Signoff')">Signoff</button>
-          <button class="chip suggested-label" data-tip="A planned pause in the show flow, such as commercial, reset, station break, or classroom pause." onclick="arPickName('Break')">Break</button>
-          <button class="chip suggested-label" data-tip="A general setup or lead-in row before a segment, guest, topic, or scripted moment." onclick="arPickName('Intro')">Intro</button>
-          <button class="chip suggested-label" data-tip="An unscripted conversation segment where talent can speak naturally from prompts or topic notes." onclick="arPickName('Open Conversation')">Open Conversation</button>
+        <div class="chip-grid" id="arNameChips">
+          <button type="button" class="chip" onclick="arPickName('Show Open')">Show Open</button>
+          <button type="button" class="chip" onclick="arPickName('Cold Open')">Cold Open</button>
+          <button type="button" class="chip" onclick="arPickName('PKG')">PKG</button>
+          <button type="button" class="chip" onclick="arPickName('Toss')">Toss</button>
+          <button type="button" class="chip" onclick="arPickName('Live Shot')">Live Shot</button>
+          <button type="button" class="chip" onclick="arPickName('Bumper')">Bumper</button>
+          <button type="button" class="chip" onclick="arPickName('Signoff')">Signoff</button>
+          <button type="button" class="chip" onclick="arPickName('Break')">Break</button>
+          <button type="button" class="chip" onclick="arPickName('Intro')">Intro</button>
+          <button type="button" class="chip" onclick="arPickName('Open Conversation')">Open Conversation</button>
         </div>
         <div>
-          <div class="field-lbl u-mb8">Style</div>
-          <div class="opt-grid-3">
-            <button type="button" class="opt-card oc-accent" id="opt-timed" onclick="arSelectStyle('timed')">
+          <div class="field-lbl u-mb8">Kind</div>
+          <div class="opt-grid-3" id="ar-style" role="group" aria-label="Kind of row">
+            <button type="button" class="opt-card oc-accent" id="opt-timed" aria-pressed="true" onclick="arSelectStyle('timed')">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></div>
               <div class="opt-name">Timed</div>
-              <div class="opt-desc">Fixed duration. Clock counts down.</div>
+              <div class="opt-desc">Has a set length. The clock counts it down.</div>
             </button>
-            <button type="button" class="opt-card oc-neutral" id="opt-flex" onclick="arSelectStyle('flex')">
+            <button type="button" class="opt-card oc-neutral" id="opt-flex" aria-pressed="false" onclick="arSelectStyle('flex')">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.flex" aria-hidden="true"></span></div>
               <div class="opt-name">Flex</div>
-              <div class="opt-desc">No fixed time. Expand as needed.</div>
+              <div class="opt-desc">No set length. Runs as long as it needs.</div>
             </button>
-            <button type="button" class="opt-card oc-yellow" id="opt-segment" onclick="arSelectStyle('segment')">
+            <button type="button" class="opt-card oc-yellow" id="opt-segment" aria-pressed="false" onclick="arSelectStyle('segment')">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="content.segment" aria-hidden="true"></span></div>
               <div class="opt-name">Segment</div>
-              <div class="opt-desc">Section divider. Collapses its cues in build.</div>
+              <div class="opt-desc">A section title, not a cue. Groups the rows under it.</div>
             </button>
           </div>
         </div>
-        <div id="ar-dur-wrap" style="display:none">
-          <label class="field-lbl">Duration</label>
+        <div id="ar-dur-wrap">
+          <label class="field-lbl" for="ar-min">Duration <span class="u-muted">(optional)</span></label>
           <div class="u-dur-grid">
-            <input class="field-in u-time-in" id="ar-min" type="number" min="0" max="180" placeholder="0">
+            <input class="field-in u-time-in" id="ar-min" type="number" inputmode="numeric" min="0" max="180" placeholder="0" aria-label="Minutes" onkeydown="arKey(event)">
             <div class="u-time-in u-muted">:</div>
-            <input class="field-in u-time-in" id="ar-sec" type="number" min="0" max="59" placeholder="00">
+            <input class="field-in u-time-in" id="ar-sec" type="number" inputmode="numeric" min="0" max="59" placeholder="00" aria-label="Seconds" onkeydown="arKey(event)">
           </div>
           <div class="u-minsec-row"><span>MIN</span><span>SEC</span></div>
         </div>
+        <div id="ar-first-cue">
+          <div class="field-lbl u-mb8">First cue <span class="u-muted">(optional)</span></div>
+          <div class="chip-grid ar-cue-grid" id="arFirstCue"></div>
+          <div class="field-hint">Opens that cue as soon as the row is added. You can add the rest from the row's cells.</div>
+        </div>
         <div class="field">
-          <label class="field-lbl">Notes <span class="u-muted">(optional)</span></label>
-          <input class="field-in" id="ar-notes-input" type="text" placeholder="Additional info for the crew" maxlength="120" autocomplete="off">
+          <label class="field-lbl" for="ar-notes-input">Notes <span class="u-muted">(optional)</span></label>
+          <input class="field-in" id="ar-notes-input" type="text" placeholder="Anything the crew needs to know" maxlength="120" autocomplete="off" onkeydown="arKey(event)">
         </div>
         <div class="ar-nav">
-          <button class="ar-back" onclick="closeAddRowOv()">Cancel</button>
-          <button class="ar-next" id="ar-next-1" onclick="arGoStep2()" disabled><span>Choose Cue Type</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
-        </div>
-      </div>
-
-      <!-- Step 2: Cue type selection -->
-      <div class="ar-step" id="ar-step-2">
-        <div class="ar-step-label">Step 2 of 2 · Cue Type</div>
-        <div class="ar-heading">What type of cue is this?</div>
-        <div class="opt-grid-3" id="arTypeGrid"></div>
-        <div class="ar-nav">
-          <button class="ar-back" onclick="arGoStep1()"><span class="sf-symbol" data-symbol="action.back" aria-hidden="true"></span><span>Back</span></button>
-          <button class="ar-next" id="ar-next-2" onclick="arCreateRowAndOpenCueBuilder()" disabled><span>Open Cue Builder</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
+          <button class="ar-back" type="button" onclick="closeAddRowOv()">Cancel</button>
+          <button class="ar-next" type="button" id="ar-next-1" onclick="arAddRow()"><span>Add row</span></button>
         </div>
       </div>
     </div>
@@ -5832,10 +5839,10 @@ input.pt-range::-moz-range-thumb,
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="cueConfigModal" data-esc-hold>
   <div class="modal u-modal-scroll" style="max-width:520px">
-    <div class="modal-title" id="cueConfigTitle">Configure Cue</div>
+    <div class="modal-title cc-title" id="cueConfigTitle">Cue</div>
     <div id="cueConfigFields"></div>
     <button class="btn-primary" onclick="saveCueConfig()">Save</button>
-    <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Remove this cue</button>
+    <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Delete this cue</button>
     <button class="btn-secondary" onclick="hideModal('cueConfigModal')">Cancel</button>
   </div>
 </div>
@@ -7375,7 +7382,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=ef241a5a25"></script>
+<script src="cueola-app.js?v=356f517c35"></script>
 <script src="outrangutan/outrangutan.js?v=6e2583a2cd"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

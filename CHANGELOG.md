@@ -25,6 +25,20 @@ skipping beats.
 - The Live status rail says who the director is and whether this window's
   keys and Stream Deck work, in words.
 
+### Rundown: same table, simpler cues
+- The rundown keeps its rows and department cells, with the READY and TAKE
+  lines in every cell.
+- The cue cell editor is one screen: the READY and TAKE lines on top, always
+  editable, and under them only the pickers that department needs (camera
+  and shot; mic and open/close/under/up; clip; graphic and on-screen text;
+  look; who reads and the words). One tap fills both lines; a line you type
+  yourself is never overwritten. A camera cue went from 47 controls on two
+  tabs to 24 on one. Every section has a ⓘ.
+- Add a row is one screen and one button: name, kind, duration, an optional
+  first cue that opens as soon as the row lands. No step 2.
+- PREP / OUT helper rows are no longer generated. Old ones stay as ordinary
+  rows.
+
 ### Fixed
 - Safety plan: PPE items can be added and saved again, and the export tells
   you exactly what is missing (and takes you there) instead of silently
@@ -56,7 +70,7 @@ skipping beats.
 ### Not in this release
 - The one-type-per-cue rundown list from the 3.0 brief (§2.2–2.4) was built,
   went live for an hour, and was pulled: Jon wants rows with the department
-  cells across. The rundown, cue editor and add-row wizard are 2.2.1's.
+  cells across. The simplification moved inside that table instead.
 - The word list (docs/v3-glossary.md) and the copy rewrite table
   (docs/v3-copy-audit.md) are drafted, not applied. Lesson text is
   unchanged because the narration audio is generated from it.

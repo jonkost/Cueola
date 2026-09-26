@@ -7656,6 +7656,17 @@ const INFO_POPS = {
     body: 'The show code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
   },
 };
+Object.assign(INFO_POPS, {
+  'cue-ready-take': { title: 'READY and TAKE', lesson: 'cueola-build', section: 'know',
+    body: '<b>READY</b> is what the operator sets up before the moment: frame the shot, load the graphic, cue the clip. <b>TAKE</b> is the go: it puts the thing on air. The director says both out loud, in that order. Pick from the buttons below to fill both lines, or type them the way you would say them.' },
+  'cue-cell-video': { title: 'Camera cues', lesson: 'cueola-build', section: 'steps', body: 'Which camera goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer.' },
+  'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'A mic opens or closes. Music goes up to full or under the voices. Fade in and Fade out are gradual.' },
+  'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'A clip that rolls: a package, a bumper, an open. Link it to a playback cue below and it rolls by itself on TAKE; pre-roll is a countdown before it is on air.' },
+  'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. Type what it reads so the graphics operator can build it.' },
+  'cue-cell-lighting': { title: 'Lighting cues', lesson: 'cueola-build', section: 'steps', body: 'A look is one lighting state, or a cue number on the board. READY has it standing by; TAKE goes to it.' },
+  'cue-cell-script': { title: 'Script cues', lesson: 'cueola-build', section: 'steps', body: 'Who reads, and the words they read. The words show big on the prompter; the READY and TAKE lines are what the floor crew hears.' },
+  'add-row': { title: 'Rows and cues', lesson: 'cueola-build', section: 'know', body: 'A row is one moment of the show, with a name and a length. Each row can hold one cue per department (camera, audio, playback, graphic, lighting, script). A segment is a section title that groups rows; it is never taken.' },
+});
 let _infoPopOpenId = '';
 let _infoPopTrigger = null;
 function closeInfoPop() {
@@ -8060,13 +8071,10 @@ function rowConfirmLabel(id) {
   return `"${label}"${b.style === 'segment' ? ' segment' : ' row'}`;
 }
 
-// Guided helper rows (PREP/OUT) generated for a playback cue. They are ordinary
+// PREP/OUT helper rows from before 3.0 (no longer generated). They are ordinary
 // flex rows: they play, advance, move, and delete like any other row. helperFor
 // holds the parent beat id and helperRole says which job the row does.
 function isHelperBeat(b) { return Boolean(b?.helperFor && b?.helperRole); }
-function findPlaybackHelperRow(parentId, role) {
-  return beats.find(x => String(x.helperFor || '') === String(parentId) && x.helperRole === role) || null;
-}
 function helperRoleTagHTML(b) {
   if (!isHelperBeat(b)) return '';
   return `<span class="helper-role-tag helper-tag-${b.helperRole}">${b.helperRole === 'prep' ? 'PREP' : 'OUT'}</span>`;
@@ -8141,82 +8149,65 @@ function addRowAt(idx, position) {
 // ADD ROW WIZARD
 // ─────────────────────────────────────────────────────────────
 const AR_TYPE_DESC = {
-  video:    'Camera, source switch',
-  audio:    'Mics, music, sound',
-  lighting: 'Fixtures, scenes, looks',
-  playback: 'Clip rolls, VT, media',
-  gfx:      'Graphics, lower thirds',
-  script:   'Copy, dialogue, Flowmingo',
+  video:    'a camera shot',
+  audio:    'a mic or music',
+  lighting: 'a lighting look',
+  playback: 'a clip that rolls',
+  gfx:      'something on screen',
+  script:   'what the talent says',
 };
 
 function openAddRow() {
   arStyle = 'timed';
   arCueType = null;
-  const nameIn = document.getElementById('ar-name-input');
-  if (nameIn) nameIn.value = '';
-  const notesIn = document.getElementById('ar-notes-input');
-  if (notesIn) notesIn.value = '';
-  const minIn = document.getElementById('ar-min');
-  if (minIn) minIn.value = '0';
-  const secIn = document.getElementById('ar-sec');
-  if (secIn) secIn.value = '30';
-  document.getElementById('ar-next-1').disabled = false;
-  const suggestionGrid = document.querySelector('#ar-step-1 .chip-grid');
+  ['ar-name-input', 'ar-notes-input', 'ar-min', 'ar-sec'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const suggestionGrid = document.getElementById('arNameChips');
   if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
-  const stepLabel = document.querySelector('#ar-step-1 .ar-step-label');
-  if (stepLabel) stepLabel.textContent = freeTextMode ? 'New Row' : 'New Row: Step 1 of 2';
-  const nextBtn = document.getElementById('ar-next-1');
-  if (nextBtn) nextBtn.innerHTML = `<span>${freeTextMode ? 'Add Row' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
-  document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('#ar-style .opt-card').forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
   document.getElementById('opt-timed')?.classList.add('sel');
+  document.getElementById('opt-timed')?.setAttribute('aria-pressed', 'true');
   const durWrap = document.getElementById('ar-dur-wrap');
-  if (durWrap) durWrap.style.display = '';
-  document.getElementById('ar-step-1').classList.add('on');
-  document.getElementById('ar-step-2').classList.remove('on');
-  buildArContext();
+  if (durWrap) durWrap.hidden = false;
+  const firstCue = document.getElementById('arFirstCue');
+  if (firstCue) firstCue.innerHTML = Object.keys(CT).map(type => `<button type="button" class="chip ar-cue-chip" id="arcue-${type}" style="--cue-clr:${CT[type].color}" aria-pressed="false" onclick="arSelectFirstCue('${type}',this)">${sfIcon(CT[type].symbol)} ${CT[type].label}<span class="ar-cue-desc">${AR_TYPE_DESC[type] || ''}</span></button>`).join('');
+  const firstWrap = document.getElementById('ar-first-cue');
+  if (firstWrap) firstWrap.hidden = false;
+  const addBtn = document.getElementById('ar-next-1');
+  if (addBtn) addBtn.innerHTML = '<span>Add row</span>';
   showOverlay('addRowOv');
-  setTimeout(()=>nameIn?.focus(), 80);
+  setTimeout(() => document.getElementById('ar-name-input')?.focus(), 80);
 }
 
-function arGoStep2() {
-  if (!arStyle) return;
-  if (freeTextMode || arStyle === 'segment') {
-    insertAddRowBeat();
-    hideOverlay('addRowOv');
-    renderRundown();
-    syncToFirestore();
-    toast(arStyle === 'segment' ? 'Segment marker added.' : 'Row added.');
-    return;
-  }
-  arCueType = null;
-  const grid = document.getElementById('arTypeGrid');
-  grid.innerHTML = Object.keys(CT).map(type => {
-    const tc = CT[type];
-    return `<button type="button" class="opt-card" id="artype-${type}"
-        style="--oc:${tc.color};--ob:${tc.bg}"
-        onclick="arSelectCueType('${type}')">
-      <div class="opt-icon opt-icon-lg">${sfIcon(tc.symbol)}</div>
-      <div class="opt-name" style="color:${tc.color}">${tc.label}</div>
-      <div class="opt-desc">${AR_TYPE_DESC[type]||''}</div>
-    </button>`;
-  }).join('');
-  document.getElementById('ar-next-2').disabled = true;
-  document.getElementById('ar-step-1').classList.remove('on');
-  document.getElementById('ar-step-2').classList.add('on');
+function arSelectStyle(s) {
+  arStyle = s;
+  document.querySelectorAll('#ar-style .opt-card').forEach(c => { const on = c.id === `opt-${s}`; c.classList.toggle('sel', on); c.setAttribute('aria-pressed', String(on)); });
+  const durWrap = document.getElementById('ar-dur-wrap');
+  if (durWrap) durWrap.hidden = s !== 'timed';
+  const firstWrap = document.getElementById('ar-first-cue');
+  if (firstWrap) firstWrap.hidden = s === 'segment';
+  const addBtn = document.getElementById('ar-next-1');
+  if (addBtn) addBtn.innerHTML = `<span>${s === 'segment' ? 'Add segment' : 'Add row'}</span>`;
 }
 
-function arSelectCueType(type) {
-  arCueType = type;
-  document.querySelectorAll('#arTypeGrid .opt-card').forEach(c=>c.classList.remove('sel'));
-  document.getElementById(`artype-${type}`)?.classList.add('sel');
-  document.getElementById('ar-next-2').disabled = false;
+function arSelectFirstCue(type, el) {
+  arCueType = arCueType === type ? null : type;
+  document.querySelectorAll('#arFirstCue .chip').forEach(c => { const on = c === el && arCueType === type; c.classList.toggle('sel', on); c.setAttribute('aria-pressed', String(on)); });
+}
+
+function arPickName(name) {
+  const el = document.getElementById('ar-name-input');
+  if (el) { el.value = name; el.focus(); }
+}
+
+function arKey(event) {
+  if (event.key === 'Enter') { event.preventDefault(); arAddRow(); }
 }
 
 function buildAddRowBeat() {
   const info  = document.getElementById('ar-name-input')?.value?.trim()||'';
   const notes = document.getElementById('ar-notes-input')?.value?.trim()||'';
   const min   = arStyle==='timed' ? (parseInt(document.getElementById('ar-min')?.value)||0) : 0;
-  const sec   = arStyle==='timed' ? (parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
+  const sec   = arStyle==='timed' ? Math.min(59, parseInt(document.getElementById('ar-sec')?.value)||0) : 0;
   const now = Date.now();
   return { id:nextBeatId(), style:arStyle, info, notes, min, sec, done:false, cues:{}, _createdAt:now, _createdBy:presenceId };
 }
@@ -8232,19 +8223,19 @@ function insertAddRowBeat() {
   return newBeat;
 }
 
-function arCreateRowAndOpenCueBuilder() {
-  if (!arStyle || !arCueType) return;
+// One button: the row is added, and if a first cue was picked its cell opens.
+function arAddRow() {
+  if (!arStyle) return;
   const newBeat = insertAddRowBeat();
   hideOverlay('addRowOv');
   renderRundown();
   syncToFirestore();
-  toast('Row added. Configure the cue.');
-  setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
-}
-
-function arGoStep1() {
-  document.getElementById('ar-step-2').classList.remove('on');
-  document.getElementById('ar-step-1').classList.add('on');
+  if (arCueType && arStyle !== 'segment' && !freeTextMode) {
+    toast('Row added.');
+    setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
+    return;
+  }
+  toast(arStyle === 'segment' ? 'Segment added.' : 'Row added. Tap a cell to add a cue.');
 }
 
 function closeAddRowOv(e) {
@@ -8252,66 +8243,29 @@ function closeAddRowOv(e) {
   else if (!e) { _insertIdx = null; hideOverlay('addRowOv'); }
 }
 
-function buildArContext() {
-  const ctx = document.getElementById('arContext');
-  const last4 = beats.slice(-4);
-  if (!last4.length) { ctx.innerHTML=''; return; }
-  ctx.innerHTML = `<div class="ar-ctx-label">Last ${last4.length} row${last4.length>1?'s':''}</div>`+
-    last4.map(b => {
-      const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
-      const badges = types.map(t=>`<span class="type-badge tb-${t} tb-mini" style="color:${CT[t].color};background:${CT[t].bg}">${sfIcon(CT[t].symbol)}</span>`).join('');
-      return `<div class="ar-ctx-row">
-        <span class="ar-ctx-num">${beats.indexOf(b)+1}</span>
-        <span class="ar-ctx-badges">${badges||'<span class="ar-ctx-none">—</span>'}</span>
-        <span class="ar-ctx-name">${esc(b.info||'—')}</span>
-        <span class="ar-ctx-dur">${fmtDur(b)}</span>
-      </div>`;
-    }).join('');
-}
-
-function arSelectStyle(s) {
-  arStyle = s;
-  document.querySelectorAll('#ar-step-1 .opt-card').forEach(c=>c.classList.remove('sel'));
-  document.getElementById(`opt-${s}`)?.classList.add('sel');
-  const durWrap = document.getElementById('ar-dur-wrap');
-  if (durWrap) durWrap.style.display = s==='timed' ? '' : 'none';
-  const nextBtn = document.getElementById('ar-next-1');
-  if (nextBtn && !freeTextMode) {
-    nextBtn.innerHTML = `<span>${s === 'segment' ? 'Add Segment Marker' : 'Choose Cue Type'}</span>${sfIcon('action.forward')}`;
-  }
-  updateArNextEnabled();
-}
-
-function updateArNextEnabled() {
-  document.getElementById('ar-next-1').disabled = !arStyle;
-}
-
-function arPickName(name) {
-  const el = document.getElementById('ar-name-input');
-  if (el) el.value = name;
-  updateArNextEnabled();
-}
-
 // buildArFields removed — wizard now single-step; cue types configured via table cells
 
 // ─────────────────────────────────────────────────────────────
 // CUE CONFIG MODAL (per-cell)
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// CUE CELL EDITOR (3.0): the READY and TAKE lines sit on top and are always
+// editable; under them, only the pickers that department needs. One tap on a
+// picker writes both lines; typing in a line keeps whatever you typed.
+// ─────────────────────────────────────────────────────────────
+let _ccPick = {};            // the current picker choices for the open cell
+let _ccLinesTouched = false; // true once a line was typed by hand
+
 function openCueConfig(beatId, type) {
   cueConfigBeatId = beatId;
   cueConfigType   = type;
-  // Reset all state
-  _vOnSrc='';_vOnAct='';_vOnShot='';_vOffTrans='';_vOffDest='';
-  _aOnSrc='';_aOnCueType='';_aOffSrc='';_aOffCall='';
-  _pOnAction='';_pOffHow='';_pOffRet='';
-  _gOnType='';_gOnSrc='';_gOnTrans='';_gOffType='';_gOffHow='';
-  _lOnAction='';_lOnFix='';_lOnSpecial='';_lOffFix='';_lOffHow='';_lOffSpecial='';
-  _sOnType='Script';_sOnSrc='';
-  _sOnTags = [...(beats.find(x=>x.id===beatId)?.cues?.script?.scriptTags||[])];
+  _ccPick = {};
+  _ccLinesTouched = false;
   const b = beats.find(x=>x.id===beatId); if (!b) return;
   const existing = b.cues?.[type] || null;
   const tc = CT[type];
-  document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${tc.label}`;
+  const title = CUE_EDITOR[type]?.title || tc.label;
+  document.getElementById('cueConfigTitle').innerHTML = `${sfIcon(tc.symbol)} ${esc(title)} cue ${infoBtn(`cue-cell-${type}`, `${title} cues`)}`;
   const bodyHTML = freeTextMode ? buildFreeTextCueFields(type, existing) : buildCueConfigFields(type, existing);
   document.getElementById('cueConfigFields').innerHTML = bodyHTML + outrangutanCueFields(type, existing);
   document.getElementById('cueConfigRemoveBtn').style.display = existing ? '' : 'none';
@@ -8319,806 +8273,207 @@ function openCueConfig(beatId, type) {
   setRundownPresence(beatId);
 }
 
+function infoBtn(id, label) {
+  return `<button type="button" class="info-btn" aria-label="About ${esc(label || id)}" onclick="toggleInfoPop(event,'${id}')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>`;
+}
+
 function buildFreeTextCueFields(type, d) {
   d = d || {};
   const isScript = type === 'script';
   return `
-    <div class="field">
-      <label class="field-lbl">${isScript ? 'Script Cue (short label)' : 'Ready (standby)'}</label>
-      <input class="field-in" id="cc-on-text" value="${esc(getCueOn(d))}" placeholder="${isScript ? 'e.g. Host · Begin (a trigger note, not the script)' : 'Type anything...'}" maxlength="160" autocomplete="off">
-      ${isScript ? '<div class="field-hint">A short trigger note. On the prompter it shows only as dimmed guidance the talent does not read.</div>' : ''}
-    </div>
-    ${isScript ? '' : `<div class="field">
-      <label class="field-lbl">Take (go)</label>
-      <input class="field-in" id="cc-off-text" value="${esc(getCueOff(d))}" placeholder="Type anything..." maxlength="160" autocomplete="off">
-    </div>`}
+    ${ccLinesHTML(type, d)}
     ${isScript ? `<div class="field">
-      <label class="field-lbl">Speaker name</label>
+      <label class="field-lbl" for="cc-s-speaker">Speaker</label>
       <input class="field-in" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="e.g. Host, Anchor, Narrator" maxlength="80" autocomplete="off">
     </div>
-    <div class="field">
-      <label class="field-lbl">Script Copy (what the talent reads)</label>
-      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="8" placeholder="Type or paste the words the talent reads aloud. THIS is what appears big on the prompter.">${esc(d.text||'')}</textarea>
-    </div>` : ''}
-    <div class="field">
-      <label class="field-lbl">Notes</label>
-      <textarea class="field-in cc-note-ta" id="cc-notes" rows="3" placeholder="Anything the team needs to know.">${esc(d.notes||'')}</textarea>
+    ${ccScriptTextHTML(d)}` : ''}
+    ${ccNotesHTML(d)}`;
+}
+
+// What each department's pickers are and how they become the two lines.
+const CUE_EDITOR = {
+  video: {
+    title: 'Camera',
+    pickers: [
+      { key:'src',   label:'Camera or source', chips: () => getSources('video'), custom:'Type another source' },
+      { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','CU','ECU','2-shot','OTS','POV'], optional:true },
+      { key:'trans', label:'How it goes on air', chips: () => ['Take','Dissolve','Wipe','Fade'], optional:true },
+    ],
+    ready: p => p.src ? `Ready ${p.src}${p.shot ? ` · ${p.shot}` : ''}` : '',
+    take:  p => p.src ? `${p.trans || 'Take'} ${p.src}` : '',
+    hint: 'Pick the camera, then the shot. READY tells the operator to frame it; TAKE puts it on air.',
+  },
+  audio: {
+    title: 'Audio',
+    pickers: [
+      { key:'src',    label:'Mic or music', chips: () => getSources('audio'), custom:'Type another source' },
+      { key:'action', label:'What happens', chips: () => ['Open','Close','Under','Up','Fade in','Fade out'] },
+    ],
+    ready: p => p.src ? `Ready ${p.src}` : '',
+    take:  p => p.src ? `${p.action || 'Open'} ${p.src}` : '',
+    hint: 'Pick the source, then what happens to it. Open and Close are mics; Under and Up are music levels.',
+  },
+  playback: {
+    title: 'Playback',
+    pickers: [
+      { key:'clip', label:'Clip', input:'e.g. SC_042 or SHOW_OPEN', store:'clip' },
+    ],
+    ready: p => p.clip ? `Ready ${p.clip}` : '',
+    take:  p => p.clip ? `Roll ${p.clip}` : '',
+    hint: 'Name the clip. READY cues it up; TAKE rolls it. Link it to a playback cue below and it rolls by itself on TAKE.',
+  },
+  gfx: {
+    title: 'Graphic',
+    pickers: [
+      { key:'name', label:'Graphic', chips: () => ['Lower third','Full screen','Bug','Credits'], custom:'Type another graphic', store:'customType' },
+      { key:'text', label:'On-screen text', input:'e.g. Jane Doe · Student Council', optional:true, store:'gfxContent' },
+    ],
+    ready: p => p.name ? `Ready ${p.name}${p.text ? `: ${p.text}` : ''}` : '',
+    take:  p => p.name ? `Take ${p.name}` : '',
+    hint: 'Pick the kind of graphic and type what it reads. READY loads it; TAKE puts it on screen.',
+  },
+  lighting: {
+    title: 'Lighting',
+    pickers: [
+      { key:'look', label:'Look', chips: () => ['Warm wash','Desk key','Interview','House up','Blackout'], custom:'Type a look or a board cue number' },
+    ],
+    ready: p => p.look ? `Ready ${p.look}` : '',
+    take:  p => p.look ? `Go ${p.look}` : '',
+    hint: 'A look is one lighting state. READY has it standing by on the board; TAKE goes to it.',
+  },
+  script: {
+    title: 'Script',
+    pickers: [
+      { key:'who', label:'Who reads it', chips: () => [...getSources('scriptWho'), 'Narrator', 'Anchor'], custom:'Type a name', store:'speaker' },
+    ],
+    ready: p => p.who ? `Standby ${p.who}` : '',
+    take:  p => p.who ? `Cue ${p.who}` : '',
+    hint: 'Pick who reads. The words they read go in the script box; the prompter shows those big.',
+  },
+};
+
+function ccLinesHTML(type, d) {
+  const onVal  = d.on  !== undefined ? d.on  : (d.take  || '');
+  const offVal = d.off !== undefined ? d.off : (d.ready || '');
+  const isScript = type === 'script';
+  const isPlayback = type === 'playback';
+  return `
+    <div class="cc-lines">
+      <div class="field">
+        <div class="field-lbl-row"><label class="field-lbl cc-result-lbl" for="cc-on-text">${sfIcon('marker.ready')} ${isPlayback ? 'READY (cue it up)' : 'READY (set it up)'}</label>${infoBtn('cue-ready-take', 'READY and TAKE')}</div>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="${isScript ? 'e.g. Standby Host' : 'e.g. Ready CAM 1 · Wide'}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
+      </div>
+      <div class="field">
+        <label class="field-lbl cc-result-lbl" for="cc-off-text">${sfIcon('marker.go')} ${isPlayback ? 'TAKE (roll it)' : 'TAKE (put it on air)'}</label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="${isScript ? 'e.g. Cue Host' : 'e.g. Take CAM 1'}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
+      </div>
     </div>`;
 }
 
-function ccChips(chips, fn) {
-  return chips.map(c => {
-    // JSON-stringify the JS argument, then HTML-escape the whole attribute —
-    // chip values/labels include custom source names synced from other devices.
-    const val = esc(JSON.stringify((c.v !== undefined ? c.v : c).toString()));
-    const lbl = esc((c.label || c).toString());
-    return `<button type="button" class="cc-chip" onclick="${fn}(${val})">${lbl}</button>`;
+function ccNotesHTML(d) {
+  return `<div class="field">
+      <label class="field-lbl" for="cc-notes">Notes <span class="lbl-hint">(for your crew)</span></label>
+      <textarea class="field-in cc-note-ta" id="cc-notes" rows="2" placeholder="Anything the crew needs to know.">${esc(d.notes || '')}</textarea>
+    </div>`;
+}
+
+function ccScriptTextHTML(d) {
+  const text = d.text || (d.scriptType === 'Dialogue' ? d.dialogueNote : '') || '';
+  return `<div class="field">
+      <label class="field-lbl" for="cc-s-text">What the talent reads <span class="lbl-hint">(shows big on the prompter)</span></label>
+      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="6" placeholder="Type or paste the words, word for word.">${esc(text)}</textarea>
+      <div class="marker-chip-row">
+        <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
+        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
+        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
+        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
+        <label class="marker-chip cc-upload">Load a .txt or .pdf<input type="file" class="cc-file-in" id="cc-s-file" accept=".txt,.md,.pdf" hidden onchange="loadScriptFile(this,'cc-s-text')"></label>
+      </div>
+    </div>`;
+}
+
+function ccPickerHTML(type, picker, d) {
+  const current = picker.store ? (d[picker.store] || '') : '';
+  const id = `ccp-${picker.key}`;
+  const label = `<div class="cc-section-lbl">${esc(picker.label)}${picker.optional ? ' <span class="lbl-hint">(optional)</span>' : ''}</div>`;
+  if (picker.input) {
+    return `<div class="cc-section">${label}<input class="field-in" id="${id}" value="${esc(current)}" placeholder="${esc(picker.input)}" maxlength="120" autocomplete="off" oninput="ccPickInput('${picker.key}',this.value)"></div>`;
+  }
+  const chips = picker.chips().map(c => {
+    const val = esc(JSON.stringify(String(c)));
+    return `<button type="button" class="cc-chip${current === c ? ' sel' : ''}" aria-pressed="${current === c}" onclick="ccPickChip('${picker.key}',${val},this)">${esc(String(c))}</button>`;
   }).join('');
-}
-function ccCustomSrcField(id, val) {
-  return `<input class="field-in cc-custom-in" id="${id}" value="${esc(val||'')}" placeholder="Type custom source name…" style="display:none" oninput="ccCustomSrcInput('${id}')">`;
-}
-
-// ── Cue config tab switcher ─────────────────────────
-function ccTab(tab) {
-  document.querySelectorAll('.cc-tab-btn').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.cc-panel').forEach(p => p.style.display = p.dataset.tab === tab ? '' : 'none');
-}
-
-// ── Chip helpers ────────────────────────────────────
-function ccSelChip(groupId, val) {
-  document.querySelectorAll(`#${groupId} .cc-chip`).forEach(c =>
-    c.classList.toggle('sel', c.textContent.trim() === val || (c.getAttribute('data-val')||'') === val));
-}
-function ccShowCustom(fieldId, targetBuildFn) {
-  document.getElementById(fieldId).style.display = '';
-  document.getElementById(fieldId).focus();
-  if (targetBuildFn) window[targetBuildFn]?.();
-}
-function ccCustomSrcInput(fieldId) {
-  // triggers rebuild on whichever type is open
-  const fns = { 'cc-v-custom':'_ccVOnBuild','cc-a-custom':'_ccAOnBuild','cc-s-custom':'_ccSOnBuild' };
-  if (fns[fieldId]) window[fns[fieldId]]?.();
+  const custom = picker.custom ? `<input class="field-in cc-custom-in" id="${id}" value="${esc(current && !picker.chips().includes(current) ? current : '')}" placeholder="${esc(picker.custom)}" maxlength="80" autocomplete="off" oninput="ccPickInput('${picker.key}',this.value,true)">` : '';
+  return `<div class="cc-section">${label}<div class="cc-chip-grid" id="${id}-chips">${chips}</div>${custom}</div>`;
 }
 
 function buildCueConfigFields(type, d) {
   d = d || {};
-  const onVal  = d.on  !== undefined ? d.on  : (d.take  || '');
-  const offVal = d.off !== undefined ? d.off : (d.ready || '');
-  const notes  = d.notes || '';
-  let onPanel = '', offPanel = '';
-
-  // Step header helper
-  const step = (n, lbl) =>
-    `<div class="cc-step-lbl"><span class="cc-step-num">${n}</span>${lbl}</div>`;
-
-  // ══ VIDEO ══════════════════════════════════════════
-  if (type === 'video') {
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Source</div>
-        <div class="cc-chip-grid" id="vOn-src">
-          ${ccChips(getSources('video'), 'ccVOnSrc')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-custom','_ccVOnBuild')">+ Custom</button>
-        </div>
-        ${ccCustomSrcField('cc-v-custom', d.customSrc)}
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Action</div>
-        <div class="cc-chip-grid" id="vOn-act">
-          ${ccChips(['Ready','Standby','Set','Set with Media Wipe'], 'ccVOnAct')}
-        </div>
-      </div>
-      <div class="cc-section" id="vOn-shot-row" style="display:none">
-        <div class="cc-section-lbl">Shot type</div>
-        <div class="cc-chip-grid" id="vOn-shot">
-          ${ccChips(['Wide','Medium','CU','ECU','2-shot','OTS','POV','—'], 'ccVOnShot')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Set CAM 1 · Wide" maxlength="120" autocomplete="off">
-      </div>`;
-
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Destination</div>
-        <div class="cc-chip-grid" id="vOff-dest">
-          ${ccChips(['Black', ...getSources('video')], 'ccVOffDest')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-dest-custom','_ccVOffBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-v-off-dest-custom" value="" placeholder="Type custom destination…" style="display:none" oninput="_ccVOffBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Transition</div>
-        <div class="cc-chip-grid" id="vOff-trans">
-          ${ccChips(['Take','Dissolve','Media Wipe','Fade to Black'], 'ccVOffTrans')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-v-off-trans-custom','_ccVOffBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-v-off-trans-custom" value="" placeholder="Type custom transition…" style="display:none" oninput="_ccVOffBuild()">
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Dissolve to Black" maxlength="120" autocomplete="off">
-      </div>`;
-
-  // ══ AUDIO ══════════════════════════════════════════
-  } else if (type === 'audio') {
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Source</div>
-        <div class="cc-chip-grid" id="aOn-src">
-          ${ccChips(getSources('audio'), 'ccAOnSrc')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-custom','_ccAOnBuild')">+ Custom</button>
-        </div>
-        ${ccCustomSrcField('cc-a-custom', d.customSrc)}
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Cue type</div>
-        <div class="cc-chip-grid" id="aOn-cue">
-          ${ccChips(['Open Mic','Track PLBK','Fade In','Play'], 'ccAOnCueType')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-cue-custom','_ccAOnBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-a-cue-custom" value="" placeholder="Type custom cue type…" style="display:none" oninput="_ccAOnBuild()">
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Open Mic · Host" maxlength="120" autocomplete="off">
-      </div>`;
-
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Source</div>
-        <div class="cc-chip-grid" id="aOff-src">
-          ${ccChips([...getSources('audio'), 'All'], 'ccAOffSrc')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-a-off-custom','_ccAOffBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-a-off-custom" value="" placeholder="Type custom source…" style="display:none" oninput="_ccAOffBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Cue</div>
-        <div class="cc-chip-grid" id="aOff-call">
-          ${ccChips(['Close Mic','Mics Out','Fade Out','Track Out','Music Out','SFX Out','All Out','Silence'], 'ccAOffCall')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Close Mic · Host" maxlength="120" autocomplete="off">
-      </div>`;
-
-  // ══ PLAYBACK ════════════════════════════════════════
-  } else if (type === 'playback') {
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="field">
-        <label class="field-lbl">Clip name</label>
-        <input class="field-in" id="cc-play-clip" value="${esc(d.clip||'')}" placeholder="e.g. SC_042 or HOFL_122_Open" maxlength="60" autocomplete="off" oninput="ccPOnBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Action</div>
-        <div class="cc-chip-grid" id="pOn-act">
-          ${ccChips(['Ready','Roll'], 'ccPOnAct')}
-        </div>
-      </div>
-      <div class="cc-section" id="pOn-dur-row" style="display:none">
-        <div class="cc-section-lbl">Duration (TRT)</div>
-        <div class="cc-row-start">
-          <div class="field cc-time-col">
-            <label class="field-lbl">Min</label>
-            <input class="field-in cc-time-in" id="cc-play-min" type="number" min="0" max="99" value="${d.trtMin||''}" placeholder="0" oninput="ccPOnBuild()">
-          </div>
-          <div class="cc-time-sep">:</div>
-          <div class="field cc-time-col">
-            <label class="field-lbl">Sec</label>
-            <input class="field-in cc-time-in" id="cc-play-sec" type="number" min="0" max="59" value="${d.trtSec||''}" placeholder="00" oninput="ccPOnBuild()">
-          </div>
-        </div>
-        <div class="field u-mt10">
-          <label class="field-lbl">SMPTE Timecode <span class="lbl-hint">(HH:MM:SS:FF)</span></label>
-          <input class="field-in u-mono" id="cc-play-smpte" value="${esc(d.smpte||'')}" placeholder="e.g. 00:02:15:00" maxlength="30" autocomplete="off" oninput="ccPOnBuild()">
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} ROLL CUE <span class="lbl-hint">(how the playback starts)</span></label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Roll SC_042 · 0:45 TRT" maxlength="120" autocomplete="off">
-      </div>`;
-
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Return to</div>
-        <div class="cc-chip-grid" id="pOff-ret">
-          ${ccChips(['CAM 1','CAM 2','CAM 3','CAM 4','PLBK','Host','Anchor','Studio','Live'], 'ccPOffReturn')}
-        </div>
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">How it ends</div>
-        <div class="cc-chip-grid" id="pOff-how">
-          ${ccChips(['Cut PLBK','Fade PLBK','Stop','Roll Next','Take Live'], 'ccPOffHow')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} OUT CUE <span class="lbl-hint">(the plan for getting out)</span></label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Cut PLBK · Take CAM 1" maxlength="120" autocomplete="off">
-      </div>`;
-
-  // ══ GFX ═════════════════════════════════════════════
-  } else if (type === 'gfx') {
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Graphic type</div>
-        <div class="cc-chip-grid" id="gOn-type">
-          ${ccChips(['Lower 3rd','Full Screen','Bug'], 'ccGOnType')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-g-custom','ccGOnBuild')">+ Custom</button>
-        </div>
-        <input class="field-in cc-custom-in" id="cc-g-custom" value="${esc(d.customType||'')}" placeholder="Type custom graphic type…" style="display:none" oninput="ccGOnBuild()">
-      </div>
-      <div class="cc-section">
-        <div class="cc-section-lbl">Source</div>
-        <div class="cc-chip-grid" id="gOn-src">
-          ${ccChips(getSources('gfx'), 'ccGOnSrc')}
-        </div>
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Transition</div>
-        <div class="cc-chip-grid" id="gOn-trans">
-          ${ccChips(['Cut','Auto On'], 'ccGOnTrans')}
-        </div>
-      </div>
-      <div class="cc-section">
-        <div class="cc-section-lbl">Motion type</div>
-        <div class="cc-checks">
-          <label class="cc-check"><input type="checkbox" id="cc-g-fixed" ${d.isFixed?'checked':''}> Fixed</label>
-          <label class="cc-check"><input type="checkbox" id="cc-g-animated" ${d.isAnimated?'checked':''}> Animated</label>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-lbl">Content <span class="lbl-hint">(what it reads / shows)</span></label>
-        <input class="field-in" id="cc-gfx-content" value="${esc(d.gfxContent||'')}" placeholder="e.g. Host lower third, sponsor bug, intro card" maxlength="120" autocomplete="off" oninput="ccGOnBuild()">
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Auto On · Lower 3rd GFX" maxlength="120" autocomplete="off">
-      </div>`;
-
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Graphic type</div>
-        <div class="cc-chip-grid" id="gOff-type">
-          ${ccChips(['Lower 3rd','Full Screen','Bug','This GFX'], 'ccGOffType')}
-        </div>
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Take it out</div>
-        <div class="cc-chip-grid" id="gOff-how">
-          ${ccChips(['Lost It','Auto Off','Clear All'], 'ccGOffHow')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Lost It · Lower 3rd" maxlength="120" autocomplete="off">
-      </div>`;
-
-  // ══ LIGHTING ════════════════════════════════════════
-  } else if (type === 'lighting') {
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Fixture / Area</div>
-        <div class="cc-chip-grid" id="lOn-fix">
-          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOnFix')}
-          <button type="button" class="cc-chip ${d.lightingGoFeature?'sel':''}" onclick="ccLOnSpecial('GoFeature')">Go to Feature</button>
-          <button type="button" class="cc-chip ${d.lightingGoCue?'sel':''}" onclick="ccLOnSpecial('GoCue')">Go to Cue</button>
-        </div>
-      </div>
-      <div class="cc-section" id="lOn-gofeature-row" style="display:${d.lightingGoFeature?'':'none'}">
-        <div class="cc-section-lbl">Feature name / details</div>
-        <input class="field-in" id="cc-l-gofeature" value="${esc(d.lightingGoFeature||'')}" placeholder="e.g. Front wash warm, interview key" maxlength="80" oninput="_ccLOnBuild()">
-      </div>
-      <div class="cc-section" id="lOn-gocue-row" style="display:${d.lightingGoCue?'':'none'}">
-        <div class="cc-section-lbl">Board cue number / label</div>
-        <input class="field-in" id="cc-l-gocue" value="${esc(d.lightingGoCue||'')}" placeholder="e.g. Cue 14.5" maxlength="60" oninput="_ccLOnBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Action</div>
-        <div class="cc-chip-grid" id="lOn-act">
-          ${ccChips(['Cue On','At','Color','Gobo'], 'ccLOnAct')}
-        </div>
-      </div>
-      <div class="cc-section" id="lOn-intensity-row" style="display:none">
-        <div class="cc-section-lbl">Intensity</div>
-        <div class="u-row">
-          <input class="field-in u-maxw120" id="cc-l-intensity" value="${esc(d.intensity||'')}" placeholder="e.g. 75%" maxlength="20" oninput="_ccLOnBuild()">
-          <div class="cc-chip-grid">${ccChips(['25%','50%','75%','100%','Full'], 'ccLOnIntensity')}</div>
-        </div>
-      </div>
-      <div class="cc-section" id="lOn-color-row" style="display:none">
-        <div class="cc-section-lbl">Color</div>
-        <div class="cc-chip-grid" id="lOn-color">
-          ${ccChips(['Warm White','Cool White','Red','Blue','Green','Amber','Magenta','UV'], 'ccLOnColor')}
-        </div>
-        <input class="field-in cc-custom-in" id="cc-l-color" value="${esc(d.color||'')}" placeholder="e.g. Lee 201 Full CT Blue" maxlength="60" oninput="_ccLOnBuild()">
-      </div>
-      <div class="cc-section" id="lOn-gobo-row" style="display:none">
-        <div class="cc-section-lbl">Gobo</div>
-        <input class="field-in" id="cc-l-gobo" value="${esc(d.gobo||'')}" placeholder="e.g. Gobo 3 · Breakup pattern" maxlength="60" oninput="_ccLOnBuild()">
-      </div>
-      <div class="field">
-        <label class="field-lbl">Lighting notes <span class="lbl-hint">(cue numbers, focus, wash details)</span></label>
-        <textarea class="field-in cc-note-ta-sm" id="cc-l-notes-detail" rows="2" placeholder="e.g. Cue 14.5: Key light focus on anchor, remove fill">${esc(d.lightingDetail||'')}</textarea>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.ready')} READY (set it up, standby)</label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Key · Cue On" maxlength="120" autocomplete="off">
-      </div>`;
-
-    offPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Fixture / Area</div>
-        <div class="cc-chip-grid" id="lOff-fix">
-          ${ccChips(['Key','Fill','Back','All','House','Studio Wash'], 'ccLOffFix')}
-          <button type="button" class="cc-chip ${d.lightingOffGoFeature?'sel':''}" onclick="ccLOffSpecial('GoFeature')">Go to Feature</button>
-          <button type="button" class="cc-chip ${d.lightingOffGoCue?'sel':''}" onclick="ccLOffSpecial('GoCue')">Go to Cue</button>
-        </div>
-      </div>
-      <div class="cc-section" id="lOff-gofeature-row" style="display:${d.lightingOffGoFeature?'':'none'}">
-        <div class="cc-section-lbl">Feature name / details</div>
-        <input class="field-in" id="cc-l-off-gofeature" value="${esc(d.lightingOffGoFeature||'')}" placeholder="e.g. House lights up full" maxlength="80" oninput="_ccLOffBuild()">
-      </div>
-      <div class="cc-section" id="lOff-gocue-row" style="display:${d.lightingOffGoCue?'':'none'}">
-        <div class="cc-section-lbl">Board cue number / label</div>
-        <input class="field-in" id="cc-l-off-gocue" value="${esc(d.lightingOffGoCue||'')}" placeholder="e.g. Cue 20" maxlength="60" oninput="_ccLOffBuild()">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Lighting out</div>
-        <div class="cc-chip-grid" id="lOff-how">
-          ${ccChips(['Black Out','Fade Out','Dim to 50%','Dim to 20%','House Up','Cross Fade','Hold'], 'ccLOffHow')}
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} TAKE (put it on air)</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="e.g. Key · Fade Out" maxlength="120" autocomplete="off">
-      </div>`;
-
-  // ══ SCRIPT ══════════════════════════════════════════
-  } else if (type === 'script') {
-    const isDialogue = d.scriptType === 'Dialogue';
-    onPanel = `
-      ${step(1,'What is it?')}
-      <div class="cc-section">
-        <div class="cc-section-lbl">Script type</div>
-        <div class="cc-chip-grid" id="sOn-type">
-          <button type="button" class="cc-chip ${isDialogue?'':'sel'}" onclick="ccSOnType('Script')">Script</button>
-          <button type="button" class="cc-chip ${isDialogue?'sel':''}" onclick="ccSOnType('Dialogue')">Dialogue</button>
-        </div>
-      </div>
-      <div class="cc-section">
-        <div class="cc-section-lbl">Tags</div>
-        <div class="cc-chip-grid" id="sOn-tags">
-          ${(()=>{const tags=['Cold Open','Show Open','PKG Intro','Live Shot','VO','Toss','Guest Intro','Open Conversation','Tease','Throw to Break','Signoff'];const cur=d.scriptTags||[];return tags.map(t=>`<button type="button" class="cc-chip ${cur.includes(t)?'sel':''}" onclick="ccSOnTag('${t}')">${t}</button>`).join('');})()}
-        </div>
-      </div>
-      <div class="cc-section">
-        <div class="cc-section-lbl">Source / Speaker</div>
-        <div class="cc-chip-grid" id="sOn-src">
-          ${ccChips([...getSources('scriptWho'), 'Narrator','Anchor'], 'ccSOnSrc')}
-          <button type="button" class="cc-chip cc-chip-add" onclick="ccShowCustom('cc-s-custom','_ccSOnBuild')">+ Custom</button>
-        </div>
-        ${ccCustomSrcField('cc-s-custom', d.customSrc)}
-        <input class="field-in u-mt8" id="cc-s-speaker" value="${esc(d.speaker||d.customSrc||'')}" placeholder="Speaker name for Flowmingo headers…" maxlength="80" autocomplete="off">
-      </div>
-      ${step(2,'What will you do with it?')}
-      <div id="sOn-script-panel" style="${isDialogue?'display:none':''}">
-        <div class="field">
-          <label class="field-lbl">Script copy <span class="lbl-hint">(feeds Flowmingo)</span></label>
-          <textarea class="field-in cc-script-ta" id="cc-s-text" rows="5" placeholder="Write the copy here, word for word.">${esc(d.text||'')}</textarea>
-          <div class="marker-chip-row">
-            <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
-            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
-            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
-            <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
-          </div>
-        </div>
-        <div class="field">
-          <label class="field-lbl">Upload script <span class="lbl-hint">(.txt or .pdf)</span></label>
-          <input type="file" class="cc-file-in" id="cc-s-file" accept=".txt,.md,.pdf" onchange="loadScriptFile(this,'cc-s-text')">
-        </div>
-      </div>
-      <div id="sOn-dialogue-panel" style="${isDialogue?'':'display:none'}">
-        <div class="field">
-          <label class="field-lbl">Dialogue note <span class="lbl-hint">(brief description only)</span></label>
-          <input class="field-in" id="cc-s-dialogue" value="${esc(d.dialogueNote||'')}" placeholder="e.g. Host and guest discuss the segment topic (unscripted)" maxlength="160" autocomplete="off">
-        </div>
-      </div>
-      <div class="cc-divider"></div>
-      <div class="field">
-        <label class="field-lbl cc-result-lbl">${sfIcon('marker.go')} SCRIPT CUE <span class="lbl-hint">(short label, not the script)</span></label>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="e.g. Host · Begin" maxlength="120" autocomplete="off">
-        <div class="field-hint">A trigger note for the crew. The prompter shows it only as dimmed guidance; the words the talent reads go in Script Copy above.</div>
-      </div>`;
-
-    offPanel = '';
-  }
-
-  // Script: single tab; all others: On/Off tabs. Playback speaks its own
-  // vocabulary: the standby panel is the ROLL CUE, the go panel is the OUT CUE.
-  const isScript = type === 'script';
-  const isPlayback = type === 'playback';
-  const tabHtml = isScript ? '' : `
-    <div class="cc-tabs">
-      <button class="cc-tab-btn active" data-tab="on" onclick="ccTab('on')">${sfIcon('marker.ready')} ${isPlayback ? 'Roll' : 'Ready'}</button>
-      <button class="cc-tab-btn" data-tab="off" onclick="ccTab('off')">${sfIcon('marker.go')} ${isPlayback ? 'Out' : 'Take'}</button>
-    </div>`;
+  const ed = CUE_EDITOR[type];
+  if (!ed) return buildFreeTextCueFields(type, d);
+  // Seed the pickers from what the cell already stores, so a saved cell
+  // reopens with its choices lit.
+  ed.pickers.forEach(p => { if (p.store && d[p.store]) _ccPick[p.key] = d[p.store]; });
   return `
-    ${tabHtml}
-    <div class="cc-panel" data-tab="on">${onPanel}</div>
-    ${isScript ? '' : `<div class="cc-panel" data-tab="off" style="display:none">${offPanel}</div>`}
-    ${isPlayback ? ccGuidedRowsSection(d) : ''}
-    <div class="cc-divider"></div>
-    <div class="field">
-      <label class="field-lbl">Notes <span class="lbl-hint">(for your crew)</span></label>
-      <textarea class="field-in cc-note-ta" id="cc-notes" rows="2" placeholder="Add context, reminders, or crew instructions…">${esc(notes)}</textarea>
-    </div>`;
+    ${ccLinesHTML(type, d)}
+    <div class="cc-pickers">
+      <div class="cc-pickers-hint">${esc(ed.hint)}</div>
+      ${ed.pickers.map(p => ccPickerHTML(type, p, d)).join('')}
+    </div>
+    ${type === 'script' ? ccScriptTextHTML(d) : ''}
+    ${ccNotesHTML(d)}`;
 }
 
-// R1 guided rows: the playback cue wizard can generate a PREP row before the
-// cue and an OUT row after it. Fresh cells default both boxes on; on an
-// existing cell each box mirrors whether that helper row exists right now
-// (checked means saving refreshes its generated text).
-function ccGuidedRowsSection(d) {
-  const parent = beats.find(x => x.id === cueConfigBeatId);
-  const prepExists = Boolean(findPlaybackHelperRow(parent?.id, 'prep'));
-  const outExists = Boolean(findPlaybackHelperRow(parent?.id, 'out'));
-  const freshCell = !getCueOn(d) && !getCueOff(d) && !(d.clip || '');
-  const bothDefault = freshCell && !prepExists && !outExists;
-  return `
-    <div class="cc-divider"></div>
-    <div class="cc-section cc-guided-rows">
-      <div class="cc-section-lbl">Guided rows</div>
-      <div class="cc-checks cc-checks-stack">
-        <label class="cc-check"><input type="checkbox" id="cc-guided-prep" ${(bothDefault || prepExists) ? 'checked' : ''}> Add a PREP row before this cue (ready the playback, track the audio)</label>
-        <label class="cc-check"><input type="checkbox" id="cc-guided-out" ${(bothDefault || outExists) ? 'checked' : ''}> Add an OUT row after this cue (where the show goes next)</label>
-      </div>
-      <div class="field-hint">PREP readies the clip before the call; OUT is where the show goes after it ends. Guided rows are real rundown rows. Students can edit or delete them.</div>
-    </div>`;
-}
-
-// ══ VIDEO On helpers ════════════════════════════════
-let _vOnSrc='',_vOnAct='',_vOnShot='';
-function ccVOnSrc(src) {
-  _vOnSrc=src; _vOnAct=''; _vOnShot='';
-  ccSelChip('vOn-src',src);
-  document.querySelectorAll('#vOn-act .cc-chip,#vOn-shot .cc-chip').forEach(c=>c.classList.remove('sel'));
-  document.getElementById('vOn-shot-row').style.display = 'none';
-  _ccVOnBuild();
-}
-function ccVOnAct(act) {
-  _vOnAct=act; ccSelChip('vOn-act',act);
-  const isLive = /^(CAM|CPU|ME)/.test(_vOnSrc);
-  document.getElementById('vOn-shot-row').style.display = isLive ? '' : 'none';
-  _ccVOnBuild();
-}
-function ccVOnShot(shot) {
-  _vOnShot=shot==='—'?'':shot; ccSelChip('vOn-shot',shot); _ccVOnBuild();
-}
-function _ccVOnBuild() {
-  if (!_vOnSrc) return;
-  const src  = document.getElementById('cc-v-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-v-custom')?.value||_vOnSrc) : _vOnSrc;
-  const act  = _vOnAct || 'Set';
-  const shot = _vOnShot ? ` · ${_vOnShot}` : '';
-  const el   = document.getElementById('cc-on-text');
-  if (el) el.value = `${act} ${src}${shot}`;
-}
-
-// ══ VIDEO Off helpers ═══════════════════════════════
-let _vOffTrans='',_vOffDest='';
-function ccVOffTrans(t){ _vOffTrans=t; ccSelChip('vOff-trans',t); _ccVOffBuild(); }
-function ccVOffDest(d) { _vOffDest=d;  ccSelChip('vOff-dest',d);  _ccVOffBuild(); }
-function _ccVOffBuild() {
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  const destCustomEl = document.getElementById('cc-v-off-dest-custom');
-  const transCustomEl = document.getElementById('cc-v-off-trans-custom');
-  const d = (destCustomEl?.style.display!=='none' && destCustomEl?.value) ? destCustomEl.value : (_vOffDest||'Black');
-  const t = (transCustomEl?.style.display!=='none' && transCustomEl?.value) ? transCustomEl.value : (_vOffTrans||'Take');
-  el.value = d==='Black' ? `${t} to Black` : `${t} to ${d}`;
-}
-
-// ══ AUDIO On helpers ════════════════════════════════
-let _aOnSrc='',_aOnCueType='';
-function ccAOnSrc(src) {
-  _aOnSrc=src; ccSelChip('aOn-src',src);
-  _ccAOnBuild();
-}
-function ccAOnCueType(t) { _aOnCueType=t; ccSelChip('aOn-cue',t); _ccAOnBuild(); }
-function _ccAOnBuild() {
-  const src = document.getElementById('cc-a-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-a-custom')?.value||_aOnSrc) : _aOnSrc;
-  const cueCustomEl = document.getElementById('cc-a-cue-custom');
-  const cue = (cueCustomEl?.style.display!=='none' && cueCustomEl?.value) ? cueCustomEl.value : _aOnCueType;
-  const el  = document.getElementById('cc-on-text'); if(!el) return;
-  const parts=[cue,src].filter(Boolean);
-  el.value = parts.join(' · ');
-}
-
-// ══ AUDIO Off helpers ═══════════════════════════════
-let _aOffSrc='',_aOffCall='';
-function ccAOffSrc(src) {
-  _aOffSrc=src; ccSelChip('aOff-src',src);
-  _ccAOffBuild();
-}
-function ccAOffCall(val) { _aOffCall=val; ccSelChip('aOff-call',val); _ccAOffBuild(); }
-function _ccAOffBuild() {
-  const src = document.getElementById('cc-a-off-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-a-off-custom')?.value||_aOffSrc) : _aOffSrc;
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  const parts=[_aOffCall,src].filter(Boolean);
-  el.value = parts.join(' · ');
-}
-
-// ══ PLAYBACK On helpers ═════════════════════════════
-let _pOnAction='';
-function ccPOnAct(act){
-  _pOnAction=act; ccSelChip('pOn-act',act);
-  document.getElementById('pOn-dur-row').style.display = act==='Roll' ? '' : 'none';
-  ccPOnBuild();
-}
-function ccPOnBuild(){
-  const clip=document.getElementById('cc-play-clip')?.value?.trim()||'';
-  const min=parseInt(document.getElementById('cc-play-min')?.value)||0;
-  const sec=parseInt(document.getElementById('cc-play-sec')?.value)||0;
-  const smpte=document.getElementById('cc-play-smpte')?.value?.trim()||'';
-  const trt=(min||sec)?` · ${min}:${sec.toString().padStart(2,'0')} TRT`:'';
-  const smpteStr=smpte?` [${smpte}]`:'';
-  const act=_pOnAction||'Roll';
-  const el=document.getElementById('cc-on-text'); if(!el) return;
-  el.value=clip?`${act} ${clip}${trt}${smpteStr}`:act;
-}
-
-// ══ PLAYBACK Off helpers ════════════════════════════
-let _pOffHow='',_pOffRet='';
-function ccPOffHow(v)    { _pOffHow=v; ccSelChip('pOff-how',v);  _ccPOffBuild(); }
-function ccPOffReturn(v) { _pOffRet=v; ccSelChip('pOff-ret',v); _ccPOffBuild(); }
-function _ccPOffBuild(){
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  const parts=[_pOffHow,_pOffRet?`Take ${_pOffRet}`:''].filter(Boolean);
-  el.value=parts.join(' · ')||_pOffHow;
-}
-
-// ══ GFX On helpers ══════════════════════════════════
-let _gOnType='',_gOnSrc='',_gOnTrans='';
-function ccGOnType(t){ _gOnType=t; ccSelChip('gOn-type',t); ccGOnBuild(); }
-function ccGOnSrc(s) { _gOnSrc=s;  ccSelChip('gOn-src',s);  ccGOnBuild(); }
-function ccGOnTrans(t){ _gOnTrans=t; ccSelChip('gOn-trans',t); ccGOnBuild(); }
-function ccGOnBuild(){
-  const type = document.getElementById('cc-g-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-g-custom')?.value?.trim()||_gOnType) : _gOnType;
-  const content=document.getElementById('cc-gfx-content')?.value?.trim()||'';
-  const trans=_gOnTrans||'Cut';
-  const el=document.getElementById('cc-on-text'); if(!el) return;
-  const parts=[trans,type||(content?'GFX':''),content?`(${content})`:''].filter(Boolean);
-  el.value=parts.join(' · ');
-}
-
-// ══ GFX Off helpers ═════════════════════════════════
-let _gOffType='',_gOffHow='';
-function ccGOffType(t){
-  _gOffType=t; ccSelChip('gOff-type',t);
-  _ccGOffBuild();
-}
-function ccGOffHow(val){ _gOffHow=val; ccSelChip('gOff-how',val); _ccGOffBuild(); }
-function _ccGOffBuild(){
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  const label=(_gOffType&&_gOffType!=='This GFX')?_gOffType:'';
-  const parts=[_gOffHow,label].filter(Boolean);
-  el.value=parts.join(' · ')||_gOffHow;
-}
-
-// ══ LIGHTING On helpers ═════════════════════════════
-let _lOnAction='',_lOnFix='',_lOnSpecial=''; // special: 'GoFeature'|'GoCue'|''
-function ccLOnFix(v){
-  _lOnFix=v; _lOnSpecial='';
-  // deselect Go to Feature / Go to Cue visually
-  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
-  ccSelChip('lOn-fix',v);
-  document.getElementById('lOn-gofeature-row').style.display='none';
-  document.getElementById('lOn-gocue-row').style.display='none';
-  _ccLOnBuild();
-}
-function ccLOnSpecial(which){
-  _lOnSpecial=which; _lOnFix='';
-  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
-  // highlight the clicked special button
-  const label = which==='GoFeature'?'Go to Feature':'Go to Cue';
-  document.querySelectorAll('#lOn-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
-  document.getElementById('lOn-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
-  document.getElementById('lOn-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
-  _ccLOnBuild();
-}
-function ccLOnAct(v){
-  _lOnAction=v; ccSelChip('lOn-act',v);
-  document.getElementById('lOn-intensity-row').style.display = v==='At'    ? '' : 'none';
-  document.getElementById('lOn-color-row').style.display     = v==='Color' ? '' : 'none';
-  document.getElementById('lOn-gobo-row').style.display      = v==='Gobo'  ? '' : 'none';
-  _ccLOnBuild();
-}
-function ccLOnIntensity(v){
-  const el=document.getElementById('cc-l-intensity'); if(el) el.value=v; _ccLOnBuild();
-}
-function ccLOnColor(v){
-  const el=document.getElementById('cc-l-color'); if(el) el.value=v; _ccLOnBuild();
-}
-function _ccLOnBuild(){
-  const el=document.getElementById('cc-on-text'); if(!el) return;
-  // Determine fixture string
-  let fix=_lOnFix;
-  if(_lOnSpecial==='GoFeature'){
-    const val=document.getElementById('cc-l-gofeature')?.value?.trim()||'';
-    fix=val?`Go to Feature: ${val}`:'Go to Feature';
-    el.value=fix; return;
-  }
-  if(_lOnSpecial==='GoCue'){
-    const val=document.getElementById('cc-l-gocue')?.value?.trim()||'';
-    fix=val?`Go to Cue ${val}`:'Go to Cue';
-    el.value=fix; return;
-  }
-  const act=_lOnAction||'Cue On';
-  let detail='';
-  if(_lOnAction==='At'){
-    const int=document.getElementById('cc-l-intensity')?.value||'';
-    detail=int?`At ${int}`:'At';
-  } else if(_lOnAction==='Color'){
-    const col=document.getElementById('cc-l-color')?.value||'';
-    detail=col?`Color: ${col}`:'Color';
-  } else if(_lOnAction==='Gobo'){
-    const gob=document.getElementById('cc-l-gobo')?.value||'';
-    detail=gob?`Gobo: ${gob}`:'Gobo';
-  }
-  const parts=[fix,detail||act].filter(Boolean);
-  el.value=parts.join(' · ');
-}
-
-// ══ LIGHTING Off helpers ════════════════════════════
-let _lOffFix='',_lOffHow='',_lOffSpecial='';
-function ccLOffFix(v){
-  _lOffFix=v; _lOffSpecial='';
-  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent==='Go to Feature'||c.textContent==='Go to Cue')c.classList.remove('sel');});
-  ccSelChip('lOff-fix',v);
-  document.getElementById('lOff-gofeature-row').style.display='none';
-  document.getElementById('lOff-gocue-row').style.display='none';
-  _ccLOffBuild();
-}
-function ccLOffSpecial(which){
-  _lOffSpecial=which; _lOffFix='';
-  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>c.classList.remove('sel'));
-  const label=which==='GoFeature'?'Go to Feature':'Go to Cue';
-  document.querySelectorAll('#lOff-fix .cc-chip').forEach(c=>{if(c.textContent===label)c.classList.add('sel');});
-  document.getElementById('lOff-gofeature-row').style.display = which==='GoFeature' ? '' : 'none';
-  document.getElementById('lOff-gocue-row').style.display     = which==='GoCue'     ? '' : 'none';
-  _ccLOffBuild();
-}
-function ccLOffHow(val){ _lOffHow=val; ccSelChip('lOff-how',val); _ccLOffBuild(); }
-function _ccLOffBuild(){
-  const el=document.getElementById('cc-off-text'); if(!el) return;
-  if(_lOffSpecial==='GoFeature'){
-    const val=document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
-    el.value=val?`Go to Feature: ${val}`:'Go to Feature'; return;
-  }
-  if(_lOffSpecial==='GoCue'){
-    const val=document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
-    el.value=val?`Go to Cue ${val}`:'Go to Cue'; return;
-  }
-  const parts=[_lOffFix,_lOffHow].filter(Boolean);
-  el.value=parts.join(' · ')||_lOffHow;
-}
-
-// ══ SCRIPT tag helpers ══════════════════════════════
-let _sOnTags = [];
-function ccSOnTag(tag) {
-  const idx = _sOnTags.indexOf(tag);
-  if (idx>=0) _sOnTags.splice(idx,1); else _sOnTags.push(tag);
-  document.querySelectorAll('#sOn-tags .cc-chip').forEach(c=>{
-    c.classList.toggle('sel', _sOnTags.includes(c.textContent));
+function ccPickChip(key, value, el) {
+  const same = _ccPick[key] === value;
+  _ccPick[key] = same ? '' : value;   // tap again to clear
+  el.parentElement?.querySelectorAll('.cc-chip').forEach(c => {
+    const on = c === el && !same;
+    c.classList.toggle('sel', on);
+    c.setAttribute('aria-pressed', String(on));
   });
-  _ccSOnBuild();
+  const custom = document.getElementById(`ccp-${key}`);
+  if (custom && custom.classList.contains('cc-custom-in')) custom.value = '';
+  ccCompose();
 }
-
-// ══ SCRIPT On helpers ═══════════════════════════════
-let _sOnType='Script',_sOnSrc='';
-function ccSOnType(t){
-  _sOnType=t;
-  document.querySelectorAll('#sOn-type .cc-chip').forEach(c=>c.classList.toggle('sel',c.textContent===t));
-  document.getElementById('sOn-script-panel').style.display   = t==='Dialogue'?'none':'';
-  document.getElementById('sOn-dialogue-panel').style.display = t==='Dialogue'?'':'none';
-  _ccSOnBuild();
+function ccPickInput(key, value, isCustom) {
+  _ccPick[key] = String(value || '').trim();
+  if (isCustom) document.querySelectorAll(`#ccp-${key}-chips .cc-chip`).forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
+  ccCompose();
 }
-function ccSOnSrc(v){ _sOnSrc=v; ccSelChip('sOn-src',v); _ccSOnBuild(); }
-function _ccSOnBuild(){
-  const src=document.getElementById('cc-s-custom')?.style.display!=='none'
-    ? (document.getElementById('cc-s-custom')?.value||_sOnSrc) : _sOnSrc;
-  const el=document.getElementById('cc-on-text'); if(!el) return;
-  el.value=src?`${src} · Begin`:'Begin';
+// Write both lines from the pickers. A line someone typed by hand is theirs:
+// the pickers stop rewriting until the cell is reopened.
+function ccCompose() {
+  if (_ccLinesTouched) return;
+  const ed = CUE_EDITOR[cueConfigType];
+  if (!ed) return;
+  const on = document.getElementById('cc-on-text'), off = document.getElementById('cc-off-text');
+  const ready = ed.ready(_ccPick), take = ed.take(_ccPick);
+  if (on && ready) on.value = ready;
+  if (off && take) off.value = take;
 }
-
 
 function saveCueConfig() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
   if (!b.cues) b.cues = {};
-  // R1 guided rows: the prior cell state tells regeneration which helper-row
-  // text is still generator-owned and which text a student rewrote by hand.
-  const prevCell = b.cues[cueConfigType] ? cloneRundownValue(b.cues[cueConfigType]) : null;
+  // Keep whatever an older editor stored on the cell (links, legacy fields):
+  // a save must never lose data the dialog no longer shows.
   const d = {
+    ...(b.cues[cueConfigType] || {}),
     on:    (document.getElementById('cc-on-text')?.value ||'').trim(),
     off:   (document.getElementById('cc-off-text')?.value||'').trim(),
     notes: (document.getElementById('cc-notes')?.value   ||'').trim(),
   };
-  // Type-specific extras
-  switch(cueConfigType) {
-    case 'video':
-      d.customSrc = document.getElementById('cc-v-custom')?.value?.trim()||'';
-      break;
-    case 'audio':
-      d.customSrc  = document.getElementById('cc-a-custom')?.value?.trim()||'';
-      break;
-    case 'playback':
-      d.clip    = document.getElementById('cc-play-clip')?.value?.trim()||'';
-      d.trtMin  = document.getElementById('cc-play-min')?.value||'';
-      d.trtSec  = document.getElementById('cc-play-sec')?.value||'';
-      d.smpte   = document.getElementById('cc-play-smpte')?.value?.trim()||'';
-      break;
-    case 'gfx':
-      d.customType  = document.getElementById('cc-g-custom')?.value?.trim()||'';
-      d.gfxContent  = document.getElementById('cc-gfx-content')?.value?.trim()||'';
-      d.isFixed     = document.getElementById('cc-g-fixed')?.checked||false;
-      d.isAnimated  = document.getElementById('cc-g-animated')?.checked||false;
-      break;
-    case 'lighting':
-      d.lightingDetail      = document.getElementById('cc-l-notes-detail')?.value?.trim()||'';
-      d.intensity           = document.getElementById('cc-l-intensity')?.value?.trim()||'';
-      d.color               = document.getElementById('cc-l-color')?.value?.trim()||'';
-      d.gobo                = document.getElementById('cc-l-gobo')?.value?.trim()||'';
-      d.lightingGoFeature   = document.getElementById('cc-l-gofeature')?.value?.trim()||'';
-      d.lightingGoCue       = document.getElementById('cc-l-gocue')?.value?.trim()||'';
-      d.lightingOffGoFeature= document.getElementById('cc-l-off-gofeature')?.value?.trim()||'';
-      d.lightingOffGoCue    = document.getElementById('cc-l-off-gocue')?.value?.trim()||'';
-      break;
-    case 'script':
-      d.scriptType  = _sOnType;
-      d.customSrc   = document.getElementById('cc-s-custom')?.value?.trim()||'';
-      d.speaker     = document.getElementById('cc-s-speaker')?.value?.trim()||'';
-      d.text        = document.getElementById('cc-s-text')?.value||'';
-      d.dialogueNote= document.getElementById('cc-s-dialogue')?.value?.trim()||'';
-      d.scriptTags  = [..._sOnTags];
-      break;
+  const ed = CUE_EDITOR[cueConfigType];
+  if (ed && !freeTextMode) ed.pickers.forEach(p => { if (p.store) d[p.store] = _ccPick[p.key] || ''; });
+  if (cueConfigType === 'script') {
+    const speaker = document.getElementById('cc-s-speaker')?.value?.trim();
+    if (speaker !== undefined) d.speaker = speaker;
+    d.text = document.getElementById('cc-s-text')?.value || '';
+    d.scriptType = 'Script';   // the words in the box are what the prompter shows
+    delete d.dialogueNote;
   }
-  // Outrangutan links — playback cells carry cue + SFX links; audio cells carry SFX (P4)
+  // Playback / SFX links (the Outrangutan block).
   if (cueConfigType === 'playback') {
     const outCue = document.getElementById('cc-out-cue')?.value || '';
     const outAuto = document.getElementById('cc-out-auto')?.checked || false;
@@ -9139,135 +8494,10 @@ function saveCueConfig() {
   // qlabAction/qlabAuto fields on old rows are dropped whenever a cue is re-saved.
   delete d.qlabCue; delete d.qlabAction; delete d.qlabAuto;
   b.cues[cueConfigType] = d;
-  const helperNote = cueConfigType === 'playback' ? syncPlaybackHelperRows(b, prevCell, d) : '';
   hideModal('cueConfigModal');
   setRundownPresence(null);
   renderRundown(); syncToFirestore();
-  toast(helperNote ? `Cue saved. ${helperNote}` : 'Cue saved.');
-}
-
-// ─────────────────────────────────────────────────────────────
-// R1 GUIDED ROWS (playback cue wizard → PREP/ROLL/OUT rundown rows)
-// The wizard teaches the full playback sequence as real rows: a PREP row
-// readies the clip and tracks the audio, the parent row is the roll cue, and
-// an OUT row states the plan for getting out. All generation runs through
-// saveCueConfig, the one place a playback cell is written.
-// ─────────────────────────────────────────────────────────────
-
-// Mirror of ccPOnBuild's grammar, computed from a saved cell instead of the
-// modal inputs. Lets generation ask: was this on text machine-composed?
-function composePlaybackOnText(act, cell) {
-  const clip = (cell?.clip || '').trim();
-  const min = parseInt(cell?.trtMin) || 0;
-  const sec = parseInt(cell?.trtSec) || 0;
-  const smpte = (cell?.smpte || '').trim();
-  const trt = (min || sec) ? ` · ${min}:${sec.toString().padStart(2,'0')} TRT` : '';
-  const smpteStr = smpte ? ` [${smpte}]` : '';
-  return clip ? `${act} ${clip}${trt}${smpteStr}` : act;
-}
-
-// Mirror of _ccPOffBuild's grammar, read back out of a saved off text:
-// '<how> · Take <return>', 'Take <return>', or a bare how.
-function parsePlaybackOffText(off) {
-  const text = String(off || '').trim();
-  if (!text) return { how:'', ret:'' };
-  const m = text.match(/^(?:(.*?) · )?Take (.+)$/);
-  if (m) return { how:(m[1] || '').trim(), ret:m[2].trim() };
-  return { how:text, ret:'' };
-}
-
-function playbackHelperClipName(cell, parent) {
-  const linked = cell?.outCueId ? ((outrangutanState.cues || {})[cell.outCueId]?.name || '') : '';
-  return (cell?.clip || '').trim() || linked || (cell?.outCueName || '') || (parent?.info || '').trim() || 'playback';
-}
-
-// Deterministic helper-row content from one playback cell. Regeneration runs
-// this same function over the PRIOR cell state to tell generated text apart
-// from a student's manual edit.
-function buildPlaybackHelperContent(role, cell, parent) {
-  if (role === 'prep') {
-    const clip = playbackHelperClipName(cell, parent);
-    return {
-      info: `PREP: ${clip}`,
-      notes: 'Get the playback ready before the roll.',
-      cues: {
-        playback: { on:`Ready ${clip} in PLBK`, off:'', notes:'' },
-        audio: { on:'Track PLBK audio', off:'' },
-      },
-    };
-  }
-  const savedOff = String(getCueOff(cell) || '').trim();
-  const parsed = parsePlaybackOffText(savedOff);
-  const outLabel = [parsed.how, parsed.ret ? `Take ${parsed.ret}` : ''].filter(Boolean).join(' · ') || savedOff || 'Back to the show';
-  const cues = {};
-  if (parsed.ret) cues.video = { on:`Ready ${parsed.ret}`, off:`Take ${parsed.ret}` };
-  return {
-    info: `OUT: ${outLabel}`,
-    notes: 'Where the show goes when the playback ends.',
-    cues,
-  };
-}
-
-// Create or refresh the PREP/OUT helper rows for one saved playback cell.
-// Never deletes a helper row (students remove rows themselves) and never
-// overwrites text a student changed by hand. Returns a short toast note.
-function syncPlaybackHelperRows(parent, prevCell, cell) {
-  const prepWanted = document.getElementById('cc-guided-prep')?.checked || false;
-  const outWanted = document.getElementById('cc-guided-out')?.checked || false;
-  if (!prepWanted && !outWanted) return '';
-  // Generation needs something to prep: a clip name or an Outrangutan link.
-  if (!((cell.clip || '').trim() || cell.outCueId || cell.outCueName)) return '';
-  const now = Date.now();
-  const createdRoles = [], updatedRoles = [];
-  let keptEdited = false;
-  [['prep', prepWanted], ['out', outWanted]].forEach(([role, wanted]) => {
-    if (!wanted) return;
-    const generated = buildPlaybackHelperContent(role, cell, parent);
-    const existing = findPlaybackHelperRow(parent.id, role);
-    if (!existing) {
-      const row = {
-        id: nextBeatId(), style:'flex',
-        info: generated.info, notes: generated.notes,
-        min:0, sec:0, done:false,
-        cues: generated.cues,
-        helperFor: String(parent.id), helperRole: role,
-        _createdAt: now, _createdBy: presenceId,
-      };
-      const pIdx = beats.indexOf(parent);
-      beats.splice(role === 'prep' ? pIdx : pIdx + 1, 0, row);
-      createdRoles.push(role === 'prep' ? 'PREP' : 'OUT');
-      return;
-    }
-    // Refresh only generator-owned text: a field updates when it is empty or
-    // still reads exactly what the prior cell state would have generated.
-    const prior = prevCell ? buildPlaybackHelperContent(role, prevCell, parent) : null;
-    let touched = false, edited = false;
-    ['info', 'notes'].forEach(key => {
-      if (existing[key] === generated[key]) return;
-      if (!existing[key] || (prior && existing[key] === prior[key])) { existing[key] = generated[key]; touched = true; }
-      else edited = true;
-    });
-    const existingCues = existing.cues || {};
-    if (stableStringify(existingCues) !== stableStringify(generated.cues)) {
-      const cuesUntouched = !Object.keys(existingCues).length
-        || (prior && stableStringify(existingCues) === stableStringify(prior.cues));
-      if (cuesUntouched) { existing.cues = cloneRundownValue(generated.cues); touched = true; }
-      else edited = true;
-    }
-    if (edited) keptEdited = true;
-    else if (touched) updatedRoles.push(role === 'prep' ? 'PREP' : 'OUT');
-  });
-  // The PREP row owns the ready step now, so a machine-composed 'Ready' parent
-  // becomes the roll cue. Hand-typed on text stays untouched.
-  if (prepWanted && cell.on === composePlaybackOnText('Ready', cell)) {
-    cell.on = composePlaybackOnText('Roll', cell);
-  }
-  const parts = [];
-  if (createdRoles.length) parts.push(`${createdRoles.join(' and ')} row${createdRoles.length > 1 ? 's' : ''} added`);
-  if (updatedRoles.length) parts.push(`${updatedRoles.join(' and ')} row${updatedRoles.length > 1 ? 's' : ''} updated`);
-  let note = parts.length ? `${parts.join(', ')}.` : '';
-  if (keptEdited) note += `${note ? ' ' : ''}Your edited helper text was kept.`;
-  return note;
+  toast('Cue saved.');
 }
 
 function removeCueCfg() {

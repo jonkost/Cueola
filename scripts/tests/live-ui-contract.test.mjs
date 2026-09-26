@@ -78,25 +78,17 @@ test('Live cue renderers share READY and TAKE vocabulary', () => {
   assert.doesNotMatch(app.slice(app.indexOf('function renderLiveCurrent'), app.indexOf('function liveRowPreview')), />[▶■○]\s*\$\{esc/);
 });
 
-test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted beats (R1)', () => {
+test('playback rows speak ROLL and OUT; old helper rows still render, none are generated (3.0)', () => {
   // Playback-only chip overrides; every other cue type keeps READY/TAKE above.
   assert.match(app, /ready:\{ label:'ROLL'/);
   assert.match(app, /take:\{ label:'OUT'/);
   assert.match(app, /LIVE_CUE_OPERATION_OVERRIDES\[cueType\]/);
-  assert.match(app, /function liveCueOperationLine\(operation, text, className='', style='', cueType=''\)/);
   // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
   // silently drops every beat field it does not list.
   assert.match(app, /\['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'\]/);
-  // saveCueConfig is the single chokepoint that generates PREP/OUT rows.
-  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
-  assert.match(save, /syncPlaybackHelperRows\(b, prevCell, d\)/);
-  const sync = app.slice(app.indexOf('function syncPlaybackHelperRows('), app.indexOf('function removeCueCfg()'));
-  assert.match(sync, /helperFor: String\(parent\.id\), helperRole: role/);
-  assert.match(sync, /beats\.splice\(role === 'prep' \? pIdx : pIdx \+ 1, 0, row\)/);
-  // The wizard offers the guided rows as opt-in checkboxes.
-  assert.match(app, /id="cc-guided-prep"/);
-  assert.match(app, /id="cc-guided-out"/);
-  // Helper rows render with role tags in the builder table and the live grid.
+  // 3.0: no PREP/OUT generation and no guided-row checkboxes in the editor.
+  assert.doesNotMatch(app, /syncPlaybackHelperRows|cc-guided-prep|cc-guided-out|ccGuidedRowsSection/);
+  // Helper rows from older shows render with role tags in the builder table and the live grid.
   assert.match(app, /rundown-row-helper helper-\$\{b\.helperRole\}/);
   assert.match(app, /live-row-helper helper-\$\{b\.helperRole\}/);
   assert.match(html, /\.helper-tag-prep/);
@@ -105,6 +97,16 @@ test('playback rows speak ROLL and OUT; guided helper rows are real whitelisted 
   assert.match(app, /Removed the row and its PREP\/OUT helper rows\./);
   // The printed rundown legend teaches the playback vocabulary too.
   assert.match(app, /For playback rows: <b>ROLL<\/b> = start the clip · <b>OUT<\/b> = the plan for getting out/);
+  // The cell editor: READY and TAKE on top, a few pickers per department, no tabs.
+  assert.match(app, /const CUE_EDITOR = \{/);
+  for (const dept of ['video', 'audio', 'playback', 'gfx', 'lighting', 'script']) assert.match(app, new RegExp(`\n  ${dept}: \\{\n    title:`));
+  assert.doesNotMatch(app, /function ccTab\(|cc-tab-btn|ccVOnSrc|ccLOnIntensity|ccSOnTag/);
+  assert.match(app, /function ccCompose\(\)/);
+  assert.match(app, /if \(_ccLinesTouched\) return;/);   // a typed line is never overwritten by a picker
+  // Add a row is one screen with one button; a first cue opens its cell.
+  assert.match(html, /id="ar-next-1" onclick="arAddRow\(\)"/);
+  assert.doesNotMatch(html, /id="ar-step-2"|Open Cue Builder|Choose Cue Type/);
+  assert.match(app, /setTimeout\(\(\) => openCueConfig\(newBeat\.id, arCueType\), 80\);/);
 });
 
 test('subsystem failures have persistent local recovery surfaces', () => {
@@ -451,7 +453,7 @@ test('pre-roll countdown then take: one per-cue count, an abort window, publishe
   // saveCueConfig persists; old CALL cells migrate to the 3 s they used to get.
   assert.match(app, /id="cc-out-auto" \$\{d\.outAuto \? 'checked' : ''\}> Roll this clip on TAKE<\/label>/);
   assert.match(app, /<input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1"/);
-  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function syncPlaybackHelperRows('));
+  const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function removeCueCfg()'));
   assert.match(save, /const preRoll = Math\.max\(0, Math\.min\(60, Math\.round\(Number\(document\.getElementById\('cc-out-preroll'\)\?\.value\) \|\| 0\)\)\);\n\s+d\.preRoll = preRoll;/);
   const migrate = app.slice(app.indexOf('function migrateBeat(b)'), app.indexOf('\nfunction ', app.indexOf('function migrateBeat(b)') + 1));
   assert.match(migrate, /if \(pb && pb\.outAuto && pb\.preRoll === undefined\) newCues\.playback = \{ \.\.\.pb, preRoll: 3 \};/);
