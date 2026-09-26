@@ -52,7 +52,8 @@ await page.evaluate(() => { if (!liveClockRunning) toggleShowClock(); });
 const t0 = Date.now();
 await page.waitForTimeout(5200);
 const timerText = await page.textContent('#ls-timer');
-const [hh, mm, ss] = timerText.split(':').map(Number);
+// HH:MM:SS:FF, or HH:MM:SS;FF when the clock counts drop-frame (29.97).
+const [hh, mm, ss] = timerText.split(/[:;]/).map(Number);
 const shown = hh * 3600 + mm * 60 + ss;
 const wall = Math.floor((Date.now() - t0) / 1000);
 check('show clock within 1 s of wall clock', Math.abs(shown - wall) <= 1, `${timerText} vs ${wall}s`);

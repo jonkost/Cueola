@@ -14,7 +14,23 @@
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=414e116aee" defer></script>
   <script src="cueola-scriptop-prefs.js?v=dfcf350611" defer></script>
-  <script src="script-operator.js?v=479680751b" defer></script>
+  <script src="script-operator.js?v=07d5af1057" defer></script>
+  <style>
+    /* Simple tier (owner 2026-09 debloat): mirrors index.html's .cc-more. The
+       second-tier controls of each tab fold behind one collapsed More; every
+       control still exists and every shortcut still lands. */
+    .cc-more { border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: 10px; padding: 0 10px; margin: 10px 0 0; }
+    .cc-more > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 0; cursor: pointer; list-style: none; font: 700 12px var(--sans, inherit); color: var(--text2); }
+    .cc-more > summary::-webkit-details-marker { display: none; }
+    .cc-more > summary::before { content: '▸'; font-size: 11px; color: var(--text3); flex-shrink: 0; }
+    .cc-more[open] > summary::before { content: '▾'; }
+    .cc-more > .control-section { border-top: 0; box-shadow: none; padding-top: 4px; }
+    .cc-more > .control-section + .control-section { border-top: 1px solid transparent; box-shadow: inset 0 1px 0 var(--glass-border); }
+    .question-state { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 10px; border-radius: 9px; background: color-mix(in srgb, var(--yellow, #f5b731) 14%, transparent); color: color-mix(in srgb, var(--yellow, #f5b731) 92%, var(--text)); font-size: 12px; font-weight: 700; }
+    .question-state[hidden] { display: none; }
+    .wrap-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .wrap-row .single-field { margin-top: 0; }
+  </style>
 </head>
 <body>
   <main class="script-operator" id="scriptOperatorRoot">
@@ -92,11 +108,12 @@
           </div>
         </div>
 
-        <!-- Tab grouping mirrors the in-app operator inspector (OP_INSP_LABELS):
-             Playback (Transport in-app) / Cue & On Air / Clocks & Alerts / Display & Theme. The
-             in-app Screen group rides the Playback tab here, and the editor
-             helpers that exist only in this pop-out (Formatting & Markers,
-             Panel Text) ride Display & Theme: this layout stops at four tabs. -->
+        <!-- Tab grouping mirrors the in-app Script Op panel (LS_INSP_LABELS):
+             Playback / Cue & On Air / Clocks & Alerts / Display & Theme. Simple
+             tier: each tab shows the controls a student reaches for first and
+             folds the rest behind one collapsed More. The editor helpers that
+             exist only in this pop-out (Formatting & Markers, Panel Text) ride
+             Display & Theme: this layout stops at four tabs. -->
         <div class="inspector-pane is-active" id="pane-transport" role="tabpanel" aria-labelledby="tab-transport" data-pane="transport">
           <section class="control-section">
             <h2>Playback</h2>
@@ -106,24 +123,46 @@
                 <span id="playButtonLabel">Play</span>
               </button>
             </div>
-            <div class="control-grid four-column">
-              <button class="control-button" type="button" data-hold-start="brake_start" data-hold-stop="brake_stop" aria-pressed="false" data-requires-state>Brake</button>
-              <button class="control-button" type="button" data-hold-start="boost_start" data-hold-stop="boost_stop" aria-pressed="false" data-requires-state>Boost</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="direction_reverse" data-state-button="reversing" data-requires-state>Reverse</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="direction_forward" data-state-button="forward" data-requires-state>Forward</button>
-            </div>
           </section>
 
           <section class="control-section">
-            <h2>Screen</h2>
-            <div class="control-grid four-column">
-              <button class="control-button" type="button" data-command-kind="control" data-action="reset" data-requires-state>Reset</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="hide_interface" data-requires-state>Hide controls</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="mirror" data-state-button="mirrored" data-requires-state>Mirror</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="fullscreen" data-requires-state>Fullscreen</button>
+            <h2>Speed &amp; Size</h2>
+            <div class="slider-row">
+              <label for="speedRange">Speed <output id="speedValue" for="speedRange">50</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_down" aria-label="Decrease speed" data-requires-state>−</button>
+              <input id="speedRange" type="range" min="5" max="200" value="50" data-preview-prefix="speed_set_" aria-label="Prompter speed" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="speed_up" aria-label="Increase speed" data-requires-state>+</button>
             </div>
-            <label class="control-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="rowInfoToggle" checked data-requires-state><span>Row info on talent</span></label>
+            <div class="slider-row">
+              <label for="sizeRange">Size <output id="sizeValue" for="sizeRange">48</output></label>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_down" aria-label="Decrease text size" data-requires-state>−</button>
+              <input id="sizeRange" type="range" min="24" max="120" value="48" data-preview-prefix="size_set_" aria-label="Prompter text size" data-requires-state>
+              <button class="step-button" type="button" data-command-kind="control" data-action="size_up" aria-label="Increase text size" data-requires-state>+</button>
+            </div>
           </section>
+
+          <details class="cc-more"><summary>More</summary>
+            <section class="control-section">
+              <h2>Hold &amp; direction</h2>
+              <div class="control-grid four-column">
+                <button class="control-button" type="button" data-hold-start="brake_start" data-hold-stop="brake_stop" aria-pressed="false" data-requires-state>Brake</button>
+                <button class="control-button" type="button" data-hold-start="boost_start" data-hold-stop="boost_stop" aria-pressed="false" data-requires-state>Boost</button>
+                <button class="control-button" type="button" data-command-kind="control" data-action="direction_reverse" data-state-button="reversing" data-requires-state>Reverse</button>
+                <button class="control-button" type="button" data-command-kind="control" data-action="direction_forward" data-state-button="forward" data-requires-state>Forward</button>
+              </div>
+            </section>
+
+            <section class="control-section">
+              <h2>Screen</h2>
+              <div class="control-grid four-column">
+                <button class="control-button" type="button" data-command-kind="control" data-action="reset" data-requires-state>Reset</button>
+                <button class="control-button" type="button" data-command-kind="control" data-action="hide_interface" data-requires-state>Hide controls</button>
+                <button class="control-button" type="button" data-command-kind="control" data-action="mirror" data-state-button="mirrored" data-requires-state>Mirror</button>
+                <button class="control-button" type="button" data-command-kind="control" data-action="fullscreen" data-requires-state>Fullscreen</button>
+              </div>
+              <label class="control-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="rowInfoToggle" checked data-requires-state><span>Row info on talent</span></label>
+            </section>
+          </details>
         </div>
 
         <div class="inspector-pane" id="pane-live" role="tabpanel" aria-labelledby="tab-live" data-pane="live" hidden>
@@ -143,28 +182,30 @@
             </div>
           </section>
 
-          <section class="control-section">
-            <h2>On Air</h2>
-            <div class="control-grid two-column">
-              <button class="control-button" id="techButton" type="button" data-command-kind="control" data-action="slate_tech_on" aria-pressed="false" data-requires-state>
-                <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span id="techButtonLabel">Tech Difficulty</span>
-              </button>
-              <button class="control-button" id="barsButton" type="button" data-command-kind="control" data-action="slate_bars_on" aria-pressed="false" data-requires-state>
-                <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span id="barsButtonLabel">Color bars</span>
-              </button>
-            </div>
-          </section>
+          <details class="cc-more"><summary>More</summary>
+            <section class="control-section">
+              <h2>On Air</h2>
+              <div class="control-grid two-column">
+                <button class="control-button" id="techButton" type="button" data-command-kind="control" data-action="slate_tech_on" aria-pressed="false" data-requires-state>
+                  <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span id="techButtonLabel">Tech Difficulty</span>
+                </button>
+                <button class="control-button" id="barsButton" type="button" data-command-kind="control" data-action="slate_bars_on" aria-pressed="false" data-requires-state>
+                  <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span id="barsButtonLabel">Color bars</span>
+                </button>
+              </div>
+            </section>
 
-          <section class="control-section">
-            <h2>Position</h2>
-            <div class="cue-slider-row">
-              <button class="step-button" type="button" data-nudge="-3" aria-label="Cue prompter back" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.back" aria-hidden="true"></span></button>
-              <input id="seekRange" type="range" min="0" max="100" value="0" data-preview-prefix="seek_set_" aria-label="Cue prompter position" data-requires-state>
-              <button class="step-button" type="button" data-nudge="3" aria-label="Cue prompter forward" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.forward" aria-hidden="true"></span></button>
-              <button class="step-button punch-button" type="button" data-punch aria-label="Play from here" data-tip="Play from here" data-requires-state><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
-            </div>
-            <output class="cue-position" id="seekValue" for="seekRange">0%</output>
-          </section>
+            <section class="control-section">
+              <h2>Position</h2>
+              <div class="cue-slider-row">
+                <button class="step-button" type="button" data-nudge="-3" aria-label="Cue prompter back" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.back" aria-hidden="true"></span></button>
+                <input id="seekRange" type="range" min="0" max="100" value="0" data-preview-prefix="seek_set_" aria-label="Cue prompter position" data-requires-state>
+                <button class="step-button" type="button" data-nudge="3" aria-label="Cue prompter forward" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.forward" aria-hidden="true"></span></button>
+                <button class="step-button punch-button" type="button" data-punch aria-label="Play from here" data-tip="Play from here" data-requires-state><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
+              </div>
+              <output class="cue-position" id="seekValue" for="seekRange">0%</output>
+            </section>
+          </details>
         </div>
 
         <div class="inspector-pane" id="pane-clocks" role="tabpanel" aria-labelledby="tab-clocks" data-pane="clocks" hidden>
@@ -188,65 +229,86 @@
           </section>
 
           <section class="control-section">
-            <h2>Wrap Up</h2>
-            <div class="control-grid three-column">
-              <button class="control-button warning-button" type="button" data-wrap-minutes="10" data-requires-state><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span>Wrap 10</span></button>
-              <button class="control-button warning-button" type="button" data-wrap-minutes="5" data-requires-state><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span>Wrap 5</span></button>
-              <button class="control-button" type="button" data-wrap-custom data-requires-state><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span><span>Send</span></button>
-            </div>
-            <label class="single-field"><span>Wrap in (min)</span><input id="wrapMinutes" type="number" min="1" max="999" value="5" inputmode="numeric" data-requires-state></label>
-          </section>
-
-          <section class="control-section">
-            <h2>Alerts</h2>
-            <button class="control-button full-width" id="questionButton" type="button" data-command-kind="control" data-action="question_on" aria-pressed="false" data-requires-state>
-              <span class="sf-symbol" id="questionButtonSymbol" data-symbol="notification.default" aria-hidden="true"></span><span id="questionButtonLabel">Question</span>
-            </button>
-            <button class="control-button full-width" type="button" data-command-kind="control" data-action="overlays_clear" data-tip="Drop the clock, wrap, question, and slates in one go" data-requires-state>
-              <span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Clear all overlays</span>
-            </button>
+            <h2>Question</h2>
             <div class="question-lane">
               <input id="questionLaneInput" type="text" maxlength="280" placeholder="Paste a chat question · Enter pushes · Esc clears" aria-label="Question for the talent" list="questionLaneCards" data-requires-state>
               <datalist id="questionLaneCards"></datalist>
             </div>
             <div class="question-lane question-lane-actions">
-              <button class="control-button question-lane-push" id="questionLanePush" type="button" data-question-push data-tip="Push this question to the talent as a QUESTION card" data-requires-state>
+              <button class="control-button question-lane-push" id="questionLanePush" type="button" data-question-push data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)" data-requires-state>
                 <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push card</span>
               </button>
               <button class="control-button question-lane-push" id="questionLaneInsert" type="button" data-question-insert data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow" data-requires-state>
                 <span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Into script</span>
               </button>
             </div>
+            <!-- No Question toggle: Push card turns the indicator on, Clear all
+                 overlays (or Esc in the lane) turns it off. -->
+            <div class="question-state" id="questionState" role="status" hidden>
+              <span class="sf-symbol" data-symbol="notification.unread" aria-hidden="true"></span><span id="questionStateLabel">Question is up</span>
+            </div>
             <div class="question-lane" style="align-items:flex-start;margin-top:4px">
               <p class="section-help" style="flex:1;margin:0">Shows the question to the talent as a card.</p>
               <p class="section-help" style="flex:1;margin:0">Puts the question into the script at the read line.</p>
             </div>
-            <div class="stepper-row">
-              <span>Overlay size</span>
-              <div class="stepper">
-                <button type="button" data-command-kind="control" data-action="clock_size_down" aria-label="Make overlay smaller" data-requires-state>−</button>
-                <output id="overlaySizeValue">M</output>
-                <button type="button" data-command-kind="control" data-action="clock_size_up" aria-label="Make overlay larger" data-requires-state>+</button>
-              </div>
-            </div>
+            <button class="control-button full-width" type="button" data-command-kind="control" data-action="overlays_clear" data-tip="Drop the clock, wrap, question, and slates in one go" data-requires-state>
+              <span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Clear all overlays</span>
+            </button>
           </section>
+
+          <details class="cc-more"><summary>More</summary>
+            <section class="control-section">
+              <h2>Wrap Up</h2>
+              <div class="wrap-row">
+                <label class="single-field"><span>Wrap in (min)</span><input id="wrapMinutes" type="number" min="1" max="999" value="5" inputmode="numeric" data-requires-state></label>
+                <button class="control-button warning-button" type="button" data-wrap-custom data-tip="Show the wrap-up countdown on the talent for this many minutes" data-requires-state><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span>Send</span></button>
+              </div>
+            </section>
+
+            <section class="control-section">
+              <h2>Overlays</h2>
+              <div class="stepper-row">
+                <span>Overlay size</span>
+                <div class="stepper">
+                  <button type="button" data-command-kind="control" data-action="clock_size_down" aria-label="Make overlay smaller" data-requires-state>−</button>
+                  <output id="overlaySizeValue">M</output>
+                  <button type="button" data-command-kind="control" data-action="clock_size_up" aria-label="Make overlay larger" data-requires-state>+</button>
+                </div>
+              </div>
+            </section>
+          </details>
         </div>
 
         <div class="inspector-pane" id="pane-display" role="tabpanel" aria-labelledby="tab-display" data-pane="display" hidden>
           <section class="control-section">
-            <h2>Display</h2>
-            <div class="slider-row">
-              <label for="speedRange">Speed <output id="speedValue" for="speedRange">50</output></label>
-              <button class="step-button" type="button" data-command-kind="control" data-action="speed_down" aria-label="Decrease speed" data-requires-state>−</button>
-              <input id="speedRange" type="range" min="5" max="200" value="50" data-preview-prefix="speed_set_" aria-label="Prompter speed" data-requires-state>
-              <button class="step-button" type="button" data-command-kind="control" data-action="speed_up" aria-label="Increase speed" data-requires-state>+</button>
+            <h2>Formatting &amp; Markers</h2>
+            <p class="section-help">Formatting is inserted into the script at the current selection.</p>
+            <div class="format-actions">
+              <button class="format-button text-format" type="button" data-wrap-before="**" data-wrap-after="**" aria-label="Bold" data-tip="Bold (Cmd B)" data-requires-state><strong>B</strong></button>
+              <button class="format-button text-format" type="button" data-wrap-before="*" data-wrap-after="*" aria-label="Italic" data-tip="Italic (Cmd I)" data-requires-state><em>I</em></button>
+              <button class="format-button" type="button" data-insert="[UPDATE] " data-requires-state><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
+              <button class="format-button" type="button" data-insert="[BREAK - AUTO PAUSE] " data-requires-state><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
+              <button class="format-button" type="button" data-insert="[STOP HERE] " data-requires-state><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
+              <button class="format-button" type="button" data-insert="&#10;&#10;" data-tip="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
+              <!-- The [CHAT] Paste / Paste-Push path is gone here too (D12.6):
+                   it re-pushed the whole script mid-read. Audience copy rides
+                   the Question lane in Clocks and Alerts. -->
             </div>
+          </section>
+          <section class="control-section">
+            <h2>Panel Text</h2>
+            <p class="section-help">Sizes this control panel and the script editor for your reading distance. The talent's prompter size is set on the Playback tab.</p>
             <div class="slider-row">
-              <label for="sizeRange">Size <output id="sizeValue" for="sizeRange">48</output></label>
-              <button class="step-button" type="button" data-command-kind="control" data-action="size_down" aria-label="Decrease text size" data-requires-state>−</button>
-              <input id="sizeRange" type="range" min="24" max="120" value="48" data-preview-prefix="size_set_" aria-label="Prompter text size" data-requires-state>
-              <button class="step-button" type="button" data-command-kind="control" data-action="size_up" aria-label="Increase text size" data-requires-state>+</button>
+              <label for="panelZoomRange">Size <output id="panelZoomValue" for="panelZoomRange">100%</output></label>
+              <button class="step-button" type="button" id="panelZoomDown" aria-label="Smaller panel text">−</button>
+              <input id="panelZoomRange" type="range" min="85" max="150" step="5" value="100" aria-label="Panel text size">
+              <button class="step-button" type="button" id="panelZoomUp" aria-label="Larger panel text">+</button>
             </div>
+          </section>
+
+          <details class="cc-more"><summary>More</summary>
+          <section class="control-section">
+            <h2>Align</h2>
             <div class="segmented-row">
               <span>Align</span>
               <div class="segmented-control" role="group" aria-label="Text alignment">
@@ -271,32 +333,7 @@
               <button class="theme-tile" type="button" data-theme-choice="prepbear" data-command-kind="control" data-action="theme_prepbear" aria-pressed="false" data-requires-state><span class="theme-preview preview-prepbear"></span><span>PrepBear</span></button>
             </div>
           </section>
-
-          <section class="control-section">
-            <h2>Formatting &amp; Markers</h2>
-            <p class="section-help">Formatting is inserted into the script at the current selection.</p>
-            <div class="format-actions">
-              <button class="format-button text-format" type="button" data-wrap-before="**" data-wrap-after="**" aria-label="Bold" data-tip="Bold (Cmd B)" data-requires-state><strong>B</strong></button>
-              <button class="format-button text-format" type="button" data-wrap-before="*" data-wrap-after="*" aria-label="Italic" data-tip="Italic (Cmd I)" data-requires-state><em>I</em></button>
-              <button class="format-button" type="button" data-insert="[UPDATE] " data-requires-state><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
-              <button class="format-button" type="button" data-insert="[BREAK - AUTO PAUSE] " data-requires-state><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
-              <button class="format-button" type="button" data-insert="[STOP HERE] " data-requires-state><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-              <button class="format-button" type="button" data-insert="&#10;&#10;" data-tip="New paragraph" data-requires-state><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Newline</span></button>
-              <!-- The [CHAT] Paste / Paste-Push path is gone here too (D12.6):
-                   it re-pushed the whole script mid-read. Audience copy rides
-                   the Question lane in Clocks and Alerts. -->
-            </div>
-          </section>
-          <section class="control-section">
-            <h2>Panel Text</h2>
-            <p class="section-help">Sizes this control panel and the script editor for your reading distance. The talent's prompter size is set in the Display section above.</p>
-            <div class="slider-row">
-              <label for="panelZoomRange">Size <output id="panelZoomValue" for="panelZoomRange">100%</output></label>
-              <button class="step-button" type="button" id="panelZoomDown" aria-label="Smaller panel text">−</button>
-              <input id="panelZoomRange" type="range" min="85" max="150" step="5" value="100" aria-label="Panel text size">
-              <button class="step-button" type="button" id="panelZoomUp" aria-label="Larger panel text">+</button>
-            </div>
-          </section>
+          </details>
         </div>
       </section>
     </div>

@@ -1180,7 +1180,8 @@ function paintThemeSwatches() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', paintThemeSwatches, { once: true });
 else paintThemeSwatches();
-function normalizeFrameRate(v) { return [24,30,60].includes(Number(v)) ? Number(v) : 30; }
+// House standard is 1080i at 29.97 (drop-frame), so that is the default.
+function normalizeFrameRate(v) { return [24,25,29.97,30,60].includes(Number(v)) ? Number(v) : 29.97; }
 let currentTheme = normalizeCueolaTheme(localStorage.getItem('cueola_theme'));
 let plandaBearTheme = normalizePlandaBearTheme(hasPlandaBearThemeOverride() ? localStorage.getItem('cueola_plandabear_theme') : cueolaThemeToPlandaBearTheme(currentTheme));
 let frameRate = normalizeFrameRate(localStorage.getItem('cueola_frame_rate'));
@@ -2209,8 +2210,6 @@ let liveScriptEditIdx = null;
 // Edit style (for edit overlay)
 let editStyle = null;
 
-// Prompt Op Mode — teleprompter-operator focused live view
-let promptOpMode = false;
 // Live view — defaults to the full department grid. Focus view (one big NOW, a
 // clear NEXT, calm coming-up list) is opt-in and remembered once chosen.
 let liveFocusMode = (() => { try { return localStorage.getItem('cueola_live_focus') === '1'; } catch { return false; } })();
@@ -2227,11 +2226,6 @@ let callSheetMealsProvided = ''; // '' | 'provided' | 'not-provided'
 let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise, sunset, emoji, source, forecastDate, place, updatedAt }
 let liveClockRunning = false;
 let paperworkDirty = false;
-let flowmingoRemoteOverrideUntil = 0;
-// How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
-// Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
-// clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
-const FLOWMINGO_REMOTE_OVERRIDE_MS = 5000;
 let collapsedSegments = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('cueola_collapsed_segs')||'[]')); }
   catch { return new Set(); }
@@ -2273,9 +2267,7 @@ function leaveSessionForFrontPage() {
   pbStopNotesListener();
   document.getElementById('rundown')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('on');
-  document.getElementById('liveshow')?.classList.remove('prompt-op-active');
   document.getElementById('promptypus')?.classList.remove('on');
-  document.getElementById('flowOp')?.classList.remove('on');
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
   setSessionCodeInUrl('');   // a reload after leaving must not rejoin
@@ -2322,6 +2314,16 @@ function fmtProductionClock(ms) {
   if (ms == null || !Number.isFinite(ms)) return '—';
   const safeMs = Math.max(0, ms);
   const totalSeconds = Math.floor(safeMs / 1000);
+  if (frameRate === 29.97) {
+    // SMPTE drop-frame: count real 29.97 frames and skip frame numbers 00 and
+    // 01 at the top of every minute except each tenth; ';' marks drop-frame.
+    let fr = Math.floor(safeMs / 1000 * 29.97 + 1e-6);
+    const tenMin = Math.floor(fr / 17982);
+    let rem = fr % 17982;
+    if (rem < 2) rem += 2;
+    fr += 18 * tenMin + 2 * Math.floor((rem - 2) / 1798);
+    return `${pad(Math.floor(fr / 108000) % 24)}:${pad(Math.floor(fr / 1800) % 60)}:${pad(Math.floor(fr / 30) % 60)};${pad(fr % 30)}`;
+  }
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -2957,6 +2959,9 @@ const LEARNING_LESSONS = [
   {
     id:'flowmingo-remote',
     area:'Flowmingo',
+    // Narrated copy (title, intro, navigation, steps, callouts) is frozen: the
+    // Kokoro MP3 is hashed from it. The "remote" action now opens the Script Op
+    // pop-out (openFlowmingoRemoteDoor); re-record before rewording.
     title:'Run The Remote Prompter',
     time:'5 min',
     intro:'Flowmingo Remote Op is the dedicated control surface for the talent display. It is meant to work from another tab, window, or device.',
@@ -2976,8 +2981,8 @@ const LEARNING_LESSONS = [
       ['Control ownership','If Flowmingo Remote Op is active, Script Op pauses its own remote control briefly so operators do not fight each other.'],
       ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its show code.']
     ],
-    checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
-    actions:[['Open Remote Op','remote']]
+    checks:['I can open the Script Op pop-out.','I know the hotkeys.','I know how to read sent versus applied status.'],
+    actions:[['Open the pop-out','remote']]
   },
   {
     id:'outrangutan',
@@ -3461,7 +3466,7 @@ function openGuideAction(action) {
   else if (action === 'profile') window.CueolaIdentity?.openHub?.();
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
-  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
+  else if (action === 'remote') openFlowmingoRemoteDoor(ptLinkedCueolaCode || session.code || '');
   else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
   else if (action === 'keywi') openControlSurface();
 }
@@ -5352,10 +5357,6 @@ document.addEventListener('cueola-identity-change', () => {
     refreshControlGrantHeld();   // a late-loading profile must light up an already-granted GO
     if (document.getElementById('modal-stud')?.classList.contains('on')) populateJoinSessionChoices('stud', 'pickAssignedStudSession');
     if (document.getElementById('modal-prepro-join')?.classList.contains('on')) populateJoinSessionChoices('pp', 'pickAssignedPreProSession');
-    if (document.getElementById('flowOp')?.classList.contains('on') && !flowOpCode && !flowOpData) {
-      flowOpSessionRenderFingerprint = '';
-      flowOpRenderSession(null);
-    }
     // Talent door (9/4 A3): re-list assigned shows, and finish a link that was
     // waiting on a sign-in.
     if (isFlowmingoTalentActive()) ptOnIdentityMaybeChanged();
@@ -6382,9 +6383,7 @@ function setupFirestore() {
           // replay here on boot). Doc-delivered controls ignore the output
           // target, which is stale after any talent reload.
           if (!prompterSessionController.accepts(control, { allowLegacy:true, ignoreTarget:true })) return;
-          if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
-            flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
-          }
+          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
         });
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
@@ -6919,7 +6918,7 @@ function isInteractiveTarget(target) {
     'button', 'input', 'textarea', 'select', 'option', 'a', 'label', 'summary',
     '[role="button"]', '[role="slider"]', '[contenteditable="true"]',
     '[data-live-interactive]', '.ls-sidebar', '.prompt-op-panel',
-    '.flowop-controls', '.modal', '.overlay', '.scrollable'
+    '.modal', '.overlay', '.scrollable'
   ].join(',')));
 }
 
@@ -7115,10 +7114,10 @@ function _talentMirrorFresh() {
 function _sdPrompterOverlay(op) {
   const mode = (ptClockState && ptClockState.mode) || 'off';
   if (op === 'clock') { sendPrompterControl(mode === 'timeofday' ? 'clock_off' : 'clock_timeofday'); return; }
-  if (op === 'duration') { mode === 'duration' ? sendPrompterControl('clock_off') : sendDurationClock('po'); return; }
+  if (op === 'duration') { mode === 'duration' ? sendPrompterControl('clock_off') : sendDurationClock('lsq'); return; }
   if (op === 'until') {
     if (mode === 'countdown') { sendPrompterControl('clock_off'); return; }
-    const action = buildCountdownActionFromInput('po');
+    const action = buildCountdownActionFromInput('lsq');
     if (!action) { toast('Set the target time first: Live screen, clock panel, count down to a time.'); return; }
     sendPrompterControl(action);
     return;
@@ -7129,10 +7128,10 @@ function _sdPrompterOverlay(op) {
     // clears its own wrap and the other key switches the length, no matter
     // which surface or window started the wrap.
     if (mode === 'wrap' && Number(ptClockState?.wrapSec) === mins * 60) { sendPrompterControl('clock_off'); return; }
-    sendWrapUp('po', mins);
+    sendWrapUp('lsq', mins);
     return;
   }
-  if (op === 'question') { toggleQuestionIndicator('po'); return; }
+  if (op === 'question') { toggleQuestionIndicator('lsq'); return; }
   if (op === 'clear') { sendPrompterControl('overlays_clear'); return; }
   // The desk's push semantics, not a seed: a sync-scope snapshot preserves the
   // talent's position and transport (a seed would teleport and could STOP a
@@ -11398,7 +11397,6 @@ function enterLiveSessionScreen(liveState) {
   liveSessionController.registerCleanup('live-transients', clearLiveTransientRuntime);
   document.getElementById('rundown').classList.remove('on');
   document.getElementById('liveshow').classList.add('on');
-  document.getElementById('liveshow').classList.toggle('prompt-op-active', promptOpMode);
   _lastLiveScrollIdx = null;
   sessionStorage.setItem('cueola_screen','live');
   pushSessionHistoryState('live');
@@ -11435,7 +11433,6 @@ function enterLiveSessionScreen(liveState) {
 function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
   document.getElementById('liveshow').classList.remove('on');
-  document.getElementById('liveshow').classList.remove('prompt-op-active');
   document.getElementById('rundown').classList.add('on');
   sessionStorage.setItem('cueola_screen','build');
   pushSessionHistoryState('build');
@@ -12322,25 +12319,8 @@ function paintLiveToggleOpenState(btn, on) {
   btn.onpointerleave = on ? () => { btn.style.background = LIVE_TOGGLE_ON_FILL; } : null;
 }
 
-const FLOWMINGO_OP_LABEL = `${sfIcon('content.display')} <span>Flow<span class="brand-hi">mingo</span></span> Op`;
-
-function setFlowmingoOpButton(active) {
-  const btn = document.getElementById('promptOpBtn');
-  if (!btn) return;
-  paintLiveToggleOpenState(btn, active);
-  if (active) setSymbolButtonLabel(btn, 'action.grid', 'Rundown View');
-  else btn.innerHTML = FLOWMINGO_OP_LABEL;
-}
-
 function toggleLivePrompterPanel() {
   livePrompterOpen = !livePrompterOpen;
-  // A user is one OR the other — Script Op and Flowmingo Op are mutually exclusive.
-  if (livePrompterOpen && promptOpMode) {
-    promptOpMode = false;
-    document.getElementById('liveshow')?.classList.remove('prompt-op-active');
-    setFlowmingoOpButton(false);
-    renderLive();
-  }
   applyLivePrompterPanelState();
   const drawerMode = window.matchMedia?.('(max-width: 900px)')?.matches === true;
   if (drawerMode) {
@@ -12780,7 +12760,6 @@ function toggleLiveFocus() {
 }
 
 function renderLive() {
-  if (promptOpMode) { renderLivePromptOp(); return; }
   const body = document.getElementById('lsBody');
   if (!beats.length) {
     body.innerHTML='<div class="empty-rundown"><div class="empty-rundown-title">No cues in rundown</div><div class="empty-rundown-sub">Build rows in the Rundown tab, then run the show from here.</div></div>';
@@ -13680,7 +13659,6 @@ function adoptPrompterTalentState(state={}) {
   const observedPlaying = typeof state.running === 'boolean' ? state.running : state.playing;
   if (typeof observedPlaying === 'boolean') {
     ptPlaying = observedPlaying;
-    flowOpPlaying = observedPlaying;
     ptSyncPlayIcons(ptPlaying);
     notifyControlSurfaceState();
     if (_prompterHasRecentTalent()) {
@@ -13698,19 +13676,16 @@ function adoptPrompterTalentState(state={}) {
     ptFontSize = Math.max(24, Math.min(120, Number(state.size)));
     document.documentElement.style.setProperty('--pt-size', `${ptFontSize}px`);
     ptEl('promptypus')?.style.setProperty('--pt-size', `${ptFontSize}px`);
-    flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
   }
   if (['left','center','right'].includes(state.align)) {
     ptAlign = state.align;
     document.documentElement.style.setProperty('--pt-align', ptAlign);
     ptEl('promptypus')?.style.setProperty('--pt-align', ptAlign);
-    flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
   }
   renderTalentPositionIndicator();   // D11.2: ▶ rail tracks the adopted position
   if (state.theme && PT_THEMES[state.theme]) {
     ptThemeName = state.theme;
     ptSetTheme(state.theme);
-    flowOpSetTheme(state.theme);
   }
   if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
   if (typeof state.rowInfoOn === 'boolean') ptRowInfoOn = state.rowInfoOn;
@@ -13719,23 +13694,17 @@ function adoptPrompterTalentState(state={}) {
   if (typeof state.techSlateOn === 'boolean' || typeof state.colorBarsOn === 'boolean') {
     ptTechSlateOn = state.techSlateOn === true;
     ptColorBarsOn = state.colorBarsOn === true;
-    flowOpTechSlate = ptTechSlateOn;
-    flowOpColorBarsOn = ptColorBarsOn;
     syncTechButtons();
   }
   if (typeof state.questionOn === 'boolean') {
     ptQuestionOn = state.questionOn;
     ptQuestionText = state.questionOn ? String(state.questionText || '') : '';
-    flowOpQuestionOn = ptQuestionOn;
-    flowOpQuestionText = ptQuestionText;
   }
   if (state.clockState && typeof state.clockState === 'object') {
     ptClockState = { ...ptClockState, ...state.clockState };
-    flowOpClockState = { ...ptClockState };
   }
   if (typeof state.questionOn === 'boolean' || (state.clockState && typeof state.clockState === 'object')) {
     renderPromptOpClockPreview();
-    if (flowOpCode) flowOpRenderControls(false);
   }
   prompterSessionController.setTransport({
     running:ptPlaying,
@@ -13745,7 +13714,6 @@ function adoptPrompterTalentState(state={}) {
     lastCommandId:state.lastCommandId,
     status:ptPlaying ? 'running' : 'paused',
   });
-  flowOpSyncControls();
   renderLivePrompterControls();
 }
 
@@ -13770,13 +13738,12 @@ function _handlePrompterControlAck(msg) {
     delete _pendingPrompterControls[msg.controlId];
     pending.settle?.({ ok:true, acknowledged:true, state:msg.state || null });
     markPrompterToggleState(pending.action, 'confirmed');
-    const label = flowOpControlLabel(pending.action);
+    const label = prompterControlLabel(pending.action);
     // A find that matched nothing is an honest miss, never an "applied".
     const status = pending.action === 'seek_text' && msg.findMiss
       ? 'No script line matches that text' : `${label} applied`;
     const tone = pending.action === 'seek_text' && msg.findMiss ? 'error' : 'ok';
-    if (pending.origin === 'flowop') flowOpSetStatus(status, tone === 'error');
-    else markLivePrompterStatus(status, tone);
+    markLivePrompterStatus(status, tone);
   }
 }
 
@@ -14185,7 +14152,6 @@ function _dropTalentTransportMirror() {
   if (isFlowmingoTalentActive()) return;
   if (ptPlaying) {
     ptPlaying = false;
-    flowOpPlaying = false;
     ptSyncPlayIcons(false);
   }
   prompterSessionController.setTransport({ running:false, status:'paused' });
@@ -14221,16 +14187,6 @@ function renderTalentPositionIndicator() {
   const rowNum = Number.isFinite(_talentRowNum) ? _talentRowNum : (marker ? Number(marker[1]) : null);
   const holding = Number.isFinite(_talentHeldAtRow) ? ` · holding at row ${_talentHeldAtRow}` : (_talentAhead ? ' · ahead of the rundown' : '');
   if (label) label.textContent = `Talent · ${rowNum ? 'row ' + rowNum + ' · ' : ''}${pct}%${holding}`;
-  // Flowmingo Op mirror: the overlay's script view tracks the talent's real
-  // position with the read line as the anchor, so "where is the prompter" is
-  // answerable at a glance (it used to render the script frozen at the top).
-  const opTrack = document.querySelector('#lsBody .prompt-op-track');
-  if (opTrack) {
-    const stage = opTrack.parentElement;
-    const stageH = stage ? stage.clientHeight : 0;
-    const max = Math.max(0, opTrack.scrollHeight - stageH);
-    opTrack.style.transform = `translateY(-${(max * pct / 100).toFixed(1)}px)`;
-  }
   const editor = document.getElementById('lsPrompterText');
   const follow = document.getElementById('lsTalentPosFollow');
   if (editor && follow?.checked && document.activeElement !== editor && !livePrompterDraftDirty) {
@@ -14320,7 +14276,7 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '4';
+const SCRIPT_OP_REGION_VERSION = '5';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -14409,12 +14365,15 @@ function patchScriptOpClockControls(region) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-  const question = region.querySelector('[data-clock-question]');
-  if (question) {
-    patchIconLabelButton(question, ptQuestionOn ? 'notification.unread' : 'notification.default', ptQuestionOn ? 'Clear question' : 'Question');
-    question.classList.toggle('active', ptQuestionOn);
-    question.setAttribute('aria-pressed', ptQuestionOn ? 'true' : 'false');
-    question.setAttribute('onclick', "toggleQuestionIndicator('lsq')");
+  // "Question is up" while the indicator is on (Push card turned it on;
+  // Clear all overlays, Esc in the lane, or the deck's QUESTION key turn it off).
+  const questionState = region.querySelector('[data-question-state]');
+  if (questionState) {
+    questionState.hidden = !ptQuestionOn;
+    const label = questionState.querySelector('[data-question-state-label]');
+    if (label) label.textContent = ptQuestionOn && ptQuestionText
+      ? `Question is up · “${ptQuestionText.slice(0, 60)}${ptQuestionText.length > 60 ? '…' : ''}”`
+      : 'Question is up';
   }
   const size = region.querySelector('[data-clock-size]');
   if (size) size.textContent = ['S','M','L','XL','MAX'][Math.max(0, Math.min(4, state.size ?? 1))];
@@ -14437,23 +14396,13 @@ function renderLivePrompterControls() {
   const displayPane = document.getElementById('lsDisplayControls');
   mountScriptOpRegion(live, 'live', () => liveActionsHTML('lsq'));
   mountScriptOpRegion(clocks, 'clock', () => clockAndAlertControlsHTML('lsq'));
-  mountScriptOpRegion(remote, 'prompter', () => promptOpControlsHTML(false));
+  mountScriptOpRegion(remote, 'prompter', () => scriptOpTransportPaneHTML());
   mountScriptOpRegion(displayPane, 'display', () => scriptOpDisplayPaneHTML());
   patchScriptOpLiveActions(live);
   patchScriptOpClockControls(clocks);
   patchScriptOpPrompterControls(remote);
   patchScriptOpPrompterControls(displayPane);
   syncLiveTextZoomReadout();
-  // Section arranging + favorites quick row (shared with the pop-out).
-  if (window.CueolaScriptOpPrefs) {
-    const drawer = document.getElementById('lsOperatorDrawer');
-    if (drawer && !drawer.dataset.sopPrefs) {
-      drawer.dataset.sopPrefs = '1';
-      window.CueolaScriptOpPrefs.init({ root: drawer, before: drawer.querySelector('.insp-head') });
-    } else if (drawer) {
-      window.CueolaScriptOpPrefs.sync();
-    }
-  }
   renderPromptOpClockPreview();
   applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
   lsInspRestoreTab();   // keep the remembered inspector tab active across re-renders
@@ -14670,9 +14619,6 @@ async function scriptOperatorExecuteCommand(command) {
       const applied = scriptOperatorApplyPreview(action);
       return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
     }
-    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
-      return { ok:false, error:'Flowmingo Op currently owns transport controls' };
-    }
     const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
     const wrapMatch = action.match(/^wrapup_(\d+(?:\.\d+)?)$/);
     const countToMatch = action.match(/^clock_until_(\d+)_label_/);
@@ -14699,7 +14645,7 @@ async function scriptOperatorExecuteCommand(command) {
     // Transport over the doc path is delivery, not a promise the talent
     // applied it: the ack (prompter.controlAck) drives 'applied' separately.
     const viaDoc = sent !== false && !isCollaborativePrompterControl(action) && prompterControlDocPathAvailable(null);
-    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the session' : flowOpControlLabel(action) + ' sent' };
+    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the session' : prompterControlLabel(action) + ' sent' };
   }
   if (kind === 'draft') {
     const text = String(data.text || '').slice(0, 500000);
@@ -15058,7 +15004,6 @@ async function pushToPrompter() {
   const draftVersion = livePrompterDraftVersion;
   const pushed = await sendToPrompter();
   if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
-  if (promptOpMode) renderLivePromptOp();
   if (pushed) toast('Pushed to Flowmingo');
   return pushed;
 }
@@ -15082,7 +15027,7 @@ function clearPrompter() {
 }
 
 function buildPrompterControl(action, source='script-op', payload=null) {
-  ensurePrompterProtocolIdentity({ productionCode:source === 'flowmingo-op' ? flowOpCode : session.code });
+  ensurePrompterProtocolIdentity({ productionCode:session.code });
   const command = prompterSessionController.buildCommand(action, payload || {});
   return {
     ...command,
@@ -15106,7 +15051,7 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
   if (!control?.action) return false;
   _postPrompterMessage(control);
   trackPrompterControl(control, origin, quiet);
-  const code = String(codeOverride || control.productionCode || session.code || flowOpCode || '').trim().toUpperCase();
+  const code = String(codeOverride || control.productionCode || session.code || '').trim().toUpperCase();
   if (window._firebaseReady && code) {
     _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
     const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
@@ -15129,8 +15074,7 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
       'prompter.controlQueue': mergedQueue,
       'prompter.updatedAt':control.ts,
     }).catch(err => {
-      if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
-      else markLivePrompterStatus(firebaseConnectionLabel(err, 'Send failed'), 'error');
+      markLivePrompterStatus(firebaseConnectionLabel(err, 'Send failed'), 'error');
     });
   }
   return true;
@@ -15139,8 +15083,7 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
 function flushPrompterCommandQueue(outputId) {
   const queued = prompterSessionController.takeQueuedCommands(outputId);
   queued.forEach(control => {
-    const origin = control.source === 'flowmingo-op' ? 'flowop' : 'live';
-    dispatchPrompterCommand(control, origin, isQuietPrompterControl(control.action), control.productionCode);
+    dispatchPrompterCommand(control, 'live', isQuietPrompterControl(control.action), control.productionCode);
   });
   return queued.length;
 }
@@ -15159,10 +15102,8 @@ function isQuietPrompterControl(action) {
 // "Collaborative" controls set discrete talent state (clock, wrap-up, question,
 // stand-by slate) or jump the cue position — they're last-writer-wins and never
 // fight the live scroll the way transport (play/speed/brake/boost/direction) does.
-// A connected Flowmingo Op arms a 30s "remote has control" lockout on the Script Op
-// desk; that's meant to stop the desk stomping the remote's SCROLL, but it was also
-// silently swallowing these complementary commands. Let them through so the desk can
-// always drive the clock/cue even while the remote handles scrolling.
+// They bypass the readiness queue and ride the doc channel so any desk can
+// always drive the clock/cue/slates, even with the handshake incomplete.
 function isCollaborativePrompterControl(action) {
   if (!action) return false;
   return action.startsWith('clock_')
@@ -15179,7 +15120,7 @@ function isCollaborativePrompterControl(action) {
 // stable selectors; state survives panel re-renders via _ptToggleAckState.
 const _ptToggleAckState = {};
 const PT_TOGGLE_FAMILIES = Object.freeze({
-  question: { prefix:['question_'], selector:'[data-clock-question], .pt-question-btn' },
+  question: { prefix:['question_'], selector:'[data-question-push]' },
   tech:     { prefix:['slate_tech_'], selector:'.pt-tech-btn' },
   bars:     { prefix:['slate_bars_'], selector:'.pt-bars-btn' },
   wrap:     { prefix:['wrapup_'], selector:'.pt-wrap-btn' },
@@ -15209,13 +15150,12 @@ function applyPrompterToggleStates() {
 function trackPrompterControl(control, origin='live', quiet=false) {
   if (!control?.controlId || quiet || isQuietPrompterControl(control.action)) return;
   markPrompterToggleState(control.action, 'pending');
-  const label = flowOpControlLabel(control.action);
+  const label = prompterControlLabel(control.action);
   clearTimeout(_pendingPrompterControls[control.controlId]?.waitTimer);
   clearTimeout(_pendingPrompterControls[control.controlId]?.failTimer);
   const waitTimer = setTimeout(() => {
     if (!_pendingPrompterControls[control.controlId]) return;
-    if (origin === 'flowop') flowOpSetStatus(`${label} sent · waiting for talent`);
-    else markLivePrompterStatus(`${label} sent`, 'busy');
+    markLivePrompterStatus(`${label} sent`, 'busy');
   }, _prompterHasRecentTalent() ? 900 : 0);
   const failTimer = setTimeout(() => {
     if (!_pendingPrompterControls[control.controlId]) return;
@@ -15223,10 +15163,30 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     delete _pendingPrompterControls[control.controlId];
     pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
     markPrompterToggleState(control.action, 'failed');
-    if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
-    else markLivePrompterStatus('No talent ack', 'busy');
+    markLivePrompterStatus('No talent ack', 'busy');
   }, 5000);
   _pendingPrompterControls[control.controlId] = { action:control.action, origin, waitTimer, failTimer };
+}
+
+// The standalone Flowmingo Op screen and the in-Live operator overlay are gone
+// (owner 2026-09 debloat): the Script Op panel and its pop-out window are the
+// two operator surfaces. The old #flowop / ?operator doors and the Guide's
+// "remote" action land here so they never dead-end: a Live host in this window
+// opens the pop-out for the show; otherwise the talent screen's "Link a show"
+// door opens with a one-line toast saying where the controls live now.
+function openFlowmingoRemoteDoor(codeOverride='') {
+  const code = String(codeOverride || '').trim().toUpperCase();
+  const hostCode = String(session?.code || '').trim().toUpperCase();
+  const liveHost = document.getElementById('liveshow')?.classList.contains('on')
+    && hostCode && !session.isDemo && (!code || code === hostCode);
+  if (liveHost) return openScriptOpPopout();
+  openPrompterApp();
+  ptOpenEdit();
+  const input = ptEl('pt-cueola-code-input');
+  if (input && code) input.value = code;
+  toast(code
+    ? `Remote operator controls now live in Script Op. Link ${code} here for the talent screen, or go Live in Cueola and open the Script Op pop-out.`
+    : 'Remote operator controls now live in Script Op: go Live in Cueola and open the Script Op pop-out.', 5000);
 }
 
 function openPrompterApp() {
@@ -15546,17 +15506,12 @@ function sendPrompterPreviewControl(action) {
 // used to omit overlay state, so a sent overlay toggle never updated the sender's
 // local mirrors: slates and the question flag could not offer their off action,
 // and the clock size label stuck on M. Mirror overlay-family actions into this
-// window's own state at send time (model: flowOpApplyControlPreview, which does
-// the same for foreign controls); the talent ack then trues everything up.
-function applyOperatorOverlayMirror(action, payload=null, origin='live') {
+// window's own state at send time; the talent ack then trues everything up.
+function applyOperatorOverlayMirror(action, payload=null) {
   if (!action) return;
   if (!(action.startsWith('slate_') || action.startsWith('question_')
       || action.startsWith('clock_') || action.startsWith('wrapup_')
       || action.startsWith('overlays_') || action.startsWith('rowinfo_'))) return;
-  if (origin === 'flowop') {
-    flowOpApplyControlPreview(action, true, payload);
-    return;
-  }
   if (action === 'overlays_clear') {
     ptTechSlateOn = false;
     ptColorBarsOn = false;
@@ -15577,10 +15532,6 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
 }
 
 function sendPrompterControl(action, payload=null) {
-  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
-    markLivePrompterStatus('Flowmingo Op has control', 'busy');
-    return false;   // strict false: a deck key can flash the refusal
-  }
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op', payload);
   applyOperatorOverlayMirror(action, payload);
@@ -15604,7 +15555,7 @@ function sendPrompterControl(action, payload=null) {
     }
     prompterSessionController.queueCommand(control);
     projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for talent to apply state' : 'Waiting for Flowmingo output');
-    markLivePrompterStatus(`${flowOpControlLabel(action)} queued`, 'busy');
+    markLivePrompterStatus(`${prompterControlLabel(action)} queued`, 'busy');
     // Queued for a talent that has not linked yet applies on link: not a dead
     // press, so the deck does not flash it red (review 9/13).
     return true;
@@ -15615,7 +15566,7 @@ function sendPrompterControl(action, payload=null) {
 // The session doc can carry this control right now: Firebase is up and a
 // show code resolves (same resolution as dispatchPrompterCommand's write).
 function prompterControlDocPathAvailable(control, codeOverride='') {
-  const code = String(codeOverride || control?.productionCode || session.code || flowOpCode || '').trim();
+  const code = String(codeOverride || control?.productionCode || session.code || '').trim();
   return Boolean(window._firebaseReady && code);
 }
 
@@ -15692,38 +15643,19 @@ let livePrompterDraftTimer = null;
 let livePrompterStatusTimer = null;
 let livePrompterDraftDirty = false;
 let livePrompterDraftVersion = 0;
-let flowOpCode = '';
-let flowOpSub = null;
-let flowOpData = null;
-let flowOpPlaying = false;
-let flowOpReturnScreen = 'entry';
-let flowOpKeydownHandler = null;
-let flowOpKeyupHandler = null;
-let flowOpLastRemoteControlTs = 0;
-let _flowOpTalentHeartbeatTs = 0;   // dedup: last doc heartbeat ts the Flowmingo Op reader fed in
-let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'talent online' label)
 let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
-let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
 let ptColorBarsOn = false;    // generated NTSC bars on the talent display
-let flowOpColorBarsOn = false;
 let ptQuestionOn = false;
-let flowOpQuestionOn = false;
 let ptQuestionText = '';       // D12.6: current QUESTION card copy ('' = generic)
 // Prepared question cards for the lane (The Break Room demo or a seeded
 // session's questionLane field). Surfaced as datalist suggestions under the
 // lane input; the lane itself stays one-card-at-a-time, last write wins.
 let sessionQuestionCards = [];
-let flowOpQuestionText = '';
 let ptClockState = { mode:'off', label:'', targetTs:0, size:1 };
-let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
-let flowOpSessionRenderFingerprint = '';
-let flowOpControlsRenderFingerprint = '';
-let flowOpDeferredControlsDisabled = null;
-let flowOpControlsRenderCount = 0;
 // Operator-entered clock inputs — persisted so a panel re-render doesn't wipe the
 // typed duration / count-to time (which broke "change duration" + "countdown to time").
 let flowClockDurationMin = 5;
-let flowWrapCustomMin = 3;   // custom "Wrap in (min)" — survives control-panel re-renders
+let flowWrapCustomMin = 5;   // "Wrap in (min)" — one field, one Send; survives control-panel re-renders
 let flowClockCountTime = '';
 function setFlowClockDuration(v) { const n = parseInt(v, 10); if (!isNaN(n)) flowClockDurationMin = Math.max(1, Math.min(999, n)); }
 function setFlowWrapCustomMin(v) { const n = parseInt(v, 10); if (!isNaN(n)) flowWrapCustomMin = Math.max(1, Math.min(999, n)); }
@@ -16009,7 +15941,7 @@ function ptUpdateProgress() {
   // Keep the operator cue scrubber tracking the live position (unless being dragged).
   // Only when there's a real scrollable track here — in the Script Op (no rendered talent
   // track, max=0) leave the scrubber where the operator set it instead of snapping to 0.
-  if (max > 0) ['po-seek', 'lsq-seek'].forEach(id => {
+  if (max > 0) ['lsq-seek'].forEach(id => {
     const s = document.getElementById(id);
     if (s && document.activeElement !== s && s.dataset.seekDragging !== '1') s.value = Math.round(pct);
   });
@@ -16336,7 +16268,7 @@ function ptCheckRowHold() {
 
 function ptSyncPlayIcons(isPlaying) {
   const icon = ptEl('pt-play-icon');
-  ['pt-play-btn', 'po-play-btn', 'lsq-play-btn'].forEach(id => {
+  ['pt-play-btn', 'lsq-play-btn'].forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
     patchPrompterPlayButton(btn, isPlaying);
@@ -16364,6 +16296,12 @@ function patchPrompterPlayButton(btn, isPlaying) {
   }
 }
 
+// Simple tier (owner 2026-09 debloat): each pane shows the controls a student
+// reaches for first; the rest folds behind one collapsed "More" per pane.
+// Every control still exists and every keyboard shortcut still lands.
+function scriptOpMoreHTML(inner) {
+  return `<details class="cc-more sop-more"><summary>More</summary>${inner}</details>`;
+}
 function poTransportSectionHTML(scope) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'Pause' : 'Play';
@@ -16372,6 +16310,12 @@ function poTransportSectionHTML(scope) {
       <div class="flow-control-grid one">
         <button class="pt-btn${ptPlaying?' active':''}" id="${scope}-play-btn" data-prompter-play data-prompter-scope="${scope}" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}"><span class="sf-symbol" data-symbol="media.play" data-prompter-play-icon="play" aria-hidden="true"${ptPlaying ? ' hidden' : ''}></span><span class="sf-symbol" data-symbol="media.pause" data-prompter-play-icon="pause" aria-hidden="true"${ptPlaying ? '' : ' hidden'}></span><span data-prompter-play-label>${playLabel}</span></button>
       </div>
+    </div>`;
+}
+// Brake / Boost / Reverse / Forward: behind More (J / L and the arrow keys still work).
+function poTransportExtrasHTML() {
+  return `<div class="flow-control-section flow-control-transport-extras">
+      <div class="flow-control-title">Hold &amp; direction</div>
       <div class="flow-control-grid four">
         <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')" onpointercancel="sendPrompterControl('brake_stop')" onlostpointercapture="sendPrompterControl('brake_stop')">Brake</button>
         <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')" onpointercancel="sendPrompterControl('boost_stop')" onlostpointercapture="sendPrompterControl('boost_stop')">Boost</button>
@@ -16380,9 +16324,10 @@ function poTransportSectionHTML(scope) {
       </div>
     </div>`;
 }
+// Speed + Size: up front on the Playback pane.
 function poDisplaySectionHTML(scope) {
   return `<div class="flow-control-section flow-control-display">
-      <div class="flow-control-title">Display</div>
+      <div class="flow-control-title">Speed &amp; Size</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="${scope}-speed-value" for="${scope}-speed-range" data-prompter-speed-value>${Math.round(ptTargetSpeed)}</output></span>
       <input type="range" class="pt-range" id="${scope}-speed-range" data-prompter-speed min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value);this.dataset.controlDragging=''">
@@ -16391,6 +16336,12 @@ function poDisplaySectionHTML(scope) {
         <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="${scope}-size-value" for="${scope}-size-range" data-prompter-size-value>${Math.round(ptFontSize)}</output></span>
       <input type="range" class="pt-range" id="${scope}-size-range" data-prompter-size min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value);this.dataset.controlDragging=''">
       </div>
+    </div>`;
+}
+// Align: behind More on the Display pane.
+function poAlignSectionHTML() {
+  return `<div class="flow-control-section flow-control-align">
+      <div class="flow-control-title">Align</div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
         <button class="pt-btn${ptAlign==='left'?' active':''}" data-prompter-align="left" onclick="sendPrompterControl('align_left')" aria-label="Align left" aria-pressed="${ptAlign === 'left' ? 'true' : 'false'}">Left</button>
@@ -16419,29 +16370,15 @@ function poScreenSectionHTML() {
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
     </div>`;
 }
-function promptOpControlsHTML(includeLiveActions = true) {
-  const scope = includeLiveActions ? 'po' : 'lsq';
-  const transport = poTransportSectionHTML(scope);
-  const screen = poScreenSectionHTML();
-  // Script Op's Transport pane mirrors the pop-out's Transport tab exactly:
-  // Transport + Screen. Display, Theme, Formatting, and Panel Text live in
-  // the Display & Theme pane (the pop-out is the reference surface).
-  if (!includeLiveActions) return `<div class="prompt-op-panel flow-control-panel">${transport}${screen}</div>`;
-  // Operator overlay: the same inspector standard as the Script Op drawer —
-  // icon tabs pick ONE flat group, no card grid.
-  return `<div class="prompt-op-panel flow-control-panel op-insp" data-insp-scope="po">
-    ${opInspHeadHTML('po')}
-    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
-    <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${liveActionsHTML('po')}</div></div>
-    <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('po')}</div>
-    <div class="insp-pane" data-insp-pane="display">${poDisplaySectionHTML(scope)}${poThemeSectionHTML()}</div>
-    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
-  </div>`;
+// Script Op Playback pane, mirrored by the pop-out's Playback tab: Play,
+// Speed, Size up front; Brake / Boost / Reverse / Forward and the Screen
+// group (Reset, Hide controls, Mirror, Fullscreen, Row info) behind More.
+function scriptOpTransportPaneHTML() {
+  return `<div class="prompt-op-panel flow-control-panel">${poTransportSectionHTML('lsq')}${poDisplaySectionHTML('lsq')}${scriptOpMoreHTML(poTransportExtrasHTML() + poScreenSectionHTML())}</div>`;
 }
 
-// The built-in Display & Theme pane mirrors the pop-out's fourth tab exactly:
-// Display, Theme, Formatting & Markers, Panel Text (owner 2026-08-19: the
-// pop-out is the surface the built-in is based on).
+// The built-in Display pane mirrors the pop-out's fourth tab: Formatting &
+// Markers and Panel Text up front; Align and Theme behind More.
 function scriptOpDisplayPaneHTML() {
   const zoom = Math.round((parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1) * 100);
   const formatting = `<div class="flow-control-section flow-control-format">
@@ -16465,7 +16402,7 @@ function scriptOpDisplayPaneHTML() {
         <button class="pt-btn" onclick="stepLiveTextZoom(0.05)">+</button>
       </div>
     </div>`;
-  return `<div class="prompt-op-panel flow-control-panel">${poDisplaySectionHTML('lsq')}${poThemeSectionHTML()}${formatting}${panelText}</div>`;
+  return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poThemeSectionHTML())}</div>`;
 }
 function setLiveTextZoomPct(pct) {
   const zoom = applyLiveTextZoom((Number(pct) || 100) / 100);
@@ -16478,37 +16415,6 @@ function syncLiveTextZoomReadout() {
   if (out) out.textContent = pct + '%';
   const range = document.getElementById('lsq-zoom-range');
   if (range && document.activeElement !== range) range.value = String(pct);
-}
-
-// ── Operator overlay / Flowmingo Op inspector tabs ─────────────────────────
-// Same pattern as the Script Op drawer (lsInspTab): icon tabs, one flat page,
-// remembered per surface so each panel reopens where the operator works.
-const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display', screen: 'Screen' };
-const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script', screen: 'action.fullscreen' };
-function opInspHeadHTML(scope) {
-  return `<div class="insp-head op-insp-head">
-    <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
-      ${Object.keys(OP_INSP_LABELS).map(key =>
-        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span><span class="insp-tab-lbl">${OP_INSP_LABELS[key]}</span></button>`).join('')}
-    </div>
-  </div>`;
-}
-function opInspTab(scope, key) {
-  if (!OP_INSP_LABELS[key]) key = 'transport';
-  document.querySelectorAll(`.op-insp[data-insp-scope="${scope}"]`).forEach(panel => {
-    panel.querySelectorAll('.insp-tab').forEach(b => {
-      const on = b.getAttribute('data-insp') === key;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    panel.querySelectorAll('.insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
-  });
-  try { localStorage.setItem(`cueola_op_insp_tab_${scope}`, key); } catch {}
-}
-function opInspRestoreTab(scope) {
-  let key = 'transport';
-  try { key = localStorage.getItem(`cueola_op_insp_tab_${scope}`) || 'transport'; } catch {}
-  opInspTab(scope, key);
 }
 
 // Rebuild which row-hold boundaries count as already passed, from geometry:
@@ -17132,16 +17038,6 @@ function anyTalentSlateOn() {
   return ptTechSlateOn || ptColorBarsOn;
 }
 
-function anyFlowOpSlateOn() {
-  return flowOpTechSlate || flowOpColorBarsOn;
-}
-
-function setFlowOpSlateState(kind) {
-  flowOpTechSlate = kind === 'tech';
-  flowOpColorBarsOn = kind === 'bars';
-  syncTechButtons();
-}
-
 function patchIconLabelButton(button, symbol, label) {
   if (!button) return;
   const icon = button.querySelector('.sf-symbol');
@@ -17156,30 +17052,21 @@ function patchIconLabelButton(button, symbol, label) {
 
 // Keep every visible slate toggle in sync with the state.
 function syncTechButtons() {
-  const talentSlateOn = anyTalentSlateOn();
-  const flowSlateOn = anyFlowOpSlateOn();
-  ['lsq-tech-btn', 'po-tech-btn', 'flow-tech-btn'].forEach(id => {
-    const b = document.getElementById(id);
-    if (!b) return;
-    const isFlow = id.startsWith('flow');
-    const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
-    const anyOn = isFlow ? flowSlateOn : talentSlateOn;
-    patchIconLabelButton(b, 'state.warning', techOn ? 'Back on air' : 'Tech Difficulty');
-    b.classList.toggle('active', techOn);
-    b.classList.toggle('muted', anyOn && !techOn);
-    b.setAttribute('aria-pressed', techOn ? 'true' : 'false');
-  });
-  ['lsq-bars-btn', 'po-bars-btn', 'flow-bars-btn'].forEach(id => {
-    const b = document.getElementById(id);
-    if (!b) return;
-    const isFlow = id.startsWith('flow');
-    const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
-    const anyOn = isFlow ? flowSlateOn : talentSlateOn;
-    patchIconLabelButton(b, 'content.display', barsOn ? 'Back on air' : 'Color bars');
-    b.classList.toggle('active', barsOn);
-    b.classList.toggle('muted', anyOn && !barsOn);
-    b.setAttribute('aria-pressed', barsOn ? 'true' : 'false');
-  });
+  const anyOn = anyTalentSlateOn();
+  const tech = document.getElementById('lsq-tech-btn');
+  if (tech) {
+    patchIconLabelButton(tech, 'state.warning', ptTechSlateOn ? 'Back on air' : 'Tech Difficulty');
+    tech.classList.toggle('active', ptTechSlateOn);
+    tech.classList.toggle('muted', anyOn && !ptTechSlateOn);
+    tech.setAttribute('aria-pressed', ptTechSlateOn ? 'true' : 'false');
+  }
+  const bars = document.getElementById('lsq-bars-btn');
+  if (bars) {
+    patchIconLabelButton(bars, 'content.display', ptColorBarsOn ? 'Back on air' : 'Color bars');
+    bars.classList.toggle('active', ptColorBarsOn);
+    bars.classList.toggle('muted', anyOn && !ptColorBarsOn);
+    bars.setAttribute('aria-pressed', ptColorBarsOn ? 'true' : 'false');
+  }
 }
 
 // Operator quick action (Script Op): throw up the stand-by slate AND record the
@@ -17220,40 +17107,36 @@ function poNudgeSeek(delta) {
 }
 
 function poPunchInSeek(scope = 'lsq') {
-  const sl = document.getElementById(`${scope}-seek`) || document.getElementById('lsq-seek') || document.getElementById('po-seek');
+  const sl = document.getElementById(`${scope}-seek`) || document.getElementById('lsq-seek');
   const val = sl ? parseFloat(sl.value) || 0 : ptProgressPct();
   const next = Math.max(0, Math.min(100, val));
   sendPrompterControl('seek_set_' + next);
   sendPrompterControl('resume');
 }
 
-// Shared "Live actions" block: Tech Difficulty toggle + the live cue scrubber.
-// scope: 'po' (prompt-op stage), 'lsq' (Script Op sidebar), 'flow' (Flowmingo Op).
-function liveActionsHTML(scope = 'po', disabled = false) {
+// Script Op "On air" pane: Cue Now / Cue Next and Find up front; the slates
+// (Tech Difficulty, Color bars) and the Position scrubber behind More.
+// scope: 'lsq' (Script Op sidebar).
+function liveActionsHTML(scope = 'lsq', disabled = false) {
   const dis = disabled ? ' disabled' : '';
-  const isFlow = scope === 'flow';
-  const techOn = isFlow ? flowOpTechSlate : ptTechSlateOn;
-  const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
-  const techCall = isFlow ? 'flowOpToggleTechDifficulty()' : 'toggleTechDifficulty()';
-  const barsCall = isFlow ? 'flowOpToggleColorBars()' : 'toggleColorBars()';
-  const seekVal = isFlow ? 0 : ptProgressPct();
-  const seekInput = isFlow
-    ? `flowOpApplyControlPreview('seek_set_'+this.value,true)`
-    : `sendPrompterPreviewControl('seek_set_'+this.value);lsScrubPreviewScript(this.value)`;
-  const seekChange = isFlow
-    ? ` onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''"`
-    : ` onchange="sendPrompterControl('seek_set_'+this.value);this.dataset.seekDragging=''"`;
+  const techOn = ptTechSlateOn;
+  const barsOn = ptColorBarsOn;
+  const techCall = 'toggleTechDifficulty()';
+  const barsCall = 'toggleColorBars()';
+  const seekVal = ptProgressPct();
+  const seekInput = `sendPrompterPreviewControl('seek_set_'+this.value);lsScrubPreviewScript(this.value)`;
+  const seekChange = ` onchange="sendPrompterControl('seek_set_'+this.value);this.dataset.seekDragging=''"`;
   // Mark the scrubber as actively dragged so the live-position sync can't yank its
   // value back mid-drag (which made the release land on the wrong spot / snap to 0).
   const seekDrag = ` onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
-  const nudge = d => isFlow ? `flowOpNudgeSeek(${d})` : `poNudgeSeek(${d})`;
-  const punch = isFlow ? 'flowOpPunchInSeek()' : `poPunchInSeek('${scope}')`;
+  const nudge = d => `poNudgeSeek(${d})`;
+  const punch = `poPunchInSeek('${scope}')`;
   const nextRowIdx = (() => {
     let i = liveActiveCueIndex();
     do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
     return i < beats.length ? i : -1;
   })();
-  const rowCue = isFlow ? '' : `<div class="flow-control-section flow-control-rowcue">
+  const rowCue = `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
       <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
         <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${rowDisplayNumber(Math.max(liveActiveCueIndex(), 0))}')" data-tip="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
@@ -17264,9 +17147,9 @@ function liveActionsHTML(scope = 'po', disabled = false) {
         <button class="pt-btn" onclick="poFindInScript('${scope}')" data-tip="Cue Flowmingo to the next line containing this text (repeat to walk through matches)"${dis}><span>Find</span></button>
       </div>
     </div>`;
-  // Returns bare control groups so they nest inside the existing panel containers
-  // (prompt-op-panel / flowop-controls / #lsLiveActions) without overlapping them.
+  // Returns bare control groups so they nest inside #lsLiveActions.
   return `${rowCue}
+    <details class="cc-more sop-more"><summary>More</summary>
     <div class="flow-control-section flow-control-onair">
       <div class="flow-control-title">On Air</div>
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
@@ -17283,7 +17166,8 @@ function liveActionsHTML(scope = 'po', disabled = false) {
 	        <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
 	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
 	      </div>
-	    </div>`;
+	    </div>
+    </details>`;
 }
 
 // Jump to line, operator side: sends the collaborative seek_text control
@@ -18281,7 +18165,7 @@ function ptRenderClockOverlay() {
 }
 
 function renderPromptOpClockPreview() {
-  ['poClockPreview', 'lsqClockPreview'].forEach(id => {
+  ['lsqClockPreview'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     let mini = el.querySelector('[data-clock-preview-mini]');
@@ -18306,7 +18190,7 @@ function renderPromptOpClockPreview() {
         : fmtClockOverlay(left, state.mode !== 'wrap');
     const label = !clockOn ? 'Clock' : (state.label || 'Clock');
     el.classList.toggle('off', !clockOn);
-    mini.className = `flowop-clock-mini ${state.mode || 'off'}`;
+    mini.className = `pt-clock-mini ${state.mode || 'off'}`;
     mini.classList.toggle('expired', Boolean(clockOn && state.mode !== 'timeofday' && left <= 0));
     const labelEl = mini.querySelector('[data-clock-preview-label]');
     const valueEl = mini.querySelector('[data-clock-preview-value]');
@@ -18321,15 +18205,11 @@ function renderPromptOpClockPreview() {
 }
 
 function applyClockActionToState(action, target='talent') {
-  const isFlow = target === 'flowop';
-  const current = isFlow ? flowOpClockState : ptClockState;
+  const current = ptClockState;
   const update = patch => {
     const next = { ...current, ...patch };
-    if (isFlow) flowOpClockState = next;
-    else {
-      ptClockState = next;
-      if (next.size !== current.size && isFlowmingoTalentActive()) ptPersistOverlaySize(next.size);
-    }
+    ptClockState = next;
+    if (next.size !== current.size && isFlowmingoTalentActive()) ptPersistOverlaySize(next.size);
   };
   if (action === 'clock_off') update({ mode:'off', label:'', targetTs:0 });
   else if (action === 'clock_timeofday') update({ mode:'timeofday', label:'Time', targetTs:0 });
@@ -18350,11 +18230,8 @@ function applyClockActionToState(action, target='talent') {
     update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, wrapSec:sec });
   } else if (action === 'clock_size_up') update({ size:Math.min(4, (current.size ?? 1) + 1) });
   else if (action === 'clock_size_down') update({ size:Math.max(0, (current.size ?? 1) - 1) });
-  if (isFlow) flowOpRenderClockPreview();
-  else {
-    ptRenderClockOverlay();
-    renderPromptOpClockPreview();
-  }
+  ptRenderClockOverlay();
+  renderPromptOpClockPreview();
 }
 
 // D12.6 questions lane: deliberately dumb — the operator copies a message in
@@ -18376,13 +18253,11 @@ function pushChatQuestion(scope) {
   const input = document.getElementById(`${scope}-question-input`);
   const text = String(input?.value || '').replace(/\s+/g, ' ').trim().slice(0, 280);
   if (!text) return clearChatQuestion(scope);
-  if (scope === 'flow') flowOpSendControl('question_on', false, { text });
-  else sendPrompterControl('question_on', { text });
+  sendPrompterControl('question_on', { text });
 }
 
 function clearChatQuestion(scope) {
-  if (scope === 'flow') flowOpSendControl('question_off');
-  else sendPrompterControl('question_off');
+  sendPrompterControl('question_off');
 }
 
 // Owner 2026-08-24: the overlay card is one way to hand talent a question;
@@ -18481,16 +18356,10 @@ function applyQuestionAction(action, target='talent', text='') {
   // D12.6 questions lane: one card at a time, last write wins. A bare
   // question_on (legacy flag) keeps the generic card text.
   const card = on ? String(text || '').slice(0, 280) : '';
-  if (target === 'flowop') {
-    flowOpQuestionOn = on;
-    flowOpQuestionText = card;
-    flowOpRenderClockPreview();
-  } else {
-    ptQuestionOn = on;
-    ptQuestionText = card;
-    ptRenderClockOverlay();
-    renderPromptOpClockPreview();
-  }
+  ptQuestionOn = on;
+  ptQuestionText = card;
+  ptRenderClockOverlay();
+  renderPromptOpClockPreview();
 }
 
 // Called by sendPrompterControl to mirror controls into the native prompter
@@ -18632,59 +18501,7 @@ function ptHandleRemoteControl(action, payload=null) {
   }
 }
 
-function flowOpEl(id) {
-  return document.getElementById(id);
-}
-
-function flowOpSetStatus(text, isError=false) {
-  const el = flowOpEl('flowOpStatus');
-  if (!el) return;
-  el.textContent = text;
-  el.style.color = isError ? '#f05252' : '';
-}
-
-function flowOpSetSpeed(val) {
-  ptTargetSpeed = Math.max(5, Math.min(200, parseFloat(val) || 60));
-  ptLiveSpeed = ptTargetSpeed;
-}
-
-function flowOpSetSize(val) {
-  ptFontSize = Math.max(24, Math.min(120, parseInt(val) || 52));
-  flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
-}
-
-function flowOpSetAlign(a) {
-  ptAlign = ['left','center','right'].includes(a) ? a : 'center';
-  flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
-}
-
-function flowOpSetTheme(name) {
-  name = normalizeCueolaTheme(name);
-  const t = PT_THEMES[name];
-  const screen = flowOpEl('flowOp');
-  if (!screen || !t) return;
-  ptThemeName = name;
-  screen.dataset.ptTheme = name;
-  screen.style.setProperty('--pt-bg', t.bg);
-  screen.style.setProperty('--pt-text', t.text);
-  screen.style.setProperty('--pt-accent', t.accent);
-  screen.style.setProperty('--pt-ui-bg', t.uiBg);
-  screen.style.setProperty('--pt-ui-border', t.uiBorder);
-  screen.style.background = name === 'flamingo'
-    ? 'linear-gradient(135deg,#330512 0%,#411b48 50%,#3b1429 100%)'
-    : name === 'koala'
-      ? 'linear-gradient(135deg,#1f1f1e 0%,#262626 50%,#404040 100%)'
-      : name === 'panda'
-        ? 'linear-gradient(135deg,#000000 0%,#1e1e1e 50%,#000000 100%)'
-        : name === 'outrangutan'
-          ? '#100c09'
-        : name === 'prepbear'
-          ? 'linear-gradient(135deg,#080912 0%,#14172a 50%,#2f357c 100%)'
-          : t.bg;
-  try { localStorage.setItem('cueola_prompter_theme', name); } catch {}
-}
-
-function flowOpControlLabel(action) {
+function prompterControlLabel(action) {
   if (action === 'seek_text') return 'Find in script';
   const labels = {
     pause:'Pause', resume:'Play', speed_up:'Faster', speed_down:'Slower',
@@ -18714,135 +18531,56 @@ function flowOpControlLabel(action) {
   return labels[action] || action || 'Control';
 }
 
-function flowOpRenderClockPreview() {
-  const el = flowOpEl('flowOpClockPreview');
-  if (!el) return;
-  const state = flowOpClockState || {};
-  const clockOn = state.mode && state.mode !== 'off';
-  const left = (Number(state.targetTs) || 0) - Date.now();
-  const value = !clockOn ? 'Off'
-    : state.mode === 'timeofday' ? formatTimeOfDay()
-      : fmtClockOverlay(left, state.mode !== 'wrap');
-  const label = !clockOn ? 'Clock' : (state.label || (state.mode === 'wrap' ? 'Wrap up' : 'Clock'));
-  el.classList.toggle('off', !clockOn);
-  el.innerHTML = `<div class="flowop-clock-mini ${state.mode || 'off'}">
-    <span>${esc(label)}</span>
-    <strong>${esc(value)}</strong>
-    ${flowOpQuestionOn ? `<em>${esc(flowOpQuestionText ? `“${flowOpQuestionText.slice(0, 80)}${flowOpQuestionText.length > 80 ? '…' : ''}”` : 'Question in chat')}</em>` : ''}
-  </div>`;
-  if (clockOn && !flowOpClockPreviewTimer) flowOpClockPreviewTimer = setInterval(flowOpRenderClockPreview, 500);
-  if (!clockOn && flowOpClockPreviewTimer) {
-    clearInterval(flowOpClockPreviewTimer);
-    flowOpClockPreviewTimer = null;
-  }
-}
-
-function flowOpApplyControlPreview(action, quiet=false, payload=null) {
-  if (!action) return;
-  if (action.startsWith('speed_set_')) {
-    flowOpSetSpeed(action.replace('speed_set_', ''));
-  } else if (action.startsWith('size_set_')) {
-    flowOpSetSize(action.replace('size_set_', ''));
-  } else if (action.startsWith('theme_')) {
-    flowOpSetTheme(action.replace('theme_', ''));
-  } else if (action.startsWith('seek_set_')) {
-    // Pure live cue scroll — no local Flowmingo Op preview state to mirror.
-  } else if (action.startsWith('seek_row_')) {
-    // Talent resolves row headers locally after the latest script update.
-  } else if (action === 'overlays_clear') {
-    setFlowOpSlateState('off');
-    applyClockActionToState('clock_off', 'flowop');
-    applyQuestionAction('question_off', 'flowop');
-  } else if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action.startsWith('clock_until_') || action.startsWith('clock_duration_') || action.startsWith('wrapup_')) {
-    applyClockActionToState(action, 'flowop');
-  } else if (action === 'question_on' || action === 'question_off') {
-    applyQuestionAction(action, 'flowop', payload?.text);
-  } else {
-    switch (action) {
-      case 'slate_tech_on': setFlowOpSlateState('tech'); break;
-      case 'slate_tech_off': setFlowOpSlateState('off'); break;
-      case 'slate_bars_on': setFlowOpSlateState('bars'); break;
-      case 'slate_bars_off': setFlowOpSlateState('off'); break;
-      case 'rowinfo_on': ptRowInfoOn = true; break;
-      case 'rowinfo_off': ptRowInfoOn = false; break;
-      case 'pause': flowOpPlaying = false; break;
-      case 'resume': flowOpPlaying = true; break;
-      case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
-      case 'speed_down': flowOpSetSpeed(ptTargetSpeed - 10); break;
-      case 'size_up': flowOpSetSize(ptFontSize + 4); break;
-      case 'size_down': flowOpSetSize(ptFontSize - 4); break;
-      case 'align_left': flowOpSetAlign('left'); break;
-      case 'align_center': flowOpSetAlign('center'); break;
-      case 'align_right': flowOpSetAlign('right'); break;
-      case 'direction_reverse': ptReversing = true; break;
-      case 'direction_forward': ptReversing = false; break;
-      case 'brake_start': ptBraking = true; break;
-      case 'brake_stop': ptBraking = false; break;
-      case 'boost_start': ptBoosting = true; break;
-      case 'boost_stop': ptBoosting = false; break;
-      default: break;
-    }
-  }
-  flowOpSyncControls();
-  if (flowOpCode) flowOpRenderControls(false);
-  if (!quiet && !action.endsWith('_stop') && !action.includes('_set_')) {
-    flowOpSetStatus(`${flowOpControlLabel(action)} sent`);
-  }
-}
-
-let flowOpClockPreviewTimer = null;
-
 function buildCountdownActionFromInput(scope) {
   const input = document.getElementById(`${scope}-clock-time`);
   const target = nextClockTargetFromHHMM(input?.value || '');
   if (!target) {
-    if (scope === 'flow') flowOpSetStatus('Set a countdown time first', true);
-    else markLivePrompterStatus('Set a countdown time', 'busy');
+    markLivePrompterStatus('Set a countdown time', 'busy');
     return '';
   }
   return `clock_until_${target}_label_${encodePrompterActionText('Countdown')}`;
 }
 
-function sendCountdownClock(scope='po') {
+function sendCountdownClock(scope='lsq') {
   const action = buildCountdownActionFromInput(scope);
   if (!action) return;
-  if (scope === 'flow') flowOpSendControl(action);
-  else sendPrompterControl(action);
+  sendPrompterControl(action);
 }
 
-function sendDurationClock(scope='po') {
+function sendDurationClock(scope='lsq') {
   const input = document.getElementById(`${scope}-duration-min`);
   const mins = Math.max(1, Math.min(999, parseInt(input?.value || '5', 10) || 5));
-  const action = `clock_duration_${mins * 60}`;
-  if (scope === 'flow') flowOpSendControl(action);
-  else sendPrompterControl(action);
+  sendPrompterControl(`clock_duration_${mins * 60}`);
 }
 
-function sendWrapUp(scope='po', minsOverride=null) {
+// One wrap control: the minutes field (default 5) and Send. The deck's WRAP
+// keys pass minsOverride (5 / 10) and never read the field.
+function sendWrapUp(scope='lsq', minsOverride=null) {
   const input = document.getElementById(`${scope}-wrap-min`);
   const mins = Math.max(1, Math.min(999, parseInt(minsOverride ?? input?.value ?? '5', 10) || 5));
-  const action = `wrapup_${mins * 60}`;
-  if (scope === 'flow') flowOpSendControl(action);
-  else sendPrompterControl(action);
+  sendPrompterControl(`wrapup_${mins * 60}`);
 }
 
-function toggleQuestionIndicator(scope='po') {
-  const on = scope === 'flow' ? flowOpQuestionOn : ptQuestionOn;
-  if (scope === 'flow') flowOpSendControl(on ? 'question_off' : 'question_on');
-  else sendPrompterControl(on ? 'question_off' : 'question_on');
+// No Question button any more: Push card turns the indicator on, Clear all
+// overlays turns it off. The deck's QUESTION key still toggles through here.
+function toggleQuestionIndicator(scope='lsq') {
+  sendPrompterControl(ptQuestionOn ? 'question_off' : 'question_on');
 }
 
-function clockAndAlertControlsHTML(scope='po', disabled=false) {
+// Script Op "Clocks" pane: the clock modes and the question lane up front;
+// the wrap control (one minutes field + Send) and Overlay size behind More.
+// There is no Question toggle: Push card turns the indicator on, Clear all
+// overlays turns it off, and the lane says "Question is up" while it is.
+function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
   const dis = disabled ? ' disabled' : '';
-  const isFlow = scope === 'flow';
-  const state = isFlow ? flowOpClockState : ptClockState;
+  const state = ptClockState;
   const mode = state?.mode || 'off';
-  const questionOn = isFlow ? flowOpQuestionOn : ptQuestionOn;
-  const send = action => isFlow ? `flowOpSendControl('${action}')` : `sendPrompterControl('${action}')`;
+  const questionOn = ptQuestionOn;
+  const send = action => `sendPrompterControl('${action}')`;
   const btn = (symbol, label, onclick, active=false, className='', attrs='') =>
     `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${attrs ? ` ${attrs}` : ''}${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
   return `<div class="flow-clock-stack">
-    <div class="flow-clock-preview" id="${scope === 'flow' ? 'flowOpClockPreview' : `${scope}ClockPreview`}"></div>
+    <div class="flow-clock-preview" id="${scope}ClockPreview"></div>
     <div class="flow-control-section flow-clock-section">
       <div class="flow-control-title">Clock</div>
       <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
@@ -18856,30 +18594,31 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
         <label class="flow-clock-field"><span>${sfIcon('time.clock')}<b>Count to</b></span><input id="${scope}-clock-time" type="time" value="${flowClockCountTime}" oninput="setFlowClockCountTime(this.value)" aria-label="Countdown target time"${dis}></label>
       </div>
     </div>
-    <div class="flow-control-section flow-wrap-section">
-      <div class="flow-control-title">Wrap Up</div>
-      <div class="flow-clock-grid flow-wrap-grid flow-control-grid three">
-        ${btn('state.warning', 'Wrap 10', `sendWrapUp('${scope}',10)`, false, 'pt-wrap-btn')}
-        ${btn('state.warning', 'Wrap 5', `sendWrapUp('${scope}',5)`, false, 'pt-wrap-btn')}
-        ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn')}
-      </div>
-      <label class="flow-wrap-custom flow-wrap-custom-row"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="${flowWrapCustomMin}" oninput="setFlowWrapCustomMin(this.value)" aria-label="Custom wrap minutes"${dis}></label>
-    </div>
     <div class="flow-control-section flow-alert-section">
-      <div class="flow-control-title">Alerts</div>
-      <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
-        ${btn(questionOn ? 'notification.unread' : 'notification.default', questionOn ? 'Clear question' : 'Question', `toggleQuestionIndicator('${scope}')`, questionOn, 'pt-question-btn', 'data-clock-question')}
-        ${btn('action.reset', 'Clear all overlays', send('overlays_clear'), false, '', 'data-overlays-clear data-tip="Drop the clock, wrap, question, and slates in one go"')}
-      </div>
+      <div class="flow-control-title">Question</div>
       <div class="pt-question-lane" data-question-lane>
         <input id="${scope}-question-input" class="pt-question-lane-input" type="text" maxlength="280"
           placeholder="Type or paste a question for the talent"
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
-        <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
+        <button type="button" class="pt-btn pt-question-lane-push" data-question-push onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
         <button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>
       </div>
-      <div class=\"field-hint\">Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.</div>
+      <div class="pt-question-state" data-question-state role="status"${questionOn ? '' : ' hidden'}>${sfIcon('notification.unread')}<span data-question-state-label>Question is up</span></div>
+      <div class="field-hint">Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.</div>
+      <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
+        ${btn('action.reset', 'Clear all overlays', send('overlays_clear'), false, '', 'data-overlays-clear data-tip="Drop the clock, wrap, question, and slates in one go"')}
+      </div>
+    </div>
+    <details class="cc-more sop-more"><summary>More</summary>
+    <div class="flow-control-section flow-wrap-section">
+      <div class="flow-control-title">Wrap Up</div>
+      <div class="flow-clock-grid flow-wrap-grid flow-control-grid two">
+        <label class="flow-wrap-custom"><span>${sfIcon('state.warning')}<b>Wrap in (min)</b></span><input id="${scope}-wrap-min" type="number" min="1" max="999" value="${flowWrapCustomMin}" oninput="setFlowWrapCustomMin(this.value)" aria-label="Wrap minutes"${dis}></label>
+        ${btn('action.forward', 'Send', `sendWrapUp('${scope}')`, false, 'pt-wrap-btn', 'data-tip="Show the wrap-up countdown on the talent for this many minutes"')}
+      </div>
+    </div>
+    <div class="flow-control-section flow-overlay-size-section">
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
         <div class="ui-stepper">
@@ -18889,455 +18628,8 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
         </div>
       </div>
     </div>
+    </details>
   </div>`;
-}
-
-function flowOpControlsHTML(disabled=false) {
-  const dis = disabled ? ' disabled' : '';
-  const playAction = flowOpPlaying ? 'pause' : 'resume';
-  const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
-  const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
-  const transport = `<div class="flow-control-section flow-control-transport">
-      <div class="flow-control-title">Playback</div>
-      <div class="flow-control-grid one">
-        <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${playIcon}<span>${playLabel}</span></button>
-      </div>
-      <div class="flow-control-grid four">
-        <button class="pt-btn" onpointerdown="flowOpSendControl('brake_start')" onpointerup="flowOpSendControl('brake_stop')" onpointerleave="flowOpSendControl('brake_stop')" onpointercancel="flowOpSendControl('brake_stop')" onlostpointercapture="flowOpSendControl('brake_stop')"${dis}>Brake</button>
-        <button class="pt-btn" onpointerdown="flowOpSendControl('boost_start')" onpointerup="flowOpSendControl('boost_stop')" onpointerleave="flowOpSendControl('boost_stop')" onpointercancel="flowOpSendControl('boost_stop')" onlostpointercapture="flowOpSendControl('boost_stop')"${dis}>Boost</button>
-        <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
-        <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
-      </div>
-    </div>`;
-  const display = `<div class="flow-control-section flow-control-display">
-      <div class="flow-control-title">Display</div>
-      <div class="pt-ctrl-group flow-control-slider">
-        <span class="pt-ctrl-label">Speed</span>
-        <button class="pt-btn" onclick="flowOpSendControl('speed_down')"${dis}>−</button>
-        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
-        <button class="pt-btn" onclick="flowOpSendControl('speed_up')"${dis}>+</button>
-      </div>
-      <div class="pt-ctrl-group flow-control-slider">
-        <span class="pt-ctrl-label">Size</span>
-        <button class="pt-btn" onclick="flowOpSendControl('size_down')"${dis}>−</button>
-        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
-        <button class="pt-btn" onclick="flowOpSendControl('size_up')"${dis}>+</button>
-      </div>
-      <div class="pt-ctrl-group flow-control-segment">
-        <span class="pt-ctrl-label">Align</span>
-        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}>Left</button>
-        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}>Center</button>
-        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}>Right</button>
-      </div>
-    </div>`;
-  const theme = `<div class="flow-control-section flow-theme-section">
-      <div class="flow-control-title">Theme</div>
-      <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
-      </div>
-    </div>`;
-  const screen = `<div class="flow-control-section flow-control-screen">
-      <div class="flow-control-title">Screen</div>
-      <div class="flow-control-grid five">
-        <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
-        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide controls</button>
-        <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
-        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
-        <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
-      </div>
-      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
-    </div>`;
-  return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
-    ${opInspHeadHTML('flow')}
-    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
-    <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${liveActionsHTML('flow', disabled)}</div></div>
-    <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('flow', disabled)}</div>
-    <div class="insp-pane" data-insp-pane="display">${display}${theme}</div>
-    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
-  </div>`;
-}
-
-function flowOpRenderControls(disabled=false) {
-  const el = flowOpEl('flowOpControls');
-  if (!el) return false;
-  const fingerprint = stableStringify({
-    disabled:Boolean(disabled),
-    question:flowOpQuestionOn,
-    clockMode:flowOpClockState?.mode || 'off',
-    clockSize:flowOpClockState?.size ?? 1,
-  });
-  if (fingerprint === flowOpControlsRenderFingerprint) {
-    flowOpSyncControls();
-    return false;
-  }
-  // A focused control owns its DOM until blur. This protects keyboard focus,
-  // typed clock values, and a range thumb that is currently being dragged.
-  if (el.contains(document.activeElement)) {
-    flowOpDeferredControlsDisabled = disabled;
-    el.onfocusout = () => queueMicrotask(() => {
-      if (!el.contains(document.activeElement) && flowOpDeferredControlsDisabled !== null) {
-        const pending = flowOpDeferredControlsDisabled;
-        flowOpDeferredControlsDisabled = null;
-        flowOpRenderControls(pending);
-      }
-    });
-    flowOpSyncControls();
-    return false;
-  }
-  el.innerHTML = flowOpControlsHTML(disabled);
-  flowOpControlsRenderFingerprint = fingerprint;
-  flowOpControlsRenderCount += 1;
-  el.dataset.renderCount = String(flowOpControlsRenderCount);
-  opInspRestoreTab('flow');   // keep the remembered inspector tab active across re-renders
-  flowOpSyncControls();
-  applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
-  return true;
-}
-
-function flowOpSyncControls() {
-  const playBtn = flowOpEl('flowOpPlayBtn');
-  if (playBtn) {
-    playBtn.innerHTML = `${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY} ${flowOpPlaying ? 'PAUSE' : 'PLAY'}`;
-    playBtn.classList.toggle('active', flowOpPlaying);
-    playBtn.setAttribute('onclick', `flowOpSendControl('${flowOpPlaying ? 'pause' : 'resume'}')`);
-  }
-  const speed = flowOpEl('flowOpSpeedRange');
-  if (speed && document.activeElement !== speed && !speed.dataset.controlDragging) speed.value = ptTargetSpeed;
-  const size = flowOpEl('flowOpSizeRange');
-  if (size && document.activeElement !== size && !size.dataset.controlDragging) size.value = ptFontSize;
-  document.querySelectorAll('[data-flowop-align]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
-  });
-  const rowInfo = flowOpEl('flowOpRowInfo');
-  if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
-  document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
-    btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
-  });
-  flowOpRenderClockPreview();
-}
-
-function flowOpRenderSession(data=null) {
-  const titleEl = flowOpEl('flowOpTitle');
-  const meta = flowOpEl('flowOpSessionMeta');
-  const preview = flowOpEl('flowOpScriptPreview');
-  const fingerprint = data ? stableStringify({
-    showName:data.show?.name || data.showName || data.name || '',
-    beats:Array.isArray(data.beats) ? data.beats : [],
-    prompterText:typeof data.prompter?.text === 'string' ? data.prompter.text : null,
-    activeIdx:data.prompter?.activeIdx,
-    currentRow:data.prompter?.currentRow || null,
-    nextRow:data.prompter?.nextRow || null,
-  }) : 'empty';
-  if (fingerprint === flowOpSessionRenderFingerprint) return false;
-  flowOpSessionRenderFingerprint = fingerprint;
-  if (!data) {
-    if (titleEl) titleEl.textContent = 'Flowmingo Op';
-    if (meta) meta.innerHTML = `<div class="flowop-session-title">No session loaded</div><div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>`;
-    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a show code to control Flowmingo remotely.</div>`;
-    flowOpOfferAssignedSessions();
-    return true;
-  }
-  const showName = data.show?.name || data.showName || data.name || 'Untitled Show';
-  const beatsInSession = Array.isArray(data.beats) ? data.beats.map(migrateBeat) : [];
-  const activeIdx = Number.isFinite(data.prompter?.activeIdx) ? data.prompter.activeIdx : 0;
-  const cur = data.prompter?.currentRow || beatsInSession[activeIdx] || null;
-  const next = data.prompter?.nextRow || beatsInSession[activeIdx + 1] || null;
-  const text = ptAssembleCueolaScript(data);
-  if (titleEl) titleEl.textContent = showName;
-  if (preview) {
-    preview.innerHTML = text.trim()
-      ? ptSanitizeHTML(ptPlainTextToHTML(text))
-      : `<div class="flowop-empty">This session has no Flowmingo script yet.</div>`;
-  }
-  if (meta) {
-    meta.innerHTML = `
-      <div class="flowop-session-title">${esc(showName)}</div>
-      <div class="flowop-meta" style="margin-top:10px">
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Code</div><div class="flowop-meta-value">${esc(flowOpCode || '—')}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Rows</div><div class="flowop-meta-value">${beatsInSession.length || '—'}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Now</div><div class="flowop-meta-value">${esc(cur?.name || cur?.info || '—')}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Next</div><div class="flowop-meta-value">${esc(next?.name || next?.info || '—')}</div></div>
-      </div>`;
-  }
-  return true;
-}
-
-// Same directive as the join modals: a signed-in operator picks an assigned
-// session from the empty preview instead of typing the code. The top-bar code
-// input stays as the typed fallback. Renders only while no session is loaded;
-// flowOpRenderSession(null) calls this after painting the plain empty state.
-let flowOpChoiceGen = 0;
-async function flowOpOfferAssignedSessions() {
-  const idApi = window.CueolaIdentity;
-  if (!idApi || typeof idApi.sessionChoices !== 'function' || !idApi.identity?.()) return;
-  const gen = ++flowOpChoiceGen;
-  let choices = [];
-  try { choices = await idApi.sessionChoices(); } catch { choices = []; }
-  if (gen !== flowOpChoiceGen || !choices.length) return;
-  if (flowOpCode || flowOpData) return;                 // a session loaded while we were checking
-  const preview = flowOpEl('flowOpScriptPreview');
-  if (!preview || !preview.querySelector('.flowop-empty')) return;
-  preview.innerHTML = '<div class="flowop-empty flowop-choices">'
-    + '<div class="join-yours-label">Your sessions</div>'
-    + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
-    + '<div class="flowop-note" style="margin-top:12px">Or type a show code above.</div>'
-    + '</div>';
-}
-function flowOpPickAssignedSession(code) { flowOpLoadSession(String(code || '').toUpperCase()); }
-
-async function flowOpLoadSession(codeOverride='') {
-  const input = flowOpEl('flowOpCodeInput');
-  const code = (codeOverride || input?.value || '').trim().toUpperCase();
-  const btn = flowOpEl('flowOpLoadBtn');
-  if (!code) {
-    flowOpSetStatus('Enter a code', true);
-    input?.focus();
-    return;
-  }
-  // Gate at the code load, not at the screen: the remote can be opened and
-  // arranged on a second device, but connecting it to a real show starts
-  // writing prompter control commands, which needs a signed-in operator.
-  if (!requireProfileForCloud('drive a live prompter', 'flowop')) {
-    flowOpSetStatus('Sign in to connect', true);
-    return;
-  }
-  if (input) input.value = code;
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
-  // Phase 5: the in-panel loader honors the class-key gate like the side doors.
-  if (!(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) {
-    flowOpSetStatus('Class key needed', true);
-    if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-    return;
-  }
-  flowOpCode = '';
-  flowOpSessionRenderFingerprint = '';
-  flowOpControlsRenderFingerprint = '';
-  flowOpDeferredControlsDisabled = null;
-  flowOpRenderControls(true);
-  flowOpSetStatus('Loading...');
-  _prompterOperatorRuntimeActive = true;
-  _ensurePrompterOperatorBridge(true);
-  const load = () => {
-    try {
-      if (flowOpSub) { flowOpSub(); flowOpSub = null; }
-      flowOpSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
-        if (!snap.exists()) {
-          flowOpCode = '';
-          flowOpData = null;
-          flowOpRenderSession(null);
-          flowOpRenderControls(true);
-          flowOpSetStatus('Not found', true);
-          if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-          return;
-        }
-        flowOpCode = code;
-        ptLinkedCueolaCode = code;
-        flowOpData = snap.data() || {};
-        // Same forward-carry as the main listener: this surface's writes must
-        // not evict other operator windows' queued commands.
-        if (Array.isArray(flowOpData.prompter?.controlQueue)) _lastDocPrompterControlQueue = flowOpData.prompter.controlQueue;
-        ensurePrompterProtocolIdentity({ productionCode:code, sessionId:flowOpData.prompter?.sessionId || '' });
-        if (flowOpData.prompter?.state) {
-          prompterSessionController.update(flowOpData.prompter.state, { preserveVersion:true });
-        }
-        flowOpRenderSession(flowOpData);
-        flowOpRenderControls(false);
-        const heartbeat = flowOpData.prompter?.talentHeartbeat;
-        // Change-or-first-sight admission (arrival clock), never a compare of
-        // the talent Mac's clock to ours: the same rule as the main listener.
-        const hbTs = Number(heartbeat?.ts) || 0;
-        const hbFromTalent = !!hbTs && !isPrompterSelfSender(heartbeat.sender);
-        if (hbFromTalent && hbTs !== _flowOpTalentHeartbeatTs
-            && (_flowOpTalentHeartbeatTs !== 0 || Math.abs(Date.now() - hbTs) < 60000)) {
-          _flowOpTalentHeartbeatTs = hbTs;
-          _flowOpTalentSeenAt = Date.now();
-          _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ...heartbeat });
-        }
-        const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && (Date.now() - _flowOpTalentSeenAt) < 20000;
-        if (talentOnline) {
-          const status = prompterSessionController.getState().status;
-          flowOpSetStatus(`${prompterStatusLabel(status).toUpperCase()} · ${code} · talent online`);
-        } else {
-          flowOpSetStatus(`OPENING · ${code} · waiting for talent`);
-        }
-        const control = flowOpData.prompter?.control;
-        if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
-          flowOpLastRemoteControlTs = control.ts;
-          flowOpApplyControlPreview(control.action, true, control.payload);
-        }
-        if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
-        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-      }, err => {
-        flowOpCode = '';
-        flowOpSetStatus(firebaseConnectionLabel(err, 'Error'), true);
-        flowOpRenderControls(true);
-        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-      });
-    } catch {
-      flowOpCode = '';
-      flowOpSetStatus('Error', true);
-      flowOpRenderControls(true);
-      if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-    }
-  };
-  if (window._firebaseReady) load();
-  else window.addEventListener('firebaseReady', load, { once:true });
-}
-
-function flowOpStopListening() {
-  if (flowOpSub) {
-    try { flowOpSub(); } catch {}
-    flowOpSub = null;
-  }
-  if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
-}
-
-function flowOpSendControl(action, quiet=false, payload=null) {
-  if (!flowOpCode) {
-    flowOpSetStatus('Load a session first', true);
-    flowOpEl('flowOpCodeInput')?.focus();
-    return;
-  }
-  _ensurePrompterOperatorBridge(true);
-  const control = buildPrompterControl(action, 'flowmingo-op', payload);
-  applyOperatorOverlayMirror(action, payload, 'flowop');
-  // Same rule as the desk: with a session code and Firebase up, every action
-  // goes to the doc now; the queue survives only while Firebase is not ready.
-  if (!prompterControlDocPathAvailable(control, flowOpCode) && !prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
-    // D12.5: same bypass as the desk — discrete state toggles (incl. every
-    // off-command) go straight to the doc channel, never the readiness queue.
-    if (isCollaborativePrompterControl(action)) {
-      return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
-    }
-    prompterSessionController.queueCommand(control);
-    flowOpSetStatus(`${flowOpControlLabel(action)} queued · waiting for talent`);
-    return false;
-  }
-  return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
-}
-
-// Flowmingo Op: toggle the Technical Difficulties stand-by cover on the talent.
-function flowOpToggleTechDifficulty() {
-  flowOpSendControl(anyFlowOpSlateOn() ? 'slate_tech_off' : 'slate_tech_on');
-}
-
-// Flowmingo Op: generate NTSC bars on the talent display.
-function flowOpToggleColorBars() {
-  flowOpSendControl(flowOpColorBarsOn ? 'slate_bars_off' : 'slate_bars_on');
-}
-
-// Flowmingo Op: fine nudge for the live cue scrubber.
-function flowOpNudgeSeek(delta) {
-  // Relative, like every other nudge: moves from the talent's real position.
-  flowOpSendControl('seek_line_' + Math.max(-200, Math.min(200, Math.round(delta))));
-}
-
-function flowOpPunchInSeek() {
-  const sl = flowOpEl('flow-seek');
-  const val = sl ? parseFloat(sl.value) || 0 : 0;
-  const next = Math.max(0, Math.min(100, val));
-  flowOpSendControl('seek_set_' + next);
-  flowOpSendControl('resume');
-}
-
-function flowOpReleaseHoldKeys() {
-  if (!flowOpCode) return;
-  if (ptBraking) flowOpSendControl('brake_stop', true);
-  if (ptBoosting) flowOpSendControl('boost_stop', true);
-  ptBraking = false;
-  ptBoosting = false;
-}
-
-function flowOpBindKeys() {
-  if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
-  if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
-  flowOpKeydownHandler = e => {
-    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (isInteractiveEventTarget(e)) return;
-    if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
-    if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
-    if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
-      if (['ArrowLeft','ArrowRight',' ','Space','f','F','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
-      return;
-    }
-    switch (e.key) {
-      case ' ':
-      case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
-      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('boost_start'); break;
-      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('brake_start'); break;
-      case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
-      case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
-      case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
-      case 'r': case 'R': consumeRemoteKey(e); flowOpSendControl('reset'); break;
-      case 'h': case 'H': consumeRemoteKey(e); flowOpSendControl('hide_interface'); break;
-      case 'm': case 'M': consumeRemoteKey(e); flowOpSendControl('mirror'); break;
-      case 'Escape': exitFlowmingoOperator(); break;
-    }
-  };
-  flowOpKeyupHandler = e => {
-    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (e.key === 'ArrowUp') { consumeRemoteKey(e); flowOpSendControl('boost_stop', true); }
-    if (e.key === 'ArrowDown') { consumeRemoteKey(e); flowOpSendControl('brake_stop', true); }
-  };
-  document.addEventListener('keydown', flowOpKeydownHandler);
-  document.addEventListener('keyup', flowOpKeyupHandler);
-}
-
-function openFlowmingoOperator(codeOverride='') {
-  flowOpReturnScreen = document.getElementById('promptypus')?.classList.contains('on') ? 'promptypus'
-    : document.getElementById('rundown')?.classList.contains('on') ? 'rundown'
-      : document.getElementById('liveshow')?.classList.contains('on') ? 'live'
-        : 'entry';
-  ptStopPlay();
-  ptCloseEdit();
-  ['entry','rundown','liveshow','promptypus'].forEach(id => document.getElementById(id)?.classList.remove('on'));
-  flowOpEl('flowOp')?.classList.add('on');
-  sessionStorage.setItem('cueola_screen', 'flowop');
-  pushSessionHistoryState('flowop');
-  flowOpSetTheme(ptThemeName);
-  flowOpSetAlign(ptAlign);
-  flowOpSetSize(ptFontSize);
-  flowOpRenderSession(flowOpData);
-  flowOpRenderControls(!flowOpCode);
-  flowOpBindKeys();
-  const code = (codeOverride || flowOpCode || ptLinkedCueolaCode || '').trim().toUpperCase();
-  const input = flowOpEl('flowOpCodeInput');
-  if (input) input.value = code;
-  if (code) flowOpLoadSession(code);
-  else setTimeout(() => input?.focus(), 50);
-}
-
-function exitFlowmingoOperator() {
-  flowOpReleaseHoldKeys();
-  flowOpStopListening();
-  flowOpEl('flowOp')?.classList.remove('on');
-  if (flowOpReturnScreen === 'promptypus') {
-    enterPrompter();
-  } else if (flowOpReturnScreen === 'live') {
-    document.getElementById('liveshow')?.classList.add('on');
-    sessionStorage.setItem('cueola_screen', 'live');
-  } else if (flowOpReturnScreen === 'rundown') {
-    document.getElementById('rundown')?.classList.add('on');
-    sessionStorage.setItem('cueola_screen', 'build');
-  } else {
-    document.getElementById('entry')?.classList.add('on');
-    sessionStorage.setItem('cueola_screen', 'entry');
-  }
-}
-
-function openPrompterFromFlowOp() {
-  const code = (flowOpCode || flowOpEl('flowOpCodeInput')?.value || '').trim().toUpperCase();
-  flowOpReleaseHoldKeys();
-  flowOpStopListening();
-  flowOpEl('flowOp')?.classList.remove('on');
-  sessionStorage.setItem('cueola_screen', 'entry');
-  enterPrompter();
-  if (code) {
-    const input = ptEl('pt-cueola-code-input');
-    if (input) input.value = code;
-    ptLoadFromCueolaCode(code);
-  }
 }
 
 function ptOpenEdit() {
@@ -19810,47 +19102,6 @@ function exitPrompter() {
   } else {
     document.getElementById('entry').classList.add('on');
   }
-}
-
-function togglePromptOpMode() {
-  promptOpMode = !promptOpMode;
-  // Mutually exclusive with the Script Op panel — close it when entering Flowmingo Op.
-  if (promptOpMode && livePrompterOpen) {
-    livePrompterOpen = false;
-    applyLivePrompterPanelState();
-  }
-  document.getElementById('liveshow')?.classList.toggle('prompt-op-active', promptOpMode);
-  setFlowmingoOpButton(promptOpMode);
-  renderLive();
-}
-
-function renderLivePromptOp() {
-  const body = document.getElementById('lsBody');
-  ptSetTheme(ptThemeName);
-  if (!beats.length) {
-    body.innerHTML = '<div class="empty-rundown"><div class="empty-rundown-title">No cues in rundown</div><div class="empty-rundown-sub">Build rows in the Rundown tab, then run the show from here.</div></div>';
-    return;
-  }
-  const activeIdx = liveActiveCueIndex();
-  const cur  = beats[activeIdx] || null;
-  const next = beats[activeIdx + 1] || null;
-  const sd   = cur?.cues?.script;
-  const script = cleanPrompterText((prompterText && prompterText.trim()) || scriptCueText(sd));
-  body.innerHTML = `<div class="prompt-op-stage" tabindex="0" aria-label="Flowmingo operator controls">
-    <div class="prompt-op-info">Now · ${esc(cur?.info || '—')} · Row ${rowDisplayNumber(activeIdx)} of ${rowDisplayTotal()}${next ? ` · Next: ${esc(next.info || '—')}` : ''}</div>
-    <div class="prompt-op-read-line"></div>
-    <div class="prompt-op-track">
-      <div class="prompt-op-text">${script ? scriptToFormattedHTML(script) : 'No script loaded.\n\nWaiting for Script Op.'}</div>
-    </div>
-    ${promptOpControlsHTML()}
-  </div>`;
-  opInspRestoreTab('po');   // keep the remembered inspector tab active across re-renders
-  renderPromptOpClockPreview();
-  // A re-render rebuilt the track at translate 0; re-sync it to the talent's
-  // position now (the dedupe key would otherwise skip the next heartbeat).
-  _lastTalentPosPct = -1;
-  renderTalentPositionIndicator();
-  requestAnimationFrame(() => body.querySelector('.prompt-op-stage')?.focus({ preventScroll:true }));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -30677,8 +29928,7 @@ window.addEventListener('popstate', () => {
     document.getElementById('rundown')?.classList.contains('on') ||
     document.getElementById('liveshow')?.classList.contains('on') ||
     document.getElementById('promptypus')?.classList.contains('on') ||
-    document.getElementById('outrangutan')?.classList.contains('on') ||
-    document.getElementById('flowOp')?.classList.contains('on');
+    document.getElementById('outrangutan')?.classList.contains('on');
   if (!browserBackGuardReady || !inSession) return;
   // Browser Back on the Live screen is the same exit as the Exit button:
   // restore the history entry, then open the one exit sheet. A second Back
@@ -30689,12 +29939,11 @@ window.addEventListener('popstate', () => {
     if (liveSessionState().lifecycle === 'live') requestExitLive();
     return;
   }
-  // Output screens (talent display, playout Air, Flowmingo Op) never offer to
-  // leave the session on Back: dropping the Air out of the session mid-show
-  // is not a gesture anyone means. Stay.
+  // Output screens (talent display, playout Air) never offer to leave the
+  // session on Back: dropping the Air out of the session mid-show is not a
+  // gesture anyone means. Stay.
   if (document.getElementById('promptypus')?.classList.contains('on')
-    || document.getElementById('outrangutan')?.classList.contains('on')
-    || document.getElementById('flowOp')?.classList.contains('on')) {
+    || document.getElementById('outrangutan')?.classList.contains('on')) {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
     return;
   }
@@ -30784,7 +30033,7 @@ function cueolaAppPath() {
       const code = params.get('code') || '';
       // Phase 5: the operator side door honors the class-key gate.
       if (code && !(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) return;
-      openFlowmingoOperator(code);
+      openFlowmingoRemoteDoor(code);
     }, 0);
     return;
   }
@@ -30956,7 +30205,6 @@ function cueolaAppPath() {
 renderLive = guardFn(renderLive, 'Live view');
 renderRundown = guardFn(renderRundown, 'Rundown view');
 renderLiveFocus = guardFn(renderLiveFocus, 'Live focus view');
-renderLivePromptOp = guardFn(renderLivePromptOp, 'Flowmingo Op view');
 applyOutrangutanState = guardFn(applyOutrangutanState, 'Playout status');
 keymapDispatch = guardFn(keymapDispatch, 'Keyboard dispatch');
 

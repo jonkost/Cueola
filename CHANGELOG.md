@@ -87,6 +87,28 @@ skipping beats.
 - Code: 262 CSS rules, 17 functions and the old prompter channel (which
   wrote every message twice) are gone; moving a show to a new code no
   longer leaves the old code's copies behind.
+- Flowmingo controls: two sets instead of four. The 'Flowmingo Op' mode
+  inside Live and the standalone Remote Op screen are gone; the Script Op
+  panel in Live and the pop-out window remain, and old Remote Op links open
+  the pop-out (or the talent screen's Link a show). Both surfaces show the
+  simple set up front (Play, Speed, Size, Cue Now / Next, Find, Push card /
+  Into script, the clocks) and keep Brake / Boost / Reverse / Forward, the
+  position scrubber, the slates, Align, Theme, the Screen group, Overlay
+  size and Wrap behind More. Wrap is one number field and Send. Pushing a
+  card turns the question indicator on; Clear all overlays turns it off.
+  Favourites and Arrange no longer show in Live.
+- Outrangutan: the settings menu is six entries instead of twelve; the
+  Stream Deck sheet points at KeyWi Bird; the Integrations sheet (Dropbox
+  token, transcode) and the dead OBS panel are gone; the kiosk card shows
+  only when the helper is detected; plain words for MIDI and Stream Deck.
+- KeyWi Bird: key rims are On / Off; one Layouts sheet (open, rename,
+  delete, save, import, export) replaces three paths; the cold start is
+  Connect deck, Preview on screen, Setup wizard.
+- Clocks: the house standard is 1080i at 29.97, so the production clock
+  and Outrangutan's big clock count real 29.97 drop-frame timecode
+  (HH:MM:SS;FF, frames 00 and 01 skipped at the top of every minute except
+  each tenth). 29.97 is the default; 24, 25, 30 and 60 stay available in
+  Settings. Output windows open at 1920×1080.
 - What was NOT cut is listed as design calls in docs/v3-debloat-plan.md.
 - Every control is at least 44 px tall on a touch screen.
 - New module cueola-live-state.js (the shared live record, the server clock

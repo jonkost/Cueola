@@ -2,9 +2,9 @@
   'use strict';
 
   const THEMES = ['cool', 'warm', 'white', 'green', 'koala', 'panda', 'flamingo', 'outrangutan', 'prepbear'];
-  // Tab names and grouping mirror the in-app operator inspector
-  // (OP_INSP_LABELS); the pop-out stops at four tabs, so Screen rides
-  // Transport and the editor helpers ride Display & Theme.
+  // Tab names and grouping mirror the in-app Script Op panel
+  // (LS_INSP_LABELS); the pop-out stops at four tabs, so Screen rides
+  // Playback (behind More) and the editor helpers ride Display & Theme.
   const TAB_LABELS = {
     transport: 'Playback',
     live: 'Cue & On Air',
@@ -433,11 +433,7 @@
       return;
     }
 
-    if (button.dataset.wrapMinutes) {
-      sendIntent('control', { action: `wrapup_${clampedInteger(button.dataset.wrapMinutes, 1, 999, 5) * 60}` });
-      return;
-    }
-
+    // One wrap control: the minutes field (default 5) and Send.
     if (button.hasAttribute('data-wrap-custom')) {
       const minutes = clampedInteger(document.getElementById('wrapMinutes').value, 1, 999, 5);
       sendIntent('control', { action: `wrapup_${minutes * 60}` });
@@ -800,9 +796,18 @@
     patchToggle('techButton', techOn, techOn ? 'slate_tech_off' : 'slate_tech_on', techOn ? 'Back on air' : 'Tech Difficulty', 'techButtonLabel');
     patchToggle('barsButton', barsOn, barsOn ? 'slate_bars_off' : 'slate_bars_on', barsOn ? 'Back on air' : 'Color bars', 'barsButtonLabel');
 
+    // No Question toggle: Push card turns the indicator on, Clear all overlays
+    // turns it off; the lane says "Question is up" while it is.
     questionOn = Boolean(first(snapshot, ['questionOn', 'question', 'alerts.question', 'prompter.questionOn']) ?? false);
-    patchToggle('questionButton', questionOn, questionOn ? 'question_off' : 'question_on', questionOn ? 'Clear question' : 'Question', 'questionButtonLabel');
-    document.getElementById('questionButtonSymbol').dataset.symbol = questionOn ? 'notification.unread' : 'notification.default';
+    const questionText = String(first(snapshot, ['questionText', 'prompter.questionText']) || '');
+    const questionState = document.getElementById('questionState');
+    if (questionState) {
+      questionState.hidden = !questionOn;
+      const label = document.getElementById('questionStateLabel');
+      if (label) label.textContent = questionOn && questionText
+        ? `Question is up · “${questionText.slice(0, 60)}${questionText.length > 60 ? '…' : ''}”`
+        : 'Question is up';
+    }
 
     const incomingClock = first(snapshot, ['clockState', 'clock', 'prompter.clockState', 'prompter.clock']);
     if (incomingClock && typeof incomingClock === 'object') clockState = { ...clockState, ...incomingClock };

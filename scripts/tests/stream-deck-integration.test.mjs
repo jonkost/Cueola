@@ -45,20 +45,21 @@ test('HID delivery consumes renderer-owned bytes and packetization', () => {
   assert.match(app, /Key ['"]? \+ \(i \+ 1\) \+ ['"]? label failed:/);
 });
 
-test('previews use the canonical, upload, and simulated device frames without CSS cancellation', () => {
-  assert.match(app, /const upload = sdLabelRenderer\.createDeviceFrame\(productId, canonical\.canvas\)/);
-  assert.match(app, /const simulated = sdLabelRenderer\.createDeviceFrame\(productId, upload\.canvas\)/);
-  // The orientation-proof export and its sample gallery are gone from the sheet.
+test('the in-app simulator and orientation proof are gone; hardware paint stays renderer-owned', () => {
+  // Key previews and the model picker moved to KeyWi Bird with the mapping UI.
   assert.doesNotMatch(app, /og-sd-export|og-sd-proof|orientation proof/);
-  const streamDeckCss = css.slice(css.indexOf('/* stream deck */'), css.indexOf('PHASE 4'));
-  assert.doesNotMatch(streamDeckCss, /rotate\(/);
+  assert.doesNotMatch(app, /og-sd-model|og-sdk-preview|createDeviceFrame|renderStreamDeckPreviews|sdSimulatorProductId/);
+  const streamDeckCss = css.slice(css.indexOf('/* stream deck sheet'), css.indexOf('/* MIDI sheet rows */'));
+  assert.doesNotMatch(streamDeckCss, /rotate\(|og-sdk/);
 });
 
-test('the operator surface exposes model simulation, per-key previews, and errors', () => {
-  for (const token of ['og-sd-model', 'og-sdk-preview', 'og-sd-error']) {
-    assert.match(app, new RegExp(token));
-  }
-  assert.match(app, /does not replace a physical-device check/);
+test('the Stream Deck sheet is one card that points at KeyWi Bird', () => {
+  const sheet = app.slice(app.indexOf('function renderStreamDeck()'), app.indexOf('// ── Cueola session sync'));
+  assert.match(sheet, /Stream Deck control lives in KeyWi Bird\./);
+  assert.match(sheet, /typeof window\.openControlSurface === 'function'/);
+  assert.match(sheet, /id="og-sd-keywi"/);
+  // No mapping controls, connect buttons or developer copy remain in the sheet.
+  assert.doesNotMatch(sheet, /og-sd-act|og-sd-ref|og-sd-conn|og-sd-disc|WebHID/);
   assert.match(css, /min-height:\s*44px/);
 });
 
@@ -80,7 +81,6 @@ test('initial and later paints share one device-bound repaint owner', () => {
   assert.match(app, /async function sdPaintKey\(i, target = sd\)/);
   assert.match(app, /if \(!target \|\| target !== sd\) return false;/);
   assert.match(app, /for \(const packet of rendered\.packets\) \{[\s\S]*if \(target !== sd\) return false;[\s\S]*target\.device\.sendReport/);
-  assert.match(app, /input only, no image profile/);
 });
 
 test('reactive keys read local progress accessors, never Firestore', () => {
@@ -458,16 +458,24 @@ test('KeyWi: GIPHY runs on the class key or the operator key, PG-13 only, and pi
   assert.match(add, /match \/config\/\{docId\} \{\s*allow get: if docId == "giphy";/);
 });
 
-test('KeyWi: saved layouts come back from the profile as My layouts rows', () => {
+test('KeyWi: saved layouts come back from the profile into the one Layouts sheet', () => {
   // Loader: profiles/{username}.keywiLayouts read on open, after a sign-in,
   // and from the deck service; every key passes toSlot before addProfile.
   const loader = deckSlice('function loadCloudLayouts()', 'function cloudLayoutRows');
   assert.match(loader, /window\._getDoc\(window\._doc\(window\._db, 'profiles', id\.username\)\)/);
   assert.match(loader, /var raw = d && d\.keywiLayouts/);
-  const sheet = deckSlice('function openCloudLayoutsSheet()', '// ── Utilities');
+  const sheet = deckSlice('function layoutRowHTML(k)', '// Profile writes for the rows above');
   assert.match(sheet, /addProfile\(l\.name \|\| 'Layout', l\.keys\.map\(toSlot\)/);
-  assert.match(deckSlice('function pagesBar()', 'function startPageRename'), /id="sd-pf-cloud"/);
-  assert.match(deck, /bind\('sd-pf-cloud', openCloudLayoutsSheet\)/);
+  // One entry point: the status-bar Layouts button (it keeps the sd-save id
+  // for the unsaved highlight). Save current, Import file and Export file
+  // live in the sheet; the old My layouts / Layout files buttons are gone.
+  assert.match(deckSlice('function saveBtnHTML()', 'var _leaveAfterSave'), /id="sd-save"[^\n]*Layouts/);
+  assert.match(deck, /bind\('sd-save', openLayoutsSheet\)/);
+  for (const id of ['sd-lay-save', 'sd-lay-import', 'sd-lay-export', 'sd-pf-file']) assert.match(sheet, new RegExp('id="' + id + '"'));
+  assert.match(sheet, /data-cloud-rename=/);
+  assert.match(sheet, /data-cloud-del=/);
+  assert.match(deckSlice('function renameCloudLayout(k, name)', 'function deleteCloudLayout'), /window\._deleteField\(\)/);
+  assert.doesNotMatch(deck, /sd-pf-cloud|sd-pf-exp|sd-pf-imp|openCloudLayoutsSheet/);
   assert.match(deckSlice('function open()', 'function close()'), /loadSharedGiphyKey\(\);[^\n]*\n\s*loadCloudLayouts\(\);/);
   assert.match(deckSlice("document.addEventListener('cueola-identity-change'", 'window.addEventListener'), /loadCloudLayouts\(\); loadSharedGiphyKey\(\);/);
   // A profile save records the new layout locally and tells a full document
@@ -697,11 +705,10 @@ test('KeyWi: app-family key rims paint by default and switch off per deck', () =
   assert.match(deckSlice('function setAppRims(on)', 'function setDialFlip'), /delete overrides\.appRims/);
 });
 
-test('KeyWi: rim width and per-app colors are per deck, ride the spec, and keep the default pixel-identical', () => {
+test('KeyWi: rims are one On/Off switch; stored width and colors stay tolerated, ride the spec, and keep the default pixel-identical', () => {
   // Units: px on a 96px reference face, integer 1..12, ABSENT = the 8/24
   // formula (so an untouched deck paints exactly as before this round).
   assert.match(deck, /var RIM_REF_PX = 96, RIM_WIDTH_MIN = 1, RIM_WIDTH_MAX = 12;/);
-  assert.match(deck, /var RIM_PRESETS = \{ thin: 2, regular: 0, bold: 7 \};/);
   const stroke = deckSlice('function rimStrokePx(spec, z)', 'function slotAt(i)');
   assert.match(stroke, /if \(rw\) return Math\.max\(1, z \* \(rw \/ RIM_REF_PX\) \* \(spec\.active \? 1\.33 : 1\)\);/);
   assert.match(stroke, /return Math\.max\(3, z \* \(spec\.active \? 0\.06 : 0\.045\)\);/);
@@ -716,34 +723,21 @@ test('KeyWi: rim width and per-app colors are per deck, ride the spec, and keep 
   // (the action tray's chips resolve against the active deck the same way).
   assert.match(deck, /var RIM_HEX_RE = \/\^#\(\[0-9a-f\]\{3\}\|\[0-9a-f\]\{6\}\)\$\/i;/);
   assert.match(deck, /function appRimColor\(a, ov\) \{ var key = rimAppKey\(a\); return key \? rimColorFor\(key, ov\) : null; \}/);
-  assert.match(deckSlice('function rimWidthOf(ov)', 'function rimWidthShown'), /Math\.max\(RIM_WIDTH_MIN, Math\.min\(RIM_WIDTH_MAX, v\)\)/);
+  assert.match(deckSlice('function rimWidthOf(ov)', 'function rimStrokePx'), /Math\.max\(RIM_WIDTH_MIN, Math\.min\(RIM_WIDTH_MAX, v\)\)/);
   assert.match(deckSlice('function actionTray()', 'function legendCard'), /appRimColor\(catalog\[it\.id\]\)/);
-  // Setters follow setAppRims: profile guard, overrides, persist(true), paintAll.
-  const setters = deckSlice('function setRimWidth(px, opts)', 'function rimEditBusy');
-  assert.match(setters, /if \(px === RIM_WIDTH_REGULAR\) delete overrides\.rimWidth;/);
-  assert.match(setters, /else overrides\.rimWidth = px;/);
-  assert.match(setters, /overrides\.rimColors\[key\] = hex;/);
-  assert.match(setters, /if \(!Object\.keys\(overrides\.rimColors\)\.length\) delete overrides\.rimColors;/);
-  assert.match(setters, /function resetRims\(\)[\s\S]{0,200}delete overrides\.rimWidth; delete overrides\.rimColors; delete overrides\.appRims;/);
-  assert.match(setters, /function recolorTrayChips\(\)/);
-  // The slider updates the sheet IN PLACE: the input path never re-renders
-  // the sheet (that would destroy the slider mid-drag); presets pass rerender.
-  const widthFn = deckSlice('function setRimWidth(px, opts)', 'function setRimColor');
-  assert.match(widthFn, /if \(opts && opts\.rerender\) \{ renderDeckSettings\(\); return; \}/);
-  assert.equal((widthFn.match(/renderDeckSettings\(\)/g) || []).length, 1);
-  const wire = deckSlice('function wireRims(o)', '// Flip is a fact about');
-  assert.match(wire, /rw\.oninput = function \(\) \{ setRimWidth\(\+rw\.value\); \};/);
-  assert.match(wire, /inp\.oninput = function \(\) \{ setRimColor\(/);
-  assert.match(wire, /inp\.onchange = function \(\) \{[^\n]*renderDeckSettings\(\);/);
-  // An OBS state flip re-renders the sheet; while the slider is held or a
-  // color picker is open that re-render is deferred, not applied.
-  assert.match(deckSlice('function renderDeckSettings()', 'function surfaceGrid'), /if \(rimEditBusy\(\)\) \{ settingsRerenderPending = true; return; \}/);
-  // Markup: presets, slider, four color wells, Reset.
+  // The only setter is the switch: On clears any old width/color picks so
+  // the deck wears the defaults; Off stores appRims === false. Tray chips
+  // recolor with it.
+  const setter = deckSlice('function setAppRims(on)', 'function recolorTrayChips');
+  assert.match(setter, /if \(on\) \{ delete overrides\.appRims; delete overrides\.rimWidth; delete overrides\.rimColors; \}/);
+  assert.match(setter, /else overrides\.appRims = false;/);
+  assert.match(setter, /persist\(true\);[\s\S]*paintAll\(\);[\s\S]*recolorTrayChips\(\);/);
+  assert.match(deck, /function recolorTrayChips\(\)/);
+  assert.doesNotMatch(deck, /setRimWidth|setRimColor|resetRims|rimEditBusy|RIM_PRESETS|RIM_WIDTH_REGULAR/);
+  // Markup: On / Off only. No stroke presets, slider, color wells or Reset.
   const section = deckSlice('function rimsSection()', 'function wireRims');
-  for (const id of ['sd-rim-thin', 'sd-rim-reg', 'sd-rim-bold', 'sd-rim-w', 'sd-rim-w-val', 'sd-rims-reset']) assert.match(section, new RegExp('id="' + id + '"'));
-  assert.match(section, /\[\['cueola', 'Cueola'\], \['flowmingo', 'Flowmingo'\], \['outrangutan', 'Outrangutan'\], \['obs', 'OBS'\]\]/);
-  assert.match(section, /data-rim-app="' \+ p\[0\] \+ '"/);
-  assert.match(html, /\.sd-rim-color input\[type=color\]/);
+  for (const id of ['sd-rims-on', 'sd-rims-off']) assert.match(section, new RegExp('id="' + id + '"'));
+  assert.doesNotMatch(section, /sd-rim-thin|sd-rim-reg|sd-rim-bold|sd-rim-w|sd-rims-reset|data-rim-app|type="color"/);
   // Persistence: the v3 geometry wipe leaves the rim prefs alone.
   const wipe = deck.match(/\[('[a-zA-Z]+', )+'keyPx'\]\.forEach\(function \(k\) \{ delete overrides\[k\]; \}\);/);
   assert.ok(wipe, 'geometry wipe list present');

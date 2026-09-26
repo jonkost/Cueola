@@ -176,7 +176,7 @@
   background: color-mix(in srgb, var(--s1) 92%, transparent);
   /* a popover opens over the bar, which is itself s1/s2 glass. With shadows
      disabled by doctrine the rim IS the layer boundary, so it is carried as an
-     inset shadow (same idiom as the .og-tr-ico and .og-sdk-preview rims). */
+     inset shadow (same idiom as the .og-tr-ico rim). */
   box-shadow: inset 0 0 0 1px var(--liquid-edge, var(--og-edge));
   -webkit-backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
   backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 150%));
@@ -250,6 +250,11 @@
 .og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-preview { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent), inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
 .og-settings-pop .og-themes-submenu .ts-name { max-width: 100%; font-size: 11px; line-height: 1.15; overflow-wrap: anywhere; color: var(--text2); }
 .og-settings-pop .og-themes-submenu .theme-swatch:is(.active, [aria-pressed="true"]) .ts-name { color: var(--accent); }
+/* Show / Controllers groups reuse the themes drill row; their leading icon is a
+   symbol, not the theme colour wheel, and their items indent under the row. */
+.og-themes-submenu > summary .og-tr-ico.og-sub-ico { background: none; box-shadow: none; border-radius: 0; display: grid; place-items: center; color: currentColor; }
+.og-themes-submenu > summary .og-tr-ico.og-sub-ico .sf-symbol { width: 18px; height: 18px; font-size: 15px; }
+.og-settings-pop .og-themes-submenu .og-sub-body { padding: 2px 0 6px 18px; }
 
 /* module-only icons registered on the shared sf-symbol channel. Root-relative
    on purpose: relative url() in a custom property resolves against the stylesheet
@@ -869,7 +874,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 }
 .btn-primary.og-sheet-x { margin-left: auto; }
 .btn-primary.og-help-close { margin-top: 14px; width: 100%; padding: 10px; }
-#og-outputs-body, #og-sd-body, #og-integrations-body, #og-midi-body { padding: 18px 20px; }
+#og-outputs-body, #og-sd-body, #og-midi-body { padding: 18px 20px; }
+.og-out-note { font-size: 12.5px; color: var(--text2); margin: 0 0 12px; line-height: 1.5; }
 .og-sheet-note { color: var(--text2); font-size: 12px; line-height: 1.5; margin: 14px 0 0; max-width: 68ch; }
 .og-sheet-hint { color: var(--text2); font-size: 12px; margin: 12px 0 0; }
 .og-sheet-note code { font-family: var(--mono-num, monospace); background: var(--s3); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
@@ -918,28 +924,13 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .og-out-note { font-size: 11.5px; color: var(--text3); align-self: center; }
 .og-out-open, .og-out-del, .og-out-recover { flex: 0 0 auto; }
 
-/* stream deck sheet */
-.og-sd-card { width: min(1040px, 96vw); }
-.og-sd-card .og-sheet-x, .og-sd-card .og-bar-btn { min-height: 44px; }
-.og-sd-status { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text); padding-bottom: 12px; border-bottom: 1px solid var(--og-edge); }
-.og-sd-device-tools { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-.og-sd-device-tools label { display: grid; gap: 5px; min-width: 250px; font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--text2); }
-.og-sd-device-tools select { min-height: 44px; background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 10px; }
-.og-sd-device-tools select:disabled { opacity: .7; }
-/* the red wash carries the state; the left callout bar comes back as an INSET
-   shadow (same idiom as .og-cue.selected / .og-cue.playing) rather than a
-   border. The §12 rule only exists under forced-colors and paints nothing here. */
-.og-sd-error { margin-top: 12px; border-left: 3px solid transparent; padding: 9px 11px; background: color-mix(in srgb, var(--red) 16%, var(--s2)); box-shadow: inset 3px 0 0 var(--red); color: var(--text); font-size: 12.5px; line-height: 1.4; }
-.og-sd-grid { display: grid; grid-template-columns: repeat(var(--sd-cols, 5), minmax(104px, 1fr)); gap: 8px; margin-top: 14px; overflow-x: auto; padding-bottom: 4px; }
-.og-sdk { border: 1px solid var(--og-edge); border-radius: var(--og-r); background: color-mix(in srgb, var(--s2) 70%, transparent); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; position: relative; min-width: 0; }
-/* mapped = a stronger accent wash instead of an accent rim */
-.og-sdk.mapped { border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, var(--s2)); }
-.og-sdk-i { font-family: var(--mono-num, monospace); font-size: 9px; font-weight: 750; letter-spacing: .05em; color: var(--text3); }
-.og-sdk-preview { display: block; align-self: center; width: min(100%, 96px); height: auto; aspect-ratio: 1; border-radius: 8px; background: #05070a; box-shadow: inset 0 0 0 1px var(--liquid-edge-lit); }
-.og-sdk-preview[data-active="true"] { box-shadow: 0 0 0 2px var(--green), inset 0 0 0 1px var(--liquid-edge-lit); }
-.og-sdk-preview-missing { display: grid; place-items: center; aspect-ratio: 1; min-height: 72px; border-radius: 8px; background: #05070a; color: var(--text3); font-size: 10px; text-align: center; }
-.og-sdk select { min-height: 44px; background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
-.og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
+/* stream deck sheet: one card pointing at KeyWi Bird */
+.og-sd-card { max-width: 440px; }
+.og-sd-card .og-sheet-x, .og-sd-card .btn-primary.og-sd-keywi-open { min-height: 44px; }
+.og-sd-keywi { display: grid; gap: 14px; justify-items: start; }
+.og-sd-keywi-text { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.5; }
+.og-sd-keywi .og-sheet-note { margin: 0; }
+.btn-primary.og-sd-keywi-open { width: auto; padding: 8px 18px; }
 .og-sd-card :is(select, button):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* MIDI sheet rows */
@@ -951,25 +942,10 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .og-midi-del { flex: none; }
 .og-midi-act, .og-midi-ref { min-height: var(--ui-control-height-compact, 34px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 12.5px; padding: 5px 8px; }
 
-/* integrations sheet (OBS · Dropbox · Transcode) */
-.og-intg-sect { padding: 16px 0; border-bottom: 1px solid var(--og-edge); }
-.og-intg-sect:first-child { padding-top: 0; }
-.og-intg-sect:last-child { border-bottom: none; padding-bottom: 0; }
-.og-intg-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13.5px; color: var(--text); margin-bottom: 12px; }
-.og-intg-head .sf-symbol { font-size: 15px; color: var(--text2); }
-.og-intg-head .og-out-note { font-weight: 500; }
-.og-push-right { margin-left: auto; }   /* pushes a row's trailing item (e.g. the OBS status dot) to the right edge */
-.og-intg-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
-.og-intg-row:last-child { margin-bottom: 0; }
-.og-intg-in { flex: 1 1 120px; min-width: 80px; box-sizing: border-box; min-height: var(--ui-control-height, 40px); background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 13px; padding: 8px 12px; }
-.og-intg-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-.og-intg-port { flex: 0 0 80px; }
-.og-obs-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.og-obs-scene.on { background: color-mix(in srgb, var(--accent) 84%, var(--s2)); color: color-mix(in srgb, var(--bg) 18%, #000); border-color: transparent; }
+/* Import from Production Notes rows */
 .og-dbx-files { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .og-dbx-file { display: flex; align-items: center; gap: 8px; }
 .og-dbx-name { flex: 1 1 auto; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.og-dbx-pull, .og-dbx-pullall { flex: 0 0 auto; }
 
 /* ════════════════════════════════════════════════════════════════════════════
  * 9 · FOOT — shortcut strip
@@ -1099,7 +1075,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   .og-tools-menu, .og-theme-menu { max-width: 100%; }
   .og-tools-menu > summary, .og-theme-menu > summary { max-width: calc(100vw - 28px); }
   .og-theme-pop, .og-tools-pop { right: auto; left: 0; }
-  .og-sd-device-tools > * { width: 100%; }
 }
 @media (max-width: 720px) {
   .og-tabs { width: 100%; }
@@ -1113,7 +1088,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   #outrangutan :is(.og-tbtn, .og-clock-dir, .og-bottom-tab):focus-visible,
   #outrangutan .og-pad-search:focus-within { outline-color: Highlight; }
   .og-bottom-tab.on { border-color: Highlight; }
-  .og-sdk.mapped, .og-sdk-preview[data-active="true"], .og-sd-error { border: 2px solid Highlight; forced-color-adjust: auto; }
 }
 
 /* v2.1 D11.6: live drag-reorder — insertion edge on the drop target. */

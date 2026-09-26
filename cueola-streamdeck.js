@@ -1452,8 +1452,6 @@
   // whose overrides live in deck.cfg, repaint on the next tick by themselves.
   var APP_RIM_COLORS = { cueola: '#8a93a6', flowmingo: '#f06eb4', outrangutan: '#f97316', obs: '#5b8df8' };
   var RIM_REF_PX = 96, RIM_WIDTH_MIN = 1, RIM_WIDTH_MAX = 12;
-  var RIM_WIDTH_REGULAR = 4;          // what the slider shows for the default formula (0.045 * 96 = 4.3)
-  var RIM_PRESETS = { thin: 2, regular: 0, bold: 7 };   // 0 = default formula (no override stored)
   var RIM_HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
   function appRimsOn(ov) { var o = ov || overrides; return !o || o.appRims !== false; }
   function rimAppKey(a) {
@@ -1469,14 +1467,16 @@
     return (typeof custom === 'string' && RIM_HEX_RE.test(custom)) ? custom.toLowerCase() : APP_RIM_COLORS[key];
   }
   function appRimColor(a, ov) { var key = rimAppKey(a); return key ? rimColorFor(key, ov) : null; }
-  // Stored width, clamped; 0 when unset (today's formula). Tolerates a
-  // hand-edited store (NaN, strings, out-of-range values).
+  // Stored width, clamped; 0 when unset (today's formula). The width and
+  // color pickers left Deck settings (rims are On/Off now, On = defaults), but
+  // an old store may still carry rimWidth/rimColors: read them, tolerate a
+  // hand-edited value (NaN, strings, out-of-range), and clear them the next
+  // time rims are switched on.
   function rimWidthOf(ov) {
     var o = ov || overrides, v = o ? Math.round(Number(o.rimWidth)) : 0;
     if (!v || !isFinite(v)) return 0;
     return Math.max(RIM_WIDTH_MIN, Math.min(RIM_WIDTH_MAX, v));
   }
-  function rimWidthShown(ov) { return rimWidthOf(ov) || RIM_WIDTH_REGULAR; }
   // The rim stroke in canvas px for a face of z px: the stored width scaled
   // by z/96 (x1.33 while active), or the 8/24 formula when nothing is stored.
   function rimStrokePx(spec, z) {
@@ -3389,13 +3389,16 @@
   // asks once on the way out.
   function markDirty() { if (layoutDirty) return; layoutDirty = true; updateSaveBtn(); }
   function clearDirty() { if (!layoutDirty) return; layoutDirty = false; updateSaveBtn(); }
+  // One Layouts button in the status bar: it opens the Layouts sheet (saved
+  // layouts, Save current, Import, Export) and lights up while edits are
+  // unsaved. It keeps the sd-save id so the dirty highlight still applies.
   function updateSaveBtn() {
     var btn = document.getElementById('sd-save');
-    if (btn) { btn.classList.toggle('sd-save-dirty', layoutDirty); btn.textContent = layoutDirty ? 'Save layout' : 'Saved'; }
+    if (btn) { btn.classList.toggle('sd-save-dirty', layoutDirty); btn.textContent = layoutDirty ? 'Layouts · unsaved' : 'Layouts'; }
   }
   function saveBtnHTML() {
     if (!device && !previewMode) return '';
-    return '<button class="btn-secondary' + (layoutDirty ? ' sd-save-dirty' : '') + '" id="sd-save" data-tip="Save this layout to your profile or a .keywi file">' + (layoutDirty ? 'Save layout' : 'Saved') + '</button>';
+    return '<button class="btn-secondary' + (layoutDirty ? ' sd-save-dirty' : '') + '" id="sd-save" data-tip="Your saved layouts, plus save, import and export">' + (layoutDirty ? 'Layouts · unsaved' : 'Layouts') + '</button>';
   }
   var _leaveAfterSave = false;
   function openSaveSheet(leaving) {
@@ -3478,25 +3481,45 @@
         });
       }
       _cloudLayouts = out; _cloudLayoutsFor = id.username; _cloudLayoutsLoading = false;
-      if (isSurfaceVisible() && (device || previewMode)) { var b = document.getElementById('sd-pf-cloud'); if (!b && Object.keys(out).length) render(); }
+      if (isSurfaceVisible() && (device || previewMode)) { updateSaveBtn(); }
     }).catch(function () { _cloudLayoutsLoading = false; });
   }
   function cloudLayoutRows() { return _cloudLayouts ? Object.keys(_cloudLayouts).sort(function (a, b) { return (_cloudLayouts[b].savedAt || 0) - (_cloudLayouts[a].savedAt || 0); }) : []; }
-  function openCloudLayoutsSheet() {
+  // One Layouts sheet: the layouts saved to your profile (open, rename,
+  // delete), Save current, Import file, Export file. The save flow, the
+  // .keywi import/export and the profile loader underneath are unchanged.
+  function layoutRowHTML(k) {
+    var l = _cloudLayouts[k], when = l.savedAt ? new Date(l.savedAt).toLocaleDateString() : '';
+    var modelName = ''; try { modelName = l.model ? (Device.makeProfile(l.model, {}) || {}).name || '' : ''; } catch (e) {}
+    return '<div class="sd-layout-row">'
+      + '<button class="sd-picker-opt" data-cloud="' + esc(k) + '" data-tip="Add this layout as a page on this deck">' + esc(l.name || 'Layout') + '<span class="sd-note"> · ' + esc((modelName ? modelName + ' · ' : '') + l.keys.length + ' keys' + (when ? ' · ' + when : '')) + '</span></button>'
+      + '<button class="sd-mini" data-cloud-rename="' + esc(k) + '" aria-label="Rename ' + esc(l.name || 'layout') + '">Rename</button>'
+      + '<button class="sd-mini danger" data-cloud-del="' + esc(k) + '" aria-label="Delete ' + esc(l.name || 'layout') + '">Delete</button>'
+      + '</div>';
+  }
+  function openLayoutsSheet() {
     if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
+    var idmod = window.CueolaIdentity, signedIn = false;
+    try { signedIn = !!(idmod && idmod.identity && idmod.identity()); } catch (e) {}
     var rows = cloudLayoutRows();
-    var body = '<div class="sd-ed-head">My layouts</div>'
-      + '<div class="sd-ed-desc">Layouts saved to your profile. Picking one adds it as a page on this deck.</div>'
-      + (rows.length ? rows.map(function (k) {
-          var l = _cloudLayouts[k], when = l.savedAt ? new Date(l.savedAt).toLocaleDateString() : '';
-          var modelName = ''; try { modelName = l.model ? (Device.makeProfile(l.model, {}) || {}).name || '' : ''; } catch (e) {}
-          return '<button class="sd-picker-opt" data-cloud="' + esc(k) + '">' + esc(l.name || 'Layout') + '<span class="sd-note"> · ' + esc((modelName ? modelName + ' · ' : '') + l.keys.length + ' keys' + (when ? ' · ' + when : '')) + '</span></button>';
-        }).join('')
-        : '<div class="sd-note">Nothing saved yet. Save layout, then Save to my profile, puts one here.</div>')
-      + '<div class="sd-save-actions"><button class="btn-secondary" id="sd-cloud-cancel">Cancel</button></div>';
+    var body = '<div class="sd-ed-head">Layouts</div>'
+      + '<div class="sd-ed-desc">Your saved layouts follow you to any machine you sign in on. Opening one adds it as a page on this deck. A file is a copy you can share or keep.</div>'
+      + (rows.length ? '<div class="sd-layout-list">' + rows.map(layoutRowHTML).join('') + '</div>'
+        : '<div class="sd-note">' + (signedIn ? 'Nothing saved yet. Save current puts this page here.' : 'Sign in on the front page to keep layouts on your profile. Files work without signing in.') + '</div>')
+      + '<div class="sd-save-actions">'
+      + '<button class="btn-secondary" id="sd-lay-import">Import file</button>'
+      + '<button class="btn-secondary" id="sd-lay-export">Export file</button>'
+      + '<input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden>'
+      + '<button class="btn-primary" id="sd-lay-save">Save current</button>'
+      + '<button class="btn-secondary" id="sd-lay-close">Done</button>'
+      + '</div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
-    bind('sd-cloud-cancel', closeOverlay);
+    bind('sd-lay-close', closeOverlay);
+    bind('sd-lay-save', function () { closeOverlay(); openSaveSheet(false); });
+    bind('sd-lay-export', function () { exportActive(); clearDirty(); });
+    bind('sd-lay-import', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
+    var file2 = document.getElementById('sd-pf-file'); if (file2) file2.onchange = function () { if (file2.files && file2.files[0]) { closeOverlay(); importFile(file2.files[0]); } file2.value = ''; };
     o.querySelectorAll('[data-cloud]').forEach(function (btn) {
       btn.onclick = function () {
         var l = _cloudLayouts && _cloudLayouts[btn.getAttribute('data-cloud')]; if (!l) return;
@@ -3506,6 +3529,47 @@
         toast('Added "' + mapping().name + '" from your profile.');
       };
     });
+    o.querySelectorAll('[data-cloud-rename]').forEach(function (btn) {
+      btn.onclick = function () {
+        var k = btn.getAttribute('data-cloud-rename'), l = _cloudLayouts && _cloudLayouts[k]; if (!l) return;
+        var name = window.prompt('New name for this layout', l.name || 'Layout');
+        if (name == null) return;
+        name = String(name).trim().slice(0, 40);
+        if (!name || name === l.name) return;
+        renameCloudLayout(k, name);
+      };
+    });
+    o.querySelectorAll('[data-cloud-del]').forEach(function (btn) {
+      btn.onclick = function () {
+        var k = btn.getAttribute('data-cloud-del'), l = _cloudLayouts && _cloudLayouts[k]; if (!l) return;
+        if (!window.confirm('Delete the saved layout "' + (l.name || 'Layout') + '" from your profile? Pages already on this deck stay.')) return;
+        deleteCloudLayout(k);
+      };
+    });
+  }
+  // Profile writes for the rows above. Rename = write the new key, drop the
+  // old one, in one update; both refresh the local copy and the open sheet.
+  function cloudPatch(patch, onOk, failMsg) {
+    var idmod = window.CueolaIdentity, id = null;
+    try { id = idmod && idmod.identity && idmod.identity(); } catch (e) {}
+    if (!id || !id.username) { toast('Sign in on the front page first.'); return; }
+    if (!window._firebaseReady || !window._updateDoc || !window._doc || !window._db || !window._deleteField) { toast('Cloud is not reachable right now.'); return; }
+    window._updateDoc(window._doc(window._db, 'profiles', id.username), patch)
+      .then(function () { onOk(); if (overlay() && overlay().className.indexOf('on') >= 0) openLayoutsSheet(); })
+      .catch(function () { toast(failMsg); });
+  }
+  function renameCloudLayout(k, name) {
+    var l = _cloudLayouts && _cloudLayouts[k]; if (!l) return;
+    var next = Object.assign({}, l, { name: name });
+    var nk = 'k_' + slug(name).replace(/[^a-z0-9]/g, '_');
+    var patch = {};
+    patch['keywiLayouts.' + nk] = next;
+    if (nk !== k) patch['keywiLayouts.' + k] = window._deleteField();
+    cloudPatch(patch, function () { if (nk !== k) delete _cloudLayouts[k]; _cloudLayouts[nk] = next; toast('Renamed to "' + name + '".'); }, 'Rename failed. Check the connection and try again.');
+  }
+  function deleteCloudLayout(k) {
+    var patch = {}; patch['keywiLayouts.' + k] = window._deleteField();
+    cloudPatch(patch, function () { delete _cloudLayouts[k]; toast('Saved layout deleted.'); }, 'Delete failed. Check the connection and try again.');
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
@@ -3539,7 +3603,7 @@
       + '<div class="sd-status-actions">'
       + saveBtnHTML()
       + ((device || previewMode) ? '<button class="btn-secondary sd-icon-btn" id="sd-settings" data-tip="Deck settings: theme, OBS' + (micoParked() ? '' : ', Micochondria') + '" aria-label="Deck settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>' : '')
-      + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : '<button class="btn-primary" id="sd-connect">Connect deck</button>')
+      + (device ? '<button class="btn-secondary" id="sd-disconnect">Disconnect</button>' : (previewMode ? '<button class="btn-primary" id="sd-connect">Connect deck</button>' : ''))
       + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
       // The off-air panic (kills both mics) only makes sense once the talkback
       // daemon exists at all — hidden entirely while Micochondria is parked.
@@ -3547,21 +3611,16 @@
       + '</div></div>';
   }
   function statusChip(label, value, cls, id) { return '<div' + (id ? ' id="' + id + '"' : '') + ' class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
-  // Cold-start hero. The guided path is the setup wizard; this page just offers
-  // the three doors (connect, preview, wizard) plus honest readiness dots.
+  // Cold-start hero: three doors only. Connect deck, Preview on screen, Setup
+  // wizard. (Diagnostics moved to Deck settings; the readiness dots went with
+  // the status chips above.)
   function connectHelp() {
-    var tbOn = talkbackState.connected, obsOn = !!(OBSc() && OBSc().isReady && OBSc().isReady());
-    var apps = micoParked() ? 'playback, rundown, prompter, OBS' : 'playback, rundown, prompter, mics, OBS';
     return '<div class="sd-hero">'
       + '<h3>Any Stream Deck. The whole rig.</h3>'
       + (deckHeldElsewhere ? '<p><b>Another Cueola window is the deck window right now.</b> Connect here to drive the Stream Deck from this window instead; closing the other window also moves it here.</p>' : '')
-      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: ' + apps + ', with saved layouts as pages. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it is using the deck.</p>'
-      + '<div class="sd-hero-actions"><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button></div>'
-      + '<div class="sd-hero-checks">'
-      + '<span class="sd-ready">Deck</span>'
-      + (micoParked() ? '' : '<span class="sd-ready' + (tbOn ? ' on' : '') + '">Micochondria</span>')
-      + '<span class="sd-ready' + (obsOn ? ' on' : '') + '">OBS</span>'
-      + '</div></div>';
+      + '<p>Plug in a Stream Deck and connect it, or try the whole deck on screen first. Quit the Elgato Stream Deck app before connecting; it is using the deck.</p>'
+      + '<div class="sd-hero-actions"><button class="btn-primary" id="sd-hero-connect">Connect deck</button><button class="btn-secondary" id="sd-preview">Preview on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button></div>'
+      + '</div>';
   }
   // One chip per connected deck; the active one takes the editor. "Add deck"
   // grants + opens another Stream Deck on this computer.
@@ -3596,7 +3655,6 @@
       + '<span class="sd-pf-sp"></span>'
       + '<button class="sd-mini" id="sd-pf-dup" data-tip="Duplicate this page">Duplicate</button>'
       + '<button class="sd-mini" id="sd-pf-home" data-tip="Make this page HOME: the one the deck starts on and the HOME key jumps to">Set home</button>'
-      + (_cloudLayouts && _cloudLayoutsFor ? '<button class="sd-mini" id="sd-pf-cloud" data-tip="Layouts saved to your profile, on any machine you signed in on">My layouts' + (cloudLayoutRows().length ? ' (' + cloudLayoutRows().length + ')' : '') + '</button>' : '')
       + '</div>';
   }
   function startPageRename(id) { pageRenaming = id; render(); }
@@ -3650,57 +3708,13 @@
   function openDeckSettings() { settingsOpen = true; renderDeckSettings(); }
   function setAppRims(on) {
     if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
-    if (on) delete overrides.appRims;
+    if (on) { delete overrides.appRims; delete overrides.rimWidth; delete overrides.rimColors; }   // On = the defaults
     else overrides.appRims = false;
     persist(true);   // a look preference, not a layout edit: no save nag
     renderDeckSettings();
     paintAll();
+    recolorTrayChips();
     toast(on ? 'Key rims on: app keys wear their app\'s color.' : 'Key rims off.');
-  }
-  // Rim stroke width (px on a 96px face, 1..12; RIM_WIDTH_REGULAR = the
-  // default formula, stored as no override). The slider path updates the
-  // sheet IN PLACE (value, readout, preset chips): renderDeckSettings rebuilds
-  // the whole overlay's innerHTML, which would destroy a slider mid-drag.
-  // Preset buttons pass rerender so the sheet redraws once, on the click.
-  function setRimWidth(px, opts) {
-    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
-    px = Math.round(Number(px));
-    if (!px || !isFinite(px)) px = RIM_WIDTH_REGULAR;
-    px = Math.max(RIM_WIDTH_MIN, Math.min(RIM_WIDTH_MAX, px));
-    if (px === RIM_WIDTH_REGULAR) delete overrides.rimWidth;   // regular = today's formula
-    else overrides.rimWidth = px;
-    persist(true);   // a look preference, not a layout edit: no save nag
-    paintAll();
-    if (opts && opts.rerender) { renderDeckSettings(); return; }
-    var sl = document.getElementById('sd-rim-w'); if (sl && +sl.value !== px) sl.value = px;
-    var lbl = document.getElementById('sd-rim-w-val'); if (lbl) lbl.textContent = px + ' px';
-    var cur = rimWidthOf();
-    [['sd-rim-thin', RIM_PRESETS.thin], ['sd-rim-reg', RIM_PRESETS.regular], ['sd-rim-bold', RIM_PRESETS.bold]].forEach(function (p) {
-      var b = document.getElementById(p[0]); if (b) b.classList.toggle('cur', cur === p[1]);
-    });
-  }
-  // One app's rim color. 'input' fires continuously from a color picker, so
-  // this never re-renders the sheet; the caller re-renders on 'change'.
-  function setRimColor(key, hex) {
-    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
-    if (!APP_RIM_COLORS[key]) return;
-    hex = String(hex || '').toLowerCase();
-    if (!RIM_HEX_RE.test(hex)) return;
-    overrides.rimColors = overrides.rimColors || {};
-    if (hex === APP_RIM_COLORS[key]) delete overrides.rimColors[key]; else overrides.rimColors[key] = hex;
-    if (!Object.keys(overrides.rimColors).length) delete overrides.rimColors;
-    persist(true);
-    paintAll();
-    recolorTrayChips();
-  }
-  function resetRims() {
-    if (!profile) { toast('Connect a deck (or open Preview) first.'); return; }
-    delete overrides.rimWidth; delete overrides.rimColors; delete overrides.appRims;
-    persist(true);
-    renderDeckSettings();
-    paintAll();
-    recolorTrayChips();
-    toast('Key rims back to defaults.');
   }
   // The action tray's chips wear the same rim colors; recolor them in place
   // (the tray only rebuilds with the whole editor).
@@ -3711,53 +3725,15 @@
       chip.style.setProperty('--chip-rim', appRimColor(a) || 'var(--line, #3a4356)');
     });
   }
-  // A settings re-render while the operator is dragging the rim slider or
-  // has a color picker open would destroy that control (the sheet is
-  // innerHTML-rebuilt, and OBS state flips call renderDeckSettings on their
-  // own). Skip it, remember, and redraw once the control is released.
-  var rimSliderDown = false, settingsRerenderPending = false;
-  function rimEditBusy() {
-    if (rimSliderDown) return true;   // pointer held on the slider (focus alone is not enough: Safari leaves a released slider focused)
-    var ae = document.activeElement;   // a color input keeps focus while its picker is open
-    return !!(ae && ae.getAttribute && ae.getAttribute('data-rim-app'));
-  }
-  function settingsRerenderIfPending() { if (settingsRerenderPending && settingsOpen && !rimEditBusy()) { settingsRerenderPending = false; renderDeckSettings(); } }
   function rimsSection() {
-    var rimsOn = appRimsOn(), rw = rimWidthOf(), shown = rimWidthShown();
-    var apps = [['cueola', 'Cueola'], ['flowmingo', 'Flowmingo'], ['outrangutan', 'Outrangutan'], ['obs', 'OBS']];
-    var html = '<div class="sd-set-sec">Key rims</div>'
-      + '<div class="sd-set-status"><span class="sd-obs-off">Keys wear a rim in their app\'s color so a glance sorts the deck by app. System keys (pages, mics, fun) stay bare. Width is measured on a 96 px key; smaller decks scale it down.</span></div>'
+    var rimsOn = appRimsOn();
+    return '<div class="sd-set-sec">Key rims</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">Keys wear a thin rim in their app\'s color so a glance sorts the deck by app. System keys (pages, mics, fun) stay bare.</span></div>'
       + '<div class="sd-obs"><button class="sd-mini' + (rimsOn ? ' cur' : '') + '" id="sd-rims-on">On</button><button class="sd-mini' + (rimsOn ? '' : ' cur') + '" id="sd-rims-off">Off</button></div>';
-    if (rimsOn) {
-      html += '<div class="sd-obs sd-rim-row"><label class="sd-obs-vol-lbl">Stroke</label>'
-        + '<button class="sd-mini' + (rw === RIM_PRESETS.thin ? ' cur' : '') + '" id="sd-rim-thin">Thin</button>'
-        + '<button class="sd-mini' + (rw === RIM_PRESETS.regular ? ' cur' : '') + '" id="sd-rim-reg">Regular</button>'
-        + '<button class="sd-mini' + (rw === RIM_PRESETS.bold ? ' cur' : '') + '" id="sd-rim-bold">Bold</button>'
-        + '<input type="range" id="sd-rim-w" min="' + RIM_WIDTH_MIN + '" max="' + RIM_WIDTH_MAX + '" step="1" value="' + shown + '" aria-label="Rim width"><span id="sd-rim-w-val">' + shown + ' px</span></div>'
-        + '<div class="sd-obs sd-rim-colors">'
-        + apps.map(function (p) { return '<label class="sd-rim-color"><input type="color" data-rim-app="' + p[0] + '" value="' + rimColorFor(p[0]) + '" aria-label="' + p[1] + ' rim color"><span>' + p[1] + '</span></label>'; }).join('')
-        + '<span class="sd-pf-sp"></span><button class="sd-mini" id="sd-rims-reset">Reset</button></div>';
-    }
-    return html;
   }
-  function wireRims(o) {
+  function wireRims() {
     bind('sd-rims-on', function () { setAppRims(true); });
     bind('sd-rims-off', function () { setAppRims(false); });
-    bind('sd-rim-thin', function () { setRimWidth(RIM_PRESETS.thin, { rerender: true }); });
-    bind('sd-rim-reg', function () { setRimWidth(RIM_WIDTH_REGULAR, { rerender: true }); });
-    bind('sd-rim-bold', function () { setRimWidth(RIM_PRESETS.bold, { rerender: true }); });
-    bind('sd-rims-reset', resetRims);
-    var rw = document.getElementById('sd-rim-w');
-    if (rw) {
-      rw.oninput = function () { setRimWidth(+rw.value); };
-      var release = function () { rimSliderDown = false; setTimeout(settingsRerenderIfPending, 0); };
-      rw.onpointerdown = function () { rimSliderDown = true; try { window.addEventListener('pointerup', release, { once: true }); } catch (e) {} };
-      rw.onpointerup = release; rw.onpointercancel = release; rw.onchange = release;
-    }
-    o.querySelectorAll('[data-rim-app]').forEach(function (inp) {
-      inp.oninput = function () { setRimColor(inp.getAttribute('data-rim-app'), inp.value); };
-      inp.onchange = function () { setRimColor(inp.getAttribute('data-rim-app'), inp.value); try { inp.blur(); } catch (e) {} renderDeckSettings(); };
-    });
   }
   // Flip is a fact about the connected deck's encoders, so it lives in this
   // deck's overrides (per product id) and follows the hardware, not the layout.
@@ -3773,7 +3749,6 @@
   }
   function renderDeckSettings() {
     if (!settingsOpen) return;
-    if (rimEditBusy()) { settingsRerenderPending = true; return; }   // never yank a slider or color picker mid-use
     var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-set-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
     var body = '<div class="sd-ed-head">Deck settings</div>'
       + '<div class="sd-set-sec">Theme</div><div class="sd-theme-chips">' + chips + '</div>'
@@ -3783,9 +3758,6 @@
         + '<div class="sd-obs"><button class="sd-mini' + (overrides.dialFlip ? '' : ' cur') + '" id="sd-dialdir-n">Normal</button><button class="sd-mini' + (overrides.dialFlip ? ' cur' : '') + '" id="sd-dialdir-r">Reversed</button></div>' : '')
       + '<div class="sd-set-sec">OBS Studio</div>' + obsSection()
       + (micoParked() ? '' : '<div class="sd-set-sec">Micochondria</div>' + micoBar())
-      + '<div class="sd-set-sec">Layout files</div>'
-      + '<div class="sd-set-status"><span class="sd-obs-off">A .keywi file is a standalone copy of the current page: back it up, share it, or move it to another machine.</span></div>'
-      + '<div class="sd-obs"><button class="sd-mini" id="sd-pf-exp">Export this page (.keywi)</button><button class="sd-mini" id="sd-pf-imp">Import a .keywi file</button><input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden></div>'
       + '<div class="sd-set-sec">Clipboard</div>'
       + '<div class="sd-set-status"><span class="sd-obs-off">The PASTE key reads this machine\'s clipboard, and the browser only allows that after you approve it once. Approve it here so the key never stalls mid-show.</span></div>'
       + '<div class="sd-obs"><button class="sd-mini" id="sd-clip-enable">Enable clipboard</button></div>'
@@ -3797,16 +3769,13 @@
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-set-done', closeOverlay);
     bind('sd-diag-settings', function () { closeOverlay(); runDiagnostics(); });
-    wireRims(o);
+    wireRims();
     bind('sd-dialdir-n', function () { setDialFlip(false); });
     bind('sd-dialdir-r', function () { setDialFlip(true); });
     o.querySelectorAll('[data-set-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-set-theme')); }; });
     bind('sd-obs-con', function () { var url = (document.getElementById('sd-obs-url') || {}).value || 'ws://localhost:4455'; var pw = (document.getElementById('sd-obs-pw') || {}).value || ''; if (OBSc()) { if (!pw) pw = ((OBSc().config && OBSc().config()) || {}).password || ''; OBSc().configure({ url: url, password: pw }); OBSc().connect(); toast('Connecting to OBS…'); } });
     bind('sd-obs-dis', function () { if (OBSc()) OBSc().disconnect(); });
     var ov2 = document.getElementById('sd-obs-vol'); if (ov2) ov2.onchange = function () { setObsVolInput(ov2.value); toast('Stream-volume dial now rides "' + ov2.value + '".'); };
-    bind('sd-pf-exp', exportActive);
-    bind('sd-pf-imp', function () { var f = document.getElementById('sd-pf-file'); if (f) f.click(); });
-    var file2 = document.getElementById('sd-pf-file'); if (file2) file2.onchange = function () { if (file2.files && file2.files[0]) importFile(file2.files[0]); file2.value = ''; };
     // One-time clipboard grant: a real user click on a read is the only thing
     // that makes the browser show its permission prompt. The text read here is
     // thrown away; only the grant matters.
@@ -4556,7 +4525,7 @@
 
   function wire() {
     var r = root(); if (!r) return;
-    bind('sd-connect', connect); bind('sd-disconnect', disconnect);
+    bind('sd-connect', connect); bind('sd-hero-connect', connect); bind('sd-disconnect', disconnect);
     bind('sd-diag', runDiagnostics);
     bind('sd-diag-close', function () { diagInfo = null; render(); });
     bind('sd-diag-copy', function () {
@@ -4567,7 +4536,7 @@
     bind('sd-talkoff', function () { releaseTalkback(true); });
     bind('sd-reset', resetActive); bind('sd-test', testPattern);
     bind('sd-learn', function () { armLearn(!learnArmed); render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
-    bind('sd-pf-new', openNewPageSheet); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive); bind('sd-pf-cloud', openCloudLayoutsSheet);
+    bind('sd-pf-new', openNewPageSheet); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive);
     r.querySelectorAll('.sd-page-tab').forEach(function (tab) {
       var id = tab.getAttribute('data-page');
       tab.onclick = function (e) {
@@ -4595,7 +4564,7 @@
     bind('sd-wizard-open', function () { openWizard(0); });
     bind('sd-preview', startPreview); bind('sd-preview-connect', connect); bind('sd-preview-exit', stopPreview);
     wireMico();
-    bind('sd-save', function () { openSaveSheet(false); });
+    bind('sd-save', openLayoutsSheet);
     bind('sd-add-deck', addDeck);
     r.querySelectorAll('.sd-deck-tab').forEach(function (chip) { chip.onclick = function () { activateDeck(decks[+chip.getAttribute('data-deck')]); }; });
     r.querySelectorAll('.sd-key').forEach(function (btn) { btn.onclick = function () { openKeyEditor(+btn.getAttribute('data-key')); }; });

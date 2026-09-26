@@ -234,8 +234,12 @@ test('overlay discipline: bounded band, off-commands always pass, toggles are ac
   // issues / bars / question" swallow.
   const send = app.slice(app.indexOf('function sendPrompterControl('), app.indexOf('// ─────────────────────────────────────────────────────────────\n// PROMPTYPUS'));
   assert.match(send, /isCollaborativePrompterControl\(action\)[\s\S]*?dispatchPrompterCommand\(control, 'live'/);
-  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
-  assert.match(flowSend, /isCollaborativePrompterControl\(action\)[\s\S]*?dispatchPrompterCommand\(control, 'flowop'/);
+  // The pop-out is the second operator surface: its controls reach the talent
+  // through the host's sendPrompterControl (same discrete-state path), never a
+  // second sender of its own.
+  const popoutHost = app.slice(app.indexOf("if (!scriptOperatorControlAllowed(action)) throw new Error('Rejected Script Operator action: '"), app.indexOf("if (kind === 'draft') {"));
+  assert.match(popoutHost, /const sent = questionText \? sendPrompterControl\(action, \{ text: questionText \}\)\n\s+: findQuery \? sendPrompterControl\(action, \{ q: findQuery \}\)\n\s+: sendPrompterControl\(action\);/);
+  assert.doesNotMatch(app, /function flowOpSendControl\(/);
   // Toggle UI rides the ack path: pending on send, confirmed on control_ack,
   // failed after the no-ack timeout.
   assert.match(app, /markPrompterToggleState\(control\.action, 'pending'\)/);
@@ -263,7 +267,9 @@ test('first GO fires like the tenth: resume-after-sync, arming, and unlock (D12.
   assert.match(outputHtml, /addEventListener\('pointerdown', retryBlockedPlayback/);
 });
 
-test('questions lane replaces push-paste: QUESTION card in, script pollution out (D12.6)', () => {
+test('questions lane replaces push-paste: QUESTION card in, script pollution out (D12.6)', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
   // The broken Paste/Paste-Push path is deleted, not kept alongside.
   assert.doesNotMatch(app, /pasteClipboardToPrompter/);
   assert.doesNotMatch(html, /pasteClipboardToPrompter/);
@@ -273,8 +279,27 @@ test('questions lane replaces push-paste: QUESTION card in, script pollution out
   assert.match(app, /function questionLaneKeydown\(event, scope\)/);
   assert.match(app, /function pushChatQuestion\(scope\)/);
   assert.match(app, /sendPrompterControl\('question_on', \{ text \}\)/);
-  assert.match(app, /flowOpSendControl\('question_on', false, \{ text \}\)/);
+  // The pop-out lane sends the same envelope through the host.
+  assert.match(scriptOp, /sendIntent\('control', \{ action: 'question_on', text \}\)/);
   assert.match(app, /-question-input/);
+  // No Question toggle button (owner 2026-09): Push card turns the indicator
+  // on, Clear all overlays turns it off, and both surfaces show "Question is
+  // up" while it is. The deck's QUESTION key still toggles via the helper.
+  const clockPane = app.slice(app.indexOf('function clockAndAlertControlsHTML('), app.indexOf('function ptOpenEdit()'));
+  assert.doesNotMatch(clockPane, /toggleQuestionIndicator\(/);
+  assert.doesNotMatch(clockPane, /data-clock-question/);
+  assert.match(clockPane, /data-question-push onclick="pushChatQuestion\('\$\{scope\}'\)"/);
+  assert.match(clockPane, /data-question-state role="status"\$\{questionOn \? '' : ' hidden'\}[^<]*<span data-question-state-label>Question is up<\/span>/);
+  assert.match(clockPane, /data-overlays-clear/);
+  assert.match(app, /function toggleQuestionIndicator\(scope='lsq'\)/);
+  assert.doesNotMatch(scriptOpHtml, /id="questionButton"/);
+  assert.match(scriptOpHtml, /id="questionState" role="status" hidden/);
+  assert.match(scriptOp, /questionState\.hidden = !questionOn;/);
+  const patchClock = app.slice(app.indexOf('function patchScriptOpClockControls('), app.indexOf('function renderLivePrompterControls('));
+  assert.match(patchClock, /questionState\.hidden = !ptQuestionOn;/);
+  // Overlays clear turns the mirrored question off on the desk too.
+  const mirror = app.slice(app.indexOf('function applyOperatorOverlayMirror('), app.indexOf('function sendPrompterControl('));
+  assert.match(mirror, /if \(action === 'overlays_clear'\) \{[\s\S]*?applyQuestionAction\('question_off', 'talent'\);/);
   // The talent renders a QUESTION-labeled card (signage, not script) and a
   // bare legacy question_on still shows the generic card.
   assert.match(app, /pt-question-tag/);
@@ -855,13 +880,14 @@ test('8/19 round: strip keeps its slot, rail is damped, Script Op surfaces mirro
   assert.match(app, /function scriptOpDisplayPaneHTML/);
   assert.match(html, /data-insp-pane="display"><div id="lsDisplayControls">/);
   assert.doesNotMatch(html, /data-insp-pane="format"/);
-  // The arrange + favorites engine loads on BOTH surfaces and shares its
-  // storage keys, so an order or a star made in one window applies in both.
-  assert.match(html, /cueola-scriptop-prefs\.js\?v=/);
+  // The arrange + favorites engine is off the Live panel (owner 2026-09: no
+  // favourites row, no Arrange in the sidebar). The pop-out still loads it.
+  assert.doesNotMatch(html, /cueola-scriptop-prefs\.js\?v=/);
+  assert.doesNotMatch(html, /\.sop-quick-row\{/);
+  assert.doesNotMatch(app, /CueolaScriptOpPrefs/);
   assert.match(scriptOpHtml, /cueola-scriptop-prefs\.js\?v=/);
   assert.match(prefs, /cueola_scriptop_section_order/);
   assert.match(prefs, /cueola_scriptop_favs/);
-  assert.match(app, /CueolaScriptOpPrefs\.init\(/);
   assert.match(scriptOp, /CueolaScriptOpPrefs\.init\(/);
   // The builder's notes panel can expand any production note to full text.
   assert.match(app, /function pnToggleNote/);
@@ -1171,10 +1197,13 @@ test('preflight reports this machine\'s control links honestly (plan item 6)', (
 test('the bridge overlay verbs toggle against the operator mirrors and reuse the Live senders', () => {
   const ov = app.slice(app.indexOf('function _sdPrompterOverlay'), app.indexOf('window.cueolaSurfaceBridge = {'));
   assert.match(ov, /mode === 'timeofday' \? 'clock_off' : 'clock_timeofday'/);
-  assert.match(ov, /sendDurationClock\('po'\)/);
-  assert.match(ov, /buildCountdownActionFromInput\('po'\)/);
-  assert.match(ov, /sendWrapUp\('po', mins\)/);
-  assert.match(ov, /toggleQuestionIndicator\('po'\)/);
+  // The helpers read the Script Op panel's fields ('lsq'): the operator
+  // overlay scope ('po') is gone with the in-Live Flowmingo Op mode.
+  assert.match(ov, /sendDurationClock\('lsq'\)/);
+  assert.match(ov, /buildCountdownActionFromInput\('lsq'\)/);
+  assert.match(ov, /sendWrapUp\('lsq', mins\)/);
+  assert.match(ov, /toggleQuestionIndicator\('lsq'\)/);
+  assert.doesNotMatch(app, /'po-play-btn'|'po-seek'|'poClockPreview'/);
   assert.match(ov, /'overlays_clear'/);
   // PUSH carries the desk's sync-scope semantics: a seed snapshot would
   // teleport and could STOP a rolling talent.
@@ -1331,7 +1360,7 @@ test('talent overlay CSS: theme tokens, stage-relative banners, honest read line
   assert.match(rule('#pt-hold-chip'), /animation:ptHoldPulse 2\.4s ease-in-out 3/);
   assert.match(css, /\.pt-clock-overlay\.expired:not\(\.timeofday\) \.pt-clock-value\{animation:ptExpiredPulse 1s ease-in-out 4\}/);
   assert.match(rule('.pt-slate-mark'), /border:1px solid transparent/);
-  assert.match(css, /#pt-text strong,\.prompt-op-text strong,\.flowop-script strong\{[^}]*text-shadow:none/);
+  assert.match(css, /#pt-text strong\{[^}]*text-shadow:none/);
   assert.match(clock, /border-radius:var\(--ui-radius-panel\)/);
   assert.match(question, /border-radius:var\(--ui-radius-group\)/);
   assert.match(rule('.pt-question-tag'), /border-radius:999px/);
@@ -1421,8 +1450,9 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   assert.match(send, /if \(!prompterControlDocPathAvailable\(control\) && !prompterSessionController\.isReady\(_activePrompterOutputInstanceId\)\)/);
   assert.match(app, /function prompterControlDocPathAvailable\(control, codeOverride=''\)/);
   assert.match(app, /return Boolean\(window\._firebaseReady && code\);/);
-  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
-  assert.match(flowSend, /if \(!prompterControlDocPathAvailable\(control, flowOpCode\) && !prompterSessionController\.isReady/);
+  // The pop-out rides the same sendPrompterControl path (no second sender), so
+  // the doc-path rule above covers both operator surfaces.
+  assert.doesNotMatch(app, /flowOpCode/);
   // Rebind on EVIDENCE (pinned talent silent, or the newcomer echoes our
   // snapshotId), never on a newer heartbeat ts; recovery rides sync scope.
   const handler = app.slice(app.indexOf('function _handlePrompterOperatorMessage('), app.indexOf('function _ensurePrompterOperatorBridge('));
@@ -2118,15 +2148,13 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   assert.match(queue, /const action = String\(newest\?\.action \|\| ''\);/);
   assert.doesNotMatch(queue, /Date\.now\(\)/);
   // C4: change-driven admission with a 60s skew-tolerant first sight; applied
-  // receipts need a change (no clock); the Flowmingo Op reader follows suit;
-  // both dedup stamps reset with the runtime.
+  // receipts need a change (no clock); both dedup stamps reset with the
+  // runtime. (The standalone Flowmingo Op reader that mirrored this is gone.)
   assert.match(app, /_hb\.ts !== _lastSeenTalentHeartbeatTs\n          && \(_lastSeenTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - _hb\.ts\) < 60000\)\) \{/);
   assert.match(app, /const firstSight = _lastSeenTalentAppliedTs === 0;\n        _lastSeenTalentAppliedTs = _ta\.ts;\n        if \(!firstSight\) _handlePrompterOperatorMessage\(\{ \.\.\._ta, type:'PROMPTER_STATE_APPLIED' \}\);/);
   assert.doesNotMatch(app, /\(Date\.now\(\) - _ta\.ts\) < 20000/);
   assert.doesNotMatch(app, /\(Date\.now\(\) - _hb\.ts\) < 20000/);
   assert.doesNotMatch(app, /\(Date\.now\(\) - heartbeat\.ts\) < 20000/);
-  assert.match(app, /hbTs !== _flowOpTalentHeartbeatTs\n            && \(_flowOpTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - hbTs\) < 60000\)\) \{/);
-  assert.match(app, /const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && \(Date\.now\(\) - _flowOpTalentSeenAt\) < 20000;/);
   const stop = app.slice(app.indexOf('function stopPrompterOperatorRuntime()'), app.indexOf('function updatePrompterOnAdvance('));
   assert.match(stop, /_lastSeenTalentHeartbeatTs = 0;\n  _lastSeenTalentAppliedTs = 0;/);
   // C5: intent keyed on direction at every caller; no bare { advance:true }
@@ -2295,6 +2323,64 @@ test('9/4 fix round slice A2: C9/G5 row numbers, C14 Esc = Stay live, C15/C16/C1
   assert.match(offer, /else if \(adminSession && !idApi\?\.identity\?\.\(\)\) \{[\s\S]*Admin sign-in: type the show code below/);
   // No dashes in any copy this slice added.
   for (const slice of [commit, classify, firstGo, offer, noAnswer, esc]) assert.doesNotMatch(slice, /[–—]/);
+});
+
+test('two prompter control sets, simple tier by default (owner 2026-09 debloat)', async () => {
+  const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
+  const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
+  // The in-Live "Flowmingo Op" mode and the standalone #flowOp screen are gone:
+  // markup, state, functions, CSS, and their entry points.
+  for (const gone of [/promptOpMode/, /togglePromptOpMode/, /renderLivePromptOp/, /promptOpControlsHTML/, /opInspHeadHTML/, /OP_INSP_LABELS/, /flowOp[A-Z]/, /openFlowmingoOperator/, /exitFlowmingoOperator/, /origin === 'flowop'/, /, 'flowop'/, /'flowmingo-op'/, /flowmingoRemoteOverrideUntil/]) {
+    assert.doesNotMatch(app, gone, `${gone} should be gone from cueola-app.js`);
+  }
+  for (const gone of [/id="flowOp"/, /id="promptOpBtn"/, /flowop-/, /prompt-op-active/, /prompt-op-stage/, /openFlowmingoOperator/, />Remote Op</]) {
+    assert.doesNotMatch(html, gone, `${gone} should be gone from index.html`);
+  }
+  // Kept: the Script Op panel in Live and the pop-out page.
+  assert.match(html, /id="prompterPanelBtn" onclick="toggleLivePrompterPanel\(\)"/);
+  assert.match(app, /function openScriptOpPopout\(\)/);
+  // The old #flowop / ?operator doors never dead-end: a Live host opens the
+  // pop-out, otherwise the talent screen's Link a show door opens with a toast.
+  const door = app.slice(app.indexOf('function openFlowmingoRemoteDoor('), app.indexOf('function openPrompterApp()'));
+  assert.match(door, /if \(liveHost\) return openScriptOpPopout\(\);/);
+  assert.match(door, /openPrompterApp\(\);\n  ptOpenEdit\(\);/);
+  assert.match(door, /toast\(/);
+  assert.match(app, /params\.has\('flowop'\) \|\| params\.has\('operator'\)\) \{[\s\S]*?openFlowmingoRemoteDoor\(code\);/);
+  assert.match(app, /else if \(action === 'remote'\) openFlowmingoRemoteDoor\(/);
+  // Simple tier: each pane leads with the student controls and folds the rest
+  // behind one collapsed More, on both surfaces.
+  const transport = app.slice(app.indexOf('function scriptOpTransportPaneHTML()'), app.indexOf('function scriptOpDisplayPaneHTML()'));
+  assert.match(transport, /poTransportSectionHTML\('lsq'\)\}\$\{poDisplaySectionHTML\('lsq'\)\}\$\{scriptOpMoreHTML\(poTransportExtrasHTML\(\) \+ poScreenSectionHTML\(\)\)/);
+  const display = app.slice(app.indexOf('function scriptOpDisplayPaneHTML()'), app.indexOf('function setLiveTextZoomPct('));
+  assert.match(display, /\$\{formatting\}\$\{panelText\}\$\{scriptOpMoreHTML\(poAlignSectionHTML\(\) \+ poThemeSectionHTML\(\)\)\}/);
+  assert.match(app, /return `<details class="cc-more sop-more"><summary>More<\/summary>\$\{inner\}<\/details>`;/);
+  const onAir = app.slice(app.indexOf('function liveActionsHTML('), app.indexOf('function poFindInScript('));
+  assert.match(onAir, /\$\{rowCue\}\n\s*<details class="cc-more sop-more"><summary>More<\/summary>\n\s*<div class="flow-control-section flow-control-onair">/);
+  assert.match(onAir, /flow-control-cue[\s\S]*<\/details>`;/);
+  const clocks = app.slice(app.indexOf('function clockAndAlertControlsHTML('), app.indexOf('function ptOpenEdit()'));
+  assert.match(clocks, /flow-clock-modes[\s\S]*data-question-lane[\s\S]*<details class="cc-more sop-more"><summary>More<\/summary>[\s\S]*flow-wrap-section[\s\S]*data-clock-size/);
+  // One wrap control: a minutes field (default 5) and Send; Wrap 10 / Wrap 5 are gone.
+  assert.doesNotMatch(clocks, /Wrap 10|Wrap 5/);
+  assert.match(clocks, /id="\$\{scope\}-wrap-min" type="number" min="1" max="999" value="\$\{flowWrapCustomMin\}"/);
+  assert.match(clocks, /btn\('action\.forward', 'Send', `sendWrapUp\('\$\{scope\}'\)`, false, 'pt-wrap-btn'/);
+  assert.match(app, /let flowWrapCustomMin = 5;/);
+  assert.match(app, /function sendWrapUp\(scope='lsq', minsOverride=null\)/);
+  // Pop-out mirror: same folds, same single wrap field.
+  assert.match(scriptOpHtml, /<details class="cc-more"><summary>More<\/summary>/);
+  assert.equal((scriptOpHtml.match(/<details class="cc-more">/g) || []).length, 4, 'one More per tab');
+  assert.doesNotMatch(scriptOpHtml, /data-wrap-minutes/);
+  assert.match(scriptOpHtml, /id="wrapMinutes" type="number" min="1" max="999" value="5"/);
+  assert.match(scriptOpHtml, /data-wrap-custom/);
+  assert.doesNotMatch(scriptOp, /dataset\.wrapMinutes/);
+  assert.match(scriptOpHtml, /\.cc-more \{/);
+  // Behind More on both surfaces: holds/direction, screen group, slates, scrubber, align, theme, overlay size.
+  for (const [pane, inMore] of [['transport', /data-hold-start="brake_start"[\s\S]*data-action="fullscreen"[\s\S]*id="rowInfoToggle"/], ['live', /id="techButton"[\s\S]*id="seekRange"/], ['clocks', /id="wrapMinutes"[\s\S]*id="overlaySizeValue"/], ['display', /data-align="left"[\s\S]*data-theme-choice="cool"/]]) {
+    const paneHtml = scriptOpHtml.slice(scriptOpHtml.indexOf(`data-pane="${pane}"`), scriptOpHtml.indexOf('</div>\n\n', scriptOpHtml.indexOf(`data-pane="${pane}"`)));
+    const more = paneHtml.slice(paneHtml.indexOf('<details class="cc-more">'));
+    assert.match(more, inMore, `${pane}: second-tier controls fold behind More`);
+  }
+  // The keymap bridge still reaches every helper through the Script Op scope.
+  assert.match(app, /window\.cueolaSurfaceBridge = \{/);
 });
 
 for (const { name, run } of tests) {
