@@ -2539,20 +2539,6 @@
     on('og-transcode', 'onchange', e => { settings.transcode = e.target.checked; scheduleSave(); if (e.target.checked) loadFFmpeg(); });
   }
 
-  function sdProofSamples(productId) {
-    return [
-      { label:'Text only', mapping:{ action:'go' }, descriptor:{ text:'GO', iconMode:'text' } },
-      { label:'Icon only', mapping:{ action:'go' }, descriptor:{ text:'', iconMode:'icon' } },
-      { label:'Text + icon', mapping:{ action:'cue' }, descriptor:{ text:'CUE 12' } },
-      { label:'Multiple lines', mapping:{ action:'pad' }, descriptor:{ text:'HOUSE MUSIC' } },
-      { label:'Long label', mapping:{ action:'fadeStop' }, descriptor:{ text:'SUPERLONGTRANSITIONLABEL', maxLines:2 } },
-      { label:'Active state', mapping:{ action:'go' }, descriptor:{ text:'LIVE', active:true } },
-    ].map((sample, index) => ({
-      ...sample,
-      descriptor:sdKeyDescriptor(index, sample.mapping, productId, sample.descriptor),
-    }));
-  }
-
   function sdPhysicalFrames(productId, descriptor) {
     const canonical = sdLabelRenderer.renderCanonical(productId, descriptor);
     const upload = sdLabelRenderer.createDeviceFrame(productId, canonical.canvas);
@@ -2583,11 +2569,6 @@
       const frames = sdPhysicalFrames(productId, sdKeyDescriptor(index, sdMap[index], productId));
       sdCopyCanvas(canvas, frames.simulated);
       canvas.dataset.active = sdKeyIsActive(index, sdMap[index]) ? 'true' : 'false';
-    });
-    const samples = sdProofSamples(productId);
-    Array.prototype.forEach.call(body.querySelectorAll('.og-sd-proof-preview[data-sample]'), canvas => {
-      const sample = samples[Number(canvas.getAttribute('data-sample'))];
-      if (sample) sdCopyCanvas(canvas, sdPhysicalFrames(productId, sample.descriptor).simulated);
     });
   }
 
@@ -2668,75 +2649,6 @@
     }, SD_PRESS_FLASH_MS + 30);
   }
 
-  function buildStreamDeckProofCanvas(productId) {
-    const profile = SD_LABELS.getModelProfile(productId);
-    const gap = 12, labelHeight = 18, edge = 24, keySize = profile.imageWidth;
-    const gridWidth = (profile.columns * (keySize + gap)) - gap;
-    const gridHeight = profile.rows * (keySize + labelHeight + gap);
-    const sampleSize = keySize, sampleGap = 16;
-    const samples = sdProofSamples(productId);
-    const sampleWidth = (samples.length * (sampleSize + sampleGap)) - sampleGap;
-    const width = Math.max(gridWidth, sampleWidth) + edge * 2;
-    const sectionHeight = 34 + gridHeight;
-    const height = 76 + sectionHeight * 2 + 50 + sampleSize + 46;
-    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    ctx.save();
-    try {
-      ctx.fillStyle = '#080b12'; ctx.fillRect(0, 0, width, height);
-      ctx.fillStyle = '#f7f8fb'; ctx.font = '700 20px -apple-system,system-ui,sans-serif';
-      ctx.fillText('Cueola Stream Deck orientation proof', edge, 29);
-      ctx.fillStyle = '#9aa4b5'; ctx.font = '12px -apple-system,system-ui,sans-serif';
-      ctx.fillText(profile.name + ' · ' + profile.keys + ' keys · device upload rotation ' + profile.deviceRotationDegrees + '°', edge, 50);
-      const drawGrid = (title, y, frameName) => {
-        ctx.fillStyle = '#d8dfeb'; ctx.font = '700 13px -apple-system,system-ui,sans-serif'; ctx.fillText(title, edge, y + 15);
-        for (let i = 0; i < profile.keys; i++) {
-          const row = Math.floor(i / profile.columns), col = i % profile.columns;
-          const x = edge + col * (keySize + gap), ky = y + 28 + row * (keySize + labelHeight + gap);
-          const calibration = sdKeyDescriptor(i, { action:'go' }, productId, {
-            text:'K' + String(i + 1).padStart(2, '0'),
-            active:i === 0 || i === profile.keys - 1,
-            backgroundColor:i % 2 ? '#234a8a' : '#1c7a3e',
-          });
-          const frame = sdPhysicalFrames(productId, calibration)[frameName];
-          ctx.drawImage(frame, x, ky, keySize, keySize);
-          ctx.fillStyle = '#9aa4b5'; ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'center';
-          ctx.fillText(String(i + 1), x + keySize / 2, ky + keySize + 13); ctx.textAlign = 'start';
-        }
-      };
-      drawGrid('SIMULATED PHYSICAL DISPLAY · labels must read upright', 66, 'simulated');
-      drawGrid('RAW HID JPEG FRAME · intentionally pre-rotated 180°', 66 + sectionHeight, 'upload');
-      const sampleY = 66 + sectionHeight * 2 + 26;
-      ctx.fillStyle = '#d8dfeb'; ctx.font = '700 13px -apple-system,system-ui,sans-serif'; ctx.fillText('CONTENT AND STATE CASES · simulated display', edge, sampleY);
-      samples.forEach((sample, index) => {
-        const x = edge + index * (sampleSize + sampleGap), y = sampleY + 14;
-        ctx.drawImage(sdPhysicalFrames(productId, sample.descriptor).simulated, x, y, sampleSize, sampleSize);
-        ctx.fillStyle = '#9aa4b5'; ctx.font = '10px -apple-system,system-ui,sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText(sample.label, x + sampleSize / 2, y + sampleSize + 14); ctx.textAlign = 'start';
-      });
-    } finally {
-      ctx.restore();
-    }
-    return canvas;
-  }
-
-  function exportStreamDeckProof() {
-    const productId = sdCurrentProductId();
-    if (!sdSupportedProfile(productId)) { sdSetPaintError('This model has no verified Cueola image profile to export.'); return; }
-    const canvas = buildStreamDeckProofCanvas(productId);
-    canvas.toBlob(blob => {
-      if (!blob) { sdSetPaintError('Could not encode the Stream Deck orientation proof.'); return; }
-      const url = URL.createObjectURL(blob), link = document.createElement('a');
-      link.href = url;
-      link.download = 'cueola-stream-deck-orientation-' + productId.toString(16).padStart(4, '0') + '.png';
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      toast('Stream Deck orientation proof exported.');
-    }, 'image/png');
-  }
-
   function renderStreamDeck() {
     const body = $('og-sd-body'); if (!body) return;
     const connected = !!sd, productId = sdCurrentProductId(), profile = sdSupportedProfile(productId);
@@ -2760,21 +2672,18 @@
       const item = SD_LABELS.getModelProfile(id);
       return '<option value="' + id + '"' + (id === productId ? ' selected' : '') + '>' + esc(item.name) + ' · ' + item.keys + ' keys</option>';
     }).join('') : '');
-    const proofSamples = profile ? sdProofSamples(productId).map((sample, index) => '<div class="og-sd-proof-sample"><canvas class="og-sd-proof-preview" data-sample="' + index + '" width="' + profile.imageWidth + '" height="' + profile.imageHeight + '" role="img" aria-label="' + esc(sample.label) + ' orientation sample"></canvas><span>' + esc(sample.label) + '</span></div>').join('') : '';
     body.innerHTML =
       '<div class="og-sd-status">'
         + (connected ? '<span class="og-out-dot live"></span> Connected: ' + esc(sd.model.name) + ' (' + sd.model.keys + ' keys)' : (hasHid ? '<span class="og-out-dot"></span> Not connected' : 'WebHID unavailable (needs Chrome or Edge)'))
         + '<div class="og-bar-spacer"></div>'
         + (connected ? '<button class="og-bar-btn og-capsule danger" id="og-sd-disc">Disconnect</button>' : '<button class="og-bar-btn og-capsule" id="og-sd-conn"' + (hasHid ? '' : ' disabled') + '>Connect Stream Deck</button>')
       + '</div>'
-      + '<div class="og-sd-device-tools"><label><span>' + (connected ? 'Connected image profile' : 'Preview model') + '</span><select id="og-sd-model"' + (connected ? ' disabled' : '') + '>' + profileOptions + '</select></label><button class="og-bar-btn og-capsule" id="og-sd-export"' + (profile ? '' : ' disabled') + '>' + sym('action.export') + 'Export orientation proof</button></div>'
+      + '<div class="og-sd-device-tools"><label><span>' + (connected ? 'Connected image profile' : 'Preview model') + '</span><select id="og-sd-model"' + (connected ? ' disabled' : '') + '>' + profileOptions + '</select></label></div>'
       + '<div class="og-sd-error" id="og-sd-error" role="status"' + (sdPaintError ? '' : ' hidden') + '>' + esc(sdPaintError) + '</div>'
       + '<p class="og-sheet-note">Map each key to GO / Stop / Pause / Fade·Stop / PANIC, a cue, or an SFX pad. The preview models the physical display from the same canonical art and verified 180° upload transform used by Classic/MK.2/v2 and XL hardware. It supports rehearsal, but does not replace a physical-device check.</p>'
-      + '<div class="og-sd-grid" style="--sd-cols:' + cols + '">' + grid + '</div>'
-      + (profile ? '<section class="og-sd-proof"><h4>Orientation check</h4><p>These cases round-trip through the raw device frame before display simulation.</p><div class="og-sd-proof-grid">' + proofSamples + '</div></section>' : '');
+      + '<div class="og-sd-grid" style="--sd-cols:' + cols + '">' + grid + '</div>';
     if ($('og-sd-conn')) $('og-sd-conn').onclick = sdConnect;
     if ($('og-sd-disc')) $('og-sd-disc').onclick = sdDisconnect;
-    if ($('og-sd-export')) $('og-sd-export').onclick = exportStreamDeckProof;
     if ($('og-sd-model')) $('og-sd-model').onchange = e => { sdSimulatorProductId = Number(e.target.value); renderStreamDeck(); };
     Array.prototype.forEach.call(body.querySelectorAll('.og-sd-act'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); const a = e.target.value; if (!a) delete sdMap[k]; else { sdMap[k] = Object.assign({}, sdMap[k], { action: a }); if (a !== 'cue' && a !== 'pad') delete sdMap[k].ref; } settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
     Array.prototype.forEach.call(body.querySelectorAll('.og-sd-ref'), s => { s.onchange = e => { const k = +s.getAttribute('data-k'); sdMap[k] = Object.assign({}, sdMap[k], { ref: e.target.value }); settings.sdMap = sdMap; renderStreamDeck(); scheduleStreamDeckRefresh(); scheduleSave(); }; });
@@ -4400,6 +4309,7 @@
     t.textContent = formatWallClock(new Date());
     wrap.setAttribute('aria-label', 'Time of day, ' + (settings.wallClockMode === '12' ? '12-hour' : '24-hour') + '. Click to toggle.');
     wrap.setAttribute('data-tip', settings.wallClockMode === '12' ? 'Switch to 24-hour clock' : 'Switch to 12-hour clock');
+    const fmt = $('og-wallclock-fmt'); if (fmt) fmt.textContent = settings.wallClockMode === '12' ? '12h' : '24h';
     wrap.removeAttribute('title');
   }
 
@@ -5776,7 +5686,7 @@
         + '<span class="og-mode-badge" id="og-mode-badge">Standalone</span>'
         + '<div class="og-tabs"><button class="og-tab on" id="og-tab-play">' + sym('content.display') + 'Playback</button><button class="og-tab" id="og-tab-sfx">' + sym('action.grid') + 'SFX Board</button></div>'
         + '<div class="og-bar-spacer"></div>'
-        + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" data-tip="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span></span>'
+        + '<span class="og-wallclock og-top-wallclock" id="og-wallclock" role="button" tabindex="0" data-tip="Switch to 12-hour clock">' + assetIcon('clock') + '<span id="og-wallclock-t">--:--:--</span><span id="og-wallclock-fmt" style="font-size:10px;opacity:.7;margin-left:4px">24h</span></span>'
         + '<button class="og-bar-btn og-program-popout" id="og-program-popout" data-tip="Pop the program output into a movable window for another display" aria-label="Pop out program window" aria-pressed="false">' + sym('action.fullscreen') + '<span>Pop out program</span></button>'
         + '<details class="og-theme-menu og-settings-menu" id="og-theme-menu"><summary data-tip="Settings" aria-label="Settings">' + sym('action.settings') + '<span id="og-theme-label" hidden>Theme</span></summary><div class="og-theme-pop og-settings-pop">'
           + '<details class="og-themes-submenu"><summary class="og-themes-row"><span class="og-tr-ico" aria-hidden="true"></span><span class="og-tr-lbl">Themes</span><span class="og-tr-val">Choose<span class="og-tr-chev" aria-hidden="true">›</span></span></summary>'
@@ -5825,7 +5735,7 @@
                 + '<canvas id="og-key-canvas" class="og-deck og-key"></canvas></div>'
               + '<div class="og-meters">'
                 + '<div class="og-vu-col"><div class="og-vu-pair"><span class="og-vu"><span class="og-vu-fill og-vu-fill-y" id="og-vu-l"></span></span><span class="og-vu"><span class="og-vu-fill og-vu-fill-y" id="og-vu-r"></span></span></div><span class="og-meter-col-lbl">VU</span></div>'
-                + '<div class="og-fader-col"><input type="range" class="og-vfader" id="og-master-gain-play" min="0" max="1.2" step="0.01" value="1" aria-label="Output level"><span class="og-meter-col-lbl">Output</span></div>'
+                + '<div class="og-fader-col"><input type="range" class="og-vfader" id="og-master-gain-play" min="0" max="1.2" step="0.01" value="1" aria-label="Master level"><span class="og-meter-col-lbl">Master</span></div>'
               + '</div>'
             + '</div>'
             + '<div class="og-scopes" id="og-scopes"><div class="og-scope og-scope-wfm"><canvas id="og-wfm"></canvas><span class="og-scope-lbl">WAVEFORM</span></div><div class="og-scope og-scope-vec"><canvas id="og-vscope"></canvas><span class="og-scope-lbl">VECTORSCOPE</span></div></div>'
@@ -5884,7 +5794,7 @@
           + '</div>'
         + '</div>'
       + '</div>'
-      + '<div class="og-foot"><span id="og-foot-keys"></span><div class="og-foot-spacer"></div><span id="og-foot-mode">Local-first · IndexedDB · Web Audio</span></div>'
+      + '<div class="og-foot"><span id="og-foot-keys"></span><div class="og-foot-spacer"></div></div>'
       + '<audio id="og-audio-deck"></audio>'
       + '<div class="og-help" id="og-help"><div class="og-help-card"><h3>Keyboard shortcuts</h3><div id="og-help-rows"></div>'
         + '<p class="og-sheet-hint">Click a field and press a key to rebind. GO and PANIC are always reachable by keyboard.</p>'
@@ -5915,9 +5825,9 @@
         + '<div class="join-your-sessions" id="og-join-sessions" hidden></div>'
         + '<div class="join-altcode-label" id="og-join-altcode" hidden>Have a different code?</div>'
         + '<div class="field"><label class="field-lbl">Show Code</label><input class="field-in og-join-code-in" id="og-join-code" type="text" placeholder="Show code" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
-        + '<div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
+        + '<div class="field" id="og-join-name-field"><label class="field-lbl">Your name</label><input class="field-in" id="og-join-name" type="text" placeholder=\'e.g. "Alex"\' maxlength="40"></div>'
         + '<div class="join-identity-strip" id="og-join-identity" hidden></div>'
-        + '<div class="modal-err" id="og-join-err">Please fill in both fields.</div>'
+        + '<div class="modal-err" id="og-join-err">Enter the show code.</div>'
         + '<button class="btn-primary" id="og-join-go">Open Outrangutan</button>'
         + '<button class="btn-secondary" id="og-join-skip">Cancel</button>'
       + '</div></div>';
@@ -6268,18 +6178,21 @@
     return p ? (p.username || '') + '|' + (p.fullName || '') : '';
   }
   function decorateOgJoinIdentity() {
-    const strip = $('og-join-identity'), nameEl = $('og-join-name');
+    const strip = $('og-join-identity'), nameEl = $('og-join-name'), nameField = $('og-join-name-field');
     if (!nameEl) return;
     const profile = ogJoinProfile();
     if (!profile) {
       nameEl.readOnly = false; nameEl.removeAttribute('aria-readonly');
+      if (nameField) nameField.hidden = false;
       if (strip) { strip.hidden = true; strip.innerHTML = ''; }
       return;
     }
     // Locked, not just prefilled: the join is stamped with the signed-in
-    // identity, so a free-typed alias would contradict the stamp.
+    // identity, so a free-typed alias would contradict the stamp. The field
+    // itself is hidden; the strip below says who is joining.
     nameEl.value = profile.fullName;
     nameEl.readOnly = true; nameEl.setAttribute('aria-readonly', 'true');
+    if (nameField) nameField.hidden = true;
     if (!strip) return;
     strip.hidden = false;
     strip.innerHTML = '<span class="jis-who">Joining as <b>' + esc(profile.fullName) + '</b>'
@@ -6389,7 +6302,7 @@
     const codeEl = $('og-join-code'), nameEl = $('og-join-name'), err = $('og-join-err');
     const code = (codeEl ? codeEl.value : '').trim().toUpperCase();
     const name = (nameEl ? nameEl.value : '').trim();
-    if (!code || !name) { if (err) { err.textContent = 'Please fill in both fields.'; err.classList.add('on'); } const f = code ? nameEl : codeEl; if (f) f.focus(); return; }
+    if (!code || !name) { if (err) { err.textContent = code ? 'Enter your name.' : 'Enter the show code.'; err.classList.add('on'); } const f = code ? nameEl : codeEl; if (f) f.focus(); return; }
     if (err) err.classList.remove('on');
     // v2.1 Phase 5: the Outrangutan side door honors the class-key gate — the
     // shared helper routes key-holders through the front-door join + wizard.

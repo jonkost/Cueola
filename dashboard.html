@@ -899,10 +899,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
     <div class="admin-name" id="topAdminName">Signed in as <strong id="topAdminNameVal">—</strong></div>
     <div class="admin-badge" id="topAdminBadge">—</div>
     <button type="button" class="btn-sm btn-ghost btn-icon" id="systemSettingsBtn" onclick="openSystemSettings()" data-tip="System settings" aria-label="System Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
-    <button class="btn-sm btn-ghost" id="accountsNavBtn" onclick="openAccountsPage()" style="display:none">Accounts</button>
     <button class="btn-sm btn-ghost" id="switchBtn" onclick="switchAdmin()" style="display:none">Sign Out</button>
-    <button class="btn-sm btn-ghost" id="testShowBtn" onclick="createTestShow()" style="display:none" data-tip="Mint a real session pre-loaded with The Break Room, the full-system test show">Create Test Show</button>
-    <button class="btn-sm btn-accent" id="newSessionBtn" onclick="openNewSession()" style="display:none">+ New Session</button>
+    <button class="btn-sm btn-ghost" id="testShowBtn" onclick="createTestShow()" style="display:none" data-tip="Create a test show pre-loaded with The Break Room, the full-system test show">Create Test Show</button>
   </div>
 </nav>
 
@@ -920,10 +918,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
       <div class="hstat">
         <div class="hstat-val" id="stat-sessions">—</div>
         <div class="hstat-lbl">Sessions</div>
-      </div>
-      <div class="hstat">
-        <div class="hstat-val" id="stat-cues">—</div>
-        <div class="hstat-lbl">Total Cues</div>
       </div>
       <div class="hstat">
         <div class="hstat-val" id="stat-active">—</div>
@@ -991,8 +985,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
         <input class="admin-mini-in" id="newAdminUsername" autocapitalize="none" spellcheck="false" placeholder="Username (letters, numbers, . _ -)">
         <input class="admin-mini-in" id="newAdminCode" type="password" autocomplete="new-password" placeholder="Temp password (8+ characters)">
         <select class="admin-mini-in" id="newAdminLevel">
-          <option value="standard">Standard</option>
-          <option value="super">Super</option>
+          <option value="standard">Instructor</option>
+          <option value="super">Super admin</option>
         </select>
         <button class="admin-mini-btn primary" onclick="addDashboardAdmin()">Add Account</button>
       </div>
@@ -1008,9 +1002,9 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
           <option value="student">Student key</option>
           <option value="admin">Instructor key</option>
         </select>
-        <button class="admin-mini-btn primary" onclick="mintLoginCode()">Mint Code</button>
+        <button class="admin-mini-btn primary" onclick="mintLoginCode()">Create key</button>
       </div>
-      <div class="overview-list" id="loginCodesList"><div class="roster-empty">Loading login codes…</div></div>
+      <div class="overview-list" id="loginCodesList"><div class="roster-empty">Loading class keys…</div></div>
     </div>
 
     <!-- Phase 3: class roster — every registered profile in one screen -->
@@ -1209,10 +1203,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
               </div>
             </div>
             <div class="session-detail">
-              <div class="sd-row"><span class="sd-lbl">Show Name</span><span class="sd-val" id="detail-show">—</span></div>
-              <div class="sd-row"><span class="sd-lbl">Start Time</span><span class="sd-val" id="detail-start">—</span></div>
               <div class="sd-row"><span class="sd-lbl">Cues</span><span class="sd-val" id="detail-cues">—</span></div>
-              <div class="sd-row"><span class="sd-lbl">Created By</span><span class="sd-val" id="detail-created-by">—</span></div>
               <div class="sd-row"><span class="sd-lbl">Created</span><span class="sd-val" id="detail-created">—</span></div>
             </div>
           </section>
@@ -1278,22 +1269,21 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 <div class="modal-wrap" id="modal-system-settings">
   <div class="modal" style="max-width:640px">
     <div class="modal-title"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span> System Settings</div>
-    <div class="modal-sub">Choose the workspace look and keep global Cueola preferences in one place.</div>
+    <div class="modal-sub">Pick a theme. It applies and saves right away.</div>
     <div class="field">
       <label class="field-lbl">Theme</label>
       <div class="theme-grid" id="dashboardThemeGrid">
-        <button type="button" class="theme-swatch" data-dashboard-theme="cool" onclick="applyDashboardTheme('cool')" data-tip="Glacier" aria-pressed="false"><span class="ts-preview" style="background:#08090f"></span><span class="ts-name">Glacier</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="warm" onclick="applyDashboardTheme('warm')" data-tip="Honey" aria-pressed="false"><span class="ts-preview" style="background:#ffc400"></span><span class="ts-name">Honey</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="white" onclick="applyDashboardTheme('white')" data-tip="Polar Bear" aria-pressed="false"><span class="ts-preview" style="background:#ffffff"></span><span class="ts-name">Polar Bear</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="green" onclick="applyDashboardTheme('green')" data-tip="Eucalyptus" aria-pressed="false"><span class="ts-preview" style="background:#040d05"></span><span class="ts-name">Eucalyptus</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="koala" onclick="applyDashboardTheme('koala')" data-tip="Koala" aria-pressed="false"><span class="ts-preview" style="background:#1f1f1e"></span><span class="ts-name">Koala</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="panda" onclick="applyDashboardTheme('panda')" data-tip="Planda Bear" aria-pressed="false"><span class="ts-preview" style="background:#000000"></span><span class="ts-name">Planda Bear</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="flamingo" onclick="applyDashboardTheme('flamingo')" data-tip="Flowmingo" aria-pressed="false"><span class="ts-preview" style="background:#330512"></span><span class="ts-name">Flowmingo</span></button>
-        <button type="button" class="theme-swatch" data-dashboard-theme="prepbear" onclick="applyDashboardTheme('prepbear')" data-tip="PrepBear" aria-pressed="false"><span class="ts-preview" style="background:#080912"></span><span class="ts-name">PrepBear</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="cool" onclick="applyDashboardTheme('cool')" aria-pressed="false"><span class="ts-preview" style="background:#08090f"></span><span class="ts-name">Glacier</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="warm" onclick="applyDashboardTheme('warm')" aria-pressed="false"><span class="ts-preview" style="background:#ffc400"></span><span class="ts-name">Honey</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="white" onclick="applyDashboardTheme('white')" aria-pressed="false"><span class="ts-preview" style="background:#ffffff"></span><span class="ts-name">Polar Bear</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="green" onclick="applyDashboardTheme('green')" aria-pressed="false"><span class="ts-preview" style="background:#040d05"></span><span class="ts-name">Eucalyptus</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="koala" onclick="applyDashboardTheme('koala')" aria-pressed="false"><span class="ts-preview" style="background:#1f1f1e"></span><span class="ts-name">Koala</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="panda" onclick="applyDashboardTheme('panda')" aria-pressed="false"><span class="ts-preview" style="background:#000000"></span><span class="ts-name">Planda Bear</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="flamingo" onclick="applyDashboardTheme('flamingo')" aria-pressed="false"><span class="ts-preview" style="background:#330512"></span><span class="ts-name">Flowmingo</span></button>
+        <button type="button" class="theme-swatch" data-dashboard-theme="prepbear" onclick="applyDashboardTheme('prepbear')" aria-pressed="false"><span class="ts-preview" style="background:#080912"></span><span class="ts-name">PrepBear</span></button>
       </div>
     </div>
-    <button class="btn-full btn-primary" onclick="saveSystemSettings()">Save Settings</button>
-    <button type="button" class="btn-full btn-secondary" onclick="hideModal('modal-system-settings')" style="margin-top:4px">Close</button>
+    <button type="button" class="btn-full btn-secondary" onclick="hideModal('modal-system-settings')">Close</button>
   </div>
 </div>
 
@@ -1325,6 +1315,7 @@ let dashboardTheme = normalizeDashboardTheme(localStorage.getItem('cueola_theme'
 function applyDashboardTheme(t) {
   dashboardTheme = normalizeDashboardTheme(t);
   document.documentElement.setAttribute('data-theme', dashboardTheme);
+  try { localStorage.setItem('cueola_theme', dashboardTheme); } catch (e) {}
   document.querySelectorAll('[data-dashboard-theme]').forEach(btn => {
     const active = btn.dataset.dashboardTheme === dashboardTheme;
     btn.classList.toggle('active', active);
@@ -1335,7 +1326,7 @@ function renderDashboardThemeGrid() {
   const grid = document.getElementById('dashboardThemeGrid');
   if (!grid) return;
   grid.innerHTML = DASHBOARD_THEMES.map(theme => `
-    <button type="button" class="theme-swatch" data-dashboard-theme="${theme.key}" onclick="applyDashboardTheme('${theme.key}')" data-tip="${theme.label}" aria-pressed="false">
+    <button type="button" class="theme-swatch" data-dashboard-theme="${theme.key}" onclick="applyDashboardTheme('${theme.key}')" aria-pressed="false">
       <span class="ts-preview" style="background:${theme.bg}"></span>
       <span class="ts-name">${theme.label}</span>
     </button>
@@ -1345,12 +1336,6 @@ function renderDashboardThemeGrid() {
 function openSystemSettings() {
   renderDashboardThemeGrid();
   showModal('modal-system-settings');
-}
-function saveSystemSettings() {
-  localStorage.setItem('cueola_theme', dashboardTheme);
-  showToast('System settings saved.');
-  hideModal('modal-system-settings');
-  if (location.hash === '#modal-system-settings') history.replaceState(null, '', location.pathname + location.search);
 }
 applyDashboardTheme(dashboardTheme);
 
@@ -1540,16 +1525,13 @@ function applySignedOutUI() {
   document.getElementById('sessionsHead').style.display = 'none';
   document.getElementById('superOverview').classList.remove('on');
   document.getElementById('newSessionCard').style.display = 'none';
-  document.getElementById('newSessionBtn').style.display = 'none';
   document.getElementById('testShowBtn').style.display = 'none';
   document.getElementById('switchBtn').style.display = 'none';
-  document.getElementById('accountsNavBtn').style.display = 'none';
   document.getElementById('topAdminName').style.display = 'none';
   document.getElementById('topAdminBadge').style.display = 'none';
   document.getElementById('heroName').textContent = 'Welcome to Cueola';
   document.getElementById('heroSub').textContent = 'Sign in with your instructor account to manage sessions.';
   document.getElementById('stat-sessions').textContent = '—';
-  document.getElementById('stat-cues').textContent = '—';
   document.getElementById('stat-active').textContent = '—';
   // Reset login form
   document.getElementById('login-username').value = '';
@@ -1582,10 +1564,7 @@ function onLoggedIn() {
     roleTag.classList.toggle('super', adminSession.level === 'super');
   }
   document.getElementById('switchBtn').style.display = '';
-  document.getElementById('newSessionBtn').style.display = '';
   document.getElementById('testShowBtn').style.display = '';
-  // v2.1 Phase 4: accounts management is top-level nav for supers.
-  document.getElementById('accountsNavBtn').style.display = adminSession.level === 'super' ? '' : 'none';
   document.getElementById('sessionsHead').style.display = '';
   document.getElementById('newSessionCard').style.display = '';
   initSessionScope();
@@ -2129,8 +2108,6 @@ function renderSessions() {
 function updateStats() {
   const visible = scopedSessions(sessions);
   document.getElementById('stat-sessions').textContent = visible.length;
-  const totalCues = visible.reduce((a,s)=>a+((s.beats||s.cues||[]).length),0);
-  document.getElementById('stat-cues').textContent = totalCues;
   document.getElementById('stat-active').textContent = visible.filter(s=>s.status==='active').length;
 }
 
@@ -2280,15 +2257,15 @@ function genLoginCode() {
 async function mintLoginCode() {
   const label = document.getElementById('newLoginCodeLabel').value.trim();
   const role = document.getElementById('newLoginCodeRole').value === 'admin' ? 'admin' : 'student';
-  if (!label) { showToast('Give the code a label (e.g. the class name).'); return; }
+  if (!label) { showToast('Give the key a label (e.g. the class name).'); return; }
   const code = genLoginCode();
   try {
     await window._setDoc(window._doc(db(), 'accessCodes', code), {
       role, label, active: true, createdBy: adminSession.name, createdAt: Date.now(),
     });
-  } catch (e) { showToast('Mint failed: ' + e.message); return; }
+  } catch (e) { showToast('Could not create the key: ' + e.message); return; }
   document.getElementById('newLoginCodeLabel').value = '';
-  showToast(`Class key ${code} minted. Share it with the class.`);
+  showToast(`Class key ${code} created. Share it with the class.`);
   await loadIdentityAdminData();
 }
 
@@ -2317,7 +2294,7 @@ function renderLoginCodes() {
   const el = document.getElementById('loginCodesList');
   if (!el) return;
   if (!identityCodes.length) {
-    el.innerHTML = '<div class="roster-empty">No class keys yet. Mint one and share it with the class.</div>';
+    el.innerHTML = '<div class="roster-empty">No class keys yet. Create one and share it with the class.</div>';
     return;
   }
   el.innerHTML = identityCodes.map(c => {
@@ -2600,8 +2577,8 @@ function renderAdminOverview() {
         <label class="admin-field-pack">
           <span>Access</span>
           <select class="admin-mini-in" data-admin-id="${escapeHtml(a.uid)}" data-admin-field="level">
-            <option value="standard" ${a.level!=='super'?'selected':''}>Standard</option>
-            <option value="super" ${a.level==='super'?'selected':''}>Super</option>
+            <option value="standard" ${a.level!=='super'?'selected':''}>Instructor</option>
+            <option value="super" ${a.level==='super'?'selected':''}>Super admin</option>
           </select>
         </label>
         <div class="admin-actions-buttons">
@@ -3119,15 +3096,12 @@ async function showDetail(code, e) {
 
   document.getElementById('detail-title').textContent      = s.showName || 'Session Details';
   document.getElementById('detail-code').textContent       = code;
-  document.getElementById('detail-show').textContent       = s.showName || 'Untitled Show';
   document.getElementById('detail-show-input').value       = s.showName || 'Untitled Show';
   document.getElementById('detail-start-input').value      = normalizeTimeValue(s.startTime);
   document.getElementById('detail-owner-input').value      = s.createdBy || '';
   document.getElementById('detail-status-input').value     = s.status || 'idle';
   document.getElementById('detail-entrycode-input').value  = s.requireLoginCode === true ? 'on' : 'off';
-  document.getElementById('detail-start').textContent      = s.startTime ? formatTime12(s.startTime) : 'Not set';
   document.getElementById('detail-cues').textContent       = cueCount + ' cue' + (cueCount!==1?'s':'');
-  document.getElementById('detail-created-by').textContent = s.createdBy || '—';
   // D6: paperwork config renders for everyone, editable only by the owner or
   // a super admin (canManageSession gate = canDeleteSession here).
   renderPaperworkConfigFieldset('detail-paperwork-fieldset', s.prePro?.paperworkEnabled, canDeleteSession(s));
@@ -3614,9 +3588,6 @@ async function saveDetailMetadata(showToastOnSave=true) {
       }
     }
     document.getElementById('detail-title').textContent = nextTitle;
-    document.getElementById('detail-show').textContent = nextTitle;
-    document.getElementById('detail-start').textContent = nextStart ? formatTime12(nextStart) : 'Not set';
-    document.getElementById('detail-created-by').textContent = patch.createdBy || nextOwner || '—';
     renderSessions();
     updateStats();
     renderSuperOverview();

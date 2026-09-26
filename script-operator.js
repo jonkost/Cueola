@@ -6,7 +6,7 @@
   // (OP_INSP_LABELS); the pop-out stops at four tabs, so Screen rides
   // Transport and the editor helpers ride Display & Theme.
   const TAB_LABELS = {
-    transport: 'Transport',
+    transport: 'Playback',
     live: 'Cue & On Air',
     clocks: 'Clocks & Alerts',
     display: 'Display & Theme'
@@ -94,13 +94,13 @@
     }
 
     if (!productionCode || !sessionId || !controllerInstanceId) {
-      setDisconnected('This Script Operator link is missing its production, session, or controller identity.');
+      setDisconnected('This window was opened without a show. Open it from Live.');
       return;
     }
 
     protocol = createProtocolAdapter();
     if (!protocol) {
-      setDisconnected('The Script Operator protocol failed to load. Close this panel and reopen it from Cueola Live.');
+      setDisconnected('Could not start. Reload this window.');
       return;
     }
     try {
@@ -224,7 +224,7 @@
     }
     if (Date.now() - lastControllerSeenAt >= protocol.heartbeatTimeout) {
       protocol.checkHeartbeat();
-      setDisconnected('The Cueola Live window missed three heartbeats. Controls are paused.');
+      setDisconnected('Lost the connection to Live. Controls are paused.');
       // Keep knocking: a reloaded Live window re-creates its host on the SAME
       // channel (persisted controller id) but knows no operator until a READY
       // arrives — without this both sides waited on each other forever.
@@ -292,7 +292,7 @@
       const pending = clearPendingIntent(payload.commandId);
       const result = ackState && typeof ackState === 'object' ? ackState : (payload.result || payload);
       const ok = result.ok !== false && result.accepted !== false;
-      const detail = result.error || result.reason || result.detail || (ok ? 'Command acknowledged' : 'Command failed');
+      const detail = result.error || result.reason || result.detail || (ok ? 'Sent' : 'Not delivered. Try again.');
       // Preview intents are never tracked, so read the ack's own commandType
       // to keep slider preview acks from spamming the status line.
       const ackKind = pending ? pending.kind : String(payload.commandType || '');
@@ -356,13 +356,13 @@
       if (closed || !pendingIntents.has(entry.commandId)) return;
       if (entry.attempts >= COMMAND_MAX_ATTEMPTS) {
         pendingIntents.delete(entry.commandId);
-        setDraftStatus('No command acknowledgement · state unknown', 'error');
+        setDraftStatus('Not delivered. Try again.', 'error');
         console.error('[Script Operator] Command acknowledgement timed out', { commandId:entry.commandId, kind:entry.kind, attempts:entry.attempts });
         return;
       }
       entry.attempts += 1;
       postMessageToController(entry.message);
-      setDraftStatus(`Retrying command · ${entry.attempts}/${COMMAND_MAX_ATTEMPTS}`, 'busy');
+      setDraftStatus(`Sending again (${entry.attempts} of ${COMMAND_MAX_ATTEMPTS})`, 'busy');
       schedulePendingIntent(entry);
     }, COMMAND_RETRY_MS);
   }
@@ -798,7 +798,7 @@
     const techOn = Boolean(first(snapshot, ['techSlateOn', 'techSlate', 'slate.tech', 'prompter.techSlateOn']) ?? false);
     const barsOn = Boolean(first(snapshot, ['colorBarsOn', 'barsOn', 'slate.bars', 'prompter.colorBarsOn']) ?? false);
     patchToggle('techButton', techOn, techOn ? 'slate_tech_off' : 'slate_tech_on', techOn ? 'Back on air' : 'Tech Difficulty', 'techButtonLabel');
-    patchToggle('barsButton', barsOn, barsOn ? 'slate_bars_off' : 'slate_bars_on', barsOn ? 'Back on air' : 'NTSC Bars', 'barsButtonLabel');
+    patchToggle('barsButton', barsOn, barsOn ? 'slate_bars_off' : 'slate_bars_on', barsOn ? 'Back on air' : 'Color bars', 'barsButtonLabel');
 
     questionOn = Boolean(first(snapshot, ['questionOn', 'question', 'alerts.question', 'prompter.questionOn']) ?? false);
     patchToggle('questionButton', questionOn, questionOn ? 'question_off' : 'question_on', questionOn ? 'Clear question' : 'Question', 'questionButtonLabel');
@@ -975,7 +975,6 @@
       pane.classList.toggle('is-active', active);
       pane.hidden = !active;
     });
-    document.getElementById('inspectorCaption').textContent = TAB_LABELS[key];
     if (remember) {
       try { localStorage.setItem('cueola_script_operator_tab', key); } catch {}
     }

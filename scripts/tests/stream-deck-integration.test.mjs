@@ -45,23 +45,17 @@ test('HID delivery consumes renderer-owned bytes and packetization', () => {
   assert.match(app, /Key ['"]? \+ \(i \+ 1\) \+ ['"]? label failed:/);
 });
 
-test('preview and proof use the canonical, upload, and simulated device frames without CSS cancellation', () => {
+test('previews use the canonical, upload, and simulated device frames without CSS cancellation', () => {
   assert.match(app, /const upload = sdLabelRenderer\.createDeviceFrame\(productId, canonical\.canvas\)/);
   assert.match(app, /const simulated = sdLabelRenderer\.createDeviceFrame\(productId, upload\.canvas\)/);
-  assert.match(app, /SIMULATED PHYSICAL DISPLAY/);
-  assert.match(app, /RAW HID JPEG FRAME/);
-  assert.match(app, /Text only/);
-  assert.match(app, /Icon only/);
-  assert.match(app, /Text \+ icon/);
-  assert.match(app, /Multiple lines/);
-  assert.match(app, /Long label/);
-  assert.match(app, /Active state/);
+  // The orientation-proof export and its sample gallery are gone from the sheet.
+  assert.doesNotMatch(app, /og-sd-export|og-sd-proof|orientation proof/);
   const streamDeckCss = css.slice(css.indexOf('/* stream deck */'), css.indexOf('PHASE 4'));
   assert.doesNotMatch(streamDeckCss, /rotate\(/);
 });
 
-test('the operator surface exposes model simulation, per-key previews, errors, and proof export', () => {
-  for (const token of ['og-sd-model', 'og-sdk-preview', 'og-sd-error', 'og-sd-export', 'og-sd-proof-preview']) {
+test('the operator surface exposes model simulation, per-key previews, and errors', () => {
+  for (const token of ['og-sd-model', 'og-sdk-preview', 'og-sd-error']) {
     assert.match(app, new RegExp(token));
   }
   assert.match(app, /does not replace a physical-device check/);
@@ -69,7 +63,7 @@ test('the operator surface exposes model simulation, per-key previews, errors, a
 });
 
 test('state-driven repaint is coalesced and serialized', () => {
-  const refresh = app.slice(app.indexOf('function scheduleStreamDeckRefresh()'), app.indexOf('function buildStreamDeckProofCanvas'));
+  const refresh = app.slice(app.indexOf('function scheduleStreamDeckRefresh()'), app.indexOf('function renderStreamDeck()'));
   assert.match(app, /if \(sdRefreshPromise\) return sdRefreshPromise;/);
   assert.match(refresh, /do \{/);
   assert.match(refresh, /await sdPaintAll\(target\)/);
@@ -107,7 +101,7 @@ test('the meter tick repaints only changed keys through the per-key painter', ()
   assert.match(app, /SD_PROGRESS_STEPS = 20/);
   assert.match(app, /SD_KEY_REPAINT_MS = 200/);
   assert.match(app, /paintMeters\(\); sdReactiveTick\(\);/);
-  const tick = app.slice(app.indexOf('function sdKeySignature'), app.indexOf('function buildStreamDeckProofCanvas'));
+  const tick = app.slice(app.indexOf('function sdKeySignature'), app.indexOf('function renderStreamDeck()'));
   assert.match(tick, /sdPaintKey\(i\)/);
   assert.doesNotMatch(tick, /sdPaintAll/);
   assert.match(tick, /sdKeyBusy\[i\]/);

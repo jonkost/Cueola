@@ -14,7 +14,7 @@
   <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
   <script src="cueola-script-operator-protocol.js?v=414e116aee" defer></script>
   <script src="cueola-scriptop-prefs.js?v=dfcf350611" defer></script>
-  <script src="script-operator.js?v=4ba6f3e531" defer></script>
+  <script src="script-operator.js?v=479680751b" defer></script>
 </head>
 <body>
   <main class="script-operator" id="scriptOperatorRoot">
@@ -53,7 +53,7 @@
             <div class="eyebrow">Live Flowmingo script</div>
             <h1 id="scriptHeading">Script</h1>
           </div>
-          <span class="draft-status" id="draftStatus" role="status" aria-live="polite">Waiting for state</span>
+          <span class="draft-status" id="draftStatus" role="status" aria-live="polite">Waiting for Live…</span>
         </div>
         <textarea class="script-editor" id="scriptEditor" spellcheck="true" aria-label="Live Flowmingo script" placeholder="The live Flowmingo script appears here." data-requires-state></textarea>
         <div class="script-actions" aria-label="Script actions">
@@ -73,34 +73,33 @@
       <section class="inspector" aria-label="Script Operator controls">
         <div class="inspector-head">
           <div class="inspector-tabs" role="tablist" aria-label="Script Operator control groups">
-            <button class="inspector-tab is-active" id="tab-transport" type="button" role="tab" aria-selected="true" aria-controls="pane-transport" data-tab="transport" data-tip="Transport">
+            <button class="inspector-tab is-active" id="tab-transport" type="button" role="tab" aria-selected="true" aria-controls="pane-transport" data-tab="transport" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
-              <span class="visually-hidden">Transport</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Playback</span>
             </button>
-            <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" data-tip="Cue and On Air">
+            <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
-              <span class="visually-hidden">Cue &amp; On Air</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Cue &amp; On Air</span>
             </button>
-            <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" data-tip="Clocks and alerts">
+            <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span>
-              <span class="visually-hidden">Clocks &amp; Alerts</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Clocks &amp; Alerts</span>
             </button>
-            <button class="inspector-tab" id="tab-display" type="button" role="tab" aria-selected="false" aria-controls="pane-display" data-tab="display" data-tip="Display and theme">
+            <button class="inspector-tab" id="tab-display" type="button" role="tab" aria-selected="false" aria-controls="pane-display" data-tab="display" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span>
-              <span class="visually-hidden">Display &amp; Theme</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Display &amp; Theme</span>
             </button>
           </div>
-          <div class="inspector-caption" id="inspectorCaption">Transport</div>
         </div>
 
         <!-- Tab grouping mirrors the in-app operator inspector (OP_INSP_LABELS):
-             Transport / Cue & On Air / Clocks & Alerts / Display & Theme. The
-             in-app Screen group rides the Transport tab here, and the editor
+             Playback (Transport in-app) / Cue & On Air / Clocks & Alerts / Display & Theme. The
+             in-app Screen group rides the Playback tab here, and the editor
              helpers that exist only in this pop-out (Formatting & Markers,
              Panel Text) ride Display & Theme: this layout stops at four tabs. -->
         <div class="inspector-pane is-active" id="pane-transport" role="tabpanel" aria-labelledby="tab-transport" data-pane="transport">
           <section class="control-section">
-            <h2>Transport</h2>
+            <h2>Playback</h2>
             <div class="control-grid one-column">
               <button class="control-button play-button" id="playButton" type="button" data-command-kind="control" data-action="resume" aria-pressed="false" data-requires-state>
                 <span class="sf-symbol" id="playButtonSymbol" data-symbol="media.play" aria-hidden="true"></span>
@@ -119,9 +118,9 @@
             <h2>Screen</h2>
             <div class="control-grid four-column">
               <button class="control-button" type="button" data-command-kind="control" data-action="reset" data-requires-state>Reset</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="hide_interface" data-requires-state>Hide UI</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="hide_interface" data-requires-state>Hide controls</button>
               <button class="control-button" type="button" data-command-kind="control" data-action="mirror" data-state-button="mirrored" data-requires-state>Mirror</button>
-              <button class="control-button" type="button" data-command-kind="control" data-action="fullscreen" data-requires-state>Full</button>
+              <button class="control-button" type="button" data-command-kind="control" data-action="fullscreen" data-requires-state>Fullscreen</button>
             </div>
             <label class="control-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="rowInfoToggle" checked data-requires-state><span>Row info on talent</span></label>
           </section>
@@ -151,18 +150,18 @@
                 <span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span><span id="techButtonLabel">Tech Difficulty</span>
               </button>
               <button class="control-button" id="barsButton" type="button" data-command-kind="control" data-action="slate_bars_on" aria-pressed="false" data-requires-state>
-                <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span id="barsButtonLabel">NTSC Bars</span>
+                <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span id="barsButtonLabel">Color bars</span>
               </button>
             </div>
           </section>
 
           <section class="control-section">
-            <h2>Scrub</h2>
+            <h2>Position</h2>
             <div class="cue-slider-row">
               <button class="step-button" type="button" data-nudge="-3" aria-label="Cue prompter back" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.back" aria-hidden="true"></span></button>
               <input id="seekRange" type="range" min="0" max="100" value="0" data-preview-prefix="seek_set_" aria-label="Cue prompter position" data-requires-state>
               <button class="step-button" type="button" data-nudge="3" aria-label="Cue prompter forward" data-requires-state><span class="sf-symbol" data-symbol="action.nudge.forward" aria-hidden="true"></span></button>
-              <button class="step-button punch-button" type="button" data-punch aria-label="Punch in from this position" data-requires-state><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
+              <button class="step-button punch-button" type="button" data-punch aria-label="Play from here" data-tip="Play from here" data-requires-state><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span></button>
             </div>
             <output class="cue-position" id="seekValue" for="seekRange">0%</output>
           </section>
@@ -217,6 +216,10 @@
               <button class="control-button question-lane-push" id="questionLaneInsert" type="button" data-question-insert data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow" data-requires-state>
                 <span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Into script</span>
               </button>
+            </div>
+            <div class="question-lane" style="align-items:flex-start;margin-top:4px">
+              <p class="section-help" style="flex:1;margin:0">Shows the question to the talent as a card.</p>
+              <p class="section-help" style="flex:1;margin:0">Puts the question into the script at the read line.</p>
             </div>
             <div class="stepper-row">
               <span>Overlay size</span>

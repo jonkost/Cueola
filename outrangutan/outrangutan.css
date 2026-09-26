@@ -940,13 +940,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .og-sdk-preview-missing { display: grid; place-items: center; aspect-ratio: 1; min-height: 72px; border-radius: 8px; background: #05070a; color: var(--text3); font-size: 10px; text-align: center; }
 .og-sdk select { min-height: 44px; background: color-mix(in srgb, var(--s3) 88%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 13%, var(--border)); border: 1px solid transparent; border-radius: var(--ui-radius-control, 12px); color: var(--text); font-size: 11.5px; padding: 7px 6px; width: 100%; min-width: 0; }
 .og-sd-grid .og-bar-btn[disabled] { opacity: .5; pointer-events: none; }
-.og-sd-proof { margin-top: 20px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
-.og-sd-proof h4 { margin: 0; font-family: var(--syne); font-size: 14px; }
-.og-sd-proof p { margin: 5px 0 12px; color: var(--text2); font-size: 12px; line-height: 1.45; }
-.og-sd-proof-grid { display: grid; grid-template-columns: repeat(6, minmax(76px, 1fr)); gap: 12px; }
-.og-sd-proof-sample { display: grid; justify-items: center; gap: 6px; min-width: 0; }
-.og-sd-proof-preview { display: block; width: min(100%, 96px); height: auto; aspect-ratio: 1; border-radius: 8px; background: #05070a; }
-.og-sd-proof-sample span { color: var(--text2); font-size: 10.5px; text-align: center; }
 .og-sd-card :is(select, button):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* MIDI sheet rows */
@@ -1107,7 +1100,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   .og-tools-menu > summary, .og-theme-menu > summary { max-width: calc(100vw - 28px); }
   .og-theme-pop, .og-tools-pop { right: auto; left: 0; }
   .og-sd-device-tools > * { width: 100%; }
-  .og-sd-proof-grid { grid-template-columns: repeat(3, minmax(76px, 1fr)); }
 }
 @media (max-width: 720px) {
   .og-tabs { width: 100%; }

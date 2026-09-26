@@ -2759,7 +2759,6 @@
     if (!blob) return;
     var bytes = new Uint8Array(await blob.arrayBuffer());
     var packets = (v.cmd === 0x0b) ? Device.stripWindowPackets(profile, bytes) : Device.stripImagePackets(profile, bytes);
-    console.log('[KeyWi] strip probe ' + v.n + ': cmd 0x' + v.cmd.toString(16) + ', jpeg ' + (v.rotate ? h + '×' + w : w + '×' + h) + ', ' + bytes.length + ' bytes, ' + packets.length + ' packets');
     // Probe frames must all reach the panel, so no coalescing key here; the
     // queue still serializes them against every other write.
     await queueDeviceWrite(null, async function () {
@@ -3544,7 +3543,7 @@
       + (previewMode ? '<button class="btn-secondary" id="sd-preview-exit">Exit preview</button>' : '')
       // The off-air panic (kills both mics) only makes sense once the talkback
       // daemon exists at all — hidden entirely while Micochondria is parked.
-      + (!micoParked() && (talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" data-tip="Cut both Micochondria mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + (!micoParked() && (talkbackState.connected || device || previewMode) ? '<button class="btn-secondary" id="sd-talkoff" data-tip="Cut both Micochondria mics (Talkback and Voice of the Universe) instantly">All talk off</button>' : '')
       + '</div></div>';
   }
   function statusChip(label, value, cls, id) { return '<div' + (id ? ' id="' + id + '"' : '') + ' class="sd-chip sd-chip-' + cls + '"><span class="sd-chip-l">' + esc(label) + '</span><span class="sd-chip-v">' + esc(value) + '</span></div>'; }
@@ -3556,8 +3555,8 @@
     return '<div class="sd-hero">'
       + '<h3>Any Stream Deck. The whole rig.</h3>'
       + (deckHeldElsewhere ? '<p><b>Another Cueola window is the deck window right now.</b> Connect here to drive the Stream Deck from this window instead; closing the other window also moves it here.</p>' : '')
-      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: ' + apps + ', with saved layouts as pages. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it hogs the USB device.</p>'
-      + '<div class="sd-hero-actions"><button class="btn-primary" id="sd-connect2">Connect deck</button><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button><button class="btn-secondary" id="sd-diag">Diagnostics</button></div>'
+      + '<p>Plug in a deck (Mini to + XL) and KeyWi Bird lays it out by app for its size: ' + apps + ', with saved layouts as pages. Or explore on screen first: preview mode is the full deck with no hardware. Quit the Elgato Stream Deck app before connecting; it is using the deck.</p>'
+      + '<div class="sd-hero-actions"><button class="btn-secondary" id="sd-preview">See it on screen</button><button class="btn-secondary" id="sd-wizard-open">Setup wizard</button></div>'
       + '<div class="sd-hero-checks">'
       + '<span class="sd-ready">Deck</span>'
       + (micoParked() ? '' : '<span class="sd-ready' + (tbOn ? ' on' : '') + '">Micochondria</span>')
@@ -3790,10 +3789,14 @@
       + '<div class="sd-set-sec">Clipboard</div>'
       + '<div class="sd-set-status"><span class="sd-obs-off">The PASTE key reads this machine\'s clipboard, and the browser only allows that after you approve it once. Approve it here so the key never stalls mid-show.</span></div>'
       + '<div class="sd-obs"><button class="sd-mini" id="sd-clip-enable">Enable clipboard</button></div>'
+      + '<div class="sd-set-sec">Diagnostics</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">A report of what the deck itself says it is, for support questions.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini" id="sd-diag-settings">Diagnostics</button></div>'
       + '<div class="sd-save-actions"><button class="btn-primary" id="sd-set-done">Done</button></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-set-done', closeOverlay);
+    bind('sd-diag-settings', function () { closeOverlay(); runDiagnostics(); });
     wireRims(o);
     bind('sd-dialdir-n', function () { setDialFlip(false); });
     bind('sd-dialdir-r', function () { setDialFlip(true); });
@@ -3922,7 +3925,7 @@
       + '<span class="sd-mico-status">' + (on ? 'Connected' : 'Not running') + '</span>'
       + '<span class="sd-pf-sp"></span>'
       + '<button class="sd-mini" id="sd-mico-pop" data-tip="Pop Micochondria out into its own little window">Pop out</button>'
-      + (on ? '<button class="sd-mini danger" id="sd-mico-off" data-tip="Cut both mics (TKB + VofU) instantly">All talk off</button>' : '')
+      + (on ? '<button class="sd-mini danger" id="sd-mico-off" data-tip="Cut both mics (Talkback and Voice of the Universe) instantly">All talk off</button>' : '')
       + '</div>';
     if (on) {
       html += micoStrip('A', 'TKB', 'Talkback · crew · outs 1-2')
@@ -3940,7 +3943,7 @@
       + '<div class="sd-mico-mid"><div class="sd-mico-sub">' + subtitle + '</div>'
       + (talkbackState.hasLevels
         ? '<div class="sd-mico-meter"><div class="sd-mico-meter-fill" data-meter="' + bus + '"></div></div>'
-        : '<div class="sd-mico-sub2">Hold to talk. The lamp is the truth.</div>')
+        : '<div class="sd-mico-sub2">Hold to talk. The key lights up when it is live.</div>')
       + '</div>'
       + (talkbackState.hasGains ? '<input type="range" class="sd-mico-vol" data-vol="' + bus + '" min="0" max="100" value="' + Math.round((gain == null ? 1 : gain) * 100) + '" aria-label="' + name + ' volume">' : '')
       + '<span class="sd-mico-lamp">' + (onAir ? 'ON AIR' : 'off') + '</span>'
@@ -4553,7 +4556,7 @@
 
   function wire() {
     var r = root(); if (!r) return;
-    bind('sd-connect', connect); bind('sd-connect2', connect); bind('sd-disconnect', disconnect);
+    bind('sd-connect', connect); bind('sd-disconnect', disconnect);
     bind('sd-diag', runDiagnostics);
     bind('sd-diag-close', function () { diagInfo = null; render(); });
     bind('sd-diag-copy', function () {
@@ -5031,7 +5034,6 @@
     close();
   });
 
-  try { console.log('[KeyWi] driver r6: per-key appearance, Liquid Glass theme, auto-dim'); } catch (e) {}
   window.CueolaStreamDeck = {
     open: open, close: close, connect: connect, disconnect: disconnect,
     isConnected: function () { return !!device; },

@@ -853,22 +853,17 @@
         delete anonymousName.dataset.profileUsername;
         delete anonymousName.dataset.profileNameKey;
       }
-      strip.hidden = false;
-      strip.innerHTML = '<span class="jis-hint">Have a profile?</span>' +
-        '<button type="button" class="jis-btn" onclick="CueolaIdentity.openSignIn(&quot;' + kind + '&quot;)">Use my username</button>';
+      // Signed-out: no strip. The front door and the profile icon carry sign-in.
+      strip.hidden = true;
+      strip.innerHTML = '';
       return;
     }
     var label = cachedProfile ? cachedProfile.fullName : id.username;
-    var chips = '';
-    if (cachedProfile && Array.isArray(cachedProfile.sessions) && cachedProfile.sessions.length) {
-      chips = '<div class="jis-codes">' + cachedProfile.sessions.slice(0, 6).map(function (c) {
-        var arg = JSON.stringify(String(c)).replace(/"/g, '&quot;');
-        return '<button type="button" class="jis-code" onclick="CueolaIdentity.pickSession(&quot;' + kind + '&quot;,' + arg + ')">' + esc(c) + '</button>';
-      }).join('') + '</div>';
-    }
+    // Session chips used to sit here; the Join modal's "Your sessions" list
+    // already covers one-tap codes, so the strip is just who is joining.
     strip.hidden = false;
     strip.innerHTML = '<span class="jis-who">Joining as <b>' + esc(label) + '</b> <span class="jis-user">@' + esc(id.username) + '</span></span>' +
-      '<button type="button" class="jis-btn" onclick="CueolaIdentity.openHub()">Profile</button>' + chips;
+      '<button type="button" class="jis-btn" onclick="CueolaIdentity.openHub()">Profile</button>';
     var nameIn = document.getElementById(nameId);
     if (nameIn && !nameIn.value && cachedProfile) nameIn.value = cachedProfile.fullName;
     if (nameIn && cachedProfile) decorateJoinNameInput(nameIn, cachedProfile);
@@ -882,16 +877,6 @@
         decorateJoin(kind);
       }).catch(function () {});
     }
-  }
-
-  // A saved-session chip in a join modal: fill the code (and name) for one tap.
-  function pickSession(kind, code) {
-    var codeIn = document.getElementById(kind === 'stud' ? 'stud-code' : 'pp-join-code');
-    if (codeIn) codeIn.value = String(code || '');
-    var nameIn = document.getElementById(kind === 'stud' ? 'stud-name' : 'pp-join-name');
-    if (nameIn && !nameIn.value && cachedProfile) nameIn.value = cachedProfile.fullName;
-    if (nameIn && cachedProfile) decorateJoinNameInput(nameIn, cachedProfile);
-    if (nameIn && !nameIn.value) nameIn.focus();
   }
 
 
@@ -1581,7 +1566,7 @@
       ? '<div class="id-portal-empty">This profile was loaded from offline cache and may be out of date. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>'
       : '';
     if (p._identityMigrationError) {
-      profileWarnings += '<div class="id-portal-empty">Your stable profile identity could not be saved yet. Assignments may be unavailable until cloud access is restored. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>';
+      profileWarnings += '<div class="id-portal-empty">Your profile could not be saved yet. Assignments may be unavailable until you are back online. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>';
     }
     body().innerHTML = profileWarnings +
       '<div class="id-portal-cards" id="id-portal-cards">' +
@@ -1613,7 +1598,7 @@
       if (summary.paperwork.length) badges += '<span class="id-badge paper">' + esc(summary.paperwork.join(', ')) + '</span>';
       if (entry.sessionStatus === 'offline') badges += '<span class="id-badge unseen">Session may be out of date · offline</span>';
       if (entry.assignmentStatus !== 'ok') badges += '<span class="id-badge unseen">' + esc(portalIssueLabel('Assignments', entry.assignmentStatus, false)) + '</span>';
-      else if (summary.assignmentSource === 'legacy') badges += '<span class="id-badge quiet">Legacy assignment · migration pending</span>';
+      else if (summary.assignmentSource === 'legacy') badges += '<span class="id-badge quiet">Old assignment, will update on next save</span>';
       else if (summary.assignmentSource === 'empty') badges += '<span class="id-badge quiet">No crew assignment yet</span>';
       if (entry.notesStatus !== 'ok') badges += '<span class="id-badge unseen">' + esc(portalIssueLabel('Assigned actions', entry.notesStatus, entry.notesFallback)) + '</span>';
       else if (!summary.todos && !summary.unseen) badges += '<span class="id-badge quiet">No open actions or unseen notes</span>';
@@ -1629,7 +1614,7 @@
         (canHideSessions(p)
           ? (hiddenSessionsFor(p).indexOf(String(entry.code).toUpperCase()) >= 0
             ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.unhideSession(' + codeArg + ')" data-tip="Put this session back in your front page and pickers" aria-label="Unhide ' + esc(entry.code) + '">Unhide</button>'
-            : '<button type="button" class="jis-btn" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your front page and pickers on this device" aria-label="Hide ' + esc(entry.code) + '">Hide</button>')
+            : '<button type="button" class="jis-btn" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your front page and pickers on every device you sign in on" aria-label="Hide ' + esc(entry.code) + '">Hide</button>')
           : '') +
         '<button type="button" class="jis-btn jis-remove" onclick="CueolaIdentity.portalRemoveCode(' + codeArg + ')" data-tip="Remove this session from your profile" aria-label="Remove ' + esc(entry.code) + ' from your profile">Remove</button>' +
         '</div></div>';
@@ -1861,7 +1846,7 @@
     var res = await writeHiddenSessions(list, hidden ? { add: c } : { remove: c });
     if (res.ok) say(hidden ? 'Hidden ' + c + ' from your lists on every device.' : c + ' is back in your lists.');
     else if (res.offline) say((hidden ? 'Hidden ' + c : c + ' is back') + ' on this device. It will not follow you to other devices until the cloud is reachable.');
-    else say((hidden ? 'Hidden ' + c : c + ' is back') + ' on this device only. The cloud did not accept the change (the hidden-sessions rules update may not be deployed yet).');
+    else say((hidden ? 'Hidden ' + c : c + ' is back') + ' on this device only. Could not save. Try again in a moment.');
     rerenderHiddenSurfaces();
   }
   function hideSession(code) { setSessionHidden(code, true); }
@@ -1871,7 +1856,7 @@
     frontDoorShowHidden = false;
     var res = await writeHiddenSessions([], null);
     if (res.ok) say('All sessions are back in your lists on every device.');
-    else say('All sessions are back on this device. The cloud did not accept the change yet.');
+    else say('All sessions are back on this device only. Could not save. Try again in a moment.');
     rerenderHiddenSurfaces();
   }
   function toggleHiddenSessions() {
@@ -1983,10 +1968,7 @@
     } else {
       html = '<span class="sf-symbol ea-ico" data-symbol="action.profile" aria-hidden="true"></span>'
         + '<div class="entry-account-text"><div class="entry-account-name">Not signed in</div>'
-        + '<div class="entry-account-sub">Sign in to see your sessions and notes</div></div>'
-        + '<div class="entry-account-actions">'
-        + '<button type="button" class="jis-btn" onclick="' + closeThen('CueolaIdentity.openSignIn()') + '">Sign in</button>'
-        + '</div>';
+        + '<div class="entry-account-sub">Use the profile icon or the front page to sign in</div></div>';
     }
     row.innerHTML = html;
     // Admins only: how many sessions are tucked away on this device, with a
@@ -2105,7 +2087,7 @@
       if (!canHide) return btn;
       var toggle = isHidden
         ? '<button type="button" class="fd-hide" onclick="CueolaIdentity.unhideSession(' + codeArg + ')" data-tip="Put this session back in your lists" aria-label="Unhide ' + esc(m.code) + '">Unhide</button>'
-        : '<button type="button" class="fd-hide" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your lists on this device" aria-label="Hide ' + esc(m.code) + '">Hide</button>';
+        : '<button type="button" class="fd-hide" onclick="CueolaIdentity.hideSession(' + codeArg + ')" data-tip="Hide this session from your lists on every device you sign in on" aria-label="Hide ' + esc(m.code) + '">Hide</button>';
       return '<div class="fd-session-row' + (isHidden ? ' fd-hidden-row' : '') + '">' + btn + toggle + '</div>';
     };
     var rows = [];
@@ -2113,7 +2095,7 @@
     metas.forEach(function (m, i) {
       if (!m) return;
       var isHidden = i >= codes.length;
-      if (isHidden && !hiddenHeaderDone) { rows.push('<div class="fd-hidden-note">Hidden on this device</div>'); hiddenHeaderDone = true; }
+      if (isHidden && !hiddenHeaderDone) { rows.push('<div class="fd-hidden-note">Hidden from your lists</div>'); hiddenHeaderDone = true; }
       rows.push(sessionRow(m, isHidden));
     });
     wrap.innerHTML = rows.length ? rows.join('') : emptyMsg;
@@ -2296,7 +2278,7 @@
     attachSessions: attachSessions, detachSessions: detachSessions, noteJoin: noteJoin,
     entrySatisfied: entrySatisfied, revealEntryCodeRow: revealEntryCodeRow,
     onDeviceAvatarSaved: onDeviceAvatarSaved,
-    decorateJoin: decorateJoin, pickSession: pickSession,
+    decorateJoin: decorateJoin,
     openHub: openHub, openSignIn: openSignIn, renderHub: renderHub, renderSignIn: renderSignIn,
     submitSignIn: submitSignIn, startCreate: startCreate,
     wizardNext: wizardNext, wizardBack: wizardBack, wizardPickAvatar: wizardPickAvatar, wizardPickAvatarBg: wizardPickAvatarBg, wizardFinish: wizardFinish,

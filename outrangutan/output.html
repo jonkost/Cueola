@@ -74,12 +74,12 @@
 
   document.title = 'Outrangutan Output ' + OUTPUT_ID;
   if (!Protocol || !CommandQueue) {
-    waiting.textContent = 'OUTPUT ERROR: protocol unavailable';
+    waiting.textContent = 'This output window could not start. Close it and open it again from Outrangutan.';
     waiting.style.color = '#a33';
     return;
   }
   if (!PRODUCTION_SESSION_ID || !CONTROLLER_INSTANCE_ID) {
-    waiting.textContent = 'OUTPUT ERROR: session identity missing';
+    waiting.textContent = 'This window was opened without a show. Open it from Outrangutan.';
     waiting.style.color = '#a33';
     return;
   }
@@ -796,7 +796,7 @@
         return { ok: true };
       case 'replaced':
         clearProgram();
-        waiting.textContent = 'OUTPUT REPLACED: close this window';
+        waiting.textContent = 'Another output window took over. You can close this one.';
         waiting.style.display = 'grid';
         runtime.recoverability = 'unrecoverable';
         return { ok: true };
