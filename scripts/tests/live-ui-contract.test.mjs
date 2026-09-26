@@ -452,6 +452,7 @@ test('pre-roll countdown then take: one per-cue count, an abort window, publishe
   // The cue editor: "Roll this clip on TAKE" + a bounded pre-roll field that
   // saveCueConfig persists; old CALL cells migrate to the 3 s they used to get.
   assert.match(app, /id="cc-out-auto" \$\{d\.outAuto \? 'checked' : ''\}> Roll this clip on TAKE<\/label>/);
+  assert.doesNotMatch(app, /fireOutrangutanFromModal|cc-out-fire/);   // no fire buttons in the editor; Live has them
   assert.match(app, /<input class="field-in cc-time-in" id="cc-out-preroll" type="number" min="0" max="60" step="1"/);
   const save = app.slice(app.indexOf('function saveCueConfig()'), app.indexOf('function removeCueCfg()'));
   assert.match(save, /const preRoll = Math\.max\(0, Math\.min\(60, Math\.round\(Number\(document\.getElementById\('cc-out-preroll'\)\?\.value\) \|\| 0\)\)\);\n\s+d\.preRoll = preRoll;/);

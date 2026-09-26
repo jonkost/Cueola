@@ -42,7 +42,7 @@ const ed = await page.evaluate(() => ({
   title: document.getElementById('cueConfigTitle').textContent.trim(),
 }));
 if (shots) await page.screenshot({ path: join(shots, 'shot-editor-video.png') });
-check('video editor: READY/TAKE plus three pickers, no tabs', ed.open && !ed.tabs && ed.sections.join(',') === 'Camera or source,Shot (optional),How it goes on air (optional)', ed.sections.join(','));
+check('video editor: READY/TAKE plus three pickers, no tabs', ed.open && !ed.tabs && ed.sections.join(',') === 'Camera,Shot (optional),Transition (optional)', ed.sections.join(','));
 check('video editor has under 30 controls (was 47)', ed.controls < 30, String(ed.controls));
 check('editor title and lines carry ⓘ buttons', ed.info >= 2 && /Camera cue/.test(ed.title), ed.title);
 
@@ -75,20 +75,20 @@ await page.evaluate(() => openCueConfig(beats[2].id, 'script'));
 await page.waitForTimeout(200);
 const sc = await page.evaluate(() => ({ text: document.getElementById('cc-s-text').value.slice(0, 20), sections: [...document.querySelectorAll('#cueConfigFields .cc-section-lbl')].map(l => l.textContent.trim()), on: document.getElementById('cc-on-text').value }));
 if (shots) await page.screenshot({ path: join(shots, 'shot-editor-script.png') });
-check('script editor: who reads + the words, existing lines kept', sc.sections.join() === 'Who reads it' && sc.text.startsWith('Good evening') && sc.on === 'Standby Host', JSON.stringify(sc));
+check('script editor: who reads + the words, existing lines kept', sc.sections.join() === 'Speaker' && sc.text.startsWith('Good evening') && sc.on === 'Standby Host', JSON.stringify(sc));
 await page.evaluate(() => hideModal('cueConfigModal'));
 
 // Playback cell keeps its link block (Roll this clip on TAKE + pre-roll) and
 // a saved cell keeps every field it had.
 await page.evaluate(() => { beats[4].cues.playback.outCueId = 'cue_x'; beats[4].cues.playback.outAuto = true; beats[4].cues.playback.preRoll = 3; openCueConfig(beats[4].id, 'playback'); });
 await page.waitForTimeout(200);
-const pb = await page.evaluate(() => ({ auto: document.getElementById('cc-out-auto')?.checked, pre: document.getElementById('cc-out-preroll')?.value, clip: document.getElementById('ccp-clip')?.value, guided: !!document.getElementById('cc-guided-prep') }));
-check('playback editor: clip field, link block with pre-roll, no guided rows', pb.auto === true && pb.pre === '3' && !pb.guided, JSON.stringify(pb));
+const pb = await page.evaluate(() => ({ auto: document.getElementById('cc-out-auto')?.checked, pre: document.getElementById('cc-out-preroll')?.value, clip: document.getElementById('ccp-clip')?.value, guided: !!document.getElementById('cc-guided-prep'), folded: document.querySelector('.cc-outrangutan')?.open === true, fire: !!document.getElementById('cc-out-fire') }));
+check('playback editor: clip field; link block folded open only because it is linked; no fire buttons, no guided rows', pb.auto === true && pb.pre === '3' && !pb.guided && pb.folded && !pb.fire, JSON.stringify(pb));
 await page.fill('#ccp-clip', 'SC_042_v2');
 await page.tap('#cueConfigModal .btn-primary');
 await page.waitForTimeout(200);
 const pbs = await page.evaluate(() => beats[4].cues.playback);
-check('playback save keeps the link and pre-roll, updates clip and lines', pbs.outCueId === 'cue_x' && pbs.outAuto === true && pbs.preRoll === 3 && pbs.clip === 'SC_042_v2' && pbs.on === 'Ready SC_042_v2' && pbs.off === 'Roll SC_042_v2', JSON.stringify(pbs));
+check('playback save keeps the link and pre-roll, updates clip and the ROLL line; the OUT line stays as typed', pbs.outCueId === 'cue_x' && pbs.outAuto === true && pbs.preRoll === 3 && pbs.clip === 'SC_042_v2' && pbs.on === 'Roll SC_042_v2' && pbs.off === 'Roll SC_042', JSON.stringify(pbs));
 check('no helper rows were generated', await page.evaluate(() => !beats.some(b => b.helperFor)));
 
 // Add a row: one screen, name + kind + duration + first cue, one button.
@@ -109,7 +109,7 @@ await page.tap('#ccp-action-chips .cc-chip:first-child');
 await page.tap('#cueConfigModal .btn-primary');
 await page.waitForTimeout(200);
 const au = await page.evaluate(() => beats[beats.length - 1].cues.audio);
-check('audio cue from the add flow: 4 taps to a finished cell', au.on === 'Ready Host' && au.off === 'Open Host', JSON.stringify(au));
+check('audio cue from the add flow: 4 taps to a finished cell', au.on === 'Standby Host' && au.off === 'Open Host', JSON.stringify(au));
 
 // Segment kind hides duration and first cue.
 await page.evaluate(() => { openAddRow(); arSelectStyle('segment'); });

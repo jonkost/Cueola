@@ -598,6 +598,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cc-pickers-hint{font-size:12.5px;line-height:1.5;color:var(--text2)}
 .cc-pickers .cc-section{margin:0}
 .cc-pickers .cc-chip{min-height:38px}
+.cc-more{border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:10px;padding:0 12px;margin:0 0 14px}
+.cc-more>summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 0;cursor:pointer;list-style:none;font-size:13px;color:var(--text2)}
+.cc-more>summary::-webkit-details-marker{display:none}
+.cc-more>summary::before{content:'▸';font-size:11px;color:var(--text3);flex-shrink:0}
+.cc-more[open]>summary::before{content:'▾'}
+.cc-more-title{font-weight:700;color:var(--text);white-space:nowrap}
+.cc-more-state{flex:1;min-width:0;font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-more>*:not(summary){margin-bottom:12px}
+.cc-more .cc-trigger-auto{margin-top:0}
 .cc-upload{cursor:pointer}
 .ar-panel .ar-cue-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .ar-cue-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:52px;padding:8px 12px;white-space:normal;text-align:left;font-family:var(--sans);font-size:13px;font-weight:600}
@@ -7382,7 +7391,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=356f517c35"></script>
+<script src="cueola-app.js?v=a60f3980ac"></script>
 <script src="outrangutan/outrangutan.js?v=6e2583a2cd"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

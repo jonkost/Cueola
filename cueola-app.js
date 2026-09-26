@@ -7560,7 +7560,7 @@ const INFO_POPS = {
   'playback-call': {
     title: 'Rolling a clip on TAKE',
     lesson: 'cueola-live', section: 'steps',
-    body: 'Link this cue to a playback clip and tick <b>Roll this clip on TAKE</b>. When the director takes the cue, the clip rolls. <b>Pre-roll</b> is a countdown before it is on air (0 means at once); everyone sees the count. <b>S</b> cancels the count so nothing rolls; <b>G</b> rolls it now.',
+    body: 'Pick the playback cue this clip lives in and tick <b>Roll this clip on TAKE</b>. When the director takes the row, the clip rolls by itself. <b>Pre-roll</b> is a countdown before it is on air (0 means at once); everyone sees the count. <b>S</b> cancels the count so nothing rolls; <b>G</b> rolls it now.',
   },
   'export-package': {
     title: 'What’s in the export',
@@ -7657,14 +7657,14 @@ const INFO_POPS = {
   },
 };
 Object.assign(INFO_POPS, {
-  'cue-ready-take': { title: 'READY and TAKE', lesson: 'cueola-build', section: 'know',
-    body: '<b>READY</b> is what the operator sets up before the moment: frame the shot, load the graphic, cue the clip. <b>TAKE</b> is the go: it puts the thing on air. The director says both out loud, in that order. Pick from the buttons below to fill both lines, or type them the way you would say them.' },
+  'cue-ready-take': { title: 'The two lines', lesson: 'cueola-build', section: 'know',
+    body: 'Every cue is two beats the director says out loud, in order. The first line sets it up (READY a camera, STANDBY a mic or a look, ROLL a clip). The second line is the go (TAKE the camera, GO on the mic or the look, CUE the talent). Each department has its own words for the two beats, and the labels here use them. Pick from the buttons to fill both lines, or type them the way you would say them.' },
   'cue-cell-video': { title: 'Camera cues', lesson: 'cueola-build', section: 'steps', body: 'Which camera goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer.' },
-  'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'A mic opens or closes. Music goes up to full or under the voices. Fade in and Fade out are gradual.' },
-  'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'A clip that rolls: a package, a bumper, an open. Link it to a playback cue below and it rolls by itself on TAKE; pre-roll is a countdown before it is on air.' },
+  'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'STANDBY names the source that is next. GO is what happens to it: a mic opens or closes, music goes up to full or under the voices.' },
+  'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'ROLL is how the clip starts. OUT is the plan for getting out when it ends (back to a camera, roll the next clip). Link the clip under More and it rolls by itself when the director takes the row; pre-roll is a countdown before it is on air.' },
   'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. Type what it reads so the graphics operator can build it.' },
-  'cue-cell-lighting': { title: 'Lighting cues', lesson: 'cueola-build', section: 'steps', body: 'A look is one lighting state, or a cue number on the board. READY has it standing by; TAKE goes to it.' },
-  'cue-cell-script': { title: 'Script cues', lesson: 'cueola-build', section: 'steps', body: 'Who reads, and the words they read. The words show big on the prompter; the READY and TAKE lines are what the floor crew hears.' },
+  'cue-cell-lighting': { title: 'Lighting cues', lesson: 'cueola-build', section: 'steps', body: 'A look is one lighting state, or a cue number on the board. STANDBY has it ready on the board; GO goes to it.' },
+  'cue-cell-script': { title: 'Script cues', lesson: 'cueola-build', section: 'steps', body: 'Who reads, and the words they read. STANDBY warns the talent; CUE is their go. The words show big on the prompter.' },
   'add-row': { title: 'Rows and cues', lesson: 'cueola-build', section: 'know', body: 'A row is one moment of the show, with a name and a length. Each row can hold one cue per department (camera, audio, playback, graphic, lighting, script). A segment is a section title that groups rows; it is never taken.' },
 });
 let _infoPopOpenId = '';
@@ -8291,81 +8291,89 @@ function buildFreeTextCueFields(type, d) {
 }
 
 // What each department's pickers are and how they become the two lines.
+// The two lines are the same two beats everywhere (set it up, then go), but
+// every department has its own words for them, and the editor uses those.
 const CUE_EDITOR = {
   video: {
     title: 'Camera',
+    lines: { ready: 'READY', readyHint: 'frame it', take: 'TAKE', takeHint: 'put it on air', readyEg: 'Ready CAM 1 · Wide', takeEg: 'Take CAM 1' },
     pickers: [
-      { key:'src',   label:'Camera or source', chips: () => getSources('video'), custom:'Type another source' },
-      { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','CU','ECU','2-shot','OTS','POV'], optional:true },
-      { key:'trans', label:'How it goes on air', chips: () => ['Take','Dissolve','Wipe','Fade'], optional:true },
+      { key:'src',   label:'Camera', chips: () => getSources('video'), custom:'Another source' },
+      { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','Close-up','2-shot','OTS'], optional:true },
+      { key:'trans', label:'Transition', chips: () => ['Take','Dissolve','Wipe'], optional:true },
     ],
     ready: p => p.src ? `Ready ${p.src}${p.shot ? ` · ${p.shot}` : ''}` : '',
     take:  p => p.src ? `${p.trans || 'Take'} ${p.src}` : '',
-    hint: 'Pick the camera, then the shot. READY tells the operator to frame it; TAKE puts it on air.',
+    hint: 'Pick the camera, then the shot.',
   },
   audio: {
     title: 'Audio',
+    lines: { ready: 'STANDBY', readyHint: 'what is next', take: 'GO', takeHint: 'what happens', readyEg: 'Standby Host mic', takeEg: 'Open Host mic' },
     pickers: [
-      { key:'src',    label:'Mic or music', chips: () => getSources('audio'), custom:'Type another source' },
-      { key:'action', label:'What happens', chips: () => ['Open','Close','Under','Up','Fade in','Fade out'] },
+      { key:'src',    label:'Source', chips: () => getSources('audio'), custom:'Another source' },
+      { key:'action', label:'Action', chips: () => ['Open','Close','Up','Under'] },
     ],
-    ready: p => p.src ? `Ready ${p.src}` : '',
+    ready: p => p.src ? `Standby ${p.src}` : '',
     take:  p => p.src ? `${p.action || 'Open'} ${p.src}` : '',
-    hint: 'Pick the source, then what happens to it. Open and Close are mics; Under and Up are music levels.',
+    hint: 'Open and Close are mics. Up and Under are music levels.',
   },
   playback: {
     title: 'Playback',
+    lines: { ready: 'ROLL', readyHint: 'how it starts', take: 'OUT', takeHint: 'how it ends', readyEg: 'Roll SHOW_OPEN', takeEg: 'Back to CAM 1' },
     pickers: [
-      { key:'clip', label:'Clip', input:'e.g. SC_042 or SHOW_OPEN', store:'clip' },
+      { key:'clip', label:'Clip', input:'e.g. SHOW_OPEN or SC_042', store:'clip' },
+      { key:'out',  label:'Out', chips: () => ['Back to camera','Roll next','Fade out','Hold last frame'], optional:true },
     ],
-    ready: p => p.clip ? `Ready ${p.clip}` : '',
-    take:  p => p.clip ? `Roll ${p.clip}` : '',
-    hint: 'Name the clip. READY cues it up; TAKE rolls it. Link it to a playback cue below and it rolls by itself on TAKE.',
+    ready: p => p.clip ? `Roll ${p.clip}` : '',
+    take:  p => p.out || '',
+    hint: 'Name the clip. Link it below and it rolls by itself on TAKE.',
   },
   gfx: {
     title: 'Graphic',
+    lines: { ready: 'READY', readyHint: 'load it', take: 'TAKE', takeHint: 'put it on screen', readyEg: 'Ready Lower third: Jane Doe', takeEg: 'Take Lower third' },
     pickers: [
-      { key:'name', label:'Graphic', chips: () => ['Lower third','Full screen','Bug','Credits'], custom:'Type another graphic', store:'customType' },
+      { key:'name', label:'Graphic', chips: () => ['Lower third','Full screen','Bug','Credits'], custom:'Another graphic', store:'customType' },
       { key:'text', label:'On-screen text', input:'e.g. Jane Doe · Student Council', optional:true, store:'gfxContent' },
     ],
     ready: p => p.name ? `Ready ${p.name}${p.text ? `: ${p.text}` : ''}` : '',
     take:  p => p.name ? `Take ${p.name}` : '',
-    hint: 'Pick the kind of graphic and type what it reads. READY loads it; TAKE puts it on screen.',
+    hint: 'Pick the kind of graphic and type what it reads.',
   },
   lighting: {
     title: 'Lighting',
+    lines: { ready: 'STANDBY', readyHint: 'the next look', take: 'GO', takeHint: 'go to it', readyEg: 'Standby Warm wash', takeEg: 'Go Warm wash' },
     pickers: [
-      { key:'look', label:'Look', chips: () => ['Warm wash','Desk key','Interview','House up','Blackout'], custom:'Type a look or a board cue number' },
+      { key:'look', label:'Look', chips: () => ['Warm wash','Desk key','Interview','House up','Blackout'], custom:'Another look, or a board cue number' },
     ],
-    ready: p => p.look ? `Ready ${p.look}` : '',
+    ready: p => p.look ? `Standby ${p.look}` : '',
     take:  p => p.look ? `Go ${p.look}` : '',
-    hint: 'A look is one lighting state. READY has it standing by on the board; TAKE goes to it.',
+    hint: 'A look is one lighting state.',
   },
   script: {
     title: 'Script',
+    lines: { ready: 'STANDBY', readyHint: 'who is next', take: 'CUE', takeHint: 'they start', readyEg: 'Standby Host', takeEg: 'Cue Host' },
     pickers: [
-      { key:'who', label:'Who reads it', chips: () => [...getSources('scriptWho'), 'Narrator', 'Anchor'], custom:'Type a name', store:'speaker' },
+      { key:'who', label:'Speaker', chips: () => getSources('scriptWho'), custom:'Another name', store:'speaker' },
     ],
     ready: p => p.who ? `Standby ${p.who}` : '',
     take:  p => p.who ? `Cue ${p.who}` : '',
-    hint: 'Pick who reads. The words they read go in the script box; the prompter shows those big.',
+    hint: 'Pick who reads. Their words go in the box below.',
   },
 };
 
 function ccLinesHTML(type, d) {
   const onVal  = d.on  !== undefined ? d.on  : (d.take  || '');
   const offVal = d.off !== undefined ? d.off : (d.ready || '');
-  const isScript = type === 'script';
-  const isPlayback = type === 'playback';
+  const L = CUE_EDITOR[type]?.lines || { ready: 'READY', readyHint: 'set it up', take: 'TAKE', takeHint: 'go', readyEg: '', takeEg: '' };
   return `
     <div class="cc-lines">
       <div class="field">
-        <div class="field-lbl-row"><label class="field-lbl cc-result-lbl" for="cc-on-text">${sfIcon('marker.ready')} ${isPlayback ? 'READY (cue it up)' : 'READY (set it up)'}</label>${infoBtn('cue-ready-take', 'READY and TAKE')}</div>
-        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="${isScript ? 'e.g. Standby Host' : 'e.g. Ready CAM 1 · Wide'}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
+        <div class="field-lbl-row"><label class="field-lbl cc-result-lbl" for="cc-on-text">${sfIcon('marker.ready')} ${esc(L.ready)} <span class="lbl-hint">(${esc(L.readyHint)})</span></label>${infoBtn('cue-ready-take', 'the two lines')}</div>
+        <input class="field-in cc-result-in" id="cc-on-text" value="${esc(onVal)}" placeholder="${esc(L.readyEg ? `e.g. ${L.readyEg}` : '')}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
       </div>
       <div class="field">
-        <label class="field-lbl cc-result-lbl" for="cc-off-text">${sfIcon('marker.go')} ${isPlayback ? 'TAKE (roll it)' : 'TAKE (put it on air)'}</label>
-        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="${isScript ? 'e.g. Cue Host' : 'e.g. Take CAM 1'}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
+        <label class="field-lbl cc-result-lbl" for="cc-off-text">${sfIcon('marker.go')} ${esc(L.take)} <span class="lbl-hint">(${esc(L.takeHint)})</span></label>
+        <input class="field-in cc-result-in" id="cc-off-text" value="${esc(offVal)}" placeholder="${esc(L.takeEg ? `e.g. ${L.takeEg}` : '')}" maxlength="120" autocomplete="off" oninput="_ccLinesTouched=true">
       </div>
     </div>`;
 }
@@ -9037,12 +9045,18 @@ function outrangutanCueFields(type, d) {
   d = d || {};
   const emptyCues = !Object.keys(outrangutanState.cues || {}).length;
   const emptyPads = !Object.keys(outrangutanState.pads || {}).length;
+  const linked = Boolean(d.outCueId || d.outCueName || d.outPadId || d.outPadName);
+  const cueName = d.outCueId ? ((outrangutanState.cues || {})[d.outCueId]?.name || d.outCueName || 'a playback cue') : (d.outCueName || '');
+  const padName = d.outPadId ? ((outrangutanState.pads || {})[d.outPadId]?.name || d.outPadName || 'an SFX pad') : (d.outPadName || '');
+  const summary = type === 'playback'
+    ? (cueName ? `Linked to ${cueName}${d.outAuto ? ' · rolls on TAKE' : ''}${Number(d.preRoll) > 0 ? ` · ${Number(d.preRoll)} s pre-roll` : ''}` : 'Link the clip so it rolls by itself')
+    : (padName ? `SFX: ${padName}${d.outPadAuto ? ' · fires on TAKE' : ''}` : 'Link an SFX pad');
   const cuePart = type !== 'playback' ? '' : `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
-          <label class="field-lbl">Link to an Outrangutan cue</label>
+          <label class="field-lbl" for="cc-out-cue">Playback cue</label>
           <select class="field-in" id="cc-out-cue">${outrangutanCueOptions(d.outCueId || '', d.outCueName || '')}</select>
-          ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this session to list its cues.</div>` : ''}
+          ${emptyCues ? `<div class="cc-out-hint">Open Outrangutan in this show to list its cues.</div>` : ''}
         </div>
       </div>
       <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-auto" ${d.outAuto ? 'checked' : ''}> Roll this clip on TAKE</label>
@@ -9054,22 +9068,18 @@ function outrangutanCueFields(type, d) {
   const sfxPart = `
       <div class="cc-trigger-row">
         <div class="cc-trigger-cue-field u-flex1">
-          <label class="field-lbl">SFX pad</label>
+          <label class="field-lbl" for="cc-out-pad">SFX pad</label>
           <select class="field-in" id="cc-out-pad">${outrangutanPadOptions(d.outPadId || '', d.outPadName || '')}</select>
           ${emptyPads ? `<div class="cc-out-hint">Assign pads on Outrangutan's SFX board to list them here.</div>` : ''}
         </div>
       </div>
-      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Auto-fire SFX when this row advances live</label>`;
+      <label class="cc-check cc-trigger-auto"><input type="checkbox" id="cc-out-pad-auto" ${d.outPadAuto ? 'checked' : ''}> Fire this SFX on TAKE</label>`;
   return `
-    <div class="field cc-trigger cc-outrangutan">
-      <div class="cc-section-lbl cc-trigger-head"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Outrangutan ${type === 'playback' ? 'playback' : 'SFX'} <span class="cc-trigger-optional">(optional)</span>${type === 'playback' ? `<button type="button" class="info-btn" aria-label="How the playback call works" onclick="toggleInfoPop(event,'playback-call')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>` : ''}</div>
+    <details class="cc-more cc-outrangutan"${linked ? ' open' : ''}>
+      <summary><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span><span class="cc-more-title">${type === 'playback' ? 'Link to playback' : 'Link an SFX pad'} <span class="cc-trigger-optional">(optional)</span></span><span class="cc-more-state">${esc(summary)}</span>${type === 'playback' ? infoBtn('playback-call', 'how the playback link works') : ''}</summary>
       ${cuePart}
       ${sfxPart}
-      <div class="cc-trigger-actions">
-        ${type === 'playback' ? `<button type="button" class="cc-trigger-fire" id="cc-out-fire" onclick="fireOutrangutanFromModal()" data-tip="Really plays the cue in Outrangutan right now, skipping the call"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire in Outrangutan now</button>` : ''}
-        <button type="button" class="cc-trigger-fire" id="cc-out-fire-sfx" onclick="fireOutrangutanSfxFromModal()"><span class="cc-out-glyph"><svg class="brand-ico"><use href="#ic-outrangutan"/></svg></span> Fire SFX now</button>
-      </div>
-    </div>`;
+    </details>`;
 }
 
 // Core writer: push a fire command to the session doc for Outrangutan to consume.
@@ -9289,18 +9299,6 @@ function outrangutanSendToast(kind) {
   toast(outrangutanEverConnected()
     ? `Outrangutan: ${kind} sent.`
     : `${kind} queued. Open Outrangutan on the playout machine to receive it.`);
-}
-
-function fireOutrangutanFromModal() {
-  const outCue = document.getElementById('cc-out-cue')?.value || '';
-  if (!outCue) { toast('Link an Outrangutan cue first.'); return; }
-  if (fireOutrangutanCommand('cue', outCue)) outrangutanSendToast('GO');
-}
-
-function fireOutrangutanSfxFromModal() {
-  const outPad = document.getElementById('cc-out-pad')?.value || '';
-  if (!outPad) { toast('Link an SFX pad first.'); return; }
-  if (fireOutrangutanCommand('pad', outPad)) outrangutanSendToast('SFX');
 }
 
 // P5: playout transport from the live-screen keymap — same-tab fast path first,
@@ -12600,6 +12598,18 @@ const LIVE_CUE_OPERATION_OVERRIDES = Object.freeze({
   playback: Object.freeze({
     ready:{ label:'ROLL', title:'Roll cue: how the playback starts' },
     take:{ label:'OUT', title:'Out cue: the plan for getting out' },
+  }),
+  audio: Object.freeze({
+    ready:{ label:'STANDBY', title:'Standby: the source that is next' },
+    take:{ label:'GO', title:'Go: what happens to it' },
+  }),
+  lighting: Object.freeze({
+    ready:{ label:'STANDBY', title:'Standby: the next look' },
+    take:{ label:'GO', title:'Go: go to the look' },
+  }),
+  script: Object.freeze({
+    ready:{ label:'STANDBY', title:'Standby: who reads next' },
+    take:{ label:'CUE', title:'Cue: the talent starts' },
   }),
 });
 
