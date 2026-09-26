@@ -123,8 +123,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .entry-theme-info{margin-top:12px;padding-top:12px;border-top: 1px solid transparent;display:grid;gap:9px}
 .entry-theme-info-row{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:8px;color:var(--text2);font-size:12px;line-height:1.42}
 .entry-theme-info-row .sf-symbol{font-size:16px;color:var(--accent);margin-top:1px}
-.entry-theme-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--s2) 70%,transparent);border: 1px solid transparent;font:700 11px/1.25 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
-.entry-theme-meta b{color:var(--text);font-weight:800}
 
 .entry-theme-panel .theme-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .entry-theme-panel .theme-swatch{min-width:0;padding:8px 4px}
@@ -1012,6 +1010,11 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .field-action-btn.on{border-color:transparent;background:color-mix(in srgb,var(--accent) 20%,var(--s2));color:var(--text)}
 .field-in:disabled{opacity:.72;color:var(--text2);cursor:not-allowed;background:color-mix(in srgb,var(--s2) 70%,var(--bg))}
 .field-hint{font-size:11px;color:var(--text3);line-height:1.5}
+/* Read-only value copied from another sheet (schedule show-day fields follow the call sheet). */
+.field-static{min-height:38px;display:flex;align-items:center;padding:8px 10px;border-radius:var(--ui-radius-control,10px);background:color-mix(in srgb,var(--s2) 60%,transparent);color:var(--text2);font-size:13px;line-height:1.4;word-break:break-word}
+.field-static.is-empty{color:var(--text3)}
+.field-link-btn{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
+.field-link-btn:hover{color:var(--text)}
 
 .modal-err{font-size:13px;color:var(--red);background:color-mix(in srgb,var(--red) 10%,transparent);border:1px solid transparent;border-radius:9px;padding:10px 13px;display:none;font-weight:500}
 .ws-screen-row{display:flex;gap:8px;align-items:center}
@@ -1076,6 +1079,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 	.guide-modal{max-width:1040px!important;height:min(92vh,860px);max-height:92vh;padding:0!important;overflow:hidden}
 	.guide-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:start;padding:20px 22px;border-bottom: 1px solid transparent;background:linear-gradient(180deg,var(--s1),color-mix(in srgb,var(--s2) 82%,transparent))}
 	.guide-kicker{font-size:10px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+	.guide-version{margin-top:8px;font-size:10.5px;font-family:var(--mono);color:var(--text3)}
 	.guide-sub{font-size:13px;color:var(--text2);line-height:1.55;max-width:660px}
 	.guide-close{width:36px;height:36px;border-radius:9px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);font-size:20px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 	.guide-close:hover{color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
@@ -4343,13 +4347,6 @@ input.pt-range::-moz-range-thumb,
   justify-self:start;
   margin-top:0;
 }
-.entry-theme-meta{
-  min-height:30px;
-  padding:4px 8px 4px 36px;
-  border:0;
-  border-radius:0;
-  background:transparent;
-}
 .pb-modal-body{position:relative}
 .plandabear-settings-btn{width:40px;height:40px;border-radius:50%}
 .plandabear-settings-btn .sf-symbol{font-size:22px}
@@ -5050,7 +5047,6 @@ input.pt-range::-moz-range-thumb,
                 <a class="license-link" href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">Full license text</a>
               </div>
             </details>
-            <div class="entry-theme-meta"><span>Cueola</span><b>v3.0.0</b></div>
           </div>
         </div>
       </div>
@@ -5169,7 +5165,6 @@ input.pt-range::-moz-range-thumb,
       <div class="smeta"><span class="smeta-lbl">Start</span><span class="smeta-val" id="rd-start">—</span></div>
       <div class="smeta"><span class="smeta-lbl">Duration</span><span class="smeta-val warn" id="rd-dur">—</span></div>
       <div class="smeta"><span class="smeta-lbl">End</span><span class="smeta-val ok" id="rd-end">—</span></div>
-      <div class="smeta"><span class="smeta-lbl">Rows</span><span class="smeta-val" id="rd-count">0</span></div>
     </div>
   </div>
   <div class="prog"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
@@ -5650,6 +5645,7 @@ input.pt-range::-moz-range-thumb,
         <div class="guide-kicker">Self-guided training</div>
         <div class="modal-title">Cueola Learning Hub</div>
         <div class="guide-sub">Short lessons for getting from blank show to live rundown, Planda Bear paperwork, Flowmingo prompting, Outrangutan playback, and the KeyWi Bird deck without needing outside support.</div>
+        <div class="guide-version" id="guide-version">Cueola v3.0.0</div>
         <div class="guide-voice-panel">
           <button type="button" class="guide-voice-btn tts-toggle-btn" id="guideTtsBtn" onclick="toggleTTS()" aria-label="Turn on voice over" aria-pressed="false">Voice Over Off</button>
           <button type="button" class="guide-voice-replay" id="guideReplayVoiceBtn" onclick="replayCurrentLearningVO()">Replay Lesson</button>
@@ -5911,15 +5907,9 @@ input.pt-range::-moz-range-thumb,
           </div>
           <button type="button" class="wx-fetch-btn" id="pp-weather-fetch-btn" onclick="fetchCallSheetWeather()"><span id="pp-weather-ico"><span class="sf-symbol" data-symbol="weather.default" aria-hidden="true"></span></span> Get forecast</button>
         </div>
-        <div class="wx-status" id="pp-weather-status">Auto-fills from your location and shoot date. You can edit anything below.</div>
+        <div class="wx-status" id="pp-weather-status">Auto-fills from your location and shoot date. Edit the line below if it is wrong.</div>
         <div class="wx-grid">
-          <label class="wx-field wx-wide"><span><span class="sf-symbol" data-symbol="weather.default" aria-hidden="true"></span> Conditions</span><input id="pp-wx-conditions" class="field-in" maxlength="60" placeholder="e.g. Partly cloudy" oninput="onCallSheetWeatherInput('conditions',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.temp" aria-hidden="true"></span> High</span><input id="pp-wx-high" class="field-in" maxlength="8" placeholder="72°" oninput="onCallSheetWeatherInput('high',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.temp" aria-hidden="true"></span> Low</span><input id="pp-wx-low" class="field-in" maxlength="8" placeholder="58°" oninput="onCallSheetWeatherInput('low',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.precip" aria-hidden="true"></span> Precip</span><input id="pp-wx-precip" class="field-in" maxlength="8" placeholder="20%" oninput="onCallSheetWeatherInput('precip',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.wind" aria-hidden="true"></span> Wind</span><input id="pp-wx-wind" class="field-in" maxlength="12" placeholder="8 mph" oninput="onCallSheetWeatherInput('wind',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunrise" aria-hidden="true"></span> Sunrise</span><input id="pp-wx-sunrise" class="field-in" maxlength="10" placeholder="--:--" oninput="onCallSheetWeatherInput('sunrise',this.value)"></label>
-          <label class="wx-field"><span><span class="sf-symbol" data-symbol="weather.sunset" aria-hidden="true"></span> Sunset</span><input id="pp-wx-sunset" class="field-in" maxlength="10" placeholder="--:--" oninput="onCallSheetWeatherInput('sunset',this.value)"></label>
+          <label class="wx-field wx-wide"><span><span class="sf-symbol" data-symbol="weather.default" aria-hidden="true"></span> Forecast</span><input id="pp-wx-summary" class="field-in" maxlength="200" placeholder="e.g. Sunny · 72° / 55° · wind 8 mph · sunrise 6:41 AM" oninput="onCallSheetWeatherLineInput(this.value)"></label>
         </div>
       </div>
     </div>
@@ -5975,9 +5965,8 @@ input.pt-range::-moz-range-thumb,
         <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
         <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="e.g. 1200 Health Way"><div class="field-hint">Prints on the call sheet too, so the crew can navigate fast.</div></div>
         <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in field-narrow" id="sp-hospital-phone" maxlength="40" placeholder="(555) 210-4400"></div>
-        <div class="field"><label class="field-lbl">Emergency Numbers</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
-        <div class="field"><label class="field-lbl">Non-Emergency Numbers</label><input class="field-in" id="sp-nonemergency" maxlength="160" placeholder="e.g. Facilities (555) 210-3000"></div>
-        <div class="field"><label class="field-lbl">Security</label><input class="field-in" id="sp-security" maxlength="80" placeholder="e.g. Campus security (555) 210-2000"></div>
+        <div class="field"><label class="field-lbl">Emergency</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
+        <div class="field"><label class="field-lbl">Other numbers</label><input class="field-in" id="sp-nonemergency" maxlength="240" placeholder="e.g. Facilities (555) 210-3000 · Campus security (555) 210-2000"><div class="field-hint">Non-emergency lines, security, facilities: anyone the crew may need to call.</div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if someone runs late. Auto-fills from the Call Sheet.</div></div>
       </div>
     </div>
@@ -6033,16 +6022,17 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Show Day<button type="button" class="info-btn" aria-label="What the show day section is for" onclick="toggleInfoPop(event,'ps-show-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
-      <div class="field-hint">Crew call and show start never fill in on their own: enter the real times. The linked fields below follow the call sheet until you type a different value here.</div>
+      <div class="field-hint">Crew call and show start never fill in on their own: enter the real times. Show day, doors, location and address come from the call sheet.</div>
       <div class="prepro-grid prepro-grid-times">
-        <div class="field"><label class="field-lbl">Show Day</label><input class="field-in" id="ps-show-date" type="date"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Show Day</label><div class="field-static" id="ps-show-date">—</div></div>
         <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><input class="field-in" id="ps-doors" type="time"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-static" id="ps-doors">—</div></div>
         <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
       </div>
       <div class="prepro-grid u-mt10">
-        <div class="field"><label class="field-lbl">Location</label><input class="field-in" id="ps-location" maxlength="100"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
-        <div class="field"><label class="field-lbl">Address</label><input class="field-in" id="ps-address" maxlength="160"><div class="field-hint">Auto-fills from the Call Sheet.</div></div>
+        <div class="field"><label class="field-lbl">Location</label><div class="field-static" id="ps-location">—</div></div>
+        <div class="field"><label class="field-lbl">Address</label><div class="field-static" id="ps-address">—</div></div>
+        <div class="u-col-span field-hint" id="ps-linked-hint">Show day, doors, location and address are from the call sheet. <button type="button" class="field-link-btn" onclick="openCallSheetFromSchedule()">Edit on the call sheet</button></div>
         <div class="field u-col-span"><label class="field-lbl">Show Notes</label><textarea class="field-in u-textarea-cozy" id="ps-show-notes" rows="2" placeholder="Arrival details, holding areas, final reminders, day-of timing notes"></textarea></div>
       </div>
     </div>
@@ -6157,7 +6147,6 @@ input.pt-range::-moz-range-thumb,
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtWrap('**','**')" data-tip="Make the selected text bold (Cmd/Ctrl+B)"><b>B</b></button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtWrap('*','*')" data-tip="Make the selected text italic (Cmd/Ctrl+I)"><i>I</i></button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtWrap('~~','~~')" data-tip="Cross out the selected text"><s>S</s></button>
-            <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtWrap('\`','\`')" data-tip="Format the selected text as code">&lt;/&gt;</button>
             <span class="pb-fmt-div"></span>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(false)" data-tip="Insert a bulleted list">•&nbsp;List</button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(true)" data-tip="Insert a numbered list">1.&nbsp;List</button>
@@ -6403,7 +6392,6 @@ input.pt-range::-moz-range-thumb,
     <div class="field"><label class="field-lbl">Show Name <span class="u-muted">(optional)</span></label><input class="field-in" id="blank-show" type="text" placeholder="Untitled Show" maxlength="60"></div>
     <div class="modal-err" id="blank-err">Enter your name.</div>
     <button class="btn-primary" id="blank-create-btn" onclick="startBlankSlate()">Create Shared Blank Slate</button>
-    <button class="btn-secondary" onclick="hideModal('modal-blank');loadExpert()">Work Locally Only</button>
     <button class="btn-secondary" onclick="hideModal('modal-blank')">Cancel</button>
   </div>
 </div>
@@ -6463,7 +6451,6 @@ input.pt-range::-moz-range-thumb,
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save Changes</button>
     </div>
-    <div class="settings-version u-version-line">Cueola v3.0.0</div>
   </div>
 </div>
 
@@ -6593,13 +6580,6 @@ input.pt-range::-moz-range-thumb,
 .sd-bright-row .btn-secondary { width:auto; flex:0 0 auto; }
 .sd-bright-row label { color:var(--text2); font-size:13px; }
 .sd-bright-row input[type=range] { width:200px; }
-/* Deck settings > Key rims: stroke presets + slider, four per-app color wells, Reset. */
-.sd-rim-row input[type=range] { width:140px; }
-.sd-rim-row #sd-rim-w-val { font-size:12px; color:var(--text2); min-width:38px; font-variant-numeric:tabular-nums; }
-.sd-rim-colors { gap:var(--sp-3,12px); }
-.sd-rim-color { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); cursor:pointer; }
-.sd-rim-color input[type=color] { width:30px; height:30px; padding:0; border:2px solid transparent; border-radius:8px; background:var(--s2); cursor:pointer; }
-@media (pointer:coarse) { .sd-rim-color input[type=color] { width:44px; height:44px; } }
 .sd-sect-t { font-weight:700; font-size:14px; margin:var(--sp-4,16px) 0 var(--sp-2,8px); padding-top:var(--sp-3,12px); border-top: 1px solid transparent; }
 .sd-sect-t:first-of-type { border-top:0; padding-top:0; margin-top:var(--sp-2,8px); }
 .sd-sect-hint { font-weight:500; font-size:12px; color:var(--text3); margin-left:6px; }
@@ -7147,7 +7127,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=7aebbd2783"></script>
+<script src="cueola-app.js?v=2266723660"></script>
 <script src="outrangutan/outrangutan.js?v=d75f53816e"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

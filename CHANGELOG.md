@@ -109,6 +109,17 @@ skipping beats.
   (HH:MM:SS;FF, frames 00 and 01 skipped at the top of every minute except
   each tenth). 29.97 is the default; 24, 25, 30 and 60 stay available in
   Settings. Output windows open at 1920×1080.
+- Planda Bear: the call sheet's seven weather fields are one forecast line
+  that Get forecast fills and you can edit; the production schedule shows
+  Show day, Doors, Location and Address from the call sheet as text with
+  an 'Edit on the call sheet' link; the safety plan has Emergency and Other
+  numbers; the stage plot keeps its rotation slider (the ±45° buttons are
+  gone) and hides the floor-plan picker while there is one room; the
+  notes composer loses the code-format button. Old saves read and print as
+  before, and the 'Who worked on what' log stays.
+- Front door: Blank Slate's 'Work locally only' path, the Rows count in the
+  show strip and the version line in Settings and the front door are gone
+  (the Guide shows the version).
 - What was NOT cut is listed as design calls in docs/v3-debloat-plan.md.
 - Every control is at least 44 px tall on a touch screen.
 - New module cueola-live-state.js (the shared live record, the server clock

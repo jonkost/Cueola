@@ -3315,6 +3315,9 @@ function openLearningHub(lessonId='', sectionId='') {
   const idx = LEARNING_LESSONS.findIndex(l => l.id === lessonId);
   if (idx >= 0) activeLearningLesson = idx;
   renderLearningHub();
+  // The only version line in the app lives here (front door and Settings lost theirs).
+  const ver = document.getElementById('guide-version');
+  if (ver && window.CUEOLA_VERSION) ver.textContent = `Cueola v${window.CUEOLA_VERSION}`;
   // Stacked modal-wraps share one z-index and paint in DOM order — the hub
   // sits EARLIER in the DOM than every ⓘ host modal, so opening it under one
   // left the guide invisible and the visible modal inert. Close any open
@@ -5576,15 +5579,6 @@ async function joinPreProSession() {
   }
 }
 
-function loadExpert() {
-  session = { code:'', role:'instructor', userName:'You', profileId:'', username:'', profileAliases:[], isDemo:false, isExpert:true };
-  show = { name:'Untitled Show', start:'' };
-  beats = [];
-  freeTextMode = true;
-  restoreLocalDraftAsRundownBaseline();
-  enterRundown();
-}
-
 function openBlankSlateSetup() {
   hideModal('modal-blank');
   const name = document.getElementById('blank-name');
@@ -7821,7 +7815,6 @@ function renderRundown() {
 
   const total = totalSecs();
   document.getElementById('rd-dur').textContent = fmtSecs(total);
-  document.getElementById('rd-count').textContent = rowDisplayTotal();   // segments never count
   document.getElementById('rd-end').textContent = show.start ? clock(show.start, total) : '—';
   updateGoLiveButton();
   document.getElementById('progFill').style.width = '0%';
@@ -20367,8 +20360,7 @@ function pbRefreshSafetyFields() {
   pbSetFieldIfIdle('sp-first-aid', safety.firstAid || '');
   pbSetFieldIfIdle('sp-fire', safety.fire || '');
   pbSetFieldIfIdle('sp-emergency', safety.emergency || '');
-  pbSetFieldIfIdle('sp-nonemergency', safety.nonemergency || '');
-  pbSetFieldIfIdle('sp-security', safetySecurityValue(safety.security));
+  pbSetFieldIfIdle('sp-nonemergency', safetyOtherNumbersValue(safety));
   pbSetFieldIfIdle('sp-late', safety.late || data.late || '');
   pbSetFieldIfIdle('sp-equipment', safety.equipment || data.equipment || '');
   pbSetFieldIfIdle('sp-notes', safety.notes || '');
@@ -20392,12 +20384,7 @@ function pbRefreshScheduleFields() {
   pbSetFieldIfIdle('ps-call', timeTo24(schedule.call));
   pbSetFieldIfIdle('ps-show', timeTo24(schedule.show));
   pbSetFieldIfIdle('ps-wrap', timeTo24(schedule.wrap));
-  pbSetFieldIfIdle('ps-show-date', schedule.showDate || '');
-  // D9.6: ps-doors is a time input now — normalize legacy free-text values
-  // ("7pm") so they hydrate instead of blanking; unparseable text is dropped.
-  pbSetFieldIfIdle('ps-doors', timeTo24(schedule.doors || '') || '');
-  pbSetFieldIfIdle('ps-location', schedule.location || '');
-  pbSetFieldIfIdle('ps-address', schedule.address || '');
+  renderScheduleLinkedFields(schedule, callSheet);
   pbSetFieldIfIdle('ps-setup-notes', schedule.setupNotes || '');
   pbSetFieldIfIdle('ps-show-notes', schedule.showNotes || '');
   // Setup-N/A and the Ready Before Show checklist ride the same shared object —
@@ -20485,7 +20472,7 @@ function pbRefreshCallSheetFields() {
     const remoteVenue = normalizeCallSheetVenue(sheet.venue);
     if (remoteVenue !== callSheetVenue) { callSheetVenue = remoteVenue; renderCallSheetVenue(); }
   }
-  const wxIds = ['pp-wx-conditions','pp-wx-high','pp-wx-low','pp-wx-precip','pp-wx-wind','pp-wx-sunrise','pp-wx-sunset'];
+  const wxIds = ['pp-wx-summary'];
   const wxBusy = wxIds.some(id => { const el = document.getElementById(id); return (el && el === document.activeElement) || pbFieldRecentlyEdited(id); });
   if (!wxBusy) {
     const remoteWx = normalizeCallSheetWeather(sheet.weather);
@@ -26164,14 +26151,6 @@ function updateSelectedPlotItem(field, value) {
   if (field === 'color' || field === 'layer' || field === 'w_ft' || field === 'panels') renderPlotInspector();
   queueStagePlotAutosave();
 }
-function rotateSelectedPlotItem(deltaDeg) {
-  const item = selectedPlotItem();
-  if (!item) return;
-  plotUndoPush();
-  updateSelectedPlotItem('rot', (item.rot + deltaDeg) % 360);
-  const slider = document.getElementById('plot-item-rot');
-  if (slider) slider.value = String(Math.round(item.rot));
-}
 // Shared instructor/admin gate for the space and bank controls.
 function requirePlotManager(message) {
   if (canManageCallSheetStructure()) return true;
@@ -26584,10 +26563,6 @@ function renderPlotInspector() {
     <div class="plot-insp-h">Rotation <span class="plot-insp-val" id="plot-rot-val">${Math.round(item.rot)}°</span></div>
     <div class="plot-insp-body">
       <input type="range" id="plot-item-rot" min="0" max="359" step="1" value="${Math.round(item.rot)}" oninput="updateSelectedPlotItem('rot', this.value)">
-      <div class="plot-insp-actions">
-        <button type="button" class="u-callbtn call-add-btn" onclick="rotateSelectedPlotItem(-45)">Rotate -45°</button>
-        <button type="button" class="u-callbtn call-add-btn" onclick="rotateSelectedPlotItem(45)">Rotate +45°</button>
-      </div>
     </div>
     ${(() => {
       const def = plotTypeDef(item.type);
@@ -26641,15 +26616,18 @@ function renderPlotInspector() {
   // add/delete): students work inside the assigned space.
   const canShapeSpace = canManageCallSheetStructure();
   const floorNow = plotFloorDef(plot.floor) || PLOT_FLOOR_TEMPLATES[0];
+  // A picker with one real room besides Blank is not a choice yet: show the
+  // plain label until the preset list grows.
+  const floorChoices = PLOT_FLOOR_TEMPLATES.filter(t => t.id !== 'blank').length > 1;
   const stagePane = `
     <div class="plot-insp-h">Floor plan</div>
     <div class="plot-insp-body">
-      ${canShapeSpace ? `
+      ${canShapeSpace && floorChoices ? `
       <select class="field-in" id="plot-floor-select" onchange="updateStagePlotFloor(this.value)">
         ${PLOT_FLOOR_TEMPLATES.map(t => `<option value="${t.id}" ${floorNow.id === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
       </select>
       <div class="plot-insp-hint">Assign the floor plan for your learning space. Picking a room sizes the space to match it.</div>`
-      : `<div class="plot-insp-hint">${esc(floorNow.label)}. Your instructor assigns the floor plan and space size.</div>`}
+      : `<div class="plot-insp-hint">${esc(floorNow.label)}. ${canShapeSpace ? 'Set the space size below.' : 'Your instructor assigns the floor plan and space size.'}</div>`}
     </div>
     <div class="plot-insp-h">Space size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
@@ -27169,19 +27147,69 @@ function venueLabel(v) {
   return v === 'indoors' ? 'Indoors' : v === 'outdoors' ? 'Outdoors' : v === 'both' ? 'Indoors & Outdoors' : '';
 }
 
+const WEATHER_SUMMARY_MAX = 200;
 function normalizeCallSheetWeather(w) {
   if (!w || typeof w !== 'object') return null;
   const s = v => (v == null ? '' : String(v)).slice(0, 60);
   const out = {
     conditions: s(w.conditions), high: s(w.high), low: s(w.low),
     precip: s(w.precip), wind: s(w.wind), sunrise: s(w.sunrise), sunset: s(w.sunset),
+    // The one editable line the student sees. Fetches and edits always write
+    // it; older saves lack it and compose the line from the fields above.
+    summary: (w.summary == null ? '' : String(w.summary)).slice(0, WEATHER_SUMMARY_MAX),
     emoji: s(w.emoji), symbol: s(w.symbol),
     source: w.source === 'auto' ? 'auto' : (w.source === 'manual' ? 'manual' : ''),
     forecastDate: s(w.forecastDate), place: s(w.place), queryLocation: s(w.queryLocation),
     updatedAt: Number(w.updatedAt) || 0,
   };
-  const hasAny = out.conditions || out.high || out.low || out.precip || out.wind || out.sunrise || out.sunset;
+  const hasAny = out.summary || out.conditions || out.high || out.low || out.precip || out.wind || out.sunrise || out.sunset;
   return hasAny ? out : null;
+}
+
+// Compose the editable line from the per-field shape ("Sunny · 72° / 55° ·
+// wind 8 mph · sunrise 6:41 AM"). Used after a fetch and for saves that
+// predate `summary`.
+function composeWeatherLine(w) {
+  if (!w) return '';
+  const parts = [];
+  if (w.conditions) parts.push(w.conditions);
+  if (w.high || w.low) parts.push(`${w.high || '—'} / ${w.low || '—'}`);
+  if (w.precip) parts.push(`precip ${w.precip}`);
+  if (w.wind) parts.push(`wind ${w.wind}`);
+  if (w.sunrise) parts.push(`sunrise ${w.sunrise}`);
+  if (w.sunset) parts.push(`sunset ${w.sunset}`);
+  return parts.join(' · ').slice(0, WEATHER_SUMMARY_MAX);
+}
+
+// What the student sees in the weather line: the stored summary, else the
+// line composed from an older save's fields.
+function weatherEditableLine(w) {
+  w = normalizeCallSheetWeather(w);
+  if (!w) return '';
+  return w.summary || composeWeatherLine(w);
+}
+
+// Best-effort parse of a hand-edited line back into the per-field shape so the
+// safety plan chips and older readers keep their structured values. Anything
+// that does not parse simply stays in `summary` — nothing is lost.
+function parseWeatherLine(line) {
+  const out = { conditions:'', high:'', low:'', precip:'', wind:'', sunrise:'', sunset:'' };
+  let rest = String(line || '').replace(/\s+/g, ' ').trim();
+  if (!rest) return out;
+  const take = (re, fn) => { const m = rest.match(re); if (m) { fn(m); rest = rest.replace(m[0], ' · '); } };
+  const clock = '(\\d{1,2}:\\d{2}\\s*(?:[AaPp]\\.?[Mm]\\.?)?)';
+  take(new RegExp('sunrise\\s*:?\\s*' + clock, 'i'), m => { out.sunrise = m[1].trim(); });
+  take(new RegExp('sunset\\s*:?\\s*' + clock, 'i'), m => { out.sunset = m[1].trim(); });
+  take(/winds?\s*:?\s*(-?\d+(?:\.\d+)?\s*(?:mph|km\/h|kph|kt|knots|m\/s)?)/i, m => { out.wind = m[1].trim(); });
+  take(/(?:precip(?:itation)?|rain|chance)?\s*:?\s*(\d{1,3})\s*%/i, m => { out.precip = m[1] + '%'; });
+  const deg = v => (/°/.test(v) ? v : v + '°').replace(/\s+/g, '');
+  take(/(?:high\s*:?\s*)?(-?\d{1,3}\s*°\s*[FC]?)\s*\/\s*(?:low\s*:?\s*)?(-?\d{1,3}\s*°?\s*[FC]?)/i, m => { out.high = deg(m[1]); out.low = deg(m[2]); });
+  if (!out.high) take(/high\s*:?\s*(-?\d{1,3}\s*°?\s*[FC]?)/i, m => { out.high = deg(m[1]); });
+  if (!out.low) take(/low\s*:?\s*(-?\d{1,3}\s*°?\s*[FC]?)/i, m => { out.low = deg(m[1]); });
+  // Conditions: the first remaining segment with no digits in it.
+  const seg = rest.split(/[·|,;/]/).map(x => x.trim()).find(x => x && !/\d/.test(x));
+  out.conditions = (seg || '').slice(0, 60);
+  return out;
 }
 
 // [label, emoji (text/PDF), symbol (SVG icon from the design-system weather library)]
@@ -27206,7 +27234,7 @@ function wmoWeather(code) {
 // symbol, else infer one from the conditions text (manual entries), else default.
 function weatherSymbolFor(w) {
   if (w && w.symbol) return w.symbol;
-  const text = String(w?.conditions || '').toLowerCase();
+  const text = String(w?.conditions || w?.summary || '').toLowerCase();
   if (!text) return 'weather.default';
   if (/thunder|storm|lightning/.test(text)) return 'weather.thunderstorm';
   if (/hail|sleet|freezing/.test(text)) return 'weather.sleet';
@@ -27247,11 +27275,14 @@ function weatherSummaryLine(w) {
   w = normalizeCallSheetWeather(w);
   if (!w) return '';
   const parts = [];
-  if (w.conditions) parts.push(w.conditions);
-  if (w.high || w.low) parts.push(`High ${w.high || '—'} / Low ${w.low || '—'}`);
-  if (w.precip) parts.push(`Precip ${w.precip}`);
-  if (w.wind) parts.push(`Wind ${w.wind}`);
-  if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+  if (w.summary) parts.push(w.summary);   // the student's edited line prints as written
+  else {
+    if (w.conditions) parts.push(w.conditions);
+    if (w.high || w.low) parts.push(`High ${w.high || '—'} / Low ${w.low || '—'}`);
+    if (w.precip) parts.push(`Precip ${w.precip}`);
+    if (w.wind) parts.push(`Wind ${w.wind}`);
+    if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+  }
   // Say which DAY this forecast is for — a sheet dated Friday prints Friday's
   // storm, and without the label that reads as "wrong weather" on show day.
   if (w.forecastDate) parts.push(`Forecast for ${callSheetDayLabel(w.forecastDate) || w.forecastDate}`);
@@ -27261,6 +27292,7 @@ function weatherSummaryLine(w) {
 function weatherCompactSummary(w, withSun=false) {
   w = normalizeCallSheetWeather(w);
   if (!w) return '';
+  if (w.summary) return w.summary;
   const parts = [];
   if (w.conditions) parts.push(w.conditions);
   if (w.high || w.low) parts.push(`${w.high || '-'} / ${w.low || '-'}`);
@@ -27301,6 +27333,8 @@ function safetyPlanWeatherSymbolHTML(w) {
   if (w.high || w.low) parts.push(weatherChipHTML('weather.temp', `${w.high || '-'} / ${w.low || '-'}`));
   if (w.precip) parts.push(weatherChipHTML('weather.precip', w.precip));
   if (w.wind) parts.push(weatherChipHTML('weather.wind', w.wind));
+  // A hand-written line that parsed into no fields still shows as one chip.
+  if (!parts.length && w.summary) parts.push(weatherChipHTML(weatherSymbolFor(w), w.summary));
   return parts.filter(Boolean).join('<span class="sp-weather-sep" aria-hidden="true">·</span>');
 }
 
@@ -27323,6 +27357,17 @@ function safetySecurityValue(value) {
   const v = String(value || '').trim();
   // '8822' is the legacy demo-session marker; strip it so it never renders as a real security value.
   return v === '8822' ? '' : v;
+}
+
+// "Other numbers" shows the non-emergency line plus any legacy Security value
+// it does not already mention, so an older save's security contact is never
+// hidden from the student.
+function safetyOtherNumbersValue(safety) {
+  const other = String(safety?.nonemergency || '').trim();
+  const security = safetySecurityValue(safety?.security);
+  if (!security) return other;
+  if (other.toLowerCase().includes(security.toLowerCase())) return other;
+  return [other, security].filter(Boolean).join(' · ');
 }
 
 // ── OSHA PPE requirements (owner 2026-08-30): a REQUIRED list on the safety
@@ -27476,13 +27521,7 @@ function renderCallSheetWeatherCard() {
   setTxt('pp-weather-call', document.getElementById('pp-call')?.value || '—');
   setTxt('pp-weather-loc', document.getElementById('pp-location')?.value?.trim() || 'Add a location');
   const w = callSheetWeather || {};
-  setV('pp-wx-conditions', w.conditions || '');
-  setV('pp-wx-high', w.high || '');
-  setV('pp-wx-low', w.low || '');
-  setV('pp-wx-precip', w.precip || '');
-  setV('pp-wx-wind', w.wind || '');
-  setV('pp-wx-sunrise', w.sunrise || '');
-  setV('pp-wx-sunset', w.sunset || '');
+  setV('pp-wx-summary', weatherEditableLine(w));
   const icoEl = document.getElementById('pp-weather-ico');
   if (icoEl) icoEl.innerHTML = sfIcon(weatherSymbolFor(w));
   if (w.updatedAt) {
@@ -27499,21 +27538,17 @@ function renderCallSheetWeatherCard() {
       setWeatherStatus([w.source === 'auto' ? 'Auto forecast' : 'Manual entry', w.place, w.forecastDate].filter(Boolean).join(' · '));
     }
   } else {
-    setWeatherStatus('Auto-fills from your location and shoot date. You can edit anything below.');
+    setWeatherStatus('Auto-fills from your location and shoot date. Edit the line below if it is wrong.');
   }
 }
 
-function onCallSheetWeatherInput(field, value) {
-  if (!callSheetWeather) {
-    callSheetWeather = { conditions:'', high:'', low:'', precip:'', wind:'', sunrise:'', sunset:'', emoji:'', source:'manual', forecastDate:'', place:'', updatedAt:0 };
-  }
-  callSheetWeather[field] = value;
-  // A hand edit makes the entry manual — and a rewritten conditions line must
-  // drop the fetched icon/emoji so the symbol re-infers from the new text
-  // instead of showing the old forecast's picture next to corrected words.
-  callSheetWeather.source = 'manual';
-  if (field === 'conditions') { callSheetWeather.symbol = ''; callSheetWeather.emoji = ''; }
-  callSheetWeather.updatedAt = Date.now();
+// The student edited the one weather line. Store it as `summary`, re-derive
+// the per-field shape where the text parses, and drop the fetched icon so the
+// symbol re-infers from the new words instead of the old forecast's picture.
+function onCallSheetWeatherLineInput(value) {
+  const line = String(value || '').slice(0, WEATHER_SUMMARY_MAX);
+  const prev = callSheetWeather || { emoji:'', forecastDate:'', place:'', queryLocation:'' };
+  callSheetWeather = { ...prev, ...parseWeatherLine(line), summary: line, symbol:'', emoji:'', source:'manual', updatedAt: Date.now() };
   const icoEl = document.getElementById('pp-weather-ico');
   if (icoEl) icoEl.innerHTML = sfIcon(weatherSymbolFor(callSheetWeather));
   setWeatherStatus(['Manual entry', callSheetWeather.place, callSheetWeather.forecastDate].filter(Boolean).join(' · '));
@@ -27613,6 +27648,7 @@ async function fetchCallSheetWeather() {
       queryLocation: weatherQueryBasis(location, address),   // the fetch basis, for later staleness checks
       updatedAt: Date.now(),
     };
+    callSheetWeather.summary = composeWeatherLine(callSheetWeather);
     renderCallSheetWeatherCard();
     paperworkDirty = true;
     saveCallSheetStateLocally(false);
@@ -27929,8 +27965,7 @@ function openSafetyPlan() {
   document.getElementById('sp-first-aid').value = safety.firstAid || '';
   document.getElementById('sp-fire').value = safety.fire || '';
   document.getElementById('sp-emergency').value = safety.emergency || '';
-  document.getElementById('sp-nonemergency').value = safety.nonemergency || '';
-  document.getElementById('sp-security').value = safetySecurityValue(safety.security);
+  document.getElementById('sp-nonemergency').value = safetyOtherNumbersValue(safety);
   document.getElementById('sp-late').value = safety.late || data.late || '';
   document.getElementById('sp-equipment').value = safety.equipment || data.equipment || '';
   document.getElementById('sp-notes').value = safety.notes || '';
@@ -27968,7 +28003,9 @@ function getSafetyPlanData() {
     fire: document.getElementById('sp-fire')?.value?.trim() ?? existing.fire ?? '',
     emergency: document.getElementById('sp-emergency')?.value?.trim() ?? existing.emergency ?? '',
     nonemergency: document.getElementById('sp-nonemergency')?.value?.trim() ?? existing.nonemergency ?? '',
-    security: safetySecurityValue(document.getElementById('sp-security')?.value?.trim() ?? existing.security ?? ''),
+    // No Security field on screen any more: the stored value rides along
+    // untouched (it is folded into "Other numbers" on load and still prints).
+    security: safetySecurityValue(existing.security ?? ''),
     late: (lateAuto && lateVal === lateAuto) ? '' : lateVal,
     equipment: document.getElementById('sp-equipment')?.value?.trim() ?? existing.equipment ?? '',
     notes: document.getElementById('sp-notes')?.value ?? existing.notes ?? '',
@@ -27991,6 +28028,7 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
     const custom = safetyWeather && safetyWeather !== safetyPlanWeatherAutoText(data) ? safetyWeather : '';
     if (custom) return esc(custom);
     const w = safetyPlanWeatherSource(data);
+    if (w && w.summary) return esc(w.summary);   // the call sheet's edited line prints as written
     if (w && (w.conditions || w.high || w.low || w.precip || w.wind)) {
       const lines = [];
       if (w.conditions) lines.push(`<b>${esc(w.conditions)}</b>`);
@@ -28015,9 +28053,9 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
       <tr><th>OSHA PPE Requirements</th><td>${ppeCell}</td></tr>
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
-      <tr><th>Emergency Numbers</th><td>${esc(safety.emergency || '')}</td></tr>
-      <tr><th>Non-Emergency Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
-      <tr><th>Security</th><td>${esc(safetySecurityValue(safety.security) || '')}</td></tr>
+      <tr><th>Emergency</th><td>${esc(safety.emergency || '')}</td></tr>
+      <tr><th>Other Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
+      ${safetySecurityValue(safety.security) ? `<tr><th>Security</th><td>${esc(safetySecurityValue(safety.security))}</td></tr>` : ''}
       <tr><th>Late / Lost Contact</th><td>${esc(safety.late || data.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
@@ -28111,10 +28149,7 @@ function openProductionSchedule() {
   setTimeInputValue('ps-call', schedule.call);
   setTimeInputValue('ps-show', schedule.show);
   setTimeInputValue('ps-wrap', schedule.wrap);
-  document.getElementById('ps-show-date').value = schedule.showDate || '';
-  document.getElementById('ps-doors').value = timeTo24(schedule.doors || '') || '';
-  document.getElementById('ps-location').value = schedule.location || '';
-  document.getElementById('ps-address').value = schedule.address || '';
+  renderScheduleLinkedFields(schedule, callSheet);
   document.getElementById('ps-setup-notes').value = schedule.setupNotes || '';
   document.getElementById('ps-show-notes').value = schedule.showNotes || '';
   setSetupNotApplicable(schedule.setupNA);
@@ -28216,24 +28251,52 @@ function removeProductionChecklistRow(idx) {
   paperworkDirty = false;
 }
 
+// Show day, doors, location and address are read from the call sheet and shown
+// as text here. The stored fields stay in the schedule object: an override an
+// older save typed in is kept (and printed) until the call sheet is edited.
+function renderScheduleLinkedFields(schedule, callSheet=loadPreProData()) {
+  const stored = callSheet.productionSchedule || {};
+  const set = (id, text, src, own) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const v = String(text || '').trim();
+    el.textContent = v || '—';
+    el.classList.toggle('is-empty', !v);
+    // An old override that no longer matches the call sheet says so, so the
+    // "from the call sheet" hint never lies about where a value came from.
+    el.title = own && src && own !== src ? 'Saved on this schedule earlier. Edit the call sheet to replace it.' : '';
+  };
+  set('ps-show-date', paperDate(schedule.showDate), callSheet.date || '', stored.showDate || '');
+  set('ps-doors', schedule.doors ? paperTime(schedule.doors) : '', callSheet.doors || '', stored.doors || '');
+  set('ps-location', schedule.location, String(callSheet.location || '').trim(), String(stored.location || '').trim());
+  set('ps-address', schedule.address, String(callSheet.address || '').trim(), String(stored.address || '').trim());
+}
+
+// "Edit on the call sheet": save what is open here, then open the call sheet
+// editor. The schedule refills from it when it comes back.
+function openCallSheetFromSchedule() {
+  savePaperworkItem('production-scheduler', false);
+  hidePaperworkEditors();
+  openPaperworkItem('call-sheet');
+}
+
 function getProductionScheduleData() {
-  // Show-day fields are LINKS, not copies: a value that still equals its
-  // call-sheet source is stored empty so productionScheduleWithCallSheet keeps
-  // it following the call sheet live. A differing value is a real override and
-  // is kept as typed. Times never link (see productionScheduleWithCallSheet).
-  const callSheet = loadPreProData();
-  const linked = (val, src) => (src && val === src) ? '' : val;
+  // Show-day fields are LINKS, not copies: they are read-only here and follow
+  // the call sheet through productionScheduleWithCallSheet. The stored values
+  // (an override typed before these became read-only) are carried through
+  // untouched so nothing an older save holds is dropped. Times never link.
+  const existing = loadPreProData().productionSchedule || {};
   return {
     setupNA: document.getElementById('ps-setup-na')?.classList.contains('on') || false,
     date: document.getElementById('ps-date')?.value || '',
-    showDate: linked(document.getElementById('ps-show-date')?.value || '', callSheet.date || ''),
+    showDate: existing.showDate || '',
     setup: timeInputValue('ps-setup'),
     call: timeInputValue('ps-call'),
     show: timeInputValue('ps-show'),
     wrap: timeInputValue('ps-wrap'),
-    doors: linked(document.getElementById('ps-doors')?.value?.trim() || '', timeTo24(callSheet.doors || '') || ''),
-    location: linked(document.getElementById('ps-location')?.value?.trim() || '', String(callSheet.location || '').trim()),
-    address: linked(document.getElementById('ps-address')?.value?.trim() || '', String(callSheet.address || '').trim()),
+    doors: existing.doors || '',
+    location: existing.location || '',
+    address: existing.address || '',
     setupNotes: document.getElementById('ps-setup-notes')?.value || '',
     showNotes: document.getElementById('ps-show-notes')?.value || '',
     checklist: collectProductionChecklistRows(false),
