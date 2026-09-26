@@ -4203,7 +4203,6 @@ window.addEventListener('load', ()=>{
     window._appCheckConfigured = APP_CHECK_ENABLED && Boolean(siteKey);
     window._appCheckReady = false;
     if (!APP_CHECK_ENABLED) {
-      console.info('Firebase App Check is staged but disabled. Enable it only after following docs/app-check-rollout.md.');
       return null;
     }
     if (!siteKey) {

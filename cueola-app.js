@@ -848,7 +848,6 @@ let prompterVersion = 0;
 let prompterUpdatedAt = 0;
 let prompterSource = 'assembled';
 let prompterChannel = null;
-let prompterLegacyChannel = null;
 const CLIENT_ID = (() => {
   try {
     const key = 'cueola_client_id';
@@ -5064,7 +5063,7 @@ async function moveSessionToNewCode() {
     ['cueola_prepro_', 'cueola_pb_notes_', 'cueola_pb_note_draft_', 'cueola_pb_comments_', 'cueola_customSources_'].forEach(prefix => {
       try {
         const v = localStorage.getItem(prefix + oldCode);
-        if (v != null) localStorage.setItem(prefix + newCode, v);
+        if (v != null) { localStorage.setItem(prefix + newCode, v); localStorage.removeItem(prefix + oldCode); }
       } catch {}
     });
 
@@ -13362,9 +13361,6 @@ const PROMPTER_MISS_THRESHOLD = 3;
 const PROMPTYPUS_CHANNEL = 'promptypus';
 const PROMPTYPUS_STORAGE_MSG = 'promptypus_msg';
 const PROMPTYPUS_STORAGE_PING = 'promptypus_ping';
-const PROMPTYPUS_LEGACY_CHANNEL = 'prompt_up_the_jam';
-const PROMPTYPUS_LEGACY_STORAGE_MSG = 'prompt_up_the_jam_msg';
-const PROMPTYPUS_LEGACY_STORAGE_PING = 'prompt_up_the_jam_ping';
 
 function buildCompletePrompterState() {
   const state = currentPrompterSessionState();
@@ -13591,7 +13587,7 @@ function _postPrompterMessage(payload) {
   // Per-window sender id matters: operator and talent windows often share one
   // localStorage CLIENT_ID, so remote commands must identify the actual tab/window.
   payload = withPrompterEnvelope(payload);
-  [prompterChannel, prompterLegacyChannel].forEach(ch => {
+  [prompterChannel].forEach(ch => {
     if (ch) {
       try { ch.postMessage(payload); } catch {}
     }
@@ -13599,7 +13595,6 @@ function _postPrompterMessage(payload) {
   try {
     const msg = JSON.stringify({...payload, storageNonce:Date.now()+Math.random()});
     localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
-    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
   } catch {}
 }
 
@@ -13979,13 +13974,11 @@ function _ensurePrompterOperatorBridge(startHello=false) {
     try {
       prompterChannel = new BroadcastChannel(PROMPTYPUS_CHANNEL);
       prompterChannel.onmessage = e => _handlePrompterOperatorMessage(e.data);
-      prompterLegacyChannel = new BroadcastChannel(PROMPTYPUS_LEGACY_CHANNEL);
-      prompterLegacyChannel.onmessage = e => _handlePrompterOperatorMessage(e.data);
     } catch {}
   }
   if (!_prompterStorageHandler) {
     _prompterStorageHandler = (e) => {
-      if (![PROMPTYPUS_STORAGE_PING, PROMPTYPUS_LEGACY_STORAGE_PING, PROMPTYPUS_STORAGE_MSG, PROMPTYPUS_LEGACY_STORAGE_MSG].includes(e.key) || !e.newValue) return;
+      if (![PROMPTYPUS_STORAGE_PING, PROMPTYPUS_STORAGE_MSG].includes(e.key) || !e.newValue) return;
       try { _handlePrompterOperatorMessage(JSON.parse(e.newValue)); } catch {}
     };
     window.addEventListener('storage', _prompterStorageHandler);
@@ -14026,11 +14019,10 @@ function stopPrompterOperatorRuntime() {
   _pendingPrompterControls = {};
   clearTimeout(_prompterHandshakeTimer);
   _prompterHandshakeTimer = null;
-  [prompterChannel, prompterLegacyChannel].forEach(channel => {
+  [prompterChannel].forEach(channel => {
     try { channel?.close(); } catch (error) { containError('Flowmingo channel cleanup', error); }
   });
   prompterChannel = null;
-  prompterLegacyChannel = null;
   lastTalentPingTs = 0;
   _lastSeenTalentHeartbeatTs = 0;
   _lastSeenTalentAppliedTs = 0;
@@ -14514,15 +14506,9 @@ function scriptOperatorIdentity() {
   };
 }
 
-function scriptOperatorNextCueIndex() {
-  let index = liveActiveCueIndex();
-  do { index += 1; } while (index < beats.length && beats[index]?.style === 'segment');
-  return index < beats.length ? index : -1;
-}
-
 function scriptOperatorSnapshot() {
   const activeIdx = liveActiveCueIndex();
-  const nextIdx = scriptOperatorNextCueIndex();
+  const nextIdx = scriptOpNextCueIndex();
   const activeBeat = beats[activeIdx] || null;
   const nextBeat = beats[nextIdx] || null;
   // Read the controller here; do not call currentPrompterSessionState(), whose
@@ -15770,7 +15756,6 @@ function ptPostOperatorMessage(payload) {
   try {
     const msg = JSON.stringify({...msgObj, storageNonce:Date.now()+Math.random()});
     localStorage.setItem(PROMPTYPUS_STORAGE_MSG, msg);
-    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_MSG, msg);
   } catch {}
   return msgObj;
 }
@@ -15783,7 +15768,6 @@ function ptPostPing(reason='heartbeat') {
   try {
     const msg = JSON.stringify({...ping, storageNonce:Date.now()+Math.random()});
     localStorage.setItem(PROMPTYPUS_STORAGE_PING, msg);
-    localStorage.setItem(PROMPTYPUS_LEGACY_STORAGE_PING, msg);
   } catch {}
 }
 
@@ -15956,14 +15940,14 @@ function ptInitReceiver() {
     return;
   }
   try {
-    [PROMPTYPUS_CHANNEL, PROMPTYPUS_LEGACY_CHANNEL].forEach(name => {
+    [PROMPTYPUS_CHANNEL].forEach(name => {
       const ch = new BroadcastChannel(name);
       ch.onmessage = e => ptHandleCueolaMessage(e.data);
       ptReceiverChannels.push(ch);
     });
   } catch {}
   ptReceiverStorageHandler = (e) => {
-    if (![PROMPTYPUS_STORAGE_MSG, PROMPTYPUS_LEGACY_STORAGE_MSG].includes(e.key) || !e.newValue) return;
+    if (e.key !== PROMPTYPUS_STORAGE_MSG || !e.newValue) return;
     try { ptHandleCueolaMessage(JSON.parse(e.newValue)); } catch {}
   };
   window.addEventListener('storage', ptReceiverStorageHandler);
@@ -17142,12 +17126,6 @@ function ptHideAllSlates() {
   const slate = ptEl('pt-slate');
   if (slate) slate.classList.remove('on', 'bars');
   syncTechButtons();
-}
-function ptHideTechSlate() {
-  ptHideAllSlates();
-}
-function ptHideColorBars() {
-  ptHideAllSlates();
 }
 
 function anyTalentSlateOn() {
@@ -18615,9 +18593,9 @@ function ptHandleRemoteControl(action, payload=null) {
   }
   switch (action) {
     case 'slate_tech_on':  ptShowTechSlate(); break;
-    case 'slate_tech_off': ptHideTechSlate(); break;
+    case 'slate_tech_off': ptHideAllSlates(); break;
     case 'slate_bars_on':  ptShowColorBars(); break;
-    case 'slate_bars_off': ptHideColorBars(); break;
+    case 'slate_bars_off': ptHideAllSlates(); break;
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;

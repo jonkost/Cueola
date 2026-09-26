@@ -397,7 +397,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cd-subnote{font-size:10px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* Type badge */
-.type-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:5px;font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.05em;white-space:nowrap}
 
 /* Style pill */
 .style-pill{font-size:10px;font-family:var(--sans);font-weight:700;padding:3px 7px;border-radius:5px;letter-spacing:.02em;text-transform:uppercase;display:inline-block}
@@ -878,15 +877,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ── ADD ROW OVERLAY (shows last 4 rows as context) ── */
 #addRowOv{align-items:center;justify-content:center;background:rgba(8,11,18,.75);padding:20px}
 .ar-wrap{width:min(100%,980px);max-width:none;display:flex;flex-direction:column}
-.ar-context{padding:0 0 0;opacity:.5;pointer-events:none;flex-shrink:0}
-.ar-ctx-label{font-size:9px;font-family:var(--mono);letter-spacing:.1em;color:var(--text3);text-transform:uppercase;padding:6px 14px 4px}
-.ar-ctx-row{display:flex;align-items:center;gap:8px;padding:5px 14px;border-top: 1px solid transparent;background:var(--s1)}
-.ar-ctx-num{font-family:var(--mono);font-size:10px;color:var(--text3);width:22px}
-.ar-ctx-name{font-size:12px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ar-ctx-dur{font-family:var(--mono);font-size:10px;color:var(--text3)}
+
 .ar-panel{background:var(--s1);border: 1px solid transparent;border-radius:16px;padding:22px 22px 24px;animation:sheetUp .25s cubic-bezier(.16,1,.3,1) both;max-height:calc(100vh - 64px);overflow-y:auto}
 .ar-step{display:none}.ar-step.on{display:flex;flex-direction:column;gap:14px}
-.ar-step-label{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+
 .ar-heading{font-family:var(--syne);font-size:20px;font-weight:700}
 
 /* Option grids */
@@ -905,20 +899,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .chip{padding:5px 12px;border-radius:7px;font-size:12px;font-family:var(--mono);color:var(--btn-ink);border:1px solid transparent;background:var(--btn-fill);cursor:pointer;transition:all .15s;white-space:nowrap}
 .chip:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .chip.sel{border-color:transparent;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
-.chip.suggested-label{position:relative;display:inline-flex;align-items:center;gap:6px;padding-right:9px}
-.chip.suggested-label::before{content:'';order:2;width:14px;height:14px;flex:0 0 auto;background:currentColor;-webkit-mask:url("design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg") center/contain no-repeat;mask:url("design-system/apple/symbols/runtime/light-small/objectsandtools/info.circle.svg") center/contain no-repeat;opacity:.55;text-transform:none}
-.chip.suggested-label:hover::before,.chip.suggested-label:focus-visible::before{opacity:1}
+
 /* Tip text now renders through the shared data-tip engine (.ui-float-tip); the
    CSS-only ::after chip is retired so tooltips never double up. */
 
 /* Wizard step 2 — cue type toggles */
 /* Cue config rich builder */
-.cc-tabs{display:flex;gap:0;border-bottom: 1.5px solid transparent;margin-bottom:14px}
-.cc-tab-btn{flex:1;padding:8px 0;font-size:13px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;cursor:pointer;border:none;background:transparent;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1.5px;transition:all .15s}
-.cc-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
-.cc-tab-btn:first-child.active{color:var(--green);border-bottom-color:var(--green)}
-.cc-tab-btn:last-child.active{color:var(--red);border-bottom-color:var(--red)}
-.cc-panel{animation:fadeUp .18s ease both}
 
 .cc-section{margin-bottom:12px}
 .cc-section-lbl{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:7px}
@@ -926,7 +912,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cc-chip{padding:4px 12px;border-radius:7px;font-size:13px;font-family:var(--mono);cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:all .15s;white-space:nowrap}
 .cc-chip:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .cc-chip.sel{border-color:transparent;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent);font-weight:600}
-.cc-divider{height:1px;background:var(--bord2);margin:14px 0}
+
 .cc-result-lbl{font-size:10px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
 .cc-result-in{border-width:1.5px!important;font-size:14px!important}
 .cc-checks{display:flex;gap:16px;margin:6px 0}
@@ -950,24 +936,18 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .flow-switch-row:has(input:checked){color:var(--text)}
 /* Guided rows section (playback cue wizard) */
 .cc-checks-stack{flex-direction:column;align-items:flex-start;gap:8px}
-.cc-guided-rows .field-hint{margin-top:6px}
+
 .cc-custom-in{margin-top:6px}
 /* Cue trigger block (Outrangutan links in the cue-config modal) */
 .cc-trigger{margin-top:16px;padding-top:14px;border-top: 1px solid transparent}
-.cc-trigger-head{display:flex;align-items:center;gap:8px}
+
 .cc-trigger-optional{font-family:inherit;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text3)}
 .cc-trigger-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
 .cc-trigger-cue-field{flex:1 1 160px}
 .cc-trigger-auto{margin-top:11px}
-.cc-trigger-actions{margin-top:12px}
-.cc-trigger-fire{display:inline-flex;align-items:center;gap:7px;padding:7px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);transition:all .15s}
+
 .cc-trigger-fire:hover:not(:disabled){background:var(--accent);color:var(--s1)}
-.cc-trigger-fire:disabled{opacity:.4;cursor:not-allowed}
-.cc-chip-add{color:var(--text3)!important}
-.cc-chip-add:hover{color:var(--btn-ink-hover)!important}
-.cc-step-lbl{display:flex;align-items:center;gap:8px;font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--text3);margin:14px 0 10px}
-.cc-step-lbl:first-child{margin-top:0}
-.cc-step-num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--s3);border: 1px solid transparent;color:var(--accent);font-size:9px;font-weight:700;flex-shrink:0;font-family:var(--mono)}
+
 /* Cue cell on/off display */
 .cue-on-line{font-size:13px;line-height:1.4;color:var(--text);display:flex;align-items:baseline;gap:6px;font-weight:600;letter-spacing:0}
 .cue-off-line{font-size:12px;line-height:1.4;color:var(--text2);display:flex;align-items:baseline;gap:6px;font-weight:500;letter-spacing:0}
@@ -1185,7 +1165,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .admin-tab{width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:50%;color:var(--text3);border: 1px solid transparent;background:color-mix(in srgb,var(--s2) 64%,transparent);font-size:18px;cursor:pointer;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
 .admin-tab:hover{color:var(--text);background:color-mix(in srgb,var(--s3) 72%,transparent)}
 .admin-tab.sel{color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--accent) 18%,var(--s2))}
-.admin-caption{padding:7px 2px 0;margin-bottom:16px;color:var(--text3);font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;text-align:center}
+
 .admin-section{margin-bottom:24px}
 .admin-section-label{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;padding-bottom:6px;border-bottom: 1px solid transparent}
 .admin-list{display:flex;flex-direction:column;gap:6px}
@@ -1844,10 +1824,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 /* ── Identity layer (profiles + login codes) ── */
 .join-identity-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;border: 1px solid transparent;border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:12.5px;color:var(--text2)}
 .join-identity-strip[hidden],.join-entrycode[hidden]{display:none!important}
-.jis-codes{flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap}
-.jis-code{border: 1px solid transparent;background:var(--s2);color:var(--text2);font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:4px 10px;border-radius:8px;cursor:pointer}
-.jis-code:hover{border-color:transparent;color:var(--text)}
-.jis-hint{color:var(--text3)}
+
 .jis-who .jis-user{font-family:var(--mono);font-size:11px;color:var(--text3);margin-left:4px}
 .jis-btn{border: 1px solid transparent;background:var(--s2);color:var(--text);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
 .jis-btn:hover{border-color:transparent;background:color-mix(in srgb,var(--accent) 16%,var(--s2))}
@@ -4237,10 +4214,7 @@ input.pt-range::-moz-range-thumb,
 .topbar .brand .brand-ico,.ls-brand .brand-ico{width:42px;height:42px;vertical-align:-.42em}
 .ls-brand{display:inline-flex;align-items:center;gap:8px}
 #rundown .topbar #adminBtn,#rundown .topbar #pnPanelBtn,#rundown .topbar #plandaBearBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
-.settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.settings-action-grid .settings-file-btn{min-height:40px}
-.settings-info-card{border: 1px solid transparent;border-radius:12px;background:color-mix(in srgb,var(--s2) 70%,transparent);padding:12px 13px;font-size:12.5px;color:var(--text2);line-height:1.45}
-.settings-info-card b{display:block;color:var(--text);font-size:13px;margin-bottom:2px}
+
 /* Root-relative on purpose: relative url() in a custom property resolves against the
    stylesheet that USES the var (assets/sf-symbols.css), not the one that declares it. */
 .sf-symbol[data-symbol="action.export"]{--sf-symbol:url("/assets/icons/EXPORT_ARROW.svg?v=1")}
@@ -4524,7 +4498,7 @@ input.pt-range::-moz-range-thumb,
   #liveshow .ls-overview .ls-show-card{grid-column:1/-1}
 }
 @media(max-width:640px){
-  .settings-action-grid{grid-template-columns:1fr}
+
   /* Phones stack the actions; full-width tap targets are correct there. */
   .paperwork-actions{flex-direction:column}
   .paperwork-actions>button{width:100%}
@@ -4545,7 +4519,7 @@ input.pt-range::-moz-range-thumb,
 #liveshow .ls-overview-show{grid-area:show}
 #liveshow .ls-overview-now{grid-area:now}
 #liveshow .ls-overview-next{grid-area:next}
-#liveshow .ls-overview-timer{grid-area:timer}
+
 #liveshow .ls-overview :is(.ls-show-card,.ls-stat-card){min-height:54px;display:flex;flex-direction:column;justify-content:center}
 #liveshow .ls-overview :is(.ls-show-card,.ls-stat-card):not(:last-child){border-right: 1px solid transparent!important}
 
@@ -4768,12 +4742,7 @@ input.pt-range::-moz-range-thumb,
 .t-lighting{--tag-base:var(--purple)}
 .t-todo{--tag-base:var(--orange)}
 .t-video{--tag-base:var(--accent)}
-.tb-audio{background:color-mix(in srgb,var(--cue-audio) 15%,transparent);color:var(--cue-audio)}
-.tb-gfx{background:color-mix(in srgb,var(--cue-gfx) 15%,transparent);color:var(--cue-gfx)}
-.tb-lighting{background:color-mix(in srgb,var(--cue-lighting) 15%,transparent);color:var(--cue-lighting)}
-.tb-playback{background:color-mix(in srgb,var(--cue-playback) 15%,transparent);color:var(--cue-playback)}
-.tb-script{background:color-mix(in srgb,var(--cue-script) 15%,transparent);color:var(--cue-script)}
-.tb-video{background:color-mix(in srgb,var(--cue-video) 15%,transparent);color:var(--cue-video)}
+
 </style>
 </head>
 <body>
@@ -7363,7 +7332,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=319542356f"></script>
+<script src="cueola-app.js?v=b6d5a235c5"></script>
 <script src="outrangutan/outrangutan.js?v=cd596ea309"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
@@ -7395,7 +7364,6 @@ function initializeCueolaAppCheck(firebaseApp) {
   window._appCheckConfigured = APP_CHECK_ENABLED && Boolean(siteKey);
   window._appCheckReady = false;
   if (!APP_CHECK_ENABLED) {
-    console.info('Firebase App Check is staged but disabled. Enable it only after following docs/app-check-rollout.md.');
     return null;
   }
   if (!siteKey) {

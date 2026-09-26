@@ -59,9 +59,35 @@ skipping beats.
 - Rundown: everyone but the director gets Watch live, which opens Live at
   once. The director keeps Go Live and the pre-show checks.
 
-### Smaller
-- 217 CSS rules and 14 functions nobody used are gone; duration math has
-  one home.
+### Less to look at (de-bloat, every screen)
+- Rundown chrome: the Settings 'Apps' section repeated the toolbar and is
+  gone with its marketing card; the sync state is a word next to the dot;
+  admin tabs carry text; duplicate Planda Bear buttons are gone; the bottom
+  bar says ON AIR / STANDBY like Live.
+- Live chrome: the four connection chips in the top bar are gone (the
+  status rail says it in words); the duplicate 'Time left' card is gone;
+  the A−/A+ and speed/size −/+ buttons are gone (sliders and Panel Text
+  stay); the panel tabs are named Playback / On air / Clocks / Display and
+  say so under the icon; the pre-show checks read in plain English.
+- Planda Bear: the hub footer is Export + Preview; the third and fourth
+  copies of the export buttons are gone; editors have one back button; a
+  student sees Instructor Comments only when there are some; roster,
+  preview and refusal messages are plain words.
+- Flowmingo: Playback / Position / Color bars / Hide controls / Fullscreen /
+  Play from here; captions under Push card / Into script; the talent
+  panel's duplicate Script button is gone; the pop-out's status line speaks
+  plainly.
+- Doors and dashboard: duplicate sign-in, session chips, nav buttons,
+  summary rows and the 'Total Cues' stat are gone; theme clicks save at
+  once; class key is called one thing; the support link works.
+- Playback and deck: the developer footer, the orientation-proof tools, a
+  second Connect button and two console banners are gone; Diagnostics
+  moved into Deck settings; output windows explain themselves in
+  sentences.
+- Code: 262 CSS rules, 17 functions and the old prompter channel (which
+  wrote every message twice) are gone; moving a show to a new code no
+  longer leaves the old code's copies behind.
+- What was NOT cut is listed as design calls in docs/v3-debloat-plan.md.
 - Every control is at least 44 px tall on a touch screen.
 - New module cueola-live-state.js (the shared live record, the server clock
   and the TAKE gate), covered by node tests; a browser smoke test runs the
