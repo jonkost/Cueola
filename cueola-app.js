@@ -30675,7 +30675,7 @@ const DEMO_BEATS = [
   }},
   { id:5, style:'timed', info:'PKG: Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
     video:    { on:'Set FULL SCREEN', off:'Dissolve to PKG' },
-    playback: { on:'Ready SC_042',    off:'Roll SC_042' },
+    playback: { on:'Roll SC_042',     off:'Back to CAM 2', clip:'SC_042' },
     audio:    { on:'Ready PKG Audio', off:'Take PKG SOT' },
   }},
   { id:6, style:'timed', info:'Back to Anchor', notes:'', min:0, sec:10, done:false, cues:{
@@ -30688,7 +30688,7 @@ const DEMO_BEATS = [
     script: { on:'Standby Host', off:'Cue Host', text:'Guest conversation. Ad-lib topic: the student budget vote and what it means for clubs.' },
   }},
   { id:8, style:'timed', info:'Sports Highlight', notes:'', min:1, sec:30, done:false, cues:{
-    playback: { on:'Ready SPT_HL', off:'Roll SPT_HL' },
+    playback: { on:'Roll SPT_HL', off:'Back to CAM 1', clip:'SPT_HL' },
     gfx:      { on:'Ready Scorebug', off:'Take Scorebug' },
   }},
   { id:9, style:'timed', info:'Weather Look-Live', notes:'Chroma key', min:1, sec:0, done:false, cues:{

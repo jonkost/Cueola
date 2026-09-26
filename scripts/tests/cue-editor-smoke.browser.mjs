@@ -88,7 +88,7 @@ await page.fill('#ccp-clip', 'SC_042_v2');
 await page.tap('#cueConfigModal .btn-primary');
 await page.waitForTimeout(200);
 const pbs = await page.evaluate(() => beats[4].cues.playback);
-check('playback save keeps the link and pre-roll, updates clip and the ROLL line; the OUT line stays as typed', pbs.outCueId === 'cue_x' && pbs.outAuto === true && pbs.preRoll === 3 && pbs.clip === 'SC_042_v2' && pbs.on === 'Roll SC_042_v2' && pbs.off === 'Roll SC_042', JSON.stringify(pbs));
+check('playback save keeps the link and pre-roll, updates clip and the ROLL line; the OUT line stays as typed', pbs.outCueId === 'cue_x' && pbs.outAuto === true && pbs.preRoll === 3 && pbs.clip === 'SC_042_v2' && pbs.on === 'Roll SC_042_v2' && pbs.off === 'Back to CAM 2', JSON.stringify(pbs));
 check('no helper rows were generated', await page.evaluate(() => !beats.some(b => b.helperFor)));
 
 // Add a row: one screen, name + kind + duration + first cue, one button.
