@@ -265,7 +265,6 @@ function renderLiveStatusItem(name, record) {
   button.className = 'ls-status-recovery';
   button.dataset.actionLabel = actionLabel;
   button.textContent = actionLabel;
-  button.dataset.tip = actionLabel;
   button.setAttribute('aria-label', actionLabel);
   button.addEventListener('click', () => recoverLiveSubsystem(name));
   actions.replaceChildren(button);
@@ -2767,6 +2766,8 @@ function setCloudSyncState(state='synced', detail='') {
     else if (state === 'off') dot.classList.add('off');
   }
   if (badge) badge.dataset.tip = detail;
+  const word = document.getElementById('syncWord');
+  if (word) word.textContent = { synced:'Saved', saving:'Saving…', error:'Not saved', local:'On this device', reconnecting:'Reconnecting…' }[state] || '';
   if (document.getElementById('liveshow')?.classList.contains('on')) renderLiveStatusRail();
 }
 
@@ -3695,9 +3696,8 @@ function renderAdminBody() {
 
   let html = tabs.length > 1
     ? `<div class="admin-tabs" role="tablist" aria-label="Admin controls">
-        ${tabs.map(t => `<button class="admin-tab${t.id === active ? ' sel' : ''}" role="tab" aria-selected="${t.id === active}" onclick="setAdminTab('${t.id}')" data-tip="${t.label}" aria-label="${t.label}">${sfIcon(t.symbol)}</button>`).join('')}
-      </div>
-      <div class="admin-caption">${tabs.find(t => t.id === active).label}</div>`
+        ${tabs.map(t => `<button class="admin-tab${t.id === active ? ' sel' : ''}" role="tab" aria-selected="${t.id === active}" onclick="setAdminTab('${t.id}')">${sfIcon(t.symbol)}<span>${t.label}</span></button>`).join('')}
+      </div>`
     : '';
 
   if (active === 'people') html += renderAdminPanePeople();
@@ -3720,17 +3720,13 @@ function renderAdminPaneSession() {
         <button class="admin-act-btn" onclick="copySessionCode()" data-tip="Copy the show code">Copy code</button>
         <button class="admin-act-btn" onclick="copySessionLink()" data-tip="Copy a join link">Copy link</button>
         <button class="admin-act-btn" onclick="shareSessionInvite()" data-tip="Share a join invite">Share invite</button>
-        <button class="admin-act-btn" onclick="openPaperworkHub()" data-tip="Open the Planda Bear paperwork hub">Open Planda Bear</button>
       </div>
     </div>`;
   }
   if (isSuper) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Accounts</div>
-      <div class="u-note">
-        Signed in as <b>${esc(adminSession.name)}</b> (${esc(adminSession.username || '')}).
-        Instructor accounts are managed on the <a href="dashboard.html#accounts" class="link-accent">Dashboard accounts page</a>.
-      </div>
+      <div class="u-note">Instructor accounts: <a href="dashboard.html#accounts" class="link-accent">Dashboard accounts page</a>.</div>
     </div>`;
   }
   if (session.code || session.isExpert) {
@@ -3821,11 +3817,6 @@ function renderAdminPanePeople() {
       <datalist id="adminAssignOptions">${adminAssignOptionsHTML()}</datalist>
       <button class="admin-act-btn" onclick="adminAssignProfileToSession()">Assign</button>
     </div>
-  </div>`;
-  html += `<div class="admin-section">
-    <div class="admin-section-label">Position assignments</div>
-    <div class="u-note u-mb8">Positions and required paperwork are set on the Planda Bear hub now. Open Planda Bear with the show code and the assignments card is ready to edit.</div>
-    <button class="admin-act-btn" onclick="closeAdminPanel();openPaperworkHub()">Open Planda Bear</button>
   </div>`;
   return html;
 }
@@ -4046,7 +4037,7 @@ function assignmentSaveStateHTML() {
       ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="retryRoleAssignmentLoad()">Retry connection</button></span>`
       : `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="saveRoleAssignmentsFromAdmin()">Retry</button><button class="admin-act-btn" onclick="revertRoleAssignments()">Revert draft</button></span>`
     : state === 'conflict'
-      ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="reloadRoleAssignmentsAfterConflict()">Load server copy</button></span>`
+      ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="reloadRoleAssignmentsAfterConflict()">Load the saved version</button></span>`
       : '';
   return `<div class="admin-assignment-state is-${state}" role="status" aria-live="polite" data-assignment-save-state="${state}">
     <span class="admin-assignment-state-pill">${labels[state] || 'Unsaved'}</span>
@@ -4408,8 +4399,8 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
     const profile = assignmentProfileById(row.profileId);
     const profileMeta = row.profileId
       ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
-      : 'Choose a saved profile; display names are not identity.';
-    const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved canonically yet';
+      : 'Choose a saved profile.';
+    const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved yet';
     const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
     const chosen = (row.paperwork || []).filter(Boolean);
     const summary = chosen.length ? `Paperwork (${chosen.length}): ${chosen.join(' · ')}` : 'Choose paperwork';
@@ -4720,7 +4711,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
           ? 'Cached legacy assignments are shown, but cloud availability was not confirmed. Reconnect before migration.'
           : unresolved
             ? `${unresolved} legacy row${unresolved === 1 ? '' : 's'} cannot be linked uniquely to a saved profile and position.`
-            : `${rows.length} legacy assignment${rows.length === 1 ? '' : 's'} linked. Review and save once to migrate them canonically.`);
+            : `${rows.length} legacy assignment${rows.length === 1 ? '' : 's'} linked. Review and save once to update them.`);
       } else {
         rows = defaultRoleAssignments();
         confirmedRoleAssignmentRows = [];
@@ -4746,7 +4737,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
       const denied = error?.code === 'permission-denied';
       _assignmentLoadDenied = denied;
       setAssignmentSaveState('failed', denied
-        ? 'Firestore denied profiles or assignments. The staged rules need an owner deploy before production can use this workflow.'
+        ? 'Saving was refused. Ask your instructor to check the show’s cloud settings.'
         : `${firebaseConnectionLabel(error, 'Could not load assignments')}. Existing local rows were not treated as confirmed.`);
       console.warn('Assignment hydration failed.', error);
       return null;
@@ -7370,7 +7361,7 @@ function toggleKeymapRef() {
   // D11.1: the overlay body is generated by the shared engine from THIS
   // surface's active scope, so the reference and the dispatch cannot drift.
   const scope = keymapScopeNow() === 'live' ? 'live' : 'build';
-  const sections = window.CueolaKeymap.sectionsForScope(KEYMAP, scope);
+  const sections = window.CueolaKeymap.sectionsForScope(KEYMAP, scope).map(s => ({ ...s, rows: (s.rows || []).filter(r => r.keys && r.keys.length) })).filter(s => s.rows.length);
   // Outrangutan's own screen — read its LIVE bindings so this stays truthful.
   const og = window.Outrangutan && window.Outrangutan._state ? window.Outrangutan._state() : null;
   const sc = og && og.settings && og.settings.shortcuts;
@@ -7386,7 +7377,7 @@ function toggleKeymapRef() {
   ov.innerHTML = window.CueolaKeymap.referenceHTML({
     title: scope === 'live' ? 'Keyboard shortcuts: live screen' : 'Keyboard shortcuts: rundown builder',
     sections,
-    foot: 'Typing in any field suppresses shortcuts. Override a binding via <code>localStorage.cueola_keymap</code>, e.g. <code>{"playout.go":["G"]}</code> (ids match the registry).',
+    foot: 'Typing in any field pauses shortcuts.',
   });
   ov.hidden = false;
 }
@@ -10855,7 +10846,7 @@ function runPreflight(reviewOnly) {
   // OBS or a deck is not failing anything.
   addSystemsPreflightRows();
   if (window._firebaseReady && session.code && !session.isDemo && !session.isExpert) {
-    addPreflightRow({ key: 'Cloud round-trip', group: 'cloud', state: 'pend', detail: 'Writing a ping and waiting for the server echo…' });
+    addPreflightRow({ key: 'Cloud round-trip', group: 'cloud', state: 'pend', detail: 'Checking the connection to the cloud…' });
   }
   addPreflightRow({ key: 'Theme & brand assets', group: 'mac', state: 'pend', detail: 'Checking…' });
   renderPreflightRows();
@@ -10901,7 +10892,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
           fix: { label: 'Sync media on the Air', remote: { target: 'playout', kind: 'syncMedia', extra: _airFixAddress() } } });
       }
       if (out?.helper?.wanted && !out.helper.connected) {
-        extra.push({ key: 'Kiosk helper', group: 'playout', state: 'warn', detail: 'Kiosk helper offline on the Air. Kiosk outputs run on their own until it restarts there' });
+        extra.push({ key: 'Kiosk helper', group: 'playout', state: 'warn', detail: 'The playback computer’s helper is not running. Its outputs keep going on their own until it restarts' });
       }
       if (extra.length) { if (at >= 0) _preflightRows.splice(at + 1, 0, ...extra); else extra.forEach(addPreflightRow); }
       // First GO on the Air: an un-tapped Air (audio suspended after a
@@ -10971,7 +10962,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
   if (hasLocal) {
     const media = deep.cues.filter(c => c.checked);
     const badMedia = media.filter(c => !c.ok);
-    if (!badMedia.length) setPreflightRow('Playout media', { state: 'ok', detail: media.length + ' cue' + (media.length === 1 ? '' : 's') + ' present & decodable, dimensions known' });
+    if (!badMedia.length) setPreflightRow('Playout media', { state: 'ok', detail: media.length + ' cue' + (media.length === 1 ? '' : 's') + ' present and playable' });
     else setPreflightRow('Playout media', { state: 'fail', detail: badMedia.slice(0, 3).map(c => '#' + c.num + ' “' + c.name + '”: ' + c.issue).join(' · ') + (badMedia.length > 3 ? ' · +' + (badMedia.length - 3) + ' more' : '') });
   } else if (hasRemote) {
     // The Air runs the deep check on request and publishes a compact result
@@ -11009,7 +11000,7 @@ async function runPreflightAsync(run, links, firstGoArming = null) {
       const showHasVideo = links.cues.length > 0 || hasLocal && deep.cues.length > 0;
       setPreflightRow('Playout outputs', { state: showHasVideo ? 'warn' : 'ok', detail: showHasVideo ? 'No output window open. Open one before doors if this show plays video' : 'No output windows open', fix: showHasVideo ? { label: 'Open output', run: _openPlayoutControlsFix } : null });
     } else {
-      setPreflightRow('Playout outputs', { state: 'ok', detail: oh.healthy + ' of ' + oh.open + ' output window' + (oh.open === 1 ? '' : 's') + ' responding to the heartbeat' });
+      setPreflightRow('Playout outputs', { state: 'ok', detail: oh.healthy + ' of ' + oh.open + ' output window' + (oh.open === 1 ? '' : 's') + ' responding' });
     }
   }
   renderPreflightRows();
@@ -11066,8 +11057,8 @@ function talkbackSystemStatus() {
   const tb = window.CueolaStreamDeck?.talkbackStatus?.();
   if (!tb || !tb.seen) return null;
   return tb.connected
-    ? { state: 'ok', detail: 'Talkback daemon linked on this Mac' }
-    : { state: 'warn', detail: 'talkbackd is not running. Start the talkback daemon on this Mac if mics are in the show today' };
+    ? { state: 'ok', detail: 'Talkback is running on this Mac' }
+    : { state: 'warn', detail: 'Talkback is not running on this Mac. Start it if mics are in the show today' };
 }
 function addSystemsPreflightRows() {
   const obs = obsSystemStatus();
@@ -14516,8 +14507,6 @@ let _scriptOpLastStateFingerprint = '';
 let _scriptOpDisconnectAnnounced = false;
 let _scriptOpLastStatePushAt = 0;   // rate limit for heartbeat-resume STATE pushes
 
-function toggleScriptOpPopout() { openScriptOpPopout(); }
-
 function scriptOperatorIdentity() {
   const state = currentPrompterSessionState();
   return {
@@ -16397,7 +16386,7 @@ function poTransportSectionHTML(scope) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'Pause' : 'Play';
   return `<div class="flow-control-section flow-control-transport">
-      <div class="flow-control-title">Transport</div>
+      <div class="flow-control-title">Playback</div>
       <div class="flow-control-grid one">
         <button class="pt-btn${ptPlaying?' active':''}" id="${scope}-play-btn" data-prompter-play data-prompter-scope="${scope}" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}"><span class="sf-symbol" data-symbol="media.play" data-prompter-play-icon="play" aria-hidden="true"${ptPlaying ? ' hidden' : ''}></span><span class="sf-symbol" data-symbol="media.pause" data-prompter-play-icon="pause" aria-hidden="true"${ptPlaying ? '' : ' hidden'}></span><span data-prompter-play-label>${playLabel}</span></button>
       </div>
@@ -16414,15 +16403,11 @@ function poDisplaySectionHTML(scope) {
       <div class="flow-control-title">Display</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="${scope}-speed-value" for="${scope}-speed-range" data-prompter-speed-value>${Math.round(ptTargetSpeed)}</output></span>
-      <button class="pt-btn" onclick="sendPrompterControl('speed_down')">−</button>
       <input type="range" class="pt-range" id="${scope}-speed-range" data-prompter-speed min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value);this.dataset.controlDragging=''">
-      <button class="pt-btn" onclick="sendPrompterControl('speed_up')">+</button>
       </div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="${scope}-size-value" for="${scope}-size-range" data-prompter-size-value>${Math.round(ptFontSize)}</output></span>
-      <button class="pt-btn" onclick="sendPrompterControl('size_down')">−</button>
       <input type="range" class="pt-range" id="${scope}-size-range" data-prompter-size min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value);this.dataset.controlDragging=''">
-      <button class="pt-btn" onclick="sendPrompterControl('size_up')">+</button>
       </div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
@@ -16445,7 +16430,7 @@ function poScreenSectionHTML() {
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid four">
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
-        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide UI</button>
+        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide controls</button>
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
         <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
       </div>
@@ -16516,13 +16501,13 @@ function syncLiveTextZoomReadout() {
 // ── Operator overlay / Flowmingo Op inspector tabs ─────────────────────────
 // Same pattern as the Script Op drawer (lsInspTab): icon tabs, one flat page,
 // remembered per surface so each panel reopens where the operator works.
-const OP_INSP_LABELS = { transport: 'Transport', live: 'Cue & On Air', clock: 'Clocks & Alerts', display: 'Display & Theme', screen: 'Screen' };
+const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display', screen: 'Screen' };
 const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script', screen: 'action.fullscreen' };
 function opInspHeadHTML(scope) {
   return `<div class="insp-head op-insp-head">
     <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
       ${Object.keys(OP_INSP_LABELS).map(key =>
-        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')" data-tip="${OP_INSP_LABELS[key]}"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span></button>`).join('')}
+        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span><span class="insp-tab-lbl">${OP_INSP_LABELS[key]}</span></button>`).join('')}
     </div>
     <div class="insp-caption" data-insp-caption>${OP_INSP_LABELS.transport}</div>
   </div>`;
@@ -17217,7 +17202,7 @@ function syncTechButtons() {
     const isFlow = id.startsWith('flow');
     const barsOn = isFlow ? flowOpColorBarsOn : ptColorBarsOn;
     const anyOn = isFlow ? flowSlateOn : talentSlateOn;
-    patchIconLabelButton(b, 'content.display', barsOn ? 'Back on air' : 'NTSC Bars');
+    patchIconLabelButton(b, 'content.display', barsOn ? 'Back on air' : 'Color bars');
     b.classList.toggle('active', barsOn);
     b.classList.toggle('muted', anyOn && !barsOn);
     b.setAttribute('aria-pressed', barsOn ? 'true' : 'false');
@@ -17313,7 +17298,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
       <div class="flow-control-title">On Air</div>
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
         <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
-        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Generate NTSC color bars on Flowmingo" aria-label="Toggle NTSC color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'NTSC Bars'}</span></button>
+        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Show color bars on Flowmingo" aria-label="Toggle color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'Color bars'}</span></button>
       </div>
     </div>
 	    <div class="flow-control-section flow-control-cue">
@@ -17323,7 +17308,7 @@ function liveActionsHTML(scope = 'po', disabled = false) {
 	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
 	        <input type="range" class="pt-range" id="${scope}-seek" min="0" max="100" value="${seekVal}" aria-label="Cue prompter position" oninput="${seekInput}"${seekChange}${seekDrag}${dis}>
 	        <button class="pt-btn pt-icon-btn" onclick="${nudge(3)}" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
-	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" data-tip="Punch in from this script position" aria-label="Punch in from this script position"${dis}>${sfIcon('media.play')}</button>
+	        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="${punch}" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
 	      </div>
 	    </div>`;
 }
@@ -18737,7 +18722,7 @@ function flowOpControlLabel(action) {
     brake_start:'Brake', brake_stop:'Brake release',
     boost_start:'Boost', boost_stop:'Boost release',
     slate_tech_on:'Tech difficulties', slate_tech_off:'Back on air',
-    slate_bars_on:'NTSC bars', slate_bars_off:'Bars off',
+    slate_bars_on:'Color bars', slate_bars_off:'Bars off',
     clock_timeofday:'Time clock', clock_off:'Clock off',
     clock_size_up:'Clock bigger', clock_size_down:'Clock smaller',
     question_on:'Question indicator', question_off:'Question cleared',
@@ -18915,12 +18900,13 @@ function clockAndAlertControlsHTML(scope='po', disabled=false) {
       </div>
       <div class="pt-question-lane" data-question-lane>
         <input id="${scope}-question-input" class="pt-question-lane-input" type="text" maxlength="280"
-          placeholder="Paste a chat question · Enter pushes · Esc clears"
+          placeholder="Type or paste a question for the talent"
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
         <button type="button" class="pt-btn pt-question-lane-push" onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
         <button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>
       </div>
+      <div class=\"field-hint\">Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.</div>
       <div class="ui-row" style="border:0">
         <span class="ui-row-lbl">Overlay size</span>
         <div class="ui-stepper">
@@ -18939,7 +18925,7 @@ function flowOpControlsHTML(disabled=false) {
   const playLabel = flowOpPlaying ? 'PAUSE' : 'PLAY';
   const playIcon = flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY;
   const transport = `<div class="flow-control-section flow-control-transport">
-      <div class="flow-control-title">Transport</div>
+      <div class="flow-control-title">Playback</div>
       <div class="flow-control-grid one">
         <button class="pt-btn${flowOpPlaying?' active':''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${playIcon}<span>${playLabel}</span></button>
       </div>
@@ -18981,7 +18967,7 @@ function flowOpControlsHTML(disabled=false) {
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid five">
         <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
-        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide UI</button>
+        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide controls</button>
         <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
         <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full</button>
         <button class="pt-btn" onclick="openPrompterFromFlowOp()"${dis}>Talent</button>
@@ -20044,7 +20030,6 @@ function liveTick() {
         const el = document.getElementById('ls-timer');
         if (el && el.classList.contains('warn') !== warn) el.classList.toggle('warn', warn);
         setLiveText('ls-remain', fmtProductionClock(liveRemainingMs()));
-        setLiveText('ls-stat-remain', liveRemainingSecs() ? fmtProductionClock(liveRemainingMs()) : '—');
       }
     }
     const sec = Math.floor(now / 1000);
@@ -21532,7 +21517,6 @@ function renderPaperworkNav(id, slotId='') {
     'video-patch':'pbNavPatch',
     'audio-comms-patch':'pbNavPatch',
     'stage-plot':'pbNavPlot',
-    'production-notes':'pbNavNotes',
   };
   const slot = document.getElementById(slotId || slotMap[id]);
   if (!slot || !item) return;
@@ -21545,7 +21529,7 @@ function renderPaperworkNav(id, slotId='') {
   const previewButton = (slotId === 'pbNavPreview' || id === 'production-notes') ? '' : `<button type="button" onclick="previewPaperworkItem('${item.id}')">Preview</button>`;
   // The preview panel's title bar already carries the Planda Bear back button;
   // its step nav drops the duplicate so back exists once per panel.
-  const backButton = slotId === 'pbNavPreview' ? '' : `<button type="button" onclick="returnToPaperworkHub()">${sfIcon('chevron.left')}<span>Planda Bear</span></button>`;
+  const backButton = '';   // the editor header carries the Planda Bear back button
   slot.innerHTML = `
     <div class="paperwork-flow-left">
       ${backButton}
@@ -22022,6 +22006,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
       ? 'Mark each note reviewed once you’ve made the change or talked it through.'
       : 'Feedback from your instructor lands here.';
     const instructorCopy = 'Leave feedback without touching the paperwork itself.';
+    if (!canComment && !comments.length) { slot.innerHTML = ''; return; }
     slot.innerHTML = `<div class="pb-comments" data-pb-comments-for="${esc(targetSection)}">
       <div class="pb-comments-head">
         <div>
@@ -25606,7 +25591,7 @@ function paperExportOptionsForSnapshot(snapshot, options={}) {
   // D9.3: the printed footer carries only a small revision stamp — revision
   // integrity still matters for classrooms, branding does not.
   const revBits = [];
-  if (Number.isFinite(Number(revisions.assignmentRevision))) revBits.push(`Rev r${Number(revisions.assignmentRevision) || 0}`);
+  if (Number.isFinite(Number(revisions.assignmentRevision))) revBits.push(`Positions v${Number(revisions.assignmentRevision) || 0}`);
   revBits.push(paperExportDateOnlyLabel(revisions.preProUpdatedAt || snapshot.exportedAt));
   return {
     ...options,
@@ -25627,7 +25612,7 @@ function paperExportOptionsForSnapshot(snapshot, options={}) {
 
 function paperworkExportFailureMessage(error) {
   if (error?.readiness) return paperworkExportReadinessMessage(error.readiness);
-  if (error?.code === 'permission-denied') return 'Firestore denied the saved paperwork. The staged rules need an owner deploy before production export can continue.';
+  if (error?.code === 'permission-denied') return 'The saved paperwork could not be read. Ask your instructor to check the show’s cloud settings.';
   if (error?.code === 'unavailable' || error?.code === 'export-timeout') return error.message || 'The saved production is unavailable. Reconnect before exporting.';
   return error?.message || 'Could not prepare the saved paperwork export.';
 }
@@ -25698,7 +25683,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
   // body's pinned print-safe colors (design audit Aug 2026).
   const controlsSlot = document.getElementById('paperPreviewControls');
   if (controlsSlot) controlsSlot.innerHTML = controls;
-  previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-loading" role="status">Building fixed-page preview…</div>`;
+  previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-loading" role="status">Building the preview…</div>`;
   const primary = document.getElementById('paperPreviewPrimary');
   const isExportAction = /\b(export|download)\b/i.test(primaryLabel || '');
   primary.classList.toggle('export-action', isExportAction);
@@ -25736,7 +25721,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
     fitPaperPreviewDocument();
   }).catch(error => {
     if (sequence !== paperPreviewBuildSequence) return;
-    previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-preview-error" role="alert">Could not build the fixed-page preview. ${esc(error?.message || 'Unknown export error')}</div>`;
+    previewBody.innerHTML = `${controlsSlot ? '' : controls}<div class="paper-export-preview-error" role="alert">Could not build the preview. ${esc(error?.message || 'Unknown export error')}</div>`;
   });
 }
 
@@ -27386,13 +27371,12 @@ function renderPlotInspector() {
     <div class="plot-insp-h">Drape panels <span class="plot-insp-val">${PLOT_DRAPE_PANEL_FT} ft each</span></div>
     <div class="plot-insp-body plot-insp-row">
       <div class="field"><label class="field-lbl">Panels</label><input class="field-in" type="number" min="1" max="20" step="1" value="${item.panels || Math.round(item.w_ft / PLOT_DRAPE_PANEL_FT)}" onchange="updateSelectedPlotItem('panels', this.value)"></div>
-      <div class="field"><label class="field-lbl">Wide (feet)</label><input class="field-in" type="number" value="${item.w_ft}" disabled></div>
+      <div class="field"><label class="field-lbl">Size</label><div class="u-note">${item.w_ft} × ${item.h_ft} ft</div></div>
     </div>`;
       if (def && def.resize !== 'free') return `
     <div class="plot-insp-h">Size (feet)</div>
     <div class="plot-insp-body plot-insp-row">
       <div class="field"><label class="field-lbl">Wide</label><input class="field-in" type="number" min="0.5" max="100" step="0.5" value="${item.w_ft}" onchange="updateSelectedPlotItem('w_ft', this.value)"></div>
-      <div class="field"><label class="field-lbl">Deep (auto)</label><input class="field-in" type="number" value="${item.h_ft}" disabled></div>
     </div>`;
       return `
     <div class="plot-insp-h">Size (feet)</div>
@@ -29115,7 +29099,7 @@ function renderPatchTable(kind, title) {
   return `
     <div class="field">
       <label class="field-lbl">${title}</label>
-      <div class="field-hint">Type directly in the first row. Use Add row for another line, or import a CSV/TSV. The arrows reorder rows.</div>
+      <div class="field-hint">Type in the first row. Add row for another line, or import a spreadsheet. The arrows reorder rows.</div>
       <div class="patch-table ${isComms ? 'comms' : kind}" id="${kind}-patch-table">
         ${heads.map(h => `<div class="patch-head">${h}</div>`).join('')}<div class="patch-head"></div><div class="patch-head"></div>
         ${rows.map((row,i) => (row.id ? `<input type="hidden" data-patch-kind="${kind}" data-patch-row="${i}" data-patch-field="id" value="${esc(row.id)}">` : '') + (isComms ? `
@@ -29137,7 +29121,7 @@ function renderPatchTable(kind, title) {
       </div>
       <div class="patch-table-actions">
         <button class="call-add-btn" onclick="addPatchRow('${kind}')">${sfIcon('action.add')}<span>Add row</span></button>
-        <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import CSV/TSV</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
+        <label class="patch-upload-btn">${sfIcon('action.upload')}<span>Import spreadsheet</span><input type="file" accept=".csv,.tsv,.txt" onchange="importPatchRows('${kind}',this)" hidden></label>
       </div>
     </div>`;
 }
@@ -29193,7 +29177,7 @@ function openPatchSheetEditor(kind) {
   hideModal('paperworkHubModal');
   const isVideo = kind === 'video';
   document.getElementById('patchSheetTitle').textContent = isVideo ? 'Video Patch Sheet' : 'Audio and Comms Patch Sheets';
-  document.getElementById('patchSheetSub').textContent = 'Add rows manually or upload a CSV/TSV. Imported columns fill left to right.';
+  document.getElementById('patchSheetSub').textContent = 'Add rows, or import a spreadsheet (.csv). Columns fill left to right.';
   // One render path: pbRenderPatchBody also clears the divergence hold, so a
   // stale flag from a previous grid can never wedge this freshly rendered one.
   clearTimeout(_pbPatchReconcileTimer);
@@ -29447,7 +29431,7 @@ function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('
     <p>Who holds each position, and the paperwork that position owns.</p>
     <table class="paper-assignment-register">
       <thead><tr><th>Student profile</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
-      <tbody>${rows.join('') || '<tr><td colspan="6">No canonical assignments were saved for this production.</td></tr>'}</tbody>
+      <tbody>${rows.join('') || '<tr><td colspan="6">No positions were saved for this production.</td></tr>'}</tbody>
     </table>`;
 }
 

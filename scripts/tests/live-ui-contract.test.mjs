@@ -330,7 +330,7 @@ test('Production Notes SFX bridge: taggable uploads and a pull API for Outrangut
   assert.match(app, /async getFile\(item\)/);
   // SFX is a first-class board tag, and the composer states the audio cap.
   assert.match(app, /sfx:\s+\{ label:'SFX',\s+symbol:'media\.waveform' \}/);
-  assert.match(html, /Audio uploads cap at 4MB\. Use mp3 or m4a for SFX\./);
+  assert.match(html, /Audio files up to 4 MB \(mp3 or m4a\)\./);
   // The closed-Outrangutan hand-off toast points at the pull path too.
   assert.match(app, /Import from Production Notes/);
 });
@@ -550,9 +550,11 @@ test('playout live reorder is an order-only write that respects the playing clip
 
 test('pop-outs cannot die quietly: chip + auto-reconnect + one-click reopen (D11.8)', async () => {
   const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
-  // Connection chips: both pop-outs ride the D12.1 link model permanently.
-  assert.match(html, /id="ls-link-talent"/);
-  assert.match(html, /id="ls-link-scriptop"/);
+  // Connection state: both pop-outs ride the D12.1 link model permanently;
+  // 3.0 shows it in words on the status rail, not as chips in the top bar.
+  assert.match(app, /liveLinkState\.configure\('talent'/);
+  assert.match(app, /liveLinkState\.configure\('scriptop'/);
+  assert.doesNotMatch(html, /id="ls-link-talent"|id="ls-link-scriptop"/);
   // Automatic reconnect attempts on loss, one per announcement. The old
   // in-branch republish was dead code (checkHeartbeat clears `connected`
   // first, so the publish guard always bailed); recovery is now split: the
@@ -718,13 +720,14 @@ test('one ON AIR for the room: no per-person following, a follower who browsed a
   }
   assert.doesNotMatch(app, /cmd\.type === 'followMe'/);
   assert.doesNotMatch(app, /presence\.\$\{presenceId\}\.following/);
-  // The overview cards: On air (with time on cue), Standby, Time left, and
-  // the one native button that snaps a browsing follower back.
+  // The overview cards: On air (with time on cue), Standby, and the one
+  // native button that snaps a browsing follower back. Time left lives in
+  // the bottom bar as Remaining, once.
   assert.match(html, /<div class="ls-stat-label">On air<\/div><div class="ls-stat-value live" id="ls-stat-now">/);
   assert.match(html, /<div class="ls-stat-sub" id="ls-stat-now-time"><\/div>/);
   assert.match(html, /<button type="button" class="ls-back-now" id="lsBackToNow" onclick="followSelf\(\)" hidden>Back to on air<\/button>/);
   assert.match(html, /<div class="ls-stat-label">Standby<\/div>/);
-  assert.match(html, /<div class="ls-stat-label">Time left<\/div>/);
+  assert.doesNotMatch(html, /<div class="ls-stat-label">Time left<\/div>/);
   assert.match(html, /\.ls-back-now\[hidden\]\{display:none\}/);
   // renderFollowChips only decides whether that button shows: a follower on
   // Live whose cursor left the ON AIR cue.
