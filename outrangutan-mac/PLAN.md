@@ -1,0 +1,89 @@
+# Outrangutan for Mac: the plan
+
+Outrangutan is becoming a real Mac app. Everything that plays picture and
+sound runs on the Mac, with no browser in the way. The show keeps playing
+with the Wi-Fi off.
+
+Two things still ride the internet, because the rest of Cueola lives in the
+cloud:
+
+- The director's TAKE on the rundown firing a clip.
+- Stream Deck keys pressed on another Mac.
+
+## The one rule: speak the same language as the web Outrangutan
+
+Today the rundown and KeyWi Bird send Outrangutan commands through the
+show's shared record in the cloud (GO, stop, pause, fade, panic, fire a cue,
+fire a pad, stand by a cue, master volume). Outrangutan answers with what is
+on air, the clock, and "got it" for every command.
+
+The Mac app will read and write exactly the same fields in exactly the same
+shape. That means:
+
+- The rundown's TAKE works with no change.
+- KeyWi Bird keys, the playback strip, the key lights and the "not linked"
+  warning all work with no change.
+- The Go Live preflight rows work with no change.
+- The web Outrangutan and the Mac app can take turns on the same show while
+  we test. Only run one of them at a time on a show.
+
+## One Stream Deck for both apps
+
+Only one program at a time can hold a Stream Deck. That stays KeyWi Bird,
+in the browser, the way it works now. KeyWi keeps running the rundown,
+prompter, talkback and OBS keys, and its playback keys reach the Mac app.
+
+- **Deck on a different Mac from the playback Mac** (the Pro + Air rig):
+  keys go through the shared record, like today.
+- **Deck on the same Mac as the playback Mac:** later we add a direct lane
+  inside the Mac, so playback keys land at once and keep working with the
+  internet down. This needs a small addition to KeyWi Bird. Everything else
+  in KeyWi stays the same.
+
+## Every tool, and what gets better
+
+| Web tool | On the Mac | What gets better |
+|---|---|---|
+| Cue list: video, sound, stills | Built (step 1) | Plays ProRes, HEVC, video with see-through backgrounds, any sound file. No converting. |
+| Count-out clock, 29.97 drop-frame | Built (step 1) | Counts from the player itself, 30 times a second. |
+| GO, Pause, Stop, All Stop | Built (step 1) | macOS is told a show is running, so it never slows the app down. |
+| Autosave | Built (step 1) | Saved on this Mac after every change. |
+| Output window | Built (step 1), one screen | Fills its own screen edge to edge, above the menu bar. |
+| Fade and Stop All, fades with curves, crossfades | Step 2 | Smooth to the frame, set in frames or seconds. |
+| Pre-wait, continue modes, end actions, still timers | Step 2 | Same rules as the web version (see its notes on stills). |
+| Trim in and out, loop, volume, fit, scale, position | Step 2 | Exact to the frame. |
+| Solid color mattes, program preview | Step 2 | |
+| Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop, search | Step 3 | Sounds load into memory before the show, so a pad fires with no delay. |
+| Sound chain: gain, 3-band EQ, compressor, meters, master volume | Step 3 | Real audio meters, and each output picks any channel pair on the audio interface. |
+| Record a sound effect | Step 3 | |
+| Multiple outputs, identify, pick a screen and audio device per output | Step 4 | Replaces the kiosk Chrome windows. No helper program to keep running. |
+| Join a show by code, sign in, publish cues and what is on air | Step 5 | The rule above: same fields, same shape. |
+| Command queue, "got it" replies, panic lane, master volume from the deck | Step 5 | |
+| Fix requests from the rundown, preflight report | Step 5 | |
+| KeyWi Bird playback keys and strip | Step 5 (through the cloud) and step 6 (direct, same Mac) | |
+| Show log, show file save and open, print cue sheet, crash recovery | Step 6 | |
+| Keyboard shortcuts you can change, lock, wall clock | Step 6 | |
+| MIDI | Step 6 | Uses the Mac's own MIDI system. |
+| Waveform and vectorscope | Step 7 | Reads every frame, not a sample. |
+| Keying: chroma, luma, alpha | Step 7 | Keys on the graphics card, full resolution. |
+| OBS control | Step 7 | Same connection as the web version. |
+| Dropbox folder sync | Step 7 | |
+| Convert on upload | Not needed | The Mac plays the pro formats as they are. |
+| Kiosk helper and kiosk windows | Not needed | Native outputs replace them. |
+| Not possible on the web | Step 8 | SDI out through a Blackmagic card, NDI to the switcher, key and fill. |
+
+## How we test each step
+
+1. `swift test` checks the clock and the rules.
+2. The app's test mode (see README.md) presses the buttons by itself, saves
+   pictures of both windows and writes what happened.
+3. Jon runs it on the real rig before we call a step done.
+
+## Still to decide
+
+- **Signing in (step 5):** writing to the shared record needs a Cueola
+  sign-in (a student PIN or an admin). The Mac app will use the same
+  sign-in the web app uses.
+- **Handing the app to other Macs:** the free Apple sign-in covers Jon's
+  own machines. Giving it to anyone else without a warning needs the paid
+  Apple Developer account.
