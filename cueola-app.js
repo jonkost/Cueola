@@ -8147,7 +8147,7 @@ function addRowAt(idx, position) {
 // ADD ROW WIZARD
 // ─────────────────────────────────────────────────────────────
 const AR_TYPE_DESC = {
-  video:    'a camera shot',
+  video:    'a video source',
   audio:    'a mic or music',
   lighting: 'a lighting look',
   playback: 'a clip that rolls',
@@ -8156,22 +8156,14 @@ const AR_TYPE_DESC = {
 };
 
 function openAddRow() {
-  arStyle = 'timed';
   arCueType = null;
   ['ar-name-input', 'ar-notes-input', 'ar-min', 'ar-sec'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const suggestionGrid = document.getElementById('arNameChips');
   if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
-  document.querySelectorAll('#ar-style .opt-card').forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
-  document.getElementById('opt-timed')?.classList.add('sel');
-  document.getElementById('opt-timed')?.setAttribute('aria-pressed', 'true');
-  const durWrap = document.getElementById('ar-dur-wrap');
-  if (durWrap) durWrap.hidden = false;
   const firstCue = document.getElementById('arFirstCue');
-  if (firstCue) firstCue.innerHTML = Object.keys(CT).map(type => `<button type="button" class="chip ar-cue-chip" id="arcue-${type}" style="--cue-clr:${CT[type].color}" aria-pressed="false" onclick="arSelectFirstCue('${type}',this)">${sfIcon(CT[type].symbol)} ${CT[type].label}<span class="ar-cue-desc">${AR_TYPE_DESC[type] || ''}</span></button>`).join('');
-  const firstWrap = document.getElementById('ar-first-cue');
-  if (firstWrap) firstWrap.hidden = false;
-  const addBtn = document.getElementById('ar-next-1');
-  if (addBtn) addBtn.innerHTML = '<span>Add row</span>';
+  if (firstCue) firstCue.innerHTML = Object.keys(CT).map(type => `<button type="button" class="chip ar-cue-chip" id="arcue-${type}" style="--cue-clr:${CT[type].color}" aria-pressed="false" onclick="arSelectFirstCue('${type}',this)"><span class="ar-cue-top">${sfIcon(CT[type].symbol)} ${CT[type].label}</span><span class="ar-cue-desc">${AR_TYPE_DESC[type] || ''}</span></button>`).join('');
+  // A new row starts as Flex (no set length); Timed shows the duration.
+  arSelectStyle('flex');
   showOverlay('addRowOv');
   setTimeout(() => document.getElementById('ar-name-input')?.focus(), 80);
 }

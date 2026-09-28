@@ -610,13 +610,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cc-more>*:not(summary){margin-bottom:12px}
 .cc-more .cc-trigger-auto{margin-top:0}
 .cc-upload{cursor:pointer}
-.ar-panel .ar-cue-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
-.ar-cue-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:52px;padding:8px 12px;white-space:normal;text-align:left;font-family:var(--sans);font-size:13px;font-weight:600}
+.ar-panel #arFirstCue.ar-cue-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.ar-panel .ar-cue-chip{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:56px;padding:10px 14px;border-radius:11px;white-space:normal;text-align:left;font-family:var(--sans);font-size:13px;font-weight:600}
+.ar-cue-top{display:inline-flex;align-items:center;gap:7px;letter-spacing:.02em}
+.ar-cue-top .sf-symbol{color:var(--cue-clr)}
 .ar-cue-chip.sel{color:var(--cue-clr);border-color:color-mix(in srgb,var(--cue-clr) 50%,transparent);background:color-mix(in srgb,var(--cue-clr) 14%,transparent)}
 .ar-cue-desc{font-size:11px;font-weight:400;color:var(--text3)}
 .ar-cue-chip.sel .ar-cue-desc{color:inherit;opacity:.8}
 .ar-heading .info-btn{vertical-align:middle}
-@media (max-width:600px){.ar-panel .ar-cue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.ar-panel #arFirstCue.ar-cue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cc-preroll-row .field-lbl{margin:0}
 .cc-preroll-row .cc-time-in{width:64px}
 .ls-show-label,.ls-stat-label{font-size:9.5px;font-family:var(--sans);font-weight:700;letter-spacing:.035em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
@@ -5566,12 +5568,12 @@ input.pt-range::-moz-range-thumb,
         <div>
           <div class="field-lbl u-mb8">Kind</div>
           <div class="opt-grid-3" id="ar-style" role="group" aria-label="Kind of row">
-            <button type="button" class="opt-card oc-accent" id="opt-timed" aria-pressed="true" onclick="arSelectStyle('timed')">
+            <button type="button" class="opt-card oc-accent" id="opt-timed" aria-pressed="false" onclick="arSelectStyle('timed')">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span></div>
               <div class="opt-name">Timed</div>
               <div class="opt-desc">Has a set length. The clock counts it down.</div>
             </button>
-            <button type="button" class="opt-card oc-neutral" id="opt-flex" aria-pressed="false" onclick="arSelectStyle('flex')">
+            <button type="button" class="opt-card oc-neutral" id="opt-flex" aria-pressed="true" onclick="arSelectStyle('flex')">
               <div class="opt-icon"><span class="sf-symbol" data-symbol="state.flex" aria-hidden="true"></span></div>
               <div class="opt-name">Flex</div>
               <div class="opt-desc">No set length. Runs as long as it needs.</div>
@@ -5583,7 +5585,7 @@ input.pt-range::-moz-range-thumb,
             </button>
           </div>
         </div>
-        <div id="ar-dur-wrap">
+        <div id="ar-dur-wrap" hidden>
           <label class="field-lbl" for="ar-min">Duration <span class="u-muted">(optional)</span></label>
           <div class="u-dur-grid">
             <input class="field-in u-time-in" id="ar-min" type="number" inputmode="numeric" min="0" max="180" placeholder="0" aria-label="Minutes" onkeydown="arKey(event)">
@@ -7131,7 +7133,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=8628b68fd9"></script>
+<script src="cueola-app.js?v=5a89bf75b3"></script>
 <script src="outrangutan/outrangutan.js?v=d75f53816e"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

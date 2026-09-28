@@ -94,10 +94,11 @@ check('no helper rows were generated', await page.evaluate(() => !beats.some(b =
 // Add a row: one screen, name + kind + duration + first cue, one button.
 await page.evaluate(() => openAddRow());
 await page.waitForTimeout(250);
-const ar = await page.evaluate(() => ({ steps: document.querySelectorAll('.ar-step').length, btn: document.getElementById('ar-next-1').textContent.trim(), cues: document.querySelectorAll('#arFirstCue .chip').length, min: document.getElementById('ar-min').value }));
+const ar = await page.evaluate(() => ({ steps: document.querySelectorAll('.ar-step').length, btn: document.getElementById('ar-next-1').textContent.trim(), cues: document.querySelectorAll('#arFirstCue .chip').length, min: document.getElementById('ar-min').value, flex: document.getElementById('opt-flex').classList.contains('sel'), durHidden: document.getElementById('ar-dur-wrap').hidden }));
 if (shots) await page.screenshot({ path: join(shots, 'shot-addrow.png') });
-check('add row is one screen with one button and a blank duration', ar.steps === 1 && ar.btn === 'Add row' && ar.cues === 6 && ar.min === '', JSON.stringify(ar));
+check('add row is one screen with one button, Flex by default, no duration', ar.steps === 1 && ar.btn === 'Add row' && ar.cues === 6 && ar.min === '' && ar.flex && ar.durHidden, JSON.stringify(ar));
 await page.fill('#ar-name-input', 'Weather toss');
+await page.tap('#opt-timed');
 await page.fill('#ar-sec', '20');
 await page.tap('#arcue-audio');
 await page.tap('#ar-next-1');
