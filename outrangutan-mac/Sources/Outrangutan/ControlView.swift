@@ -11,17 +11,31 @@ struct ControlView: View {
     @State private var dropTargeted = false
     @State private var showConnect = false
     @AppStorage("ui.inspector") private var showInspector = true
+    @AppStorage("ui.tab") private var tab = "cues"
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             HStack(spacing: 0) {
-                cueList
+                VStack(spacing: 0) {
+                    Picker("", selection: $tab) {
+                        Text("Cues").tag("cues")
+                        Text("Pads").tag("pads")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 220)
+                    .padding(.vertical, 8)
+                    Divider()
+                    if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
+                }
                 if showInspector {
                     Divider()
-                    InspectorView(engine: engine)
-                        .frame(width: 330)
+                    Group {
+                        if tab == "pads" { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
+                    }
+                    .frame(width: 330)
                 }
             }
             Divider()
@@ -32,7 +46,7 @@ struct ControlView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
         .dropDestination(for: URL.self) { urls, _ in
-            engine.add(urls: urls)
+            if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
             return true
         } isTargeted: { dropTargeted = $0 }
         .overlay {

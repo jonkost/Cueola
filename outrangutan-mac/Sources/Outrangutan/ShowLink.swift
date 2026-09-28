@@ -35,6 +35,8 @@ final class ShowLink: ObservableObject {
     private var liveSeq = 0
     private var lastLiveAt: Double = 0
     private var startSeq = 0
+    private var sfxSeq = 0
+    private var lastSfxAt: Double = 0
     private var fixSeen: [String] = []
     private var pending: [[String]: Any] = [:]
     private var writing = false
@@ -48,6 +50,7 @@ final class ShowLink: ObservableObject {
         engine.onTick = { [weak self] in self?.publishLive(force: false) }
         engine.onClipStart = { [weak self] cue, seconds in self?.publishPlayingStart(cue, seconds: seconds) }
         engine.onCuesChanged = { [weak self] in self?.scheduleCues() }
+        engine.pads.onFire = { [weak self] pad, seconds in self?.publishSfxFire(pad, seconds: seconds) }
     }
 
     static var now: Double { Date().timeIntervalSince1970 * 1000 }
@@ -178,8 +181,8 @@ final class ShowLink: ObservableObject {
         queueWrite([["outrangutan", "live"]: packet])
     }
 
-    /// The cue list, without media, so the rundown can link cues and the
-    /// deck can fill its cue keys. Pads come in a later step.
+    /// The cue list and the pads, without media, so the rundown can link
+    /// them and the deck can fill its cue and pad keys.
     func publishCues() {
         guard joined else { return }
         var map: [String: Any] = [:]
@@ -192,9 +195,20 @@ final class ShowLink: ObservableObject {
                 "dur": (engine.durations[cue.id] ?? 0).rounded(),
             ]
         }
+        var padMap: [String: Any] = [:]
+        let board = engine.pads
+        for pad in board.pads where pad.fileIsThere {
+            var entry: [String: Any] = [
+                "name": pad.name.isEmpty ? "Pad" : pad.name,
+                "bank": board.banks.first { $0.id == pad.bank }?.name ?? "",
+                "emoji": pad.emoji,
+            ]
+            if let len = board.length(pad.id), len > 0 { entry["dur"] = len.rounded() }
+            padMap[pad.id] = entry
+        }
         queueWrite([
             ["outrangutan", "cues"]: map,
-            ["outrangutan", "pads"]: [String: Any](),
+            ["outrangutan", "pads"]: padMap,
             ["outrangutan", "cuesTs"]: Self.now,
             ["outrangutan", "sender"]: sender,
         ])
@@ -205,6 +219,20 @@ final class ShowLink: ObservableObject {
         cuesTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.publishCues() }
         }
+    }
+
+    /// Each pad hit, so the rundown can show a short chip. At most one every
+    /// quarter second, so mashing a pad cannot flood the show record.
+    private func publishSfxFire(_ pad: Pad, seconds: Double?) {
+        guard joined else { return }
+        let now = Self.now
+        guard now - lastSfxAt >= 250 else { return }
+        lastSfxAt = now
+        sfxSeq += 1
+        var fire: [String: Any] = ["padId": pad.id, "name": pad.name.isEmpty ? "SFX" : pad.name, "emoji": pad.emoji,
+                                   "startedAt": now, "ts": now, "seq": sfxSeq, "sender": sender]
+        if let seconds { fire["durMs"] = (seconds * 1000).rounded() } else { fire["loop"] = true }
+        queueWrite([["outrangutan", "sfxFire"]: fire])
     }
 
     /// One write per clip start. Every screen counts down from this on its own.
@@ -287,11 +315,16 @@ final class ShowLink: ObservableObject {
             let bad = engine.cues.enumerated().filter { !$0.element.fileIsThere }.prefix(50).map { i, c -> [String: Any] in
                 ["id": c.wireID ?? "", "num": i + 1, "name": c.name, "issue": "file missing on this Mac"]
             }
+            let board = engine.pads
+            let badPads = board.pads.filter { !$0.fileIsThere }.prefix(50).map { p -> [String: Any] in
+                ["id": p.id, "name": p.name, "bank": board.banks.first { $0.id == p.bank }?.name ?? "", "issue": "file missing on this Mac"]
+            }
             queueWrite([["outrangutan", "preflight"]: [
                 "ts": Self.now, "sender": sender, "fixId": id,
-                "cues": engine.cues.count, "pads": 0, "bad": Array(bad), "badPads": [Any](),
+                "cues": engine.cues.count, "pads": board.pads.count, "bad": Array(bad), "badPads": Array(badPads),
             ] as [String: Any]])
-            return (bad.isEmpty, "\(bad.count) bad cue\(bad.count == 1 ? "" : "s"), 0 bad pads")
+            return (bad.isEmpty && badPads.isEmpty,
+                    "\(bad.count) bad cue\(bad.count == 1 ? "" : "s"), \(badPads.count) bad pad\(badPads.count == 1 ? "" : "s")")
         case "openOutput":
             engine.openOutput()
             return (engine.output.isOpen, engine.output.isOpen ? "output open" : "output did not open")

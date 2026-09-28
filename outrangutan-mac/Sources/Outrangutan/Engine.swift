@@ -131,6 +131,8 @@ final class Engine: ObservableObject {
     var onTick: (() -> Void)?
 
     let output = OutputWindowController()
+    /// The sound effect board.
+    let pads: PadBoard
     private var view: OutputView { output.pictureView }
     private let fader = Fader()
     private let videoDecks = [Deck(name: "a", slot: .a), Deck(name: "b", slot: .b)]
@@ -166,6 +168,9 @@ final class Engine: ObservableObject {
         outputScreen = show.outputScreen
         masterGain = show.masterGain ?? 1
         standbyID = show.cues.first?.id
+        pads = PadBoard(banks: show.banks, pads: show.pads, multiTrigger: show.multiTrigger)
+        pads.setMaster(masterGain)
+        pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         save()
         loadDurations()
         startClock()
@@ -237,8 +242,15 @@ final class Engine: ObservableObject {
         refresh()
     }
 
-    /// All Stop: everything off at once, output to black.
+    /// All Stop (PANIC): everything off at once, pads too, output to black.
     func allStop() {
+        stopCues()
+        pads.stopAll()
+    }
+
+    /// Stops every cue at once, but lets pads ring. What a remote Stop does,
+    /// like the web app.
+    func stopCues() {
         fader.cancelAll()
         cancelPending()
         stopPicture()
@@ -258,6 +270,7 @@ final class Engine: ObservableObject {
         let startPicture = decks.map { $0.pictureLevel }, startSound = decks.map { $0.soundLevel }
         let startStill = stillLevel
         decks.forEach { fader.cancel($0.name) }
+        pads.fadeOutAll()
         fader.run("all", from: 1, to: 0, seconds: 1, apply: { [weak self] v in
             guard let self else { return }
             for (i, d) in decks.enumerated() {
@@ -273,6 +286,7 @@ final class Engine: ObservableObject {
     func setGain(_ value: Double) {
         masterGain = min(1.2, max(0, value))
         [pictureDeck, soundDeck].compactMap { $0 }.forEach(apply)
+        pads.setMaster(masterGain)
         save()
         onTransport?()
     }
@@ -309,6 +323,7 @@ final class Engine: ObservableObject {
         }
         guard result.ok else { return result }
         lastLane = cue.kind == .audio ? .audio : .video
+        pads.tie(cue)
         refresh()
         onClipStart?(cue, playLength(cue))
         // Continue: the next cue fires as this one starts.
@@ -420,8 +435,9 @@ final class Engine: ObservableObject {
                 clearDeck(old)
             }
         }
-        if stillCue != nil {
+        if let leaving = stillCue {
             let oldSlot = stillSlot
+            pads.cueLeftAir(leaving.id)
             stillCue = nil
             stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil; stillLeft = nil
             fader.cancel("still")
@@ -490,7 +506,7 @@ final class Engine: ObservableObject {
                 self?.stillLevel = v; self?.applyStill()
             }, done: { [weak self] in
                 guard let self, self.stillSlot == slot, self.stillCue?.id == cue.id else { return }
-                self.view.hide(slot); self.stillCue = nil; self.refresh()
+                self.view.hide(slot); self.stillCue = nil; self.pads.cueLeftAir(cue.id); self.refresh()
             })
         }
         refresh()
@@ -547,7 +563,8 @@ final class Engine: ObservableObject {
         var result = WireResult.done
         switch cmd.action {
         case "go": result = go()
-        case "stop", "panic": allStop()
+        case "stop": stopCues()
+        case "panic": allStop()
         case "fadeStop": fadeStopAll()
         case "pause":
             if !hasAnythingToPause && !paused { result = .refused("nothing playing") }
@@ -560,7 +577,7 @@ final class Engine: ObservableObject {
                 result = .refused("cue \(cmd.cueId) is not on this Mac")
             }
         case "pad":
-            result = .refused("sound effect pads are not in the Mac app yet")
+            result = pads.fire(cmd.padId)
         case "arm":
             if !arm(cmd.cueId) { result = .refused("cue \(cmd.cueId) is not on this Mac") }
         default:
@@ -568,7 +585,10 @@ final class Engine: ObservableObject {
         }
         // A fire can carry the rundown's next standby on the same write.
         if !cmd.armCueId.isEmpty { arm(cmd.armCueId) }
-        if !cmd.pads.isEmpty { notice = "The rundown fired sound effect pads. Pads are not in the Mac app yet." }
+        // TAKE-linked sound effects ride the same write.
+        for id in cmd.pads where pads.fire(id).ok == false {
+            notice = "The rundown fired a pad this Mac doesn't have."
+        }
         return result
     }
 
@@ -705,6 +725,7 @@ final class Engine: ObservableObject {
     }
 
     private func clearDeck(_ d: Deck) {
+        if let leaving = d.cue { pads.cueLeftAir(leaving.id) }
         fader.cancel(d.name)
         d.clear()
         if let slot = d.slot { view.hide(slot) }
@@ -717,6 +738,7 @@ final class Engine: ObservableObject {
         videoDecks.forEach { if $0.cue != nil { clearDeck($0) } }
         stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil; stillLeft = nil
         fader.cancel("still")
+        if let leaving = stillCue { pads.cueLeftAir(leaving.id) }
         stillCue = nil
         view.hide(.s1); view.hide(.s2)
     }
@@ -788,6 +810,7 @@ final class Engine: ObservableObject {
     }
 
     private func save() {
-        ShowStore.save(ShowFile(cues: cues, outputScreen: outputScreen, masterGain: masterGain))
+        ShowStore.save(ShowFile(cues: cues, outputScreen: outputScreen, masterGain: masterGain,
+                                pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger))
     }
 }

@@ -55,8 +55,12 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Trim in and out, loop, volume, fit, scale, position | Built (step 2) | Trim stops on the exact frame. |
 | Solid color mattes | Built (step 2) | |
 | Program preview in the control window | Later | |
-| Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop, search | Step 3 | Sounds load into memory before the show, so a pad fires with no delay. |
-| Sound chain: gain, 3-band EQ, compressor, meters, master volume | Step 3 | Real audio meters, and each output picks any channel pair on the audio interface. |
+| Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop | Built (step 3) | Sounds load into memory before the show, so a pad fires with no delay. Four copies per pad for Layer. |
+| A pad tied to a cue | Built (step 3) | |
+| Pads from the rundown and the deck | Built (step 3) | |
+| Pad search | Later | |
+| Sound chain: gain, 3-band EQ, compressor, master volume | Built for pads (step 3) | The same EQ points and compressor as the web app. |
+| Audio meters, audio interface channel routing | Step 4 | Each output picks any channel pair on the audio interface. |
 | Record a sound effect | Step 3 | |
 | Multiple outputs, identify, pick a screen and audio device per output | Step 4 | Replaces the kiosk Chrome windows. No helper program to keep running. |
 | Join a show by code, sign in, publish cues and what is on air | Built (step 5) | The rule above: same fields, same shape. |

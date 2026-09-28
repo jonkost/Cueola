@@ -16,6 +16,7 @@ struct InspectorView: View {
                 if !cue.kind.holds { trimSection(cue) }
                 fadeSection(cue)
                 if cue.kind.hasPicture { pictureSection(cue) }
+                padSection(cue)
             }
             .formStyle(.grouped)
         } else {
@@ -121,6 +122,28 @@ struct InspectorView: View {
                     engine.update(cue.id) { $0.fit = .contain; $0.scale = 1; $0.posX = 0; $0.posY = 0 }
                 }
             }
+        }
+    }
+
+    private func padSection(_ cue: Cue) -> some View {
+        let board = engine.pads
+        return Section {
+            Picker("Pad", selection: bind(cue, \.sfxPadId)) {
+                Text("None").tag("")
+                ForEach(board.banks) { bank in
+                    ForEach(board.pads.filter { $0.bank == bank.id }.sorted { $0.slot < $1.slot }) { pad in
+                        Text("\(bank.name): \(pad.emoji.isEmpty ? "" : pad.emoji + " ")\(pad.name)").tag(pad.id)
+                    }
+                }
+            }
+            if !live(cue).sfxPadId.isEmpty {
+                seconds("After", bind(cue, \.sfxDelay), step: 0.5)
+            }
+        } header: {
+            Text("Sound effect with this cue")
+        } footer: {
+            Text("The pad fires when the cue starts (after the wait), plays through it, and fades out when the cue leaves air.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

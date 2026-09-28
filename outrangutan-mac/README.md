@@ -48,6 +48,25 @@ a time. While paused, GO carries on, like the web app.
 The show saves itself after every change, to
 `~/Library/Application Support/Outrangutan/show.json`.
 
+## Sound effect pads
+
+Switch to **Pads** above the list.
+
+- Drop sounds on the board (or on one pad), or click an empty pad to pick one.
+- Click a pad, or press its hotkey, to hit it. The bar on the pad shows how
+  far along it is.
+- Banks are pages of pads. Right-click a bank to rename or remove it.
+- **Several at once** off: hitting a pad stops every other pad.
+- The Inspector holds each pad's name, emoji, color, hotkey, volume, what a
+  second hit does (Restart, Layer, Toggle), loop, fades, trim, a three-band
+  EQ and a compressor.
+- A cue can bring a pad with it: pick it under "Sound effect with this cue".
+  It fires when the cue starts (after an optional wait) and fades out when
+  the cue leaves air.
+
+Stop (S) stops cues but lets pads ring. Fade (F) fades pads too. All Stop
+(Esc) stops everything.
+
 ## Connect it to a show
 
 Click the light in the bottom bar, or press Command-K.
@@ -72,8 +91,8 @@ saved.
 
 Run only one Outrangutan on a show at a time: this app or the web one.
 
-Not in the Mac app yet: sound effect pads. A pad from the rundown or the deck
-is answered with "not in the Mac app yet".
+Pads work from the rundown and the deck too: a pad key, a TAKE-linked sound
+effect, or a rundown row's sound effect hits the pad on this Mac.
 
 ## Check it
 
@@ -97,6 +116,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `transport` (the default): GO, Pause, All Stop pressed on this Mac.
 - `link`: a pretend show record plays the rundown's part and sends the same
   commands the rundown and KeyWi Bird send. No internet is used.
+- `pads`: loading pads, Restart, Layer and Toggle, a hit from the rundown, a
+  pad tied to a cue, Stop letting pads ring, PANIC, and hotkeys.
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
@@ -110,6 +131,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `ControlView.swift` | The control window |
 | `InspectorView.swift` | Every setting for the cue standing by |
 | `Fader.swift` | Every fade, from one steady clock |
+| `Pads.swift` | The sound effect board and its sound paths |
+| `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, and saving the show |
 | `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |

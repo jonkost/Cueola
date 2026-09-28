@@ -60,11 +60,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case 53: self.engine.allStop(); return nil     // Esc
             default: break
             }
-            switch event.charactersIgnoringModifiers?.lowercased() {
+            let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            switch key {
             case "s": self.engine.stop(); return nil
             case "p": self.engine.togglePause(); return nil
             case "f": self.engine.fadeStopAll(); return nil
-            default: return event
+            default:
+                // A pad's hotkey hits it. Holding the key down does not repeat.
+                if let pad = self.engine.pads.pad(forKey: key) {
+                    if !event.isARepeat { self.engine.pads.fire(pad.id) }
+                    return nil
+                }
+                return event
             }
         }
     }

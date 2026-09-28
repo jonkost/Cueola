@@ -1,6 +1,7 @@
 import OutrangutanCore
 import AppKit
 import AVFoundation
+import SwiftUI
 
 /// Test mode, for checking the app without anyone at the keyboard.
 ///
@@ -17,7 +18,7 @@ enum TestSnapshot {
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
 
     /// The pretend show record, only in the link test.
-    @MainActor static let fake: FakeRecordStore? = isOn && scenario == "link" ? FakeRecordStore() : nil
+    @MainActor static let fake: FakeRecordStore? = isOn && (scenario == "link" || scenario == "pads") ? FakeRecordStore() : nil
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
@@ -46,6 +47,7 @@ enum TestSnapshot {
         switch scenario {
         case "link": steps = linkSteps(engine: engine, link: link, note: note, state: state, snap: snap)
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
+        case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
             (1.0, {
@@ -144,6 +146,104 @@ enum TestSnapshot {
         ]
     }
 
+    /// Pads: loading, the three hit-again modes, a hit from the rundown, a
+    /// pad tied to a cue, Stop letting pads ring, PANIC, and one-at-a-time.
+    @MainActor
+    private static func padSteps(engine: Engine, link: ShowLink, dir: URL, note: @escaping (String) -> Void,
+                                 state: @escaping (String) -> Void) -> Steps {
+        guard let fake else { return [] }
+        let board = engine.pads
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func ids() -> [String] { board.pads.sorted { $0.slot < $1.slot }.map(\.id) }
+        func sounding() -> String {
+            let names = board.pads.filter { board.sounding[$0.id] != nil }.map(\.name).sorted()
+            return names.isEmpty ? "none" : names.joined(separator: ", ")
+        }
+        func og() -> [String: Any] { fake.doc["outrangutan"] as? [String: Any] ?? [:] }
+        var n = 0
+        func send(_ action: String, cueId: String = "", padId: String = "") {
+            n += 1
+            let t = ShowLink.now
+            let c: [String: Any] = ["commandId": "pad_TEST_\(n)", "origId": "pad_TEST_\(n)", "ts": t, "expiresAt": t + 8000,
+                                    "by": "Test", "sender": "flowmingo_test", "action": action, "cueId": cueId, "padId": padId]
+            fake.set(["outrangutan", "commandQueue"], [c])
+            fake.set(["outrangutan", "command"], c)
+        }
+        func snapBoard(_ name: String) {
+            let root = HStack(spacing: 0) {
+                PadBoardView(board: board)
+                Divider()
+                PadInspectorView(board: board).frame(width: 330)
+            }
+            .frame(width: 1100, height: 560)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+            let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 560), styleMask: [.titled], backing: .buffered, defer: false)
+            win.appearance = NSAppearance(named: .darkAqua)
+            win.contentView = NSHostingView(rootView: root)
+            win.orderBack(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
+                }
+                win.orderOut(nil)
+            }
+        }
+        return [
+            (1.0, {
+                board.add(urls: ["demo-applause.wav", "demo-airhorn.wav", "demo-rimshot.wav", "demo-aww.wav"].map { media.appendingPathComponent($0) })
+                let i = ids()
+                board.update(i[1]) { $0.retrigger = .poly; $0.emoji = "📯" }
+                board.update(i[3]) { $0.retrigger = .toggle; $0.loop = true; $0.emoji = "😢" }
+                board.update(i[0]) { $0.emoji = "👏"; $0.eq.high = 3; $0.comp = true }
+                note("loaded: " + board.pads.sorted { $0.slot < $1.slot }.map { "\($0.name) key=\($0.key) \(board.length($0.id).map { String(format: "%.1fs", $0) } ?? "not loaded")" }.joined(separator: " | "))
+            }),
+            (0.2, { board.fire(ids()[0]); board.fire(ids()[0]) }),
+            (0.3, { note("1 applause hit twice (restart): sounding \(sounding())") }),
+            (0.1, { board.fire(ids()[3]) }),
+            (0.3, { note("2 aww (toggle, loop) hit once: sounding \(sounding())"); board.selectedPadID = ids()[0]; snapBoard("pads-board") }),
+            (0.7, { board.fire(ids()[3]) }),
+            (0.3, { note("3 aww hit again (toggle stops it): sounding \(sounding())") }),
+            (0.1, { engine.openOutput(); link.join(code: "TEST1") }),
+            (1.2, {
+                let padsMap = og()["pads"] as? [String: Any] ?? [:]
+                let first = padsMap[ids()[0]] as? [String: Any]
+                note("4 joined: published \(padsMap.count) pads, first: \(first?["emoji"] ?? "") \(first?["name"] ?? "-") bank=\(first?["bank"] ?? "-") dur=\(first?["dur"] ?? "-")")
+                send("pad", padId: ids()[1])
+            }),
+            (0.8, {
+                let ack = og()["cmdAck"] as? [String: Any]
+                let fire = og()["sfxFire"] as? [String: Any]
+                note("5 rundown fired the airhorn: ack ok=\(ack?["ok"] ?? "-") \(ack?["reason"] ?? ""), sfxFire=\(fire?["name"] ?? "-") durMs=\(fire?["durMs"] ?? "-"), sounding \(sounding())")
+                send("pad", padId: "p_missing")
+            }),
+            (0.8, { let ack = og()["cmdAck"] as? [String: Any]; note("6 a pad this Mac lacks: ok=\(ack?["ok"] ?? "-") reason=\(ack?["reason"] ?? "")") }),
+            (0.1, {
+                board.stopAll()
+                // Tie the applause to the first cue, half a second in.
+                if let cue = engine.cues.first { engine.update(cue.id) { $0.sfxPadId = ids()[0]; $0.sfxDelay = 0.5 } }
+                send("cue", cueId: engine.cues.first?.wireID ?? "")
+            }),
+            (0.9, { state("7 the cue fired; its tied pad came in after 0.5 s"); note("   sounding \(sounding())") }),
+            (0.1, { board.update(ids()[0]) { $0.loop = true }; send("stop") }),
+            (0.4, { note("8 remote Stop: the cue stopped, the tied pad is fading: sounding \(sounding())") }),
+            (0.8, { note("   a moment later: sounding \(sounding())"); board.fire(ids()[2]); board.fire(ids()[3]) }),
+            (0.2, { note("9 rimshot and aww playing: sounding \(sounding())"); send("panic") }),
+            (0.8, { note("10 PANIC: sounding \(sounding())") }),
+            (0.1, { board.multiTrigger = false; board.update(ids()[0]) { $0.loop = false }; board.fire(ids()[3]); board.fire(ids()[0]) }),
+            (0.3, { note("11 one at a time: aww then applause: sounding \(sounding())"); board.stopAll() }),
+            (0.2, {
+                // A pad's hotkey, the way the keyboard hits it.
+                let key = board.pads.first { $0.slot == 2 }?.key ?? ""
+                if let pad = board.pad(forKey: key) { board.fire(pad.id) }
+                note("12 hotkey \(key.uppercased()) hit: sounding \(sounding())")
+            }),
+            (0.8, { note("   writes: \(fake.writeCount)") }),
+        ]
+    }
+
     /// Plays the rundown's part against a pretend show record, with commands
     /// shaped exactly like fireOutrangutanCommand in cueola-app.js.
     @MainActor
@@ -220,7 +320,7 @@ enum TestSnapshot {
             (0.1, { fake.set(["outrangutan", "panic"], ["id": "panic_1", "origId": "panic_1", "ts": ShowLink.now, "by": "Test Director", "sender": "flowmingo_test"]) }),
             (0.9, { report("10 PANIC lane") }),
             (0.1, { send([command("pad", padId: "p1")]) }),
-            (0.9, { report("11 an SFX pad (not in the Mac app yet)") }),
+            (0.9, { report("11 an SFX pad this Mac does not have") }),
             (0.1, {
                 fake.set(["fixRequests", "fix_1"], ["id": "fix_1", "target": "playout", "kind": "preflight", "detail": "",
                                                      "ts": ShowLink.now, "by": "Test Director", "byClient": "test", "status": "open"])

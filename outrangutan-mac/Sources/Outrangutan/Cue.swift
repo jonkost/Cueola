@@ -111,6 +111,9 @@ struct Cue: Identifiable, Codable, Equatable {
     var posX: Double = 0                        // percent of the screen width, + is right
     var posY: Double = 0                        // percent of the screen height, + is down
     var color = "#000000"                       // mattes only
+    // A sound effect pad that fires with this cue, after a delay
+    var sfxPadId = ""
+    var sfxDelay: Double = 0
     // Other
     var notes = ""
     var armed = true                            // false: GO skips this cue
@@ -151,6 +154,8 @@ struct Cue: Identifiable, Codable, Equatable {
         posX = try c.decodeIfPresent(Double.self, forKey: .posX) ?? 0
         posY = try c.decodeIfPresent(Double.self, forKey: .posY) ?? 0
         color = try c.decodeIfPresent(String.self, forKey: .color) ?? "#000000"
+        sfxPadId = try c.decodeIfPresent(String.self, forKey: .sfxPadId) ?? ""
+        sfxDelay = try c.decodeIfPresent(Double.self, forKey: .sfxDelay) ?? 0
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         armed = try c.decodeIfPresent(Bool.self, forKey: .armed) ?? true
     }
@@ -195,6 +200,9 @@ struct ShowFile: Codable {
     var cues: [Cue] = []
     var outputScreen: String?
     var masterGain: Double?
+    var pads: [Pad]?
+    var banks: [PadBank]?
+    var multiTrigger: Bool?
 }
 
 /// Saves the show to this Mac only, in
