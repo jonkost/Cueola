@@ -27925,7 +27925,7 @@ function callSheetDayOfDays(sheet, prePro) {
 function callSheetPreviewHTML(data, prePro=loadPreProData()) {
   const title = callSheetTitle(data);
   const people = (data.people || []).filter(p => p.name || p.position || p.role || p.email || p.phone || p.call);
-  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(paperTime(p.call || data.call || ''))}</td></tr>`).join('');
+  const peopleRows = people.map(p => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.position || p.role || '')}</td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(paperTime(p.call || ''))}</td></tr>`).join('');
   const notes = (data.notes || '').trim();
   const dayOfDays = callSheetDayOfDays(data, prePro);
   // D9.7: nearest hospital single-sourced with the Safety Plan — enter it once.

@@ -22,6 +22,8 @@
   this item", "Paperwork saves" instead of "PB saves", "show" instead of
   "session". The name Planda Bear stays where it names the place.
 - Nothing moved and no control changed. Old saves read and print as before.
+- Call sheet preview and PDF: a person with no call time shows --:-- again.
+  It used to borrow the sheet's crew call, so a blank looked like 12:30.
 
 ### Checks
 
